@@ -20,9 +20,11 @@ plain language — it writes the report and renders it for you:
 Claude installs the skill on first use (`skaldr --install-skill`) and takes it from there; the
 finished report is a self-contained HTML file you can open, share, or publish.
 
-**See a live sample →** [alex-yanchenko.github.io/skaldr](https://alex-yanchenko.github.io/skaldr/)
-(rendered from [`examples/sales-pipeline.yaml`](examples/sales-pipeline.yaml)). The rest of this
-README is for developers running skaldr directly.
+**See live samples →** [sales pipeline](https://alex-yanchenko.github.io/skaldr/) ·
+[warehouse count](https://alex-yanchenko.github.io/skaldr/data-import.html) (rendered from
+[`examples/sales-pipeline.yaml`](examples/sales-pipeline.yaml) and
+[`data/example.yaml`](data/example.yaml)). The rest of this README is for developers running
+skaldr directly.
 
 ```bash
 # from a checkout
