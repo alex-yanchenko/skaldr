@@ -1,0 +1,1573 @@
+{
+  "$defs": {
+    "Badge": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Chip text for this tag/status.",
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "description": "Chip colour, chosen from the badge palette.",
+          "enum": [
+            "slate",
+            "blue",
+            "green",
+            "amber",
+            "red",
+            "violet",
+            "teal",
+            "sky"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "legend": {
+          "description": "One-line meaning, shown in the derived legend.",
+          "title": "Legend",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "tone",
+        "legend"
+      ],
+      "title": "Badge",
+      "type": "object"
+    },
+    "BadgeLiteral": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Chip text for a one-off badge (not from the page vocabulary).",
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "description": "Chip colour from the badge palette.",
+          "enum": [
+            "slate",
+            "blue",
+            "green",
+            "amber",
+            "red",
+            "violet",
+            "teal",
+            "sky"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "tone"
+      ],
+      "title": "BadgeLiteral",
+      "type": "object"
+    },
+    "BadgeRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "A key declared in the page `badges`.",
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "BadgeRef",
+      "type": "object"
+    },
+    "BadgeRow": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "badge_row",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional leading label (e.g. 'Affects:').",
+          "title": "Label"
+        },
+        "items": {
+          "description": "Chips: page-vocabulary refs or one-off label+tone pairs.",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BadgeRef"
+              },
+              {
+                "$ref": "#/$defs/BadgeLiteral"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "BadgeRow",
+      "type": "object"
+    },
+    "Callout": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "callout",
+          "title": "Type",
+          "type": "string"
+        },
+        "tone": {
+          "description": "Accent + tint tone: info, success, warning, or danger.",
+          "enum": [
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "title": "Tone",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional bold title line in the tone colour.",
+          "title": "Title"
+        },
+        "body": {
+          "description": "Rich-text body.",
+          "title": "Body",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "tone",
+        "body"
+      ],
+      "title": "Callout",
+      "type": "object"
+    },
+    "Card": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Card label above the number.",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Headline number, or a short status string.",
+          "title": "Value"
+        },
+        "of": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Denominator; renders a derived percentage.",
+          "title": "Of"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone for the top-border accent.",
+          "title": "Tone"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional small caption line under the number.",
+          "title": "Note"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "Card",
+      "type": "object"
+    },
+    "Cards": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "cards",
+          "title": "Type",
+          "type": "string"
+        },
+        "items": {
+          "description": "Headline-number cards, laid out full-width.",
+          "items": {
+            "$ref": "#/$defs/Card"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "Cards",
+      "type": "object"
+    },
+    "Code": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "code",
+          "title": "Type",
+          "type": "string"
+        },
+        "content": {
+          "description": "Code/log/config text; rendered verbatim, no highlighting.",
+          "title": "Content",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional label header above the block.",
+          "title": "Label"
+        },
+        "mode": {
+          "default": "plain",
+          "description": "plain, or diff (+/- lines tinted success/danger).",
+          "enum": [
+            "plain",
+            "diff"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "content"
+      ],
+      "title": "Code",
+      "type": "object"
+    },
+    "Column": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Row-dict key this column reads.",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "description": "Column header text.",
+          "title": "Label",
+          "type": "string"
+        },
+        "kind": {
+          "description": "text/rich (first one becomes the title column), number, or badge (chip under title).",
+          "enum": [
+            "text",
+            "number",
+            "badge",
+            "rich"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "pct_of_total": {
+          "default": false,
+          "description": "Show a derived '% of total' caption (needs a reconcile total).",
+          "title": "Pct Of Total",
+          "type": "boolean"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Proportional width weight (1-6); set it on every non-badge column, or none.",
+          "title": "Width"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "kind"
+      ],
+      "title": "Column",
+      "type": "object"
+    },
+    "Fact": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Fact label (e.g. 'Source').",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Fact value (e.g. 'prod').",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "FactStrip": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "fact_strip",
+          "title": "Type",
+          "type": "string"
+        },
+        "facts": {
+          "description": "1-8 label/value pairs, one line.",
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Facts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "facts"
+      ],
+      "title": "FactStrip",
+      "type": "object"
+    },
+    "Grid": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "grid",
+          "title": "Type",
+          "type": "string"
+        },
+        "cells": {
+          "description": "Cells across a 6-column row.",
+          "items": {
+            "$ref": "#/$defs/GridCell"
+          },
+          "minItems": 1,
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "cells"
+      ],
+      "title": "Grid",
+      "type": "object"
+    },
+    "GridCell": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "description": "Columns this cell spans, of 6.",
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Span",
+          "type": "integer"
+        },
+        "blocks": {
+          "description": "Blocks stacked in the cell; may include nested grids (depth 2 max).",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "code": "#/$defs/Code",
+                "fact_strip": "#/$defs/FactStrip",
+                "grid": "#/$defs/InnerGrid",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "meter": "#/$defs/Meter",
+                "quote": "#/$defs/Quote",
+                "status_list": "#/$defs/StatusList",
+                "table": "#/$defs/Table",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/InnerGrid"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "span",
+        "blocks"
+      ],
+      "title": "GridCell",
+      "type": "object"
+    },
+    "Group": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Group band label; shows the derived subtotal.",
+          "title": "Name",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Empty renders a '\u2014 none \u2014' row.",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Rows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Group",
+      "type": "object"
+    },
+    "Handled": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Label for the non-issue bucket (e.g. 'Imported cleanly').",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Count in the bucket; added to the column sum for reconciliation.",
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "Handled",
+      "type": "object"
+    },
+    "Heading": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "heading",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "description": "Heading text; also the TOC entry at level 2.",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "level": {
+          "default": 2,
+          "description": "Heading level: 2 (section) or 3 (sub-heading).",
+          "enum": [
+            2,
+            3
+          ],
+          "title": "Level",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "title": "Heading",
+      "type": "object"
+    },
+    "Image": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "src": {
+          "description": "A data: URI (self-contained \u2014 no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
+          "title": "Src",
+          "type": "string"
+        },
+        "alt": {
+          "description": "Alt text for the image.",
+          "title": "Alt",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption shown below the image.",
+          "title": "Caption"
+        },
+        "max_width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional max width in pixels.",
+          "title": "Max Width"
+        }
+      },
+      "required": [
+        "type",
+        "src",
+        "alt"
+      ],
+      "title": "Image",
+      "type": "object"
+    },
+    "InnerGrid": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "grid",
+          "title": "Type",
+          "type": "string"
+        },
+        "cells": {
+          "description": "Cells across the 6-column row.",
+          "items": {
+            "$ref": "#/$defs/InnerGridCell"
+          },
+          "minItems": 1,
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "cells"
+      ],
+      "title": "InnerGrid",
+      "type": "object"
+    },
+    "InnerGridCell": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "description": "Columns this cell spans, of 6.",
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Span",
+          "type": "integer"
+        },
+        "blocks": {
+          "description": "Leaf blocks stacked in the cell.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "code": "#/$defs/Code",
+                "fact_strip": "#/$defs/FactStrip",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "meter": "#/$defs/Meter",
+                "quote": "#/$defs/Quote",
+                "status_list": "#/$defs/StatusList",
+                "table": "#/$defs/Table",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "span",
+        "blocks"
+      ],
+      "title": "InnerGridCell",
+      "type": "object"
+    },
+    "KVPair": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Row label (muted).",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Rich-text value.",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "KVPair",
+      "type": "object"
+    },
+    "KeyValue": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "key_value",
+          "title": "Type",
+          "type": "string"
+        },
+        "pairs": {
+          "description": "Vertical label/value metadata rows.",
+          "items": {
+            "$ref": "#/$defs/KVPair"
+          },
+          "minItems": 1,
+          "title": "Pairs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "pairs"
+      ],
+      "title": "KeyValue",
+      "type": "object"
+    },
+    "ListBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "list",
+          "title": "Type",
+          "type": "string"
+        },
+        "style": {
+          "default": "bullet",
+          "description": "Bulleted or numbered.",
+          "enum": [
+            "bullet",
+            "number"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "items": {
+          "description": "Rich-text points; no nesting.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "ListBlock",
+      "type": "object"
+    },
+    "Meta": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "description": "Page title (h1).",
+          "title": "Title",
+          "type": "string"
+        },
+        "subtitle": {
+          "description": "Subtitle lines under the title.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Subtitle",
+          "type": "array"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provenance; feeds the footer.",
+          "title": "Source"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Report date; feeds the footer (never auto-now).",
+          "title": "Date"
+        },
+        "toc": {
+          "default": false,
+          "description": "Render a table of contents from level-2 headings.",
+          "title": "Toc",
+          "type": "boolean"
+        },
+        "width": {
+          "default": "default",
+          "description": "Page width cap: default (1600px), wide (1920px), or full (fill the window).",
+          "enum": [
+            "default",
+            "wide",
+            "full"
+          ],
+          "title": "Width",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Meta",
+      "type": "object"
+    },
+    "Meter": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "meter",
+          "title": "Type",
+          "type": "string"
+        },
+        "items": {
+          "description": "Labelled horizontal bars.",
+          "items": {
+            "$ref": "#/$defs/MeterItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "Meter",
+      "type": "object"
+    },
+    "MeterItem": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Bar label.",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Filled amount (0 \u2264 value \u2264 max).",
+          "title": "Value"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Bar maximum (> 0); the denominator for the derived percentage.",
+          "title": "Max"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone for the bar fill.",
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "label",
+        "value",
+        "max"
+      ],
+      "title": "MeterItem",
+      "type": "object"
+    },
+    "Quote": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "quote",
+          "title": "Type",
+          "type": "string"
+        },
+        "body": {
+          "description": "Rich-text quotation.",
+          "title": "Body",
+          "type": "string"
+        },
+        "cite": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional attribution line.",
+          "title": "Cite"
+        }
+      },
+      "required": [
+        "type",
+        "body"
+      ],
+      "title": "Quote",
+      "type": "object"
+    },
+    "Reconcile": {
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "description": "Denominator; the column sum + handled must equal this.",
+          "exclusiveMinimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "column": {
+          "description": "Key of the number column that must sum to `total`.",
+          "title": "Column",
+          "type": "string"
+        },
+        "handled": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handled"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A bucket outside the rows."
+        }
+      },
+      "required": [
+        "total",
+        "column"
+      ],
+      "title": "Reconcile",
+      "type": "object"
+    },
+    "Section": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "section",
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "description": "Summary label shown on the collapsible.",
+          "title": "Title",
+          "type": "string"
+        },
+        "collapsed": {
+          "default": true,
+          "description": "Whether the section starts collapsed.",
+          "title": "Collapsed",
+          "type": "boolean"
+        },
+        "blocks": {
+          "description": "Blocks; no nested section.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "code": "#/$defs/Code",
+                "fact_strip": "#/$defs/FactStrip",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "meter": "#/$defs/Meter",
+                "quote": "#/$defs/Quote",
+                "status_list": "#/$defs/StatusList",
+                "table": "#/$defs/Table",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "blocks"
+      ],
+      "title": "Section",
+      "type": "object"
+    },
+    "StatusItem": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "description": "Step state, driving the glyph: done, pending, failed, blocked.",
+          "enum": [
+            "done",
+            "pending",
+            "failed",
+            "blocked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "text": {
+          "description": "Rich-text label for the step.",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "text"
+      ],
+      "title": "StatusItem",
+      "type": "object"
+    },
+    "StatusList": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "status_list",
+          "title": "Type",
+          "type": "string"
+        },
+        "items": {
+          "description": "Steps/checks with a coloured state glyph.",
+          "items": {
+            "$ref": "#/$defs/StatusItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "StatusList",
+      "type": "object"
+    },
+    "Table": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "table",
+          "title": "Type",
+          "type": "string"
+        },
+        "columns": {
+          "description": "Column specs; at least one text/rich column.",
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "groups": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Group"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Grouped rows with derived subtotals; provide this OR `rows`, not both.",
+          "title": "Groups"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ungrouped rows; provide this OR `groups`, not both.",
+          "title": "Rows"
+        },
+        "reconcile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reconcile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opt-in trust check on a number column."
+        },
+        "totals": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Totals"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sum a number column into a footer row."
+        }
+      },
+      "required": [
+        "type",
+        "columns"
+      ],
+      "title": "Table",
+      "type": "object"
+    },
+    "Text": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "body": {
+          "description": "Rich-text prose; blank lines split paragraphs.",
+          "title": "Body",
+          "type": "string"
+        },
+        "muted": {
+          "default": false,
+          "description": "Render in the caption colour, for asides.",
+          "title": "Muted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "body"
+      ],
+      "title": "Text",
+      "type": "object"
+    },
+    "Timeline": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "timeline",
+          "title": "Type",
+          "type": "string"
+        },
+        "items": {
+          "description": "Ordered entries with state-coloured dots.",
+          "items": {
+            "$ref": "#/$defs/TimelineItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "Timeline",
+      "type": "object"
+    },
+    "TimelineItem": {
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional timestamp/label for the entry.",
+          "title": "Time"
+        },
+        "title": {
+          "description": "Entry title.",
+          "title": "Title",
+          "type": "string"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional rich-text detail.",
+          "title": "Body"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "enum": [
+                "done",
+                "current",
+                "pending"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional dot state: done, current, pending.",
+          "title": "State"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "TimelineItem",
+      "type": "object"
+    },
+    "Totals": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "description": "Key of the number column to sum into a footer row.",
+          "title": "Column",
+          "type": "string"
+        }
+      },
+      "required": [
+        "column"
+      ],
+      "title": "Totals",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Content-file schema version.",
+      "title": "Version",
+      "type": "integer"
+    },
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "badges": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Badge"
+      },
+      "description": "Author-declared tag/status vocabulary.",
+      "title": "Badges",
+      "type": "object"
+    },
+    "blocks": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "badge_row": "#/$defs/BadgeRow",
+            "callout": "#/$defs/Callout",
+            "cards": "#/$defs/Cards",
+            "code": "#/$defs/Code",
+            "fact_strip": "#/$defs/FactStrip",
+            "grid": "#/$defs/Grid",
+            "heading": "#/$defs/Heading",
+            "image": "#/$defs/Image",
+            "key_value": "#/$defs/KeyValue",
+            "list": "#/$defs/ListBlock",
+            "meter": "#/$defs/Meter",
+            "quote": "#/$defs/Quote",
+            "section": "#/$defs/Section",
+            "status_list": "#/$defs/StatusList",
+            "table": "#/$defs/Table",
+            "text": "#/$defs/Text",
+            "timeline": "#/$defs/Timeline"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Heading"
+          },
+          {
+            "$ref": "#/$defs/Text"
+          },
+          {
+            "$ref": "#/$defs/ListBlock"
+          },
+          {
+            "$ref": "#/$defs/FactStrip"
+          },
+          {
+            "$ref": "#/$defs/KeyValue"
+          },
+          {
+            "$ref": "#/$defs/Cards"
+          },
+          {
+            "$ref": "#/$defs/BadgeRow"
+          },
+          {
+            "$ref": "#/$defs/Callout"
+          },
+          {
+            "$ref": "#/$defs/StatusList"
+          },
+          {
+            "$ref": "#/$defs/Meter"
+          },
+          {
+            "$ref": "#/$defs/Table"
+          },
+          {
+            "$ref": "#/$defs/Code"
+          },
+          {
+            "$ref": "#/$defs/Quote"
+          },
+          {
+            "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Timeline"
+          },
+          {
+            "$ref": "#/$defs/Section"
+          },
+          {
+            "$ref": "#/$defs/Grid"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Blocks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "meta",
+    "blocks"
+  ],
+  "title": "Report",
+  "type": "object"
+}

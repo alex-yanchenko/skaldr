@@ -1,0 +1,26 @@
+name: Publish
+
+# Publishing the draft GitHub release (a manual click) is the release gate; this
+# workflow then pushes the package to PyPI via trusted publishing — no API token,
+# the OIDC identity of this workflow + the `pypi` environment is the credential.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build from the released tag, not the branch tip — main may have moved on.
+          ref: ${{ github.event.release.tag_name }}
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
