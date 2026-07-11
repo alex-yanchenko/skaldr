@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/alex-yanchenko/skaldr/compare/v0.4.0...v0.4.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **readme:** link both rendered samples (sales + warehouse) ([#1](https://github.com/alex-yanchenko/skaldr/issues/1)) ([150011f](https://github.com/alex-yanchenko/skaldr/commit/150011f7460d5dc2591ae95c4a533458a105e900))
+
 ## [0.4.0](https://github.com/alex-yanchenko/skaldr/compare/v0.3.3...v0.4.0) (2026-07-10)
 
 
