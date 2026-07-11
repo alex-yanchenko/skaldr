@@ -1,0 +1,64 @@
+version: 1
+meta:
+  title: "Q3 Pipeline Review — West Region"
+  subtitle: ["120 open opportunities, reconciled by stage and risk."]
+  source: "CRM export"
+  date: "Q3 2026"
+  toc: true
+  width: default
+
+badges:
+  COMMIT: { label: "Commit", tone: green, legend: "Forecast-committed this quarter." }
+  AT_RISK: { label: "At risk", tone: amber, legend: "Slipping or unqualified — needs attention." }
+
+blocks:
+  - { type: heading, text: "Where we stand" }
+  - type: cards
+    items:
+      - { label: "Open pipeline", value: 4200000, of: 4200000, tone: neutral, note: "West region, all stages" }
+      - { label: "Committed", value: 1850000, of: 4200000, tone: success }
+      - { label: "At risk", value: 620000, of: 4200000, tone: warning }
+      - { label: "Forecast", value: "ON TRACK", tone: success }
+  - type: callout
+    tone: warning
+    title: "Needs a decision this week"
+    body: "**7 deals ($620K)** are flagged *at risk* — mostly stalled in Proposal with no next
+      step booked. Owners should confirm a close plan or move them out of the quarter."
+
+  - { type: heading, text: "Opportunities by stage" }
+  - type: table
+    columns:
+      - { key: stage, label: "Stage", kind: text }
+      - { key: flag, label: "", kind: badge }
+      - { key: count, label: "Deals", kind: number, pct_of_total: true }
+      - { key: note, label: "Where it stands", kind: rich }
+    reconcile:
+      total: 120
+      column: count
+    groups:
+      - name: "Late stage"
+        rows:
+          - stage: "Negotiation"
+            flag: COMMIT
+            count: 18
+            note: "Redlines out with legal; **verbal yes** on 11 of them."
+          - stage: "Proposal"
+            flag: AT_RISK
+            count: 34
+            note: "Half have *no booked next step* — the main slip risk this quarter."
+      - name: "Early stage"
+        rows:
+          - stage: "Discovery"
+            flag: ""
+            count: 41
+            note: "Qualified; discovery calls complete, scoping in progress."
+          - stage: "Prospecting"
+            flag: ""
+            count: 27
+            note: "Top of funnel — not forecasted, tracked for next quarter."
+
+  - type: status_list
+    items:
+      - { state: done, text: "Committed deals have a mutual close plan." }
+      - { state: blocked, text: "17 Proposal deals need a next step booked." }
+      - { state: pending, text: "Discovery deals to be re-scored by Friday." }

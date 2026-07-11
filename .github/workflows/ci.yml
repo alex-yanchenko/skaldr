@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests
+      - run: uv run pyright
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Oldest supported and newest — the bounds of requires-python are where
+        # stdlib/pydantic behavior differences surface, not the middle versions.
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv build
+      # Render from the INSTALLED wheel, not the source tree — the test suite resolves
+      # the templates and stylesheet from src/, so this is the only check that the wheel
+      # actually ships them (a build-backend exclude would otherwise fail silently,
+      # and only post-`uv tool install`).
+      - run: uvx --from dist/*.whl skaldr data/example.yaml -o smoke/example.html
+      # The skill + guide ship as package data too — exercise both from the installed wheel so a
+      # build exclude that drops src/skaldr/skill fails CI here, not at a user's first run.
+      - run: |
+          set -o pipefail
+          uvx --from dist/*.whl skaldr --guide | grep -q "## Blocks"
+      - run: |
+          tmp_home="$(mktemp -d)"
+          mkdir -p "$tmp_home/.claude"
+          HOME="$tmp_home" uvx --from dist/*.whl skaldr --install-skill
+          test -f "$tmp_home/.claude/skills/skaldr/SKILL.md"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: example-render
+          path: smoke/example.html

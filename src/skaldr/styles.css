@@ -1,0 +1,242 @@
+/* skaldr — single source of truth for page styling; inlined into every page by render.py.
+   Tokens first, then components. Every colour routes through a token; the palette is theme-aware
+   via light-dark() (see the :root block). */
+*,*::before,*::after{box-sizing:border-box}
+html{line-height:1.5;-webkit-text-size-adjust:100%}
+body{margin:0}
+h1,h2,h3,p,ul,ol,figure,figcaption,table,dl,dt,dd,blockquote,pre{margin:0}
+ul,ol{padding:0}
+table{border-collapse:collapse}
+
+:root{
+	/* Every colour is theme-aware via light-dark(light, dark). color-scheme follows the viewer's
+	   OS by default; the [data-theme] rules below force one theme regardless. Component rules never
+	   reference a raw colour — they read these tokens — so the whole palette flips from one place. */
+	color-scheme:light dark;
+	--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
+	--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
+	--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
+	--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
+	--hdr:light-dark(#475569,#2c3543); --hdr-fg:#ffffff; --hdr-h:41px;
+	--neutral-fg:light-dark(#475569,#cbd5e1); --neutral-bg:light-dark(#f1f5f9,#2b3441);
+	--info-fg:light-dark(#1d4ed8,#93c5fd); --info-bg:light-dark(#eff6ff,#15243c);
+	--success-fg:light-dark(#15803d,#86efac); --success-bg:light-dark(#ecfdf5,#122a1e);
+	--warning-fg:light-dark(#b45309,#fbbf24); --warning-bg:light-dark(#fef3c7,#2c2410);
+	--danger-fg:light-dark(#b91c1c,#fca5a5); --danger-bg:light-dark(#fee2e2,#301619);
+	--accent-fg:light-dark(#7c3aed,#c4b5fd); --accent-bg:light-dark(#f3e8ff,#241a38);
+	--teal-fg:light-dark(#0f766e,#5eead4); --teal-bg:light-dark(#f0fdfa,#0b2621);
+	--sky-fg:light-dark(#0369a1,#7dd3fc); --sky-bg:light-dark(#e0f2fe,#0c2740);
+	--s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
+	/* Soft elevation for the bounded-panel family (cards/table/code/image/section); flow and
+	   tinted blocks stay flat so the lift keeps meaning "discrete panel". Reads only against the
+	   tinted --page, not pure white. */
+	--shadow:0 1px 2px light-dark(rgba(20,26,40,0.05),rgba(0,0,0,0.5)), 0 4px 16px light-dark(rgba(20,26,40,0.04),rgba(0,0,0,0.35));
+	--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+	--mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+/* An explicit theme choice — a consumer setting data-theme on the root — wins over the OS default. */
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
+	line-height:1.5; -webkit-font-smoothing:antialiased}
+.wrap{margin:0 auto; padding:40px 48px 80px}
+/* Page width cap (meta.width). max-width is a ceiling: on a narrower screen the page fills the
+   viewport regardless, so the mode only diverges once the screen is wider than the cap. */
+.wrap.width-default{max-width:1600px}
+.wrap.width-wide{max-width:1920px}
+.wrap.width-full{max-width:none}
+/* The width switcher sets data-width on the root to override the author's meta.width class at
+   runtime. Higher specificity than the .wrap.width-* class above, so the reader's choice wins. */
+:root[data-width="default"] .wrap{max-width:1600px}
+:root[data-width="wide"] .wrap{max-width:1920px}
+:root[data-width="full"] .wrap{max-width:none}
+
+h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-bottom:6px; text-wrap:balance}
+.subtitle{color:var(--muted); font-size:14px}
+.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
+.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
+h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-bottom:var(--s2);
+	border-bottom:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
+h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+
+.text{margin:var(--s3) 0; max-width:80ch}
+.text.muted{color:var(--muted)}
+.text strong,td strong,.tb strong{font-weight:680}
+em{font-style:italic}
+del{color:var(--muted); text-decoration:line-through}
+a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
+code{font-family:var(--mono); font-size:12px; border:1px solid var(--line); padding:0 4px;
+	border-radius:4px; background:transparent}
+
+.facts{display:flex; flex-wrap:wrap; gap:var(--s1) 0; font-size:12.5px; color:var(--muted); margin:var(--s3) 0}
+.facts .fact{display:inline-flex; gap:6px}
+.facts .fact:not(:last-child)::after{content:"·"; margin:0 var(--s3); color:var(--rule)}
+.facts .fact .k{font-weight:600; color:var(--ink)}
+
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:9px 24px; font-size:13.5px; margin:var(--s4) 0; max-width:640px}
+.kv dt{color:var(--muted)}
+.kv dd{font-weight:400; font-variant-numeric:tabular-nums}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--s3); margin:var(--s6) 0}
+.card{border:1px solid var(--line); border-radius:8px; padding:18px; border-top:3px solid var(--t,var(--line)); background:var(--surface); box-shadow:var(--shadow)}
+.card.info{--t:var(--info-fg)} .card.success{--t:var(--success-fg)} .card.warning{--t:var(--warning-fg)}
+.card.danger{--t:var(--danger-fg)} .card.accent{--t:var(--accent-fg)} .card.neutral{--t:var(--neutral-fg)}
+.card .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
+.card .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:8px; letter-spacing:-0.01em}
+.card .n.neg{color:var(--danger-fg)} .card .n.str{font-size:20px; font-weight:600}
+.card .n .pct{font-size:13px; font-weight:500; color:var(--muted); margin-left:6px}
+.card .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}
+
+.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+	padding:2px 9px; border-radius:5px; white-space:nowrap}
+.badge-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:var(--s3) 0}
+.badge-row .label{font-size:12.5px; color:var(--muted); margin-right:var(--s1)}
+.chip.slate{background:var(--neutral-bg); color:var(--neutral-fg)} .chip.blue{background:var(--info-bg); color:var(--info-fg)}
+.chip.green{background:var(--success-bg); color:var(--success-fg)} .chip.amber{background:var(--warning-bg); color:var(--warning-fg)}
+.chip.red{background:var(--danger-bg); color:var(--danger-fg)} .chip.violet{background:var(--accent-bg); color:var(--accent-fg)}
+.chip.teal{background:var(--teal-bg); color:var(--teal-fg)} .chip.sky{background:var(--sky-bg); color:var(--sky-fg)}
+
+.callout{border-left:4px solid var(--c); background:var(--cb); border-radius:8px; padding:14px 18px; margin:var(--s4) 0}
+.callout .title{font-weight:600; color:var(--c); margin-bottom:var(--s1)}
+.callout.info{--c:var(--info-fg); --cb:var(--info-bg)} .callout.success{--c:var(--success-fg); --cb:var(--success-bg)}
+.callout.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} .callout.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
+
+.status-list{list-style:none; margin:var(--s3) 0; display:flex; flex-direction:column; gap:var(--s2)}
+.status-list li{display:flex; gap:var(--s2); align-items:baseline; font-size:14px}
+.status-list .glyph{font-weight:700; width:1.2em; flex:none; text-align:center}
+.status-list .done .glyph{color:var(--success-fg)} .status-list .pending .glyph{color:var(--muted)}
+.status-list .failed .glyph{color:var(--danger-fg)} .status-list .blocked .glyph{color:var(--warning-fg)}
+
+/* One shared grid so the label column hugs the longest label (not a fixed width) and every bar
+   still aligns — adapts cleanly whether the meter is full-width or in a narrow grid cell. */
+.meter{display:grid; grid-template-columns:max-content 1fr auto; gap:var(--s3) var(--s4); align-items:center; margin:var(--s4) 0; max-width:900px}
+.meter .m-label{font-size:13px}
+.meter .track{background:var(--neutral-bg); border-radius:999px; height:12px; overflow:hidden}
+.meter .fill{height:100%; border-radius:999px; background:var(--m,var(--neutral-fg))}
+.meter .m-val{font-size:12.5px; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums}
+.meter .fill.info{--m:var(--info-fg)} .meter .fill.success{--m:var(--success-fg)} .meter .fill.warning{--m:var(--warning-fg)} .meter .fill.danger{--m:var(--danger-fg)}
+.meter .fill.neutral{--m:var(--neutral-fg)} .meter .fill.accent{--m:var(--accent-fg)}
+
+.list{margin:var(--s3) 0; padding-left:var(--s6); max-width:80ch}
+.list li{margin:var(--s1) 0}
+
+.tl{list-style:none; position:relative; padding-left:26px; margin:var(--s4) 0}
+.tl::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
+.tl li{position:relative; margin-bottom:18px}
+.tl li:last-child{margin-bottom:0}
+.tl li::before{content:""; position:absolute; left:-26px; top:3px; width:12px; height:12px; border-radius:50%;
+	background:var(--rule); box-shadow:0 0 0 3px var(--page)}
+.tl li.done::before{background:var(--success-fg)} .tl li.current::before{background:var(--info-fg)}
+.tl .time{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-variant-numeric:tabular-nums}
+.tl .ti{font-weight:650; margin-top:1px}
+.tl .tb{color:var(--ink); font-size:13.5px; margin-top:2px}
+
+blockquote.quote{border-left:3px solid var(--rule); padding:2px 0 2px 16px; margin:var(--s4) 0; color:var(--ink)}
+blockquote.quote .cite{display:block; margin-top:8px; font-size:12.5px; color:var(--muted)}
+blockquote.quote .cite::before{content:"— "}
+
+.code{margin:var(--s4) 0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
+.code .code-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+	color:var(--muted); background:var(--panel); padding:6px var(--s3); border-bottom:1px solid var(--line)}
+.code pre{padding:var(--s3); overflow-x:auto; font-family:var(--mono); font-size:12px; line-height:1.6}
+.code pre.diff{padding:var(--s3) 0}
+.code .diff .ln{display:block; padding:0 var(--s3); white-space:pre}
+.code .diff .add{background:var(--success-bg)} .code .diff .add::before{content:"+ "; color:var(--success-fg)}
+.code .diff .del{background:var(--danger-bg)} .code .diff .del::before{content:"- "; color:var(--danger-fg)}
+.code .diff .ctx::before{content:"  "}
+
+figure.fig{margin:var(--s4) 0; max-width:680px}
+figure.fig .frame{border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
+figure.fig img,figure.fig svg{display:block; width:100%; height:auto}
+figure.fig figcaption{font-size:12px; color:var(--muted); margin-top:8px; text-align:center}
+
+/* The table is a contained panel: the wrapper owns the border/radius/shadow, NOT overflow:hidden —
+   an overflow container would trap the sticky header inside the box and break it. Corners are
+   instead rounded on the header cells (top) and the last row loses its border (bottom edge). */
+.table-wrap{margin:var(--s3) 0; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:var(--shadow)}
+/* border-collapse:separate is required for the header's border-radius to render — collapsed cells
+   ignore border-radius. border-spacing:0 keeps the row rules looking like collapsed borders. */
+table.rep{width:100%; table-layout:fixed; font-size:14px; border-collapse:separate; border-spacing:0}
+table.rep thead th{position:sticky; top:0; z-index:3; text-align:left; font-size:11px; font-weight:700;
+	text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg); background:var(--hdr); padding:12px 16px; vertical-align:bottom}
+/* 7px = the wrapper's 8px radius minus its 1px border, so the header sits flush inside the corner. */
+table.rep thead th:first-child{border-top-left-radius:7px}
+table.rep thead th:last-child{border-top-right-radius:7px}
+table.rep th.num{text-align:right}
+table.rep > tbody > tr:last-child > td{border-bottom:none}
+table.rep tr.group td{position:sticky; top:var(--hdr-h); z-index:2; background:var(--surface); padding:18px 16px 8px;
+	font-weight:700; font-size:13px; color:var(--ink); box-shadow:inset 0 -1px 0 var(--rule)}
+table.rep tr.group .st{float:right; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums}
+table.rep tbody td{padding:16px; border-bottom:1px solid var(--line); vertical-align:top}
+table.rep tbody tr.row:hover td{background:var(--hover)}
+table.rep tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
+table.rep td.title{font-weight:650}
+table.rep td.title .chip{margin-top:8px}
+table.rep td.num{text-align:right; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}
+table.rep td.num .pct{display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:2px}
+table.rep tfoot td{border-top:2px solid var(--ink); padding:12px 16px; font-weight:700}
+table.rep tfoot td.num{text-align:right; font-variant-numeric:tabular-nums; font-size:16px}
+/* Scoped under table.rep so these win over `table.rep tbody td` (a descendant selector that would
+   otherwise leak the main cell's 16px padding + row border into these nested quiet rows). */
+.subtable{margin-top:12px; width:100%; font-size:12.5px}
+table.rep .subtable td{padding:3px 10px 3px 0; border:0; vertical-align:baseline; color:var(--muted)}
+table.rep .subtable td.sv{text-align:right; font-variant-numeric:tabular-nums; width:70px}
+.reconcile{font-size:12.5px; color:var(--muted); margin:var(--s3) 0 var(--s6)}
+
+details.section{border:1px solid var(--line); border-radius:8px; margin:var(--s4) 0; background:var(--surface); box-shadow:var(--shadow)}
+details.section>summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
+	list-style:none; display:flex; align-items:center; gap:var(--s2)}
+details.section>summary::-webkit-details-marker{display:none}
+details.section>summary::before{content:"▸"; color:var(--muted); font-size:12px}
+details.section[open]>summary::before{content:"▾"}
+details.section .section-body{padding:0 var(--s4) var(--s4)}
+.legend-grid{display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:var(--s2) var(--s8)}
+.legend-row{display:flex; align-items:baseline; gap:10px; font-size:13px}
+.legend-row .meaning{color:var(--muted)}
+
+.footer{font-size:12px; color:var(--muted); margin-top:var(--s8); padding-top:var(--s4); border-top:1px solid var(--line)}
+.credit{font-size:11px; color:var(--muted); margin-top:var(--s4)}
+.credit a{color:var(--muted); text-decoration:underline; text-underline-offset:2px}
+
+/* grid — bounded side-by-side layout over 6 columns. Cell width = span/6, set by .span-N. A cell
+   is not an overflow container, so a sticky table header inside it keeps working. */
+.grid{display:grid; grid-template-columns:repeat(6,1fr); gap:var(--s4); margin:var(--s4) 0; align-items:start}
+.cell{min-width:0}
+.cell.span-1{grid-column:span 1} .cell.span-2{grid-column:span 2} .cell.span-3{grid-column:span 3}
+.cell.span-4{grid-column:span 4} .cell.span-5{grid-column:span 5} .cell.span-6{grid-column:span 6}
+/* Below the stack floor, cells go full-width (spans ignored) so nothing is cramped on narrow screens. */
+@media (max-width:768px){
+	.grid{grid-template-columns:1fr}
+	.cell{grid-column:auto}
+}
+
+/* Display controls — a fixed corner menu (theme + width). position:fixed so it never affects
+   layout or page width; collapsed to just the button until opened. z-index sits above all page
+   content (sticky headers top out at 3). Hidden in print. */
+.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px}
+.sc-btn{display:flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0;
+	border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--muted);
+	box-shadow:var(--shadow); cursor:pointer}
+.sc-btn:hover{color:var(--ink)}
+.sc-btn:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}
+/* Anchored below the button (its full height + a gap) so the offset tracks the button size. */
+.sc-menu{position:absolute; top:calc(100% + var(--s2)); right:0; min-width:190px; padding:var(--s3);
+	border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:var(--shadow);
+	display:flex; flex-direction:column; gap:var(--s3)}
+.sc-menu[hidden]{display:none}
+.sc-row{display:flex; flex-direction:column; gap:6px}
+.sc-lbl{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted)}
+.sc-seg{display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden}
+.sc-seg button{flex:1; padding:6px 4px; border:0; background:var(--surface); color:var(--muted);
+	font:inherit; cursor:pointer}
+.sc-seg button+button{border-left:1px solid var(--line)}
+.sc-seg button:hover{background:var(--hover); color:var(--ink)}
+.sc-seg button.on{background:var(--hdr); color:var(--hdr-fg)}
+/* Negative offset keeps the focus ring inside the tightly-packed segment instead of clipping. */
+.sc-seg button:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}
+
+@media print{
+	table.rep thead th,table.rep tr.group td{position:static}
+	.card,.callout,figure.fig,table,.tl li{break-inside:avoid}
+	.sc{display:none}
+}

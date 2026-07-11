@@ -1,0 +1,56 @@
+name: Sync Homebrew formula
+
+# Manually re-push skaldr's Homebrew formula to the tap for a given (default: latest)
+# release — the recovery path when the release job's brew push didn't run or needs redoing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "skaldr version to pin (blank = latest release)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            skaldr
+            homebrew-tap
+      - uses: astral-sh/setup-uv@v7
+      - env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ver="$INPUT_VERSION"
+          if [ -z "$ver" ]; then
+            ver=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName')
+            ver="${ver#v}"
+          fi
+          # Wait until the version resolves on PyPI (the generator resolves the closure there).
+          for i in $(seq 1 30); do
+            printf 'skaldr==%s\n' "$ver" | uv pip compile - --python-version 3.13 --refresh --quiet >/dev/null 2>&1 && break
+            [ "$i" -eq 30 ] && { echo "skaldr $ver not resolvable on PyPI after 5 min"; exit 1; }
+            sleep 10
+          done
+          tap=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/alex-yanchenko/homebrew-tap" "$tap"
+          uv run --no-project python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb"
+          cd "$tap"
+          git config user.name "alex-release-bot[bot]"
+          git config user.email "alex-release-bot[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git commit -am "chore: skaldr $ver"
+            git push
+          else
+            echo "formula already at skaldr $ver"
+          fi

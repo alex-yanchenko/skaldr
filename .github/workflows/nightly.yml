@@ -1,0 +1,20 @@
+name: Nightly
+
+# Advisory checks that must NEVER gate a PR, push, or merge: a dependency-advisory
+# feed moves on its own; a brand-new, unpatched advisory in a runtime dep would
+# otherwise turn unrelated PRs red.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+      # Runtime deps only (jinja2, pydantic, pyyaml). The dev toolchain (pytest, ruff,
+      # pyright) never ships, so its advisories aren't a risk for this CLI.
+      - run: uv export --no-dev --no-emit-project --format requirements.txt > requirements-audit.txt
+      - run: uvx pip-audit -r requirements-audit.txt

@@ -1,0 +1,102 @@
+{# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
+
+{% set STATUS_GLYPHS = {"done": "✓", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
+
+{% macro chip_item(item) %}
+{% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
+{% else %}<span class="chip {{ item.tone }}">{{ item.label }}</span>{% endif %}
+{% endmacro %}
+
+{% macro legend(used_badges) %}
+<details class="section">
+<summary>Legend — badges used on this page</summary>
+<div class="section-body">
+<div class="legend-grid">
+{% for key, b in used_badges %}<div class="legend-row"><span class="chip {{ b.tone }}">{{ b.label }}</span><span class="meaning">{{ b.legend }}</span></div>
+{% endfor %}
+</div>
+</div>
+</details>
+{% endmacro %}
+
+{% macro table_row(b, row, non_badge, badge_cols, title_key) %}
+<tr class="row">
+{% for c in non_badge %}
+{% if c.key == title_key %}
+<td class="title">{{ row[c.key] | richtext }}
+{% for bc in badge_cols %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
+{% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+</td>
+{% elif c.kind == "number" %}
+<td class="num">{{ row[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
+{% else %}
+<td>{{ row[c.key] | richtext }}</td>
+{% endif %}
+{% endfor %}
+</tr>
+{% endmacro %}
+
+{% macro table(b) %}
+{% set non_badge = b.columns | rejectattr("kind", "equalto", "badge") | list %}
+{% set badge_cols = b.columns | selectattr("kind", "equalto", "badge") | list %}
+{% set text_cols = b.columns | selectattr("kind", "equalto", "text") | map(attribute="key") | list %}
+{% set rich_cols = b.columns | selectattr("kind", "equalto", "rich") | map(attribute="key") | list %}
+{% set title_key = text_cols[0] if text_cols else (rich_cols[0] if rich_cols else non_badge[0].key) %}
+{% set sum_key = b.reconcile.column if b.reconcile else (b.totals.column if b.totals else none) %}
+<div class="table-wrap"><table class="rep">
+{% set width_total = non_badge | selectattr("width") | map(attribute="width") | sum %}
+<colgroup>{% for c in non_badge %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% endif %}>{% endfor %}</colgroup>
+<thead><tr>{% for c in non_badge %}<th{% if c.kind == "number" %} class="num"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
+<tbody>
+{% if b.groups is not none %}
+{% for g in b.groups %}
+<tr class="group"><td colspan="{{ non_badge | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
+{% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, non_badge, badge_cols, title_key) }}{% endfor %}
+{% else %}<tr class="empty"><td colspan="{{ non_badge | length }}">— none —</td></tr>{% endif %}
+{% endfor %}
+{% else %}
+{% for row in b.rows %}{{ table_row(b, row, non_badge, badge_cols, title_key) }}{% endfor %}
+{% endif %}
+</tbody>
+{% if b.totals %}<tfoot><tr>{% for c in non_badge %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif loop.first %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
+</table></div>
+{% if b.reconcile %}<p class="reconcile">{{ reconcile_line(b) }}</p>{% endif %}
+{% endmacro %}
+
+{% macro render_block(block) %}
+{% if block.type == "heading" %}
+<h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
+{% elif block.type == "text" %}
+{% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
+{% elif block.type == "list" %}
+<{{ "ol" if block.style == "number" else "ul" }} class="list">{% for item in block.items %}<li>{{ item | richtext }}</li>{% endfor %}</{{ "ol" if block.style == "number" else "ul" }}>
+{% elif block.type == "fact_strip" %}
+<div class="facts">{% for f in block.facts %}<span class="fact"><span class="k">{{ f.label }}</span><span>{{ f.value }}</span></span>{% endfor %}</div>
+{% elif block.type == "key_value" %}
+<dl class="kv">{% for p in block.pairs %}<dt>{{ p.label }}</dt><dd>{{ p.value | richtext }}</dd>{% endfor %}</dl>
+{% elif block.type == "cards" %}
+<div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>{% endfor %}</div>
+{% elif block.type == "badge_row" %}
+<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>
+{% elif block.type == "callout" %}
+<div class="callout {{ block.tone }}">{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ block.body | richtext }}</div></div>
+{% elif block.type == "status_list" %}
+<ul class="status-list">{% for item in block.items %}<li class="{{ item.state }}"><span class="glyph">{{ STATUS_GLYPHS[item.state] }}</span><span>{{ item.text | richtext }}</span></li>{% endfor %}</ul>
+{% elif block.type == "meter" %}
+<div class="meter">{% for m in block.items %}<span class="m-label">{{ m.label }}</span><div class="track"><div class="fill {{ m.tone or 'neutral' }}" style="width:{{ (m.value / m.max * 100) | round(1) }}%"></div></div><span class="m-val">{{ pct(m.value, m.max) }}</span>{% endfor %}</div>
+{% elif block.type == "code" %}
+<div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for line in block.content.split("\n") %}<span class="ln {{ 'add' if line.startswith('+') else 'del' if line.startswith('-') else 'ctx' }}">{{ line[1:] if (line.startswith('+') or line.startswith('-')) else line }}</span>{% endfor %}</pre>{% else %}<pre>{{ block.content }}</pre>{% endif %}</div>
+{% elif block.type == "quote" %}
+<blockquote class="quote"><div>{{ block.body | richtext }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
+{% elif block.type == "image" %}
+<figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
+{% elif block.type == "timeline" %}
+<ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}</li>{% endfor %}</ul>
+{% elif block.type == "table" %}
+{{ table(block) }}
+{% elif block.type == "section" %}
+<details class="section"{% if not block.collapsed %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+{% elif block.type == "grid" %}
+<div class="grid">{% for cell in block.cells %}<div class="cell span-{{ cell.span }}">{% for inner in cell.blocks %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
+{% endif %}
+{% endmacro %}

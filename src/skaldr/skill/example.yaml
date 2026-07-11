@@ -1,0 +1,57 @@
+version: 1
+meta:
+  title: "Q3 Warehouse Inventory Count — Discrepancies & Fixes"
+  subtitle: ["Reconciled review of the 10,000-unit cycle count."]
+  source: "WMS export"
+  date: "Q3 2026"
+  toc: true
+
+badges:
+  FLOOR: { label: "Floor", tone: amber, legend: "Fixable on the floor before the next count." }
+  SYSTEM: { label: "System", tone: blue, legend: "Defect in the scanning/labeling pipeline." }
+
+blocks:
+  - { type: heading, text: "Overview" }
+  - type: text
+    body: >-
+      Of 10,000 counted units, most matched the system. This page reconciles the rest by cause and
+      proposes a fix for each. The counts **must** sum to the expected total or the build fails — see
+      the reconciliation line under the table.
+  - type: cards
+    items:
+      - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
+      - { label: "Needs work", value: 1500, of: 10000, tone: warning }
+
+  - { type: heading, text: "Discrepancies" }
+  - type: table
+    columns:
+      - { key: issue, label: "Discrepancy", kind: text }
+      - { key: tag, label: "", kind: badge }
+      - { key: count, label: "Units", kind: number, pct_of_total: true }
+      - { key: problem, label: "What happened", kind: rich }
+    reconcile:
+      total: 10000
+      column: count
+      handled: { label: "Matched cleanly", value: 8500 }
+    groups:
+      - name: "Floor — fixable"
+        rows:
+          - issue: "Double-counted units"
+            tag: FLOOR
+            count: 600
+            problem: "The same pallet is scanned twice within the count window."
+          - issue: "Mislabeled bin codes"
+            tag: SYSTEM
+            count: 500
+            problem: "`9-digit` bin codes were truncated and failed the lookup."
+      - name: "Flagged for the vendor"
+        rows:
+          - issue: "Short shipment"
+            tag: FLOOR
+            count: 400
+            problem: "The vendor's ASN listed units that never reached the dock."
+
+  - type: callout
+    tone: info
+    title: "Next step"
+    body: "The 600 double-counts clear with the de-dup fix; the 400 short-shipped units need the vendor."

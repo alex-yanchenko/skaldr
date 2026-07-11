@@ -1,0 +1,42 @@
+name: Sample page
+
+# Publishes rendered sample reports to GitHub Pages so non-developers can click and see the
+# output. ONE-TIME SETUP: repo Settings → Pages → Source: "GitHub Actions". Until that's set,
+# this workflow will fail (expected) — it can't deploy Pages that aren't enabled.
+
+on:
+  push:
+    branches: [main]
+    paths: [examples/**, data/example.yaml, src/skaldr/**, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Render the sample reports
+        run: |
+          mkdir -p site
+          uv run skaldr examples/sales-pipeline.yaml -o site/index.html
+          uv run skaldr data/example.yaml -o site/data-import.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

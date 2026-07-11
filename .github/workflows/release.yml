@@ -1,0 +1,122 @@
+name: Release
+
+# release-please maintains a "chore(main): release X.Y.Z" PR off main: it bumps the
+# version in pyproject.toml and writes the CHANGELOG from Conventional Commit messages.
+# Merging that PR creates a PUBLISHED (non-draft) GitHub release + tag, which fires the
+# `release: published` event that triggers publish.yml (PyPI via trusted publishing). This
+# same job also builds the sdist + wheel and attaches them with provenance attestation.
+# Net: merging the release PR is the only manual step — PyPI publish happens automatically.
+on:
+  push:
+    branches: [main]
+
+# Serialize releases: only one run at a time. A second push while a run is mid-flight
+# queues behind it (cancel-in-progress: false). We do NOT cancel the in-progress run —
+# killing it mid-build could leave a release half-built (assets missing or formula unpushed).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Build-provenance attestation for the release assets: id-token mints the OIDC
+  # identity the attestation is signed with; attestations writes it to the store that
+  # `gh attestation verify` checks.
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Mint a short-lived installation token from the dedicated release GitHub App so
+      # PR creation is scoped to THIS workflow's token. The token also makes the release
+      # PR trigger CI (PRs opened by the default GITHUB_TOKEN don't).
+      # The token reaches only the repos listed under `repositories`: skaldr for
+      # release-please + assets, homebrew-tap for the formula push below.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            skaldr
+            homebrew-tap
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # uv.lock records the project's own version, and release-please bumps only
+      # pyproject.toml — without this refresh, `uv sync --locked` fails CI on every
+      # release PR. Runs whenever release-please created/updated the release PR.
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          ref: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: astral-sh/setup-uv@v7
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+      - name: Sync uv.lock on the release PR
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: |
+          uv lock
+          if ! git diff --quiet uv.lock; then
+            git config user.name "alex-release-bot[bot]"
+            git config user.email "alex-release-bot[bot]@users.noreply.github.com"
+            git add uv.lock
+            git commit -m "chore: sync uv.lock with release version"
+            git push
+          fi
+
+      # The rest runs ONLY when a release PR was just merged (a release now exists).
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created }}
+      - uses: astral-sh/setup-uv@v7
+        if: ${{ steps.release.outputs.release_created }}
+      - if: ${{ steps.release.outputs.release_created }}
+        run: uv build
+      - name: Attest build provenance for the release assets
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+      - name: Attach sdist + wheel to the release
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ steps.release.outputs.tag_name }}" dist/* --clobber
+      # Regenerate skaldr's Homebrew formula and push it to the tap. This step is what
+      # updates brew, so let it fail the release if the push fails. The formula pins a
+      # dependency wheel per platform, so the tap's generator rebuilds the whole file;
+      # uv (used by the generator) is on PATH from setup-uv above.
+      - name: Regenerate + push the Homebrew formula
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          # publish.yml uploads to PyPI in a parallel workflow; the generator resolves the
+          # dependency closure from PyPI, so wait until this version is resolvable there
+          # before regenerating (up to 5 min).
+          for i in $(seq 1 30); do
+            printf 'skaldr==%s\n' "$ver" | uv pip compile - --python-version 3.13 --refresh --quiet >/dev/null 2>&1 && break
+            [ "$i" -eq 30 ] && { echo "skaldr $ver not resolvable on PyPI after 5 min"; exit 1; }
+            sleep 10
+          done
+          tap=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/alex-yanchenko/homebrew-tap" "$tap"
+          uv run --no-project python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb"
+          cd "$tap"
+          git config user.name "alex-release-bot[bot]"
+          git config user.email "alex-release-bot[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git commit -am "chore: skaldr $ver"
+            git push
+          fi

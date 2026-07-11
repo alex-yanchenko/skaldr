@@ -1,0 +1,77 @@
+[project]
+name = "skaldr"
+version = "0.4.0"
+description = "Component framework that renders one YAML content file into a self-contained HTML report page"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Alex Yanchenko", email = "a.inbox.2026@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2>=3.1",
+    "markupsafe>=2.1",
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0",
+]
+keywords = ["report", "html", "yaml", "components", "jinja"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Markup :: HTML",
+]
+
+[project.urls]
+Repository = "https://github.com/alex-yanchenko/skaldr"
+Issues = "https://github.com/alex-yanchenko/skaldr/issues"
+
+[project.scripts]
+skaldr = "skaldr.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1",
+    "pytest>=8.0",
+    "ruff>=0.14",
+    "types-pyyaml>=6.0",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "C4",  # comprehensions
+    "SIM", # simplify
+    "RET", # return
+    "ARG", # unused arguments
+    "PTH", # pathlib
+    "RUF", # ruff-specific
+]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

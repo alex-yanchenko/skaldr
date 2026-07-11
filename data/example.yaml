@@ -1,0 +1,212 @@
+# Example report — fictional, self-contained. Run:
+#   uv run skaldr data/example.yaml
+# Then open out/example.html in a browser. This file exercises every block type.
+version: 1
+meta:
+  title: "Q3 Warehouse Inventory Count — Discrepancies & Fixes"
+  subtitle:
+    - "Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category."
+    - "Mixed audience — ops reads the impact, the floor team reads the fix."
+  source: "WMS export"
+  date: "Q3 2026"
+  toc: true
+
+badges:
+  FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
+  SYSTEM: { label: "System", tone: blue,  legend: "Defect in the scanning/labeling pipeline." }
+  VENDOR: { label: "Vendor", tone: red,   legend: "Depends on the vendor to resolve." }
+
+blocks:
+  - type: fact_strip
+    facts:
+      - { label: "Source", value: "WMS export" }
+      - { label: "Period", value: "Q3 2026" }
+      - { label: "Site", value: "DC-West" }
+      - { label: "Owner", value: "Inventory Ops" }
+
+  - type: heading
+    text: "Overview"
+
+  - type: key_value
+    pairs:
+      - { label: "Count date", value: "2026-07-09 14:22 UTC" }
+      - { label: "Units expected", value: "10,000" }
+      - { label: "Method", value: "`full cycle count`" }
+      - { label: "Mode", value: "strict" }
+
+  - type: cards
+    items:
+      - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
+      - { label: "Floor — fixable", value: 1100, of: 10000, tone: warning, note: "Miscounts + mislabeled bins we can correct." }
+      - { label: "Vendor — escalate", value: 400, of: 10000, tone: danger }
+      - { label: "Count status", value: "HEALTHY", tone: accent }
+      - { label: "Total units", value: 10000, tone: neutral }
+
+  - type: text
+    body: "The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin > 12~~ scan rule is under review; see the [method](https://example.com/runbook)."
+  - type: text
+    muted: true
+    body: "Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated."
+
+  - type: callout
+    tone: warning
+    title: "Action needed before the next count"
+    body: "The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting."
+  - type: callout
+    tone: info
+    body: "Counts below are per distinct discrepancy class, not per unit."
+
+  - type: heading
+    text: "Discrepancies & fixes"
+  - type: table
+    columns:
+      - { key: issue, label: "Discrepancy", kind: text }
+      - { key: tag, label: "", kind: badge }
+      - { key: count, label: "Units", kind: number, pct_of_total: true }
+      - { key: problem, label: "What the problem is", kind: rich }
+      - { key: fix, label: "Proposed fix", kind: rich }
+    reconcile:
+      total: 10000
+      column: count
+      handled: { label: "Matched cleanly", value: 8500 }
+    groups:
+      - name: "Floor — fixable"
+        rows:
+          - issue: "Double-counted units"
+            tag: FLOOR
+            count: 600
+            problem: "The same pallet is scanned twice when a picker re-enters an aisle within the count window."
+            fix: "De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan."
+            subrows:
+              - { label: "Skipped, bin > 12", value: 260 }
+              - { label: "Same-window re-scan", value: 340 }
+          - issue: "Mislabeled bin codes"
+            tag: SYSTEM
+            count: 500
+            problem: "Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup."
+            fix: "Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log."
+      - name: "Vendor — escalation"
+        rows:
+          - issue: "Short shipment"
+            tag: VENDOR
+            count: 400
+            problem: "The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted."
+            fix: "Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives."
+      - name: "Correctly counted — no action"
+        rows: []
+
+  - type: heading
+    text: "Count progress"
+  - type: meter
+    items:
+      - { label: "Zone A", value: 100, max: 100, tone: info }
+      - { label: "Zone B", value: 92, max: 100, tone: success }
+      - { label: "Zone C", value: 85, max: 100, tone: warning }
+      - { label: "Overflow", value: 4, max: 100, tone: danger }
+  - type: badge_row
+    label: "Affects:"
+    items:
+      - { label: "inventory", tone: teal }
+      - { label: "scan-app", tone: sky }
+      - { label: "DC-West", tone: violet }
+
+  - type: heading
+    text: "Verification"
+  - type: status_list
+    items:
+      - { state: done, text: "Reconciliation gate passes (10,000 = 10,000)." }
+      - { state: done, text: "De-dup validated on a 1,000-pallet sample." }
+      - { state: pending, text: "Overflow re-scan scheduled for the next count." }
+      - { state: failed, text: "Vendor short-ship — blocked, cannot count." }
+      - { state: blocked, text: "Vendor escalation awaiting `OPS-1234` response." }
+  - type: heading
+    level: 3
+    text: "Follow-up checklist"
+  - type: list
+    style: number
+    items:
+      - "Confirm the `bin > 12` scan rule with the site lead."
+      - "Ship the 9-digit bin-code widening behind the scan flag."
+      - "Re-run the count and re-verify reconciliation."
+
+  - type: heading
+    text: "Rollout"
+  - type: timeline
+    items:
+      - { time: "2026-06-30", title: "Initial full count", body: "12,400 units scanned; 88% matched clean.", state: done }
+      - { time: "2026-07-02", title: "Root-caused the double-count bug", body: "Lexical tiebreak in `dedupe.ts`.", state: done }
+      - { time: "2026-07-09", title: "Fix drafted, awaiting re-count", body: "Placeholder-aware ordering; recovers 1,140 units.", state: current }
+      - { time: "next count", title: "Re-verify reconciliation", state: pending }
+
+  - type: heading
+    text: "Method"
+  - type: text
+    body: "Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below."
+  - type: code
+    label: "reconciliation.sql"
+    content: |
+      SELECT reason, count(*) AS n
+      FROM count_audit
+      WHERE cycle_id = 'Q3-2026'
+      GROUP BY reason
+      ORDER BY n DESC;
+  - type: code
+    label: "dedupe.ts · tiebreak fix"
+    mode: diff
+    content: |
+      function pickWinner(a, b) {
+      -  return a.code.localeCompare(b.code);
+      +  if (isPlaceholder(a) !== isPlaceholder(b))
+      +    return isPlaceholder(a) ? 1 : -1;
+      +  return a.code.localeCompare(b.code);
+      }
+  - type: image
+    alt: "Discrepancy volume by zone"
+    caption: "Fig 1 — discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts)."
+    src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+"
+  - type: quote
+    body: "These bins are aggregate lots — we can't split `AGG-07` into individual SKUs from the dock scan alone."
+    cite: "Floor lead, ticket OPS-1234"
+
+  - type: heading
+    text: "At a glance"
+  - type: grid
+    cells:
+      - span: 2
+        blocks:
+          - type: cards
+            items:
+              - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
+              - { label: "Needs work", value: 1500, of: 10000, tone: warning }
+      - span: 4
+        blocks:
+          - type: callout
+            tone: info
+            title: "Reading this section"
+            body: "The cards on the left summarise; the panels below break down count progress and checks side by side."
+          - type: grid
+            cells:
+              - span: 3
+                blocks:
+                  - type: meter
+                    items:
+                      - { label: "Zone C", value: 88, max: 100, tone: warning }
+              - span: 3
+                blocks:
+                  - type: status_list
+                    items:
+                      - { state: done, text: "Reconciliation gate passes." }
+                      - { state: blocked, text: "Awaiting `OPS-1234`." }
+
+  - type: section
+    title: "Appendix — discrepancy-reason raw counts"
+    blocks:
+      - type: list
+        items:
+          - "Double-count (same-window re-scan): 340"
+          - "Double-count (bin > 12 skip): 260"
+          - "Mislabeled bin code (9-digit truncation): 500"
+          - "Short shipment (vendor): 400"
+      - type: text
+        muted: true
+        body: "Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units."
