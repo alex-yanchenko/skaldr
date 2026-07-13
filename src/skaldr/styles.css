@@ -304,10 +304,27 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 .sc-seg button:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}
 
 @media print{
-	/* Screen sizes suit a monitor; scale the whole page down ~12% so print/PDF reads at a
-	   document density. zoom scales every px uniformly (the sizes are literal px, not rem). */
-	.wrap{zoom:0.88}
-	table.rep thead th,table.rep tr.group td{position:static}
-	.card,.callout,figure.fig,table,.tl li,.flow .seg,.flow .step{break-inside:avoid}
+	/* Print backgrounds + colours. Browsers drop them by default, which erased almost everything
+	   skaldr draws with colour: table headers went white-on-white (invisible), and every chip,
+	   indicator dot, callout/panel tint, meter fill, row tint and diff shade vanished.
+	   print-color-adjust is inherited, so setting it on the root carries it to the whole page. */
+	html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+	body{background:#fff}
+	/* Let the printer's own page margin be the only margin; use the full width. */
+	.wrap{max-width:none; padding:0}
 	.sc{display:none}
+	/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
+	.card,.callout,figure.fig,blockquote.quote,.code,.tl li,.status-list li,.list li,
+	.flow .seg,.flow .step,details.section,.kv{break-inside:avoid}
+	p{orphans:2; widows:2}
+	/* Tables: never split a row across pages, repeat the column header on each page, and drop the
+	   sticky positioning (meaningless on paper). */
+	table.rep thead{display:table-header-group}
+	table.rep tr{break-inside:avoid}
+	table.rep thead th,table.rep tr.group td{position:static}
+	/* Expand collapsed sections so a PDF captures their content. Full documents also run a
+	   beforeprint script (reliable); ::details-content covers a script-less host (an embedded
+	   fragment) on modern Chromium. */
+	details::details-content{content-visibility:visible !important}
+	details:not([open])>summary::before{content:"▾"}
 }

@@ -206,14 +206,21 @@ def test_embed_and_page_share_content_and_controls() -> None:
     assert embed[embed.index(marker) : embed.index(sc)] == page[page.index(marker) : page.index(sc)]
 
 
-def test_print_expands_collapsibles_and_scales_the_page_down() -> None:
+def test_print_css_keeps_the_pdf_readable() -> None:
     html = render_html(parse_report(make_report()))
 
-    # a collapsed <details> prints empty — a beforeprint handler opens every one (afterprint restores)
+    # backgrounds/colours must print, or headers go white-on-white and chips/dots/tints vanish
+    assert "print-color-adjust:exact" in html
+    # a table row must not split across a page break, and the header must repeat on each page
+    assert "table.rep tr{break-inside:avoid}" in html
+    assert "table.rep thead{display:table-header-group}" in html
+    # cards/callouts/list+status items stay whole across page breaks
+    assert "details.section,.kv{break-inside:avoid}" in html
+    # collapsed sections are expanded for print (beforeprint opens them, afterprint restores),
+    # with a CSS fallback for script-less hosts
     assert 'addEventListener("beforeprint"' in html
     assert 'addEventListener("afterprint"' in html
-    # print scales the page down for document density (screen sizes are tuned for a monitor)
-    assert ".wrap{zoom:0.88}" in html
+    assert "details::details-content{content-visibility:visible" in html
 
 
 def test_width_defaults_to_default() -> None:
