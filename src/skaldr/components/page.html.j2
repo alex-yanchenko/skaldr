@@ -10,7 +10,7 @@
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output — if a
      script changes, that test fails until the hash below is updated. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-Pp/Bwhev7+nUbmX6BHi0JedrZZ1dY/dDnDpmYCYsAPo=' 'sha256-CZmXAqjKGs0k+zATdC/z+dqrhtWKhrZcRGJZoU+3Ki8='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-Pp/Bwhev7+nUbmX6BHi0JedrZZ1dY/dDnDpmYCYsAPo=' 'sha256-rEVQtlK2+FTK4+QqJ9WkGJxgSzRCB7SBET7XGLfJ1O4='; base-uri 'none'; form-action 'none'">
 <title>{{ meta.title }}</title>
 <style>{{ styles | safe }}</style>
 <script>
@@ -85,6 +85,18 @@
 		});
 	});
 	reflect();
+
+	/* Collapsed sections hide their content when printed. Expand every <details> for print, then
+	   restore each to how the reader left it — so a PDF captures the whole report. */
+	window.addEventListener("beforeprint", function () {
+		document.querySelectorAll("details").forEach(function (item) {
+			item.dataset.printOpen = item.open ? "1" : "0";
+			item.open = true;
+		});
+	});
+	window.addEventListener("afterprint", function () {
+		document.querySelectorAll("details").forEach(function (item) { item.open = item.dataset.printOpen === "1"; });
+	});
 })();
 </script>
 </body>
