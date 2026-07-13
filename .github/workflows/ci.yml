@@ -13,7 +13,13 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - run: uv sync --locked
+      # Lockfile is enforced everywhere EXCEPT release-please PRs: release-please bumps the version
+      # in pyproject.toml one commit before the Release workflow syncs uv.lock, so `--locked` would
+      # (correctly) fail on that transient commit. head_ref is passed via env to avoid script injection.
+      - env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$HEAD_REF" == release-please--* ]]; then uv sync; else uv sync --locked; fi
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
       - run: uv run pyright
@@ -31,7 +37,11 @@ jobs:
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --locked
+      # See the lint job: --locked everywhere except the transient release-please version-bump commit.
+      - env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$HEAD_REF" == release-please--* ]]; then uv sync; else uv sync --locked; fi
       - run: uv run pytest
 
   build:
