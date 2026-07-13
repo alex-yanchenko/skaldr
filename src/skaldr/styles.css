@@ -310,8 +310,10 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	   print-color-adjust is inherited, so setting it on the root carries it to the whole page. */
 	html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
 	body{background:#fff}
-	/* Let the printer's own page margin be the only margin; use the full width. */
-	.wrap{max-width:none; padding:0}
+	/* Let the printer's own page margin be the only margin; use the full width. zoom shrinks the
+	   whole page uniformly for a denser, more document-like PDF — this is the print-density knob:
+	   lower = smaller fonts + more content per page (try 0.80–0.90). */
+	.wrap{max-width:none; padding:0; zoom:0.75}
 	.sc{display:none}
 	/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 	.card,.callout,figure.fig,blockquote.quote,.code,.tl li,.status-list li,.list li,
