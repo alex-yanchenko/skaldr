@@ -25,17 +25,23 @@ installing.)
 ```bash
 skaldr report.yaml                 # → out/report.html
 skaldr report.yaml -o review.html  # choose the output path
+skaldr report.yaml --pdf report.pdf  # a ready-to-share PDF (drives a headless Chrome/Chromium)
 open review.html                   # a self-contained file — open it, host it, or share it
 ```
 
-That's the whole tool: point it at a content file, get an HTML page. A few more commands help you
-write the content file and share the result:
+That's the whole tool: point it at a content file, get an HTML page (or a PDF). A few more commands
+help you write the content file and share the result:
 
 ```bash
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 ```
+
+For a **PDF**, use `--pdf` (above): it prints the page's print styling with a headless browser you
+already have — the reliable way to a shareable PDF. (Printing a published Artifact doesn't work: it's
+a sandboxed frame the browser flattens to a snapshot, so the print CSS never applies.) `--pdf` needs
+a Chrome/Chromium/Edge on the machine; set `SKALDR_BROWSER` to point at one if it isn't auto-found.
 
 There are no styling flags — everything is in the content file.
 
