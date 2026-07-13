@@ -144,6 +144,10 @@ class Card(_Frozen):
     of: Number | None = Field(default=None, description="Denominator; renders a derived percentage.")
     tone: Tone | None = Field(default=None, description="Optional tone for the top-border accent.")
     note: str | None = Field(default=None, description="Optional small caption line under the number.")
+    badges: list[str] = Field(
+        default_factory=list,
+        description="Declared badge keys (from the page `badges`) to chip onto this card.",
+    )
 
     @model_validator(mode="after")
     def _of_requires_positive_numeric_value(self) -> "Card":
@@ -253,6 +257,10 @@ class TimelineItem(_Frozen):
     state: TimelineState | None = Field(
         default=None, description="Optional dot state: done, current, pending."
     )
+    badges: list[str] = Field(
+        default_factory=list,
+        description="Declared badge keys (from the page `badges`) to chip onto this entry.",
+    )
 
 
 class Timeline(_Frozen):
@@ -269,6 +277,10 @@ class FlowStep(_Frozen):
         default=None,
         description="Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a "
         "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
+    )
+    badges: list[str] = Field(
+        default_factory=list,
+        description="Declared badge keys (from the page `badges`) to chip onto this node.",
     )
 
     @model_validator(mode="after")
@@ -556,6 +568,15 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
                 yield from iter_referenced_badge_keys(cell.blocks)
         elif isinstance(block, BadgeRow):
             yield from (item.key for item in block.items if isinstance(item, BadgeRef))
+        elif isinstance(block, Cards):
+            for card in block.items:
+                yield from card.badges
+        elif isinstance(block, Timeline):
+            for item in block.items:
+                yield from item.badges
+        elif isinstance(block, Flow):
+            for step in block.steps:
+                yield from step.badges
         elif isinstance(block, Table):
             badge_columns = [column.key for column in block.columns if column.kind == "badge"]
             for row in block.all_rows():

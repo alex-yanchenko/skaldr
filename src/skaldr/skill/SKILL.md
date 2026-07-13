@@ -1,13 +1,13 @@
 ---
 name: skaldr
 description: >-
-  Author and render a report or design write-up with skaldr — one YAML file becomes a polished,
-  self-contained HTML page, so you never hand-write HTML/CSS. Use it for any shareable report,
-  summary, or architecture/design doc (investigations, reviews, audits, ingestion/data-quality
-  writeups, post-mortems, proposals, status pages) — especially when it needs visual structure: a
-  flow/pipeline, comparison table, stat cards, timeline, meters, or callouts. Reach for it instead
-  of hand-building an HTML page, plain prose, or a raw table. skaldr owns the design; you describe
-  what it says.
+  Author and render a report, explainer, or design write-up with skaldr — one YAML file becomes a
+  polished, self-contained HTML page, so you never hand-write HTML/CSS. Use it for any shareable
+  report, summary, how-does-X-work / data-model explainer, or architecture/design doc
+  (investigations, reviews, audits, ingestion/data-quality writeups, post-mortems, proposals, status
+  pages) — especially when it needs visual structure: a flow/pipeline, comparison table, stat cards,
+  timeline, meters, or callouts. Reach for it instead of hand-building an HTML page, plain prose, or
+  a raw table. skaldr owns the design; you describe what it says.
 ---
 
 # Authoring a skaldr report

@@ -246,6 +246,14 @@
           "default": null,
           "description": "Optional small caption line under the number.",
           "title": "Note"
+        },
+        "badges": {
+          "description": "Declared badge keys (from the page `badges`) to chip onto this card.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Badges",
+          "type": "array"
         }
       },
       "required": [
@@ -514,6 +522,14 @@
           "default": null,
           "description": "Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
           "title": "Note"
+        },
+        "badges": {
+          "description": "Declared badge keys (from the page `badges`) to chip onto this node.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Badges",
+          "type": "array"
         }
       },
       "required": [
@@ -1546,6 +1562,14 @@
           "default": null,
           "description": "Optional dot state: done, current, pending.",
           "title": "State"
+        },
+        "badges": {
+          "description": "Declared badge keys (from the page `badges`) to chip onto this entry.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Badges",
+          "type": "array"
         }
       },
       "required": [
