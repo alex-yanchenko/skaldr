@@ -1,45 +1,43 @@
 # skaldr
 
-A component framework for **AI-authored report pages**. An AI (or a person) doing real
-work — an investigation, a review, a proposal, an ingestion report — writes **one YAML
-content file**; skaldr validates it and renders **one polished, self-contained HTML page**.
-No time is spent on design, styling, or layout: those decisions are made once, here, by the
-component library.
+Turn **one YAML file** into **one polished, self-contained HTML report page**. You describe *what*
+the report says — findings, tables, a pipeline, the numbers — and skaldr owns *how* it looks:
+layout, spacing, colour, light/dark, all decided once, here. No design work, no CSS, no drift.
 
-## The easy way — just ask Claude (no install)
+**See it →** [sales pipeline](https://alex-yanchenko.github.io/skaldr/) ·
+[warehouse count](https://alex-yanchenko.github.io/skaldr/data-import.html)
+(rendered from [`examples/sales-pipeline.yaml`](examples/sales-pipeline.yaml) and
+[`data/example.yaml`](data/example.yaml)).
 
-You don't need Python or a terminal. Open Claude Code or Cowork, point it at skaldr, and ask in
-plain language — it writes the report and renders it for you:
-
-- *"Make me a skaldr report on our Q3 pipeline — deals by stage, what's at risk, the forecast."*
-- *"Turn this account list into a skaldr QBR: health by account, renewals, expansion."*
-- *"Build a win/loss report from these closed deals — why we won, why we lost, by segment."*
-- *"Skaldr report: pipeline health this month — coverage, deal aging, slipped deals."*
-- *"Audit this data export as a skaldr report — what's clean, what's broken, and the fix."*
-
-Claude installs the skill on first use (`skaldr --install-skill`) and takes it from there; the
-finished report is a self-contained HTML file you can open, share, or publish.
-
-**See live samples →** [sales pipeline](https://alex-yanchenko.github.io/skaldr/) ·
-[warehouse count](https://alex-yanchenko.github.io/skaldr/data-import.html) (rendered from
-[`examples/sales-pipeline.yaml`](examples/sales-pipeline.yaml) and
-[`data/example.yaml`](data/example.yaml)). The rest of this README is for developers running
-skaldr directly.
+## Install
 
 ```bash
-# from a checkout
-uv run skaldr data/example.yaml
-open out/example.html
-
-# or installed (from PyPI, once published)
-uv tool install skaldr
-skaldr data/example.yaml
+brew install alex-yanchenko/tap/skaldr     # recommended (macOS/Linux)
+uv tool install skaldr                     # or, with uv
+pipx install skaldr                        # or, with pipx
 ```
 
-The CLI is deliberately tiny: `skaldr <content.yaml> [-o out.html]`, plus
-`skaldr --write-schema schema/page.schema.json` and `--embed` (emit an Artifact-ready fragment —
-inline `<style>` + content, no document skeleton — for publishing to a claude.ai Artifact). There
-are no styling flags — everything is in the content file.
+All three put a `skaldr` command on your PATH. (From a checkout, `uv run skaldr …` works without
+installing.)
+
+## Use
+
+```bash
+skaldr report.yaml                 # → out/report.html
+skaldr report.yaml -o review.html  # choose the output path
+open review.html                   # a self-contained file — open it, host it, or share it
+```
+
+That's the whole tool: point it at a content file, get an HTML page. A few more commands help you
+write the content file and share the result:
+
+```bash
+skaldr --guide                     # the authoring guide: every block, the rules, a full example
+skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
+skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
+```
+
+There are no styling flags — everything is in the content file.
 
 ## The content file
 
@@ -52,6 +50,7 @@ meta:
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
   toc: true                     # optional; auto table-of-contents from level-2 headings
   width: default                # optional; page width cap: default (1600) | wide (1920) | full
+  hero: true                    # optional; larger display title + subtitle in a tinted band
 badges:                         # author-declared vocabulary (see below)
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
   SYSTEM: { label: "System", tone: blue,  legend: "Defect in the scanning/labeling pipeline." }
@@ -69,18 +68,17 @@ type, a field from the wrong block, or an unknown key each fails with a precise
 
 **Blocks:** `heading` · `text` · `list` · `fact_strip` · `key_value` · `cards` · `badge_row` ·
 `callout` · `status_list` · `meter` · `table` · `code` · `quote` · `image` · `timeline` ·
-`section` (collapsible) · `grid` (bounded 6-column layout). The `table` is the workhorse — typed
-columns, grouped subtotals, sub-rows, and a `reconcile` block that hard-fails the build if the
-counts don't sum to a declared total. Prose fields take a small markdown subset
-(`**bold**`, `*italic*`, `` `code` ``, `~~strike~~`, links); raw HTML is never interpreted.
+`flow` (a directional pipeline — arrow or step style, optional loop) · `section` (collapsible) ·
+`grid` (bounded 6-column layout, with optional per-cell emphasis panels). The `table` is the
+workhorse — typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
+`tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
+total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
+nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
+`~~strike~~`, links); raw HTML is never interpreted.
 
-**Learn the format:**
-- **`skaldr --guide`** — the authoring guide (every block, the table, badges, rich text, the
-  rules) with a complete example, straight from the installed version. Source:
-  [`src/skaldr/skill/GUIDE.md`](src/skaldr/skill/GUIDE.md).
-- [`data/example.yaml`](data/example.yaml) — a complete file exercising every block.
-- [`schema/page.schema.json`](schema/page.schema.json) — the machine-readable contract; point
-  your editor's YAML language server at it, or regenerate with `skaldr --write-schema`.
+Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/skaldr/skill/GUIDE.md)),
+[`data/example.yaml`](data/example.yaml) (a file exercising every block), and
+[`schema/page.schema.json`](schema/page.schema.json).
 
 ## Guarantees
 
@@ -94,22 +92,25 @@ counts don't sum to a declared total. Prose fields take a small markdown subset
 - **Light & dark** — the palette follows the viewer's OS theme; a small corner menu lets the
   reader switch theme and page width.
 
-## Use with Claude Code
+## Let an AI write it
 
-skaldr ships a Claude skill so an AI can author reports for you. After installing skaldr, run:
+skaldr ships a Claude skill, so you can skip the YAML and just ask. Install it once:
 
 ```bash
-skaldr --install-skill
+skaldr --install-skill      # copies the skill into ~/.claude/skills (survives upgrades)
 ```
 
-It copies the skill into `~/.claude/skills/` (or tells you how if Claude Code isn't set up). Then
-ask Claude — *"make me a skaldr report on X"* — and it writes the YAML and renders it.
+Then in Claude Code (or Cowork), ask in plain language — *"make me a skaldr report on this data
+export: what's clean, what's broken, and the fix"* — and it writes the content file and renders the
+page. The skill reads the current guide from the tool itself (`skaldr --guide`), so it stays correct
+across upgrades without reinstalling.
 
-The skill is thin and stable: it reads the current authoring guide from the tool itself
-(`skaldr --guide` for the tour, `skaldr --write-schema` for exact fields), so it's
-**install-once** — no need to re-run after a `brew upgrade`.
+## Development
 
-## Layout
+```bash
+uv run skaldr data/example.yaml -o out/example.html   # run from a checkout
+uv run pytest                                          # tests
+```
 
 - [`src/skaldr/models.py`](src/skaldr/models.py) — the content-file contract (pydantic).
 - [`src/skaldr/compute.py`](src/skaldr/compute.py) — derived values (legend, TOC, subtotals, footer).
