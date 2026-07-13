@@ -34,6 +34,8 @@
 </td>
 {% elif c.kind == "number" %}
 <td class="num">{{ row[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
+{% elif c.kind == "indicator" %}
+<td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
 {% else %}
 <td>{{ row[c.key] | richtext }}</td>
 {% endif %}
@@ -50,8 +52,8 @@
 {% set sum_key = b.reconcile.column if b.reconcile else (b.totals.column if b.totals else none) %}
 <div class="table-wrap"><table class="rep">
 {% set width_total = non_badge | selectattr("width") | map(attribute="width") | sum %}
-<colgroup>{% for c in non_badge %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% endif %}>{% endfor %}</colgroup>
-<thead><tr>{% for c in non_badge %}<th{% if c.kind == "number" %} class="num"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
+<colgroup>{% for c in non_badge %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
+<thead><tr>{% for c in non_badge %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% if b.groups is not none %}
 {% for g in b.groups %}

@@ -74,6 +74,7 @@ blocks:
     columns:
       - { key: issue, label: "Discrepancy", kind: text }
       - { key: tag, label: "", kind: badge }
+      - { key: risk, label: "Risk", kind: indicator }
       - { key: count, label: "Units", kind: number, pct_of_total: true }
       - { key: problem, label: "What the problem is", kind: rich }
       - { key: fix, label: "Proposed fix", kind: rich }
@@ -86,6 +87,7 @@ blocks:
         rows:
           - issue: "Double-counted units"
             tag: FLOOR
+            risk: warning
             count: 600
             problem: "The same pallet is scanned twice when a picker re-enters an aisle within the count window."
             fix: "De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan."
@@ -94,6 +96,7 @@ blocks:
               - { label: "Same-window re-scan", value: 340 }
           - issue: "Mislabeled bin codes"
             tag: SYSTEM
+            risk: warning
             count: 500
             problem: "Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup."
             fix: "Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log."
@@ -101,6 +104,7 @@ blocks:
         rows:
           - issue: "Short shipment"
             tag: VENDOR
+            risk: danger
             count: 400
             tone: danger
             problem: "The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted."

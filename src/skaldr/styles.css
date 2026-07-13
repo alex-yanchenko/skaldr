@@ -221,6 +221,11 @@ table.rep tr.empty td{color:var(--muted); font-style:italic; text-align:center; 
 table.rep td.title{font-weight:650}
 table.rep td.title .chip{margin-top:8px}
 table.rep td.num{text-align:right; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}
+/* indicator column — a colour-only status dot in its own cell (multiple orthogonal signals per row). */
+table.rep th.ind,table.rep td.ind{text-align:center}
+table.rep .dot{display:inline-block; width:11px; height:11px; border-radius:999px; background:var(--neutral-fg); vertical-align:middle}
+table.rep .dot.info{background:var(--info-fg)} table.rep .dot.success{background:var(--success-fg)} table.rep .dot.warning{background:var(--warning-fg)}
+table.rep .dot.danger{background:var(--danger-fg)} table.rep .dot.accent{background:var(--accent-fg)} table.rep .dot.neutral{background:var(--neutral-fg)}
 table.rep td.num .pct{display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:2px}
 table.rep tfoot td{border-top:2px solid var(--ink); padding:12px 16px; font-weight:700}
 table.rep tfoot td.num{text-align:right; font-variant-numeric:tabular-nums; font-size:16px}

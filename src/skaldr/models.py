@@ -56,7 +56,7 @@ BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal",
 CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
-ColumnKind = Literal["text", "number", "badge", "rich"]
+ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
 FlowStyle = Literal["arrow", "steps"]
 
 
@@ -318,7 +318,8 @@ class Column(_Frozen):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
     kind: ColumnKind = Field(
-        description="text/rich (first one becomes the title column), number, or badge (chip under title)."
+        description="text/rich (first one becomes the title column), number, badge (chip under title), "
+        "or indicator (a colour-only dot in its own column; the cell value is a tone name)."
     )
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
@@ -371,8 +372,16 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                     raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
                 if not math.isfinite(value):
                     raise ValueError(f"{loc}.{index}.{column.key}: number column must be finite")
-            elif not isinstance(value, str):
-                raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
+            else:
+                if not isinstance(value, str):
+                    raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
+                # An indicator value is validated to an exact Tone here (or blank), so the rendered
+                # `<span class="dot {value}">` class is always a known tone.
+                if column.kind == "indicator" and value.strip() and value not in get_args(Tone):
+                    raise ValueError(
+                        f"{loc}.{index}.{column.key}: indicator value must be a tone name "
+                        "(neutral·info·success·warning·danger·accent) or blank"
+                    )
         raw_subrows = row.get("subrows")
         if raw_subrows is not None:
             if not isinstance(raw_subrows, list):
