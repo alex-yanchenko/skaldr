@@ -151,8 +151,10 @@ code{font-family:var(--mono); font-size:12px; border:1px solid var(--line); padd
 .flow.arrow .node .lab{font-weight:600; font-size:14px; white-space:nowrap}
 .flow.arrow .node .sub{font-size:11px; color:var(--muted); line-height:1.35}
 
-.flow.steps .track{align-items:stretch; gap:0}
-.flow.steps .step{flex:1 1 160px; display:flex; align-items:center; min-width:0}
+.flow.steps .track{align-items:stretch; gap:var(--s2) 0}
+/* Fixed-width steps (no grow): a 2-node flow shows two tidy cards, not two half-page slabs; more
+   nodes wrap at the same width. Left-aligned like the arrow chips — trailing space, never balloon. */
+.flow.steps .step{flex:0 1 250px; display:flex; align-items:center; min-width:0}
 .flow.steps .card{flex:1; min-width:0; border:1px solid var(--line); border-top:3px solid var(--t,var(--line));
 	border-radius:8px; background:var(--panel); padding:13px 15px}
 .flow.steps .card .n{margin-bottom:var(--s2)}

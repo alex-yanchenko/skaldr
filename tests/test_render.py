@@ -44,6 +44,7 @@ def test_flow_arrow_leading_connectors_never_dangle() -> None:
     assert '<span class="seg"><span class="node">' in html  # first seg: no connector
     assert html.count('<span class="seg"><span class="conn"></span><span class="node">') == 2  # B, C
     assert html.count('class="conn"') == 2  # exactly len(steps) - 1
+    assert '<div class="loop">' not in html  # no loop marker unless loop: true
 
 
 def test_flow_arrow_numbers_and_tones_each_node() -> None:
@@ -51,10 +52,9 @@ def test_flow_arrow_numbers_and_tones_each_node() -> None:
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
-    assert '<span class="node info">' in html
-    assert '<span class="node success">' in html
-    assert '<span class="n">1</span>' in html
-    assert '<span class="n">2</span>' in html
+    # tone and number bound to the SAME node, so a decoupling bug can't pass vacuously
+    assert '<span class="node info"><span class="n">1</span>' in html
+    assert '<span class="node success"><span class="n">2</span>' in html
 
 
 def test_flow_arrow_note_renders_as_a_sub_line() -> None:
@@ -65,8 +65,9 @@ def test_flow_arrow_note_renders_as_a_sub_line() -> None:
     assert '<span class="sub">detail</span>' in html
 
 
-def test_flow_numbered_false_omits_the_number_bubbles() -> None:
-    block = {"type": "flow", "numbered": False, "steps": [{"label": "A"}, {"label": "B"}]}
+@pytest.mark.parametrize("style", ["arrow", "steps"])
+def test_flow_numbered_false_omits_the_number_bubbles(style: str) -> None:
+    block = {"type": "flow", "style": style, "numbered": False, "steps": [{"label": "A"}, {"label": "B"}]}
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
@@ -83,8 +84,19 @@ def test_flow_steps_style_renders_caption_cards_with_a_leading_blank_spacer() ->
     html = render_html(parse_report(make_report(blocks=[block])))
 
     assert '<div class="flow steps">' in html
-    assert '<span class="link blank"></span>' in html  # first-card spacer keeps card widths even
+    assert html.count('class="link blank"') == 1  # ONLY the first card gets the hidden spacer
+    assert '<span class="link"></span>' in html  # the second step has a real (non-blank) link
     assert '<div class="cap">first note</div>' in html
+
+
+def test_flow_steps_style_tones_and_numbers_each_card() -> None:
+    """The steps branch has its own tone/number template guards, distinct from the arrow branch."""
+    block = {"type": "flow", "style": "steps", "steps": [{"label": "A", "tone": "warning"}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="card warning"><span class="n">1</span>' in html  # tone + number, bound to the card
+    assert '<span class="n">2</span>' in html
 
 
 def test_flow_loop_marker_names_the_first_node() -> None:
