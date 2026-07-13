@@ -7,8 +7,9 @@ import sys
 from pathlib import Path
 
 from skaldr.errors import ReportError
-from skaldr.models import Report, package_path, package_text
-from skaldr.render import render_file
+from skaldr.models import Report, load_report, package_path, package_text
+from skaldr.pdf import html_to_pdf
+from skaldr.render import render_file, render_html
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -20,6 +21,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit an Artifact-ready fragment (inline <style> + content, no <html>/<head>/<body> "
         "skeleton or scripts) for publishing to a claude.ai Artifact, instead of a full document",
+    )
+    parser.add_argument(
+        "--pdf",
+        metavar="PATH",
+        help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge — needs one "
+        "installed; set SKALDR_BROWSER to override discovery). Prints the full page's print styling.",
     )
     parser.add_argument(
         "--write-schema",
@@ -61,13 +68,24 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a content file is required (or use --write-schema)")
 
     data_path = Path(args.data).resolve()
-    out_path = Path(args.out).resolve() if args.out else Path.cwd() / "out" / f"{data_path.stem}.html"
+    written: list[Path] = []
     try:
-        report = render_file(data_path, out_path, embed=args.embed)
+        report = load_report(data_path)
+        if args.pdf:
+            # PDF always prints the full page (the print CSS needs the whole document, not a fragment).
+            pdf_path = Path(args.pdf).resolve()
+            html_to_pdf(render_html(report), pdf_path)
+            written.append(pdf_path)
+        # Write HTML when asked (-o), or by default when no --pdf was requested.
+        if args.out or not args.pdf:
+            out_path = Path(args.out).resolve() if args.out else Path.cwd() / "out" / f"{data_path.stem}.html"
+            render_file(data_path, out_path, embed=args.embed)
+            written.append(out_path)
     except ReportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"OK  {out_path}")
+    for path in written:
+        print(f"OK  {path}")
     print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
     return 0
 
