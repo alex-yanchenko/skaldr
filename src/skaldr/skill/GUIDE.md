@@ -88,6 +88,7 @@ infinities.
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?}]` |
+| `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 
@@ -118,6 +119,36 @@ grid's cells hold only leaf blocks. `grid` and `section` don't mix. Below a narr
 columns stack into one. You choose *how many columns* and *which cells*; skaldr owns every width,
 gap, and alignment. For many equal small items (e.g. cards), prefer the block's own auto-flow
 rather than a grid; the grid is for asymmetric composition.
+
+## The `flow`
+
+A directional pipeline — the block for a process, data flow, or architecture where the **direction
+between stages is the message** (the thing a bulleted list or `status_list` throws away). Nodes are
+connected left-to-right; the connector leads each node, so a long flow wraps cleanly with no
+dangling arrows.
+
+```yaml
+- type: flow
+  style: arrow          # arrow (default) | steps
+  loop: true            # draws a "↺ back to <first>" return marker — for a cycle, not a one-way flow
+  numbered: true        # 1..n on the nodes (default); set false to hide
+  steps:
+    - { label: "Source",  tone: info,    note: "Atlas Advisor + $indexStats" }
+    - { label: "Reason",  tone: info }
+    - { label: "Propose", tone: accent }
+    - { label: "Deliver", tone: success }
+```
+
+**Which `style`:**
+- `arrow` (default) — short-labelled chips joined by connectors. Reach for it when the flow is the
+  *direction itself*: a pipeline, a request path, a state cycle. Keep labels to a word or two.
+- `steps` — equal cards that each carry a one-line `note` caption. Reach for it when **every stage
+  needs a sentence of explanation** and the labels alone aren't enough.
+
+Rule of thumb: if most nodes have a `note`, use `style: steps`; otherwise `arrow`. A flow with more
+than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (any of
+`neutral·info·success·warning·danger·accent`) accents a node's border + number — use it to mark the
+key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
 
 ## The `table`
 

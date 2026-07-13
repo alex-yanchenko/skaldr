@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import Meta, Report, Table, Text, load_report, parse_report, read_text_file
+from skaldr.models import Flow, FlowStep, Meta, Report, Table, Text, load_report, parse_report, read_text_file
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -105,6 +105,48 @@ def test_section_may_not_contain_a_section() -> None:
 
     with pytest.raises(ReportError, match=r"blocks\.0\.section\.blocks\.0"):
         parse_report(make_report(blocks=[outer]))
+
+
+def test_flow_arrow_parses_to_whole_model_with_defaults() -> None:
+    block = {"type": "flow", "steps": [{"label": "Source"}, {"label": "Deliver", "tone": "success"}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Flow(
+        type="flow",
+        style="arrow",
+        loop=False,
+        numbered=True,
+        steps=[FlowStep(label="Source"), FlowStep(label="Deliver", tone="success")],
+    )
+
+
+def test_flow_requires_at_least_two_steps() -> None:
+    block = {"type": "flow", "steps": [{"label": "solo"}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.flow\.steps.*at least 2"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_flow_step_label_must_not_be_blank() -> None:
+    block = {"type": "flow", "steps": [{"label": "  "}, {"label": "B"}]}
+
+    with pytest.raises(ReportError, match=r"flow step label must not be blank"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_flow_unknown_style_is_rejected() -> None:
+    block = {"type": "flow", "style": "zigzag", "steps": [{"label": "A"}, {"label": "B"}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.flow\.style"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_flow_unknown_field_is_rejected_with_path() -> None:
+    block = {"type": "flow", "steps": [{"label": "A"}, {"label": "B"}], "oops": 1}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.flow\.oops.*not permitted"):
+        parse_report(make_report(blocks=[block]))
 
 
 def test_table_row_missing_a_column_is_rejected() -> None:

@@ -33,6 +33,68 @@ def test_sales_example_renders_and_reconciles() -> None:
     assert "Reconciles: 120 = 120." in html
 
 
+def test_flow_arrow_leading_connectors_never_dangle() -> None:
+    """The connector sits inside the seg, BEFORE the node, so it wraps with its node and never trails
+    at a line end. The first seg carries no connector; every later seg opens with one."""
+    block = {"type": "flow", "steps": [{"label": "A"}, {"label": "B"}, {"label": "C"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="flow arrow">' in html
+    assert '<span class="seg"><span class="node">' in html  # first seg: no connector
+    assert html.count('<span class="seg"><span class="conn"></span><span class="node">') == 2  # B, C
+    assert html.count('class="conn"') == 2  # exactly len(steps) - 1
+
+
+def test_flow_arrow_numbers_and_tones_each_node() -> None:
+    block = {"type": "flow", "steps": [{"label": "A", "tone": "info"}, {"label": "B", "tone": "success"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="node info">' in html
+    assert '<span class="node success">' in html
+    assert '<span class="n">1</span>' in html
+    assert '<span class="n">2</span>' in html
+
+
+def test_flow_arrow_note_renders_as_a_sub_line() -> None:
+    block = {"type": "flow", "steps": [{"label": "A", "note": "detail"}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="sub">detail</span>' in html
+
+
+def test_flow_numbered_false_omits_the_number_bubbles() -> None:
+    block = {"type": "flow", "numbered": False, "steps": [{"label": "A"}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="n">' not in html
+
+
+def test_flow_steps_style_renders_caption_cards_with_a_leading_blank_spacer() -> None:
+    block = {
+        "type": "flow",
+        "style": "steps",
+        "steps": [{"label": "A", "note": "first note"}, {"label": "B"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="flow steps">' in html
+    assert '<span class="link blank"></span>' in html  # first-card spacer keeps card widths even
+    assert '<div class="cap">first note</div>' in html
+
+
+def test_flow_loop_marker_names_the_first_node() -> None:
+    block = {"type": "flow", "loop": True, "steps": [{"label": "Flag"}, {"label": "Close"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="loop"><span class="cyc">↺</span> back to Flag</div>' in html
+
+
 def test_width_defaults_to_default() -> None:
     html = render_html(parse_report(make_report()))
 

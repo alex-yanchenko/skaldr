@@ -425,6 +425,103 @@
       "title": "FactStrip",
       "type": "object"
     },
+    "Flow": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "flow",
+          "title": "Type",
+          "type": "string"
+        },
+        "steps": {
+          "description": "Ordered stages (2+); a flow needs two or more nodes.",
+          "items": {
+            "$ref": "#/$defs/FlowStep"
+          },
+          "minItems": 2,
+          "title": "Steps",
+          "type": "array"
+        },
+        "style": {
+          "default": "arrow",
+          "description": "arrow (default): short-labelled nodes joined by \u2192 connectors \u2014 reach for it when the DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each carry a caption line \u2014 reach for it when every stage needs a sentence of explanation.",
+          "enum": [
+            "arrow",
+            "steps"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "loop": {
+          "default": false,
+          "description": "Draw a '\u21ba back to <first>' return marker after the last node \u2014 for a cycle, not a one-way pipeline.",
+          "title": "Loop",
+          "type": "boolean"
+        },
+        "numbered": {
+          "default": true,
+          "description": "Number the nodes 1..n (derived); set false to hide numbers.",
+          "title": "Numbered",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "steps"
+      ],
+      "title": "Flow",
+      "type": "object"
+    },
+    "FlowStep": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Short stage name \u2014 the node label.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone accent for this node's border + number.",
+          "title": "Tone"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
+          "title": "Note"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "FlowStep",
+      "type": "object"
+    },
     "Grid": {
       "additionalProperties": false,
       "properties": {
@@ -470,6 +567,7 @@
                 "cards": "#/$defs/Cards",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
+                "flow": "#/$defs/Flow",
                 "grid": "#/$defs/InnerGrid",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
@@ -529,6 +627,9 @@
               },
               {
                 "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -722,6 +823,7 @@
                 "cards": "#/$defs/Cards",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
+                "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
@@ -780,6 +882,9 @@
               },
               {
                 "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
               }
             ]
           },
@@ -1126,6 +1231,7 @@
                 "cards": "#/$defs/Cards",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
+                "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
@@ -1184,6 +1290,9 @@
               },
               {
                 "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
               }
             ]
           },
@@ -1489,6 +1598,7 @@
             "cards": "#/$defs/Cards",
             "code": "#/$defs/Code",
             "fact_strip": "#/$defs/FactStrip",
+            "flow": "#/$defs/Flow",
             "grid": "#/$defs/Grid",
             "heading": "#/$defs/Heading",
             "image": "#/$defs/Image",
@@ -1549,6 +1659,9 @@
           },
           {
             "$ref": "#/$defs/Timeline"
+          },
+          {
+            "$ref": "#/$defs/Flow"
           },
           {
             "$ref": "#/$defs/Section"
