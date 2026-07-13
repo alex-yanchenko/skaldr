@@ -63,6 +63,25 @@
 {% if b.reconcile %}<p class="reconcile">{{ reconcile_line(b) }}</p>{% endif %}
 {% endmacro %}
 
+{# Flow: a directional pipeline. The connector sits at the FRONT of each node (never the last node
+   of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
+{% macro flow(b) %}
+<div class="flow {{ b.style }}">
+<div class="track">
+{% if b.style == "steps" %}
+{% for s in b.steps %}
+<div class="step"><span class="link{% if loop.first %} blank{% endif %}"></span><div class="card{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<div class="lab">{{ s.label }}</div>{% if s.note %}<div class="cap">{{ s.note | richtext }}</div>{% endif %}</div></div>
+{% endfor %}
+{% else %}
+{% for s in b.steps %}
+<span class="seg">{% if not loop.first %}<span class="conn"></span>{% endif %}<span class="node{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<span class="txt"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}</span></span></span>
+{% endfor %}
+{% endif %}
+</div>
+{% if b.loop %}<div class="loop"><span class="cyc">↺</span> back to {{ b.steps[0].label }}</div>{% endif %}
+</div>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -92,6 +111,8 @@
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}</li>{% endfor %}</ul>
+{% elif block.type == "flow" %}
+{{ flow(block) }}
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}

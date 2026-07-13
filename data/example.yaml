@@ -48,6 +48,18 @@ blocks:
     muted: true
     body: "Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated."
 
+  - type: heading
+    level: 3
+    text: "Count pipeline"
+  - type: flow
+    loop: true
+    steps:
+      - { label: "Scan", tone: info }
+      - { label: "Reconcile", tone: accent }
+      - { label: "Flag", tone: warning }
+      - { label: "Fix", tone: success }
+      - { label: "Recount" }
+
   - type: callout
     tone: warning
     title: "Action needed before the next count"

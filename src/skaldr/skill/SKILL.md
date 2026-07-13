@@ -1,11 +1,13 @@
 ---
 name: skaldr
 description: >-
-  Author and render a report with skaldr — one YAML content file becomes a polished,
-  self-contained HTML page. Use when the user wants a shareable report or summary (an
-  investigation, review, audit, data-quality or ingestion writeup, incident post-mortem,
-  proposal, or status page) rather than plain prose or a raw table. skaldr owns all design;
-  you only describe what the report says.
+  Author and render a report or design write-up with skaldr — one YAML file becomes a polished,
+  self-contained HTML page, so you never hand-write HTML/CSS. Use it for any shareable report,
+  summary, or architecture/design doc (investigations, reviews, audits, ingestion/data-quality
+  writeups, post-mortems, proposals, status pages) — especially when it needs visual structure: a
+  flow/pipeline, comparison table, stat cards, timeline, meters, or callouts. Reach for it instead
+  of hand-building an HTML page, plain prose, or a raw table. skaldr owns the design; you describe
+  what it says.
 ---
 
 # Authoring a skaldr report
@@ -13,6 +15,10 @@ description: >-
 skaldr is a **CLI already on your PATH** — do not look for a source repo, a `uv run`, or a
 `python -m`; just run `skaldr`. You write one YAML content file; skaldr renders one self-contained
 HTML page and owns all the design.
+
+It covers visual structure too — flows/pipelines, comparison tables, stat cards, timelines — so for
+an architecture or design doc, reach for it before hand-building HTML. Run `skaldr --guide` for the
+full block palette.
 
 **Author from real evidence.** Every number, date, and claim must come from the data, files, or
 facts in front of you. If you don't have a value, ask for it or leave the block out — never invent

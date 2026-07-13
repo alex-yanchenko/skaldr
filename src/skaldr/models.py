@@ -54,6 +54,7 @@ CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich"]
+FlowStyle = Literal["arrow", "steps"]
 
 
 def _resource(name: str) -> Traversable:
@@ -259,6 +260,45 @@ class Timeline(_Frozen):
     items: list[TimelineItem] = Field(min_length=1, description="Ordered entries with state-coloured dots.")
 
 
+class FlowStep(_Frozen):
+    label: str = Field(min_length=1, description="Short stage name — the node label.")
+    tone: Tone | None = Field(
+        default=None, description="Optional tone accent for this node's border + number."
+    )
+    note: str | None = Field(
+        default=None,
+        description="Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a "
+        "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
+    )
+
+    @model_validator(mode="after")
+    def _non_blank(self) -> "FlowStep":
+        if not self.label.strip():
+            raise ValueError("flow step label must not be blank")
+        return self
+
+
+class Flow(_Frozen):
+    type: Literal["flow"]
+    steps: list[FlowStep] = Field(
+        min_length=2, description="Ordered stages (2+); a flow needs two or more nodes."
+    )
+    style: FlowStyle = Field(
+        default="arrow",
+        description="arrow (default): short-labelled nodes joined by → connectors — reach for it when the "
+        "DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each "
+        "carry a caption line — reach for it when every stage needs a sentence of explanation.",
+    )
+    loop: bool = Field(
+        default=False,
+        description="Draw a '↺ back to <first>' return marker after the last node — for a cycle, "
+        "not a one-way pipeline.",
+    )
+    numbered: bool = Field(
+        default=True, description="Number the nodes 1..n (derived); set false to hide numbers."
+    )
+
+
 class Column(_Frozen):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
@@ -438,6 +478,7 @@ _Leaf = (
     | Quote
     | Image
     | Timeline
+    | Flow
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 
