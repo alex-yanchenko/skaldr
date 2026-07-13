@@ -160,6 +160,19 @@ def test_grid_cell_tone_renders_an_emphasis_panel() -> None:
     assert '<div class="cell span-6 panel accent">' in html
 
 
+def test_hero_meta_wraps_the_title_in_a_hero_band() -> None:
+    html = render_html(parse_report(make_report(meta={"title": "T", "subtitle": ["s"], "hero": True})))
+
+    assert '<header class="hero"><h1>T</h1><p class="subtitle">s</p></header>' in html
+
+
+def test_no_hero_by_default_renders_a_bare_title() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert '<header class="hero">' not in html
+    assert "<h1>Test Report</h1>" in html
+
+
 def test_width_defaults_to_default() -> None:
     html = render_html(parse_report(make_report()))
 

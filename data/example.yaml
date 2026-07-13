@@ -10,6 +10,7 @@ meta:
   source: "WMS export"
   date: "Q3 2026"
   toc: true
+  hero: true
 
 badges:
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
