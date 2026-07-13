@@ -26,8 +26,12 @@
 </head>
 <body>
 <div class="wrap width-{{ meta.width }}">
+{% if meta.hero %}
+<header class="hero"><h1>{{ meta.title }}</h1>{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}</header>
+{% else %}
 <h1>{{ meta.title }}</h1>
 {% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}
+{% endif %}
 {% if toc %}<nav class="toc">{% for slug, text in toc %}<a href="#{{ slug }}">{{ text }}</a>{% endfor %}</nav>{% endif %}
 {% if used_badges and first_table_index is none %}{{ m.legend(used_badges) }}{% endif %}
 {% for block in blocks %}

@@ -95,6 +95,11 @@ class Meta(_Frozen):
         default="default",
         description="Page width cap: default (1600px), wide (1920px), or full (fill the window).",
     )
+    hero: bool = Field(
+        default=False,
+        description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
+        "that opens by selling an idea rather than a plain report header.",
+    )
 
 
 class Heading(_Frozen):

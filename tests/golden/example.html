@@ -67,6 +67,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-bottom:6px; text-wrap:balance}
 .subtitle{color:var(--muted); font-size:14px}
+/* Opt-in hero header (meta.hero): a larger display title in a tinted band, for a page that opens by
+   selling an idea. Flat by design (tinted block). */
+.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6); background:var(--panel); border:1px solid var(--line); border-radius:12px}
+.hero h1{font-size:38px; line-height:1.1; margin-bottom:var(--s3)}
+.hero .subtitle{font-size:16px}
+.hero .subtitle:not(:last-child){margin-bottom:var(--s1)}
 .toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 .toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-bottom:var(--s2);
@@ -330,8 +336,8 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 </head>
 <body>
 <div class="wrap width-default">
-<h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1>
-<p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p><nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 

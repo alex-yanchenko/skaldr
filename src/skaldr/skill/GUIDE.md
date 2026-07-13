@@ -29,7 +29,11 @@ meta:
   date: "Q3 2026"                # optional; footer. Author it — skaldr never inserts "now"
   toc: true                      # optional; auto table-of-contents from level-2 headings
   width: default                 # optional; page width cap: default (1600px) | wide (1920px) | full
+  hero: true                     # optional; a larger display title + subtitle in a tinted band
 ```
+
+`hero` opts the page into a bolder opening — a large display title and subtitle in a tinted band —
+for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
 
 `width` caps how wide the page may grow. It's a ceiling — on a screen narrower than the cap the
 page fills the viewport regardless. (The rendered page also carries a corner menu that lets a

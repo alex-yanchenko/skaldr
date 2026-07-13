@@ -53,6 +53,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-bottom:6px; text-wrap:balance}
 .subtitle{color:var(--muted); font-size:14px}
+/* Opt-in hero header (meta.hero): a larger display title in a tinted band, for a page that opens by
+   selling an idea. Flat by design (tinted block). */
+.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6); background:var(--panel); border:1px solid var(--line); border-radius:12px}
+.hero h1{font-size:38px; line-height:1.1; margin-bottom:var(--s3)}
+.hero .subtitle{font-size:16px}
+.hero .subtitle:not(:last-child){margin-bottom:var(--s1)}
 .toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 .toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-bottom:var(--s2);
