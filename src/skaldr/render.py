@@ -75,7 +75,7 @@ def _environment() -> Environment:
     return env
 
 
-def render_html(report: Report) -> str:
+def _render(report: Report, template: str) -> str:
     env = _environment()
     slugs = compute.heading_slugs(report)
 
@@ -85,7 +85,7 @@ def render_html(report: Report) -> str:
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["heading_id"] = heading_id
-    return env.get_template("page.html.j2").render(
+    return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
         styles=package_text("styles.css"),
@@ -96,9 +96,21 @@ def render_html(report: Report) -> str:
     )
 
 
-def render_file(data_path: Path, out_path: Path) -> Report:
+def render_html(report: Report) -> str:
+    """A complete, self-contained HTML document — the default output."""
+    return _render(report, "page.html.j2")
+
+
+def render_embed(report: Report) -> str:
+    """A fragment for embedding in a claude.ai Artifact: an inline `<style>` + the content markup,
+    without the `<!doctype>`/`<html>`/`<head>`/`<body>` skeleton or the corner-menu script. The host
+    supplies those and the theme toggle; skaldr's `light-dark()` + `[data-theme]` CSS follows it."""
+    return _render(report, "embed.html.j2")
+
+
+def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
     report = load_report(data_path)
-    html = render_html(report)
+    html = render_embed(report) if embed else render_html(report)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     return report

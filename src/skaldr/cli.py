@@ -16,6 +16,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("data", nargs="?", help="path to the content YAML")
     parser.add_argument("-o", "--out", help="output HTML path (default: out/<data-stem>.html)")
     parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="emit an Artifact-ready fragment (inline <style> + content, no <html>/<head>/<body> "
+        "skeleton or scripts) for publishing to a claude.ai Artifact, instead of a full document",
+    )
+    parser.add_argument(
         "--write-schema",
         metavar="PATH",
         help="write the JSON Schema for content files to PATH and exit",
@@ -57,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     data_path = Path(args.data).resolve()
     out_path = Path(args.out).resolve() if args.out else Path.cwd() / "out" / f"{data_path.stem}.html"
     try:
-        report = render_file(data_path, out_path)
+        report = render_file(data_path, out_path, embed=args.embed)
     except ReportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

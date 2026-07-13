@@ -28,12 +28,13 @@ skaldr report.yaml -o review.html  # choose the output path
 open review.html                   # a self-contained file — open it, host it, or share it
 ```
 
-That's the whole tool: point it at a content file, get an HTML page. Two more commands help you
-write the content file:
+That's the whole tool: point it at a content file, get an HTML page. A few more commands help you
+write the content file and share the result:
 
 ```bash
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
+skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 ```
 
 There are no styling flags — everything is in the content file.

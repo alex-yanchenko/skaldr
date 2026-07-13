@@ -1,0 +1,6 @@
+{# A fragment for embedding in a claude.ai Artifact (or any host that supplies its own
+   <html>/<head>/<body> and theme control): an inline <style> + the page content, with no
+   doctype/head/body skeleton, no CSP meta, and no corner-menu script. The palette stays
+   theme-aware because the CSS uses light-dark() + :root[data-theme], which the host drives. #}
+<style>{{ styles | safe }}</style>
+{% include "_content.html.j2" %}

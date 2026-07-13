@@ -6,7 +6,7 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.models import load_report, parse_report
-from skaldr.render import render_html, render_richtext
+from skaldr.render import render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
@@ -171,6 +171,33 @@ def test_no_hero_by_default_renders_a_bare_title() -> None:
 
     assert '<header class="hero">' not in html
     assert "<h1>Test Report</h1>" in html
+
+
+def test_embed_omits_the_document_skeleton_menu_and_scripts() -> None:
+    html = render_embed(parse_report(make_report(blocks=[{"type": "text", "body": "hi"}])))
+
+    assert "<!doctype" not in html.lower()
+    assert "<html" not in html
+    assert "<body" not in html
+    assert "<script" not in html  # no corner-menu JS (the Artifact host drives theme)
+    assert 'class="sc"' not in html  # no corner menu
+    # but it DOES carry the inline styles and the rendered content
+    assert html.startswith("<style>")
+    assert '<div class="wrap width-default">' in html
+    assert '<p class="text">hi</p>' in html
+
+
+def test_embed_and_page_render_identical_content() -> None:
+    report = parse_report(
+        make_report(blocks=[{"type": "heading", "text": "H"}, {"type": "text", "body": "b"}])
+    )
+
+    embed = render_embed(report)
+    page = render_html(report)
+
+    # the shared _content partial is byte-identical in both; only skeleton/chrome differ
+    marker = '<div class="wrap width-default">'
+    assert embed[embed.index(marker) :] == page[page.index(marker) : page.index('<div class="sc"')]
 
 
 def test_width_defaults_to_default() -> None:
