@@ -7,13 +7,18 @@ browser they already have. No new Python dependency; if no browser is found we s
 HTML path untouched.
 """
 
+import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 from pathlib import Path
 
 from skaldr.errors import ReportError
+
+# A hang shouldn't wedge the CLI forever; a module constant so tests can shorten it.
+_TIMEOUT_SECONDS = 120
 
 # macOS .app binaries, tried in order; then PATH names. SKALDR_BROWSER overrides everything.
 _MAC_APP_BINARIES = (
@@ -31,13 +36,26 @@ _PATH_NAMES = (
 )
 
 
+def _is_executable(path: str) -> bool:
+    """A runnable browser binary — a regular file with the executable bit (not a dir or data file)."""
+    candidate = Path(path)
+    return candidate.is_file() and os.access(candidate, os.X_OK)
+
+
 def find_browser() -> str | None:
-    """Path to a Chromium-family browser to print with, or None. `SKALDR_BROWSER` wins if set."""
+    """Path to a Chromium-family browser to print with, or None if none is installed. `SKALDR_BROWSER`
+    wins if set; a set-but-unrunnable override raises rather than silently falling back to discovery,
+    so a typo'd path fails loudly instead of masquerading as 'no browser installed'."""
     override = os.environ.get("SKALDR_BROWSER")
     if override:
-        return override if Path(override).exists() else None
+        if _is_executable(override):
+            return override
+        raise ReportError(
+            f"SKALDR_BROWSER is set to {override!r}, but that is not a runnable browser (no such "
+            "executable file). Fix the path, or unset SKALDR_BROWSER to auto-discover one."
+        )
     for binary in _MAC_APP_BINARIES:
-        if Path(binary).exists():
+        if _is_executable(binary):
             return binary
     for name in _PATH_NAMES:
         found = shutil.which(name)
@@ -68,10 +86,33 @@ def html_to_pdf(html: str, pdf_path: Path, *, browser: str | None = None) -> Non
             f"--print-to-pdf={pdf_path}",
             source.as_uri(),
         ]
+        # start_new_session puts the browser in its own process group so a timeout can kill the
+        # headless renderer/GPU children too, not just the launcher (which would orphan them).
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
-        except (OSError, subprocess.TimeoutExpired) as err:
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
+            )
+        except OSError as err:
             raise ReportError(f"could not run the browser for --pdf ({binary}): {err}") from err
-    if result.returncode != 0 or not pdf_path.exists():
-        detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "no output"
-        raise ReportError(f"the browser failed to produce a PDF (exit {result.returncode}): {detail}")
+        try:
+            _, stderr = process.communicate(timeout=_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as err:
+            _kill_process_group(process)
+            raise ReportError(
+                f"the browser timed out after {_TIMEOUT_SECONDS}s rendering the PDF ({binary})"
+            ) from err
+        returncode = process.returncode
+    if returncode != 0 or not pdf_path.exists():
+        detail = stderr.strip().splitlines()[-1] if stderr.strip() else "no output"
+        raise ReportError(f"the browser failed to produce a PDF (exit {returncode}): {detail}")
+
+
+def _kill_process_group(process: "subprocess.Popen[str]") -> None:
+    """SIGKILL the whole process group (POSIX) or the process (elsewhere), then reap it."""
+    with contextlib.suppress(OSError, ProcessLookupError):
+        if hasattr(os, "killpg"):
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        else:
+            process.kill()
+    with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+        process.communicate(timeout=5)
