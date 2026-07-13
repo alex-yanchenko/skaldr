@@ -107,6 +107,22 @@ def test_flow_loop_marker_names_the_first_node() -> None:
     assert '<div class="loop"><span class="cyc">↺</span> back to Flag</div>' in html
 
 
+def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
+    badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
+    blocks = [
+        {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["OK"]}]},
+        {"type": "timeline", "items": [{"title": "T", "badges": ["OK"]}]},
+        {"type": "flow", "steps": [{"label": "A", "badges": ["OK"]}, {"label": "B"}]},
+    ]
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=blocks)))
+
+    # a chip renders inside each of the three containers
+    assert html.count('<span class="chips"><span class="chip green">OK</span></span>') == 3
+    # and a container badge now feeds the auto-legend — the "dead badge" wart, inverted
+    assert "Legend — badges used on this page" in html
+
+
 def test_width_defaults_to_default() -> None:
     html = render_html(parse_report(make_report()))
 

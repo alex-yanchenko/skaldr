@@ -37,8 +37,8 @@ blocks:
   - type: cards
     items:
       - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
-      - { label: "Floor — fixable", value: 1100, of: 10000, tone: warning, note: "Miscounts + mislabeled bins we can correct." }
-      - { label: "Vendor — escalate", value: 400, of: 10000, tone: danger }
+      - { label: "Floor — fixable", value: 1100, of: 10000, tone: warning, note: "Miscounts + mislabeled bins we can correct.", badges: [FLOOR] }
+      - { label: "Vendor — escalate", value: 400, of: 10000, tone: danger, badges: [VENDOR] }
       - { label: "Count status", value: "HEALTHY", tone: accent }
       - { label: "Total units", value: 10000, tone: neutral }
 
@@ -56,7 +56,7 @@ blocks:
     steps:
       - { label: "Scan", tone: info }
       - { label: "Reconcile", tone: accent }
-      - { label: "Flag", tone: warning }
+      - { label: "Flag", tone: warning, badges: [SYSTEM] }
       - { label: "Fix", tone: success }
       - { label: "Recount" }
 

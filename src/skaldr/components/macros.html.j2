@@ -7,6 +7,10 @@
 {% else %}<span class="chip {{ item.tone }}">{{ item.label }}</span>{% endif %}
 {% endmacro %}
 
+{# Chips from declared badge keys, attached to a container (card / timeline item / flow node). A
+   <span> wrapper (not <div>) so it's valid inside the inline flow-node txt column too. #}
+{% macro chip_keys(keys) %}<span class="chips">{% for key in keys %}<span class="chip {{ badges[key].tone }}">{{ badges[key].label }}</span>{% endfor %}</span>{% endmacro %}
+
 {% macro legend(used_badges) %}
 <details class="section">
 <summary>Legend — badges used on this page</summary>
@@ -70,11 +74,11 @@
 <div class="track">
 {% if b.style == "steps" %}
 {% for s in b.steps %}
-<div class="step"><span class="link{% if loop.first %} blank{% endif %}"></span><div class="card{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<div class="lab">{{ s.label }}</div>{% if s.note %}<div class="cap">{{ s.note | richtext }}</div>{% endif %}</div></div>
+<div class="step"><span class="link{% if loop.first %} blank{% endif %}"></span><div class="card{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<div class="lab">{{ s.label }}</div>{% if s.note %}<div class="cap">{{ s.note | richtext }}</div>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div></div>
 {% endfor %}
 {% else %}
 {% for s in b.steps %}
-<span class="seg">{% if not loop.first %}<span class="conn"></span>{% endif %}<span class="node{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<span class="txt"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}</span></span></span>
+<span class="seg">{% if not loop.first %}<span class="conn"></span>{% endif %}<span class="node{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<span class="txt"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</span></span></span>
 {% endfor %}
 {% endif %}
 </div>
@@ -94,7 +98,7 @@
 {% elif block.type == "key_value" %}
 <dl class="kv">{% for p in block.pairs %}<dt>{{ p.label }}</dt><dd>{{ p.value | richtext }}</dd>{% endfor %}</dl>
 {% elif block.type == "cards" %}
-<div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>{% endfor %}</div>
+<div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endfor %}</div>
 {% elif block.type == "badge_row" %}
 <div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>
 {% elif block.type == "callout" %}
@@ -110,7 +114,7 @@
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}
-<ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}</li>{% endfor %}</ul>
+<ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}
 {{ flow(block) }}
 {% elif block.type == "table" %}

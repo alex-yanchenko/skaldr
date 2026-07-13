@@ -149,6 +149,36 @@ def test_flow_unknown_field_is_rejected_with_path() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_container_badge_reference_must_be_declared() -> None:
+    block = {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["GHOST"]}]}
+
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_container_badge_nested_in_a_section_is_still_validated() -> None:
+    """Guards the recursion-composition path: the badge walker must reach container badges nested
+    inside a section/grid, not just top-level ones."""
+    inner = {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["GHOST"]}]}
+    section = {"type": "section", "title": "s", "blocks": [inner]}
+
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
+        parse_report(make_report(blocks=[section]))
+
+
+def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
+    badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
+    blocks = [
+        {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["OK"]}]},
+        {"type": "timeline", "items": [{"title": "T", "badges": ["OK"]}]},
+        {"type": "flow", "steps": [{"label": "A", "badges": ["OK"]}, {"label": "B"}]},
+    ]
+
+    report = parse_report(make_report(badges=badges, blocks=blocks))
+
+    assert len(report.blocks) == 3
+
+
 def test_table_row_missing_a_column_is_rejected() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "only"}]}])
 

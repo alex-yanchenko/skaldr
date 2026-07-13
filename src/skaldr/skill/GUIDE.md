@@ -46,8 +46,9 @@ badges:
 ```
 
 Each key maps to a `label` (chip text), a `tone` (chip colour), and a `legend` (one-line
-meaning). Reference a key from a table `badge` column or a `badge_row`. **A referenced key that
-isn't declared fails the build.** A legend of the badges you actually used is generated
+meaning). Reference a key from a table `badge` column, a `badge_row`, or a `badges: [KEY, …]` list
+on a **card, timeline entry, or flow step** (the chips render on that container). **A referenced key
+that isn't declared fails the build.** A legend of the badges you actually used is generated
 automatically before the first table — you don't author it.
 
 Badge colours: `slate · blue · green · amber · red · violet · teal · sky`.
@@ -78,7 +79,7 @@ infinities.
 | `list` | Bulleted or numbered points | `style: bullet\|number`, `items[]` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
-| `cards` | Headline numbers | `items: [{label, value, of?, tone?, note?}]` |
+| `cards` | Headline numbers | `items: [{label, value, of?, tone?, note?, badges?}]` |
 | `badge_row` | A standalone row of chips | `label?`, `items: [{key} \| {label, tone}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
 | `status_list` | Checks / steps | `items: [{state: done\|pending\|failed\|blocked, text}]` |
@@ -87,8 +88,8 @@ infinities.
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
-| `timeline` | Ordered events | `items: [{title, time?, body?, state?}]` |
-| `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
+| `timeline` | Ordered events | `items: [{title, time?, body?, state?, badges?}]` |
+| `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 

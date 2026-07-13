@@ -95,6 +95,9 @@ code{font-family:var(--mono); font-size:12px; border:1px solid var(--line); padd
 .chip.green{background:var(--success-bg); color:var(--success-fg)} .chip.amber{background:var(--warning-bg); color:var(--warning-fg)}
 .chip.red{background:var(--danger-bg); color:var(--danger-fg)} .chip.violet{background:var(--accent-bg); color:var(--accent-fg)}
 .chip.teal{background:var(--teal-bg); color:var(--teal-fg)} .chip.sky{background:var(--sky-bg); color:var(--sky-fg)}
+/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
+.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
+.flow.arrow .node .chips{margin-top:4px}
 
 .callout{border-left:4px solid var(--c); background:var(--cb); border-radius:8px; padding:14px 18px; margin:var(--s4) 0}
 .callout .title{font-weight:600; color:var(--c); margin-bottom:var(--s1)}
