@@ -200,6 +200,16 @@ def test_embed_and_page_render_identical_content() -> None:
     assert embed[embed.index(marker) :] == page[page.index(marker) : page.index('<div class="sc"')]
 
 
+def test_print_expands_collapsibles_and_scales_the_page_down() -> None:
+    html = render_html(parse_report(make_report()))
+
+    # a collapsed <details> prints empty — a beforeprint handler opens every one (afterprint restores)
+    assert 'addEventListener("beforeprint"' in html
+    assert 'addEventListener("afterprint"' in html
+    # print scales the page down for document density (screen sizes are tuned for a monitor)
+    assert ".wrap{zoom:0.88}" in html
+
+
 def test_width_defaults_to_default() -> None:
     html = render_html(parse_report(make_report()))
 
