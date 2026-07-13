@@ -375,6 +375,8 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
+                # An indicator value is validated to an exact Tone here (or blank), so the rendered
+                # `<span class="dot {value}">` class is always a known tone.
                 if column.kind == "indicator" and value.strip() and value not in get_args(Tone):
                     raise ValueError(
                         f"{loc}.{index}.{column.key}: indicator value must be a tone name "
