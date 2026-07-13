@@ -331,6 +331,9 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	.card,.callout,figure.fig,blockquote.quote,.code,.tl li,.status-list li,.list li,
 	.flow .seg,.flow .step,details.section,.kv{break-inside:avoid}
 	p{orphans:2; widows:2}
+	/* Code has no horizontal scrollbar on paper — wrap long lines (and long unbroken tokens) so the
+	   whole block prints instead of clipping at the page edge. */
+	.code pre,.code .diff .ln{white-space:pre-wrap; overflow-wrap:anywhere}
 	/* Tables: never split a row across pages, repeat the column header on each page, and drop the
 	   sticky positioning (meaningless on paper). */
 	table.rep thead{display:table-header-group}
