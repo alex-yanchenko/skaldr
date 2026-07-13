@@ -235,7 +235,14 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert "table.rep tr{break-inside:avoid}" in html
     assert "table.rep thead{display:table-header-group}" in html
     # cards/callouts/list+status items stay whole across page breaks
-    assert "details.section,.kv{break-inside:avoid}" in html
+    assert ".flow .seg,.flow .step,.kv{break-inside:avoid}" in html
+    # a header is never stranded from the content it introduces (break in the gap after it forbidden)
+    assert "h1,h2,h3,h4,summary{break-after:avoid; break-inside:avoid}" in html
+    # a long section may still break — it is NOT force-kept whole
+    assert "details.section,.kv{break-inside:avoid}" not in html
+    # flows stack vertically (never wrap a lone node) when printing or on a narrow screen
+    assert "@media print, (max-width: 640px){" in html
+    assert ".flow .track{flex-direction:column; flex-wrap:nowrap}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
     # print scales down for document density (the print-density knob)

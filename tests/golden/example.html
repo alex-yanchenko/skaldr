@@ -193,6 +193,26 @@ code{font-family:var(--mono); font-size:12px; border:1px solid var(--line); padd
 	border-radius:8px; padding:5px 12px; font-size:12.5px; font-weight:600}
 .flow .loop .cyc{font-size:15px; line-height:1}
 
+/* On paper and on narrow screens a horizontal pipeline can't fit: a wrapped row strands a lone node
+   far from its predecessor. Stack the flow vertically and centre it — each node/card sits centred
+   with a downward connector to the next. Same rules fire when printing or below 640px. */
+@media print, (max-width: 640px){
+	.flow .track{flex-direction:column; flex-wrap:nowrap}
+	.flow.arrow .track,.flow.steps .track{align-items:center}
+	.flow.arrow .seg{flex-direction:column; align-items:center}
+	.flow.steps .step{flex-direction:column; align-items:center; flex:none; width:min(340px,100%)}
+	.flow.steps .card{width:100%}
+	/* Connector rotates: a short vertical bar with a downward arrowhead instead of a rightward one. */
+	.flow .conn,.flow .link{width:2px; height:22px; margin:0}
+	.flow .conn::after,.flow .link::after{right:auto; left:50%; top:auto; bottom:-1px;
+		transform:translateX(-50%); border-left:4px solid transparent; border-right:4px solid transparent;
+		border-top:6px solid var(--rule); border-bottom:0}
+	/* No dangling connector above the first stacked card. */
+	.flow.steps .step:first-child .link{display:none}
+	/* Centre the loop return chip under the stack (its parent .flow is a block, so margin-auto it). */
+	.flow .loop{display:flex; width:fit-content; margin-left:auto; margin-right:auto}
+}
+
 blockquote.quote{border-left:3px solid var(--rule); padding:2px 0 2px 16px; margin:var(--s4) 0; color:var(--ink)}
 blockquote.quote .cite{display:block; margin-top:8px; font-size:12.5px; color:var(--muted)}
 blockquote.quote .cite::before{content:"— "}
@@ -331,8 +351,13 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	.sc{display:none}
 	/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 	.card,.callout,figure.fig,blockquote.quote,.code,.tl li,.status-list li,.list li,
-	.flow .seg,.flow .step,details.section,.kv{break-inside:avoid}
+	.flow .seg,.flow .step,.kv{break-inside:avoid}
 	p{orphans:2; widows:2}
+	/* Keep a header with the content it introduces: forbid a page break in the gap right after a
+	   heading or section summary, so a title is never stranded at the foot of one page while its
+	   (unbreakable) block moves to the next. Only that immediately-following gap is held — a long
+	   section still breaks freely further down, which is why the whole section is NOT break-inside. */
+	h1,h2,h3,h4,summary{break-after:avoid; break-inside:avoid}
 	/* Code has no horizontal scrollbar on paper — wrap long lines (and long unbroken tokens) so the
 	   whole block prints instead of clipping at the page edge. */
 	.code pre,.code .diff .ln{white-space:pre-wrap; overflow-wrap:anywhere}
