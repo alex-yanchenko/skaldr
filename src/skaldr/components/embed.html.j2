@@ -1,6 +1,10 @@
-{# A fragment for embedding in a claude.ai Artifact (or any host that supplies its own
-   <html>/<head>/<body> and theme control): an inline <style> + the page content, with no
-   doctype/head/body skeleton, no CSP meta, and no corner-menu script. The palette stays
-   theme-aware because the CSS uses light-dark() + :root[data-theme], which the host drives. #}
+{# A skeleton-less fragment for embedding in a claude.ai Artifact (or any host that supplies its own
+   <html>/<head>/<body>): the inline <style> + the page content + the SAME corner controls and scripts
+   as the full page — only the <!doctype>/<html>/<head>/<body> wrapper and CSP meta are dropped (the
+   host provides those). A leading <title> lets the Artifact publisher name the artifact. Inline JS is
+   allowed in Artifacts, so theme/width controls and the print handler work here too. #}
+<title>{{ meta.title }}</title>
 <style>{{ styles | safe }}</style>
+{% include "_theme_boot.html.j2" %}
 {% include "_content.html.j2" %}
+{% include "_controls.html.j2" %}

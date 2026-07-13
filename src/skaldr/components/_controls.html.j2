@@ -1,0 +1,73 @@
+<div class="sc" data-open="false">
+<button class="sc-btn" type="button" aria-label="Display settings" aria-expanded="false" aria-controls="sc-menu">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="var(--surface)"/><circle cx="15" cy="16" r="2.6" fill="var(--surface)"/></svg>
+</button>
+<div class="sc-menu" id="sc-menu" role="group" aria-label="Display settings" hidden>
+<div class="sc-row"><span class="sc-lbl">Theme</span><div class="sc-seg" role="group" aria-label="Theme"><button type="button" aria-pressed="false" data-set="theme" data-val="auto">Auto</button><button type="button" aria-pressed="false" data-set="theme" data-val="light">Light</button><button type="button" aria-pressed="false" data-set="theme" data-val="dark">Dark</button></div></div>
+<div class="sc-row"><span class="sc-lbl">Width</span><div class="sc-seg" role="group" aria-label="Width"><button type="button" aria-pressed="false" data-set="width" data-val="default">Default</button><button type="button" aria-pressed="false" data-set="width" data-val="wide">Wide</button><button type="button" aria-pressed="false" data-set="width" data-val="full">Full</button></div></div>
+</div>
+</div>
+<script>
+(function () {
+	var root = document.documentElement;
+	var controls = document.querySelector(".sc");
+	if (!controls) return;
+	var button = controls.querySelector(".sc-btn");
+	var menu = controls.querySelector(".sc-menu");
+	if (!button || !menu) return;
+	var wrap = document.querySelector(".wrap");
+	/* Author's width is the .wrap width-<mode> class; no other class on .wrap matches width-\w+. */
+	var authorWidth = (wrap && (wrap.className.match(/width-(\w+)/) || [])[1]) || "default";
+
+	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
+	function drop(key) { try { localStorage.removeItem(key); } catch (err) {} }
+
+	function setOpen(isOpen) {
+		controls.dataset.open = isOpen ? "true" : "false";
+		button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+		menu.hidden = !isOpen;
+	}
+
+	function syncGroup(kind, active) {
+		controls.querySelectorAll('[data-set="' + kind + '"]').forEach(function (item) {
+			var on = item.dataset.val === active;
+			item.setAttribute("aria-pressed", on ? "true" : "false");
+			item.classList.toggle("on", on);
+		});
+	}
+	function reflect() {
+		syncGroup("theme", root.getAttribute("data-theme") || "auto");
+		syncGroup("width", root.getAttribute("data-width") || authorWidth);
+	}
+
+	button.addEventListener("click", function (event) { event.stopPropagation(); setOpen(controls.dataset.open !== "true"); });
+	document.addEventListener("click", function (event) { if (!controls.contains(event.target)) setOpen(false); });
+	document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
+
+	controls.querySelectorAll("[data-set]").forEach(function (item) {
+		item.addEventListener("click", function () {
+			if (item.dataset.set === "theme") {
+				if (item.dataset.val === "auto") { root.removeAttribute("data-theme"); drop("skaldr-theme"); }
+				else { root.setAttribute("data-theme", item.dataset.val); save("skaldr-theme", item.dataset.val); }
+			} else {
+				/* Width is a transient per-view override — not persisted, so a new page keeps the author's width. */
+				root.setAttribute("data-width", item.dataset.val);
+			}
+			reflect();
+		});
+	});
+	reflect();
+
+	/* Collapsed sections hide their content when printed. Expand every <details> for print, then
+	   restore each to how the reader left it — so a PDF captures the whole report. */
+	window.addEventListener("beforeprint", function () {
+		document.querySelectorAll("details").forEach(function (item) {
+			item.dataset.printOpen = item.open ? "1" : "0";
+			item.open = true;
+		});
+	});
+	window.addEventListener("afterprint", function () {
+		document.querySelectorAll("details").forEach(function (item) { item.open = item.dataset.printOpen === "1"; });
+	});
+})();
+</script>
