@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/alex-yanchenko/skaldr/compare/v0.5.0...v0.6.0) (2026-07-13)
+
+
+### Features
+
+* **cli:** add --embed for publishing to a claude.ai Artifact ([#11](https://github.com/alex-yanchenko/skaldr/issues/11)) ([a0f271b](https://github.com/alex-yanchenko/skaldr/commit/a0f271b3b7b3dbc16ac832ee231107e4bfb4bd32))
+* **print:** expand collapsibles and scale down for PDF ([#12](https://github.com/alex-yanchenko/skaldr/issues/12)) ([967d06b](https://github.com/alex-yanchenko/skaldr/commit/967d06b9d891d7f03951202cad9afe8577960ca1))
+
+
+### Documentation
+
+* **guide:** explain the code block's diff mode ([#14](https://github.com/alex-yanchenko/skaldr/issues/14)) ([667981d](https://github.com/alex-yanchenko/skaldr/commit/667981d0112e3a72c6ea840fdca53bd9eee56b36))
+* **readme:** lead with install + usage; add Homebrew; catch up with 0.5.0 ([#10](https://github.com/alex-yanchenko/skaldr/issues/10)) ([d5ab808](https://github.com/alex-yanchenko/skaldr/commit/d5ab808ac9732f4a34ea8b4c3d13181ff563a21e))
+
 ## [0.5.0](https://github.com/alex-yanchenko/skaldr/compare/v0.4.1...v0.5.0) (2026-07-13)
 
 
