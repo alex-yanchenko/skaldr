@@ -49,6 +49,7 @@ Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
 
 # Design-system primitives (fixed — referenced by name, never authored as values).
 Tone = Literal["neutral", "info", "success", "warning", "danger", "accent"]
+RowTone = Literal["muted", "danger"]  # table-row emphasis: dim a rejected row, or flag a bad one
 BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
 CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
@@ -351,13 +352,16 @@ def col_sum(rows: Sequence[dict[str, Any]], key: str) -> float:
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
     keys = {column.key for column in columns}
     for index, row in enumerate(rows):
-        present = set(row) - {"subrows"}
+        present = set(row) - {"subrows", "tone"}
         missing = keys - present
         extra = present - keys
         if missing:
             raise ValueError(f"{loc}.{index}: missing column value(s): {sorted(missing)}")
         if extra:
             raise ValueError(f"{loc}.{index}: unknown key(s): {sorted(extra)}")
+        row_tone = row.get("tone")
+        if row_tone is not None and row_tone not in ("muted", "danger"):
+            raise ValueError(f"{loc}.{index}.tone: row tone must be 'muted' or 'danger'")
         for column in columns:
             value = row[column.key]
             if column.kind == "number":
@@ -512,6 +516,11 @@ class Section(_Frozen):
 class InnerGridCell(_Frozen):
     span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
     blocks: list[InnerBlock] = Field(min_length=1, description="Leaf blocks stacked in the cell.")
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone: turns the cell into an emphasis panel (accent top-border + tint). "
+        "Use `neutral` for a muted aside, `accent`/`success` for a primary panel.",
+    )
 
 
 class InnerGrid(_Frozen):
@@ -531,6 +540,11 @@ class GridCell(_Frozen):
     span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
     blocks: list[CellBlock] = Field(
         min_length=1, description="Blocks stacked in the cell; may include nested grids (depth 2 max)."
+    )
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone: turns the cell into an emphasis panel (accent top-border + tint). "
+        "Use `neutral` for a muted aside, `accent`/`success` for a primary panel.",
     )
 
 

@@ -4,7 +4,18 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import Flow, FlowStep, Meta, Report, Table, Text, load_report, parse_report, read_text_file
+from skaldr.models import (
+    Flow,
+    FlowStep,
+    Grid,
+    Meta,
+    Report,
+    Table,
+    Text,
+    load_report,
+    parse_report,
+    read_text_file,
+)
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -177,6 +188,37 @@ def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
     report = parse_report(make_report(badges=badges, blocks=blocks))
 
     assert len(report.blocks) == 3
+
+
+def test_row_tone_is_a_reserved_key_not_an_unknown_column() -> None:
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x", "tone": "muted"}]
+    )
+
+    block = parse_report(make_report(blocks=[table])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.rows == [{"a": "x", "tone": "muted"}]  # tone kept, not tripping the unknown-key guard
+
+
+def test_row_tone_rejects_an_unknown_value() -> None:
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x", "tone": "bogus"}]
+    )
+
+    with pytest.raises(ReportError, match=r"tone: row tone must be 'muted' or 'danger'"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:
+    ok = make_grid([{"span": 6, "tone": "accent", "blocks": [{"type": "text", "body": "x"}]}])
+    block = parse_report(make_report(blocks=[ok])).blocks[0]
+    assert isinstance(block, Grid)
+    assert block.cells[0].tone == "accent"
+
+    bad = make_grid([{"span": 6, "tone": "bogus", "blocks": [{"type": "text", "body": "x"}]}])
+    with pytest.raises(ReportError, match=r"blocks\.0\.grid\.cells\.0\.tone"):
+        parse_report(make_report(blocks=[bad]))
 
 
 def test_table_row_missing_a_column_is_rejected() -> None:
