@@ -12,7 +12,7 @@
 {% macro chip_keys(keys) %}<span class="chips">{% for key in keys %}<span class="chip {{ badges[key].tone }}">{{ badges[key].label }}</span>{% endfor %}</span>{% endmacro %}
 
 {% macro legend(used_badges) %}
-<details class="section">
+<details class="section"{% if expand_details %} open{% endif %}>
 <summary>Legend — badges used on this page</summary>
 <div class="section-body">
 <div class="legend-grid">
@@ -123,7 +123,7 @@
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}
-<details class="section"{% if not block.collapsed %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+<details class="section"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "grid" %}
 <div class="grid">{% for cell in block.cells %}<div class="cell span-{{ cell.span }}{% if cell.tone %} panel {{ cell.tone }}{% endif %}">{% for inner in cell.blocks %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
 {% endif %}
