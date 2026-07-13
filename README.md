@@ -51,6 +51,7 @@ meta:
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
   toc: true                     # optional; auto table-of-contents from level-2 headings
   width: default                # optional; page width cap: default (1600) | wide (1920) | full
+  hero: true                    # optional; larger display title + subtitle in a tinted band
 badges:                         # author-declared vocabulary (see below)
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
   SYSTEM: { label: "System", tone: blue,  legend: "Defect in the scanning/labeling pipeline." }
@@ -68,10 +69,13 @@ type, a field from the wrong block, or an unknown key each fails with a precise
 
 **Blocks:** `heading` · `text` · `list` · `fact_strip` · `key_value` · `cards` · `badge_row` ·
 `callout` · `status_list` · `meter` · `table` · `code` · `quote` · `image` · `timeline` ·
-`section` (collapsible) · `grid` (bounded 6-column layout). The `table` is the workhorse — typed
-columns, grouped subtotals, sub-rows, and a `reconcile` block that hard-fails the build if the
-counts don't sum to a declared total. Prose fields take a small markdown subset
-(`**bold**`, `*italic*`, `` `code` ``, `~~strike~~`, links); raw HTML is never interpreted.
+`flow` (a directional pipeline — arrow or step style, optional loop) · `section` (collapsible) ·
+`grid` (bounded 6-column layout, with optional per-cell emphasis panels). The `table` is the
+workhorse — typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
+`tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
+total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
+nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
+`~~strike~~`, links); raw HTML is never interpreted.
 
 **Learn the format:**
 - **`skaldr --guide`** — the authoring guide (every block, the table, badges, rich text, the
