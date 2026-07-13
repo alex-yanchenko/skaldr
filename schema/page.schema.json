@@ -655,6 +655,27 @@
           "minItems": 1,
           "title": "Blocks",
           "type": "array"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone: turns the cell into an emphasis panel (accent top-border + tint). Use `neutral` for a muted aside, `accent`/`success` for a primary panel.",
+          "title": "Tone"
         }
       },
       "required": [
@@ -907,6 +928,27 @@
           "minItems": 1,
           "title": "Blocks",
           "type": "array"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone: turns the cell into an emphasis panel (accent top-border + tint). Use `neutral` for a muted aside, `accent`/`success` for a primary panel.",
+          "title": "Tone"
         }
       },
       "required": [

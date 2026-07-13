@@ -121,6 +121,10 @@ columns stack into one. You choose *how many columns* and *which cells*; skaldr 
 gap, and alignment. For many equal small items (e.g. cards), prefer the block's own auto-flow
 rather than a grid; the grid is for asymmetric composition.
 
+Give a cell an optional **`tone`** to make it an emphasis panel (accent top-border + tint): use
+`accent`/`success` for the *primary* panel and `neutral` for a *muted aside*, so a reader sees which
+of two side-by-side panels is the answer.
+
 ## The `flow`
 
 A directional pipeline — the block for a process, data flow, or architecture where the **direction
@@ -180,7 +184,9 @@ key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→f
 - **Column widths** are automatic by default. To set proportions, give every non-badge column a
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
   It's all-or-none — set `width` on every non-badge column or none; `badge` columns can't take one.
-- **Every row supplies every column key and nothing else** (plus an optional `subrows`).
+- **Every row supplies every column key and nothing else** (plus an optional `subrows`, and an
+  optional `tone: muted | danger`). A row `tone` emphasises the whole row: `muted` dims and strikes
+  it (a rejected/superseded row), `danger` tints it red (a bad row).
 - **`reconcile`** is the trust check: the column sum, plus any `handled` bucket, must equal
   `total` or the build fails naming the delta. With `pct_of_total` on a number column, each cell
   also shows its share of the reconcile total.

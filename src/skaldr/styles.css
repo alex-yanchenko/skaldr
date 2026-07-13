@@ -211,6 +211,12 @@ table.rep tr.group td{position:sticky; top:var(--hdr-h); z-index:2; background:v
 table.rep tr.group .st{float:right; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums}
 table.rep tbody td{padding:16px; border-bottom:1px solid var(--line); vertical-align:top}
 table.rep tbody tr.row:hover td{background:var(--hover)}
+/* Row emphasis (reserved row key `tone`): muted = a struck, dimmed "rejected" row; danger = a
+   red-tinted "bad" row. The strike sits on the title only — struck numbers read as edits, not intent. */
+table.rep tbody tr.row.muted{opacity:0.55}
+table.rep tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
+table.rep tbody tr.row.danger td{background:var(--danger-bg)}
+table.rep tbody tr.row.danger:hover td{background:var(--danger-bg)}
 table.rep tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 table.rep td.title{font-weight:650}
 table.rep td.title .chip{margin-top:8px}
@@ -246,6 +252,15 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 .cell{min-width:0}
 .cell.span-1{grid-column:span 1} .cell.span-2{grid-column:span 2} .cell.span-3{grid-column:span 3}
 .cell.span-4{grid-column:span 4} .cell.span-5{grid-column:span 5} .cell.span-6{grid-column:span 6}
+/* Cell emphasis (opt-in `tone`): turns a bare layout cell into a panel — accent top-border + tint,
+   so a primary panel outranks a muted aside. Flat by design (tinted block; keeps --shadow meaning
+   "discrete surface"). neutral = the muted aside; accent/success = the primary panel. */
+.cell.panel{border:1px solid var(--line); border-top:3px solid var(--pt,var(--rule)); border-radius:8px;
+	padding:var(--s4); background:var(--pb,var(--panel))}
+.cell.panel.neutral{--pt:var(--rule); --pb:var(--panel)}
+.cell.panel.info{--pt:var(--info-fg); --pb:var(--info-bg)} .cell.panel.success{--pt:var(--success-fg); --pb:var(--success-bg)}
+.cell.panel.warning{--pt:var(--warning-fg); --pb:var(--warning-bg)} .cell.panel.danger{--pt:var(--danger-fg); --pb:var(--danger-bg)}
+.cell.panel.accent{--pt:var(--accent-fg); --pb:var(--accent-bg)}
 /* Below the stack floor, cells go full-width (spans ignored) so nothing is cramped on narrow screens. */
 @media (max-width:768px){
 	.grid{grid-template-columns:1fr}

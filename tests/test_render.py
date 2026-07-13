@@ -123,6 +123,27 @@ def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
     assert "Legend — badges used on this page" in html
 
 
+def test_row_tone_renders_on_the_tr() -> None:
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}],
+        rows=[{"a": "keep"}, {"a": "drop", "tone": "muted"}, {"a": "bad", "tone": "danger"}],
+    )
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert '<tr class="row muted">' in html
+    assert '<tr class="row danger">' in html
+    assert '<tr class="row">' in html  # the untoned row is unchanged
+
+
+def test_grid_cell_tone_renders_an_emphasis_panel() -> None:
+    grid = make_grid([{"span": 6, "tone": "accent", "blocks": [{"type": "text", "body": "x"}]}])
+
+    html = render_html(parse_report(make_report(blocks=[grid])))
+
+    assert '<div class="cell span-6 panel accent">' in html
+
+
 def test_width_defaults_to_default() -> None:
     html = render_html(parse_report(make_report()))
 

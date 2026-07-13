@@ -102,6 +102,7 @@ blocks:
           - issue: "Short shipment"
             tag: VENDOR
             count: 400
+            tone: danger
             problem: "The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted."
             fix: "Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives."
       - name: "Correctly counted — no action"
@@ -185,6 +186,7 @@ blocks:
   - type: grid
     cells:
       - span: 2
+        tone: accent
         blocks:
           - type: cards
             items:
