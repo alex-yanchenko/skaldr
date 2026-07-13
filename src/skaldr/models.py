@@ -14,7 +14,7 @@ import sys
 from collections.abc import Iterator, Sequence
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -50,6 +50,8 @@ Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
 # Design-system primitives (fixed — referenced by name, never authored as values).
 Tone = Literal["neutral", "info", "success", "warning", "danger", "accent"]
 RowTone = Literal["muted", "danger"]  # table-row emphasis: dim a rejected row, or flag a bad one
+# Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
+_ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
 BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
 CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
@@ -352,7 +354,7 @@ def col_sum(rows: Sequence[dict[str, Any]], key: str) -> float:
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
     keys = {column.key for column in columns}
     for index, row in enumerate(rows):
-        present = set(row) - {"subrows", "tone"}
+        present = set(row) - _ROW_RESERVED_KEYS
         missing = keys - present
         extra = present - keys
         if missing:
@@ -360,7 +362,7 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
         if extra:
             raise ValueError(f"{loc}.{index}: unknown key(s): {sorted(extra)}")
         row_tone = row.get("tone")
-        if row_tone is not None and row_tone not in ("muted", "danger"):
+        if row_tone is not None and row_tone not in get_args(RowTone):
             raise ValueError(f"{loc}.{index}.tone: row tone must be 'muted' or 'danger'")
         for column in columns:
             value = row[column.key]
@@ -420,6 +422,9 @@ class Table(_Frozen):
         column_keys = [column.key for column in self.columns]
         if len(column_keys) != len(set(column_keys)):
             raise ValueError("column keys must be unique")
+        reserved_clash = sorted(_ROW_RESERVED_KEYS.intersection(column_keys))
+        if reserved_clash:
+            raise ValueError(f"column key(s) {reserved_clash} are reserved row keys; rename the column(s)")
         number_keys = {column.key for column in self.columns if column.kind == "number"}
         for spec, name in ((self.reconcile, "reconcile"), (self.totals, "totals")):
             if spec is not None and spec.column not in number_keys:

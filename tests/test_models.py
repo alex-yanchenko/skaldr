@@ -221,6 +221,13 @@ def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:
         parse_report(make_report(blocks=[bad]))
 
 
+def test_table_column_key_may_not_collide_with_a_reserved_row_key() -> None:
+    table = make_table(columns=[{"key": "tone", "label": "Tone", "kind": "text"}], rows=[{"tone": "warm"}])
+
+    with pytest.raises(ReportError, match=r"reserved row keys"):
+        parse_report(make_report(blocks=[table]))
+
+
 def test_table_row_missing_a_column_is_rejected() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "only"}]}])
 
