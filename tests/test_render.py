@@ -123,6 +123,26 @@ def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
     assert "Legend — badges used on this page" in html
 
 
+def test_container_badges_render_on_a_steps_style_flow_node() -> None:
+    """The steps branch renders badge chips through a different template arm than the arrow branch."""
+    badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
+    block = {"type": "flow", "style": "steps", "steps": [{"label": "A", "badges": ["OK"]}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[block])))
+
+    assert '<div class="flow steps">' in html
+    assert html.count('<span class="chips"><span class="chip green">OK</span></span>') == 1
+
+
+def test_expand_forces_collapsed_sections_open_for_pdf() -> None:
+    section = {"type": "section", "title": "S", "collapsed": True, "blocks": [{"type": "text", "body": "hi"}]}
+    report = parse_report(make_report(blocks=[section]))
+
+    # a collapsed section stays closed in the default render, but --pdf renders it open
+    assert '<details class="section"><summary>S</summary>' in render_html(report)
+    assert '<details class="section" open><summary>S</summary>' in render_html(report, expand=True)
+
+
 def test_row_tone_renders_on_the_tr() -> None:
     table = make_table(
         columns=[{"key": "a", "label": "A", "kind": "text"}],

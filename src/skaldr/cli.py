@@ -9,7 +9,7 @@ from pathlib import Path
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
-from skaldr.render import render_file, render_html
+from skaldr.render import render_html, render_report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,8 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--embed",
         action="store_true",
-        help="emit an Artifact-ready fragment (inline <style> + content, no <html>/<head>/<body> "
-        "skeleton or scripts) for publishing to a claude.ai Artifact, instead of a full document",
+        help="emit an Artifact-ready fragment (inline <style> + content + controls, no "
+        "<html>/<head>/<body> skeleton or CSP meta) for publishing to a claude.ai Artifact, "
+        "instead of a full document",
     )
     parser.add_argument(
         "--pdf",
@@ -68,20 +69,30 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a content file is required (or use --write-schema)")
 
     data_path = Path(args.data).resolve()
+    # --embed only shapes HTML output; with --pdf and no -o no HTML is written, so it would be inert.
+    if args.embed and args.pdf and not args.out:
+        parser.error(
+            "--embed has no effect with --pdf alone (no HTML is written); add -o to also "
+            "write the embed fragment, or drop --embed"
+        )
     written: list[Path] = []
     try:
         report = load_report(data_path)
-        if args.pdf:
-            # PDF always prints the full page (the print CSS needs the whole document, not a fragment).
-            pdf_path = Path(args.pdf).resolve()
-            html_to_pdf(render_html(report), pdf_path)
-            written.append(pdf_path)
+        # HTML first — it needs no browser, so a later PDF failure never costs the reader the HTML.
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
             out_path = Path(args.out).resolve() if args.out else Path.cwd() / "out" / f"{data_path.stem}.html"
-            render_file(data_path, out_path, embed=args.embed)
+            render_report(report, out_path, embed=args.embed)
             written.append(out_path)
-    except ReportError as exc:
+        if args.pdf:
+            # PDF prints the full page with every section expanded: the print CSS needs the whole
+            # document (not a fragment), and headless print can't rely on the beforeprint script.
+            pdf_path = Path(args.pdf).resolve()
+            html_to_pdf(render_html(report, expand=True), pdf_path)
+            written.append(pdf_path)
+    except (ReportError, OSError) as exc:
+        for path in written:
+            print(f"OK  {path}")
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for path in written:

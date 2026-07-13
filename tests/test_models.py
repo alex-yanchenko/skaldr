@@ -5,6 +5,7 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.models import (
+    Cards,
     Flow,
     FlowStep,
     Grid,
@@ -12,6 +13,7 @@ from skaldr.models import (
     Report,
     Table,
     Text,
+    Timeline,
     load_report,
     parse_report,
     read_text_file,
@@ -187,7 +189,13 @@ def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
 
     report = parse_report(make_report(badges=badges, blocks=blocks))
 
-    assert len(report.blocks) == 3
+    cards, timeline, flow = report.blocks
+    assert isinstance(cards, Cards)
+    assert isinstance(timeline, Timeline)
+    assert isinstance(flow, Flow)
+    assert cards.items[0].badges == ["OK"]
+    assert timeline.items[0].badges == ["OK"]
+    assert flow.steps[0].badges == ["OK"]
 
 
 def test_row_tone_is_a_reserved_key_not_an_unknown_column() -> None:

@@ -75,7 +75,7 @@ def _environment() -> Environment:
     return env
 
 
-def _render(report: Report, template: str) -> str:
+def _render(report: Report, template: str, *, expand: bool = False) -> str:
     env = _environment()
     slugs = compute.heading_slugs(report)
 
@@ -85,6 +85,7 @@ def _render(report: Report, template: str) -> str:
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["heading_id"] = heading_id
+    globals_["expand_details"] = expand
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
@@ -96,21 +97,29 @@ def _render(report: Report, template: str) -> str:
     )
 
 
-def render_html(report: Report) -> str:
-    """A complete, self-contained HTML document — the default output."""
-    return _render(report, "page.html.j2")
+def render_html(report: Report, *, expand: bool = False) -> str:
+    """A complete, self-contained HTML document — the default output. `expand` forces every
+    collapsible `<details>` open; used for PDF output, where headless print can't run the
+    beforeprint script that expands sections on screen."""
+    return _render(report, "page.html.j2", expand=expand)
 
 
 def render_embed(report: Report) -> str:
-    """A fragment for embedding in a claude.ai Artifact: an inline `<style>` + the content markup,
-    without the `<!doctype>`/`<html>`/`<head>`/`<body>` skeleton or the corner-menu script. The host
-    supplies those and the theme toggle; skaldr's `light-dark()` + `[data-theme]` CSS follows it."""
+    """A fragment for embedding in a claude.ai Artifact: an inline `<style>` + the content markup +
+    the corner controls, without the `<!doctype>`/`<html>`/`<head>`/`<body>` skeleton or the CSP
+    meta. It carries the same theme-boot and controls scripts as the full page (Artifacts allow
+    inline JS), so it self-manages theme/width and stays `light-dark()` + `[data-theme]` aware."""
     return _render(report, "embed.html.j2")
+
+
+def render_report(report: Report, out_path: Path, *, embed: bool = False) -> None:
+    """Write an already-loaded report to `out_path` (no re-read of the source file)."""
+    html = render_embed(report) if embed else render_html(report)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
 
 
 def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
     report = load_report(data_path)
-    html = render_embed(report) if embed else render_html(report)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html, encoding="utf-8")
+    render_report(report, out_path, embed=embed)
     return report
