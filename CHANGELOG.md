@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/alex-yanchenko/skaldr/compare/v0.4.1...v0.5.0) (2026-07-13)
+
+
+### Features
+
+* **badges:** attach badges to cards, timeline entries, and flow nodes ([#5](https://github.com/alex-yanchenko/skaldr/issues/5)) ([0e4417a](https://github.com/alex-yanchenko/skaldr/commit/0e4417ac250b87adaef659c55fe53e5c4da54bec))
+* **emphasis:** row tone and grid-cell emphasis panels ([#6](https://github.com/alex-yanchenko/skaldr/issues/6)) ([227876b](https://github.com/alex-yanchenko/skaldr/commit/227876b6d2a0b212e825ea204f0ead79e57ce841))
+* **flow:** add directional flow block and advertise the block palette ([#3](https://github.com/alex-yanchenko/skaldr/issues/3)) ([6e19167](https://github.com/alex-yanchenko/skaldr/commit/6e1916780802d87504a46080be95e1f0a408bc3d))
+* **meta:** add an opt-in hero header (meta.hero) ([#8](https://github.com/alex-yanchenko/skaldr/issues/8)) ([73b0197](https://github.com/alex-yanchenko/skaldr/commit/73b01973a958a03335017b8a17c66f7cae086d9d))
+* **table:** add an indicator column kind (colour-only status dot) ([#7](https://github.com/alex-yanchenko/skaldr/issues/7)) ([e619d56](https://github.com/alex-yanchenko/skaldr/commit/e619d5671275d7424538617df9c42b23b872b340))
+
+
+### Bug Fixes
+
+* **ci:** don't enforce uv.lock on release-please PRs ([#9](https://github.com/alex-yanchenko/skaldr/issues/9)) ([121e07b](https://github.com/alex-yanchenko/skaldr/commit/121e07bcd50f088b03ec5e0da633ac0ec63240c6))
+
 ## [0.4.1](https://github.com/alex-yanchenko/skaldr/compare/v0.4.0...v0.4.1) (2026-07-11)
 
 
