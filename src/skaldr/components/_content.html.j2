@@ -1,0 +1,16 @@
+{% import "macros.html.j2" as m %}<div class="wrap width-{{ meta.width }}">
+{% if meta.hero %}
+<header class="hero"><h1>{{ meta.title }}</h1>{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}</header>
+{% else %}
+<h1>{{ meta.title }}</h1>
+{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}
+{% endif %}
+{% if toc %}<nav class="toc">{% for slug, text in toc %}<a href="#{{ slug }}">{{ text }}</a>{% endfor %}</nav>{% endif %}
+{% if used_badges and first_table_index is none %}{{ m.legend(used_badges) }}{% endif %}
+{% for block in blocks %}
+{% if used_badges and loop.index0 == first_table_index %}{{ m.legend(used_badges) }}{% endif %}
+{{ m.render_block(block) }}
+{% endfor %}
+{% if footer %}<div class="footer">{{ footer }}</div>{% endif %}
+<div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>
+</div>

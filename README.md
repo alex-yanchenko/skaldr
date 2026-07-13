@@ -37,8 +37,9 @@ skaldr data/example.yaml
 ```
 
 The CLI is deliberately tiny: `skaldr <content.yaml> [-o out.html]`, plus
-`skaldr --write-schema schema/page.schema.json`. There are no styling flags — everything is
-in the content file.
+`skaldr --write-schema schema/page.schema.json` and `--embed` (emit an Artifact-ready fragment —
+inline `<style>` + content, no document skeleton — for publishing to a claude.ai Artifact). There
+are no styling flags — everything is in the content file.
 
 ## The content file
 

@@ -37,6 +37,11 @@ fabrication, so honesty is on you.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`) — read it, fix, re-run. Done = skaldr prints `OK` and the output
    file exists.
+5. **Surface it, don't stop at a path.** Hand over the rendered file. **If you can publish a
+   claude.ai Artifact** (Claude Code, Cowork), render with `skaldr report.yaml --embed -o report.html`
+   and publish *that* — `--embed` drops the `<html>`/`<head>`/`<body>` skeleton so it slots into the
+   Artifact host cleanly (a full document would double-wrap and its theme JS wouldn't run). The
+   embedded page is still light/dark-aware via the host.
 
 This file is intentionally thin and stable: the version-specific detail lives in `skaldr --guide`
 and `skaldr --write-schema`, so it stays correct across upgrades without reinstalling the skill.
