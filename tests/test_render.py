@@ -173,21 +173,26 @@ def test_no_hero_by_default_renders_a_bare_title() -> None:
     assert "<h1>Test Report</h1>" in html
 
 
-def test_embed_omits_the_document_skeleton_menu_and_scripts() -> None:
+def test_embed_drops_the_skeleton_but_keeps_the_controls() -> None:
     html = render_embed(parse_report(make_report(blocks=[{"type": "text", "body": "hi"}])))
 
+    # the document skeleton is dropped — the Artifact host supplies <html>/<head>/<body>
     assert "<!doctype" not in html.lower()
     assert "<html" not in html
     assert "<body" not in html
-    assert "<script" not in html  # no corner-menu JS (the Artifact host drives theme)
-    assert 'class="sc"' not in html  # no corner menu
-    # but it DOES carry the inline styles and the rendered content
-    assert html.startswith("<style>")
+    # but the fragment stays fully functional: a leading <title> (names the artifact), inline
+    # styles, the rendered content, AND the same corner controls + scripts as the full page
+    # (inline JS runs inside an Artifact, so theme/width switching and the print handler work).
+    assert html.startswith("<title>")
+    assert "<title>Test Report</title>" in html
+    assert "<style>" in html
     assert '<div class="wrap width-default">' in html
     assert '<p class="text">hi</p>' in html
+    assert '<div class="sc" data-open="false">' in html  # corner controls present
+    assert 'addEventListener("beforeprint"' in html  # print handler present
 
 
-def test_embed_and_page_render_identical_content() -> None:
+def test_embed_and_page_share_content_and_controls() -> None:
     report = parse_report(
         make_report(blocks=[{"type": "heading", "text": "H"}, {"type": "text", "body": "b"}])
     )
@@ -195,9 +200,10 @@ def test_embed_and_page_render_identical_content() -> None:
     embed = render_embed(report)
     page = render_html(report)
 
-    # the shared _content partial is byte-identical in both; only skeleton/chrome differ
-    marker = '<div class="wrap width-default">'
-    assert embed[embed.index(marker) :] == page[page.index(marker) : page.index('<div class="sc"')]
+    # the content region (wrap → corner controls) is byte-identical in both — only the outer
+    # skeleton differs, since page and embed include the same _content and _controls partials
+    marker, sc = '<div class="wrap width-default">', '<div class="sc"'
+    assert embed[embed.index(marker) : embed.index(sc)] == page[page.index(marker) : page.index(sc)]
 
 
 def test_print_expands_collapsibles_and_scales_the_page_down() -> None:

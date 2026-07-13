@@ -1,0 +1,10 @@
+<script>
+/* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
+   persisted — it is a per-document control that resets to the author's meta.width on reload. */
+(function () {
+	try {
+		var theme = localStorage.getItem("skaldr-theme");
+		if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+	} catch (err) {}
+})();
+</script>
