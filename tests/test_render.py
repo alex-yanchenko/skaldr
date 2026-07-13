@@ -238,6 +238,8 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert "details.section,.kv{break-inside:avoid}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
+    # print scales down for document density (the print-density knob)
+    assert "zoom:0.75}" in html
     # collapsed sections are expanded for print (beforeprint opens them, afterprint restores),
     # with a CSS fallback for script-less hosts
     assert 'addEventListener("beforeprint"' in html
