@@ -103,6 +103,21 @@ embeds images, it does not fetch or generate them; **base64-encode the payload**
 unencoded SVG isn't a valid URI and won't render). A `section` holds any blocks except another
 `section` (one level of nesting only).
 
+Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
+added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
+prefixes yourself; skaldr strips the marker, re-labels the line, and tints it — it does **not**
+compute a diff. `mode: plain` (the default) renders the content verbatim with no colouring.
+
+```yaml
+- type: code
+  mode: diff
+  label: "dedupe.py"
+  content: |
+    -  total = sum(scan.count for scan in scans)
+    +  total = sum(scan.count for scan in dedupe(scans))
+       return total
+```
+
 ## The `grid`
 
 Place blocks side by side over a 6-column base. Each cell takes a required `span` (1–6); spans in
