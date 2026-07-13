@@ -203,11 +203,13 @@ def test_embed_and_page_render_identical_content() -> None:
 def test_print_expands_collapsibles_and_scales_the_page_down() -> None:
     html = render_html(parse_report(make_report()))
 
+    # backgrounds/colours must print, or table headers, chips, dots and tints vanish in a PDF
+    assert "print-color-adjust:exact" in html
     # a collapsed <details> prints empty — a beforeprint handler opens every one (afterprint restores)
     assert 'addEventListener("beforeprint"' in html
     assert 'addEventListener("afterprint"' in html
     # print scales the page down for document density (screen sizes are tuned for a monitor)
-    assert ".wrap{zoom:0.88}" in html
+    assert ".wrap{zoom:0.94}" in html
 
 
 def test_width_defaults_to_default() -> None:
