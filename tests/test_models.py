@@ -228,6 +228,30 @@ def test_table_column_key_may_not_collide_with_a_reserved_row_key() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def _indicator_table(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return make_table(
+        columns=[
+            {"key": "a", "label": "A", "kind": "text"},
+            {"key": "r", "label": "Risk", "kind": "indicator"},
+        ],
+        rows=rows,
+    )
+
+
+def test_indicator_column_rejects_a_non_tone_value() -> None:
+    with pytest.raises(ReportError, match=r"indicator value must be a tone"):
+        parse_report(make_report(blocks=[_indicator_table([{"a": "x", "r": "purple"}])]))
+
+
+def test_indicator_column_accepts_a_tone_or_blank() -> None:
+    block = parse_report(
+        make_report(blocks=[_indicator_table([{"a": "x", "r": "danger"}, {"a": "y", "r": ""}])])
+    ).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.rows == [{"a": "x", "r": "danger"}, {"a": "y", "r": ""}]
+
+
 def test_table_row_missing_a_column_is_rejected() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "only"}]}])
 

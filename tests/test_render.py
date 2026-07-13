@@ -136,6 +136,22 @@ def test_row_tone_renders_on_the_tr() -> None:
     assert '<tr class="row">' in html  # the untoned row is unchanged
 
 
+def test_indicator_column_renders_a_toned_dot_and_blanks_opt_out() -> None:
+    table = make_table(
+        columns=[
+            {"key": "a", "label": "A", "kind": "text"},
+            {"key": "r", "label": "Risk", "kind": "indicator"},
+        ],
+        rows=[{"a": "bad", "r": "danger"}, {"a": "none", "r": ""}],
+    )
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert '<span class="dot danger" title="danger"></span>' in html
+    assert html.count('class="dot') == 1  # the blank cell opts out — no dot
+    assert '<th class="ind">Risk</th>' in html
+
+
 def test_grid_cell_tone_renders_an_emphasis_panel() -> None:
     grid = make_grid([{"span": 6, "tone": "accent", "blocks": [{"type": "text", "body": "x"}]}])
 

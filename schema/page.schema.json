@@ -346,12 +346,13 @@
           "type": "string"
         },
         "kind": {
-          "description": "text/rich (first one becomes the title column), number, or badge (chip under title).",
+          "description": "text/rich (first one becomes the title column), number, badge (chip under title), or indicator (a colour-only dot in its own column; the cell value is a tone name).",
           "enum": [
             "text",
             "number",
             "badge",
-            "rich"
+            "rich",
+            "indicator"
           ],
           "title": "Kind",
           "type": "string"

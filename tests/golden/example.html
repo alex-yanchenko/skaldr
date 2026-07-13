@@ -235,6 +235,11 @@ table.rep tr.empty td{color:var(--muted); font-style:italic; text-align:center; 
 table.rep td.title{font-weight:650}
 table.rep td.title .chip{margin-top:8px}
 table.rep td.num{text-align:right; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}
+/* indicator column — a colour-only status dot in its own cell (multiple orthogonal signals per row). */
+table.rep th.ind,table.rep td.ind{text-align:center}
+.dot{display:inline-block; width:11px; height:11px; border-radius:999px; background:var(--neutral-fg); vertical-align:middle}
+.dot.info{background:var(--info-fg)} .dot.success{background:var(--success-fg)} .dot.warning{background:var(--warning-fg)}
+.dot.danger{background:var(--danger-fg)} .dot.accent{background:var(--accent-fg)} .dot.neutral{background:var(--neutral-fg)}
 table.rep td.num .pct{display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:2px}
 table.rep tfoot td{border-top:2px solid var(--ink); padding:12px 16px; font-weight:700}
 table.rep tfoot td.num{text-align:right; font-variant-numeric:tabular-nums; font-size:16px}
@@ -366,13 +371,14 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 </div>
 </details>
 <div class="table-wrap"><table class="rep">
-<colgroup><col><col style="width:10%"><col><col></colgroup>
-<thead><tr><th>Discrepancy</th><th class="num">Units</th><th>What the problem is</th><th>Proposed fix</th></tr></thead>
+<colgroup><col><col style="width:7%"><col style="width:10%"><col><col></colgroup>
+<thead><tr><th>Discrepancy</th><th class="ind">Risk</th><th class="num">Units</th><th>What the problem is</th><th>Proposed fix</th></tr></thead>
 <tbody>
-<tr class="group"><td colspan="4">Floor — fixable<span class="st">1,100</span></td></tr>
+<tr class="group"><td colspan="5">Floor — fixable<span class="st">1,100</span></td></tr>
 <tr class="row">
 <td class="title">Double-counted units
 <div><span class="chip amber">Floor</span></div><table class="subtable"><tbody><tr><td>Skipped, bin &gt; 12</td><td class="sv">260</td></tr><tr><td>Same-window re-scan</td><td class="sv">340</td></tr></tbody></table></td>
+<td class="ind"><span class="dot warning" title="warning"></span></td>
 <td class="num">600<span class="pct">6.0% of total</span></td>
 <td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 <td>De-duplicate on the pallet ID (<code>pallet_id</code>) before totalling; keep the most recent scan.</td>
@@ -380,20 +386,22 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 <tr class="row">
 <td class="title">Mislabeled bin codes
 <div><span class="chip blue">System</span></div></td>
+<td class="ind"><span class="dot warning" title="warning"></span></td>
 <td class="num">500<span class="pct">5.0% of total</span></td>
 <td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
 <td>Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log.</td>
 </tr>
-<tr class="group"><td colspan="4">Vendor — escalation<span class="st">400</span></td></tr>
+<tr class="group"><td colspan="5">Vendor — escalation<span class="st">400</span></td></tr>
 <tr class="row danger">
 <td class="title">Short shipment
 <div><span class="chip red">Vendor</span></div></td>
+<td class="ind"><span class="dot danger" title="danger"></span></td>
 <td class="num">400<span class="pct">4.0% of total</span></td>
 <td>The vendor&#39;s ASN listed 400 units that never arrived on the dock, so they can&#39;t be counted.</td>
 <td>Escalated to the vendor (ticket <code>OPS-1234</code>); hold the line until a corrected ASN arrives.</td>
 </tr>
-<tr class="group"><td colspan="4">Correctly counted — no action<span class="st">0</span></td></tr>
-<tr class="empty"><td colspan="4">— none —</td></tr></tbody>
+<tr class="group"><td colspan="5">Correctly counted — no action<span class="st">0</span></td></tr>
+<tr class="empty"><td colspan="5">— none —</td></tr></tbody>
 </table></div>
 <p class="reconcile">Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</p>
 
