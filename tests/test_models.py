@@ -156,6 +156,16 @@ def test_container_badge_reference_must_be_declared() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_container_badge_nested_in_a_section_is_still_validated() -> None:
+    """Guards the recursion-composition path: the badge walker must reach container badges nested
+    inside a section/grid, not just top-level ones."""
+    inner = {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["GHOST"]}]}
+    section = {"type": "section", "title": "s", "blocks": [inner]}
+
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
+        parse_report(make_report(blocks=[section]))
+
+
 def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
     badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
     blocks = [
