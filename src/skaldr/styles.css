@@ -26,6 +26,15 @@ table{border-collapse:collapse}
 	--accent-fg:light-dark(#7c3aed,#c4b5fd); --accent-bg:light-dark(#f3e8ff,#241a38);
 	--teal-fg:light-dark(#0f766e,#5eead4); --teal-bg:light-dark(#f0fdfa,#0b2621);
 	--sky-fg:light-dark(#0369a1,#7dd3fc); --sky-bg:light-dark(#e0f2fe,#0c2740);
+	/* Diff add/remove get their own tokens (NOT the shared success/danger family, which also drives
+	   callouts/badges/status) so the code-diff can run a more saturated green/red without dragging
+	   the rest of the palette with it. */
+	--diff-add-fg:light-dark(#0f7a37,#4ade80); --diff-add-bg:light-dark(#d1fadf,#0f2a1a); --diff-add-bar:light-dark(#16a34a,#22c55e);
+	--diff-del-fg:light-dark(#c11a1a,#f87171); --diff-del-bg:light-dark(#ffd9d6,#2a1416); --diff-del-bar:light-dark(#e5352b,#ef4444);
+	/* Code panel gets its own shaded background (not white --surface): the print page is forced white,
+	   so a white code body vanished into it. A light grey reads as a code panel on both the white paper
+	   and the tinted on-screen page. Dark is unchanged — it already sits above the darker page. */
+	--code-bg:light-dark(#f4f4f5,#171d28); --code-hdr:light-dark(#e6e6e8,#1b212b);
 	--s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
 	/* Soft elevation for the bounded-panel family (cards/table/code/image/section); flow and
 	   tinted blocks stay flat so the lift keeps meaning "discrete panel". Reads only against the
@@ -203,14 +212,16 @@ blockquote.quote{border-left:3px solid var(--rule); padding:2px 0 2px 16px; marg
 blockquote.quote .cite{display:block; margin-top:8px; font-size:12.5px; color:var(--muted)}
 blockquote.quote .cite::before{content:"— "}
 
-.code{margin:var(--s4) 0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
+.code{margin:var(--s4) 0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--code-bg); box-shadow:var(--shadow)}
 .code .code-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
-	color:var(--muted); background:var(--panel); padding:6px var(--s3); border-bottom:1px solid var(--line)}
+	color:var(--muted); background:var(--code-hdr); padding:6px var(--s3); border-bottom:1px solid var(--line)}
 .code pre{padding:var(--s3); overflow-x:auto; font-family:var(--mono); font-size:12px; line-height:1.6}
 .code pre.diff{padding:var(--s3) 0}
-.code .diff .ln{display:block; padding:0 var(--s3); white-space:pre}
-.code .diff .add{background:var(--success-bg)} .code .diff .add::before{content:"+ "; color:var(--success-fg)}
-.code .diff .del{background:var(--danger-bg)} .code .diff .del::before{content:"- "; color:var(--danger-fg)}
+.code .diff .ln{display:block; padding:0 var(--s3); border-left:3px solid transparent; white-space:pre}
+.code .diff .add{background:var(--diff-add-bg); border-left-color:var(--diff-add-bar)}
+.code .diff .add::before{content:"+ "; color:var(--diff-add-fg); font-weight:700}
+.code .diff .del{background:var(--diff-del-bg); border-left-color:var(--diff-del-bar)}
+.code .diff .del::before{content:"- "; color:var(--diff-del-fg); font-weight:700}
 .code .diff .ctx::before{content:"  "}
 
 figure.fig{margin:var(--s4) 0; max-width:680px}
@@ -336,7 +347,7 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	.wrap{max-width:none; padding:0; zoom:0.75}
 	.sc{display:none}
 	/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
-	.card,.callout,figure.fig,blockquote.quote,.code,.tl li,.status-list li,.list li,
+	.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 	.flow .seg,.flow .step,.kv{break-inside:avoid}
 	p{orphans:2; widows:2}
 	/* Keep a header with the content it introduces: forbid a page break in the gap right after a
@@ -347,11 +358,27 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	/* Code has no horizontal scrollbar on paper — wrap long lines (and long unbroken tokens) so the
 	   whole block prints instead of clipping at the page edge. */
 	.code pre,.code .diff .ln{white-space:pre-wrap; overflow-wrap:anywhere}
+	/* Long code may span pages (it is NOT in the break-inside list above). Its normal box is kept
+	   unchanged — screen and print match. The default box-decoration-break (slice) draws the box's
+	   top border only at its true top and the bottom only at its true bottom, so a break in the
+	   middle is seamless (no caps where it splits). overflow must be visible for the box to fragment
+	   instead of clipping; a single diff line stays whole. */
+	.code{overflow:visible}
+	.code .diff .ln{break-inside:avoid}
 	/* Tables: never split a row across pages, repeat the column header on each page, and drop the
 	   sticky positioning (meaningless on paper). */
 	table.rep thead{display:table-header-group}
 	table.rep tr{break-inside:avoid}
+	/* Keep a group subheader with the first row of its group — same rule as headings, so a group
+	   label is never stranded at the foot of a page while its rows start on the next. */
+	table.rep tr.group{break-after:avoid}
 	table.rep thead th,table.rep tr.group td{position:static}
+	/* A table's outer box can't survive a page break the way code's can: a broken table leaves
+	   whitespace where a pushed group row was, and the box's rounded border + shadow run down through
+	   it as a half-drawn "phantom row". Drop the box on paper so a break is just a clean row rule above
+	   intentional whitespace, and square the header corners (a lone rounded band with no box looks off). */
+	.table-wrap{border:none; border-radius:0; box-shadow:none}
+	table.rep thead th:first-child,table.rep thead th:last-child{border-radius:0}
 	/* Expand collapsed sections so a PDF captures their content. Full documents also run a
 	   beforeprint script (reliable); ::details-content covers a script-less host (an embedded
 	   fragment) on modern Chromium. */

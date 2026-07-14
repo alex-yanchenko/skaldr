@@ -234,6 +234,17 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     # a table row must not split across a page break, and the header must repeat on each page
     assert "table.rep tr{break-inside:avoid}" in html
     assert "table.rep thead{display:table-header-group}" in html
+    # a group subheader stays with its first data row (never stranded at a page foot)
+    assert "table.rep tr.group{break-after:avoid}" in html
+    # the table's outer box/shadow is dropped on paper so a mid-table break isn't a half-drawn row
+    assert ".table-wrap{border:none; border-radius:0; box-shadow:none}" in html
+    # the break-inside list holds these blocks whole but NOT .code — a long code block may fragment
+    assert ".card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li," in html
+    assert ".code," not in html
+    # code keeps its normal box (no print-only restyle); a single diff line still never splits, and
+    # the split stays seamless (default box-decoration-break, never clone)
+    assert ".code .diff .ln{break-inside:avoid}" in html
+    assert "box-decoration-break:clone" not in html
     # cards/callouts/list+status items stay whole across page breaks
     assert ".flow .seg,.flow .step,.kv{break-inside:avoid}" in html
     # a header is never stranded from the content it introduces (break in the gap after it forbidden)
