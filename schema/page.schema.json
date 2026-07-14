@@ -234,6 +234,18 @@
           "description": "Optional tone for the top-border accent.",
           "title": "Tone"
         },
+        "delta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CardDelta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional trend chip beside the value (a period-over-period change)."
+        },
         "note": {
           "anyOf": [
             {
@@ -261,6 +273,61 @@
         "value"
       ],
       "title": "Card",
+      "type": "object"
+    },
+    "CardDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Delta text shown beside the value, e.g. '+12%' or '0.3s'.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "up",
+                "down",
+                "flat"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional glyph before the label: \u25b2 up, \u25bc down, \u2192 flat.",
+          "title": "Direction"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delta colour \u2014 YOU set it: up isn't always good (down is good for cost/errors), so skaldr never infers it. Omit for a neutral chip.",
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "CardDelta",
       "type": "object"
     },
     "Cards": {

@@ -117,7 +117,14 @@
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
-			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}}
+			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}
+			/* delta trend chip beside the value; author-chosen tone (up isn't always good). */
+			& .delta{font-size:12.5px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill);
+				margin-inline-start:8px; vertical-align:middle; white-space:nowrap; letter-spacing:0;
+				color:var(--dt,var(--neutral-fg)); background:var(--db,var(--neutral-bg))}
+			& .delta.info{--dt:var(--info-fg); --db:var(--info-bg)} & .delta.success{--dt:var(--success-fg); --db:var(--success-bg)}
+			& .delta.warning{--dt:var(--warning-fg); --db:var(--warning-bg)} & .delta.danger{--dt:var(--danger-fg); --db:var(--danger-bg)}
+			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;

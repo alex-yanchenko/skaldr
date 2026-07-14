@@ -1,6 +1,7 @@
 {# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
 
 {% set STATUS_GLYPHS = {"done": "✓", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
+{% set DELTA_GLYPHS = {"up": "▲", "down": "▼", "flat": "→"} %}
 
 {% macro chip_item(item) %}
 {% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
@@ -109,7 +110,7 @@
 {% elif block.type == "key_value" %}
 <dl class="kv">{% for p in block.pairs %}<dt>{{ p.label }}</dt><dd>{{ p.value | richtext }}</dd>{% endfor %}</dl>
 {% elif block.type == "cards" %}
-<div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endfor %}</div>
+<div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ DELTA_GLYPHS[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endfor %}</div>
 {% elif block.type == "badge_row" %}
 <div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>
 {% elif block.type == "callout" %}
