@@ -37,6 +37,8 @@ _PLOT_W, _PLOT_H = _AX_R - _AX_L, _BASE - _TOP
 _XLBL_Y = 195
 # Donut box.
 _D_CX, _D_CY, _D_R, _D_SW = 105, 100, 62, 26
+# Sparkline box (a table-cell trend line).
+_SPARK_W, _SPARK_H, _SPARK_PAD = 72, 20, 3
 
 # When a series/slice gives no tone, colour it from this cycle so multiple series stay distinct
 # without the author naming a colour for each (derived-not-authored).
@@ -219,3 +221,24 @@ def chart_legend(chart: Chart) -> list[LegendRow]:
         {"label": series.label, "colour": _fill(series.tone, i), "note": None}
         for i, series in enumerate(chart.series)
     ]
+
+
+def sparkline_svg(values: list[float]) -> Markup:
+    """A tiny axis-less trend line for a table cell — the chart's line smoothing at cell scale, drawn
+    in a neutral tone. A sparkline shows shape, not good/bad; pair it with an indicator column for a
+    verdict. `values` has 2+ finite numbers (enforced by table validation)."""
+    low, high = min(values), max(values)
+    span = (high - low) or 1.0
+    inner_w, inner_h = _SPARK_W - 2 * _SPARK_PAD, _SPARK_H - 2 * _SPARK_PAD
+    step = inner_w / (len(values) - 1)
+    points = [
+        (_SPARK_PAD + i * step, _SPARK_H - _SPARK_PAD - (v - low) / span * inner_h)
+        for i, v in enumerate(values)
+    ]
+    end_x, end_y = points[-1]
+    line = (
+        f'<path d="{_smooth(points)}" fill="none" stroke="var(--neutral-fg)" '
+        'stroke-width="1.5" stroke-linecap="round"/>'
+    )
+    dot = f'<circle cx="{end_x:.1f}" cy="{end_y:.1f}" r="2" fill="var(--neutral-fg)"/>'
+    return Markup(f'<svg class="spark" viewBox="0 0 {_SPARK_W} {_SPARK_H}" role="img">{line}{dot}</svg>')

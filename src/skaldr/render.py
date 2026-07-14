@@ -14,7 +14,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
 
 from skaldr import compute
-from skaldr.charts import chart_legend, chart_svg
+from skaldr.charts import chart_legend, chart_svg, sparkline_svg
 from skaldr.models import Heading, Report, load_report, package_text
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -74,6 +74,7 @@ def _environment() -> Environment:
         reconcile_line=compute.reconcile_line,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
+        sparkline_svg=sparkline_svg,
     )
     return env
 

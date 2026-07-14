@@ -36,6 +36,8 @@
 <td class="num">{{ row[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
 {% elif c.kind == "indicator" %}
 <td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
+{% elif c.kind == "sparkline" %}
+<td class="spark">{{ sparkline_svg(row[c.key]) }}</td>
 {% else %}
 <td>{{ row[c.key] | richtext }}</td>
 {% endif %}

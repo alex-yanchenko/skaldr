@@ -60,7 +60,7 @@ BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal",
 CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
-ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+ColumnKind = Literal["text", "number", "badge", "rich", "indicator", "sparkline"]
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
 
@@ -403,7 +403,8 @@ class Column(_Frozen):
     label: str = Field(description="Column header text.")
     kind: ColumnKind = Field(
         description="text/rich (first one becomes the title column), number, badge (chip under title), "
-        "or indicator (a colour-only dot in its own column; the cell value is a tone name)."
+        "indicator (a colour-only dot in its own column; the cell value is a tone name), or sparkline "
+        "(a mini inline trend line; the cell value is a list of 2+ numbers)."
     )
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
@@ -456,6 +457,20 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                     raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
                 if not math.isfinite(value):
                     raise ValueError(f"{loc}.{index}.{column.key}: number column must be finite")
+            elif column.kind == "sparkline":
+                if not isinstance(value, list) or len(cast("list[Any]", value)) < 2:
+                    raise ValueError(
+                        f"{loc}.{index}.{column.key}: sparkline column needs a list of 2+ numbers"
+                    )
+                for point in cast("list[Any]", value):
+                    if (
+                        isinstance(point, bool)
+                        or not isinstance(point, int | float)
+                        or not math.isfinite(point)
+                    ):
+                        raise ValueError(
+                            f"{loc}.{index}.{column.key}: sparkline values must be finite numbers"
+                        )
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")

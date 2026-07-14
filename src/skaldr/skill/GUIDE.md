@@ -235,7 +235,10 @@ colours any unset series/slice from the palette so they stay distinct.
   `badge` column's value renders as a chip under the title, not in its own cell. An `indicator`
   column renders a colour-only **dot in its own cell** — the cell value is a tone name
   (`success`/`warning`/`danger`/…) or blank; use it for several orthogonal green/amber/red signals
-  per row (e.g. Reliability, Cost) that each want their own at-a-glance column.
+  per row (e.g. Reliability, Cost) that each want their own at-a-glance column. A `sparkline` column
+  renders a mini inline trend line — its cell value is a **list of 2+ numbers** (e.g. a 6-week series)
+  — a per-row shape beside the hard numbers; it's neutral-toned, so pair it with an `indicator` for a
+  verdict.
 - **Column widths** are automatic by default. To set proportions, give every non-badge column a
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
   It's all-or-none — set `width` on every non-badge column or none; `badge` columns can't take one.

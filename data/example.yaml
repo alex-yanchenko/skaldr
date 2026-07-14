@@ -256,3 +256,13 @@ blocks:
       - { label: Fixed on floor, tone: success, value: 900 }
       - { label: System defect, tone: warning, value: 760 }
       - { label: Vendor, tone: danger, value: 400 }
+
+  - type: table
+    columns:
+      - { key: zone, label: "Zone", kind: text }
+      - { key: units, label: "Units", kind: number }
+      - { key: trend, label: "6-week count", kind: sparkline }
+    rows:
+      - { zone: "Zone A", units: 2100, trend: [1800, 1920, 2010, 1980, 2060, 2100] }
+      - { zone: "Zone B", units: 1850, trend: [2000, 1960, 1900, 1880, 1870, 1850] }
+      - { zone: "Zone C", units: 2320, trend: [2100, 2180, 2200, 2260, 2300, 2320] }
