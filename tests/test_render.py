@@ -793,5 +793,6 @@ def test_subrows_render_compactly_scoped_over_the_main_cell_padding() -> None:
 
     assert '<table class="subtable">' in html
     # Nested under table.rep so it out-specifies `table.rep tbody td` (which would otherwise
-    # leak 16px padding + a row border into the nested subtable).
-    assert ".subtable td{padding:3px 10px 3px 0; border:0;" in html
+    # leak 16px padding + a row border into the nested subtable). Assert the `&` so un-nesting
+    # the rule to a bare (weaker-specificity) `.subtable td` would fail this.
+    assert "& .subtable td{padding:3px 10px 3px 0; border:0;" in html

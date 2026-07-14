@@ -115,7 +115,7 @@
 		&.info{--t:var(--info-fg)} &.success{--t:var(--success-fg)} &.warning{--t:var(--warning-fg)}
 		&.danger{--t:var(--danger-fg)} &.accent{--t:var(--accent-fg)} &.neutral{--t:var(--neutral-fg)}
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
-		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:8px; letter-spacing:-0.01em;
+		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
 			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
@@ -186,7 +186,7 @@
 		&.arrow .node .txt{display:flex; flex-direction:column; min-width:0}
 		&.arrow .node .lab{font-weight:600; font-size:14px; white-space:nowrap}
 		&.arrow .node .sub{font-size:11px; color:var(--muted); line-height:1.35}
-		&.arrow .node .chips{margin-top:4px}
+		&.arrow .node .chips{margin-top:var(--s1)}
 		&.steps .track{align-items:stretch; gap:var(--s2) 0}
 		/* Fixed-width steps (no grow): a 2-node flow shows two tidy cards, not two half-page slabs;
 		   more nodes wrap at the same width. Left-aligned like the arrow chips — trailing space. */
@@ -225,7 +225,7 @@
 	}
 
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
-		& .cite{display:block; margin-top:8px; font-size:12.5px; color:var(--muted)}
+		& .cite{display:block; margin-top:var(--s2); font-size:12.5px; color:var(--muted)}
 		& .cite::before{content:"— "}}
 
 	.code{margin-block:var(--s4); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;
@@ -244,7 +244,7 @@
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
-		& figcaption{font-size:12px; color:var(--muted); margin-top:8px; text-align:center}}
+		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
 
 	/* The table is a contained panel: the wrapper owns the border/radius/shadow, NOT overflow:hidden —
 	   an overflow container would trap the sticky header inside the box and break it. Corners are
@@ -273,7 +273,7 @@
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
-		& td.title .chip{margin-top:8px}
+		& td.title .chip{margin-top:var(--s2)}
 		& td.num{text-align:end; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}
 		/* indicator column — a colour-only status dot in its own cell (orthogonal signals per row). */
 		& th.ind,& td.ind{text-align:center}
@@ -287,7 +287,7 @@
 		   otherwise leak the main cell's 16px padding + row border into these nested quiet rows). */
 		& .subtable td{padding:3px 10px 3px 0; border:0; vertical-align:baseline; color:var(--muted)}
 		& .subtable td.sv{text-align:end; font-variant-numeric:tabular-nums; width:70px}}
-	.subtable{margin-top:12px; width:100%; font-size:12.5px}
+	.subtable{margin-top:var(--s3); width:100%; font-size:12.5px}
 	.reconcile{font-size:12.5px; color:var(--muted); margin:var(--s3) 0 var(--s6)}
 
 	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
