@@ -260,6 +260,21 @@
 		& img,& svg{display:block; width:100%; height:auto}
 		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
 
+	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
+	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
+	   stay theme-aware. Legend swatches match series colours (assigned in charts.py). */
+	.chart{margin-block:var(--s6);
+		& .cap{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-block-end:var(--s3)}
+		& svg{display:block; width:100%; height:auto}
+		&.donut svg{max-width:260px; margin-inline:auto}
+		& .c-gl{stroke:var(--line); stroke-width:1}
+		& .c-tick,& .c-axlbl{fill:var(--muted); font-size:10px; font-family:var(--sans)}
+		& .c-total{fill:var(--ink); font-size:26px; font-weight:700}
+		& .c-totlbl{fill:var(--muted); font-size:10px; letter-spacing:0.04em}
+		& .chart-legend{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-block-start:var(--s3); font-size:12px; color:var(--muted)}
+		& .chart-legend span{display:inline-flex; align-items:center; gap:6px}
+		& .chart-legend i{width:11px; height:11px; border-radius:var(--r-xs); display:block}}
+
 	/* The table is a contained panel: the wrapper owns the border/radius/shadow, NOT overflow:hidden —
 	   an overflow container would trap the sticky header inside the box and break it. Corners are
 	   instead rounded on the header cells (top) and the last row loses its border (bottom edge). */
@@ -431,7 +446,7 @@
 <body>
 <div class="wrap width-default">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 
@@ -550,6 +565,26 @@ ORDER BY n DESC;
 
 <details class="section"><summary>Appendix — discrepancy-reason raw counts</summary><div class="section-body"><ul class="list"><li>Double-count (same-window re-scan): 340</li><li>Double-count (bin &gt; 12 skip): 260</li><li>Mislabeled bin code (9-digit truncation): 500</li><li>Short shipment (vendor): 400</li></ul>
 <p class="text muted">Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.</p></div></details>
+
+<h2 id="counts-at-a-glance">Counts at a glance</h2>
+
+<figure class="chart bar">
+<figcaption class="cap">Clean vs discrepant units by zone</figcaption><svg viewBox="0 0 460 210" role="img"><line class="c-gl" x1="46" y1="176.0" x2="452" y2="176.0"/><text class="c-tick" x="40" y="179.0" text-anchor="end">0</text><line class="c-gl" x1="46" y1="135.0" x2="452" y2="135.0"/><text class="c-tick" x="40" y="138.0" text-anchor="end">1.25k</text><line class="c-gl" x1="46" y1="94.0" x2="452" y2="94.0"/><text class="c-tick" x="40" y="97.0" text-anchor="end">2.5k</text><line class="c-gl" x1="46" y1="53.0" x2="452" y2="53.0"/><text class="c-tick" x="40" y="56.0" text-anchor="end">3.75k</text><line class="c-gl" x1="46" y1="12.0" x2="452" y2="12.0"/><text class="c-tick" x="40" y="15.0" text-anchor="end">5k</text><rect x="65.3" y="107.1" width="28.3" height="68.9" rx="2" fill="var(--success-fg)"/><rect x="99.9" y="170.1" width="28.3" height="5.9" rx="2" fill="var(--danger-fg)"/><rect x="166.8" y="115.3" width="28.3" height="60.7" rx="2" fill="var(--success-fg)"/><rect x="201.4" y="164.8" width="28.3" height="11.2" rx="2" fill="var(--danger-fg)"/><rect x="268.3" y="99.9" width="28.3" height="76.1" rx="2" fill="var(--success-fg)"/><rect x="302.9" y="173.0" width="28.3" height="3.0" rx="2" fill="var(--danger-fg)"/><rect x="369.8" y="102.9" width="28.3" height="73.1" rx="2" fill="var(--success-fg)"/><rect x="404.4" y="169.1" width="28.3" height="6.9" rx="2" fill="var(--danger-fg)"/><text class="c-axlbl" x="96.8" y="195" text-anchor="middle">Zone A</text><text class="c-axlbl" x="198.2" y="195" text-anchor="middle">Zone B</text><text class="c-axlbl" x="299.8" y="195" text-anchor="middle">Zone C</text><text class="c-axlbl" x="401.2" y="195" text-anchor="middle">Zone D</text></svg>
+<div class="chart-legend"><span><i style="background:var(--success-fg)"></i>Clean</span><span><i style="background:var(--danger-fg)"></i>Discrepant</span></div>
+</figure>
+
+
+<figure class="chart line">
+<figcaption class="cap">Open discrepancies over the count window</figcaption><svg viewBox="0 0 460 210" role="img"><line class="c-gl" x1="46" y1="176.0" x2="452" y2="176.0"/><text class="c-tick" x="40" y="179.0" text-anchor="end">0</text><line class="c-gl" x1="46" y1="135.0" x2="452" y2="135.0"/><text class="c-tick" x="40" y="138.0" text-anchor="end">500</text><line class="c-gl" x1="46" y1="94.0" x2="452" y2="94.0"/><text class="c-tick" x="40" y="97.0" text-anchor="end">1k</text><line class="c-gl" x1="46" y1="53.0" x2="452" y2="53.0"/><text class="c-tick" x="40" y="56.0" text-anchor="end">1.5k</text><line class="c-gl" x1="46" y1="12.0" x2="452" y2="12.0"/><text class="c-tick" x="40" y="15.0" text-anchor="end">2k</text><path d="M86.6,53.0 C100.1,57.4 140.7,69.1 167.8,79.2 C194.9,89.4 221.9,103.2 249.0,113.7 C276.1,124.2 303.1,134.0 330.2,142.4 C357.3,150.7 397.9,160.1 411.4,163.7 L411.4,176 L86.6,176 Z" fill="var(--info-fg)" opacity="0.10"/><path d="M86.6,53.0 C100.1,57.4 140.7,69.1 167.8,79.2 C194.9,89.4 221.9,103.2 249.0,113.7 C276.1,124.2 303.1,134.0 330.2,142.4 C357.3,150.7 397.9,160.1 411.4,163.7" fill="none" stroke="var(--info-fg)" stroke-width="2.5" stroke-linecap="round"/><circle cx="411.4" cy="163.7" r="3.5" fill="var(--info-fg)"/><text class="c-axlbl" x="86.6" y="195" text-anchor="middle">Day 1</text><text class="c-axlbl" x="167.8" y="195" text-anchor="middle">Day 2</text><text class="c-axlbl" x="249.0" y="195" text-anchor="middle">Day 3</text><text class="c-axlbl" x="330.2" y="195" text-anchor="middle">Day 4</text><text class="c-axlbl" x="411.4" y="195" text-anchor="middle">Day 5</text></svg>
+<div class="chart-legend"><span><i style="background:var(--info-fg)"></i>Open</span></div>
+</figure>
+
+
+<figure class="chart donut">
+<figcaption class="cap">How discrepancies resolved</figcaption><svg viewBox="0 0 210 200" role="img" preserveAspectRatio="xMidYMid meet"><g transform="translate(105,100)"><circle r="62" fill="none" stroke="var(--panel)" stroke-width="26"/><circle r="62" fill="none" stroke="var(--success-fg)" stroke-width="26" stroke-dasharray="170.20 219.36" stroke-dashoffset="-0.00" transform="rotate(-90)"/><circle r="62" fill="none" stroke="var(--warning-fg)" stroke-width="26" stroke-dasharray="143.72 245.84" stroke-dashoffset="-170.20" transform="rotate(-90)"/><circle r="62" fill="none" stroke="var(--danger-fg)" stroke-width="26" stroke-dasharray="75.64 313.92" stroke-dashoffset="-313.92" transform="rotate(-90)"/><text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7">2,060</text><text class="c-totlbl" text-anchor="middle" dominant-baseline="middle" y="17">TOTAL</text></g></svg>
+<div class="chart-legend"><span><i style="background:var(--success-fg)"></i>Fixed on floor 44%</span><span><i style="background:var(--warning-fg)"></i>System defect 37%</span><span><i style="background:var(--danger-fg)"></i>Vendor 19%</span></div>
+</figure>
+
 
 <div class="footer">WMS export · Q3 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</div><div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>
 </div><div class="sc" data-open="false">

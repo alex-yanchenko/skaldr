@@ -6,8 +6,8 @@ description: >-
   report, summary, how-does-X-work / data-model explainer, or architecture/design doc
   (investigations, reviews, audits, ingestion/data-quality writeups, post-mortems, proposals, status
   pages) — especially when it needs visual structure: a flow/pipeline, comparison table, stat cards,
-  timeline, meters, or callouts. Reach for it instead of hand-building an HTML page, plain prose, or
-  a raw table. skaldr owns the design; you describe what it says.
+  charts (bar/line/donut), timeline, meters, or callouts. Reach for it instead of hand-building an
+  HTML page, plain prose, or a raw table. skaldr owns the design; you describe what it says.
 ---
 
 # Authoring a skaldr report
@@ -16,9 +16,9 @@ skaldr is a **CLI already on your PATH** — do not look for a source repo, a `u
 `python -m`; just run `skaldr`. You write one YAML content file; skaldr renders one self-contained
 HTML page and owns all the design.
 
-It covers visual structure too — flows/pipelines, comparison tables, stat cards, timelines — so for
-an architecture or design doc, reach for it before hand-building HTML. Run `skaldr --guide` for the
-full block palette.
+It covers visual structure too — flows/pipelines, comparison tables, stat cards, charts, timelines —
+so for an architecture or design doc, reach for it before hand-building HTML. Run `skaldr --guide`
+for the full block palette.
 
 **Author from real evidence.** Every number, date, and claim must come from the data, files, or
 facts in front of you. If you don't have a value, ask for it or leave the block out — never invent

@@ -229,3 +229,30 @@ blocks:
       - type: text
         muted: true
         body: "Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units."
+
+  - type: heading
+    level: 2
+    text: "Counts at a glance"
+
+  - type: chart
+    variant: bar
+    title: "Clean vs discrepant units by zone"
+    categories: [Zone A, Zone B, Zone C, Zone D]
+    series:
+      - { label: Clean, tone: success, values: [2100, 1850, 2320, 2230] }
+      - { label: Discrepant, tone: danger, values: [180, 340, 90, 210] }
+
+  - type: chart
+    variant: line
+    title: "Open discrepancies over the count window"
+    categories: ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"]
+    series:
+      - { label: Open, values: [1500, 1180, 760, 410, 150] }
+
+  - type: chart
+    variant: donut
+    title: "How discrepancies resolved"
+    slices:
+      - { label: Fixed on floor, tone: success, value: 900 }
+      - { label: System defect, tone: warning, value: 760 }
+      - { label: Vendor, tone: danger, value: 400 }
