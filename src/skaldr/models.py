@@ -71,6 +71,7 @@ TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
+FanDirection = Literal["in", "out"]
 
 
 def _resource(name: str) -> Traversable:
@@ -344,6 +345,23 @@ class Flow(_Frozen):
     )
     numbered: bool = Field(
         default=True, description="Number the nodes 1..n (derived); set false to hide numbers."
+    )
+
+
+class Fan(_Frozen):
+    type: Literal["fan"]
+    hub: FlowStep = Field(
+        description="The single node — the 'one' side (a fan-in's target, a fan-out's source)."
+    )
+    spokes: list[FlowStep] = Field(
+        min_length=2,
+        description="The 'many' side (2+): the nodes that converge into (in) or diverge from (out) the hub.",
+    )
+    direction: FanDirection = Field(
+        default="in",
+        description="in (default): the spokes converge INTO the hub (N→1, e.g. 3 source systems → 1 "
+        "record). out: the hub diverges to the spokes (1→N, e.g. 1 request → 3 services). Reach for a "
+        "fan when the shape is one-to-many, not a linear pipeline (use flow for that).",
     )
 
 
@@ -658,6 +676,7 @@ _Leaf = (
     | Image
     | Timeline
     | Flow
+    | Fan
     | Chart
     | Comparison
 )
@@ -756,6 +775,10 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
         elif isinstance(block, Flow):
             for step in block.steps:
                 yield from step.badges
+        elif isinstance(block, Fan):
+            yield from block.hub.badges
+            for spoke in block.spokes:
+                yield from spoke.badges
         elif isinstance(block, Table):
             badge_columns = [column.key for column in block.columns if column.kind == "badge"]
             for row in block.all_rows():

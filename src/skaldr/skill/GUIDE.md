@@ -94,6 +94,7 @@ infinities.
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
+| `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
@@ -177,6 +178,26 @@ Rule of thumb: if most nodes have a `note`, use `style: steps`; otherwise `arrow
 than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (any of
 `neutral·info·success·warning·danger·accent`) accents a node's border + number — use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
+
+## The `fan`
+
+A one-to-many shape — several nodes converging into one, or one branching out to several. Reach for
+it when the structure is **fan-in / fan-out**, not a linear pipeline (that's `flow`): three source
+systems feeding one record, one request dispatched to three services. The `spokes` (the many, 2+)
+sit in a dashed well; a single arrow joins them to the `hub` (the one). `direction` sets which way:
+
+```yaml
+- type: fan
+  direction: in           # in (default): spokes → hub (N→1) | out: hub → spokes (1→N)
+  hub: { label: "Student record", tone: accent }
+  spokes:
+    - { label: "SIS export",  tone: info }
+    - { label: "Transcripts", tone: info, note: "nightly batch" }
+    - { label: "Registrar",   tone: info }
+```
+
+`hub` and `spokes` are flow nodes — each takes `label`, optional `tone`, `note` (rich, one line),
+and `badges`. Use `direction: out` for the reverse (one hub branching to the spokes).
 
 ## The `chart`
 

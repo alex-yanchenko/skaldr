@@ -90,6 +90,19 @@
 </div>
 {% endmacro %}
 
+{# Fan: one-to-many convergence/divergence. The 'many' spokes sit in a dashed well; a single arrow
+   joins them to the one hub. DOM order follows direction so the arrow always points along the flow. #}
+{% macro fan_node(s) %}<div class="fnode{% if s.tone %} {{ s.tone }}{% endif %}"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div>{% endmacro %}
+
+{% macro fan_spokes(b) %}<div class="spokes">{% for s in b.spokes %}{{ fan_node(s) }}{% endfor %}</div>{% endmacro %}
+
+{% macro fan(b) %}
+<div class="fan {{ b.direction }}">
+{% if b.direction == "out" %}<div class="hub">{{ fan_node(b.hub) }}</div><div class="merge"><span class="arw">→</span></div>{{ fan_spokes(b) }}
+{% else %}{{ fan_spokes(b) }}<div class="merge"><span class="arw">→</span></div><div class="hub">{{ fan_node(b.hub) }}</div>{% endif %}
+</div>
+{% endmacro %}
+
 {% macro chart(b) %}
 <figure class="chart {{ b.variant }}">
 {% if b.title %}<figcaption class="cap">{{ b.title }}</figcaption>{% endif %}
@@ -136,6 +149,8 @@
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}
 {{ flow(block) }}
+{% elif block.type == "fan" %}
+{{ fan(block) }}
 {% elif block.type == "chart" %}
 {{ chart(block) }}
 {% elif block.type == "comparison" %}

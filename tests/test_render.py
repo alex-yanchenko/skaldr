@@ -107,6 +107,72 @@ def test_flow_loop_marker_names_the_first_node() -> None:
     assert '<div class="loop"><span class="cyc">↺</span> back to Flag</div>' in html
 
 
+def test_fan_in_puts_spokes_before_the_hub_with_a_converging_arrow() -> None:
+    block = {
+        "type": "fan",
+        "direction": "in",
+        "hub": {"label": "Record", "tone": "accent"},
+        "spokes": [{"label": "A", "tone": "info"}, {"label": "B", "note": "nightly"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="fan in">' in html
+    # spokes well, then the arrow, then the hub — DOM order is the flow direction
+    assert (
+        '<div class="spokes"><div class="fnode info"><span class="lab">A</span></div>'
+        '<div class="fnode"><span class="lab">B</span><span class="sub">nightly</span></div></div>'
+        '<div class="merge"><span class="arw">→</span></div>'
+        '<div class="hub"><div class="fnode accent"><span class="lab">Record</span></div></div>' in html
+    )
+
+
+def test_fan_out_puts_the_hub_first_then_the_full_spokes_well() -> None:
+    block = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Request"},
+        "spokes": [{"label": "svc-a"}, {"label": "svc-b"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="fan out">' in html
+    assert (
+        '<div class="hub"><div class="fnode"><span class="lab">Request</span></div></div>'
+        '<div class="merge"><span class="arw">→</span></div>'
+        '<div class="spokes"><div class="fnode"><span class="lab">svc-a</span></div>'
+        '<div class="fnode"><span class="lab">svc-b</span></div></div>' in html
+    )
+
+
+def test_fan_badges_on_hub_and_a_spoke_both_render_and_feed_the_legend() -> None:
+    badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
+    block = {
+        "type": "fan",
+        "hub": {"label": "H", "badges": ["OK"]},
+        "spokes": [{"label": "A", "badges": ["OK"]}, {"label": "B"}],
+    }
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[block])))
+
+    # one chip on the hub, one on spoke A — the spoke-badge iteration is exercised, not just the hub
+    assert html.count('<span class="chips"><span class="chip green">OK</span></span>') == 2
+    assert "Legend — badges used on this page" in html
+
+
+def test_fan_inside_a_grid_cell_renders() -> None:
+    block = {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "A"}, {"label": "B"}]}
+    grid = make_grid([make_cell(6, [block])])
+
+    html = render_html(parse_report(make_report(blocks=[grid])))
+
+    assert '<div class="cell span-6">' in html
+    assert '<div class="fan in">' in html
+    assert '<div class="spokes"><div class="fnode"><span class="lab">A</span></div>' in html
+    assert '<div class="hub"><div class="fnode"><span class="lab">H</span></div></div>' in html
+
+
 def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
     badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
     blocks = [
@@ -320,6 +386,8 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     # flows stack vertically (never wrap a lone node) when printing or on a narrow screen
     assert "@media print, (max-width: 640px){" in html
     assert ".flow .track{flex-direction:column; flex-wrap:nowrap}" in html
+    assert ".fan{flex-direction:column; align-items:center}" in html
+    assert ".fan .merge{transform:rotate(90deg)}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
     # print scales down for document density (the print-density knob)

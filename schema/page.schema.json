@@ -795,6 +795,46 @@
       "title": "FactStrip",
       "type": "object"
     },
+    "Fan": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "fan",
+          "title": "Type",
+          "type": "string"
+        },
+        "hub": {
+          "$ref": "#/$defs/FlowStep",
+          "description": "The single node \u2014 the 'one' side (a fan-in's target, a fan-out's source)."
+        },
+        "spokes": {
+          "description": "The 'many' side (2+): the nodes that converge into (in) or diverge from (out) the hub.",
+          "items": {
+            "$ref": "#/$defs/FlowStep"
+          },
+          "minItems": 2,
+          "title": "Spokes",
+          "type": "array"
+        },
+        "direction": {
+          "default": "in",
+          "description": "in (default): the spokes converge INTO the hub (N\u21921, e.g. 3 source systems \u2192 1 record). out: the hub diverges to the spokes (1\u2192N, e.g. 1 request \u2192 3 services). Reach for a fan when the shape is one-to-many, not a linear pipeline (use flow for that).",
+          "enum": [
+            "in",
+            "out"
+          ],
+          "title": "Direction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "hub",
+        "spokes"
+      ],
+      "title": "Fan",
+      "type": "object"
+    },
     "Flow": {
       "additionalProperties": false,
       "properties": {
@@ -947,6 +987,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
                 "grid": "#/$defs/InnerGrid",
                 "heading": "#/$defs/Heading",
@@ -1010,6 +1051,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
               },
               {
                 "$ref": "#/$defs/Chart"
@@ -1232,6 +1276,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
@@ -1294,6 +1339,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
               },
               {
                 "$ref": "#/$defs/Chart"
@@ -1675,6 +1723,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
@@ -1737,6 +1786,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
               },
               {
                 "$ref": "#/$defs/Chart"
@@ -2058,6 +2110,7 @@
             "code": "#/$defs/Code",
             "comparison": "#/$defs/Comparison",
             "fact_strip": "#/$defs/FactStrip",
+            "fan": "#/$defs/Fan",
             "flow": "#/$defs/Flow",
             "grid": "#/$defs/Grid",
             "heading": "#/$defs/Heading",
@@ -2122,6 +2175,9 @@
           },
           {
             "$ref": "#/$defs/Flow"
+          },
+          {
+            "$ref": "#/$defs/Fan"
           },
           {
             "$ref": "#/$defs/Chart"

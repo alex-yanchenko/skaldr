@@ -267,3 +267,13 @@ blocks:
       - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }, { value: "medium", tone: warning }] }
       - { feature: "Reconciles exactly", values: [true, false, false] }
       - { feature: "Disrupts picking", values: [true, false, true] }
+
+  - type: heading
+    text: "Where the count comes from"
+  - type: fan
+    direction: in
+    hub: { label: "Reconciled count", tone: accent }
+    spokes:
+      - { label: "Handheld scans", tone: info, note: "per-aisle, live" }
+      - { label: "Fixed-reader gates", tone: info }
+      - { label: "Manual recount", tone: warning, note: "overflow aisles only" }

@@ -211,6 +211,24 @@
 			border-radius:var(--r-md); padding:5px 12px; font-size:12.5px; font-weight:600}
 		& .loop .cyc{font-size:15px; line-height:1}}
 
+	/* fan — one-to-many convergence/divergence. The 'many' spokes stack inside a dashed well; a single
+	   arrow joins the well to the one hub. Tone tints each node's border (its own token set, like flow). */
+	/* No flex-wrap: the horizontal row stays intact above 640px (so the arrow never strands from the
+	   hub at a wrap); the print/narrow media query stacks it into a column instead. */
+	.fan{display:flex; align-items:center; gap:var(--s3); margin-block:var(--s6)}
+	.fan .spokes{display:flex; flex-direction:column; gap:var(--s2); padding:var(--s3);
+		border:1.5px dashed var(--rule); border-radius:var(--r-lg)}
+	.fan .fnode{display:flex; flex-direction:column; min-width:0; padding:8px 13px; background:var(--surface);
+		border:1.5px solid var(--t,var(--line)); border-radius:var(--r-md)}
+	.fan .hub .fnode{background:var(--panel)}
+	.fan .fnode .lab{font-weight:600; font-size:14px}
+	.fan .fnode .sub{font-size:11px; color:var(--muted); line-height:1.35}
+	.fan .fnode .chips{margin-top:var(--s1)}
+	.fan .merge{flex:none; display:flex; align-items:center; color:var(--rule)}
+	.fan .merge .arw{font-size:22px; line-height:1}
+	.fan .info{--t:var(--info-fg)} .fan .success{--t:var(--success-fg)} .fan .warning{--t:var(--warning-fg)}
+	.fan .danger{--t:var(--danger-fg)} .fan .accent{--t:var(--accent-fg)} .fan .neutral{--t:var(--neutral-fg)}
+
 	/* On paper and on narrow screens a horizontal pipeline can't fit: a wrapped row strands a lone
 	   node far from its predecessor. Stack the flow vertically and centre it — each node/card sits
 	   centred with a downward connector to the next. Same rules fire when printing or below 640px. */
@@ -229,6 +247,10 @@
 		.flow.steps .step:first-child .link{display:none}
 		/* Centre the loop return chip under the stack (its parent .flow is a block, so margin-auto it). */
 		.flow .loop{display:flex; width:fit-content; margin-inline:auto}
+		/* Fan stacks too: well above/below the hub, the arrow rotated to point down the column. */
+		.fan{flex-direction:column; align-items:center}
+		.fan .spokes{align-self:stretch}
+		.fan .merge{transform:rotate(90deg)}
 	}
 
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
