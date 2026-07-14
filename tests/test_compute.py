@@ -125,3 +125,23 @@ def test_reference_numbers_reach_a_references_block_nested_in_a_grid_cell() -> N
     report = parse_report(make_report(blocks=[grid]))
 
     assert reference_numbers(report) == {"a": 1}
+
+
+def test_reconciled_table_in_a_walkthrough_step_detail_reaches_the_footer() -> None:
+    step = {"label": "S", "detail": [make_reconciled_table()]}
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "source": "src"},
+            blocks=[{"type": "walkthrough", "steps": [step]}],
+        )
+    )
+
+    assert provenance_footer(report) == "src · Reconciles: 10 + 90 clean = 100."
+
+
+def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail() -> None:
+    refs = {"type": "references", "items": [{"key": "a", "text": "A"}]}
+    step = {"label": "S", "detail": [refs]}
+    report = parse_report(make_report(blocks=[{"type": "walkthrough", "steps": [step]}]))
+
+    assert reference_numbers(report) == {"a": 1}

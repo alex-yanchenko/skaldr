@@ -779,9 +779,47 @@ def _check_span_sum(cells: Sequence[GridCell | InnerGridCell]) -> None:
         raise ValueError(f"cell spans sum to {total}; must total at most 6")
 
 
-Block = Annotated[_Leaf | Section | Grid, Field(discriminator="type")]
+class WalkthroughStep(_Frozen):
+    label: str = Field(
+        min_length=1,
+        description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
+    )
+    sub: str | None = Field(
+        default=None, description="Optional one-line sub-label under the title (rich text)."
+    )
+    tone: Tone | None = Field(
+        default=None, description="Optional tone tinting this step's big (faint) numeral."
+    )
+    detail: list[InnerBlock] = Field(
+        min_length=1,
+        description="The step's detail, a nested block list (paragraphs, lists, code, callouts, tables — "
+        "like a grid cell), rendered in the column beside the numbered title.",
+    )
+
+    @model_validator(mode="after")
+    def _non_blank(self) -> "WalkthroughStep":
+        if not self.label.strip():
+            raise ValueError("walkthrough step label must not be blank")
+        return self
+
+
+class Walkthrough(_Frozen):
+    type: Literal["walkthrough"]
+    steps: list[WalkthroughStep] = Field(
+        min_length=1,
+        description="Ordered steps; each is a big numbered title beside its detail column.",
+    )
+    step_span: Count = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description="Width of the title column, of 6; the detail column takes the rest (default 2).",
+    )
+
+
+Block = Annotated[_Leaf | Section | Grid | Walkthrough, Field(discriminator="type")]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Section | Grid | InnerGrid
+AnyBlock = _Leaf | Section | Grid | InnerGrid | Walkthrough
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
@@ -795,6 +833,9 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from iter_referenced_badge_keys(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_referenced_badge_keys(step.detail)
         elif isinstance(block, BadgeRow):
             yield from (item.key for item in block.items if isinstance(item, BadgeRef))
         elif isinstance(block, Cards):
@@ -831,6 +872,9 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from iter_reference_items(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_reference_items(step.detail)
 
 
 class Report(_Frozen):

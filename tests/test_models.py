@@ -15,6 +15,8 @@ from skaldr.models import (
     Table,
     Text,
     Timeline,
+    Walkthrough,
+    WalkthroughStep,
     load_report,
     parse_report,
     read_text_file,
@@ -211,6 +213,70 @@ def test_fan_spoke_badge_reference_must_be_declared() -> None:
 
     with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
         parse_report(make_report(blocks=[block]))
+
+
+def test_walkthrough_parses_to_whole_model_with_default_step_span() -> None:
+    block = {
+        "type": "walkthrough",
+        "steps": [{"label": "Step one", "detail": [{"type": "text", "body": "do it"}]}],
+    }
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Walkthrough(
+        type="walkthrough",
+        steps=[WalkthroughStep(label="Step one", detail=[Text(type="text", body="do it")])],
+        step_span=2,
+    )
+
+
+def test_walkthrough_requires_at_least_one_step() -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.walkthrough\.steps.*at least 1"):
+        parse_report(make_report(blocks=[{"type": "walkthrough", "steps": []}]))
+
+
+def test_walkthrough_step_requires_at_least_one_detail_block() -> None:
+    step: dict[str, object] = {"label": "S", "detail": []}
+
+    with pytest.raises(ReportError, match=r"walkthrough\.steps\.0\.detail.*at least 1"):
+        parse_report(make_report(blocks=[{"type": "walkthrough", "steps": [step]}]))
+
+
+def test_walkthrough_step_label_must_not_be_blank() -> None:
+    block = {"type": "walkthrough", "steps": [{"label": "  ", "detail": [{"type": "text", "body": "x"}]}]}
+
+    with pytest.raises(ReportError, match=r"walkthrough step label must not be blank"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_walkthrough_step_span_above_five_is_rejected() -> None:
+    block = {
+        "type": "walkthrough",
+        "step_span": 6,
+        "steps": [{"label": "S", "detail": [{"type": "text", "body": "x"}]}],
+    }
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.walkthrough\.step_span"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_walkthrough_step_span_below_one_is_rejected() -> None:
+    block = {
+        "type": "walkthrough",
+        "step_span": 0,
+        "steps": [{"label": "S", "detail": [{"type": "text", "body": "x"}]}],
+    }
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.walkthrough\.step_span"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_walkthrough_badge_referenced_in_a_step_detail_must_be_declared() -> None:
+    card = {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["GHOST"]}]}
+    step = {"label": "S", "detail": [card]}
+
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
+        parse_report(make_report(blocks=[{"type": "walkthrough", "steps": [step]}]))
 
 
 def test_container_badge_reference_must_be_declared() -> None:

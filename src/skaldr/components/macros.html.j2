@@ -167,5 +167,7 @@
 <details class="section"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "grid" %}
 <div class="grid">{% for cell in block.cells %}<div class="cell span-{{ cell.span }}{% if cell.tone %} panel {{ cell.tone }}{% endif %}">{% for inner in cell.blocks %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
+{% elif block.type == "walkthrough" %}
+<div class="walk" style="grid-template-columns:minmax(120px,{{ block.step_span }}fr) {{ 6 - block.step_span }}fr">{% for step in block.steps %}<div class="wstep{% if step.tone %} {{ step.tone }}{% endif %}"><span class="wnum">{{ loop.index }}</span><span class="wlabel">{{ step.label }}{% if step.sub %}<span class="wsub">{{ step.sub | richtext }}</span>{% endif %}</span></div><div class="wdetail">{% for inner in step.detail %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
 {% endif %}
 {% endmacro %}
