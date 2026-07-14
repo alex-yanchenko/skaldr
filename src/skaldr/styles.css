@@ -349,6 +349,23 @@
 		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}}
 
+	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
+	   links down here; the number in the list links back up to its marker (bidirectional). */
+	sup.fn{font-size:0.72em; line-height:0; vertical-align:super; white-space:nowrap;
+		& a{color:var(--accent-fg); text-decoration:none; font-weight:600; scroll-margin-block-start:var(--s8)}
+		& a:hover{text-decoration:underline}}
+	.refs{list-style:none; margin-block:var(--s4); padding:0; font-size:13px; display:grid; gap:var(--s2);
+		& li{display:grid; grid-template-columns:2.4em 1fr; gap:var(--s2); align-items:baseline;
+			padding:2px 4px; border-radius:var(--r-sm); scroll-margin-block-start:var(--s8)}
+		& li:target{background:var(--accent-bg)}
+		& .rnum{color:var(--accent-fg); font-weight:700; text-decoration:none; text-align:end;
+			font-variant-numeric:tabular-nums}
+		& .rnum::before{content:"["} & .rnum::after{content:"]"}
+		& .rnum:hover{text-decoration:underline}
+		& .rtext{color:var(--ink); line-height:1.5}
+		& .rlink{color:var(--muted); text-decoration:none}
+		& .rlink:hover{color:var(--accent-fg)}}
+
 	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}

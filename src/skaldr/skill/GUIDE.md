@@ -97,6 +97,7 @@ infinities.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?` |
+| `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 
@@ -248,6 +249,26 @@ criteria; for freeform tabular data use `table`.
     - { feature: "Self-contained", values: [true, true] }
     - { feature: "Validated", values: [false, true] }
     - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }] }
+```
+
+## The `references`
+
+Numbered sources with inline citations. Drop a `references` block wherever the list should render;
+anywhere in rich text, `[^key]` becomes a superscript number linking to that source — and the number
+in the list links back to the citation. Numbering is by first appearance across every `references`
+block, so the same `[^key]` always carries the same number. Keys are ASCII `[A-Za-z0-9_-]+` and must
+be unique across the whole page (an unknown key stays literal so a typo shows). Put the `references`
+block after the prose that cites it, so each source gets a backlink to its citation. Reach for it
+when prose needs to cite sources; for a bare link inside a sentence use a `[text](url)` markdown
+link instead.
+
+```yaml
+- type: text
+  body: "Thresholds come from the Q2 audit [^audit]; method from the SOP [^sop]."
+- type: references
+  items:
+    - { key: audit, text: "Q2 Reconciliation Audit, p. 12.", url: "https://example.com/audit" }
+    - { key: sop, text: "*Counting SOP*, rev. 7." }   # text is rich; url is optional
 ```
 
 ## The `table`

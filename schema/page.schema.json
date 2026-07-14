@@ -996,6 +996,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
@@ -1060,6 +1061,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/References"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -1284,6 +1288,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
@@ -1348,6 +1353,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/References"
               }
             ]
           },
@@ -1692,6 +1700,68 @@
       "title": "Reconcile",
       "type": "object"
     },
+    "ReferenceItem": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Short id (ASCII letters, digits, _, -); cite it inline with [^key].",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Key",
+          "type": "string"
+        },
+        "text": {
+          "description": "Rich-text source description (e.g. a doc name + page).",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional link for the source (http/https/mailto).",
+          "title": "Url"
+        }
+      },
+      "required": [
+        "key",
+        "text"
+      ],
+      "title": "ReferenceItem",
+      "type": "object"
+    },
+    "References": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "references",
+          "title": "Type",
+          "type": "string"
+        },
+        "items": {
+          "description": "Numbered sources; cite each inline with [^key].",
+          "items": {
+            "$ref": "#/$defs/ReferenceItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "title": "References",
+      "type": "object"
+    },
     "Section": {
       "additionalProperties": false,
       "properties": {
@@ -1731,6 +1801,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
@@ -1795,6 +1866,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/References"
               }
             ]
           },
@@ -2119,6 +2193,7 @@
             "list": "#/$defs/ListBlock",
             "meter": "#/$defs/Meter",
             "quote": "#/$defs/Quote",
+            "references": "#/$defs/References",
             "section": "#/$defs/Section",
             "status_list": "#/$defs/StatusList",
             "table": "#/$defs/Table",
@@ -2184,6 +2259,9 @@
           },
           {
             "$ref": "#/$defs/Comparison"
+          },
+          {
+            "$ref": "#/$defs/References"
           },
           {
             "$ref": "#/$defs/Section"
