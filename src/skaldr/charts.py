@@ -7,11 +7,20 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 """
 
 import math
-from typing import TypedDict, assert_never
+import sys
+from typing import TypedDict
 
 from markupsafe import Markup, escape
 
 from skaldr.models import Chart, Tone
+
+if sys.version_info >= (3, 11):
+    from typing import assert_never
+else:  # assert_never is stdlib from 3.11; a runtime-equivalent on 3.10 (the supported floor)
+    from typing import NoReturn
+
+    def assert_never(value: object) -> NoReturn:
+        raise AssertionError(f"unhandled value: {value!r}")
 
 
 class LegendRow(TypedDict):
