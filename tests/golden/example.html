@@ -341,6 +341,23 @@
 		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}}
 
+	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
+	   links down here; the number in the list links back up to its marker (bidirectional). */
+	sup.fn{font-size:0.72em; line-height:0; vertical-align:super; white-space:nowrap;
+		& a{color:var(--accent-fg); text-decoration:none; font-weight:600; scroll-margin-block-start:var(--s8)}
+		& a:hover{text-decoration:underline}}
+	.refs{list-style:none; margin-block:var(--s4); padding:0; font-size:13px; display:grid; gap:var(--s2);
+		& li{display:grid; grid-template-columns:2.4em 1fr; gap:var(--s2); align-items:baseline;
+			padding:2px 4px; border-radius:var(--r-sm); scroll-margin-block-start:var(--s8)}
+		& li:target{background:var(--accent-bg)}
+		& .rnum{color:var(--accent-fg); font-weight:700; text-decoration:none; text-align:end;
+			font-variant-numeric:tabular-nums}
+		& .rnum::before{content:"["} & .rnum::after{content:"]"}
+		& .rnum:hover{text-decoration:underline}
+		& .rtext{color:var(--ink); line-height:1.5}
+		& .rlink{color:var(--muted); text-decoration:none}
+		& .rlink:hover{color:var(--accent-fg)}}
+
 	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
@@ -468,7 +485,7 @@
 <body>
 <div class="wrap width-default">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 
@@ -612,6 +629,12 @@ ORDER BY n DESC;
 
 <table class="cmp"><thead><tr><th></th><th class="hl">Full cycle</th><th>Sampling</th><th>Continuous</th></tr></thead>
 <tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk no">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr></tbody></table>
+
+
+<h2 id="sources">Sources</h2>
+
+<p class="text">Method definitions follow the warehouse counting SOP <sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>; the discrepancy thresholds come from the Q2 reconciliation audit <sup class="fn"><a id="fnref-audit" href="#ref-audit">[2]</a></sup>.</p>
+<ol class="refs"><li id="ref-sop"><a class="rnum" href="#fnref-sop">1</a><span class="rtext"><em>Warehouse Counting SOP</em>, rev. 7 — §3 Cycle vs sampling.</span></li><li id="ref-audit"><a class="rnum" href="#fnref-audit">2</a><span class="rtext">Q2 Reconciliation Audit, p. 12. <a class="rlink" href="https://example.com/q2-audit">↗</a></span></li></ol>
 
 
 <div class="footer">WMS export · Q3 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</div><div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>

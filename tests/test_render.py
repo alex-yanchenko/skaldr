@@ -209,6 +209,74 @@ def test_comparison_renders_options_features_checks_toned_cells_and_highlight() 
     assert html.count('<td class="hl">') == 3  # every cell of column B (three rows)
 
 
+def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
+    blocks = [
+        {"type": "text", "body": "Method [^sop]; thresholds [^audit]; typo [^missing]."},
+        {
+            "type": "references",
+            "items": [
+                {"key": "sop", "text": "*Counting SOP*, rev. 7."},
+                {"key": "audit", "text": "Q2 Audit.", "url": "https://example.com/a"},
+            ],
+        },
+    ]
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    # inline marker → numbered superscript linking down to the source
+    assert '<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>' in html
+    assert '<sup class="fn"><a id="fnref-audit" href="#ref-audit">[2]</a></sup>' in html
+    # an undeclared key is left as literal text (escaped), never a dangling link
+    assert "typo [^missing]." in html
+    assert 'href="#ref-missing"' not in html
+    # the cited source's whole <li>: number backlinks to the marker; rich text renders; no url → no rlink
+    assert (
+        '<li id="ref-sop"><a class="rnum" href="#fnref-sop">1</a>'
+        '<span class="rtext"><em>Counting SOP</em>, rev. 7.</span></li>' in html
+    )
+    # the source with a url gets the trailing external-link glyph
+    assert '<span class="rtext">Q2 Audit. <a class="rlink" href="https://example.com/a">↗</a></span>' in html
+
+
+def test_a_reference_cited_twice_reuses_its_number_and_emits_one_anchor_id() -> None:
+    blocks = [
+        {"type": "text", "body": "First [^sop] and again [^sop]."},
+        {"type": "references", "items": [{"key": "sop", "text": "SOP."}]},
+    ]
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    # both citations show number 1; only the first carries the fnref anchor id (ids stay unique)
+    assert '<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>' in html
+    assert '<sup class="fn"><a href="#ref-sop">[1]</a></sup>' in html
+    assert html.count('id="fnref-sop"') == 1
+
+
+def test_an_uncited_declared_reference_renders_a_plain_number_not_a_dead_backlink() -> None:
+    blocks = [
+        {"type": "text", "body": "Cited [^sop]."},
+        {
+            "type": "references",
+            "items": [{"key": "sop", "text": "SOP."}, {"key": "extra", "text": "Never cited."}],
+        },
+    ]
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert '<li id="ref-sop"><a class="rnum" href="#fnref-sop">1</a>' in html
+    # the uncited source has no fnref anchor to link back to, so its number is a plain span
+    assert '<li id="ref-extra"><span class="rnum">2</span>' in html
+    assert 'href="#fnref-extra"' not in html
+
+
+def test_a_citation_with_no_references_block_stays_literal() -> None:
+    html = render_html(parse_report(make_report(blocks=[{"type": "text", "body": "See [^ghost]."}])))
+
+    assert "See [^ghost]." in html
+    assert '<sup class="fn">' not in html
+
+
+def test_render_richtext_leaves_a_footnote_marker_literal_without_ref_numbers() -> None:
+    assert str(render_richtext("see [^x]")) == "see [^x]"
+
+
 def test_row_tone_renders_on_the_tr() -> None:
     table = make_table(
         columns=[{"key": "a", "label": "A", "kind": "text"}],

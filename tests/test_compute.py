@@ -4,11 +4,12 @@ from skaldr.compute import (
     heading_slugs,
     provenance_footer,
     reconcile_line,
+    reference_numbers,
     toc_entries,
     used_badges,
 )
 from skaldr.models import Table, parse_report
-from tests.factories import make_reconciled_table, make_report
+from tests.factories import make_cell, make_grid, make_reconciled_table, make_report
 
 
 def test_fmt_variants() -> None:
@@ -106,3 +107,21 @@ def test_first_table_index() -> None:
     report = parse_report(make_report(blocks=[{"type": "text", "body": "x"}, make_reconciled_table()]))
 
     assert first_table_index(report) == 1
+
+
+def test_reference_numbers_are_in_document_order_across_blocks_and_sections() -> None:
+    first = {"type": "references", "items": [{"key": "a", "text": "A"}, {"key": "b", "text": "B"}]}
+    nested = {"type": "references", "items": [{"key": "c", "text": "C"}, {"key": "d", "text": "D"}]}
+    report = parse_report(
+        make_report(blocks=[first, {"type": "section", "title": "More", "blocks": [nested]}])
+    )
+
+    assert reference_numbers(report) == {"a": 1, "b": 2, "c": 3, "d": 4}
+
+
+def test_reference_numbers_reach_a_references_block_nested_in_a_grid_cell() -> None:
+    refs = {"type": "references", "items": [{"key": "a", "text": "A"}]}
+    grid = make_grid([make_cell(6, [refs])])
+    report = parse_report(make_report(blocks=[grid]))
+
+    assert reference_numbers(report) == {"a": 1}

@@ -19,6 +19,7 @@ from skaldr.models import (
     Section,
     Table,
     col_sum,
+    iter_reference_items,
     iter_referenced_badge_keys,
 )
 
@@ -30,6 +31,7 @@ __all__ = [
     "pct",
     "provenance_footer",
     "reconcile_line",
+    "reference_numbers",
     "toc_entries",
     "used_badges",
 ]
@@ -61,6 +63,16 @@ def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from _iter_tables(cell.blocks)
+
+
+def reference_numbers(report: Report) -> dict[str, int]:
+    """`reference key -> 1-based number`, in document order across every `references` block, so an
+    inline `[^key]` marker and its entry in the list carry the same number from one source. Keys are
+    globally unique (a Report validator enforces it), so each contributes exactly one number."""
+    numbers: dict[str, int] = {}
+    for item in iter_reference_items(report.blocks):
+        numbers[item.key] = len(numbers) + 1
+    return numbers
 
 
 def heading_slugs(report: Report) -> dict[int, str]:

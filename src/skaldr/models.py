@@ -11,6 +11,7 @@ state glyphs for status lists and timelines.
 
 import math
 import sys
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from importlib import resources
 from pathlib import Path
@@ -37,6 +38,12 @@ from pydantic_core import PydanticCustomError
 from skaldr.errors import ReportError
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
+# URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
+# links in render.py and reference `url`s here), so a `javascript:`/`data:text/html:` link can't ship.
+ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:")
+# A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
+# render.py; both derive from this one class so key-validation and marker-matching can't drift.
+REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 
 
 def _reject_bool_and_non_finite(value: Any) -> Any:
@@ -599,6 +606,29 @@ class Table(_Frozen):
             )
 
 
+class ReferenceItem(_Frozen):
+    key: str = Field(
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Short id (ASCII letters, digits, _, -); cite it inline with [^key].",
+    )
+    text: str = Field(min_length=1, description="Rich-text source description (e.g. a doc name + page).")
+    url: str | None = Field(default=None, description="Optional link for the source (http/https/mailto).")
+
+    @model_validator(mode="after")
+    def _url_scheme(self) -> "ReferenceItem":
+        if self.url is not None and not self.url.startswith(ALLOWED_URL_SCHEMES):
+            raise ValueError("'url' must be an http://, https://, or mailto: link")
+        return self
+
+
+class References(_Frozen):
+    type: Literal["references"]
+    items: list[ReferenceItem] = Field(
+        min_length=1, description="Numbered sources; cite each inline with [^key]."
+    )
+
+
 class ComparisonCell(_Frozen):
     value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
     tone: Tone | None = Field(default=None, description="Optional tone for the text.")
@@ -660,6 +690,7 @@ _Leaf = (
     | Flow
     | Chart
     | Comparison
+    | References
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 
@@ -766,6 +797,19 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
                         yield value
 
 
+def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
+    """Every reference item in the block tree (recursing into sections and grids), in document
+    order. One source for both the derived numbering and the global key-uniqueness check."""
+    for block in blocks:
+        if isinstance(block, References):
+            yield from block.items
+        elif isinstance(block, Section):
+            yield from iter_reference_items(block.blocks)
+        elif isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                yield from iter_reference_items(cell.blocks)
+
+
 class Report(_Frozen):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
@@ -779,6 +823,16 @@ class Report(_Frozen):
         bad = sorted({key for key in iter_referenced_badge_keys(self.blocks) if key not in self.badges})
         if bad:
             raise ValueError(f"badge key(s) not declared in `badges`: {bad} (add them to the badges map)")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_reference_keys_unique(self) -> "Report":
+        # A key must be globally unique: it becomes an HTML id, and the shared numbering assumes one
+        # source per key. This subsumes any within-block check, so `References` carries none.
+        counts = Counter(item.key for item in iter_reference_items(self.blocks))
+        duplicates = sorted(key for key, count in counts.items() if count > 1)
+        if duplicates:
+            raise ValueError(f"reference key(s) declared more than once: {duplicates}")
         return self
 
 

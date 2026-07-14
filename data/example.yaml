@@ -267,3 +267,12 @@ blocks:
       - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }, { value: "medium", tone: warning }] }
       - { feature: "Reconciles exactly", values: [true, false, false] }
       - { feature: "Disrupts picking", values: [true, false, true] }
+
+  - type: heading
+    text: "Sources"
+  - type: text
+    body: "Method definitions follow the warehouse counting SOP [^sop]; the discrepancy thresholds come from the Q2 reconciliation audit [^audit]."
+  - type: references
+    items:
+      - { key: sop, text: "*Warehouse Counting SOP*, rev. 7 — §3 Cycle vs sampling." }
+      - { key: audit, text: "Q2 Reconciliation Audit, p. 12.", url: "https://example.com/q2-audit" }

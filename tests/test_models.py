@@ -961,3 +961,40 @@ def test_chart_stacked_only_applies_to_bar() -> None:
     }
     with pytest.raises(ReportError, match=r"'stacked' applies only to variant: bar"):
         parse_report(make_report(blocks=[block]))
+
+
+def test_references_rejects_duplicate_keys_within_a_block() -> None:
+    block = {
+        "type": "references",
+        "items": [
+            {"key": "a", "text": "First"},
+            {"key": "b", "text": "Second"},
+            {"key": "a", "text": "Clash"},
+        ],
+    }
+    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_references_rejects_a_key_reused_across_separate_blocks() -> None:
+    first = {"type": "references", "items": [{"key": "a", "text": "First"}]}
+    second = {"type": "references", "items": [{"key": "a", "text": "Clash"}]}
+    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+        parse_report(make_report(blocks=[first, second]))
+
+
+def test_references_rejects_key_with_disallowed_characters() -> None:
+    block = {"type": "references", "items": [{"key": "has space", "text": "x"}]}
+    with pytest.raises(ReportError, match=r"blocks\.0\.references\.items\.0\.key"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_references_rejects_url_with_a_disallowed_scheme() -> None:
+    block = {"type": "references", "items": [{"key": "a", "text": "x", "url": "javascript:alert(1)"}]}
+    with pytest.raises(ReportError, match=r"'url' must be an http://, https://, or mailto: link"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_references_requires_at_least_one_item() -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.references\.items.*at least 1"):
+        parse_report(make_report(blocks=[{"type": "references", "items": []}]))

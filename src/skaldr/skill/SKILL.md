@@ -6,8 +6,9 @@ description: >-
   report, summary, how-does-X-work / data-model explainer, or architecture/design doc
   (investigations, reviews, audits, ingestion/data-quality writeups, post-mortems, proposals, status
   pages) — especially when it needs visual structure: a flow/pipeline, comparison table, stat cards,
-  charts (bar/line/donut), timeline, meters, or callouts. Reach for it instead of hand-building an
-  HTML page, plain prose, or a raw table. skaldr owns the design; you describe what it says.
+  charts (bar/line/donut), timeline, meters, callouts, or footnoted sources. Reach for it instead
+  of hand-building an HTML page, plain prose, or a raw table. skaldr owns the design; you describe
+  what it says.
 ---
 
 # Authoring a skaldr report
