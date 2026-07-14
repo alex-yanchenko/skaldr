@@ -143,6 +143,46 @@ def test_expand_forces_collapsed_sections_open_for_pdf() -> None:
     assert '<details class="section" open><summary>S</summary>' in render_html(report, expand=True)
 
 
+@pytest.mark.parametrize(
+    ("delta", "expected"),
+    [
+        ({"label": "12%", "direction": "up", "tone": "success"}, '<span class="delta success">▲ 12%</span>'),
+        ({"label": "8%", "direction": "down", "tone": "danger"}, '<span class="delta danger">▼ 8%</span>'),
+        ({"label": "0", "direction": "flat", "tone": "info"}, '<span class="delta info">→ 0</span>'),
+        (
+            {"label": "n/a"},
+            '<span class="delta neutral">n/a</span>',
+        ),  # no direction → no glyph; no tone → neutral
+    ],
+    ids=["up", "down", "flat", "bare"],
+)
+def test_card_delta_renders_each_glyph_and_the_chosen_tone(delta: dict[str, str], expected: str) -> None:
+    block = {"type": "cards", "items": [{"label": "X", "value": 1, "delta": delta}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert expected in html
+
+
+def test_card_delta_tone_is_independent_of_the_card_tone() -> None:
+    # a danger-toned card can carry a green delta: escalations dropping is good, so down = success
+    block = {
+        "type": "cards",
+        "items": [
+            {
+                "label": "Escalations",
+                "value": 90,
+                "tone": "danger",
+                "delta": {"label": "-12", "direction": "down", "tone": "success"},
+            }
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="card danger">' in html  # the card's own tone
+    assert '<span class="delta success">▼ -12</span>' in html  # the delta's independent tone
+
+
 def test_row_tone_renders_on_the_tr() -> None:
     table = make_table(
         columns=[{"key": "a", "label": "A", "kind": "text"}],

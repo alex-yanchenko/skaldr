@@ -151,11 +151,26 @@ class KeyValue(_Frozen):
     pairs: list[KVPair] = Field(min_length=1, description="Vertical label/value metadata rows.")
 
 
+class CardDelta(_Frozen):
+    label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
+    direction: Literal["up", "down", "flat"] | None = Field(
+        default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
+    )
+    tone: Tone | None = Field(
+        default=None,
+        description="Delta colour — YOU set it: up isn't always good (down is good for cost/errors), so "
+        "skaldr never infers it. Omit for a neutral chip.",
+    )
+
+
 class Card(_Frozen):
     label: str = Field(description="Card label above the number.")
     value: Number | str = Field(description="Headline number, or a short status string.")
     of: Number | None = Field(default=None, description="Denominator; renders a derived percentage.")
     tone: Tone | None = Field(default=None, description="Optional tone for the top-border accent.")
+    delta: CardDelta | None = Field(
+        default=None, description="Optional trend chip beside the value (a period-over-period change)."
+    )
     note: str | None = Field(default=None, description="Optional small caption line under the number.")
     badges: list[str] = Field(
         default_factory=list,

@@ -37,9 +37,9 @@ blocks:
 
   - type: cards
     items:
-      - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
+      - { label: "Matched cleanly", value: 8500, of: 10000, tone: success, delta: { label: "+3%", direction: up, tone: success } }
       - { label: "Floor — fixable", value: 1100, of: 10000, tone: warning, note: "Miscounts + mislabeled bins we can correct.", badges: [FLOOR] }
-      - { label: "Vendor — escalate", value: 400, of: 10000, tone: danger, badges: [VENDOR] }
+      - { label: "Vendor — escalate", value: 400, of: 10000, tone: danger, delta: { label: "−90", direction: down, tone: success }, badges: [VENDOR] }
       - { label: "Count status", value: "HEALTHY", tone: accent }
       - { label: "Total units", value: 10000, tone: neutral }
 

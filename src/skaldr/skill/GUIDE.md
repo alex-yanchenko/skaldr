@@ -83,7 +83,7 @@ infinities.
 | `list` | Bulleted or numbered points | `style: bullet\|number`, `items[]` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
-| `cards` | Headline numbers | `items: [{label, value, of?, tone?, note?, badges?}]` |
+| `cards` | Headline numbers | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` |
 | `badge_row` | A standalone row of chips | `label?`, `items: [{key} \| {label, tone}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
 | `status_list` | Checks / steps | `items: [{state: done\|pending\|failed\|blocked, text}]` |
@@ -99,7 +99,9 @@ infinities.
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 
 Cards: pass `of` to render a derived percentage (`8,500 · 85.0%`). A `value` may be a short
-string (e.g. `HEALTHY`) instead of a number. Images must be self-contained `data:` URIs — skaldr
+string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside the value —
+`{label, direction?: up|down|flat, tone?}` — where you choose the `tone` (up isn't always
+good: for cost or errors, down is, so skaldr won't infer it) and `direction` sets the glyph. Images must be self-contained `data:` URIs — skaldr
 embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any blocks except another
 `section` (one level of nesting only).

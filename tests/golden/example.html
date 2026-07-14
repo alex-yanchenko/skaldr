@@ -131,7 +131,14 @@
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
-			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}}
+			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}
+			/* delta trend chip beside the value; author-chosen tone (up isn't always good). */
+			& .delta{font-size:12.5px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill);
+				margin-inline-start:8px; vertical-align:middle; white-space:nowrap; letter-spacing:0;
+				color:var(--dt,var(--neutral-fg)); background:var(--db,var(--neutral-bg))}
+			& .delta.info{--dt:var(--info-fg); --db:var(--info-bg)} & .delta.success{--dt:var(--success-fg); --db:var(--success-bg)}
+			& .delta.warning{--dt:var(--warning-fg); --db:var(--warning-bg)} & .delta.danger{--dt:var(--danger-fg); --db:var(--danger-bg)}
+			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
@@ -452,7 +459,7 @@
 
 <dl class="kv"><dt>Count date</dt><dd>2026-07-09 14:22 UTC</dd><dt>Units expected</dt><dd>10,000</dd><dt>Method</dt><dd><code>full cycle count</code></dd><dt>Mode</dt><dd>strict</dd></dl>
 
-<div class="cards"><div class="card success"><div class="l">Matched cleanly</div><div class="n">8,500<span class="pct">85.0%</span></div></div><div class="card warning"><div class="l">Floor — fixable</div><div class="n">1,100<span class="pct">11.0%</span></div><div class="note">Miscounts + mislabeled bins we can correct.</div><span class="chips"><span class="chip amber">Floor</span></span></div><div class="card danger"><div class="l">Vendor — escalate</div><div class="n">400<span class="pct">4.0%</span></div><span class="chips"><span class="chip red">Vendor</span></span></div><div class="card accent"><div class="l">Count status</div><div class="n str">HEALTHY</div></div><div class="card neutral"><div class="l">Total units</div><div class="n">10,000</div></div></div>
+<div class="cards"><div class="card success"><div class="l">Matched cleanly</div><div class="n">8,500<span class="pct">85.0%</span><span class="delta success">▲ +3%</span></div></div><div class="card warning"><div class="l">Floor — fixable</div><div class="n">1,100<span class="pct">11.0%</span></div><div class="note">Miscounts + mislabeled bins we can correct.</div><span class="chips"><span class="chip amber">Floor</span></span></div><div class="card danger"><div class="l">Vendor — escalate</div><div class="n">400<span class="pct">4.0%</span><span class="delta success">▼ −90</span></div><span class="chips"><span class="chip red">Vendor</span></span></div><div class="card accent"><div class="l">Count status</div><div class="n str">HEALTHY</div></div><div class="card neutral"><div class="l">Total units</div><div class="n">10,000</div></div></div>
 
 <p class="text">The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a <strong>hard gate</strong> — a page that does not balance <em>will not build</em>. The old <del>bin &gt; 12</del> scan rule is under review; see the <a href="https://example.com/runbook">method</a>.</p>
 <p class="text muted">Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.</p>
