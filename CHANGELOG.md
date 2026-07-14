@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/alex-yanchenko/skaldr/compare/v0.7.0...v0.8.0) (2026-07-14)
+
+
+### Features
+
+* **cards:** add an optional KPI delta chip beside the value ([#28](https://github.com/alex-yanchenko/skaldr/issues/28)) ([fb29bdd](https://github.com/alex-yanchenko/skaldr/commit/fb29bdd1b9080cae4351461a756461b81707c809))
+* **chart:** add a chart block — bar/line/donut as render-time inline SVG ([#25](https://github.com/alex-yanchenko/skaldr/issues/25)) ([2f8e7da](https://github.com/alex-yanchenko/skaldr/commit/2f8e7da4f45a18b2e2803bee01116965ce0db943))
+* **comparison:** add a feature-matrix block (options × features) ([#29](https://github.com/alex-yanchenko/skaldr/issues/29)) ([ec65e98](https://github.com/alex-yanchenko/skaldr/commit/ec65e988f640b473b37637cc16107012ff80e8fe))
+* **fan:** add a fan block for one-to-many convergence/divergence ([#31](https://github.com/alex-yanchenko/skaldr/issues/31)) ([d783042](https://github.com/alex-yanchenko/skaldr/commit/d783042e9fa73b00a72ca259b366f2aab500fde5))
+* **references:** add a references block with inline [^key] citations ([#30](https://github.com/alex-yanchenko/skaldr/issues/30)) ([70cfd4a](https://github.com/alex-yanchenko/skaldr/commit/70cfd4a3177cda96272284ef7a4d667b9e69d8c4))
+* **walkthrough:** add a walkthrough block — numbered steps with per-step detail columns ([#32](https://github.com/alex-yanchenko/skaldr/issues/32)) ([ca0a7e0](https://github.com/alex-yanchenko/skaldr/commit/ca0a7e02894b295c7454c5b0b66dd438af5fca6f))
+
 ## [0.7.0](https://github.com/alex-yanchenko/skaldr/compare/v0.6.0...v0.7.0) (2026-07-14)
 
 
