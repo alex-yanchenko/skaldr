@@ -288,6 +288,179 @@
       "title": "Cards",
       "type": "object"
     },
+    "Chart": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "chart",
+          "title": "Type",
+          "type": "string"
+        },
+        "variant": {
+          "description": "bar: compare a value across categories (grouped, or set stacked). line: a trend across an ordered axis (smoothed). donut: parts of a whole. Reach for a chart when a number's SHAPE (trend/spread/share) is the message; use `cards` for standalone figures and `meter` for a single ratio.",
+          "enum": [
+            "bar",
+            "line",
+            "donut"
+          ],
+          "title": "Variant",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption shown above the chart.",
+          "title": "Title"
+        },
+        "categories": {
+          "description": "x-axis labels, left to right (bar/line only); each series has one value per category.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Categories",
+          "type": "array"
+        },
+        "series": {
+          "description": "One or more data series (bar/line only). Multiple series group side by side, or stack.",
+          "items": {
+            "$ref": "#/$defs/ChartSeries"
+          },
+          "title": "Series",
+          "type": "array"
+        },
+        "slices": {
+          "description": "Donut segments (donut only); shares are derived from the total.",
+          "items": {
+            "$ref": "#/$defs/ChartSlice"
+          },
+          "title": "Slices",
+          "type": "array"
+        },
+        "stacked": {
+          "default": false,
+          "description": "Stack the bar series into one bar per category instead of grouping (bar only).",
+          "title": "Stacked",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "variant"
+      ],
+      "title": "Chart",
+      "type": "object"
+    },
+    "ChartSeries": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Series name \u2014 shown in the legend.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "values": {
+          "description": "One value per category, in the same order as `categories`.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone for this series' bars/line.",
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "label",
+        "values"
+      ],
+      "title": "ChartSeries",
+      "type": "object"
+    },
+    "ChartSlice": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Slice name \u2014 shown in the legend.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Slice magnitude (> 0); its share of the whole is derived.",
+          "title": "Value"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone for this slice.",
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "title": "ChartSlice",
+      "type": "object"
+    },
     "Code": {
       "additionalProperties": false,
       "properties": {
@@ -582,6 +755,7 @@
                 "badge_row": "#/$defs/BadgeRow",
                 "callout": "#/$defs/Callout",
                 "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
@@ -647,6 +821,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Chart"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -859,6 +1036,7 @@
                 "badge_row": "#/$defs/BadgeRow",
                 "callout": "#/$defs/Callout",
                 "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
@@ -923,6 +1101,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Chart"
               }
             ]
           },
@@ -1294,6 +1475,7 @@
                 "badge_row": "#/$defs/BadgeRow",
                 "callout": "#/$defs/Callout",
                 "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
@@ -1358,6 +1540,9 @@
               },
               {
                 "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Chart"
               }
             ]
           },
@@ -1669,6 +1854,7 @@
             "badge_row": "#/$defs/BadgeRow",
             "callout": "#/$defs/Callout",
             "cards": "#/$defs/Cards",
+            "chart": "#/$defs/Chart",
             "code": "#/$defs/Code",
             "fact_strip": "#/$defs/FactStrip",
             "flow": "#/$defs/Flow",
@@ -1735,6 +1921,9 @@
           },
           {
             "$ref": "#/$defs/Flow"
+          },
+          {
+            "$ref": "#/$defs/Chart"
           },
           {
             "$ref": "#/$defs/Section"

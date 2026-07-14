@@ -246,6 +246,21 @@
 		& img,& svg{display:block; width:100%; height:auto}
 		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
 
+	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
+	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
+	   stay theme-aware. Legend swatches match series colours (assigned in charts.py). */
+	.chart{margin-block:var(--s6);
+		& .cap{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-block-end:var(--s3)}
+		& svg{display:block; width:100%; height:auto}
+		&.donut svg{max-width:260px; margin-inline:auto}
+		& .c-gl{stroke:var(--line); stroke-width:1}
+		& .c-tick,& .c-axlbl{fill:var(--muted); font-size:10px; font-family:var(--sans)}
+		& .c-total{fill:var(--ink); font-size:26px; font-weight:700}
+		& .c-totlbl{fill:var(--muted); font-size:10px; letter-spacing:0.04em}
+		& .chart-legend{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-block-start:var(--s3); font-size:12px; color:var(--muted)}
+		& .chart-legend span{display:inline-flex; align-items:center; gap:6px}
+		& .chart-legend i{width:11px; height:11px; border-radius:var(--r-xs); display:block}}
+
 	/* The table is a contained panel: the wrapper owns the border/radius/shadow, NOT overflow:hidden —
 	   an overflow container would trap the sticky header inside the box and break it. Corners are
 	   instead rounded on the header cells (top) and the last row loses its border (bottom edge). */

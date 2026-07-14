@@ -39,6 +39,10 @@ def _reject_bool_and_non_finite(value: Any) -> Any:
         raise ValueError("must be a number, not a boolean")
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError("must be a finite number")
+    # A Python int is unbounded; one beyond the float range overflows any float arithmetic
+    # downstream (e.g. chart axis scaling). Reject it at the boundary rather than crash later.
+    if isinstance(value, int) and abs(value) > sys.float_info.max:
+        raise ValueError("must be a finite number")
     return value
 
 
@@ -57,6 +61,7 @@ CalloutTone = Literal["info", "success", "warning", "danger"]
 StatusState = Literal["done", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
 
 
@@ -319,6 +324,80 @@ class Flow(_Frozen):
     )
 
 
+class ChartSeries(_Frozen):
+    label: str = Field(min_length=1, description="Series name — shown in the legend.")
+    values: list[Number] = Field(
+        min_length=1, description="One value per category, in the same order as `categories`."
+    )
+    tone: Tone | None = Field(default=None, description="Optional tone for this series' bars/line.")
+
+
+class ChartSlice(_Frozen):
+    label: str = Field(min_length=1, description="Slice name — shown in the legend.")
+    value: Number = Field(description="Slice magnitude (> 0); its share of the whole is derived.")
+    tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
+
+
+class Chart(_Frozen):
+    type: Literal["chart"]
+    variant: ChartVariant = Field(
+        description="bar: compare a value across categories (grouped, or set stacked). "
+        "line: a trend across an ordered axis (smoothed). "
+        "donut: parts of a whole. Reach for a chart when a number's SHAPE (trend/spread/share) is the "
+        "message; use `cards` for standalone figures and `meter` for a single ratio."
+    )
+    title: str | None = Field(default=None, description="Optional caption shown above the chart.")
+    categories: list[str] = Field(
+        default_factory=list,
+        description="x-axis labels, left to right (bar/line only); each series has one value per category.",
+    )
+    series: list[ChartSeries] = Field(
+        default_factory=list[ChartSeries],
+        description="One or more data series (bar/line only). Multiple series group side by side, or stack.",
+    )
+    slices: list[ChartSlice] = Field(
+        default_factory=list[ChartSlice],
+        description="Donut segments (donut only); shares are derived from the total.",
+    )
+    stacked: bool = Field(
+        default=False,
+        description="Stack the bar series into one bar per category instead of grouping (bar only).",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Chart":
+        if self.stacked and self.variant != "bar":
+            raise ValueError("'stacked' applies only to variant: bar")
+        if self.variant in ("bar", "line"):
+            if self.slices:
+                raise ValueError("'slices' is only for variant: donut")
+            if not self.categories:
+                raise ValueError(f"variant '{self.variant}' needs 'categories'")
+            if not self.series:
+                raise ValueError(f"variant '{self.variant}' needs at least one entry in 'series'")
+            for entry in self.series:
+                if len(entry.values) != len(self.categories):
+                    raise ValueError(
+                        f"series '{entry.label}' has {len(entry.values)} values but there are "
+                        f"{len(self.categories)} categories — they must match"
+                    )
+                # Bars/lines measure up from a zero baseline (no negative axis) — a negative value
+                # would draw an invalid or below-axis mark. Mirror the donut/meter positivity guard.
+                if any(value < 0 for value in entry.values):
+                    raise ValueError(
+                        f"series '{entry.label}' has a negative value; bar/line values must be >= 0"
+                    )
+        else:  # donut
+            if self.categories or self.series:
+                raise ValueError("'categories'/'series' are for variant: bar/line, not donut")
+            if not self.slices:
+                raise ValueError("variant 'donut' needs at least one entry in 'slices'")
+            for segment in self.slices:
+                if segment.value <= 0:
+                    raise ValueError(f"donut slice '{segment.label}' value must be greater than 0")
+        return self
+
+
 class Column(_Frozen):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
@@ -514,6 +593,7 @@ _Leaf = (
     | Image
     | Timeline
     | Flow
+    | Chart
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 

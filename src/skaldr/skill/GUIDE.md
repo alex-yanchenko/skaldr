@@ -94,6 +94,7 @@ infinities.
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
+| `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 
@@ -173,6 +174,38 @@ Rule of thumb: if most nodes have a `note`, use `style: steps`; otherwise `arrow
 than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (any of
 `neutral·info·success·warning·danger·accent`) accents a node's border + number — use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
+
+## The `chart`
+
+Render-time SVG — self-contained, no JS. You give the data; skaldr computes the scale, ticks,
+gridlines, smoothed curves, and arcs, plus a legend whose swatches match the series. Reach for a
+chart when a number's **shape** is the point (a trend, a spread, a share); use `cards` for standalone
+figures and `meter` for a single ratio.
+
+- **`bar`** — compare a value across categories. Extra `series` group side by side, or `stacked: true`.
+- **`line`** — a trend across an ordered axis (smoothed); a lone series gets a soft area fill.
+- **`donut`** — parts of a whole; the shares are derived.
+
+`bar`/`line` take `categories` (the x-axis) and `series` (each `{label, values, tone?}` — one value
+per category); `donut` takes `slices` (each `{label, value, tone?}`). `tone` is optional — skaldr
+colours any unset series/slice from the palette so they stay distinct.
+
+```yaml
+- type: chart
+  variant: bar
+  title: "Imports vs failures by quarter"
+  categories: [Q1, Q2, Q3, Q4]
+  series:
+    - { label: Imported, tone: success, values: [820, 910, 760, 980] }
+    - { label: Failed,   tone: danger,  values: [40, 25, 60, 30] }
+
+- type: chart
+  variant: donut
+  slices:
+    - { label: Accepted, tone: success, value: 2160 }
+    - { label: Held,     tone: warning, value: 900 }
+    - { label: Rejected, tone: danger,  value: 420 }
+```
 
 ## The `table`
 

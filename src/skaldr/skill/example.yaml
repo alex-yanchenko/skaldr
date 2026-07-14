@@ -51,6 +51,14 @@ blocks:
             count: 400
             problem: "The vendor's ASN listed units that never reached the dock."
 
+  - type: chart
+    variant: donut
+    title: "Where the 1,500 discrepancies came from"
+    slices:
+      - { label: Double-count, tone: warning, value: 600 }
+      - { label: Mislabeled bin, tone: danger, value: 500 }
+      - { label: Short shipment, tone: neutral, value: 400 }
+
   - type: callout
     tone: info
     title: "Next step"

@@ -796,3 +796,128 @@ def test_subrows_render_compactly_scoped_over_the_main_cell_padding() -> None:
     # leak 16px padding + a row border into the nested subtable). Assert the `&` so un-nesting
     # the rule to a bare (weaker-specificity) `.subtable td` would fail this.
     assert "& .subtable td{padding:3px 10px 3px 0; border:0;" in html
+
+
+def test_chart_bar_renders_bars_gridlines_ticks_and_matching_legend() -> None:
+    block = {
+        "type": "chart",
+        "variant": "bar",
+        "title": "Q",
+        "categories": ["Q1", "Q2"],
+        "series": [
+            {"label": "Imported", "tone": "success", "values": [80, 90]},
+            {"label": "Failed", "tone": "danger", "values": [10, 5]},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<figure class="chart bar">' in html
+    assert '<figcaption class="cap">Q</figcaption>' in html
+    assert "<rect" in html
+    assert '<line class="c-gl"' in html  # gridlines
+    assert '<text class="c-axlbl"' in html  # category labels
+    # a bar's fill and its legend swatch both resolve to the series tone
+    assert 'fill="var(--success-fg)"' in html
+    assert 'fill="var(--danger-fg)"' in html
+    assert '<i style="background:var(--success-fg)"></i>Imported' in html
+    assert '<i style="background:var(--danger-fg)"></i>Failed' in html
+
+
+def test_chart_bar_stacked_stacks_segments_cumulatively_on_the_baseline() -> None:
+    block = {
+        "type": "chart",
+        "variant": "bar",
+        "stacked": True,
+        "categories": ["A"],
+        "series": [
+            {"label": "Auto", "tone": "info", "values": [60]},
+            {"label": "Manual", "tone": "warning", "values": [40]},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert 'fill="var(--info-fg)"' in html and 'fill="var(--warning-fg)"' in html
+    assert 'rx="2"' not in html  # stacked segments abut, without the grouped bars' rounding
+    rects = re.findall(r'<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"', html)
+    assert len(rects) == 2
+    (y0, h0), (y1, h1) = ((float(y), float(h)) for y, h in rects)
+    # first segment sits on the baseline (176); the second abuts its top — proving the cumulative
+    # offset, not both drawn from the baseline (which a broken stack would do).
+    assert round(y0 + h0) == 176
+    assert round(y1 + h1) == round(y0)
+
+
+def test_chart_line_single_category_renders_a_point_with_no_curve() -> None:
+    block = {
+        "type": "chart",
+        "variant": "line",
+        "categories": ["only"],
+        "series": [{"label": "X", "values": [5]}],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    figure = html.split('<figure class="chart line">')[1].split("</figure>")[0]
+    assert " C" not in figure  # a lone point is a move-to only, no cubic-Bézier segment
+    assert "<circle" in figure  # still shown, as its end dot
+
+
+def test_chart_line_single_series_gets_area_fill_smoothed_path_and_end_dot() -> None:
+    block = {
+        "type": "chart",
+        "variant": "line",
+        "categories": ["a", "b", "c"],
+        "series": [{"label": "X", "values": [1, 2, 3]}],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<figure class="chart line">' in html
+    assert 'opacity="0.10"' in html  # lone series → soft area fill
+    assert '<path d="M' in html and " C" in html  # a cubic-Bézier (smoothed) path, not a polyline
+    assert "<circle" in html  # end dot
+
+
+def test_chart_line_multi_series_has_no_area_fill_and_cycles_unset_tones() -> None:
+    block = {
+        "type": "chart",
+        "variant": "line",
+        "categories": ["a", "b"],
+        "series": [{"label": "One", "values": [1, 2]}, {"label": "Two", "values": [3, 4]}],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert 'opacity="0.10"' not in html  # >1 series: fills would muddy each other, so none
+    # untoned series take the palette cycle IN ORDER: series 0 → info, series 1 → success
+    assert 'stroke="var(--info-fg)"' in html
+    assert 'stroke="var(--success-fg)"' in html
+    assert html.index('stroke="var(--info-fg)"') < html.index('stroke="var(--success-fg)"')
+
+
+def test_chart_donut_renders_arcs_centre_total_and_derived_shares() -> None:
+    block = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [
+            {"label": "A", "tone": "success", "value": 60},
+            {"label": "B", "tone": "danger", "value": 40},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<figure class="chart donut">' in html
+    assert 'transform="rotate(-90)"' in html  # arc segments
+    assert 'class="c-total"' in html and ">100<" in html  # centre total = 60 + 40
+    # shares are derived, not authored, and shown in the legend
+    assert '<i style="background:var(--success-fg)"></i>A 60%' in html
+    assert '<i style="background:var(--danger-fg)"></i>B 40%' in html
+
+
+def test_chart_escapes_author_category_labels() -> None:
+    block = {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["<x>"],
+        "series": [{"label": "S", "values": [1]}],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "&lt;x&gt;" in html  # the label is escaped inside the SVG <text>, never raw markup

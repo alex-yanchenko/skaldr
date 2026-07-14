@@ -89,6 +89,14 @@
 </div>
 {% endmacro %}
 
+{% macro chart(b) %}
+<figure class="chart {{ b.variant }}">
+{% if b.title %}<figcaption class="cap">{{ b.title }}</figcaption>{% endif %}
+{{ chart_svg(b) }}
+<div class="chart-legend">{% for item in chart_legend(b) %}<span><i style="background:{{ item.colour }}"></i>{{ item.label }}{% if item.note %} {{ item.note }}{% endif %}</span>{% endfor %}</div>
+</figure>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -120,6 +128,8 @@
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}
 {{ flow(block) }}
+{% elif block.type == "chart" %}
+{{ chart(block) }}
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}
