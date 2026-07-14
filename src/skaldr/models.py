@@ -391,7 +391,8 @@ class Chart(_Frozen):
     variant: ChartVariant = Field(
         description="bar: compare a value across categories (grouped, or set stacked). "
         "line: a trend across an ordered axis (smoothed). "
-        "donut: parts of a whole. Reach for a chart when a number's SHAPE (trend/spread/share) is the "
+        "donut: parts of a whole. Provide `categories`+`series` for bar/line, or `slices` for donut. "
+        "Reach for a chart when a number's SHAPE (trend/spread/share) is the "
         "message; use `cards` for standalone figures and `meter` for a single ratio."
     )
     title: str | None = Field(default=None, description="Optional caption shown above the chart.")

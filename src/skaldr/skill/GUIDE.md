@@ -92,13 +92,13 @@ infinities.
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
-| `timeline` | Ordered events | `items: [{title, time?, body?, state?, badges?}]` |
+| `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
-| `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
+| `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 | `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` |
 
