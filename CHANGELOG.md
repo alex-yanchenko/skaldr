@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.0](https://github.com/alex-yanchenko/skaldr/compare/v0.6.0...v0.7.0) (2026-07-14)
+
+
+### Features
+
+* **cli:** --pdf renders a ready-to-share PDF via a headless browser ([#18](https://github.com/alex-yanchenko/skaldr/issues/18)) ([665edd9](https://github.com/alex-yanchenko/skaldr/commit/665edd9ccaa78e46d84b400b048c61ec14fef194))
+* **print:** scale print/PDF to 0.75 for document density ([#19](https://github.com/alex-yanchenko/skaldr/issues/19)) ([1d47c82](https://github.com/alex-yanchenko/skaldr/commit/1d47c8281cc3f06257067f53081cfc509a661938))
+
+
+### Bug Fixes
+
+* **embed:** keep the corner controls + scripts, carry the title ([#15](https://github.com/alex-yanchenko/skaldr/issues/15)) ([ff84354](https://github.com/alex-yanchenko/skaldr/commit/ff8435438e626b03b8d9e85bb3a024861ea59579))
+* **pdf:** correct --pdf output ordering, section expansion, and browser discovery ([#21](https://github.com/alex-yanchenko/skaldr/issues/21)) ([4917ed0](https://github.com/alex-yanchenko/skaldr/commit/4917ed00de5306c0286267fe0d119c8f317cf97d))
+* **print:** keep headers with their content and stack flows vertically ([#20](https://github.com/alex-yanchenko/skaldr/issues/20)) ([c9de36a](https://github.com/alex-yanchenko/skaldr/commit/c9de36a563a80e10f8e20ae6327a023786c18d46))
+* **print:** keep table groups together, break code across pages, restyle code/diff ([#22](https://github.com/alex-yanchenko/skaldr/issues/22)) ([136e914](https://github.com/alex-yanchenko/skaldr/commit/136e91481867e02e0edc8bcd1b7eec28a636d1f9))
+* **print:** readable PDF — colours, unsplit rows, repeating headers ([#16](https://github.com/alex-yanchenko/skaldr/issues/16)) ([6175c84](https://github.com/alex-yanchenko/skaldr/commit/6175c8490f9034fdf29feadb0df87426fd4c7735))
+
+
+### Code Refactoring
+
+* **styles:** modernise CSS — cascade layers, nesting, logical properties ([#23](https://github.com/alex-yanchenko/skaldr/issues/23)) ([cd82051](https://github.com/alex-yanchenko/skaldr/commit/cd82051f0148b2804225d79d5935ab2670ed8808))
+
 ## [0.6.0](https://github.com/alex-yanchenko/skaldr/compare/v0.5.0...v0.6.0) (2026-07-13)
 
 
