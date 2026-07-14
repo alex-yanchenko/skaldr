@@ -18,6 +18,7 @@ from skaldr.models import (
     Report,
     Section,
     Table,
+    Walkthrough,
     col_sum,
     iter_reference_items,
     iter_referenced_badge_keys,
@@ -52,6 +53,9 @@ def _iter_headings(blocks: Sequence[AnyBlock]) -> Iterator[Heading]:
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from _iter_headings(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from _iter_headings(step.detail)
 
 
 def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
@@ -63,6 +67,9 @@ def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from _iter_tables(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from _iter_tables(step.detail)
 
 
 def reference_numbers(report: Report) -> dict[str, int]:

@@ -2152,6 +2152,185 @@
       ],
       "title": "Totals",
       "type": "object"
+    },
+    "Walkthrough": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "walkthrough",
+          "title": "Type",
+          "type": "string"
+        },
+        "steps": {
+          "description": "Ordered steps; each is a big numbered title beside its detail column.",
+          "items": {
+            "$ref": "#/$defs/WalkthroughStep"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "step_span": {
+          "default": 2,
+          "description": "Width of the title column, of 6; the detail column takes the rest (default 2).",
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Step Span",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "steps"
+      ],
+      "title": "Walkthrough",
+      "type": "object"
+    },
+    "WalkthroughStep": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Step title \u2014 a few words to a short sentence; it wraps across lines, so it can be long.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "sub": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional one-line sub-label under the title (rich text).",
+          "title": "Sub"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone tinting this step's big (faint) numeral.",
+          "title": "Tone"
+        },
+        "detail": {
+          "description": "The step's detail, a nested block list (paragraphs, lists, code, callouts, tables \u2014 like a grid cell), rendered in the column beside the numbered title.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "meter": "#/$defs/Meter",
+                "quote": "#/$defs/Quote",
+                "references": "#/$defs/References",
+                "status_list": "#/$defs/StatusList",
+                "table": "#/$defs/Table",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/References"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Detail",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "detail"
+      ],
+      "title": "WalkthroughStep",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -2198,7 +2377,8 @@
             "status_list": "#/$defs/StatusList",
             "table": "#/$defs/Table",
             "text": "#/$defs/Text",
-            "timeline": "#/$defs/Timeline"
+            "timeline": "#/$defs/Timeline",
+            "walkthrough": "#/$defs/Walkthrough"
           },
           "propertyName": "type"
         },
@@ -2268,6 +2448,9 @@
           },
           {
             "$ref": "#/$defs/Grid"
+          },
+          {
+            "$ref": "#/$defs/Walkthrough"
           }
         ]
       },

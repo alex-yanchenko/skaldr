@@ -173,6 +173,82 @@ def test_fan_inside_a_grid_cell_renders() -> None:
     assert '<div class="hub"><div class="fnode"><span class="lab">H</span></div></div>' in html
 
 
+def test_walkthrough_renders_numbered_tinted_steps_beside_their_detail() -> None:
+    block = {
+        "type": "walkthrough",
+        "steps": [
+            {
+                "label": "First",
+                "sub": "lead-in",
+                "tone": "info",
+                "detail": [{"type": "text", "body": "do a"}],
+            },
+            {"label": "Second", "detail": [{"type": "text", "body": "do b"}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # default step_span 2 → title column 2fr, detail 4fr, set inline
+    assert '<div class="walk" style="grid-template-columns:minmax(120px,2fr) 4fr">' in html
+    # step 1: tone class on the step, derived number 1, wrapping label, sub-label
+    assert (
+        '<div class="wstep info"><span class="wnum">1</span><span class="wlabel">First'
+        '<span class="wsub">lead-in</span></span></div>'
+        '<div class="wdetail"><p class="text">do a</p></div>' in html
+    )
+    # step 2: no tone class, number 2, no sub
+    assert (
+        '<div class="wstep"><span class="wnum">2</span><span class="wlabel">Second</span></div>'
+        '<div class="wdetail"><p class="text">do b</p></div>' in html
+    )
+
+
+def test_walkthrough_step_span_sets_the_column_widths() -> None:
+    block = {
+        "type": "walkthrough",
+        "step_span": 3,
+        "steps": [{"label": "S", "detail": [{"type": "text", "body": "x"}]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="walk" style="grid-template-columns:minmax(120px,3fr) 3fr">' in html
+
+
+def test_walkthrough_detail_renders_the_full_nested_block_list() -> None:
+    block = {
+        "type": "walkthrough",
+        "steps": [
+            {
+                "label": "S",
+                "detail": [
+                    {"type": "list", "items": ["one", "two"]},
+                    {"type": "code", "label": "k", "content": "x = 1"},
+                ],
+            }
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # the detail column hosts real rendered blocks, not rich text
+    assert '<ul class="list"><li>one</li><li>two</li></ul>' in html
+    assert '<div class="code"><div class="code-label">k</div><pre>x = 1</pre></div>' in html
+
+
+def test_walkthrough_heading_in_a_step_detail_gets_a_slug_id() -> None:
+    block = {
+        "type": "walkthrough",
+        "steps": [{"label": "S", "detail": [{"type": "heading", "level": 3, "text": "Nested step note"}]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # heading_slugs recurses into step details, so the nested heading gets an anchorable id
+    assert '<h3 id="nested-step-note">Nested step note</h3>' in html
+
+
 def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
     badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
     blocks = [
@@ -446,7 +522,7 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".code .diff .ln{break-inside:avoid}" in html
     assert "box-decoration-break:clone" not in html
     # cards/callouts/list+status items stay whole across page breaks
-    assert ".flow .seg,.flow .step,.kv{break-inside:avoid}" in html
+    assert ".flow .seg,.flow .step,.walk .wstep,.kv{break-inside:avoid}" in html
     # a header is never stranded from the content it introduces (break in the gap after it forbidden)
     assert "h1,h2,h3,h4,summary{break-after:avoid; break-inside:avoid}" in html
     # a long section may still break — it is NOT force-kept whole
@@ -456,6 +532,7 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".flow .track{flex-direction:column; flex-wrap:nowrap}" in html
     assert ".fan{flex-direction:column; align-items:center}" in html
     assert ".fan .merge{transform:rotate(90deg)}" in html
+    assert ".walk{grid-template-columns:1fr !important}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
     # print scales down for document density (the print-density knob)

@@ -100,6 +100,7 @@ infinities.
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
+| `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` |
 
 Cards: pass `of` to render a derived percentage (`8,500 · 85.0%`). A `value` may be a short
 string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside the value —
@@ -199,6 +200,33 @@ sit in a dashed well; a single arrow joins them to the `hub` (the one). `directi
 
 `hub` and `spokes` are flow nodes — each takes `label`, optional `tone`, `note` (rich, one line),
 and `badges`. Use `direction: out` for the reverse (one hub branching to the spokes).
+
+## The `walkthrough`
+
+A vertical list of numbered steps where **each step needs a whole column of detail beside it** —
+a spec broken into tickets, a runbook, a migration plan. Each step is a big numbered title on the
+left with its full detail (a nested block list: paragraphs, lists, code, callouts, tables) on the
+right, aligned row by row. Reach for it when a `flow` (short labels) or `list` (one line each) is
+too thin for the explanation each step carries.
+
+```yaml
+- type: walkthrough
+  step_span: 2            # width of the title column in 6ths (default 2 → detail gets 4)
+  steps:
+    - label: "Parse the spec and pull every acceptance criterion"
+      sub: "the source of truth"        # optional one-line sub-label
+      tone: info                        # optional — tints the big numeral
+      detail:                           # a nested block list, like a grid cell
+        - { type: text, body: "Group the criteria by surface; two rules are load-bearing." }
+        - { type: list, items: ["exactly-one-default per registry", "the reconcile invariant"] }
+    - label: "Slice into shippable tickets"
+      detail:
+        - { type: code, label: "dedupe key", content: "key = (school_id, course_key)" }
+```
+
+`detail` holds the same blocks you'd put anywhere else (it can be long — that's the point). The
+step numbers are derived (1..n). Use `tone` to mark a key step. Distinct from `flow` (a directional
+pipeline) and `grid` (no row-by-row step alignment).
 
 ## The `chart`
 

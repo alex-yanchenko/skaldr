@@ -279,6 +279,37 @@ blocks:
       - { label: "Manual recount", tone: warning, note: "overflow aisles only" }
 
   - type: heading
+    text: "How to run the recount"
+  - type: walkthrough
+    steps:
+      - label: "Freeze the aisle and pull the expected list"
+        sub: "before any scanning"
+        tone: info
+        detail:
+          - type: text
+            body: "Lock the aisle in the WMS so no picks land mid-count, then export the expected units."
+          - type: list
+            items:
+              - "One row per bin, with the expected quantity."
+              - "Flag overflow bins (`bin > 12`) — they take the manual path."
+      - label: "Scan every bin twice, reconcile on the pallet ID"
+        tone: accent
+        detail:
+          - type: text
+            body: "Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count."
+          - type: code
+            label: "reconcile"
+            content: |
+              counted = dedupe(scans, key="pallet_id")
+              assert sum(counted) == expected
+      - label: "Escalate anything that still won't balance"
+        tone: warning
+        detail:
+          - type: callout
+            tone: warning
+            body: "A residual gap is a vendor short-ship, not a miscount — open a ticket, don't force the numbers."
+
+  - type: heading
     text: "Sources"
   - type: text
     body: "Method definitions follow the warehouse counting SOP [^sop]; the discrepancy thresholds come from the Q2 reconciliation audit [^audit]."

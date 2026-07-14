@@ -35,6 +35,7 @@
 		color-scheme:light dark;
 		--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
+		--ghost:light-dark(#dfe4ee,#3a4557); /* faint neutral fill for de-emphasized large glyphs */
 		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
 		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
@@ -243,6 +244,21 @@
 	.fan .info{--t:var(--info-fg)} .fan .success{--t:var(--success-fg)} .fan .warning{--t:var(--warning-fg)}
 	.fan .danger{--t:var(--danger-fg)} .fan .accent{--t:var(--accent-fg)} .fan .neutral{--t:var(--neutral-fg)}
 
+	/* walkthrough — big numbered steps (left) beside a detail column (right), aligned row-by-row. The
+	   step column TOP-aligns to the row so a tall detail keeps its title at the top; the numeral is a
+	   faint ghost, tinted by the step tone. Column widths are set inline from `step_span` (of 6). */
+	.walk{display:grid; column-gap:var(--s8); margin-block:var(--s6)}
+	.walk .wstep,.walk .wdetail{padding:var(--s4) 0; border-block-start:1px solid var(--line)}
+	.walk .wstep{grid-column:1; display:flex; gap:var(--s3); align-items:flex-start}
+	.walk .wnum{flex:none; font-weight:800; font-size:30px; line-height:1; letter-spacing:-0.03em;
+		color:var(--wt,var(--ghost)); opacity:.45}
+	.walk .wlabel{font-weight:650; font-size:14.5px; overflow-wrap:anywhere}
+	.walk .wsub{display:block; margin-block-start:2px; font-weight:400; font-size:12.5px; color:var(--muted)}
+	.walk .wdetail{grid-column:2; min-width:0}
+	.walk .wdetail > :first-child{margin-block-start:0} .walk .wdetail > :last-child{margin-block-end:0}
+	.walk .info{--wt:var(--info-fg)} .walk .success{--wt:var(--success-fg)} .walk .warning{--wt:var(--warning-fg)}
+	.walk .danger{--wt:var(--danger-fg)} .walk .accent{--wt:var(--accent-fg)} .walk .neutral{--wt:var(--neutral-fg)}
+
 	/* On paper and on narrow screens a horizontal pipeline can't fit: a wrapped row strands a lone
 	   node far from its predecessor. Stack the flow vertically and centre it — each node/card sits
 	   centred with a downward connector to the next. Same rules fire when printing or below 640px. */
@@ -265,6 +281,13 @@
 		.fan{flex-direction:column; align-items:center}
 		.fan .spokes{align-self:stretch}
 		.fan .merge{transform:rotate(90deg)}
+		/* Walkthrough collapses to one column (title row, then its detail); !important beats the
+		   inline grid-template-columns set from step_span. The children carry explicit grid-column
+		   1/2, so they must be reset to auto (as .grid does for .cell) or they'd stay in two tracks;
+		   auto-placement then stacks title → detail. The detail joins its title as one block. */
+		.walk{grid-template-columns:1fr !important}
+		.walk .wstep,.walk .wdetail{grid-column:auto}
+		.walk .wdetail{border-block-start:0; padding-block-start:0}
 	}
 
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
@@ -455,7 +478,7 @@
 		.sc{display:none}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
-		.flow .seg,.flow .step,.kv{break-inside:avoid}
+		.flow .seg,.flow .step,.walk .wstep,.kv{break-inside:avoid}
 		p{orphans:2; widows:2}
 		/* Keep a header with the content it introduces: forbid a page break in the gap right after a
 		   heading or section summary, so a title is never stranded at the foot of one page while its
@@ -507,7 +530,7 @@
 <body>
 <div class="wrap width-default">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 
@@ -658,6 +681,15 @@ ORDER BY n DESC;
 <div class="fan in">
 <div class="spokes"><div class="fnode info"><span class="lab">Handheld scans</span><span class="sub">per-aisle, live</span></div><div class="fnode info"><span class="lab">Fixed-reader gates</span></div><div class="fnode warning"><span class="lab">Manual recount</span><span class="sub">overflow aisles only</span></div></div><div class="merge"><span class="arw">→</span></div><div class="hub"><div class="fnode accent"><span class="lab">Reconciled count</span></div></div></div>
 
+
+<h2 id="how-to-run-the-recount">How to run the recount</h2>
+
+<div class="walk" style="grid-template-columns:minmax(120px,2fr) 4fr"><div class="wstep info"><span class="wnum">1</span><span class="wlabel">Freeze the aisle and pull the expected list<span class="wsub">before any scanning</span></span></div><div class="wdetail"><p class="text">Lock the aisle in the WMS so no picks land mid-count, then export the expected units.</p><ul class="list"><li>One row per bin, with the expected quantity.</li><li>Flag overflow bins (<code>bin &gt; 12</code>) — they take the manual path.</li></ul>
+</div><div class="wstep accent"><span class="wnum">2</span><span class="wlabel">Scan every bin twice, reconcile on the pallet ID</span></div><div class="wdetail"><p class="text">Two independent passes; de-duplicate on <code>pallet_id</code> so a same-window re-scan can&#39;t double-count.</p><div class="code"><div class="code-label">reconcile</div><pre>counted = dedupe(scans, key=&#34;pallet_id&#34;)
+assert sum(counted) == expected
+</pre></div>
+</div><div class="wstep warning"><span class="wnum">3</span><span class="wlabel">Escalate anything that still won&#39;t balance</span></div><div class="wdetail"><div class="callout warning"><div>A residual gap is a vendor short-ship, not a miscount — open a ticket, don&#39;t force the numbers.</div></div>
+</div></div>
 
 <h2 id="sources">Sources</h2>
 
