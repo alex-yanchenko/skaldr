@@ -924,6 +924,38 @@ def test_chart_donut_slice_value_must_be_positive() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_sparkline_column_requires_a_list_of_at_least_two_numbers() -> None:
+    columns = [{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}]
+    with pytest.raises(ReportError, match=r"sparkline column needs a list of 2\+ numbers"):
+        parse_report(make_report(blocks=[make_table(columns=columns, rows=[{"z": "a", "t": [1]}])]))
+
+
+def test_sparkline_column_rejects_a_non_list_value() -> None:
+    columns = [{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}]
+    with pytest.raises(ReportError, match=r"sparkline column needs a list of 2\+ numbers"):
+        parse_report(make_report(blocks=[make_table(columns=columns, rows=[{"z": "a", "t": 5}])]))
+
+
+def test_sparkline_column_rejects_non_numeric_points() -> None:
+    columns = [{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}]
+    with pytest.raises(ReportError, match=r"sparkline values must be finite numbers"):
+        parse_report(make_report(blocks=[make_table(columns=columns, rows=[{"z": "a", "t": [1, "x"]}])]))
+
+
+def test_sparkline_column_rejects_a_boolean_point() -> None:
+    columns = [{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}]
+    with pytest.raises(ReportError, match=r"sparkline values must be finite numbers"):
+        parse_report(make_report(blocks=[make_table(columns=columns, rows=[{"z": "a", "t": [1, True, 3]}])]))
+
+
+def test_sparkline_column_rejects_a_non_finite_point() -> None:
+    columns = [{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}]
+    with pytest.raises(ReportError, match=r"sparkline values must be finite numbers"):
+        parse_report(
+            make_report(blocks=[make_table(columns=columns, rows=[{"z": "a", "t": [1, float("inf")]}])])
+        )
+
+
 def test_chart_stacked_only_applies_to_bar() -> None:
     block = {
         "type": "chart",

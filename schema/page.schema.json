@@ -519,13 +519,14 @@
           "type": "string"
         },
         "kind": {
-          "description": "text/rich (first one becomes the title column), number, badge (chip under title), or indicator (a colour-only dot in its own column; the cell value is a tone name).",
+          "description": "text/rich (first one becomes the title column), number, badge (chip under title), indicator (a colour-only dot in its own column; the cell value is a tone name), or sparkline (a mini inline trend line; the cell value is a list of 2+ numbers).",
           "enum": [
             "text",
             "number",
             "badge",
             "rich",
-            "indicator"
+            "indicator",
+            "sparkline"
           ],
           "title": "Kind",
           "type": "string"

@@ -911,6 +911,34 @@ def test_chart_donut_renders_arcs_centre_total_and_derived_shares() -> None:
     assert '<i style="background:var(--danger-fg)"></i>B 40%' in html
 
 
+def test_sparkline_column_renders_a_mini_trend_svg_in_its_cell() -> None:
+    table = make_table(
+        columns=[
+            {"key": "z", "label": "Zone", "kind": "text"},
+            {"key": "t", "label": "Trend", "kind": "sparkline"},
+        ],
+        rows=[{"z": "A", "t": [1, 3, 2, 5, 4, 7]}, {"z": "B", "t": [9, 8, 6, 6, 5, 3]}],
+    )
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert html.count('<td class="spark">') == 2  # one per row
+    assert html.count('<svg class="spark"') == 2
+    assert '<path d="M' in html and " C" in html  # smoothed, not a polyline
+    assert html.count('r="2" fill="var(--neutral-fg)"') == 2  # an end dot per sparkline
+
+
+def test_sparkline_flat_series_renders_without_dividing_by_zero() -> None:
+    table = make_table(
+        columns=[{"key": "z", "label": "Z", "kind": "text"}, {"key": "t", "label": "T", "kind": "sparkline"}],
+        rows=[{"z": "A", "t": [5, 5, 5]}],
+    )
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    # all-equal values → span 0 → the `or 1.0` fallback; renders a flat line at the baseline, no crash
+    assert '<svg class="spark"' in html
+    assert 'cy="17.0"' in html
+
+
 def test_chart_escapes_author_category_labels() -> None:
     block = {
         "type": "chart",
