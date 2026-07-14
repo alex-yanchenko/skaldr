@@ -256,3 +256,14 @@ blocks:
       - { label: Fixed on floor, tone: success, value: 900 }
       - { label: System defect, tone: warning, value: 760 }
       - { label: Vendor, tone: danger, value: 400 }
+
+  - type: heading
+    text: "Count methods compared"
+  - type: comparison
+    options: ["Full cycle", "Sampling", "Continuous"]
+    highlight: 0
+    rows:
+      - { feature: "Catches every bin", values: [true, false, true] }
+      - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }, { value: "medium", tone: warning }] }
+      - { feature: "Reconciles exactly", values: [true, false, false] }
+      - { feature: "Disrupts picking", values: [true, false, true] }

@@ -326,6 +326,21 @@
 	.subtable{margin-top:var(--s3); width:100%; font-size:12.5px}
 	.reconcile{font-size:12.5px; color:var(--muted); margin:var(--s3) 0 var(--s6)}
 
+	/* comparison — a feature matrix: options across the top, features down the side; one column can be
+	   highlighted as the recommended pick. Bare bool cells render ✓/✗, strings render as text. */
+	.cmp{width:100%; border-collapse:separate; border-spacing:0; font-size:13.5px; margin-block:var(--s4);
+		border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface);
+		& th{padding:11px 16px; font-size:12px; font-weight:700; text-align:center; background:var(--panel); border-block-end:1px solid var(--line)}
+		& th:first-child{text-align:start; color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em}
+		& td{padding:11px 16px; border-block-start:1px solid var(--line); text-align:center}
+		& td.feat{text-align:start; font-weight:600}
+		& th.hl{background:var(--accent-bg); color:var(--accent-fg)}
+		& td.hl{background:var(--accent-bg)}
+		& .chk.yes{color:var(--success-fg); font-weight:700} & .chk.no{color:var(--danger-fg); font-weight:700}
+		& .ct{color:var(--muted)}
+		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
+		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}}
+
 	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
@@ -453,7 +468,7 @@
 <body>
 <div class="wrap width-default">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 
@@ -591,6 +606,12 @@ ORDER BY n DESC;
 <figcaption class="cap">How discrepancies resolved</figcaption><svg viewBox="0 0 210 200" role="img" preserveAspectRatio="xMidYMid meet"><g transform="translate(105,100)"><circle r="62" fill="none" stroke="var(--panel)" stroke-width="26"/><circle r="62" fill="none" stroke="var(--success-fg)" stroke-width="26" stroke-dasharray="170.20 219.36" stroke-dashoffset="-0.00" transform="rotate(-90)"/><circle r="62" fill="none" stroke="var(--warning-fg)" stroke-width="26" stroke-dasharray="143.72 245.84" stroke-dashoffset="-170.20" transform="rotate(-90)"/><circle r="62" fill="none" stroke="var(--danger-fg)" stroke-width="26" stroke-dasharray="75.64 313.92" stroke-dashoffset="-313.92" transform="rotate(-90)"/><text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7">2,060</text><text class="c-totlbl" text-anchor="middle" dominant-baseline="middle" y="17">TOTAL</text></g></svg>
 <div class="chart-legend"><span><i style="background:var(--success-fg)"></i>Fixed on floor 44%</span><span><i style="background:var(--warning-fg)"></i>System defect 37%</span><span><i style="background:var(--danger-fg)"></i>Vendor 19%</span></div>
 </figure>
+
+
+<h2 id="count-methods-compared">Count methods compared</h2>
+
+<table class="cmp"><thead><tr><th></th><th class="hl">Full cycle</th><th>Sampling</th><th>Continuous</th></tr></thead>
+<tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk no">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr></tbody></table>
 
 
 <div class="footer">WMS export · Q3 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</div><div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>

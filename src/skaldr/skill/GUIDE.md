@@ -95,6 +95,7 @@ infinities.
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
+| `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?` |
 | `section` | Collapsible container | `title`, `collapsed?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 
@@ -207,6 +208,25 @@ colours any unset series/slice from the palette so they stay distinct.
     - { label: Accepted, tone: success, value: 2160 }
     - { label: Held,     tone: warning, value: 900 }
     - { label: Rejected, tone: danger,  value: 420 }
+```
+
+## The `comparison`
+
+A feature matrix — the `options` you're weighing across the top, each `feature` down the side. One
+column can be `highlight`ed (0-based) as the recommended pick. Each row's `values` give one cell per
+option, in order: a bare `true`/`false` renders ✓/✗, a bare string renders as text, and
+`{value, tone}` renders toned text. (YAML also reads bare `yes`/`no`/`on`/`off` as booleans — quote
+them (`"yes"`) if you mean the literal word, not a ✓/✗.) Reach for it to weigh a few named options against shared
+criteria; for freeform tabular data use `table`.
+
+```yaml
+- type: comparison
+  options: ["Hand-built HTML", "skaldr"]
+  highlight: 1
+  rows:
+    - { feature: "Self-contained", values: [true, true] }
+    - { feature: "Validated", values: [false, true] }
+    - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }] }
 ```
 
 ## The `table`
