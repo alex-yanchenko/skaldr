@@ -5,8 +5,8 @@ description: >-
   polished, self-contained HTML page, so you never hand-write HTML/CSS. Use it for any shareable
   report, summary, how-does-X-work / data-model explainer, or architecture/design doc
   (investigations, reviews, audits, ingestion/data-quality writeups, post-mortems, proposals, status
-  pages) — especially when it needs visual structure: a flow/pipeline, comparison table, stat cards,
-  charts (bar/line/donut), timeline, meters, callouts, or footnoted sources. Reach for it instead
+  pages) — especially when it needs visual structure: a flow/pipeline, fan-in/out, comparison
+  table, stat cards, charts, timeline, meters, callouts, or footnoted sources. Reach for it instead
   of hand-building an HTML page, plain prose, or a raw table. skaldr owns the design; you describe
   what it says.
 ---

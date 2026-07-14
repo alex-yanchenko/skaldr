@@ -225,6 +225,24 @@
 			border-radius:var(--r-md); padding:5px 12px; font-size:12.5px; font-weight:600}
 		& .loop .cyc{font-size:15px; line-height:1}}
 
+	/* fan — one-to-many convergence/divergence. The 'many' spokes stack inside a dashed well; a single
+	   arrow joins the well to the one hub. Tone tints each node's border (its own token set, like flow). */
+	/* No flex-wrap: the horizontal row stays intact above 640px (so the arrow never strands from the
+	   hub at a wrap); the print/narrow media query stacks it into a column instead. */
+	.fan{display:flex; align-items:center; gap:var(--s3); margin-block:var(--s6)}
+	.fan .spokes{display:flex; flex-direction:column; gap:var(--s2); padding:var(--s3);
+		border:1.5px dashed var(--rule); border-radius:var(--r-lg)}
+	.fan .fnode{display:flex; flex-direction:column; min-width:0; padding:8px 13px; background:var(--surface);
+		border:1.5px solid var(--t,var(--line)); border-radius:var(--r-md)}
+	.fan .hub .fnode{background:var(--panel)}
+	.fan .fnode .lab{font-weight:600; font-size:14px}
+	.fan .fnode .sub{font-size:11px; color:var(--muted); line-height:1.35}
+	.fan .fnode .chips{margin-top:var(--s1)}
+	.fan .merge{flex:none; display:flex; align-items:center; color:var(--rule)}
+	.fan .merge .arw{font-size:22px; line-height:1}
+	.fan .info{--t:var(--info-fg)} .fan .success{--t:var(--success-fg)} .fan .warning{--t:var(--warning-fg)}
+	.fan .danger{--t:var(--danger-fg)} .fan .accent{--t:var(--accent-fg)} .fan .neutral{--t:var(--neutral-fg)}
+
 	/* On paper and on narrow screens a horizontal pipeline can't fit: a wrapped row strands a lone
 	   node far from its predecessor. Stack the flow vertically and centre it — each node/card sits
 	   centred with a downward connector to the next. Same rules fire when printing or below 640px. */
@@ -243,6 +261,10 @@
 		.flow.steps .step:first-child .link{display:none}
 		/* Centre the loop return chip under the stack (its parent .flow is a block, so margin-auto it). */
 		.flow .loop{display:flex; width:fit-content; margin-inline:auto}
+		/* Fan stacks too: well above/below the hub, the arrow rotated to point down the column. */
+		.fan{flex-direction:column; align-items:center}
+		.fan .spokes{align-self:stretch}
+		.fan .merge{transform:rotate(90deg)}
 	}
 
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
@@ -485,7 +507,7 @@
 <body>
 <div class="wrap width-default">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview</h2>
 
@@ -629,6 +651,12 @@ ORDER BY n DESC;
 
 <table class="cmp"><thead><tr><th></th><th class="hl">Full cycle</th><th>Sampling</th><th>Continuous</th></tr></thead>
 <tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk no">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr></tbody></table>
+
+
+<h2 id="where-the-count-comes-from">Where the count comes from</h2>
+
+<div class="fan in">
+<div class="spokes"><div class="fnode info"><span class="lab">Handheld scans</span><span class="sub">per-aisle, live</span></div><div class="fnode info"><span class="lab">Fixed-reader gates</span></div><div class="fnode warning"><span class="lab">Manual recount</span><span class="sub">overflow aisles only</span></div></div><div class="merge"><span class="arw">→</span></div><div class="hub"><div class="fnode accent"><span class="lab">Reconciled count</span></div></div></div>
 
 
 <h2 id="sources">Sources</h2>

@@ -269,6 +269,16 @@ blocks:
       - { feature: "Disrupts picking", values: [true, false, true] }
 
   - type: heading
+    text: "Where the count comes from"
+  - type: fan
+    direction: in
+    hub: { label: "Reconciled count", tone: accent }
+    spokes:
+      - { label: "Handheld scans", tone: info, note: "per-aisle, live" }
+      - { label: "Fixed-reader gates", tone: info }
+      - { label: "Manual recount", tone: warning, note: "overflow aisles only" }
+
+  - type: heading
     text: "Sources"
   - type: text
     body: "Method definitions follow the warehouse counting SOP [^sop]; the discrepancy thresholds come from the Q2 reconciliation audit [^audit]."

@@ -6,6 +6,7 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.models import (
     Cards,
+    Fan,
     Flow,
     FlowStep,
     Grid,
@@ -159,6 +160,56 @@ def test_flow_unknown_field_is_rejected_with_path() -> None:
     block = {"type": "flow", "steps": [{"label": "A"}, {"label": "B"}], "oops": 1}
 
     with pytest.raises(ReportError, match=r"blocks\.0\.flow\.oops.*not permitted"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_fan_parses_to_whole_model_with_default_direction_in() -> None:
+    block = {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "A"}, {"label": "B"}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Fan(
+        type="fan",
+        hub=FlowStep(label="H"),
+        spokes=[FlowStep(label="A"), FlowStep(label="B")],
+        direction="in",
+    )
+
+
+def test_fan_requires_at_least_two_spokes() -> None:
+    block = {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "solo"}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.fan\.spokes.*at least 2"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_fan_requires_a_hub() -> None:
+    block = {"type": "fan", "spokes": [{"label": "A"}, {"label": "B"}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.fan\.hub"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_fan_unknown_direction_is_rejected() -> None:
+    block = {
+        "type": "fan",
+        "direction": "sideways",
+        "hub": {"label": "H"},
+        "spokes": [{"label": "A"}, {"label": "B"}],
+    }
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.fan\.direction"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_fan_spoke_badge_reference_must_be_declared() -> None:
+    block = {
+        "type": "fan",
+        "hub": {"label": "H"},
+        "spokes": [{"label": "A", "badges": ["GHOST"]}, {"label": "B"}],
+    }
+
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*GHOST"):
         parse_report(make_report(blocks=[block]))
 
 
