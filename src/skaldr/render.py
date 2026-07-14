@@ -15,23 +15,38 @@ from markupsafe import Markup, escape
 
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
-from skaldr.models import Heading, Report, load_report, package_text
+from skaldr.models import (
+    ALLOWED_URL_SCHEMES,
+    REFERENCE_KEY_PATTERN,
+    Heading,
+    Report,
+    load_report,
+    package_text,
+)
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
+_FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _STRIKE = re.compile(r"~~([^~]+)~~")
 _ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
-_ALLOWED_SCHEMES = ("http://", "https://", "mailto:")
 
 
-def render_richtext(text: str) -> Markup:
-    """Escape, then apply the limited inline markdown subset. Code spans and links are stashed as
-    finished HTML *before* the bold/strike/italic passes run, so a stray `*` or `~` inside a code
-    span or a URL can't corrupt them."""
+def render_richtext(
+    text: str, ref_numbers: dict[str, int] | None = None, cited: set[str] | None = None
+) -> Markup:
+    """Escape, then apply the limited inline markdown subset. Code spans, footnote markers, and
+    links are stashed as finished HTML *before* the bold/strike/italic passes run, so a stray `*`
+    or `~` inside a code span or a URL can't corrupt them. `[^key]` markers resolve to a superscript
+    number linking to the `references` list — but only for keys `ref_numbers` actually declares; an
+    unknown key is left as literal text so a typo surfaces instead of vanishing. `cited` records
+    which keys have already been rendered so only the first occurrence carries the `fnref-` anchor
+    id (keeping ids unique) and the references list knows which keys are actually cited; pass one
+    shared set across a whole render."""
     # NUL is the stash sentinel below; strip any literal NUL from input so it can't collide.
     escaped = str(escape(text)).replace("\x00", "")
     stash: list[str] = []
+    seen: set[str] = cited if cited is not None else set()
 
     def _stash(html: str) -> str:
         stash.append(html)
@@ -39,9 +54,21 @@ def render_richtext(text: str) -> Markup:
 
     result = _CODE_SPAN.sub(lambda match: _stash(f"<code>{match.group(1)}</code>"), escaped)
 
+    def _footnote(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if ref_numbers is None or key not in ref_numbers:
+            return match.group(0)
+        # Only the first citation of a key gets the anchor id, so a source cited twice can't emit a
+        # duplicate `fnref-` id; every citation still links forward to the list entry.
+        anchor = "" if key in seen else f' id="fnref-{key}"'
+        seen.add(key)
+        return _stash(f'<sup class="fn"><a{anchor} href="#ref-{key}">[{ref_numbers[key]}]</a></sup>')
+
+    result = _FOOTNOTE.sub(_footnote, result)
+
     def _link(match: re.Match[str]) -> str:
         label, url = match.group(1), match.group(2)
-        if url.startswith(_ALLOWED_SCHEMES):
+        if url.startswith(ALLOWED_URL_SCHEMES):
             return _stash(f'<a href="{url}">{label}</a>')
         return match.group(0)
 
@@ -85,10 +112,23 @@ def _render(report: Report, template: str, *, expand: bool = False) -> str:
     def heading_id(block: Heading) -> str:
         return slugs[id(block)]
 
+    ref_numbers = compute.reference_numbers(report)
+    # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
+    # trailing references list reads it to give a cited key a backlink and skip one never cited.
+    cited_references: set[str] = set()
+
+    def richtext(text: str) -> Markup:
+        return render_richtext(text, ref_numbers, cited_references)
+
+    filters = cast("dict[str, Any]", env.filters)
+    filters["richtext"] = richtext
+
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["heading_id"] = heading_id
     globals_["expand_details"] = expand
+    globals_["reference_numbers"] = ref_numbers
+    globals_["cited_references"] = cited_references
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,

@@ -105,6 +105,10 @@
 <tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
 {% endmacro %}
 
+{% macro references(b) %}
+<ol class="refs">{% for item in b.items %}<li id="ref-{{ item.key }}">{% if item.key in cited_references %}<a class="rnum" href="#fnref-{{ item.key }}">{{ reference_numbers[item.key] }}</a>{% else %}<span class="rnum">{{ reference_numbers[item.key] }}</span>{% endif %}<span class="rtext">{{ item.text | richtext }}{% if item.url %} <a class="rlink" href="{{ item.url }}">↗</a>{% endif %}</span></li>{% endfor %}</ol>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -140,6 +144,8 @@
 {{ chart(block) }}
 {% elif block.type == "comparison" %}
 {{ comparison(block) }}
+{% elif block.type == "references" %}
+{{ references(block) }}
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}
