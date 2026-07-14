@@ -387,10 +387,10 @@ details.section .section-body{padding:0 var(--s4) var(--s4)}
 	   label is never stranded at the foot of a page while its rows start on the next. */
 	table.rep tr.group{break-after:avoid}
 	table.rep thead th,table.rep tr.group td{position:static}
-	/* A table is the only block that fragments across pages; its rounded outer box + shadow keep
-	   running down into the whitespace left by a break, reading as a half-drawn "phantom row". Drop
-	   the box on paper so a break is just a clean row rule above intentional whitespace, and square
-	   the header corners (a lone rounded band with no box around it looks off). */
+	/* A table's outer box can't survive a page break the way code's can: a broken table leaves
+	   whitespace where a pushed group row was, and the box's rounded border + shadow run down through
+	   it as a half-drawn "phantom row". Drop the box on paper so a break is just a clean row rule above
+	   intentional whitespace, and square the header corners (a lone rounded band with no box looks off). */
 	.table-wrap{border:none; border-radius:0; box-shadow:none}
 	table.rep thead th:first-child,table.rep thead th:last-child{border-radius:0}
 	/* Expand collapsed sections so a PDF captures their content. Full documents also run a
