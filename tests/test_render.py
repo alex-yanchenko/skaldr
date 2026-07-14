@@ -183,6 +183,32 @@ def test_card_delta_tone_is_independent_of_the_card_tone() -> None:
     assert '<span class="delta success">▼ -12</span>' in html  # the delta's independent tone
 
 
+def test_comparison_renders_options_features_checks_toned_cells_and_highlight() -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 1,
+        "rows": [
+            {"feature": "Fast", "values": [True, False]},
+            {"feature": "Cost", "values": ["free", {"value": "paid", "tone": "danger"}]},
+            {"feature": "Support", "values": [{"value": "n/a"}, "24/7"]},  # untoned cell + bare string
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<table class="cmp">' in html
+    assert '<th class="hl">B</th>' in html  # the highlighted option header (index 1)
+    assert '<td class="feat">Fast</td>' in html
+    assert '<span class="chk yes">✓</span>' in html  # bare true
+    assert "<td>free</td>" in html  # bare string cell renders unwrapped, no span
+    assert '<span class="ct danger">paid</span>' in html  # {value, tone} cell
+    assert '<span class="ct">n/a</span>' in html  # {value} with NO tone → default-muted, no tone class
+    # the highlighted column is column B specifically (content-anchored, not just a count)
+    assert '<td class="hl"><span class="chk no">✗</span></td>' in html
+    assert '<td class="hl"><span class="ct danger">paid</span></td>' in html
+    assert html.count('<td class="hl">') == 3  # every cell of column B (three rows)
+
+
 def test_row_tone_renders_on_the_tr() -> None:
     table = make_table(
         columns=[{"key": "a", "label": "A", "kind": "text"}],

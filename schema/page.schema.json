@@ -627,6 +627,127 @@
       "title": "Column",
       "type": "object"
     },
+    "Comparison": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "comparison",
+          "title": "Type",
+          "type": "string"
+        },
+        "options": {
+          "description": "The things being compared \u2014 the column headers (2+).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "rows": {
+          "description": "Feature rows; each supplies one value per option.",
+          "items": {
+            "$ref": "#/$defs/ComparisonRow"
+          },
+          "minItems": 1,
+          "title": "Rows",
+          "type": "array"
+        },
+        "highlight": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0-based index of the recommended option column to emphasise.",
+          "title": "Highlight"
+        }
+      },
+      "required": [
+        "type",
+        "options",
+        "rows"
+      ],
+      "title": "Comparison",
+      "type": "object"
+    },
+    "ComparisonCell": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "Cell text (for a \u2713/\u2717 pass a bare true/false instead).",
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone for the text.",
+          "title": "Tone"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "ComparisonCell",
+      "type": "object"
+    },
+    "ComparisonRow": {
+      "additionalProperties": false,
+      "properties": {
+        "feature": {
+          "description": "Row label \u2014 the attribute being compared.",
+          "minLength": 1,
+          "title": "Feature",
+          "type": "string"
+        },
+        "values": {
+          "description": "One cell per option, in column order.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ComparisonCell"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feature",
+        "values"
+      ],
+      "title": "ComparisonRow",
+      "type": "object"
+    },
     "Fact": {
       "additionalProperties": false,
       "properties": {
@@ -824,6 +945,7 @@
                 "cards": "#/$defs/Cards",
                 "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
                 "grid": "#/$defs/InnerGrid",
@@ -891,6 +1013,9 @@
               },
               {
                 "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -1105,6 +1230,7 @@
                 "cards": "#/$defs/Cards",
                 "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
@@ -1171,6 +1297,9 @@
               },
               {
                 "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
               }
             ]
           },
@@ -1544,6 +1673,7 @@
                 "cards": "#/$defs/Cards",
                 "chart": "#/$defs/Chart",
                 "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
                 "fact_strip": "#/$defs/FactStrip",
                 "flow": "#/$defs/Flow",
                 "heading": "#/$defs/Heading",
@@ -1610,6 +1740,9 @@
               },
               {
                 "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
               }
             ]
           },
@@ -1923,6 +2056,7 @@
             "cards": "#/$defs/Cards",
             "chart": "#/$defs/Chart",
             "code": "#/$defs/Code",
+            "comparison": "#/$defs/Comparison",
             "fact_strip": "#/$defs/FactStrip",
             "flow": "#/$defs/Flow",
             "grid": "#/$defs/Grid",
@@ -1991,6 +2125,9 @@
           },
           {
             "$ref": "#/$defs/Chart"
+          },
+          {
+            "$ref": "#/$defs/Comparison"
           },
           {
             "$ref": "#/$defs/Section"

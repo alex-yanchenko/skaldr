@@ -23,7 +23,15 @@ else:
     from importlib.abc import Traversable
 
 import yaml
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictBool,
+    ValidationError,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from skaldr.errors import ReportError
@@ -591,6 +599,48 @@ class Table(_Frozen):
             )
 
 
+class ComparisonCell(_Frozen):
+    value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
+    tone: Tone | None = Field(default=None, description="Optional tone for the text.")
+
+
+# A comparison cell is a bare bool (✓/✗), a bare string, or {value, tone} for toned text.
+# StrictBool (not bool) so a stray int like 0/1 fails loudly instead of silently rendering ✓/✗.
+ComparisonValue = StrictBool | str | ComparisonCell
+
+
+class ComparisonRow(_Frozen):
+    feature: str = Field(min_length=1, description="Row label — the attribute being compared.")
+    values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
+
+
+class Comparison(_Frozen):
+    type: Literal["comparison"]
+    options: list[str] = Field(
+        min_length=2, description="The things being compared — the column headers (2+)."
+    )
+    rows: list[ComparisonRow] = Field(
+        min_length=1, description="Feature rows; each supplies one value per option."
+    )
+    highlight: int | None = Field(
+        default=None, description="0-based index of the recommended option column to emphasise."
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Comparison":
+        for row in self.rows:
+            if len(row.values) != len(self.options):
+                raise ValueError(
+                    f"comparison row '{row.feature}' has {len(row.values)} values but there are "
+                    f"{len(self.options)} options — they must match"
+                )
+        if self.highlight is not None and not (0 <= self.highlight < len(self.options)):
+            raise ValueError(
+                f"highlight index {self.highlight} is out of range for {len(self.options)} options"
+            )
+        return self
+
+
 _Leaf = (
     Heading
     | Text
@@ -609,6 +659,7 @@ _Leaf = (
     | Timeline
     | Flow
     | Chart
+    | Comparison
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 

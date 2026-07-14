@@ -98,6 +98,13 @@
 </figure>
 {% endmacro %}
 
+{% macro cmp_cell(cell) %}{% if cell is boolean %}{% if cell %}<span class="chk yes">✓</span>{% else %}<span class="chk no">✗</span>{% endif %}{% elif cell is string %}{{ cell | richtext }}{% else %}<span class="ct{% if cell.tone %} {{ cell.tone }}{% endif %}">{{ cell.value | richtext }}</span>{% endif %}{% endmacro %}
+
+{% macro comparison(b) %}
+<table class="cmp"><thead><tr><th></th>{% for opt in b.options %}<th{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ opt }}</th>{% endfor %}</tr></thead>
+<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -131,6 +138,8 @@
 {{ flow(block) }}
 {% elif block.type == "chart" %}
 {{ chart(block) }}
+{% elif block.type == "comparison" %}
+{{ comparison(block) }}
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}

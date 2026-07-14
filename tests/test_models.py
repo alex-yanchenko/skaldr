@@ -924,6 +924,33 @@ def test_chart_donut_slice_value_must_be_positive() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_comparison_row_values_must_match_option_count() -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B", "C"],
+        "rows": [{"feature": "X", "values": [True, False]}],
+    }
+    with pytest.raises(ReportError, match=r"has 2 values but there are 3 options"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_comparison_requires_at_least_two_options() -> None:
+    block = {"type": "comparison", "options": ["only"], "rows": [{"feature": "X", "values": ["a"]}]}
+    with pytest.raises(ReportError, match=r"blocks\.0\.comparison\.options.*at least 2"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_comparison_highlight_out_of_range_is_rejected() -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 5,
+        "rows": [{"feature": "X", "values": [True, False]}],
+    }
+    with pytest.raises(ReportError, match=r"highlight index 5 is out of range"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_chart_stacked_only_applies_to_bar() -> None:
     block = {
         "type": "chart",
