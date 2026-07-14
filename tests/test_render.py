@@ -766,8 +766,8 @@ def test_panel_family_shadow_and_surface_tokens_are_in_the_stylesheet() -> None:
         "0 4px 16px light-dark(rgba(20,26,40,0.04),rgba(0,0,0,0.35));" in html
     )
     assert (
-        ".table-wrap{margin:var(--s3) 0; border:1px solid var(--line); "
-        "border-radius:8px; background:var(--surface); box-shadow:var(--shadow)}" in html
+        ".table-wrap{margin-block:var(--s3); border:1px solid var(--line); "
+        "border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow)}" in html
     )
 
 
@@ -792,6 +792,7 @@ def test_subrows_render_compactly_scoped_over_the_main_cell_padding() -> None:
     html = render_html(parse_report(make_report(blocks=[table])))
 
     assert '<table class="subtable">' in html
-    # Scoped under table.rep so it out-specifies `table.rep tbody td` (which would otherwise
-    # leak 16px padding + a row border into the nested subtable).
-    assert "table.rep .subtable td{padding:3px 10px 3px 0; border:0;" in html
+    # Nested under table.rep so it out-specifies `table.rep tbody td` (which would otherwise
+    # leak 16px padding + a row border into the nested subtable). Assert the `&` so un-nesting
+    # the rule to a bare (weaker-specificity) `.subtable td` would fail this.
+    assert "& .subtable td{padding:3px 10px 3px 0; border:0;" in html
