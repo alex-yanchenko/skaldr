@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/alex-yanchenko/skaldr/compare/v0.8.0...v1.0.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **width:** meta.width is removed. A report YAML that sets meta.width now fails the build (Meta forbids extra keys). Width is a reader-only control on the rendered page; drop meta.width from any existing spec.
+
+### Bug Fixes
+
+* **theme:** move color-scheme outside [@layer](https://github.com/layer) so the theme survives an embedding host ([#36](https://github.com/alex-yanchenko/skaldr/issues/36)) ([4e4067b](https://github.com/alex-yanchenko/skaldr/commit/4e4067b02fd138aa10cd6f7e3ba24d50b1e3ffd4))
+* **walkthrough:** uniform step numerals, brighter in dark theme, tone as a step accent ([#34](https://github.com/alex-yanchenko/skaldr/issues/34)) ([45a69e8](https://github.com/alex-yanchenko/skaldr/commit/45a69e82ad74b4a2da12c624302c6a5a48875b5d))
+
+
+### Code Refactoring
+
+* **width:** make page width a reader-only control, not an author field ([#35](https://github.com/alex-yanchenko/skaldr/issues/35)) ([26496e9](https://github.com/alex-yanchenko/skaldr/commit/26496e944f7c5dc4827d98dfdf51dc67412ef73d))
+
 ## [0.8.0](https://github.com/alex-yanchenko/skaldr/compare/v0.7.0...v0.8.0) (2026-07-14)
 
 
