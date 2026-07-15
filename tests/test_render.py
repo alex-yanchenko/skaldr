@@ -11,6 +11,14 @@ from tests.factories import make_cell, make_grid, make_reconciled_table, make_re
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
 
+# The three color-scheme rules that drive every light-dark() token. They must render unlayered (see
+# test_color_scheme_rules_sit_outside_any_layer_…); asserted by literal so a reformat fails loudly.
+COLOR_SCHEME_RULES = (
+    ":root{color-scheme:light dark}",
+    ':root[data-theme="dark"]{color-scheme:dark}',
+    ':root[data-theme="light"]{color-scheme:light}',
+)
+
 
 def test_example_render_matches_golden() -> None:
     """Pins the full page. On an intended change, regenerate with:
@@ -601,7 +609,7 @@ def test_default_width_cap_lives_on_the_wrap_and_no_author_classes_remain() -> N
 def test_palette_is_theme_aware_via_light_dark() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert "color-scheme:light dark;" in html
+    assert COLOR_SCHEME_RULES[0] in html
     assert "--ink:light-dark(#1e293b,#e8ecf3);" in html
     assert "--page:light-dark(#f5f7fa,#0e1116);" in html
 
@@ -609,8 +617,19 @@ def test_palette_is_theme_aware_via_light_dark() -> None:
 def test_explicit_theme_overrides_win_over_the_os_default() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert ':root[data-theme="dark"]{color-scheme:dark}' in html
-    assert ':root[data-theme="light"]{color-scheme:light}' in html
+    assert COLOR_SCHEME_RULES[1] in html
+    assert COLOR_SCHEME_RULES[2] in html
+
+
+def test_color_scheme_rules_sit_outside_any_layer_so_an_embedding_host_cannot_pin_them() -> None:
+    """Each rule must appear exactly once and before the first @layer block — otherwise it is layered
+    and an embedding host's own unlayered reset would pin color-scheme, stranding the theme."""
+    html = render_html(parse_report(make_report()))
+    first_layer_offset = html.index("@layer reset {")
+
+    for rule in COLOR_SCHEME_RULES:
+        assert html.count(rule) == 1
+        assert html.index(rule) < first_layer_offset
 
 
 @pytest.mark.parametrize(

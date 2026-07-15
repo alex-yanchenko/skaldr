@@ -1,8 +1,20 @@
 /* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
    earlier ones regardless of specificity, so the print overrides never fight the cascade by accident.
-   Every colour and radius routes through a token; the palette is theme-aware via light-dark(). */
+   The one exception is a small unlayered preamble for color-scheme (see below), which must outrank an
+   embedding host's own unlayered reset. Every colour/radius routes through a token; the palette is
+   theme-aware via light-dark(). */
 @layer reset, tokens, base, components, print;
+
+/* color-scheme lives OUTSIDE @layer on purpose: it drives every light-dark() token, and when skaldr
+   is embedded (e.g. a claude.ai Artifact iframe) the host injects its own UNLAYERED reset. A layered
+   rule always loses to an unlayered one regardless of specificity, so a layered color-scheme would be
+   pinned by the host's own rule and the corner control would flip data-theme but change nothing.
+   Unlayered, skaldr's rule wins (its <style> is last in the cascade). Default follows the viewer's
+   OS; the [data-theme] overrides (set by the corner control) force one theme. */
+:root{color-scheme:light dark}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
 
 @layer reset {
 	*,*::before,*::after{box-sizing:border-box}
@@ -14,11 +26,10 @@
 }
 
 @layer tokens {
-	/* Every colour is theme-aware via light-dark(light, dark). color-scheme follows the viewer's OS
-	   by default; the [data-theme] rules force one theme regardless. Components read tokens, never a
-	   raw colour, so the whole palette flips from one place. */
+	/* Every colour is theme-aware via light-dark(light, dark), which resolves against `color-scheme`
+	   (set outside @layer above). Components read tokens, never a raw colour, so the whole palette
+	   flips from one place. */
 	:root{
-		color-scheme:light dark;
 		--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
 		--ghost:light-dark(#dfe4ee,#6b7a94); /* faint neutral fill for de-emphasized large glyphs */
@@ -54,9 +65,6 @@
 		--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 		--mono:ui-monospace,"SF Mono",Menlo,monospace;
 	}
-	/* An explicit theme choice — a consumer setting data-theme on the root — wins over the OS default. */
-	:root[data-theme="dark"]{color-scheme:dark}
-	:root[data-theme="light"]{color-scheme:light}
 }
 
 @layer base {
