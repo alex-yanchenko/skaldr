@@ -64,6 +64,11 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 `**bold**` · `*italic*` · `` `code` `` · `~~strike~~` · `[label](https://url)`
 (links allow `http`, `https`, `mailto` only).
 
+**Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL —
+never a placeholder like `#` or `https://example.com`. (skaldr's own bundled examples use fictional
+links on purpose because they ship publicly; that's the exception, not a pattern to copy into a real
+report.)
+
 Everything else is escaped and shown literally — there is no raw HTML. A blank line in a `text`
 body starts a new paragraph.
 
@@ -145,6 +150,10 @@ grid's cells hold only leaf blocks. `grid` and `section` don't mix. Below a narr
 columns stack into one. You choose *how many columns* and *which cells*; skaldr owns every width,
 gap, and alignment. For many equal small items (e.g. cards), prefer the block's own auto-flow
 rather than a grid; the grid is for asymmetric composition.
+
+Keep running prose out of narrow columns. A paragraph squeezed into a 1–2-span cell reads as a
+cramped ribbon; put `text` in a wide cell (or as a full-width block outside the grid), and reserve
+narrow spans for cards, meters, short lists, and stats.
 
 Give a cell an optional **`tone`** to make it an emphasis panel (accent top-border + tint): use
 `accent`/`success` for the *primary* panel and `neutral` for a *muted aside*, so a reader sees which
