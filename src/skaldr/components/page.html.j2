@@ -10,7 +10,7 @@
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output — if a
      script changes, that test fails until the hash below is updated. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-Pp/Bwhev7+nUbmX6BHi0JedrZZ1dY/dDnDpmYCYsAPo=' 'sha256-rEVQtlK2+FTK4+QqJ9WkGJxgSzRCB7SBET7XGLfJ1O4='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U='; base-uri 'none'; form-action 'none'">
 <title>{{ meta.title }}</title>
 <style>{{ styles | safe }}</style>
 {% include "_theme_boot.html.j2" %}

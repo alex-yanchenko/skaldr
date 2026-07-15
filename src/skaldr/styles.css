@@ -62,15 +62,11 @@
 @layer base {
 	body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
 		line-height:1.5; -webkit-font-smoothing:antialiased}
-	.wrap{margin-inline:auto; padding:40px 48px 80px}
-	/* Page width cap (meta.width). max-width is a ceiling: on a narrower screen the page fills the
-	   viewport regardless, so the mode only diverges once the screen is wider than the cap. */
-	.wrap.width-default{max-width:1600px}
-	.wrap.width-wide{max-width:1920px}
-	.wrap.width-full{max-width:none}
-	/* The width switcher sets data-width on the root to override the author's meta.width class at
-	   runtime. Higher specificity than the .wrap.width-* class above, so the reader's choice wins. */
-	:root[data-width="default"] .wrap{max-width:1600px}
+	/* Width is not authorable — the page always renders at the default 1600px cap, and the reader
+	   alone widens it via the corner control (which sets data-width on the root; only wide/full
+	   override, since default IS the base cap). max-width is a ceiling: on a narrower screen the page
+	   fills the viewport regardless, so a mode only diverges once the screen is wider than its cap. */
+	.wrap{margin-inline:auto; padding:40px 48px 80px; max-width:1600px}
 	:root[data-width="wide"] .wrap{max-width:1920px}
 	:root[data-width="full"] .wrap{max-width:none}
 

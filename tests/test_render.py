@@ -4,7 +4,6 @@ import re
 
 import pytest
 
-from skaldr.errors import ReportError
 from skaldr.models import load_report, parse_report
 from skaldr.render import render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
@@ -482,7 +481,7 @@ def test_embed_drops_the_skeleton_but_keeps_the_controls() -> None:
     assert html.startswith("<title>")
     assert "<title>Test Report</title>" in html
     assert "<style>" in html
-    assert '<div class="wrap width-default">' in html
+    assert '<div class="wrap">' in html
     assert '<p class="text">hi</p>' in html
     assert '<div class="sc" data-open="false">' in html  # corner controls present
     assert 'addEventListener("beforeprint"' in html  # print handler present
@@ -498,7 +497,7 @@ def test_embed_and_page_share_content_and_controls() -> None:
 
     # the content region (wrap → corner controls) is byte-identical in both — only the outer
     # skeleton differs, since page and embed include the same _content and _controls partials
-    marker, sc = '<div class="wrap width-default">', '<div class="sc"'
+    marker, sc = '<div class="wrap">', '<div class="sc"'
     assert embed[embed.index(marker) : embed.index(sc)] == page[page.index(marker) : page.index(sc)]
 
 
@@ -544,10 +543,13 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert "details::details-content{content-visibility:visible" in html
 
 
-def test_width_defaults_to_default() -> None:
+def test_wrap_carries_no_authorable_width_class() -> None:
+    """Width is reader-only: the wrap never gets a width-* class from the author, so the reader's
+    data-width override is the sole driver. The base cap lives on .wrap itself."""
     html = render_html(parse_report(make_report()))
 
-    assert '<div class="wrap width-default">' in html
+    assert '<div class="wrap">' in html
+    assert "wrap width-" not in html
 
 
 def test_every_page_credits_and_links_the_project() -> None:
@@ -561,19 +563,13 @@ def test_every_page_credits_and_links_the_project() -> None:
     )
 
 
-@pytest.mark.parametrize("mode", ["default", "wide", "full"])
-def test_width_mode_sets_the_wrap_class(mode: str) -> None:
-    report = parse_report(make_report(meta={"title": "T", "width": mode}))
+def test_default_width_cap_lives_on_the_wrap_and_no_author_classes_remain() -> None:
+    """The default 1600px cap is baked onto .wrap itself (not an author-set width-default class), and
+    the old author-driven .wrap.width-* rules are gone — only the reader's data-width overrides cap."""
+    html = render_html(parse_report(make_report()))
 
-    assert f'<div class="wrap width-{mode}">' in render_html(report)
-
-
-def test_width_caps_are_defined_in_the_stylesheet() -> None:
-    html = render_html(parse_report(make_report(meta={"title": "T", "width": "wide"})))
-
-    assert ".wrap.width-default{max-width:1600px}" in html
-    assert ".wrap.width-wide{max-width:1920px}" in html
-    assert ".wrap.width-full{max-width:none}" in html
+    assert ".wrap{margin-inline:auto; padding:40px 48px 80px; max-width:1600px}" in html
+    assert ".wrap.width-" not in html
 
 
 def test_palette_is_theme_aware_via_light_dark() -> None:
@@ -639,17 +635,19 @@ def test_only_theme_is_restored_before_paint_in_the_head() -> None:
 
     assert "localStorage" in head
     assert 'setAttribute("data-theme"' in head
-    # Width is transient per-view: never persisted, so a new page keeps the author's meta.width.
-    # (An absent "skaldr-width" key proves it's neither stored on click nor restored in the head.)
+    # Width is transient per-view: never persisted, so a reader override resets to the default cap on
+    # reload. (An absent "skaldr-width" key proves it's neither stored on click nor restored in the head.)
     assert "skaldr-width" not in html
 
 
 def test_width_switch_overrides_are_defined_in_the_stylesheet() -> None:
+    """Only wide/full get data-width override rules; selecting "default" needs none — it falls back
+    to the base .wrap cap, so there is no duplicate 1600px rule to drift."""
     html = render_html(parse_report(make_report()))
 
-    assert ':root[data-width="default"] .wrap{max-width:1600px}' in html
     assert ':root[data-width="wide"] .wrap{max-width:1920px}' in html
     assert ':root[data-width="full"] .wrap{max-width:none}' in html
+    assert ':root[data-width="default"]' not in html
 
 
 def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> None:
@@ -671,11 +669,6 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
         assert f"'sha256-{digest}'" in script_src
     # The policy must precede the inline scripts so it governs them.
     assert html.index("Content-Security-Policy") < html.index("<script>")
-
-
-def test_unknown_width_mode_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"width"):
-        parse_report(make_report(meta={"title": "T", "width": "huge"}))
 
 
 def test_richtext_applies_the_inline_subset() -> None:

@@ -55,7 +55,6 @@ meta:
   source: "WMS export"          # optional; feeds the provenance footer
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
   toc: true                     # optional; auto table-of-contents from level-2 headings
-  width: default                # optional; page width cap: default (1600) | wide (1920) | full
   hero: true                    # optional; larger display title + subtitle in a tinted band
 badges:                         # author-declared vocabulary (see below)
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
