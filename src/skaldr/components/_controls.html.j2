@@ -15,9 +15,9 @@
 	var button = controls.querySelector(".sc-btn");
 	var menu = controls.querySelector(".sc-menu");
 	if (!button || !menu) return;
-	var wrap = document.querySelector(".wrap");
-	/* Author's width is the .wrap width-<mode> class; no other class on .wrap matches width-\w+. */
-	var authorWidth = (wrap && (wrap.className.match(/width-(\w+)/) || [])[1]) || "default";
+	/* Width is not authorable and a reader override is never persisted, so the control always starts
+	   from the default cap. */
+	var defaultWidth = "default";
 
 	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
 	function drop(key) { try { localStorage.removeItem(key); } catch (err) {} }
@@ -37,7 +37,7 @@
 	}
 	function reflect() {
 		syncGroup("theme", root.getAttribute("data-theme") || "auto");
-		syncGroup("width", root.getAttribute("data-width") || authorWidth);
+		syncGroup("width", root.getAttribute("data-width") || defaultWidth);
 	}
 
 	button.addEventListener("click", function (event) { event.stopPropagation(); setOpen(controls.dataset.open !== "true"); });
@@ -50,7 +50,7 @@
 				if (item.dataset.val === "auto") { root.removeAttribute("data-theme"); drop("skaldr-theme"); }
 				else { root.setAttribute("data-theme", item.dataset.val); save("skaldr-theme", item.dataset.val); }
 			} else {
-				/* Width is a transient per-view override — not persisted, so a new page keeps the author's width. */
+				/* Width is a transient per-view override — not persisted, so a reload resets to the default cap. */
 				root.setAttribute("data-width", item.dataset.val);
 			}
 			reflect();

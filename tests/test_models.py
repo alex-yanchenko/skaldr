@@ -49,6 +49,12 @@ def test_unknown_field_is_rejected_with_path() -> None:
         parse_report(make_report(blocks=[{"type": "text", "body": "hi", "oops": 1}]))
 
 
+def test_meta_rejects_an_authored_width() -> None:
+    """Width is reader-only — there is no meta.width. Authoring one fails the strict extra-key guard."""
+    with pytest.raises(ReportError, match=r"meta\.width.*not permitted"):
+        parse_report(make_report(meta={"title": "T", "width": "full"}))
+
+
 def test_reconciliation_failure_names_the_delta() -> None:
     table = make_reconciled_table(
         reconcile={"total": 100, "column": "count", "handled": {"label": "Clean", "value": 80}},

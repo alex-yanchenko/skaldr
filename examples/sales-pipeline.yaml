@@ -5,7 +5,6 @@ meta:
   source: "CRM export"
   date: "Q3 2026"
   toc: true
-  width: default
 
 badges:
   COMMIT: { label: "Commit", tone: green, legend: "Forecast-committed this quarter." }

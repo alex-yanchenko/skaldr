@@ -1521,17 +1521,6 @@
           "title": "Toc",
           "type": "boolean"
         },
-        "width": {
-          "default": "default",
-          "description": "Page width cap: default (1600px), wide (1920px), or full (fill the window).",
-          "enum": [
-            "default",
-            "wide",
-            "full"
-          ],
-          "title": "Width",
-          "type": "string"
-        },
         "hero": {
           "default": false,
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
