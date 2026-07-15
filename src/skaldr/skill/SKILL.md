@@ -41,8 +41,8 @@ fabrication, so honesty is on you.
 5. **Surface it, don't stop at a path.** Hand over the rendered file. **If you can publish a
    claude.ai Artifact** (Claude Code, Cowork), render with `skaldr report.yaml --embed -o report.html`
    and publish *that* — `--embed` drops the `<html>`/`<head>`/`<body>` skeleton so it slots into the
-   Artifact host cleanly (a full document would double-wrap). The embedded page carries its own
-   theme/width controls and stays light/dark-aware inside the Artifact.
+   Artifact host cleanly (a full document would double-wrap). The embedded page has its own corner
+   control for theme + width and follows the reader's OS theme.
 
 This file is intentionally thin and stable: the version-specific detail lives in `skaldr --guide`
 and `skaldr --write-schema`, so it stays correct across upgrades without reinstalling the skill.
