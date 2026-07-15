@@ -215,7 +215,7 @@ too thin for the explanation each step carries.
   steps:
     - label: "Parse the spec and pull every acceptance criterion"
       sub: "the source of truth"        # optional one-line sub-label
-      tone: info                        # optional — tints the big numeral
+      tone: info                        # optional — draws a subtle accent on the step's edge
       detail:                           # a nested block list, like a grid cell
         - { type: text, body: "Group the criteria by surface; two rules are load-bearing." }
         - { type: list, items: ["exactly-one-default per registry", "the reconcile invariant"] }

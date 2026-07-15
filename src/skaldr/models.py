@@ -789,7 +789,9 @@ class WalkthroughStep(_Frozen):
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(
-        default=None, description="Optional tone tinting this step's big (faint) numeral."
+        default=None,
+        description="Optional tone; draws a subtle accent down the step's inline-start edge (the "
+        "numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
     )
     detail: list[InnerBlock] = Field(
         min_length=1,
