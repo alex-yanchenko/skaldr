@@ -112,10 +112,6 @@ class Meta(_Frozen):
     source: str | None = Field(default=None, description="Provenance; feeds the footer.")
     date: str | None = Field(default=None, description="Report date; feeds the footer (never auto-now).")
     toc: bool = Field(default=False, description="Render a table of contents from level-2 headings.")
-    width: Literal["default", "wide", "full"] = Field(
-        default="default",
-        description="Page width cap: default (1600px), wide (1920px), or full (fill the window).",
-    )
     hero: bool = Field(
         default=False,
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
@@ -789,7 +785,9 @@ class WalkthroughStep(_Frozen):
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(
-        default=None, description="Optional tone tinting this step's big (faint) numeral."
+        default=None,
+        description="Optional tone; draws a subtle accent down the step's inline-start edge (the "
+        "numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
     )
     detail: list[InnerBlock] = Field(
         min_length=1,

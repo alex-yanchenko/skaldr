@@ -10,7 +10,7 @@
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output — if a
      script changes, that test fails until the hash below is updated. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-Pp/Bwhev7+nUbmX6BHi0JedrZZ1dY/dDnDpmYCYsAPo=' 'sha256-rEVQtlK2+FTK4+QqJ9WkGJxgSzRCB7SBET7XGLfJ1O4='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -46,7 +46,7 @@
 	:root{
 		--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
-		--ghost:light-dark(#dfe4ee,#3a4557); /* faint neutral fill for de-emphasized large glyphs */
+		--ghost:light-dark(#dfe4ee,#6b7a94); /* faint neutral fill for de-emphasized large glyphs */
 		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
 		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
@@ -84,15 +84,11 @@
 @layer base {
 	body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
 		line-height:1.5; -webkit-font-smoothing:antialiased}
-	.wrap{margin-inline:auto; padding:40px 48px 80px}
-	/* Page width cap (meta.width). max-width is a ceiling: on a narrower screen the page fills the
-	   viewport regardless, so the mode only diverges once the screen is wider than the cap. */
-	.wrap.width-default{max-width:1600px}
-	.wrap.width-wide{max-width:1920px}
-	.wrap.width-full{max-width:none}
-	/* The width switcher sets data-width on the root to override the author's meta.width class at
-	   runtime. Higher specificity than the .wrap.width-* class above, so the reader's choice wins. */
-	:root[data-width="default"] .wrap{max-width:1600px}
+	/* Width is not authorable — the page always renders at the default 1600px cap, and the reader
+	   alone widens it via the corner control (which sets data-width on the root; only wide/full
+	   override, since default IS the base cap). max-width is a ceiling: on a narrower screen the page
+	   fills the viewport regardless, so a mode only diverges once the screen is wider than its cap. */
+	.wrap{margin-inline:auto; padding:40px 48px 80px; max-width:1600px}
 	:root[data-width="wide"] .wrap{max-width:1920px}
 	:root[data-width="full"] .wrap{max-width:none}
 
@@ -253,13 +249,15 @@
 	.fan .danger{--t:var(--danger-fg)} .fan .accent{--t:var(--accent-fg)} .fan .neutral{--t:var(--neutral-fg)}
 
 	/* walkthrough — big numbered steps (left) beside a detail column (right), aligned row-by-row. The
-	   step column TOP-aligns to the row so a tall detail keeps its title at the top; the numeral is a
-	   faint ghost, tinted by the step tone. Column widths are set inline from `step_span` (of 6). */
+	   step column TOP-aligns to the row so a tall detail keeps its title at the top. The numeral is a
+	   uniform faint ghost across every step (tone never tints it, so an untoned step can't fall out of
+	   step); a toned step instead carries a subtle inline-start accent. `step_span` sets column widths. */
 	.walk{display:grid; column-gap:var(--s8); margin-block:var(--s6)}
 	.walk .wstep,.walk .wdetail{padding:var(--s4) 0; border-block-start:1px solid var(--line)}
-	.walk .wstep{grid-column:1; display:flex; gap:var(--s3); align-items:flex-start}
+	.walk .wstep{grid-column:1; display:flex; gap:var(--s3); align-items:flex-start;
+		border-inline-start:3px solid var(--wt,transparent); padding-inline-start:var(--s3)}
 	.walk .wnum{flex:none; font-weight:800; font-size:30px; line-height:1; letter-spacing:-0.03em;
-		color:var(--wt,var(--ghost)); opacity:.45}
+		color:var(--ghost); opacity:.45}
 	.walk .wlabel{font-weight:650; font-size:14.5px; overflow-wrap:anywhere}
 	.walk .wsub{display:block; margin-block-start:2px; font-weight:400; font-size:12.5px; color:var(--muted)}
 	.walk .wdetail{grid-column:2; min-width:0}
@@ -295,6 +293,7 @@
 		   auto-placement then stacks title → detail. The detail joins its title as one block. */
 		.walk{grid-template-columns:1fr !important}
 		.walk .wstep,.walk .wdetail{grid-column:auto}
+		.walk .wstep{border-inline-start:0; padding-inline-start:0}
 		.walk .wdetail{border-block-start:0; padding-block-start:0}
 	}
 
@@ -527,7 +526,7 @@
 </style>
 <script>
 /* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
-   persisted — it is a per-document control that resets to the author's meta.width on reload. */
+   persisted — it is a per-view reader control that resets to the default cap on reload. */
 (function () {
 	try {
 		var theme = localStorage.getItem("skaldr-theme");
@@ -536,7 +535,7 @@
 })();
 </script></head>
 <body>
-<div class="wrap width-default">
+<div class="wrap">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
 <nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
@@ -723,9 +722,9 @@ assert sum(counted) == expected
 	var button = controls.querySelector(".sc-btn");
 	var menu = controls.querySelector(".sc-menu");
 	if (!button || !menu) return;
-	var wrap = document.querySelector(".wrap");
-	/* Author's width is the .wrap width-<mode> class; no other class on .wrap matches width-\w+. */
-	var authorWidth = (wrap && (wrap.className.match(/width-(\w+)/) || [])[1]) || "default";
+	/* Width is not authorable and a reader override is never persisted, so the control always starts
+	   from the default cap. */
+	var defaultWidth = "default";
 
 	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
 	function drop(key) { try { localStorage.removeItem(key); } catch (err) {} }
@@ -745,7 +744,7 @@ assert sum(counted) == expected
 	}
 	function reflect() {
 		syncGroup("theme", root.getAttribute("data-theme") || "auto");
-		syncGroup("width", root.getAttribute("data-width") || authorWidth);
+		syncGroup("width", root.getAttribute("data-width") || defaultWidth);
 	}
 
 	button.addEventListener("click", function (event) { event.stopPropagation(); setOpen(controls.dataset.open !== "true"); });
@@ -758,7 +757,7 @@ assert sum(counted) == expected
 				if (item.dataset.val === "auto") { root.removeAttribute("data-theme"); drop("skaldr-theme"); }
 				else { root.setAttribute("data-theme", item.dataset.val); save("skaldr-theme", item.dataset.val); }
 			} else {
-				/* Width is a transient per-view override — not persisted, so a new page keeps the author's width. */
+				/* Width is a transient per-view override — not persisted, so a reload resets to the default cap. */
 				root.setAttribute("data-width", item.dataset.val);
 			}
 			reflect();

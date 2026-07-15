@@ -1521,17 +1521,6 @@
           "title": "Toc",
           "type": "boolean"
         },
-        "width": {
-          "default": "default",
-          "description": "Page width cap: default (1600px), wide (1920px), or full (fill the window).",
-          "enum": [
-            "default",
-            "wide",
-            "full"
-          ],
-          "title": "Width",
-          "type": "string"
-        },
         "hero": {
           "default": false,
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
@@ -2226,7 +2215,7 @@
             }
           ],
           "default": null,
-          "description": "Optional tone tinting this step's big (faint) numeral.",
+          "description": "Optional tone; draws a subtle accent down the step's inline-start edge (the numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
           "title": "Tone"
         },
         "detail": {

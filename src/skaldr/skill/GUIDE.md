@@ -28,16 +28,15 @@ meta:
   source: "WMS export"           # optional; shown in the provenance footer
   date: "Q3 2026"                # optional; footer. Author it — skaldr never inserts "now"
   toc: true                      # optional; auto table-of-contents from level-2 headings
-  width: default                 # optional; page width cap: default (1600px) | wide (1920px) | full
   hero: true                     # optional; a larger display title + subtitle in a tinted band
 ```
 
 `hero` opts the page into a bolder opening — a large display title and subtitle in a tinted band —
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
 
-`width` caps how wide the page may grow. It's a ceiling — on a screen narrower than the cap the
-page fills the viewport regardless. (The rendered page also carries a corner menu that lets a
-reader switch theme and width, but the author sets the default here.)
+Page **width is not an authoring choice** — every page renders at the default cap, and the reader
+alone widens it (default / wide / full) from the corner menu on the rendered page. There is no
+`meta.width`; don't set one (it fails the build).
 
 ## `badges` — your vocabulary
 
@@ -215,7 +214,7 @@ too thin for the explanation each step carries.
   steps:
     - label: "Parse the spec and pull every acceptance criterion"
       sub: "the source of truth"        # optional one-line sub-label
-      tone: info                        # optional — tints the big numeral
+      tone: info                        # optional — draws a subtle accent on the step's edge
       detail:                           # a nested block list, like a grid cell
         - { type: text, body: "Group the criteria by surface; two rules are load-bearing." }
         - { type: list, items: ["exactly-one-default per registry", "the reconcile invariant"] }

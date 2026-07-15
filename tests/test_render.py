@@ -4,7 +4,6 @@ import re
 
 import pytest
 
-from skaldr.errors import ReportError
 from skaldr.models import load_report, parse_report
 from skaldr.render import render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
@@ -181,7 +180,7 @@ def test_fan_inside_a_grid_cell_renders() -> None:
     assert '<div class="hub"><div class="fnode"><span class="lab">H</span></div></div>' in html
 
 
-def test_walkthrough_renders_numbered_tinted_steps_beside_their_detail() -> None:
+def test_walkthrough_renders_numbered_toned_steps_beside_their_detail() -> None:
     block = {
         "type": "walkthrough",
         "steps": [
@@ -210,6 +209,29 @@ def test_walkthrough_renders_numbered_tinted_steps_beside_their_detail() -> None
         '<div class="wstep"><span class="wnum">2</span><span class="wlabel">Second</span></div>'
         '<div class="wdetail"><p class="text">do b</p></div>' in html
     )
+
+
+def test_walkthrough_numeral_is_tone_independent_and_tone_drives_the_step_accent() -> None:
+    """A numeral is the same faint ghost on every step regardless of tone, so an untoned step can't
+    drop to grey beside toned ones; the tone instead drives an inline-start accent on the step. The
+    accent lives on `.wstep` (which carries the tone class), never on the numeral."""
+    block = {
+        "type": "walkthrough",
+        "steps": [
+            {"label": "toned", "tone": "info", "detail": [{"type": "text", "body": "a"}]},
+            {"label": "plain", "detail": [{"type": "text", "body": "b"}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # the tone class rides the step (which owns the accent), not the numeral — untoned gets no class
+    assert '<div class="wstep info"><span class="wnum">1</span>' in html
+    assert '<div class="wstep"><span class="wnum">2</span>' in html
+    # the numeral colour never reads the tone var; the tone accent lives on the step's inline-start edge
+    assert "color:var(--ghost); opacity:.45}" in html
+    assert "color:var(--wt,var(--ghost))" not in html
+    assert "border-inline-start:3px solid var(--wt,transparent)" in html
 
 
 def test_walkthrough_step_span_sets_the_column_widths() -> None:
@@ -490,7 +512,7 @@ def test_embed_drops_the_skeleton_but_keeps_the_controls() -> None:
     assert html.startswith("<title>")
     assert "<title>Test Report</title>" in html
     assert "<style>" in html
-    assert '<div class="wrap width-default">' in html
+    assert '<div class="wrap">' in html
     assert '<p class="text">hi</p>' in html
     assert '<div class="sc" data-open="false">' in html  # corner controls present
     assert 'addEventListener("beforeprint"' in html  # print handler present
@@ -506,7 +528,7 @@ def test_embed_and_page_share_content_and_controls() -> None:
 
     # the content region (wrap → corner controls) is byte-identical in both — only the outer
     # skeleton differs, since page and embed include the same _content and _controls partials
-    marker, sc = '<div class="wrap width-default">', '<div class="sc"'
+    marker, sc = '<div class="wrap">', '<div class="sc"'
     assert embed[embed.index(marker) : embed.index(sc)] == page[page.index(marker) : page.index(sc)]
 
 
@@ -541,6 +563,9 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".fan{flex-direction:column; align-items:center}" in html
     assert ".fan .merge{transform:rotate(90deg)}" in html
     assert ".walk{grid-template-columns:1fr !important}" in html
+    # collapsed walkthrough steps stack flush: the step's inline-start accent offset is zeroed so the
+    # title row lines up with its detail beneath it (mirrors the .wdetail block-start reset)
+    assert ".walk .wstep{border-inline-start:0; padding-inline-start:0}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
     # print scales down for document density (the print-density knob)
@@ -552,10 +577,13 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert "details::details-content{content-visibility:visible" in html
 
 
-def test_width_defaults_to_default() -> None:
+def test_wrap_carries_no_authorable_width_class() -> None:
+    """Width is reader-only: the wrap never gets a width-* class from the author, so the reader's
+    data-width override is the sole driver. The base cap lives on .wrap itself."""
     html = render_html(parse_report(make_report()))
 
-    assert '<div class="wrap width-default">' in html
+    assert '<div class="wrap">' in html
+    assert "wrap width-" not in html
 
 
 def test_every_page_credits_and_links_the_project() -> None:
@@ -569,19 +597,13 @@ def test_every_page_credits_and_links_the_project() -> None:
     )
 
 
-@pytest.mark.parametrize("mode", ["default", "wide", "full"])
-def test_width_mode_sets_the_wrap_class(mode: str) -> None:
-    report = parse_report(make_report(meta={"title": "T", "width": mode}))
+def test_default_width_cap_lives_on_the_wrap_and_no_author_classes_remain() -> None:
+    """The default 1600px cap is baked onto .wrap itself (not an author-set width-default class), and
+    the old author-driven .wrap.width-* rules are gone — only the reader's data-width overrides cap."""
+    html = render_html(parse_report(make_report()))
 
-    assert f'<div class="wrap width-{mode}">' in render_html(report)
-
-
-def test_width_caps_are_defined_in_the_stylesheet() -> None:
-    html = render_html(parse_report(make_report(meta={"title": "T", "width": "wide"})))
-
-    assert ".wrap.width-default{max-width:1600px}" in html
-    assert ".wrap.width-wide{max-width:1920px}" in html
-    assert ".wrap.width-full{max-width:none}" in html
+    assert ".wrap{margin-inline:auto; padding:40px 48px 80px; max-width:1600px}" in html
+    assert ".wrap.width-" not in html
 
 
 def test_palette_is_theme_aware_via_light_dark() -> None:
@@ -658,17 +680,19 @@ def test_only_theme_is_restored_before_paint_in_the_head() -> None:
 
     assert "localStorage" in head
     assert 'setAttribute("data-theme"' in head
-    # Width is transient per-view: never persisted, so a new page keeps the author's meta.width.
-    # (An absent "skaldr-width" key proves it's neither stored on click nor restored in the head.)
+    # Width is transient per-view: never persisted, so a reader override resets to the default cap on
+    # reload. (An absent "skaldr-width" key proves it's neither stored on click nor restored in the head.)
     assert "skaldr-width" not in html
 
 
 def test_width_switch_overrides_are_defined_in_the_stylesheet() -> None:
+    """Only wide/full get data-width override rules; selecting "default" needs none — it falls back
+    to the base .wrap cap, so there is no duplicate 1600px rule to drift."""
     html = render_html(parse_report(make_report()))
 
-    assert ':root[data-width="default"] .wrap{max-width:1600px}' in html
     assert ':root[data-width="wide"] .wrap{max-width:1920px}' in html
     assert ':root[data-width="full"] .wrap{max-width:none}' in html
+    assert ':root[data-width="default"]' not in html
 
 
 def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> None:
@@ -690,11 +714,6 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
         assert f"'sha256-{digest}'" in script_src
     # The policy must precede the inline scripts so it governs them.
     assert html.index("Content-Security-Policy") < html.index("<script>")
-
-
-def test_unknown_width_mode_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"width"):
-        parse_report(make_report(meta={"title": "T", "width": "huge"}))
 
 
 def test_richtext_applies_the_inline_subset() -> None:
