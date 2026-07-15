@@ -173,7 +173,7 @@ def test_fan_inside_a_grid_cell_renders() -> None:
     assert '<div class="hub"><div class="fnode"><span class="lab">H</span></div></div>' in html
 
 
-def test_walkthrough_renders_numbered_tinted_steps_beside_their_detail() -> None:
+def test_walkthrough_renders_numbered_toned_steps_beside_their_detail() -> None:
     block = {
         "type": "walkthrough",
         "steps": [
@@ -202,6 +202,29 @@ def test_walkthrough_renders_numbered_tinted_steps_beside_their_detail() -> None
         '<div class="wstep"><span class="wnum">2</span><span class="wlabel">Second</span></div>'
         '<div class="wdetail"><p class="text">do b</p></div>' in html
     )
+
+
+def test_walkthrough_numeral_is_tone_independent_and_tone_drives_the_step_accent() -> None:
+    """A numeral is the same faint ghost on every step regardless of tone, so an untoned step can't
+    drop to grey beside toned ones; the tone instead drives an inline-start accent on the step. The
+    accent lives on `.wstep` (which carries the tone class), never on the numeral."""
+    block = {
+        "type": "walkthrough",
+        "steps": [
+            {"label": "toned", "tone": "info", "detail": [{"type": "text", "body": "a"}]},
+            {"label": "plain", "detail": [{"type": "text", "body": "b"}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # the tone class rides the step (which owns the accent), not the numeral — untoned gets no class
+    assert '<div class="wstep info"><span class="wnum">1</span>' in html
+    assert '<div class="wstep"><span class="wnum">2</span>' in html
+    # the numeral colour never reads the tone var; the tone accent lives on the step's inline-start edge
+    assert "color:var(--ghost); opacity:.45}" in html
+    assert "color:var(--wt,var(--ghost))" not in html
+    assert "border-inline-start:3px solid var(--wt,transparent)" in html
 
 
 def test_walkthrough_step_span_sets_the_column_widths() -> None:
@@ -533,6 +556,9 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".fan{flex-direction:column; align-items:center}" in html
     assert ".fan .merge{transform:rotate(90deg)}" in html
     assert ".walk{grid-template-columns:1fr !important}" in html
+    # collapsed walkthrough steps stack flush: the step's inline-start accent offset is zeroed so the
+    # title row lines up with its detail beneath it (mirrors the .wdetail block-start reset)
+    assert ".walk .wstep{border-inline-start:0; padding-inline-start:0}" in html
     # code wraps instead of clipping at the page edge (no scrollbar on paper)
     assert ".code pre,.code .diff .ln{white-space:pre-wrap" in html
     # print scales down for document density (the print-density knob)

@@ -2226,7 +2226,7 @@
             }
           ],
           "default": null,
-          "description": "Optional tone tinting this step's big (faint) numeral.",
+          "description": "Optional tone; draws a subtle accent down the step's inline-start edge (the numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
           "title": "Tone"
         },
         "detail": {
