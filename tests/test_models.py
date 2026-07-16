@@ -1135,6 +1135,17 @@ def test_comparison_highlight_out_of_range_is_rejected() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_comparison_polarity_length_must_match_option_count() -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "polarity": ["positive"],
+        "rows": [{"feature": "X", "values": [True, False]}],
+    }
+    with pytest.raises(ReportError, match=r"polarity has 1 entries but there are 2 options"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_chart_stacked_only_applies_to_bar() -> None:
     block = {
         "type": "chart",

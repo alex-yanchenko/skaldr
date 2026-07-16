@@ -727,6 +727,12 @@ class Comparison(_Frozen):
     highlight: int | None = Field(
         default=None, description="0-based index of the recommended option column to emphasise."
     )
+    polarity: list[Literal["positive", "negative"]] | None = Field(
+        default=None,
+        description="Optional per-option polarity, one per option (default all positive). In a 'negative' "
+        "column a true ✓ reads as BAD (red) and a false ✗ as GOOD (green) — for present-is-bad attributes "
+        "(e.g. 'leaks disk layout'). Affects only ✓/✗ bool cells; the glyph still marks present/absent.",
+    )
 
     @model_validator(mode="after")
     def _shape(self) -> "Comparison":
@@ -739,6 +745,11 @@ class Comparison(_Frozen):
         if self.highlight is not None and not (0 <= self.highlight < len(self.options)):
             raise ValueError(
                 f"highlight index {self.highlight} is out of range for {len(self.options)} options"
+            )
+        if self.polarity is not None and len(self.polarity) != len(self.options):
+            raise ValueError(
+                f"comparison polarity has {len(self.polarity)} entries but there are "
+                f"{len(self.options)} options — they must match"
             )
         return self
 

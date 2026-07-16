@@ -673,6 +673,26 @@
           "default": null,
           "description": "0-based index of the recommended option column to emphasise.",
           "title": "Highlight"
+        },
+        "polarity": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "positive",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional per-option polarity, one per option (default all positive). In a 'negative' column a true \u2713 reads as BAD (red) and a false \u2717 as GOOD (green) \u2014 for present-is-bad attributes (e.g. 'leaks disk layout'). Affects only \u2713/\u2717 bool cells; the glyph still marks present/absent.",
+          "title": "Polarity"
         }
       },
       "required": [

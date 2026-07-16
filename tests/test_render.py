@@ -381,12 +381,12 @@ def test_comparison_renders_options_features_checks_toned_cells_and_highlight() 
     assert '<table class="cmp">' in html
     assert '<th class="hl">B</th>' in html  # the highlighted option header (index 1)
     assert '<td class="feat">Fast</td>' in html
-    assert '<span class="chk yes">✓</span>' in html  # bare true
+    assert '<span class="chk good">✓</span>' in html  # bare true
     assert "<td>free</td>" in html  # bare string cell renders unwrapped, no span
     assert '<span class="ct danger">paid</span>' in html  # {value, tone} cell
     assert '<span class="ct">n/a</span>' in html  # {value} with NO tone → default-muted, no tone class
     # the highlighted column is column B specifically (content-anchored, not just a count)
-    assert '<td class="hl"><span class="chk no">✗</span></td>' in html
+    assert '<td class="hl"><span class="chk bad">✗</span></td>' in html
     assert '<td class="hl"><span class="ct danger">paid</span></td>' in html
     assert html.count('<td class="hl">') == 3  # every cell of column B (three rows)
 
@@ -407,6 +407,28 @@ def test_comparison_highlight_reads_as_a_panel_not_just_a_tint() -> None:
     assert "--accent-line:color-mix(in srgb, var(--accent-fg) 30%, transparent);" in html  # tokenised
     assert "box-shadow:inset 0 3px 0 var(--accent-fg)" in html  # header cap on th.hl
     assert "& .hl{border-inline:1px solid var(--accent-line)}" in html  # column side-borders
+
+
+def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> None:
+    """A 'negative' column marks a present-is-bad attribute: a true ✓ reads BAD (red) and a false ✗
+    reads GOOD (green). The glyph still tracks present/absent — only the colour flips."""
+    block = {
+        "type": "comparison",
+        "options": ["Ours", "Theirs"],
+        "polarity": ["positive", "negative"],
+        "rows": [
+            {"feature": "Leaks disk layout", "values": [True, False]},
+            {"feature": "Reconciles exactly", "values": [False, True]},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # positive column: present → ✓ green (good), absent → ✗ red (bad) — the normal reading
+    assert '<td><span class="chk good">✓</span></td>' in html
+    assert '<td><span class="chk bad">✗</span></td>' in html
+    # negative column: absent → ✗ but green (good), present → ✓ but red (bad) — presence is the flaw
+    assert '<td><span class="chk good">✗</span></td>' in html
+    assert '<td><span class="chk bad">✓</span></td>' in html
 
 
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
