@@ -419,6 +419,7 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
         "rows": [
             {"feature": "Leaks disk layout", "values": [True, False]},
             {"feature": "Reconciles exactly", "values": [False, True]},
+            {"feature": "Effort", "values": ["low", {"value": "high", "tone": "danger"}]},
         ],
     }
     html = render_html(parse_report(make_report(blocks=[block])))
@@ -429,6 +430,8 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
     # negative column: absent → ✗ but green (good), present → ✓ but red (bad) — presence is the flaw
     assert '<td><span class="chk good">✗</span></td>' in html
     assert '<td><span class="chk bad">✓</span></td>' in html
+    # polarity flips only ✓/✗ bool cells; a toned cell in the negative column renders untouched
+    assert '<td><span class="ct danger">high</span></td>' in html
 
 
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
