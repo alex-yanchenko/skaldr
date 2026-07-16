@@ -12,11 +12,21 @@ from tests.factories import make_cell, make_grid, make_reconciled_table, make_re
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
 
 # The three color-scheme rules that drive every light-dark() token. They must render unlayered (see
-# test_color_scheme_rules_sit_outside_any_layer_…); asserted by literal so a reformat fails loudly.
+# test_host_override_essentials_sit_outside_any_layer); asserted by literal so a reformat fails loudly.
 COLOR_SCHEME_RULES = (
     ":root{color-scheme:light dark}",
     ':root[data-theme="dark"]{color-scheme:dark}',
     ':root[data-theme="light"]{color-scheme:light}',
+)
+# Rules that MUST stay unlayered so an embedding host's own unlayered reset can't override them: the
+# color-scheme rules, box-sizing (every component assumes border-box), and body's colour/background
+# (else skaldr's dark panels keep the host's dark text → invisible). Asserted by literal.
+UNLAYERED_ESSENTIALS = (
+    *COLOR_SCHEME_RULES,
+    "*,*::before,*::after{box-sizing:border-box}",
+    "body{font-family:var(--sans); color:var(--ink); background:var(--page)",
+    # print forces white --paper; unlayered so it beats the base body rule above (a layered one wouldn't)
+    "@media print{body{background:var(--paper)}}",
 )
 
 
@@ -621,13 +631,15 @@ def test_explicit_theme_overrides_win_over_the_os_default() -> None:
     assert COLOR_SCHEME_RULES[2] in html
 
 
-def test_color_scheme_rules_sit_outside_any_layer_so_an_embedding_host_cannot_pin_them() -> None:
-    """Each rule must appear exactly once and before the first @layer block — otherwise it is layered
-    and an embedding host's own unlayered reset would pin color-scheme, stranding the theme."""
+def test_host_override_essentials_sit_outside_any_layer() -> None:
+    """color-scheme, box-sizing, and body colour/background must each appear exactly once and before
+    the first @layer block — otherwise they are layered and an embedding host's own unlayered reset
+    would override them (stranding the theme, breaking box-sizing, or leaving dark panels with the
+    host's dark text → invisible)."""
     html = render_html(parse_report(make_report()))
     first_layer_offset = html.index("@layer reset {")
 
-    for rule in COLOR_SCHEME_RULES:
+    for rule in UNLAYERED_ESSENTIALS:
         assert html.count(rule) == 1
         assert html.index(rule) < first_layer_offset
 

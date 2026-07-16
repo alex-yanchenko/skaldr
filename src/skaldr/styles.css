@@ -1,23 +1,32 @@
 /* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
    earlier ones regardless of specificity, so the print overrides never fight the cascade by accident.
-   The one exception is a small unlayered preamble for color-scheme (see below), which must outrank an
-   embedding host's own unlayered reset. Every colour/radius routes through a token; the palette is
-   theme-aware via light-dark(). */
+   The one exception is a small unlayered preamble for essentials a host reset could otherwise strand
+   (color-scheme, box-sizing, the body surface — see below), which must outrank an embedding host's own
+   unlayered reset. Every colour/radius routes through a token; the palette is theme-aware via light-dark(). */
 @layer reset, tokens, base, components, print;
 
-/* color-scheme lives OUTSIDE @layer on purpose: it drives every light-dark() token, and when skaldr
-   is embedded (e.g. a claude.ai Artifact iframe) the host injects its own UNLAYERED reset. A layered
-   rule always loses to an unlayered one regardless of specificity, so a layered color-scheme would be
-   pinned by the host's own rule and the corner control would flip data-theme but change nothing.
-   Unlayered, skaldr's rule wins (its <style> is last in the cascade). Default follows the viewer's
-   OS; the [data-theme] overrides (set by the corner control) force one theme. */
+/* These essentials live OUTSIDE @layer on purpose. When skaldr is embedded (e.g. a claude.ai Artifact
+   iframe) the host injects its OWN unlayered reset, and a layered rule always loses to an unlayered one
+   regardless of specificity — so anything left in @layer that the host also sets gets overridden:
+   - color-scheme drives every light-dark() token (else the theme control flips data-theme but nothing
+     changes, and light-dark() resolves against the host's scheme, not ours);
+   - box-sizing is assumed border-box by every component's sizing (a host content-box would break it);
+   - body's colour/background ARE the theme surface — if the host sets its own body text colour, skaldr's
+     dark panels would keep the host's (light-theme) dark text → dark-on-dark, invisible.
+   Unlayered, skaldr wins (its <style> is last in the cascade). Default follows the viewer's OS; the
+   [data-theme] overrides (set by the corner control) force one theme. */
 :root{color-scheme:light dark}
 :root[data-theme="dark"]{color-scheme:dark}
 :root[data-theme="light"]{color-scheme:light}
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
+	line-height:1.5; -webkit-font-smoothing:antialiased}
+/* On paper the body background is the forced-white --paper, not --page. Unlayered too, so it still
+   beats the base body rule above during print (a layered @layer print rule would lose to it). */
+@media print{body{background:var(--paper)}}
 
 @layer reset {
-	*,*::before,*::after{box-sizing:border-box}
 	html{line-height:1.5; -webkit-text-size-adjust:100%}
 	body{margin:0}
 	h1,h2,h3,p,ul,ol,figure,figcaption,table,dl,dt,dd,blockquote,pre{margin:0}
@@ -68,8 +77,6 @@
 }
 
 @layer base {
-	body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
-		line-height:1.5; -webkit-font-smoothing:antialiased}
 	/* Width is not authorable — the page always renders at the default 1600px cap, and the reader
 	   alone widens it via the corner control (which sets data-width on the root; only wide/full
 	   override, since default IS the base cap). max-width is a ceiling: on a narrower screen the page
@@ -461,9 +468,10 @@
 		/* Print backgrounds + colours. Browsers drop them by default, which erased almost everything
 		   skaldr draws with colour: table headers went white-on-white (invisible), and every chip,
 		   indicator dot, callout/panel tint, meter fill, row tint and diff shade vanished.
-		   print-color-adjust is inherited, so setting it on the root carries it to the whole page. */
+		   print-color-adjust is inherited, so setting it on the root carries it to the whole page.
+		   (body's white --paper background is set unlayered in the top preamble, not here — it has to
+		   beat the unlayered base body rule, which a layered rule in this block could not.) */
 		html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
-		body{background:var(--paper)}
 		/* Let the printer's own page margin be the only margin; use the full width. zoom shrinks the
 		   whole page uniformly for a denser, more document-like PDF — this is the print-density knob:
 		   lower = smaller fonts + more content per page (try 0.80–0.90). */
