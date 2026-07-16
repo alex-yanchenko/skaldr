@@ -410,7 +410,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& th.hl{background:var(--accent-bg); color:var(--accent-fg); box-shadow:inset 0 3px 0 var(--accent-fg)}
 		& td.hl{background:var(--accent-bg)}
 		& .hl{border-inline:1px solid var(--accent-line)}
-		& .chk.yes{color:var(--success-fg); font-weight:700} & .chk.no{color:var(--danger-fg); font-weight:700}
+		& .chk{font-weight:700} & .chk.good{color:var(--success-fg)} & .chk.bad{color:var(--danger-fg)}
 		& .ct{color:var(--muted)}
 		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
@@ -705,7 +705,7 @@ ORDER BY n DESC;
 <h2 id="count-methods-compared">Count methods compared</h2>
 
 <table class="cmp"><thead><tr><th></th><th class="hl">Full cycle</th><th>Sampling</th><th>Continuous</th></tr></thead>
-<tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk no">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk yes">✓</span></td><td><span class="chk no">✗</span></td><td><span class="chk yes">✓</span></td></tr></tbody></table>
+<tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk good">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk bad">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk good">✓</span></td></tr></tbody></table>
 
 
 <h2 id="where-the-count-comes-from">Where the count comes from</h2>

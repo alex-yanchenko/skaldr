@@ -111,11 +111,13 @@
 </figure>
 {% endmacro %}
 
-{% macro cmp_cell(cell) %}{% if cell is boolean %}{% if cell %}<span class="chk yes">✓</span>{% else %}<span class="chk no">✗</span>{% endif %}{% elif cell is string %}{{ cell | richtext }}{% else %}<span class="ct{% if cell.tone %} {{ cell.tone }}{% endif %}">{{ cell.value | richtext }}</span>{% endif %}{% endmacro %}
+{# A ✓/✗ cell: the glyph marks present/absent (from the value); the colour marks good/bad. `neg` flips
+   good/bad for a present-is-bad column, so `cell != neg` is good (green) and the other is bad (red). #}
+{% macro cmp_cell(cell, neg=false) %}{% if cell is boolean %}<span class="chk {{ 'good' if cell != neg else 'bad' }}">{{ '✓' if cell else '✗' }}</span>{% elif cell is string %}{{ cell | richtext }}{% else %}<span class="ct{% if cell.tone %} {{ cell.tone }}{% endif %}">{{ cell.value | richtext }}</span>{% endif %}{% endmacro %}
 
 {% macro comparison(b) %}
 <table class="cmp"><thead><tr><th></th>{% for opt in b.options %}<th{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ opt }}</th>{% endfor %}</tr></thead>
-<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, (b.polarity[loop.index0] == 'negative') if b.polarity else false) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
 {% endmacro %}
 
 {% macro references(b) %}

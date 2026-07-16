@@ -113,7 +113,7 @@ infinities.
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
-| `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?` |
+| `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -290,10 +290,16 @@ option, in order: a bare `true`/`false` renders ✓/✗, a bare string renders a
 them (`"yes"`) if you mean the literal word, not a ✓/✗.) Reach for it to weigh a few named options against shared
 criteria; for freeform tabular data use `table`.
 
+By default a ✓ reads good (green) and a ✗ reads bad (red). Set `polarity` — one `positive`/`negative`
+entry per option — to flip that per column: in a `negative` column a present-is-bad attribute (e.g.
+"leaks disk layout") shows a true ✓ in red and a false ✗ in green. The glyph still marks
+present/absent; only the colour flips, and only on bool cells.
+
 ```yaml
 - type: comparison
   options: ["Hand-built HTML", "skaldr"]
   highlight: 1
+  polarity: ["positive", "positive"]   # optional; omit for all-positive
   rows:
     - { feature: "Self-contained", values: [true, true] }
     - { feature: "Validated", values: [false, true] }
