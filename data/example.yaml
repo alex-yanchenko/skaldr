@@ -43,6 +43,12 @@ blocks:
       - { label: "Count status", value: "HEALTHY", tone: accent }
       - { label: "Total units", value: 10000, tone: neutral }
 
+  - type: range
+    segments:
+      - { label: "Matched cleanly", span: 85, tone: success, sub: "8,500 units" }
+      - { label: "Floor-fixable", span: 11, tone: warning, sub: "1,100" }
+      - { label: "Vendor", span: 4, tone: danger, sub: "400" }
+
   - type: text
     body: "The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin > 12~~ scan rule is under review; see the [method](https://example.com/runbook)."
   - type: text

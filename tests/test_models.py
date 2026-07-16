@@ -515,6 +515,48 @@ def test_meter_max_must_be_positive() -> None:
         parse_report(make_report(blocks=[{"type": "meter", "items": [{"label": "x", "value": 0, "max": 0}]}]))
 
 
+def test_range_segment_span_must_be_positive() -> None:
+    with pytest.raises(ReportError, match=r"segment 'span' must be greater than 0"):
+        parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "x", "span": 0}]}]))
+
+
+def test_range_segment_span_rejects_boolean() -> None:
+    with pytest.raises(ReportError, match=r"must be a number, not a boolean"):
+        parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "x", "span": True}]}]))
+
+
+def test_range_segment_span_rejects_non_finite() -> None:
+    block = {"type": "range", "segments": [{"label": "x", "span": float("inf")}]}
+    with pytest.raises(ReportError, match=r"must be a finite number"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_range_segment_label_must_not_be_blank() -> None:
+    with pytest.raises(ReportError, match=r"range segment label must not be blank"):
+        parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "   ", "span": 1}]}]))
+
+
+def test_range_needs_at_least_one_segment() -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.range\.segments.*at least 1"):
+        parse_report(make_report(blocks=[{"type": "range", "segments": []}]))
+
+
+def test_range_axis_needs_at_least_one_of_min_or_max() -> None:
+    block: dict[str, object] = {"type": "range", "axis": {}, "segments": [{"label": "x", "span": 1}]}
+    with pytest.raises(ReportError, match=r"range axis needs at least one of 'min' or 'max'"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_range_axis_rejects_blank_only_labels() -> None:
+    block: dict[str, object] = {
+        "type": "range",
+        "axis": {"min": "  ", "max": ""},
+        "segments": [{"label": "x", "span": 1}],
+    }
+    with pytest.raises(ReportError, match=r"range axis needs at least one of 'min' or 'max'"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_duplicate_column_keys_rejected() -> None:
     table = make_reconciled_table(
         columns=[
