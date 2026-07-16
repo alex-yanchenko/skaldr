@@ -9,7 +9,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Chip colour, chosen from the badge palette.",
+          "description": "Chip colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026).",
           "enum": [
             "slate",
             "blue",
@@ -46,7 +46,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Chip colour from the badge palette.",
+          "description": "Chip colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin.",
           "enum": [
             "slate",
             "blue",
@@ -137,7 +137,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Accent + tint tone: info, success, warning, or danger.",
+          "description": "Accent + tint: info/success/warning/danger (blue/green/amber/red alias in).",
           "enum": [
             "info",
             "success",
@@ -222,7 +222,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -311,7 +313,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -458,7 +462,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -508,7 +514,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -693,7 +701,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -900,7 +910,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -1083,7 +1095,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -1372,7 +1386,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -1600,7 +1616,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },
@@ -2207,7 +2225,9 @@
                 "success",
                 "warning",
                 "danger",
-                "accent"
+                "accent",
+                "teal",
+                "sky"
               ],
               "type": "string"
             },

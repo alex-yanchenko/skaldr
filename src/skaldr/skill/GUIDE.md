@@ -56,6 +56,19 @@ automatically before the first table — you don't author it.
 
 Badge colours: `slate · blue · green · amber · red · violet · teal · sky`.
 
+## Colours & tones — one palette, two names
+
+Every `tone:` (on cards, flows, fans, meters, walkthroughs, chart series, comparison cells, …) and every
+badge colour names the **same eight colours**. Six of them have two interchangeable names — a *semantic*
+name and a *palette* name — and `teal`/`sky` have a palette name only:
+
+`neutral` = `slate` · `info` = `blue` · `success` = `green` · `warning` = `amber` · `danger` = `red` · `accent` = `violet` · `teal` · `sky`
+
+Write whichever reads best: `tone: success` and `tone: green` are identical, and a badge `tone: info` is the
+same as `tone: blue`. (`callout` is narrower — it maps only to the four semantic tones info/success/warning/danger;
+their palette aliases blue/green/amber/red work too, but accent/neutral/teal/sky don't.) The generated JSON
+schema lists the canonical names; the alias names still validate at build even if an editor flags them.
+
 ## Rich text
 
 Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items, `quote.body`,

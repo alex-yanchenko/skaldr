@@ -66,13 +66,56 @@ def _reject_bool_and_non_finite(value: Any) -> Any:
 Number = Annotated[int | float, BeforeValidator(_reject_bool_and_non_finite)]
 Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
 
-# Design-system primitives (fixed — referenced by name, never authored as values).
-Tone = Literal["neutral", "info", "success", "warning", "danger", "accent"]
-RowTone = Literal["muted", "danger"]  # table-row emphasis: dim a rejected row, or flag a bad one
+# One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
+# the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
+# a palette name only. An author may write either name wherever a tone or a badge colour is taken; these
+# maps normalise each input to its field's canonical spelling before the Literal validates, so a `tone:
+# green` (or a badge `tone: success`) just works instead of failing. teal/sky pass through unchanged.
+_PALETTE_TO_TONE = {
+    "slate": "neutral",
+    "blue": "info",
+    "green": "success",
+    "amber": "warning",
+    "red": "danger",
+    "violet": "accent",
+}
+_TONE_TO_PALETTE = {tone: palette for palette, tone in _PALETTE_TO_TONE.items()}
+
+
+def _to_tone(value: Any) -> Any:
+    """Normalise a palette colour name to its semantic tone twin (green → success); pass anything else
+    through unchanged (semantic names, teal/sky, non-strings)."""
+    return _PALETTE_TO_TONE.get(value, value) if isinstance(value, str) else value
+
+
+def _to_badge_color(value: Any) -> Any:
+    """Normalise a semantic tone name to its palette colour twin (success → green); pass anything else
+    through unchanged (palette names, teal/sky, non-strings)."""
+    return _TONE_TO_PALETTE.get(value, value) if isinstance(value, str) else value
+
+
+def _tone_names(tone_type: Any) -> tuple[str, ...]:
+    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator] —
+    for the manually-validated tones (table row + indicator cell) that aren't plain typed fields."""
+    return get_args(get_args(tone_type)[0])
+
+
+# Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
+# colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
+Tone = Annotated[
+    Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
+    BeforeValidator(_to_tone),
+]
+RowTone = Annotated[
+    Literal["muted", "danger"], BeforeValidator(_to_tone)
+]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
 # Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
 _ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
-BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
-CalloutTone = Literal["info", "success", "warning", "danger"]
+BadgeColor = Annotated[
+    Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"],
+    BeforeValidator(_to_badge_color),
+]
+CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_tone)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
@@ -102,7 +145,9 @@ class _Frozen(BaseModel):
 
 class Badge(_Frozen):
     label: str = Field(description="Chip text for this tag/status.")
-    tone: BadgeColor = Field(description="Chip colour, chosen from the badge palette.")
+    tone: BadgeColor = Field(
+        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
+    )
     legend: str = Field(description="One-line meaning, shown in the derived legend.")
 
 
@@ -210,7 +255,9 @@ class BadgeRef(_Frozen):
 
 class BadgeLiteral(_Frozen):
     label: str = Field(description="Chip text for a one-off badge (not from the page vocabulary).")
-    tone: BadgeColor = Field(description="Chip colour from the badge palette.")
+    tone: BadgeColor = Field(
+        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin."
+    )
 
 
 class BadgeRow(_Frozen):
@@ -223,7 +270,9 @@ class BadgeRow(_Frozen):
 
 class Callout(_Frozen):
     type: Literal["callout"]
-    tone: CalloutTone = Field(description="Accent + tint tone: info, success, warning, or danger.")
+    tone: CalloutTone = Field(
+        description="Accent + tint: info/success/warning/danger (blue/green/amber/red alias in)."
+    )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
     body: str = Field(description="Rich-text body.")
 
@@ -494,8 +543,10 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
         if extra:
             raise ValueError(f"{loc}.{index}: unknown key(s): {sorted(extra)}")
         row_tone = row.get("tone")
-        if row_tone is not None and row_tone not in get_args(RowTone):
-            raise ValueError(f"{loc}.{index}.tone: row tone must be 'muted' or 'danger'")
+        if row_tone is not None:
+            row["tone"] = _to_tone(row_tone)  # normalise an alias (e.g. red → danger) for rendering
+            if row["tone"] not in _tone_names(RowTone):
+                raise ValueError(f"{loc}.{index}.tone: row tone must be 'muted' or 'danger'")
         for column in columns:
             value = row[column.key]
             if column.kind == "number":
@@ -506,13 +557,17 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
-                # An indicator value is validated to an exact Tone here (or blank), so the rendered
-                # `<span class="dot {value}">` class is always a known tone.
-                if column.kind == "indicator" and value.strip() and value not in get_args(Tone):
-                    raise ValueError(
-                        f"{loc}.{index}.{column.key}: indicator value must be a tone name "
-                        "(neutral·info·success·warning·danger·accent) or blank"
-                    )
+                # An indicator value is normalised to a canonical Tone here (or blank), so the rendered
+                # `<span class="dot {value}">` class is always a known tone (a palette alias like `green`
+                # becomes `success`).
+                if column.kind == "indicator" and value.strip():
+                    value = _to_tone(value)
+                    row[column.key] = value
+                    if value not in _tone_names(Tone):
+                        raise ValueError(
+                            f"{loc}.{index}.{column.key}: indicator value must be a tone name "
+                            "(neutral·info·success·warning·danger·accent·teal·sky) or blank"
+                        )
         raw_subrows = row.get("subrows")
         if raw_subrows is not None:
             if not isinstance(raw_subrows, list):

@@ -5,6 +5,7 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.models import (
+    Callout,
     Cards,
     Fan,
     Flow,
@@ -346,6 +347,59 @@ def test_row_tone_rejects_an_unknown_value() -> None:
 
     with pytest.raises(ReportError, match=r"tone: row tone must be 'muted' or 'danger'"):
         parse_report(make_report(blocks=[table]))
+
+
+def test_row_tone_alias_that_is_not_a_row_tone_is_still_rejected() -> None:
+    """`blue` aliases to `info`, a real tone — but not a ROW tone (only muted/danger). It must still
+    reject after normalisation, not slip through."""
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x", "tone": "blue"}]
+    )
+
+    with pytest.raises(ReportError, match=r"tone: row tone must be 'muted' or 'danger'"):
+        parse_report(make_report(blocks=[table]))
+
+
+@pytest.mark.parametrize(
+    ("palette", "semantic"),
+    [
+        ("slate", "neutral"),
+        ("blue", "info"),
+        ("green", "success"),
+        ("amber", "warning"),
+        ("red", "danger"),
+        ("violet", "accent"),
+    ],
+)
+def test_tone_and_badge_colour_alias_in_both_directions(palette: str, semantic: str) -> None:
+    """A tone field normalises a palette name to its semantic twin; a badge colour normalises a
+    semantic name to its palette twin. Full 6-pair map, both directions."""
+    report = parse_report(
+        make_report(blocks=[{"type": "cards", "items": [{"label": "x", "value": 1, "tone": palette}]}])
+    )
+    card = report.blocks[0]
+    assert isinstance(card, Cards)
+    assert card.items[0].tone == semantic
+
+    badged = parse_report(
+        make_report(
+            badges={"K": {"label": "K", "tone": semantic, "legend": "x"}},
+            blocks=[{"type": "text", "body": "h"}],
+        )
+    )
+    assert badged.badges["K"].tone == palette
+
+
+def test_callout_accepts_a_palette_alias_but_rejects_a_non_semantic_tone() -> None:
+    """callout is semantic-only: a palette alias of one of its four tones works (green→success), but
+    accent/neutral/teal/sky are not callout tones."""
+    ok = parse_report(make_report(blocks=[{"type": "callout", "tone": "green", "body": "b"}]))
+    callout = ok.blocks[0]
+    assert isinstance(callout, Callout)
+    assert callout.tone == "success"
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.callout\.tone"):
+        parse_report(make_report(blocks=[{"type": "callout", "tone": "teal", "body": "b"}]))
 
 
 def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:

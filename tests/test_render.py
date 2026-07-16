@@ -506,6 +506,46 @@ def test_indicator_column_renders_a_toned_dot_and_blanks_opt_out() -> None:
     assert '<th class="ind">Risk</th>' in html
 
 
+def test_tone_accepts_palette_aliases_and_teal_sky_are_first_class() -> None:
+    """A tone field takes either vocabulary: a palette name normalises to its semantic twin
+    (green→success), and teal/sky are first-class tones with their own colour (no lossy mapping)."""
+    block = {
+        "type": "cards",
+        "items": [
+            {"label": "a", "value": 1, "tone": "green"},  # palette alias → success
+            {"label": "b", "value": 2, "tone": "teal"},  # first-class
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="card success">' in html  # green normalised to its semantic twin
+    assert '<div class="card teal">' in html  # teal kept as itself
+    assert "&.teal{--t:var(--teal-fg)}" in html  # the teal tone is wired in the CSS, not mapped away
+
+
+def test_badge_colour_accepts_a_semantic_alias() -> None:
+    """A badge takes a semantic tone name too — success renders the same chip as green."""
+    block = {"type": "badge_row", "items": [{"label": "OK", "tone": "success"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="chip green">OK</span>' in html  # success normalised to the palette name
+
+
+def test_row_and_indicator_tones_accept_palette_aliases() -> None:
+    """The manually-validated tones (table row emphasis, indicator dot) alias too: red→danger,
+    green→success — and the normalised name drives the rendered class."""
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}, {"key": "r", "label": "R", "kind": "indicator"}],
+        rows=[{"a": "x", "r": "green", "tone": "red"}],
+    )
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert '<tr class="row danger">' in html  # row tone red → danger
+    assert '<span class="dot success" title="success"></span>' in html  # indicator green → success
+
+
 def test_grid_cell_tone_renders_an_emphasis_panel() -> None:
     grid = make_grid([{"span": 6, "tone": "accent", "blocks": [{"type": "text", "body": "x"}]}])
 
