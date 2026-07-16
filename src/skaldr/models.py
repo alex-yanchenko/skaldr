@@ -369,6 +369,11 @@ class FlowStep(_Frozen):
         description="Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a "
         "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
     )
+    points: list[str] = Field(
+        default_factory=list,
+        description="Optional detail bullets (rich text) under the node, for when one line isn't enough. "
+        "Render below the note. Best paired with style: steps — a few bullets crowd a compact arrow chip.",
+    )
     badges: list[str] = Field(
         default_factory=list,
         description="Declared badge keys (from the page `badges`) to chip onto this node.",

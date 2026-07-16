@@ -937,6 +937,14 @@
           "description": "Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
           "title": "Note"
         },
+        "points": {
+          "description": "Optional detail bullets (rich text) under the node, for when one line isn't enough. Render below the note. Best paired with style: steps \u2014 a few bullets crowd a compact arrow chip.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Points",
+          "type": "array"
+        },
         "badges": {
           "description": "Declared badge keys (from the page `badges`) to chip onto this node.",
           "items": {

@@ -220,6 +220,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.steps .card .n{margin-block-end:var(--s2)}
 		&.steps .card .lab{font-weight:650; font-size:14px}
 		&.steps .card .cap{color:var(--muted); font-size:12.5px; line-height:1.4; margin-top:3px}
+		& .pts{margin:var(--s2) 0 0; padding-inline-start:1.15em; color:var(--muted); line-height:1.4}
+		& .pts li{margin-block:2px}
+		&.steps .pts{font-size:12px}
+		&.arrow .pts{font-size:11px}
 		& .info{--t:var(--info-fg); --tb:var(--info-bg)} & .success{--t:var(--success-fg); --tb:var(--success-bg)}
 		& .warning{--t:var(--warning-fg); --tb:var(--warning-bg)} & .danger{--t:var(--danger-fg); --tb:var(--danger-bg)}
 		& .accent{--t:var(--accent-fg); --tb:var(--accent-bg)} & .neutral{--t:var(--neutral-fg); --tb:var(--neutral-bg)}
@@ -241,6 +245,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.fan .hub .fnode{background:var(--panel)}
 	.fan .fnode .lab{font-weight:600; font-size:14px}
 	.fan .fnode .sub{font-size:11px; color:var(--muted); line-height:1.35}
+	.fan .fnode .pts{margin:var(--s2) 0 0; padding-inline-start:1.15em; font-size:11px; color:var(--muted); line-height:1.4}
+	.fan .fnode .pts li{margin-block:2px}
 	.fan .fnode .chips{margin-top:var(--s1)}
 	.fan .merge{flex:none; display:flex; align-items:center; color:var(--rule)}
 	.fan .merge .arw{font-size:22px; line-height:1}
