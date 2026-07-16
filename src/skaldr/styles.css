@@ -127,6 +127,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		border-block-start:3px solid var(--t,var(--line)); background:var(--surface); box-shadow:var(--shadow);
 		&.info{--t:var(--info-fg)} &.success{--t:var(--success-fg)} &.warning{--t:var(--warning-fg)}
 		&.danger{--t:var(--danger-fg)} &.accent{--t:var(--accent-fg)} &.neutral{--t:var(--neutral-fg)}
+		&.teal{--t:var(--teal-fg)} &.sky{--t:var(--sky-fg)}
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
@@ -137,7 +138,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 				color:var(--dt,var(--neutral-fg)); background:var(--db,var(--neutral-bg))}
 			& .delta.info{--dt:var(--info-fg); --db:var(--info-bg)} & .delta.success{--dt:var(--success-fg); --db:var(--success-bg)}
 			& .delta.warning{--dt:var(--warning-fg); --db:var(--warning-bg)} & .delta.danger{--dt:var(--danger-fg); --db:var(--danger-bg)}
-			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}}
+			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}
+			& .delta.teal{--dt:var(--teal-fg); --db:var(--teal-bg)} & .delta.sky{--dt:var(--sky-fg); --db:var(--sky-bg)}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
@@ -170,7 +172,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .track{background:var(--neutral-bg); border-radius:var(--r-pill); height:12px; overflow:hidden}
 		& .fill{height:100%; border-radius:var(--r-pill); background:var(--m,var(--neutral-fg));
 			&.info{--m:var(--info-fg)} &.success{--m:var(--success-fg)} &.warning{--m:var(--warning-fg)}
-			&.danger{--m:var(--danger-fg)} &.neutral{--m:var(--neutral-fg)} &.accent{--m:var(--accent-fg)}}
+			&.danger{--m:var(--danger-fg)} &.neutral{--m:var(--neutral-fg)} &.accent{--m:var(--accent-fg)}
+			&.teal{--m:var(--teal-fg)} &.sky{--m:var(--sky-fg)}}
 		& .m-val{font-size:12.5px; color:var(--muted); text-align:end; font-variant-numeric:tabular-nums}}
 
 	.list{margin-block:var(--s3); padding-inline-start:var(--s6); max-width:80ch}
@@ -220,6 +223,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .info{--t:var(--info-fg); --tb:var(--info-bg)} & .success{--t:var(--success-fg); --tb:var(--success-bg)}
 		& .warning{--t:var(--warning-fg); --tb:var(--warning-bg)} & .danger{--t:var(--danger-fg); --tb:var(--danger-bg)}
 		& .accent{--t:var(--accent-fg); --tb:var(--accent-bg)} & .neutral{--t:var(--neutral-fg); --tb:var(--neutral-bg)}
+		& .teal{--t:var(--teal-fg); --tb:var(--teal-bg)} & .sky{--t:var(--sky-fg); --tb:var(--sky-bg)}
 		& .loop{display:inline-flex; align-items:center; gap:var(--s2); margin-top:var(--s3);
 			border:1.5px dashed var(--accent-fg); background:var(--accent-bg); color:var(--accent-fg);
 			border-radius:var(--r-md); padding:5px 12px; font-size:12.5px; font-weight:600}
@@ -242,6 +246,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.fan .merge .arw{font-size:22px; line-height:1}
 	.fan .info{--t:var(--info-fg)} .fan .success{--t:var(--success-fg)} .fan .warning{--t:var(--warning-fg)}
 	.fan .danger{--t:var(--danger-fg)} .fan .accent{--t:var(--accent-fg)} .fan .neutral{--t:var(--neutral-fg)}
+	.fan .teal{--t:var(--teal-fg)} .fan .sky{--t:var(--sky-fg)}
 
 	/* walkthrough — big numbered steps (left) beside a detail column (right), aligned row-by-row. The
 	   step column TOP-aligns to the row so a tall detail keeps its title at the top. The numeral is a
@@ -259,6 +264,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.walk .wdetail > :first-child{margin-block-start:0} .walk .wdetail > :last-child{margin-block-end:0}
 	.walk .info{--wt:var(--info-fg)} .walk .success{--wt:var(--success-fg)} .walk .warning{--wt:var(--warning-fg)}
 	.walk .danger{--wt:var(--danger-fg)} .walk .accent{--wt:var(--accent-fg)} .walk .neutral{--wt:var(--neutral-fg)}
+	.walk .teal{--wt:var(--teal-fg)} .walk .sky{--wt:var(--sky-fg)}
 
 	/* On paper and on narrow screens a horizontal pipeline can't fit: a wrapped row strands a lone
 	   node far from its predecessor. Stack the flow vertically and centre it — each node/card sits
@@ -362,7 +368,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& th.ind,& td.ind{text-align:center}
 		& .dot{display:inline-block; width:11px; height:11px; border-radius:var(--r-pill); background:var(--neutral-fg); vertical-align:middle;
 			&.info{background:var(--info-fg)} &.success{background:var(--success-fg)} &.warning{background:var(--warning-fg)}
-			&.danger{background:var(--danger-fg)} &.accent{background:var(--accent-fg)} &.neutral{background:var(--neutral-fg)}}
+			&.danger{background:var(--danger-fg)} &.accent{background:var(--accent-fg)} &.neutral{background:var(--neutral-fg)}
+			&.teal{background:var(--teal-fg)} &.sky{background:var(--sky-fg)}}
 		& td.num .pct{display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:2px}
 		& tfoot td{border-block-start:2px solid var(--ink); padding:12px 16px; font-weight:700}
 		& tfoot td.num{text-align:end; font-variant-numeric:tabular-nums; font-size:16px}
@@ -392,7 +399,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .chk.yes{color:var(--success-fg); font-weight:700} & .chk.no{color:var(--danger-fg); font-weight:700}
 		& .ct{color:var(--muted)}
 		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
-		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}}
+		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
+		& .ct.teal{color:var(--teal-fg)} & .ct.sky{color:var(--sky-fg)}}
 
 	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
 	   links down here; the number in the list links back up to its marker (bidirectional). */
@@ -439,7 +447,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.panel.neutral{--pt:var(--rule); --pb:var(--panel)}
 		&.panel.info{--pt:var(--info-fg); --pb:var(--info-bg)} &.panel.success{--pt:var(--success-fg); --pb:var(--success-bg)}
 		&.panel.warning{--pt:var(--warning-fg); --pb:var(--warning-bg)} &.panel.danger{--pt:var(--danger-fg); --pb:var(--danger-bg)}
-		&.panel.accent{--pt:var(--accent-fg); --pb:var(--accent-bg)}}
+		&.panel.accent{--pt:var(--accent-fg); --pb:var(--accent-bg)}
+		&.panel.teal{--pt:var(--teal-fg); --pb:var(--teal-bg)} &.panel.sky{--pt:var(--sky-fg); --pb:var(--sky-bg)}}
 	/* Below the stack floor, cells go full-width (spans ignored) so nothing is cramped on narrow screens. */
 	@media (max-width:768px){
 		.grid{grid-template-columns:1fr}
