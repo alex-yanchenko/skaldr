@@ -391,6 +391,24 @@ def test_comparison_renders_options_features_checks_toned_cells_and_highlight() 
     assert html.count('<td class="hl">') == 3  # every cell of column B (three rows)
 
 
+def test_comparison_highlight_reads_as_a_panel_not_just_a_tint() -> None:
+    """The highlighted column gets accent side-borders + a header cap so it reads as a deliberate
+    panel in light theme (the bare --accent-bg tint was a washed smudge). Scoped to .cmp — the shared
+    --accent-bg token is untouched; the border colour routes through a token like every other colour."""
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 1,
+        "rows": [{"feature": "Fast", "values": [False, True]}],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<th class="hl">B</th>' in html  # the feature actually renders a highlighted column
+    assert "--accent-line:color-mix(in srgb, var(--accent-fg) 30%, transparent);" in html  # tokenised
+    assert "box-shadow:inset 0 3px 0 var(--accent-fg)" in html  # header cap on th.hl
+    assert "& .hl{border-inline:1px solid var(--accent-line)}" in html  # column side-borders
+
+
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
     blocks = [
         {"type": "text", "body": "Method [^sop]; thresholds [^audit]; typo [^missing]."},
