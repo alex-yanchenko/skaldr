@@ -73,7 +73,7 @@ RowTone = Literal["muted", "danger"]  # table-row emphasis: dim a rejected row, 
 _ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
 BadgeColor = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
 CalloutTone = Literal["info", "success", "warning", "danger"]
-StatusState = Literal["done", "pending", "failed", "blocked"]
+StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
 ChartVariant = Literal["bar", "line", "donut"]
@@ -229,7 +229,9 @@ class Callout(_Frozen):
 
 
 class StatusItem(_Frozen):
-    state: StatusState = Field(description="Step state, driving the glyph: done, pending, failed, blocked.")
+    state: StatusState = Field(
+        description="Step state, driving the glyph: done, current (in progress), pending, failed, blocked."
+    )
     text: str = Field(description="Rich-text label for the step.")
 
 

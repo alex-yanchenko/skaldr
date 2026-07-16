@@ -1,6 +1,6 @@
 {# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
 
-{% set STATUS_GLYPHS = {"done": "✓", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
+{% set STATUS_GLYPHS = {"done": "✓", "current": "◐", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
 {% set DELTA_GLYPHS = {"up": "▲", "down": "▼", "flat": "→"} %}
 
 {% macro chip_item(item) %}

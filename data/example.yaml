@@ -134,6 +134,7 @@ blocks:
     items:
       - { state: done, text: "Reconciliation gate passes (10,000 = 10,000)." }
       - { state: done, text: "De-dup validated on a 1,000-pallet sample." }
+      - { state: current, text: "Overflow bins being re-counted by hand right now." }
       - { state: pending, text: "Overflow re-scan scheduled for the next count." }
       - { state: failed, text: "Vendor short-ship — blocked, cannot count." }
       - { state: blocked, text: "Vendor escalation awaiting `OPS-1234` response." }
