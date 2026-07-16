@@ -158,8 +158,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.status-list{list-style:none; margin-block:var(--s3); display:flex; flex-direction:column; gap:var(--s2);
 		& li{display:flex; gap:var(--s2); align-items:baseline; font-size:14px}
 		& .glyph{font-weight:700; width:1.2em; flex:none; text-align:center}
-		& .done .glyph{color:var(--success-fg)} & .pending .glyph{color:var(--muted)}
-		& .failed .glyph{color:var(--danger-fg)} & .blocked .glyph{color:var(--warning-fg)}}
+		& .done .glyph{color:var(--success-fg)} & .current .glyph{color:var(--info-fg)}
+		& .pending .glyph{color:var(--muted)} & .failed .glyph{color:var(--danger-fg)}
+		& .blocked .glyph{color:var(--warning-fg)}}
 
 	/* One shared grid so the label column hugs the longest label (not a fixed width) and every bar
 	   still aligns — adapts cleanly whether the meter is full-width or in a narrow grid cell. */

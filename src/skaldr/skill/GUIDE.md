@@ -90,7 +90,7 @@ infinities.
 | `cards` | Headline numbers | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` |
 | `badge_row` | A standalone row of chips | `label?`, `items: [{key} \| {label, tone}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
-| `status_list` | Checks / steps | `items: [{state: done\|pending\|failed\|blocked, text}]` |
+| `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |

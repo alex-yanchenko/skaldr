@@ -814,13 +814,25 @@ def test_diff_code_marks_added_and_removed_lines() -> None:
     assert '<span class="ln ctx"> context</span>' in html
 
 
-def test_status_list_maps_state_to_glyph() -> None:
-    block = {"type": "status_list", "items": [{"state": "failed", "text": "broke"}]}
-    report = parse_report(make_report(blocks=[block]))
+@pytest.mark.parametrize(
+    ("state", "glyph"),
+    [("done", "✓"), ("current", "◐"), ("pending", "○"), ("failed", "✗"), ("blocked", "⏸")],
+)
+def test_status_list_glyph_for_every_state(state: str, glyph: str) -> None:
+    block = {"type": "status_list", "items": [{"state": state, "text": "x"}]}
 
-    html = render_html(report)
+    html = render_html(parse_report(make_report(blocks=[block])))
 
-    assert '<li class="failed"><span class="glyph">✗</span><span>broke</span></li>' in html
+    assert f'<li class="{state}"><span class="glyph">{glyph}</span><span>x</span></li>' in html
+
+
+def test_status_list_current_glyph_is_info_toned() -> None:
+    """The in-progress state mirrors the timeline's `current` marker — an info-toned ◐."""
+    block = {"type": "status_list", "items": [{"state": "current", "text": "x"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "& .current .glyph{color:var(--info-fg)}" in html
 
 
 def test_meter_renders_derived_percentage_and_tone() -> None:

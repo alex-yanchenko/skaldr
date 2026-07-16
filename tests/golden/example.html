@@ -172,8 +172,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.status-list{list-style:none; margin-block:var(--s3); display:flex; flex-direction:column; gap:var(--s2);
 		& li{display:flex; gap:var(--s2); align-items:baseline; font-size:14px}
 		& .glyph{font-weight:700; width:1.2em; flex:none; text-align:center}
-		& .done .glyph{color:var(--success-fg)} & .pending .glyph{color:var(--muted)}
-		& .failed .glyph{color:var(--danger-fg)} & .blocked .glyph{color:var(--warning-fg)}}
+		& .done .glyph{color:var(--success-fg)} & .current .glyph{color:var(--info-fg)}
+		& .pending .glyph{color:var(--muted)} & .failed .glyph{color:var(--danger-fg)}
+		& .blocked .glyph{color:var(--warning-fg)}}
 
 	/* One shared grid so the label column hugs the longest label (not a fixed width) and every bar
 	   still aligns — adapts cleanly whether the meter is full-width or in a narrow grid cell. */
@@ -627,7 +628,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <h2 id="verification">Verification</h2>
 
-<ul class="status-list"><li class="done"><span class="glyph">✓</span><span>Reconciliation gate passes (10,000 = 10,000).</span></li><li class="done"><span class="glyph">✓</span><span>De-dup validated on a 1,000-pallet sample.</span></li><li class="pending"><span class="glyph">○</span><span>Overflow re-scan scheduled for the next count.</span></li><li class="failed"><span class="glyph">✗</span><span>Vendor short-ship — blocked, cannot count.</span></li><li class="blocked"><span class="glyph">⏸</span><span>Vendor escalation awaiting <code>OPS-1234</code> response.</span></li></ul>
+<ul class="status-list"><li class="done"><span class="glyph">✓</span><span>Reconciliation gate passes (10,000 = 10,000).</span></li><li class="done"><span class="glyph">✓</span><span>De-dup validated on a 1,000-pallet sample.</span></li><li class="current"><span class="glyph">◐</span><span>Overflow bins being re-counted by hand right now.</span></li><li class="pending"><span class="glyph">○</span><span>Overflow re-scan scheduled for the next count.</span></li><li class="failed"><span class="glyph">✗</span><span>Vendor short-ship — blocked, cannot count.</span></li><li class="blocked"><span class="glyph">⏸</span><span>Vendor escalation awaiting <code>OPS-1234</code> response.</span></li></ul>
 
 <h3 id="follow-up-checklist">Follow-up checklist</h3>
 
