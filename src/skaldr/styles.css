@@ -52,6 +52,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		--warning-fg:light-dark(#b45309,#fbbf24); --warning-bg:light-dark(#fef3c7,#2c2410);
 		--danger-fg:light-dark(#b91c1c,#fca5a5); --danger-bg:light-dark(#fee2e2,#301619);
 		--accent-fg:light-dark(#7c3aed,#c4b5fd); --accent-bg:light-dark(#f3e8ff,#241a38);
+		--accent-line:color-mix(in srgb, var(--accent-fg) 30%, transparent); /* soft accent border (comparison highlight) */
 		--teal-fg:light-dark(#0f766e,#5eead4); --teal-bg:light-dark(#f0fdfa,#0b2621);
 		--sky-fg:light-dark(#0369a1,#7dd3fc); --sky-bg:light-dark(#e0f2fe,#0c2740);
 		/* Diff add/remove get their own tokens (NOT the shared success/danger family, which also
@@ -380,8 +381,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& th:first-child{text-align:start; color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em}
 		& td{padding:11px 16px; border-block-start:1px solid var(--line); text-align:center}
 		& td.feat{text-align:start; font-weight:600}
-		& th.hl{background:var(--accent-bg); color:var(--accent-fg)}
+		/* Highlighted "recommended" column: the tint alone (--accent-bg) reads as a washed smudge in
+		   light, so define it as a panel — accent side-borders down the column + an accent cap on the
+		   header. Scoped to .cmp so the shared --accent-bg token is untouched; works in both themes.
+		   The cap is an inset box-shadow, NOT a border-block-start: a real top border would add 3px to
+		   th.hl's height and knock it out of vertical alignment with its sibling header cells. */
+		& th.hl{background:var(--accent-bg); color:var(--accent-fg); box-shadow:inset 0 3px 0 var(--accent-fg)}
 		& td.hl{background:var(--accent-bg)}
+		& .hl{border-inline:1px solid var(--accent-line)}
 		& .chk.yes{color:var(--success-fg); font-weight:700} & .chk.no{color:var(--danger-fg); font-weight:700}
 		& .ct{color:var(--muted)}
 		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
