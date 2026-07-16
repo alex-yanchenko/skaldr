@@ -73,16 +73,19 @@
 
 {# Flow: a directional pipeline. The connector sits at the FRONT of each node (never the last node
    of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
+{# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
+{% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
+
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">
 <div class="track">
 {% if b.style == "steps" %}
 {% for s in b.steps %}
-<div class="step"><span class="link{% if loop.first %} blank{% endif %}"></span><div class="card{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<div class="lab">{{ s.label }}</div>{% if s.note %}<div class="cap">{{ s.note | richtext }}</div>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div></div>
+<div class="step"><span class="link{% if loop.first %} blank{% endif %}"></span><div class="card{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<div class="lab">{{ s.label }}</div>{% if s.note %}<div class="cap">{{ s.note | richtext }}</div>{% endif %}{{ step_points(s) }}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div></div>
 {% endfor %}
 {% else %}
 {% for s in b.steps %}
-<span class="seg">{% if not loop.first %}<span class="conn"></span>{% endif %}<span class="node{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<span class="txt"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</span></span></span>
+<span class="seg">{% if not loop.first %}<span class="conn"></span>{% endif %}<span class="node{% if s.tone %} {{ s.tone }}{% endif %}">{% if b.numbered %}<span class="n">{{ loop.index }}</span>{% endif %}<span class="txt"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{{ step_points(s) }}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</span></span></span>
 {% endfor %}
 {% endif %}
 </div>
@@ -92,7 +95,7 @@
 
 {# Fan: one-to-many convergence/divergence. The 'many' spokes sit in a dashed well; a single arrow
    joins them to the one hub. DOM order follows direction so the arrow always points along the flow. #}
-{% macro fan_node(s) %}<div class="fnode{% if s.tone %} {{ s.tone }}{% endif %}"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div>{% endmacro %}
+{% macro fan_node(s) %}<div class="fnode{% if s.tone %} {{ s.tone }}{% endif %}"><span class="lab">{{ s.label }}</span>{% if s.note %}<span class="sub">{{ s.note | richtext }}</span>{% endif %}{{ step_points(s) }}{% if s.badges %}{{ chip_keys(s.badges) }}{% endif %}</div>{% endmacro %}
 
 {% macro fan_spokes(b) %}<div class="spokes">{% for s in b.spokes %}{{ fan_node(s) }}{% endfor %}</div>{% endmacro %}
 

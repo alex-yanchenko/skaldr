@@ -124,6 +124,74 @@ def test_flow_loop_marker_names_the_first_node() -> None:
     assert '<div class="loop"><span class="cyc">↺</span> back to Flag</div>' in html
 
 
+def test_flow_steps_style_renders_points_as_rich_text_bullets_under_the_card() -> None:
+    block = {
+        "type": "flow",
+        "style": "steps",
+        "steps": [
+            {"label": "Reason", "note": "the caption", "points": ["Weighs **overlap**", "Scores hits"]},
+            {"label": "Deliver"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # bullets render after the caption, in order, with inline rich text applied
+    assert '<div class="cap">the caption</div><ul class="pts">' in html
+    assert '<ul class="pts"><li>Weighs <strong>overlap</strong></li><li>Scores hits</li></ul>' in html
+
+
+def test_flow_steps_card_orders_caption_then_points_then_badges() -> None:
+    """Locks the render order inside a card: note → points → badges (a swap would be silent otherwise)."""
+    badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
+    block = {
+        "type": "flow",
+        "style": "steps",
+        "steps": [
+            {"label": "A", "note": "cap", "points": ["p1"], "badges": ["OK"]},
+            {"label": "B"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[block])))
+
+    assert (
+        '<div class="cap">cap</div><ul class="pts"><li>p1</li></ul>'
+        '<span class="chips"><span class="chip green">OK</span></span>' in html
+    )
+
+
+def test_flow_arrow_style_still_renders_points_inside_the_node() -> None:
+    """Points aren't a steps-only feature — an arrow node carries them too (compact), never dropped."""
+    block = {"type": "flow", "steps": [{"label": "A", "points": ["one", "two"]}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="lab">A</span><ul class="pts"><li>one</li><li>two</li></ul>' in html
+
+
+def test_flow_step_without_points_emits_no_pts_list() -> None:
+    block = {"type": "flow", "steps": [{"label": "A"}, {"label": "B"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert 'class="pts"' not in html
+
+
+def test_fan_node_carries_points() -> None:
+    """Fan hub/spokes are FlowStep too, so points render there rather than silently vanishing."""
+    block = {
+        "type": "fan",
+        "direction": "in",
+        "hub": {"label": "Hub", "points": ["synthesised"]},
+        "spokes": [{"label": "S1"}, {"label": "S2"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="lab">Hub</span><ul class="pts"><li>synthesised</li></ul>' in html
+
+
 def test_fan_in_puts_spokes_before_the_hub_with_a_converging_arrow() -> None:
     block = {
         "type": "fan",

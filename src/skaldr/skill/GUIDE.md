@@ -110,7 +110,7 @@ infinities.
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
-| `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
+| `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
@@ -186,7 +186,7 @@ dangling arrows.
   numbered: true        # 1..n on the nodes (default); set false to hide
   steps:
     - { label: "Source",  tone: info,    note: "Atlas Advisor + $indexStats" }
-    - { label: "Reason",  tone: info }
+    - { label: "Reason",  tone: info,    points: ["Weighs index overlap", "Scores by hit-ratio"] }
     - { label: "Propose", tone: accent }
     - { label: "Deliver", tone: success }
 ```
@@ -197,7 +197,9 @@ dangling arrows.
 - `steps` — equal cards that each carry a one-line `note` caption. Reach for it when **every stage
   needs a sentence of explanation** and the labels alone aren't enough.
 
-Rule of thumb: if most nodes have a `note`, use `style: steps`; otherwise `arrow`. A flow with more
+Beyond the one-line `note`, a step may carry `points` — a few detail bullets under the node, for
+when one line isn't enough. Best paired with `style: steps` (a bullet list crowds a compact arrow
+chip). Rule of thumb: if most nodes have a `note`, use `style: steps`; otherwise `arrow`. A flow with more
 than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (any of
 `neutral·info·success·warning·danger·accent`) accents a node's border + number — use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
@@ -220,7 +222,8 @@ sit in a dashed well; a single arrow joins them to the `hub` (the one). `directi
 ```
 
 `hub` and `spokes` are flow nodes — each takes `label`, optional `tone`, `note` (rich, one line),
-and `badges`. Use `direction: out` for the reverse (one hub branching to the spokes).
+`points` (detail bullets), and `badges`. Use `direction: out` for the reverse (one hub branching to
+the spokes).
 
 ## The `walkthrough`
 
