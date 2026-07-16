@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/alex-yanchenko/skaldr/compare/v1.0.0...v1.0.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **theme:** unlayer box-sizing + body surface so an embedding host can't strand the theme ([#39](https://github.com/alex-yanchenko/skaldr/issues/39)) ([d8a2b46](https://github.com/alex-yanchenko/skaldr/commit/d8a2b464d16220336ae0afc232062db6f124cad2))
+
 ## [1.0.0](https://github.com/alex-yanchenko/skaldr/compare/v0.8.0...v1.0.0) (2026-07-15)
 
 
