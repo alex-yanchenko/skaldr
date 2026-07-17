@@ -127,6 +127,16 @@
 <ol class="refs">{% for item in b.items %}<li id="ref-{{ item.key }}">{% if item.key in cited_references %}<a class="rnum" href="#fnref-{{ item.key }}">{{ reference_numbers[item.key] }}</a>{% else %}<span class="rnum">{{ reference_numbers[item.key] }}</span>{% endif %}<span class="rtext">{{ item.text | richtext }}{% if item.url %} <a class="rlink" href="{{ item.url }}">↗</a>{% endif %}</span></li>{% endfor %}</ol>
 {% endmacro %}
 
+{# Range: a horizontal bar of segments sized in proportion to their spans. `flex:<span>` (grow, basis 0)
+   distributes the bar's width by the span ratios exactly — no percentage math, no rounding gap. Optional
+   axis renders end-cap labels. (Soft-tint rationale lives with the .range CSS.) #}
+{% macro range_bar(b) %}
+<div class="range">
+<div class="rbar">{% for s in b.segments %}<div class="rseg {{ s.tone or 'neutral' }}" style="flex:{{ s.span }}"><span class="rlab">{{ s.label }}</span>{% if s.sub %}<span class="rsub">{{ s.sub | richtext }}</span>{% endif %}</div>{% endfor %}</div>
+{% if b.axis %}<div class="raxis"><span class="rmin">{{ b.axis.min or "" }}</span><span class="rmax">{{ b.axis.max or "" }}</span></div>{% endif %}
+</div>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -148,6 +158,8 @@
 <ul class="status-list">{% for item in block.items %}<li class="{{ item.state }}"><span class="glyph">{{ STATUS_GLYPHS[item.state] }}</span><span>{{ item.text | richtext }}</span></li>{% endfor %}</ul>
 {% elif block.type == "meter" %}
 <div class="meter">{% for m in block.items %}<span class="m-label">{{ m.label }}</span><div class="track"><div class="fill {{ m.tone or 'neutral' }}" style="width:{{ (m.value / m.max * 100) | round(1) }}%"></div></div><span class="m-val">{{ pct(m.value, m.max) }}</span>{% endfor %}</div>
+{% elif block.type == "range" %}
+{{ range_bar(block) }}
 {% elif block.type == "code" %}
 <div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for line in block.content.split("\n") %}<span class="ln {{ 'add' if line.startswith('+') else 'del' if line.startswith('-') else 'ctx' }}">{{ line[1:] if (line.startswith('+') or line.startswith('-')) else line }}</span>{% endfor %}</pre>{% else %}<pre>{{ block.content }}</pre>{% endif %}</div>
 {% elif block.type == "quote" %}

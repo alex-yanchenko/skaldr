@@ -334,6 +334,47 @@ class Meter(_Frozen):
     items: list[MeterItem] = Field(min_length=1, description="Labelled horizontal bars.")
 
 
+class RangeSegment(_Frozen):
+    label: str = Field(min_length=1, description="Label shown inside the segment.")
+    span: Number = Field(
+        description="Relative width (> 0). Spans are normalised across the segments, so only the "
+        "ratios matter — [3, 1] and [30, 10] render identically."
+    )
+    tone: Tone | None = Field(
+        default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
+    )
+    sub: str | None = Field(default=None, description="Optional rich-text sub-line under the label.")
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RangeSegment":
+        if not self.label.strip():
+            raise ValueError("range segment label must not be blank")
+        if self.span <= 0:
+            raise ValueError("segment 'span' must be greater than 0")
+        return self
+
+
+class RangeAxis(_Frozen):
+    min: str | None = Field(default=None, description="Label at the left end of the bar (e.g. a start year).")
+    max: str | None = Field(default=None, description="Label at the right end of the bar (e.g. an end year).")
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> "RangeAxis":
+        if not (self.min or "").strip() and not (self.max or "").strip():
+            raise ValueError("range axis needs at least one of 'min' or 'max'")
+        return self
+
+
+class Range(_Frozen):
+    type: Literal["range"]
+    segments: list[RangeSegment] = Field(
+        min_length=1, description="Segments laid left-to-right, each sized in proportion to its span."
+    )
+    axis: RangeAxis | None = Field(
+        default=None, description="Optional end-cap labels marking the bar's extent."
+    )
+
+
 class Code(_Frozen):
     type: Literal["code"]
     content: str = Field(description="Code/log/config text; rendered verbatim, no highlighting.")
@@ -795,6 +836,7 @@ _Leaf = (
     | Callout
     | StatusList
     | Meter
+    | Range
     | Table
     | Code
     | Quote
