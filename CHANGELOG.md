@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0](https://github.com/alex-yanchenko/skaldr/compare/v1.0.1...v1.1.0) (2026-07-17)
+
+
+### Features
+
+* **badge_row:** group chips into labelled gutter rows ([#48](https://github.com/alex-yanchenko/skaldr/issues/48)) ([31697f2](https://github.com/alex-yanchenko/skaldr/commit/31697f2e9e6392534fb647ffab4d54518852c66c))
+* **comparison:** per-column polarity to flip ✓/✗ colour for present-is-bad attributes ([#45](https://github.com/alex-yanchenko/skaldr/issues/45)) ([340670b](https://github.com/alex-yanchenko/skaldr/commit/340670b9f1310ae1b91570231bca69f9cbd79751))
+* **flow:** let a step carry a few detail points, not just a one-liner ([#46](https://github.com/alex-yanchenko/skaldr/issues/46)) ([ea93e34](https://github.com/alex-yanchenko/skaldr/commit/ea93e348248fabf5e4e29f169d6ce41937c4ca51))
+* **range:** a bar sized by numeric span, for date windows / coverage ([#47](https://github.com/alex-yanchenko/skaldr/issues/47)) ([bbf63f9](https://github.com/alex-yanchenko/skaldr/commit/bbf63f9578f81523370ec71024148a5a4cbc8eee))
+* **skill:** make skaldr the default for report-shaped docs, with a markdown-destination boundary ([#50](https://github.com/alex-yanchenko/skaldr/issues/50)) ([49936e6](https://github.com/alex-yanchenko/skaldr/commit/49936e679b609328396693ff79fd478d52a39a0b))
+* **status_list:** add a 'current' state for in-progress items ([#41](https://github.com/alex-yanchenko/skaldr/issues/41)) ([5495698](https://github.com/alex-yanchenko/skaldr/commit/5495698c8f95f42ef8f0df948a6957cee8f0a33b))
+* **swimlane:** a lane-by-time matrix for multi-track processes ([#49](https://github.com/alex-yanchenko/skaldr/issues/49)) ([87dbadd](https://github.com/alex-yanchenko/skaldr/commit/87dbaddc5ba774774f75456646ae94cc51662472))
+* **tones:** unify the tone and badge-colour vocabularies into one 8-colour palette ([#44](https://github.com/alex-yanchenko/skaldr/issues/44)) ([b5f77b9](https://github.com/alex-yanchenko/skaldr/commit/b5f77b925a6c70a529fdcda5df74ec24af6cf499))
+
+
+### Bug Fixes
+
+* **comparison:** make the highlighted column read as a panel in light theme ([#42](https://github.com/alex-yanchenko/skaldr/issues/42)) ([ae29870](https://github.com/alex-yanchenko/skaldr/commit/ae2987040385cdff1895ea1172702e62f2095ed1))
+
 ## [1.0.1](https://github.com/alex-yanchenko/skaldr/compare/v1.0.0...v1.0.1) (2026-07-16)
 
 
