@@ -10,6 +10,7 @@ from collections.abc import Iterator, Sequence
 from typing import Any
 
 from skaldr.models import (
+    TONE_NAMES,
     AnyBlock,
     Badge,
     Grid,
@@ -17,6 +18,7 @@ from skaldr.models import (
     InnerGrid,
     Report,
     Section,
+    Swimlane,
     Table,
     Walkthrough,
     col_sum,
@@ -29,6 +31,7 @@ __all__ = [
     "first_table_index",
     "fmt",
     "heading_slugs",
+    "lane_tones",
     "pct",
     "provenance_footer",
     "reconcile_line",
@@ -36,6 +39,10 @@ __all__ = [
     "toc_entries",
     "used_badges",
 ]
+
+# Lanes without an explicit override draw a colour by position from the canonical tone order.
+# `Swimlane.lanes` is capped at the palette length, so a lane's position never wraps into a reused one.
+_LANE_PALETTE = TONE_NAMES
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
@@ -117,6 +124,12 @@ def used_badges(report: Report) -> list[tuple[str, Badge]]:
     """Declared badges that are actually referenced, in declaration order (drives the legend)."""
     referenced = set(iter_referenced_badge_keys(report.blocks))
     return [(key, badge) for key, badge in report.badges.items() if key in referenced]
+
+
+def lane_tones(block: Swimlane) -> dict[str, str]:
+    """Each lane's tone: an explicit `tones` override, else a palette colour by lane position. Lanes are
+    capped at the palette length, so positions never collide onto a reused colour."""
+    return {lane: block.tones.get(lane, _LANE_PALETTE[index]) for index, lane in enumerate(block.lanes)}
 
 
 def provenance_footer(report: Report) -> str | None:

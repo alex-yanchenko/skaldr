@@ -127,6 +127,7 @@ infinities.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
+| `swimlane` | Multi-track process on a lane × time grid (see below) | `lanes[]`, `steps: [{lane, col, n, label}]`, `tones?`, `connect?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -341,6 +342,35 @@ present/absent; only the colour flips, and only on bool cells.
     - { feature: "Validated", values: [false, true] }
     - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }] }
 ```
+
+## The `swimlane`
+
+A process that runs across several **tracks** (teams, systems, roles) laid on a grid: `lanes` are the
+rows, and each step's `col` is its position along the timeline (left to right). The sequence reads as a
+staircase stepping down and across the lanes. Reach for it when **who does what, when** is the message
+and a single-track `flow` can't show the hand-offs between lanes.
+
+Every step field is explicit — skaldr never derives or renumbers: `lane` (one of `lanes`), `col`
+(1-based timeline column), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`.
+Two steps sharing a `col` are **parallel** — they stack in that column. Column gaps are allowed. Each
+lane gets a palette colour auto-assigned in `lanes` order (carried on its label and its steps' number
+cells); override any lane with `tones`. Up to **8 lanes** (one per palette colour) — more tracks than
+that stop reading as a matrix, so split into two swimlanes.
+
+```yaml
+- type: swimlane
+  lanes: ["Product", "Eng", "QA"]
+  tones: { QA: success }          # optional per-lane override; others auto-assigned
+  steps:
+    - { lane: "Product", col: 1, n: "1", label: "Spec" }
+    - { lane: "Eng", col: 2, n: "2", label: "Build" }
+    - { lane: "Eng", col: 3, n: "3a", label: "Feature flag" }   # parallel with 3b (same col)
+    - { lane: "QA", col: 3, n: "3b", label: "Test plan" }
+    - { lane: "QA", col: 4, n: "4", label: "Regression" }
+```
+
+The columns are fixed-width and the block scrolls horizontally when wide, so a long timeline stays a
+grid rather than reflowing (and fits the page when printed). Cross-lane connector lines are a future addition.
 
 ## The `references`
 

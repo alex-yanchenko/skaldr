@@ -2,14 +2,43 @@ from skaldr.compute import (
     first_table_index,
     fmt,
     heading_slugs,
+    lane_tones,
     provenance_footer,
     reconcile_line,
     reference_numbers,
     toc_entries,
     used_badges,
 )
-from skaldr.models import Table, parse_report
+from skaldr.models import Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report
+
+
+def test_lane_tones_assigns_the_full_palette_by_position_and_honours_overrides() -> None:
+    """Eight lanes exhaust the palette in order; an explicit override replaces its position colour."""
+    block = parse_report(
+        make_report(
+            blocks=[
+                {
+                    "type": "swimlane",
+                    "lanes": ["a", "b", "c", "d", "e", "f", "g", "h"],
+                    "tones": {"c": "danger"},
+                    "steps": [{"lane": "a", "col": 1, "n": "1", "label": "x"}],
+                }
+            ]
+        )
+    ).blocks[0]
+    assert isinstance(block, Swimlane)
+
+    assert lane_tones(block) == {
+        "a": "neutral",
+        "b": "info",
+        "c": "danger",  # override wins over the position colour (success)
+        "d": "warning",
+        "e": "danger",
+        "f": "accent",
+        "g": "teal",
+        "h": "sky",
+    }
 
 
 def test_fmt_variants() -> None:

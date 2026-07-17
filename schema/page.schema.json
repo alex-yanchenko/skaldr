@@ -1078,6 +1078,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline"
@@ -1144,6 +1145,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
               },
               {
                 "$ref": "#/$defs/References"
@@ -1376,6 +1380,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline"
@@ -1442,6 +1447,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
               },
               {
                 "$ref": "#/$defs/References"
@@ -2021,6 +2029,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline"
@@ -2087,6 +2096,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
               },
               {
                 "$ref": "#/$defs/References"
@@ -2157,6 +2169,97 @@
         "items"
       ],
       "title": "StatusList",
+      "type": "object"
+    },
+    "Swimlane": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "swimlane",
+          "title": "Type",
+          "type": "string"
+        },
+        "lanes": {
+          "description": "Lane names, in row order (top to bottom). Capped at 8 \u2014 one per palette colour, and more tracks than that stop reading as a matrix; split into two swimlanes instead.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Lanes",
+          "type": "array"
+        },
+        "steps": {
+          "description": "Steps placed on the lane/column grid; the sequence reads as a staircase.",
+          "items": {
+            "$ref": "#/$defs/SwimlaneStep"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "tones": {
+          "additionalProperties": {
+            "enum": [
+              "neutral",
+              "info",
+              "success",
+              "warning",
+              "danger",
+              "accent",
+              "teal",
+              "sky"
+            ],
+            "type": "string"
+          },
+          "description": "Optional per-lane tone override, keyed by lane name. Lanes without an override get a colour auto-assigned from the 8-colour palette in `lanes` order.",
+          "title": "Tones",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "lanes",
+        "steps"
+      ],
+      "title": "Swimlane",
+      "type": "object"
+    },
+    "SwimlaneStep": {
+      "additionalProperties": false,
+      "properties": {
+        "lane": {
+          "description": "Which lane this step sits in \u2014 one of the block's `lanes`.",
+          "minLength": 1,
+          "title": "Lane",
+          "type": "string"
+        },
+        "col": {
+          "description": "1-based column (its position along the timeline). Two steps sharing a `col` are parallel \u2014 they stack in that column.",
+          "minimum": 1,
+          "title": "Col",
+          "type": "integer"
+        },
+        "n": {
+          "description": "The number shown in the step's cell \u2014 a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
+          "minLength": 1,
+          "title": "N",
+          "type": "string"
+        },
+        "label": {
+          "description": "Step label, shown beside the number.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lane",
+        "col",
+        "n",
+        "label"
+      ],
+      "title": "SwimlaneStep",
       "type": "object"
     },
     "Table": {
@@ -2476,6 +2579,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline"
@@ -2544,6 +2648,9 @@
                 "$ref": "#/$defs/Comparison"
               },
               {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
                 "$ref": "#/$defs/References"
               }
             ]
@@ -2604,6 +2711,7 @@
             "references": "#/$defs/References",
             "section": "#/$defs/Section",
             "status_list": "#/$defs/StatusList",
+            "swimlane": "#/$defs/Swimlane",
             "table": "#/$defs/Table",
             "text": "#/$defs/Text",
             "timeline": "#/$defs/Timeline",
@@ -2671,6 +2779,9 @@
           },
           {
             "$ref": "#/$defs/Comparison"
+          },
+          {
+            "$ref": "#/$defs/Swimlane"
           },
           {
             "$ref": "#/$defs/References"

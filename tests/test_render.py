@@ -502,6 +502,103 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
     assert '<td><span class="ct danger">high</span></td>' in html
 
 
+def test_swimlane_renders_lane_gutter_and_placed_steps_with_auto_tones() -> None:
+    """Lanes get palette tones in order (neutral, info, success…); a step's number cell carries its
+    lane tone; a step lands in its lane row at its `col` (offset by the gutter column)."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["Plan", "Do"],
+        "steps": [
+            {"lane": "Plan", "col": 1, "n": "1", "label": "Draft"},
+            {"lane": "Do", "col": 2, "n": "2", "label": "Build"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # two columns (max col) after the max-content gutter
+    assert 'style="grid-template-columns:max-content repeat(2, var(--swim-col))"' in html
+    # lane gutters carry the auto-assigned tone (Plan → neutral, Do → info)
+    assert '<div class="sw-lane neutral">Plan</div>' in html
+    assert '<div class="sw-lane info">Do</div>' in html
+    # a step renders n + label inside a tone-classed box
+    assert (
+        '<div class="sw-step neutral"><span class="sw-n">1</span><span class="sw-label">Draft</span></div>'
+        in html
+    )
+    assert (
+        '<div class="sw-step info"><span class="sw-n">2</span><span class="sw-label">Build</span></div>'
+        in html
+    )
+    # Plan's whole row: gutter, its step at col 1, then an EMPTY sw-cell at col 2 (no step there)
+    assert (
+        '<div class="sw-lane neutral">Plan</div>'
+        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">1</span>'
+        '<span class="sw-label">Draft</span></div></div>'
+        '<div class="sw-cell"></div>' in html
+    )
+
+
+def test_swimlane_column_gap_renders_an_empty_middle_column() -> None:
+    """Steps at col 1 and 3 leave col 2 an empty cell — the range(1, maxcol+1) fill, not a skipped col."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["A"],
+        "steps": [
+            {"lane": "A", "col": 1, "n": "1", "label": "x"},
+            {"lane": "A", "col": 3, "n": "3", "label": "z"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert 'style="grid-template-columns:max-content repeat(3, var(--swim-col))"' in html
+    assert (
+        '<div class="sw-lane neutral">A</div>'
+        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">1</span>'
+        '<span class="sw-label">x</span></div></div>'
+        '<div class="sw-cell"></div>'
+        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">3</span>'
+        '<span class="sw-label">z</span></div></div>' in html
+    )
+
+
+def test_swimlane_parallel_steps_share_a_column_cell() -> None:
+    """Two steps in the same lane+col stack in one cell; the free-string `n` renders verbatim."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["Eng"],
+        "steps": [
+            {"lane": "Eng", "col": 1, "n": "3a", "label": "A"},
+            {"lane": "Eng", "col": 1, "n": "3b", "label": "B"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="sw-cell">'
+        '<div class="sw-step neutral"><span class="sw-n">3a</span><span class="sw-label">A</span></div>'
+        '<div class="sw-step neutral"><span class="sw-n">3b</span><span class="sw-label">B</span></div>'
+        "</div>" in html
+    )
+
+
+def test_swimlane_tone_override_wins_over_auto_assignment() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": ["A", "B"],
+        "tones": {"B": "danger"},
+        "steps": [{"lane": "B", "col": 1, "n": "1", "label": "x"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="sw-lane danger">B</div>' in html  # override, not the auto tone (info)
+    assert '<div class="sw-step danger">' in html
+    assert '<div class="sw-lane neutral">A</div>' in html  # sibling lane's auto tone is undisturbed
+
+
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
     blocks = [
         {"type": "text", "body": "Method [^sop]; thresholds [^audit]; typo [^missing]."},

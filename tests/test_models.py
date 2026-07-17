@@ -1250,6 +1250,56 @@ def test_comparison_polarity_length_must_match_option_count() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def _swimlane(**overrides: object) -> dict[str, object]:
+    block: dict[str, object] = {
+        "type": "swimlane",
+        "lanes": ["A", "B"],
+        "steps": [{"lane": "A", "col": 1, "n": "1", "label": "x"}],
+    }
+    block.update(overrides)
+    return block
+
+
+def test_swimlane_step_lane_must_be_a_declared_lane() -> None:
+    block = _swimlane(steps=[{"lane": "Ghost", "col": 1, "n": "1", "label": "x"}])
+    with pytest.raises(ReportError, match=r"swimlane step lane 'Ghost' is not one of the declared lanes"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_lanes_must_be_unique() -> None:
+    block = _swimlane(lanes=["A", "A"])
+    with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_tones_key_must_be_a_declared_lane() -> None:
+    block = _swimlane(tones={"Ghost": "danger"})
+    with pytest.raises(ReportError, match=r"swimlane tones key 'Ghost' is not a declared lane"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_col_must_be_at_least_one() -> None:
+    block = _swimlane(steps=[{"lane": "A", "col": 0, "n": "1", "label": "x"}])
+    with pytest.raises(ReportError, match=r"blocks\.0\.swimlane\.steps\.0\.col"):
+        parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize("field", ["lane", "n", "label"])
+def test_swimlane_step_field_may_not_be_blank(field: str) -> None:
+    step = {"lane": "A", "col": 1, "n": "1", "label": "x", field: "  "}
+    with pytest.raises(ReportError, match=rf"swimlane step {field} must not be blank"):
+        parse_report(make_report(blocks=[_swimlane(steps=[step])]))
+
+
+def test_swimlane_allows_at_most_eight_lanes() -> None:
+    block = _swimlane(
+        lanes=[f"L{i}" for i in range(9)],
+        steps=[{"lane": "L0", "col": 1, "n": "1", "label": "x"}],
+    )
+    with pytest.raises(ReportError, match=r"blocks\.0\.swimlane\.lanes.*at most 8"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_chart_stacked_only_applies_to_bar() -> None:
     block = {
         "type": "chart",
