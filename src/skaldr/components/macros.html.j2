@@ -137,6 +137,17 @@
 </div>
 {% endmacro %}
 
+{# Swimlane: a time-matrix — rows are lanes, columns are `col` (timeline position). Each lane gets a
+   palette tone (auto-assigned in lanes order, overridable via `tones`); a step's number cell carries it.
+   Parallel steps (same lane+col) stack in one cell. Fixed-width columns; the wrap scrolls horizontally. #}
+{% macro swimlane(b) %}
+{% set lane_tone = lane_tones(b) %}
+{% set maxcol = b.steps | map(attribute="col") | max %}
+<div class="swim-wrap"><div class="swim" style="grid-template-columns:max-content repeat({{ maxcol }}, var(--swim-col))">
+{% for lane in b.lanes %}<div class="sw-lane {{ lane_tone[lane] }}">{{ lane }}</div>{% for c in range(1, maxcol + 1) %}<div class="sw-cell">{% for s in b.steps if s.lane == lane and s.col == c %}<div class="sw-step {{ lane_tone[lane] }}"><span class="sw-n">{{ s.n }}</span><span class="sw-label">{{ s.label }}</span></div>{% endfor %}</div>{% endfor %}{% endfor %}
+</div></div>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
@@ -176,6 +187,8 @@
 {{ chart(block) }}
 {% elif block.type == "comparison" %}
 {{ comparison(block) }}
+{% elif block.type == "swimlane" %}
+{{ swimlane(block) }}
 {% elif block.type == "references" %}
 {{ references(block) }}
 {% elif block.type == "table" %}

@@ -106,6 +106,9 @@ Tone = Annotated[
     Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
     BeforeValidator(_to_tone),
 ]
+# The canonical tone names in order — the one source for anything that assigns tones by position
+# (e.g. a swimlane lane's auto-colour), so a palette can't drift from the Tone literal.
+TONE_NAMES = _tone_names(Tone)
 RowTone = Annotated[
     Literal["muted", "danger"], BeforeValidator(_to_tone)
 ]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
@@ -825,6 +828,62 @@ class Comparison(_Frozen):
         return self
 
 
+class SwimlaneStep(_Frozen):
+    lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
+    col: Count = Field(
+        ge=1,
+        description="1-based column (its position along the timeline). Two steps sharing a `col` are "
+        "parallel — they stack in that column.",
+    )
+    n: str = Field(
+        min_length=1,
+        description="The number shown in the step's cell — a free string ('1', '3a', 'R1'); skaldr never "
+        "derives or renumbers it, so it reads exactly as written.",
+    )
+    label: str = Field(min_length=1, description="Step label, shown beside the number.")
+
+    @model_validator(mode="after")
+    def _non_blank(self) -> "SwimlaneStep":
+        if not self.lane.strip():
+            raise ValueError("swimlane step lane must not be blank")
+        if not self.n.strip():
+            raise ValueError("swimlane step n must not be blank")
+        if not self.label.strip():
+            raise ValueError("swimlane step label must not be blank")
+        return self
+
+
+class Swimlane(_Frozen):
+    type: Literal["swimlane"]
+    lanes: list[str] = Field(
+        min_length=1,
+        max_length=8,
+        description="Lane names, in row order (top to bottom). Capped at 8 — one per palette colour, and "
+        "more tracks than that stop reading as a matrix; split into two swimlanes instead.",
+    )
+    steps: list[SwimlaneStep] = Field(
+        min_length=1, description="Steps placed on the lane/column grid; the sequence reads as a staircase."
+    )
+    tones: dict[str, Tone] = Field(
+        default_factory=dict,
+        description="Optional per-lane tone override, keyed by lane name. Lanes without an override get a "
+        "colour auto-assigned from the 8-colour palette in `lanes` order.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Swimlane":
+        if len(set(self.lanes)) != len(self.lanes):
+            raise ValueError("swimlane lanes must be unique")
+        lane_set = set(self.lanes)
+        for step in self.steps:
+            if step.lane not in lane_set:
+                raise ValueError(f"swimlane step lane '{step.lane}' is not one of the declared lanes")
+        for lane in self.tones:
+            if lane not in lane_set:
+                raise ValueError(f"swimlane tones key '{lane}' is not a declared lane")
+        return self
+
+
 _Leaf = (
     Heading
     | Text
@@ -846,6 +905,7 @@ _Leaf = (
     | Fan
     | Chart
     | Comparison
+    | Swimlane
     | References
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]

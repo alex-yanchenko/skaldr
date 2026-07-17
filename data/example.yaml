@@ -67,6 +67,19 @@ blocks:
       - { label: "Fix", tone: success }
       - { label: "Recount" }
 
+  - type: heading
+    level: 3
+    text: "Discrepancy resolution across teams"
+  - type: swimlane
+    lanes: ["Floor", "System", "Vendor"]
+    tones: { Vendor: danger }
+    steps:
+      - { lane: "Floor", col: 1, n: "1", label: "Recount bin" }
+      - { lane: "System", col: 2, n: "2a", label: "Check scan log" }
+      - { lane: "Floor", col: 2, n: "2b", label: "Re-label" }
+      - { lane: "System", col: 3, n: "3", label: "Reconcile" }
+      - { lane: "Vendor", col: 4, n: "4", label: "Escalate short-ship" }
+
   - type: callout
     tone: warning
     title: "Action needed before the next count"

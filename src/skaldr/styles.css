@@ -438,6 +438,28 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
 		& .ct.teal{color:var(--teal-fg)} & .ct.sky{color:var(--sky-fg)}}
 
+	/* swimlane — a time-matrix: rows are lanes, columns are the `col` timeline position. Fixed-width
+	   columns inside a horizontally-scrolling wrap; hairline column rules + lane baselines use --rule
+	   (visible in dark). Each lane owns a palette tone (auto-assigned, overridable) carried on its gutter
+	   label and every step's number cell; --t/--tb hold that tone like flow/range. */
+	.swim-wrap{overflow-x:auto; margin-block:var(--s6)}
+	.swim{display:grid; --swim-col:150px; width:max-content; min-width:100%;
+		& .sw-lane{display:flex; align-items:center; justify-content:flex-end; padding:var(--s2) var(--s3);
+			font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+			color:var(--t,var(--muted)); text-align:end; border-block-end:1px solid var(--rule)}
+		& .sw-cell{display:flex; flex-direction:column; justify-content:center; gap:var(--s2); padding:var(--s2);
+			border-inline-start:1px solid var(--rule); border-block-end:1px solid var(--rule)}
+		& .sw-step{display:flex; align-items:stretch; overflow:hidden; font-size:12.5px;
+			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
+		& .sw-n{flex:none; display:flex; align-items:center; padding:4px 8px; font-family:var(--mono);
+			font-weight:700; font-size:11px; border-inline-end:1px solid var(--line);
+			background:var(--tb,var(--neutral-bg)); color:var(--t,var(--neutral-fg))}
+		& .sw-label{align-self:center; padding:4px 9px}
+		& .info{--t:var(--info-fg); --tb:var(--info-bg)} & .success{--t:var(--success-fg); --tb:var(--success-bg)}
+		& .warning{--t:var(--warning-fg); --tb:var(--warning-bg)} & .danger{--t:var(--danger-fg); --tb:var(--danger-bg)}
+		& .accent{--t:var(--accent-fg); --tb:var(--accent-bg)} & .neutral{--t:var(--neutral-fg); --tb:var(--neutral-bg)}
+		& .teal{--t:var(--teal-fg); --tb:var(--teal-bg)} & .sky{--t:var(--sky-fg); --tb:var(--sky-bg)}}
+
 	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
 	   links down here; the number in the list links back up to its marker (bidirectional). */
 	sup.fn{font-size:0.72em; line-height:0; vertical-align:super; white-space:nowrap;
@@ -542,6 +564,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		/* Code has no horizontal scrollbar on paper — wrap long lines (and long unbroken tokens) so the
 		   whole block prints instead of clipping at the page edge. */
 		.code pre,.code .diff .ln{white-space:pre-wrap; overflow-wrap:anywhere}
+		/* Same idea for a wide swimlane: no scrollbar on paper, so fit the matrix to the page width —
+		   columns share the space (minmax(0,1fr)) and labels wrap, instead of the fixed-width grid
+		   overflowing and clipping columns past the edge. */
+		.swim-wrap{overflow-x:visible}
+		.swim{width:auto; --swim-col:minmax(0,1fr)}
 		/* Long code may span pages (it is NOT in the break-inside list above). Its normal box is kept
 		   unchanged — screen and print match. The default box-decoration-break (slice) draws the box's
 		   top border only at its true top and the bottom only at its true bottom, so a break in the
