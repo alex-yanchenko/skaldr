@@ -713,7 +713,7 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".code .diff .ln{break-inside:avoid}" in html
     assert "box-decoration-break:clone" not in html
     # cards/callouts/list+status items stay whole across page breaks
-    assert ".flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar{break-inside:avoid}" in html
+    assert ".flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}" in html
     # a header is never stranded from the content it introduces (break in the gap after it forbidden)
     assert "h1,h2,h3,h4,summary{break-after:avoid; break-inside:avoid}" in html
     # a long section may still break — it is NOT force-kept whole
@@ -1128,6 +1128,67 @@ def test_badge_row_reference_renders_declared_chip() -> None:
     html = render_html(report)
 
     assert '<span class="chip violet">prod</span>' in html
+
+
+def test_badge_row_groups_render_as_a_labelled_gutter_dl() -> None:
+    block = {
+        "type": "badge_row",
+        "groups": [
+            {"label": "Severity", "items": [{"label": "High", "tone": "red"}]},
+            {"label": "Area", "items": [{"label": "API", "tone": "blue"}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<dl class="badge-groups">'
+        '<dt>Severity</dt><dd><span class="chip red">High</span></dd>'
+        '<dt>Area</dt><dd><span class="chip blue">API</span></dd>'
+        "</dl>" in html
+    )
+    assert 'class="badge-row"' not in html  # grouped mode does not also emit the flat row
+
+
+def test_badge_row_group_renders_multiple_chips_in_order() -> None:
+    """A group with more than one chip renders them all, in order, inside its dd."""
+    block = {
+        "type": "badge_row",
+        "groups": [
+            {"label": "Mix", "items": [{"label": "A", "tone": "blue"}, {"label": "B", "tone": "red"}]}
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<dt>Mix</dt><dd><span class="chip blue">A</span><span class="chip red">B</span></dd>' in html
+
+
+def test_badge_row_grouped_reference_feeds_the_auto_legend() -> None:
+    """A ref inside a group must reach the same walker as a flat ref, so its legend meaning renders."""
+    report = parse_report(
+        make_report(
+            badges={"HIGH": {"label": "high", "tone": "red", "legend": "urgent"}},
+            blocks=[{"type": "badge_row", "groups": [{"label": "Sev", "items": [{"key": "HIGH"}]}]}],
+        )
+    )
+
+    html = render_html(report)
+
+    assert "Legend — badges used on this page" in html
+    assert "urgent" in html  # the grouped ref's legend meaning shows
+
+
+def test_badge_row_flat_items_still_render_the_ungrouped_row() -> None:
+    block = {"type": "badge_row", "label": "Affects:", "items": [{"label": "X", "tone": "amber"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="badge-row"><span class="label">Affects:</span>'
+        '<span class="chip amber">X</span></div>' in html
+    )
+    assert 'class="badge-groups"' not in html
 
 
 def test_richtext_strips_nul_bytes() -> None:

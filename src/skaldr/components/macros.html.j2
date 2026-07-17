@@ -151,7 +151,7 @@
 {% elif block.type == "cards" %}
 <div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ DELTA_GLYPHS[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endfor %}</div>
 {% elif block.type == "badge_row" %}
-<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>
+{% if block.groups %}<dl class="badge-groups">{% for g in block.groups %}<dt>{{ g.label }}</dt><dd>{% for item in g.items %}{{ chip_item(item) }}{% endfor %}</dd>{% endfor %}</dl>{% else %}<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>{% endif %}
 {% elif block.type == "callout" %}
 <div class="callout {{ block.tone }}">{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ block.body | richtext }}</div></div>
 {% elif block.type == "status_list" %}

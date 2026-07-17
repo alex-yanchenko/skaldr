@@ -84,6 +84,68 @@ def test_undeclared_badge_reference_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def test_badge_row_needs_exactly_one_of_items_or_groups() -> None:
+    with pytest.raises(ReportError, match=r"a badge row needs exactly one of 'items' or 'groups'"):
+        parse_report(make_report(blocks=[{"type": "badge_row"}]))
+
+
+def test_badge_row_rejects_both_items_and_groups() -> None:
+    block = {
+        "type": "badge_row",
+        "items": [{"label": "X", "tone": "amber"}],
+        "groups": [{"label": "G", "items": [{"label": "Y", "tone": "blue"}]}],
+    }
+    with pytest.raises(ReportError, match=r"a badge row needs exactly one of 'items' or 'groups'"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_badge_row_label_may_not_accompany_groups() -> None:
+    """`label` is a flat-row affordance; pairing it with `groups` is rejected, not silently dropped."""
+    block = {
+        "type": "badge_row",
+        "label": "Affects:",
+        "groups": [{"label": "G", "items": [{"label": "Y", "tone": "blue"}]}],
+    }
+    with pytest.raises(ReportError, match=r"badge row 'label' applies to a flat 'items' row, not 'groups'"):
+        parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize(
+    "group",
+    [
+        pytest.param({"label": "Sev", "items": []}, id="empty-items"),
+        pytest.param({"label": "", "items": [{"label": "X", "tone": "blue"}]}, id="blank-label"),
+    ],
+)
+def test_badge_group_rejects_empty_items_and_blank_label(group: dict[str, object]) -> None:
+    with pytest.raises(ReportError, match=r"at least 1 (item|character)"):
+        parse_report(make_report(blocks=[{"type": "badge_row", "groups": [group]}]))
+
+
+def test_undeclared_badge_reference_inside_a_group_is_rejected() -> None:
+    """A grouped ref must feed the same walker as a flat one, or an undeclared key would slip through."""
+    block = {"type": "badge_row", "groups": [{"label": "Sev", "items": [{"key": "MADE_UP"}]}]}
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*MADE_UP"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_undeclared_ref_among_multiple_group_items_is_caught() -> None:
+    """The walker must reach every item in a multi-item group — the bad ref sits last, after a literal."""
+    block = {
+        "type": "badge_row",
+        "groups": [
+            {
+                "label": "Mix",
+                "items": [{"key": "OK"}, {"label": "X", "tone": "blue"}, {"key": "MADE_UP"}],
+            }
+        ],
+    }
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*MADE_UP"):
+        parse_report(
+            make_report(badges={"OK": {"label": "ok", "tone": "green", "legend": "l"}}, blocks=[block])
+        )
+
+
 def test_declared_badge_reference_passes() -> None:
     table = make_reconciled_table(
         columns=[

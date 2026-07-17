@@ -164,6 +164,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.teal{background:var(--teal-bg); color:var(--teal-fg)} &.sky{background:var(--sky-bg); color:var(--sky-fg)}}
 	.badge-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-block:var(--s3)}
 	.badge-row .label{font-size:12.5px; color:var(--muted); margin-inline-end:var(--s1)}
+	/* Grouped chips — a <dl> laid out like .kv: a 2-column grid (label gutter | chips) where the dt/dd of
+	   each group land in the same two columns, so gutters align across rows. The gutter label (dt) is
+	   uppercase/muted and never pill-shaped, so it can't be mistaken for a chip; a divider rule on its
+	   inline-end marks the gutter. Collapses to a stack below 640px (print/narrow block). */
+	.badge-groups{display:grid; grid-template-columns:max-content 1fr; gap:var(--s2) var(--s4);
+		margin-block:var(--s3); max-width:720px; align-items:baseline;
+		& dt{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+			color:var(--muted); text-align:end; border-inline-end:1px solid var(--line); padding-inline-end:var(--s4)}
+		& dd{display:flex; flex-wrap:wrap; gap:6px; align-items:center}}
 	/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
 	.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
 
@@ -333,6 +342,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.walk .wstep,.walk .wdetail{grid-column:auto}
 		.walk .wstep{border-inline-start:0; padding-inline-start:0}
 		.walk .wdetail{border-block-start:0; padding-block-start:0}
+		/* Grouped chips stack: the gutter becomes a plain label above its chips, no divider. */
+		.badge-groups{grid-template-columns:1fr}
+		.badge-groups dt{text-align:start; border-inline-end:0; padding-inline-end:0}
+		.badge-groups dd{margin-block-end:var(--s2)}
 	}
 
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
@@ -533,7 +546,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.sc{display:none}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
-		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar{break-inside:avoid}
+		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}
 		p{orphans:2; widows:2}
 		/* Keep a header with the content it introduces: forbid a page break in the gap right after a
 		   heading or section summary, so a title is never stranded at the foot of one page while its
@@ -669,7 +682,6 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <div class="meter"><span class="m-label">Zone A</span><div class="track"><div class="fill info" style="width:100.0%"></div></div><span class="m-val">100.0%</span><span class="m-label">Zone B</span><div class="track"><div class="fill success" style="width:92.0%"></div></div><span class="m-val">92.0%</span><span class="m-label">Zone C</span><div class="track"><div class="fill warning" style="width:85.0%"></div></div><span class="m-val">85.0%</span><span class="m-label">Overflow</span><div class="track"><div class="fill danger" style="width:4.0%"></div></div><span class="m-val">4.0%</span></div>
 
 <div class="badge-row"><span class="label">Affects:</span><span class="chip teal">inventory</span><span class="chip sky">scan-app</span><span class="chip violet">DC-West</span></div>
-
 <h2 id="verification">Verification</h2>
 
 <ul class="status-list"><li class="done"><span class="glyph">✓</span><span>Reconciliation gate passes (10,000 = 10,000).</span></li><li class="done"><span class="glyph">✓</span><span>De-dup validated on a 1,000-pallet sample.</span></li><li class="current"><span class="glyph">◐</span><span>Overflow bins being re-counted by hand right now.</span></li><li class="pending"><span class="glyph">○</span><span>Overflow re-scan scheduled for the next count.</span></li><li class="failed"><span class="glyph">✗</span><span>Vendor short-ship — blocked, cannot count.</span></li><li class="blocked"><span class="glyph">⏸</span><span>Vendor escalation awaiting <code>OPS-1234</code> response.</span></li></ul>
