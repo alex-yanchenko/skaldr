@@ -713,7 +713,7 @@ def test_print_css_keeps_the_pdf_readable() -> None:
     assert ".code .diff .ln{break-inside:avoid}" in html
     assert "box-decoration-break:clone" not in html
     # cards/callouts/list+status items stay whole across page breaks
-    assert ".flow .seg,.flow .step,.walk .wstep,.kv{break-inside:avoid}" in html
+    assert ".flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar{break-inside:avoid}" in html
     # a header is never stranded from the content it introduces (break in the gap after it forbidden)
     assert "h1,h2,h3,h4,summary{break-after:avoid; break-inside:avoid}" in html
     # a long section may still break — it is NOT force-kept whole
@@ -1025,6 +1025,86 @@ def test_meter_item_without_tone_falls_back_to_neutral() -> None:
     html = render_html(report)
 
     assert '<div class="fill neutral" style="width:50.0%">' in html
+
+
+def test_range_segments_carry_their_span_as_flex_with_soft_tint() -> None:
+    """Segments distribute the bar by `flex:<span>` (exact proportional fill, no rounding); tone is a
+    class, sub is a rich line."""
+    block = {
+        "type": "range",
+        "segments": [
+            {"label": "Transferable", "span": 3, "tone": "success", "sub": "full **credit**"},
+            {"label": "Expired", "span": 1, "tone": "danger"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="range">' in html
+    assert (
+        '<div class="rbar">'
+        '<div class="rseg success" style="flex:3"><span class="rlab">Transferable</span>'
+        '<span class="rsub">full <strong>credit</strong></span></div>'
+        '<div class="rseg danger" style="flex:1"><span class="rlab">Expired</span></div>'
+        "</div>" in html
+    )
+    assert 'class="raxis"' not in html  # no axis given → no axis row
+
+
+def test_range_three_segments_each_emit_their_own_span() -> None:
+    """Covers 3+ segments and distinct span values through the real render path."""
+    block = {
+        "type": "range",
+        "segments": [
+            {"label": "A", "span": 2},
+            {"label": "B", "span": 1},
+            {"label": "C", "span": 1},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="rseg neutral" style="flex:2"><span class="rlab">A</span></div>'
+        '<div class="rseg neutral" style="flex:1"><span class="rlab">B</span></div>'
+        '<div class="rseg neutral" style="flex:1"><span class="rlab">C</span></div>' in html
+    )
+
+
+def test_range_axis_renders_both_end_cap_labels() -> None:
+    block = {
+        "type": "range",
+        "axis": {"min": "2015", "max": "2025"},
+        "segments": [{"label": "A", "span": 1}, {"label": "B", "span": 1}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="raxis"><span class="rmin">2015</span><span class="rmax">2025</span></div>' in html
+
+
+@pytest.mark.parametrize(
+    ("axis", "expected"),
+    [
+        ({"min": "2015"}, '<span class="rmin">2015</span><span class="rmax"></span>'),
+        ({"max": "now"}, '<span class="rmin"></span><span class="rmax">now</span>'),
+    ],
+)
+def test_range_axis_with_one_end_omitted_renders_an_empty_cap(axis: dict[str, str], expected: str) -> None:
+    """Either end may be omitted; the present label keeps its side and the omitted end is an empty span."""
+    block = {"type": "range", "axis": axis, "segments": [{"label": "A", "span": 1}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert f'<div class="raxis">{expected}</div>' in html
+
+
+def test_range_segment_without_tone_falls_back_to_neutral() -> None:
+    block = {"type": "range", "segments": [{"label": "X", "span": 1}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="rseg neutral" style="flex:1"><span class="rlab">X</span></div>' in html
 
 
 def test_card_string_value_and_tone_render() -> None:

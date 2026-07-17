@@ -176,6 +176,23 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			&.teal{--m:var(--teal-fg)} &.sky{--m:var(--sky-fg)}}
 		& .m-val{font-size:12.5px; color:var(--muted); text-align:end; font-variant-numeric:tabular-nums}}
 
+	/* range — a proportional bar: segment widths encode a numeric extent (a date window, a coverage
+	   span, a before/after split). Soft-tint fills (--*-bg + --*-fg text), never a bright --*-fg fill —
+	   that glared in dark. --t/--tb carry the per-segment tone, like flow. */
+	.range{margin-block:var(--s6); max-width:900px;
+		& .rbar{display:flex; width:100%; border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden}
+		& .rseg{display:flex; flex-direction:column; justify-content:center; min-width:0; padding:10px 12px;
+			background:var(--tb,var(--neutral-bg)); color:var(--t,var(--neutral-fg));
+			border-inline-start:1px solid var(--line); &:first-child{border-inline-start:0}}
+		& .rlab{font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+		& .rsub{font-size:11px; opacity:0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+		& .raxis{display:flex; justify-content:space-between; margin-top:var(--s1); font-size:11px;
+			color:var(--muted); font-variant-numeric:tabular-nums}
+		& .neutral{--t:var(--neutral-fg); --tb:var(--neutral-bg)} & .info{--t:var(--info-fg); --tb:var(--info-bg)}
+		& .success{--t:var(--success-fg); --tb:var(--success-bg)} & .warning{--t:var(--warning-fg); --tb:var(--warning-bg)}
+		& .danger{--t:var(--danger-fg); --tb:var(--danger-bg)} & .accent{--t:var(--accent-fg); --tb:var(--accent-bg)}
+		& .teal{--t:var(--teal-fg); --tb:var(--teal-bg)} & .sky{--t:var(--sky-fg); --tb:var(--sky-bg)}}
+
 	.list{margin-block:var(--s3); padding-inline-start:var(--s6); max-width:80ch}
 	.list li{margin-block:var(--s1)}
 
@@ -502,7 +519,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.sc{display:none}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
-		.flow .seg,.flow .step,.walk .wstep,.kv{break-inside:avoid}
+		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar{break-inside:avoid}
 		p{orphans:2; widows:2}
 		/* Keep a header with the content it introduces: forbid a page break in the gap right after a
 		   heading or section summary, so a title is never stranded at the foot of one page while its

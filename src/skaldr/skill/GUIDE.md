@@ -105,6 +105,7 @@ infinities.
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
+| `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
@@ -251,6 +252,26 @@ too thin for the explanation each step carries.
 `detail` holds the same blocks you'd put anywhere else (it can be long — that's the point). The
 step numbers are derived (1..n). Use `tone` to mark a key step. Distinct from `flow` (a directional
 pipeline) and `grid` (no row-by-row step alignment).
+
+## The `range`
+
+One horizontal bar cut into `segments` whose widths are **proportional to their `span`** — for a
+numeric extent that a `meter` (a single value/max ratio), `chart`, or `flow` (equal chips) can't show:
+a date window, a coverage span, a before/after split. Spans are normalised, so only the ratios matter
+(`[3, 1]` and `[30, 10]` are identical). Each segment carries a soft-tint `tone` and an optional `sub`
+line; an optional `axis` labels the extent's ends.
+
+```yaml
+- type: range
+  axis: { min: "2015", max: "2025" }      # optional end-cap labels; either end may be omitted
+  segments:
+    - { label: "Transferable", span: 7, tone: success, sub: "full credit" }
+    - { label: "Review", span: 2, tone: warning }
+    - { label: "Expired", span: 1, tone: danger }
+```
+
+Reach for it when the **relative size of spans** is the message. For a single ratio use `meter`; for a
+trend or distribution use `chart`; for an ordered set of stages use `flow`.
 
 ## The `chart`
 

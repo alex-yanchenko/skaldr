@@ -1036,6 +1036,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
@@ -1074,6 +1075,9 @@
               },
               {
                 "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
               },
               {
                 "$ref": "#/$defs/Table"
@@ -1330,6 +1334,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
@@ -1368,6 +1373,9 @@
               },
               {
                 "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
               },
               {
                 "$ref": "#/$defs/Table"
@@ -1701,6 +1709,141 @@
       "title": "Quote",
       "type": "object"
     },
+    "Range": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "range",
+          "title": "Type",
+          "type": "string"
+        },
+        "segments": {
+          "description": "Segments laid left-to-right, each sized in proportion to its span.",
+          "items": {
+            "$ref": "#/$defs/RangeSegment"
+          },
+          "minItems": 1,
+          "title": "Segments",
+          "type": "array"
+        },
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RangeAxis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional end-cap labels marking the bar's extent."
+        }
+      },
+      "required": [
+        "type",
+        "segments"
+      ],
+      "title": "Range",
+      "type": "object"
+    },
+    "RangeAxis": {
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Label at the left end of the bar (e.g. a start year).",
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Label at the right end of the bar (e.g. an end year).",
+          "title": "Max"
+        }
+      },
+      "title": "RangeAxis",
+      "type": "object"
+    },
+    "RangeSegment": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Label shown inside the segment.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Relative width (> 0). Spans are normalised across the segments, so only the ratios matter \u2014 [3, 1] and [30, 10] render identically.",
+          "title": "Span"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent",
+                "teal",
+                "sky"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Soft-tint fill + text colour for the segment (defaults to neutral).",
+          "title": "Tone"
+        },
+        "sub": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional rich-text sub-line under the label.",
+          "title": "Sub"
+        }
+      },
+      "required": [
+        "label",
+        "span"
+      ],
+      "title": "RangeSegment",
+      "type": "object"
+    },
     "Reconcile": {
       "additionalProperties": false,
       "properties": {
@@ -1836,6 +1979,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
@@ -1874,6 +2018,9 @@
               },
               {
                 "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
               },
               {
                 "$ref": "#/$defs/Table"
@@ -2287,6 +2434,7 @@
                 "list": "#/$defs/ListBlock",
                 "meter": "#/$defs/Meter",
                 "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "status_list": "#/$defs/StatusList",
                 "table": "#/$defs/Table",
@@ -2325,6 +2473,9 @@
               },
               {
                 "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
               },
               {
                 "$ref": "#/$defs/Table"
@@ -2410,6 +2561,7 @@
             "list": "#/$defs/ListBlock",
             "meter": "#/$defs/Meter",
             "quote": "#/$defs/Quote",
+            "range": "#/$defs/Range",
             "references": "#/$defs/References",
             "section": "#/$defs/Section",
             "status_list": "#/$defs/StatusList",
@@ -2450,6 +2602,9 @@
           },
           {
             "$ref": "#/$defs/Meter"
+          },
+          {
+            "$ref": "#/$defs/Range"
           },
           {
             "$ref": "#/$defs/Table"
