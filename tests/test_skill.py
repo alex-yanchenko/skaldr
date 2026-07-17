@@ -24,9 +24,10 @@ def test_skill_md_is_thin_and_defers_to_the_tool() -> None:
     assert "## Blocks" not in skill_md
     assert "| `heading` |" not in skill_md
     # Thinness backstop. The structural asserts above are the real guard (no block catalog); this
-    # cap just stops the file doubling. The description carries a palette routing-signal, so it sits
-    # above a bare frontmatter — a catalog would blow well past this.
-    assert len(skill_md) < 2900
+    # cap just stops the file doubling. The description carries a palette routing-signal plus the
+    # when-to-use / destination boundary, so it sits well above a bare frontmatter — a block catalog
+    # would still blow past this.
+    assert len(skill_md) < 4000
 
 
 def test_guide_command_prints_the_authoring_guide_and_example(capsys: pytest.CaptureFixture[str]) -> None:
