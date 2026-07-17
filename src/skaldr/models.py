@@ -260,12 +260,37 @@ class BadgeLiteral(_Frozen):
     )
 
 
+class BadgeGroup(_Frozen):
+    label: str = Field(min_length=1, description="Group label, shown in the row's gutter.")
+    items: list[BadgeRef | BadgeLiteral] = Field(
+        min_length=1, description="Chips in this group: page-vocabulary refs or one-off label+tone pairs."
+    )
+
+
 class BadgeRow(_Frozen):
     type: Literal["badge_row"]
-    label: str | None = Field(default=None, description="Optional leading label (e.g. 'Affects:').")
-    items: list[BadgeRef | BadgeLiteral] = Field(
-        min_length=1, description="Chips: page-vocabulary refs or one-off label+tone pairs."
+    label: str | None = Field(
+        default=None, description="Optional leading label (e.g. 'Affects:') for a flat `items` row."
     )
+    items: list[BadgeRef | BadgeLiteral] = Field(
+        default_factory=list[BadgeRef | BadgeLiteral],
+        description="A flat row of chips: page-vocabulary refs or one-off label+tone pairs. Use this OR "
+        "`groups`, not both.",
+    )
+    groups: list[BadgeGroup] = Field(
+        default_factory=list[BadgeGroup],
+        description="Grouped chips — each group renders as a labelled gutter row. Use this OR `items`, "
+        "not both.",
+    )
+
+    @model_validator(mode="after")
+    def _one_source(self) -> "BadgeRow":
+        # items/groups default to [] (never None), so truthiness — not `is None` — distinguishes them.
+        if bool(self.items) == bool(self.groups):
+            raise ValueError("a badge row needs exactly one of 'items' or 'groups'")
+        if self.groups and self.label is not None:
+            raise ValueError("badge row 'label' applies to a flat 'items' row, not 'groups'")
+        return self
 
 
 class Callout(_Frozen):
@@ -909,7 +934,9 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
             for step in block.steps:
                 yield from iter_referenced_badge_keys(step.detail)
         elif isinstance(block, BadgeRow):
-            yield from (item.key for item in block.items if isinstance(item, BadgeRef))
+            for item in (*block.items, *(i for group in block.groups for i in group.items)):
+                if isinstance(item, BadgeRef):
+                    yield item.key
         elif isinstance(block, Cards):
             for card in block.items:
                 yield from card.badges

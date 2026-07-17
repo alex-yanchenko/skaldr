@@ -37,6 +37,39 @@
       "title": "Badge",
       "type": "object"
     },
+    "BadgeGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Group label, shown in the row's gutter.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "items": {
+          "description": "Chips in this group: page-vocabulary refs or one-off label+tone pairs.",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BadgeRef"
+              },
+              {
+                "$ref": "#/$defs/BadgeLiteral"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "items"
+      ],
+      "title": "BadgeGroup",
+      "type": "object"
+    },
     "BadgeLiteral": {
       "additionalProperties": false,
       "properties": {
@@ -101,11 +134,11 @@
             }
           ],
           "default": null,
-          "description": "Optional leading label (e.g. 'Affects:').",
+          "description": "Optional leading label (e.g. 'Affects:') for a flat `items` row.",
           "title": "Label"
         },
         "items": {
-          "description": "Chips: page-vocabulary refs or one-off label+tone pairs.",
+          "description": "A flat row of chips: page-vocabulary refs or one-off label+tone pairs. Use this OR `groups`, not both.",
           "items": {
             "anyOf": [
               {
@@ -116,14 +149,20 @@
               }
             ]
           },
-          "minItems": 1,
           "title": "Items",
+          "type": "array"
+        },
+        "groups": {
+          "description": "Grouped chips \u2014 each group renders as a labelled gutter row. Use this OR `items`, not both.",
+          "items": {
+            "$ref": "#/$defs/BadgeGroup"
+          },
+          "title": "Groups",
           "type": "array"
         }
       },
       "required": [
-        "type",
-        "items"
+        "type"
       ],
       "title": "BadgeRow",
       "type": "object"

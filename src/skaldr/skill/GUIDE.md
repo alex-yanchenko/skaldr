@@ -56,6 +56,18 @@ automatically before the first table — you don't author it.
 
 Badge colours: `slate · blue · green · amber · red · violet · teal · sky`.
 
+A standalone `badge_row` is either **flat** (`items:` — an optional leading `label` then chips) or
+**grouped** (`groups: [{label, items}]` — each group renders as a labelled gutter row, the labels
+aligned in a column like `key_value`). Use one or the other, not both. Reach for `groups` when a dense
+set of chips reads better split into a few titled rows.
+
+```yaml
+- type: badge_row
+  groups:
+    - { label: "Severity", items: [{ key: HIGH }, { key: LOW }] }
+    - { label: "Area", items: [{ label: "API", tone: blue }, { label: "UI", tone: violet }] }
+```
+
 ## Colours & tones — one palette, two names
 
 Every `tone:` (on cards, flows, fans, meters, walkthroughs, chart series, comparison cells, …) and every
@@ -101,7 +113,7 @@ infinities.
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
 | `cards` | Headline numbers | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` |
-| `badge_row` | A standalone row of chips | `label?`, `items: [{key} \| {label, tone}]` |
+| `badge_row` | A standalone row of chips, flat or grouped | `label?` + `items: [{key} \| {label, tone}]`, OR `groups: [{label, items[]}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
