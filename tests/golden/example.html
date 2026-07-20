@@ -460,7 +460,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   BEYOND the table: a coloured cap poking above/below + a faint cell tint (--gc accent, --gt tint,
 	   set by a palette class). Lines are on-top overlays because cell tints paint over box borders. */
 	.swim-wrap{overflow-x:auto; margin-block:var(--s6)}
-	.swim{display:grid; position:relative; --swim-col:150px; --swim-poke:28px; --swim-pokeb:12px;
+	.swim{display:grid; position:relative; --swim-col:minmax(150px, 1fr); --swim-poke:28px; --swim-pokeb:12px;
 		width:max-content; min-width:100%;
 		& .swim-tbl{background:var(--surface); border-radius:var(--r-md)}
 		/* the outer table border as a rounded frame ON TOP of the tints (which would otherwise cover a
