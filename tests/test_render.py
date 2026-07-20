@@ -1026,6 +1026,22 @@ def test_text_block_splits_paragraphs_in_order() -> None:
     assert html.index("one") < html.index("two")
 
 
+def test_block_span_wraps_the_block_in_a_width_container() -> None:
+    """A `span` wraps the block in `.blk span-N` (the width primitive); the block's own markup is
+    unchanged inside it."""
+    html = render_html(parse_report(make_report(blocks=[{"type": "list", "span": 4, "items": ["a"]}])))
+
+    assert '<div class="blk span-4"><ul class="list"><li>a</li></ul>' in html
+
+
+def test_block_without_span_is_not_wrapped() -> None:
+    """No span → no wrapper, so an unspanned block renders exactly as before (full width)."""
+    html = render_html(parse_report(make_report(blocks=[{"type": "text", "body": "hi"}])))
+
+    assert 'class="blk' not in html
+    assert '<p class="text">hi</p>' in html
+
+
 def test_totals_footer_renders_the_sum_in_the_number_cell() -> None:
     table = {
         "type": "table",
