@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/alex-yanchenko/skaldr/compare/v1.1.0...v1.2.0) (2026-07-20)
+
+
+### Features
+
+* **swimlane:** named column axis + optional milestone group overlay ([#53](https://github.com/alex-yanchenko/skaldr/issues/53)) ([66e7c65](https://github.com/alex-yanchenko/skaldr/commit/66e7c6527a5e8719c6e9d3f430bcc5569177a180))
+
+
+### Bug Fixes
+
+* **release:** retry Homebrew formula generation to survive PyPI propagation races ([#51](https://github.com/alex-yanchenko/skaldr/issues/51)) ([806b676](https://github.com/alex-yanchenko/skaldr/commit/806b6761d65f84b9eabc8ef2c6607582d08d89e6))
+
 ## [1.1.0](https://github.com/alex-yanchenko/skaldr/compare/v1.0.1...v1.1.0) (2026-07-17)
 
 
