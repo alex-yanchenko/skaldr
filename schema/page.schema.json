@@ -119,6 +119,21 @@
     "BadgeRow": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "badge_row",
           "title": "Type",
@@ -170,6 +185,21 @@
     "Callout": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "callout",
           "title": "Type",
@@ -376,6 +406,21 @@
     "Cards": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "cards",
           "title": "Type",
@@ -401,6 +446,21 @@
     "Chart": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "chart",
           "title": "Type",
@@ -578,6 +638,21 @@
     "Code": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "code",
           "title": "Type",
@@ -677,6 +752,21 @@
     "Comparison": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "comparison",
           "title": "Type",
@@ -841,6 +931,21 @@
     "FactStrip": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "fact_strip",
           "title": "Type",
@@ -867,6 +972,21 @@
     "Fan": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "fan",
           "title": "Type",
@@ -907,6 +1027,21 @@
     "Flow": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "flow",
           "title": "Type",
@@ -1022,6 +1157,21 @@
     "Grid": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "grid",
           "title": "Type",
@@ -1240,6 +1390,21 @@
     "Heading": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "heading",
           "title": "Type",
@@ -1272,6 +1437,21 @@
     "Image": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "image",
           "title": "Type",
@@ -1325,6 +1505,21 @@
     "InnerGrid": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "grid",
           "title": "Type",
@@ -1515,6 +1710,21 @@
     "KeyValue": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "key_value",
           "title": "Type",
@@ -1540,6 +1750,21 @@
     "ListBlock": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "list",
           "title": "Type",
@@ -1636,6 +1861,21 @@
     "Meter": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "meter",
           "title": "Type",
@@ -1725,6 +1965,21 @@
     "Quote": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "quote",
           "title": "Type",
@@ -1759,6 +2014,21 @@
     "Range": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "range",
           "title": "Type",
@@ -1965,6 +2235,21 @@
     "References": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "references",
           "title": "Type",
@@ -1990,6 +2275,21 @@
     "Section": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "section",
           "title": "Type",
@@ -2149,6 +2449,21 @@
     "StatusList": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "status_list",
           "title": "Type",
@@ -2174,6 +2489,21 @@
     "Swimlane": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "swimlane",
           "title": "Type",
@@ -2320,6 +2650,21 @@
     "Table": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "table",
           "title": "Type",
@@ -2402,6 +2747,21 @@
     "Text": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "text",
           "title": "Type",
@@ -2429,6 +2789,21 @@
     "Timeline": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "timeline",
           "title": "Type",
@@ -2536,6 +2911,21 @@
     "Walkthrough": {
       "additionalProperties": false,
       "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6 of 6); omit for full width. Same column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
         "type": {
           "const": "walkthrough",
           "title": "Type",

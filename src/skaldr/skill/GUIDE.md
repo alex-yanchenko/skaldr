@@ -105,6 +105,12 @@ infinities.
 
 ## Blocks
 
+**Every block accepts an optional `span: 1-6`** — its width in content columns, the same column-count
+as a `grid` cell. Omit for full width (the default). `span` is width *only*: blocks still stack
+vertically one per row regardless — to place several in a single row, use a `grid`. Reach for a
+smaller span to hold long-form prose at a readable measure (e.g. `- {type: text, span: 4, body: …}`)
+or to keep a small block from stretching across the whole page.
+
 | `type` | Purpose | Key fields |
 |---|---|---|
 | `heading` | Section structure (feeds the TOC at level 2) | `text`, `level: 2\|3` |

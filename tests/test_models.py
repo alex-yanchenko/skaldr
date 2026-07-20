@@ -51,6 +51,25 @@ def test_unknown_field_is_rejected_with_path() -> None:
         parse_report(make_report(blocks=[{"type": "text", "body": "hi", "oops": 1}]))
 
 
+def test_block_span_defaults_to_none() -> None:
+    block = parse_report(make_report(blocks=[{"type": "text", "body": "x"}])).blocks[0]
+    assert isinstance(block, Text)
+    assert block.span is None
+
+
+def test_block_span_accepts_one_through_six() -> None:
+    for span in range(1, 7):
+        block = parse_report(make_report(blocks=[{"type": "text", "body": "x", "span": span}])).blocks[0]
+        assert isinstance(block, Text)
+        assert block.span == span
+
+
+@pytest.mark.parametrize("span", [0, 7])
+def test_block_span_out_of_range_is_rejected(span: int) -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.text\.span"):
+        parse_report(make_report(blocks=[{"type": "text", "body": "x", "span": span}]))
+
+
 def test_meta_rejects_an_authored_width() -> None:
     """Width is reader-only — there is no meta.width. Authoring one fails the strict extra-key guard."""
     with pytest.raises(ReportError, match=r"meta\.width.*not permitted"):

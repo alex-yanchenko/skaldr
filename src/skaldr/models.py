@@ -143,6 +143,21 @@ class _Frozen(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class _Block(_Frozen):
+    """Base for every top-level/section block. Carries the one width primitive: `span`, how many of
+    the 6 content columns the block occupies. It is width only; blocks still stack vertically (one per
+    row). To place several blocks in a single row, use a `grid` (whose cells carry their own span)."""
+
+    span: int | None = Field(
+        default=None,
+        ge=1,
+        le=6,
+        description="Block width in content columns (1 to 6 of 6); omit for full width. Same "
+        "column-count vocabulary as a grid cell's span. Width only: blocks still stack vertically; use "
+        "a `grid` to put several in one row.",
+    )
+
+
 class Badge(_Frozen):
     label: str = Field(description="Chip text for this tag/status.")
     tone: BadgeColor = Field(
@@ -164,7 +179,7 @@ class Meta(_Frozen):
     )
 
 
-class Heading(_Frozen):
+class Heading(_Block):
     type: Literal["heading"]
     text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
     level: Literal[2, 3] = Field(default=2, description="Heading level: 2 (section) or 3 (sub-heading).")
@@ -176,13 +191,13 @@ class Heading(_Frozen):
         return self
 
 
-class Text(_Frozen):
+class Text(_Block):
     type: Literal["text"]
     body: str = Field(description="Rich-text prose; blank lines split paragraphs.")
     muted: bool = Field(default=False, description="Render in the caption colour, for asides.")
 
 
-class ListBlock(_Frozen):
+class ListBlock(_Block):
     type: Literal["list"]
     style: Literal["bullet", "number"] = Field(default="bullet", description="Bulleted or numbered.")
     items: list[str] = Field(min_length=1, description="Rich-text points; no nesting.")
@@ -193,7 +208,7 @@ class Fact(_Frozen):
     value: str = Field(description="Fact value (e.g. 'prod').")
 
 
-class FactStrip(_Frozen):
+class FactStrip(_Block):
     type: Literal["fact_strip"]
     facts: list[Fact] = Field(min_length=1, max_length=8, description="1-8 label/value pairs, one line.")
 
@@ -203,7 +218,7 @@ class KVPair(_Frozen):
     value: str = Field(description="Rich-text value.")
 
 
-class KeyValue(_Frozen):
+class KeyValue(_Block):
     type: Literal["key_value"]
     pairs: list[KVPair] = Field(min_length=1, description="Vertical label/value metadata rows.")
 
@@ -244,7 +259,7 @@ class Card(_Frozen):
         return self
 
 
-class Cards(_Frozen):
+class Cards(_Block):
     type: Literal["cards"]
     items: list[Card] = Field(min_length=1, description="Headline-number cards, laid out full-width.")
 
@@ -267,7 +282,7 @@ class BadgeGroup(_Frozen):
     )
 
 
-class BadgeRow(_Frozen):
+class BadgeRow(_Block):
     type: Literal["badge_row"]
     label: str | None = Field(
         default=None, description="Optional leading label (e.g. 'Affects:') for a flat `items` row."
@@ -293,7 +308,7 @@ class BadgeRow(_Frozen):
         return self
 
 
-class Callout(_Frozen):
+class Callout(_Block):
     type: Literal["callout"]
     tone: CalloutTone = Field(
         description="Accent + tint: info/success/warning/danger (blue/green/amber/red alias in)."
@@ -309,7 +324,7 @@ class StatusItem(_Frozen):
     text: str = Field(description="Rich-text label for the step.")
 
 
-class StatusList(_Frozen):
+class StatusList(_Block):
     type: Literal["status_list"]
     items: list[StatusItem] = Field(min_length=1, description="Steps/checks with a coloured state glyph.")
 
@@ -329,7 +344,7 @@ class MeterItem(_Frozen):
         return self
 
 
-class Meter(_Frozen):
+class Meter(_Block):
     type: Literal["meter"]
     items: list[MeterItem] = Field(min_length=1, description="Labelled horizontal bars.")
 
@@ -365,7 +380,7 @@ class RangeAxis(_Frozen):
         return self
 
 
-class Range(_Frozen):
+class Range(_Block):
     type: Literal["range"]
     segments: list[RangeSegment] = Field(
         min_length=1, description="Segments laid left-to-right, each sized in proportion to its span."
@@ -375,7 +390,7 @@ class Range(_Frozen):
     )
 
 
-class Code(_Frozen):
+class Code(_Block):
     type: Literal["code"]
     content: str = Field(description="Code/log/config text; rendered verbatim, no highlighting.")
     label: str | None = Field(default=None, description="Optional label header above the block.")
@@ -384,13 +399,13 @@ class Code(_Frozen):
     )
 
 
-class Quote(_Frozen):
+class Quote(_Block):
     type: Literal["quote"]
     body: str = Field(description="Rich-text quotation.")
     cite: str | None = Field(default=None, description="Optional attribution line.")
 
 
-class Image(_Frozen):
+class Image(_Block):
     type: Literal["image"]
     src: str = Field(
         description="A data: URI (self-contained — no external fetches). Base64-encode the payload "
@@ -420,7 +435,7 @@ class TimelineItem(_Frozen):
     )
 
 
-class Timeline(_Frozen):
+class Timeline(_Block):
     type: Literal["timeline"]
     items: list[TimelineItem] = Field(min_length=1, description="Ordered entries with state-coloured dots.")
 
@@ -452,7 +467,7 @@ class FlowStep(_Frozen):
         return self
 
 
-class Flow(_Frozen):
+class Flow(_Block):
     type: Literal["flow"]
     steps: list[FlowStep] = Field(
         min_length=2, description="Ordered stages (2+); a flow needs two or more nodes."
@@ -473,7 +488,7 @@ class Flow(_Frozen):
     )
 
 
-class Fan(_Frozen):
+class Fan(_Block):
     type: Literal["fan"]
     hub: FlowStep = Field(
         description="The single node — the 'one' side (a fan-in's target, a fan-out's source)."
@@ -504,7 +519,7 @@ class ChartSlice(_Frozen):
     tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
 
 
-class Chart(_Frozen):
+class Chart(_Block):
     type: Literal["chart"]
     variant: ChartVariant = Field(
         description="bar: compare a value across categories (grouped, or set stacked). "
@@ -667,7 +682,7 @@ class Group(_Frozen):
     )
 
 
-class Table(_Frozen):
+class Table(_Block):
     type: Literal["table"]
     columns: list[Column] = Field(min_length=1, description="Column specs; at least one text/rich column.")
     groups: list[Group] | None = Field(
@@ -765,7 +780,7 @@ class ReferenceItem(_Frozen):
         return self
 
 
-class References(_Frozen):
+class References(_Block):
     type: Literal["references"]
     items: list[ReferenceItem] = Field(
         min_length=1, description="Numbered sources; cite each inline with [^key]."
@@ -787,7 +802,7 @@ class ComparisonRow(_Frozen):
     values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
 
 
-class Comparison(_Frozen):
+class Comparison(_Block):
     type: Literal["comparison"]
     options: list[str] = Field(
         min_length=2, description="The things being compared — the column headers (2+)."
@@ -870,7 +885,7 @@ class SwimlaneGroup(_Frozen):
     )
 
 
-class Swimlane(_Frozen):
+class Swimlane(_Block):
     type: Literal["swimlane"]
     lanes: list[str] = Field(
         min_length=1,
@@ -1020,7 +1035,7 @@ _Leaf = (
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 
 
-class Section(_Frozen):
+class Section(_Block):
     type: Literal["section"]
     title: str = Field(description="Summary label shown on the collapsible.")
     collapsed: bool = Field(default=True, description="Whether the section starts collapsed.")
@@ -1044,7 +1059,7 @@ class InnerGridCell(_Frozen):
     )
 
 
-class InnerGrid(_Frozen):
+class InnerGrid(_Block):
     type: Literal["grid"]
     cells: list[InnerGridCell] = Field(min_length=1, description="Cells across the 6-column row.")
 
@@ -1069,7 +1084,7 @@ class GridCell(_Frozen):
     )
 
 
-class Grid(_Frozen):
+class Grid(_Block):
     type: Literal["grid"]
     cells: list[GridCell] = Field(min_length=1, description="Cells across a 6-column row.")
 
@@ -1111,7 +1126,7 @@ class WalkthroughStep(_Frozen):
         return self
 
 
-class Walkthrough(_Frozen):
+class Walkthrough(_Block):
     type: Literal["walkthrough"]
     steps: list[WalkthroughStep] = Field(
         min_length=1,
