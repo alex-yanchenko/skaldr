@@ -112,7 +112,15 @@ jobs:
           done
           tap=$(mktemp -d)
           git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/alex-yanchenko/homebrew-tap" "$tap"
-          uv run --no-project python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb"
+          # The generator re-resolves the closure from PyPI. Even after the wait-loop above sees the
+          # version, this follow-up resolution can transiently hit a PyPI node that hasn't caught up
+          # (eventual consistency) and exit non-zero — which previously failed the whole release with
+          # the tag + PyPI publish already done. Retry so that race self-heals instead of half-releasing.
+          for i in $(seq 1 5); do
+            uv run --no-project python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb" && break
+            [ "$i" -eq 5 ] && { echo "formula generation failed after 5 attempts"; exit 1; }
+            sleep 15
+          done
           cd "$tap"
           git config user.name "alex-release-bot[bot]"
           git config user.email "alex-release-bot[bot]@users.noreply.github.com"
