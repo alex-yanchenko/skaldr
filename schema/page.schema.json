@@ -2180,13 +2180,30 @@
           "type": "string"
         },
         "lanes": {
-          "description": "Lane names, in row order (top to bottom). Capped at 8 \u2014 one per palette colour, and more tracks than that stop reading as a matrix; split into two swimlanes instead.",
+          "description": "Lane names, in row order (top to bottom). Capped at 8 \u2014 more rows than that stop reading as a matrix; split into two swimlanes instead.",
           "items": {
             "type": "string"
           },
           "maxItems": 8,
           "minItems": 1,
           "title": "Lanes",
+          "type": "array"
+        },
+        "columns": {
+          "description": "Column names, left to right \u2014 the sprint / phase axis. Ordered and unique.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "groups": {
+          "description": "Optional milestone overlay: coloured caps beyond the table, each spanning a contiguous run of columns. Omit entirely for a plain swimlane.",
+          "items": {
+            "$ref": "#/$defs/SwimlaneGroup"
+          },
+          "title": "Groups",
           "type": "array"
         },
         "steps": {
@@ -2197,32 +2214,57 @@
           "minItems": 1,
           "title": "Steps",
           "type": "array"
-        },
-        "tones": {
-          "additionalProperties": {
-            "enum": [
-              "neutral",
-              "info",
-              "success",
-              "warning",
-              "danger",
-              "accent",
-              "teal",
-              "sky"
-            ],
-            "type": "string"
-          },
-          "description": "Optional per-lane tone override, keyed by lane name. Lanes without an override get a colour auto-assigned from the 8-colour palette in `lanes` order.",
-          "title": "Tones",
-          "type": "object"
         }
       },
       "required": [
         "type",
         "lanes",
+        "columns",
         "steps"
       ],
       "title": "Swimlane",
+      "type": "object"
+    },
+    "SwimlaneGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Group (milestone / delivery) name, shown on its cap.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "color": {
+          "description": "Cap colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026). Author-chosen, never auto-assigned: a group's colour carries meaning.",
+          "enum": [
+            "slate",
+            "blue",
+            "green",
+            "amber",
+            "red",
+            "violet",
+            "teal",
+            "sky"
+          ],
+          "title": "Color",
+          "type": "string"
+        },
+        "columns": {
+          "description": "The columns this group spans \u2014 a CONTIGUOUS run of the block's `columns` (a group cannot skip a column). Order need not match; it is derived from the block `columns`.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "color",
+        "columns"
+      ],
+      "title": "SwimlaneGroup",
       "type": "object"
     },
     "SwimlaneStep": {
@@ -2235,10 +2277,10 @@
           "type": "string"
         },
         "col": {
-          "description": "1-based column (its position along the timeline). Two steps sharing a `col` are parallel \u2014 they stack in that column.",
-          "minimum": 1,
+          "description": "Which column (sprint) this step sits in \u2014 one of the block's `columns`. Two steps sharing a lane/col stack in that cell.",
+          "minLength": 1,
           "title": "Col",
-          "type": "integer"
+          "type": "string"
         },
         "n": {
           "description": "The number shown in the step's cell \u2014 a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
@@ -2251,6 +2293,19 @@
           "minLength": 1,
           "title": "Label",
           "type": "string"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which group (milestone) this step belongs to \u2014 one of the block's `groups` that covers its `col`. Required only when the column is split across more than one group; inferred otherwise.",
+          "title": "Group"
         }
       },
       "required": [

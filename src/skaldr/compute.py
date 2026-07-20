@@ -1,5 +1,6 @@
-"""Derived, never-authored values: TOC, the used-badge legend, the provenance footer, and the
-number/percent formatting helpers the templates call, so they can't drift from the data.
+"""Derived, never-authored values: TOC, the used-badge legend, the provenance footer, the
+number/percent formatting helpers, and the swimlane grid layout — everything the templates need
+computed from the data so it can't drift from it.
 
 `col_sum` is re-exported from `models` (it lives there because `Table._reconcile` validates against
 it, and models must not import compute) so templates can reach it through this one module.
@@ -7,10 +8,9 @@ it, and models must not import compute) so templates can reach it through this o
 
 import re
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import Any, TypedDict
 
 from skaldr.models import (
-    TONE_NAMES,
     AnyBlock,
     Badge,
     Grid,
@@ -31,18 +31,14 @@ __all__ = [
     "first_table_index",
     "fmt",
     "heading_slugs",
-    "lane_tones",
     "pct",
     "provenance_footer",
     "reconcile_line",
     "reference_numbers",
+    "swimlane_layout",
     "toc_entries",
     "used_badges",
 ]
-
-# Lanes without an explicit override draw a colour by position from the canonical tone order.
-# `Swimlane.lanes` is capped at the palette length, so a lane's position never wraps into a reused one.
-_LANE_PALETTE = TONE_NAMES
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
@@ -126,10 +122,268 @@ def used_badges(report: Report) -> list[tuple[str, Badge]]:
     return [(key, badge) for key, badge in report.badges.items() if key in referenced]
 
 
-def lane_tones(block: Swimlane) -> dict[str, str]:
-    """Each lane's tone: an explicit `tones` override, else a palette colour by lane position. Lanes are
-    capped at the palette length, so positions never collide onto a reused colour."""
-    return {lane: block.tones.get(lane, _LANE_PALETTE[index]) for index, lane in enumerate(block.lanes)}
+class _SwimBox(TypedDict):
+    """A rectangle on the grid, as 1-based start/end grid line numbers (column then row)."""
+
+    line_start: int
+    line_end: int
+    row_start: int
+    row_end: int
+
+
+class SwimStep(TypedDict):
+    n: str
+    label: str
+
+
+class SwimSubcol(TypedDict):
+    col: str
+    group: str | None
+    tone: str | None  # the group's palette colour name (a BadgeColor), or None for an ungrouped column
+    line_start: int
+    line_end: int
+
+
+class SwimHeader(_SwimBox):
+    label: str  # one per column, spanning that column's sub-columns
+
+
+class SwimTint(_SwimBox):
+    tone: str | None  # a header sub-cell, tinted by its group's palette colour (or None, untinted)
+
+
+class SwimGutter(TypedDict):
+    lane: str
+    row_start: int
+    row_end: int
+
+
+class SwimCell(_SwimBox):
+    tone: str | None  # the group's palette colour, or None for an ungrouped column
+    steps: list[SwimStep]
+
+
+class SwimCapBottom(_SwimBox):
+    color: str  # the group's palette colour name (a BadgeColor)
+    edges: str  # "left"/"right"/"left right"/"" — which outer sides carry a grey (frame-matching) edge
+
+
+class SwimCap(SwimCapBottom):
+    label: str
+
+
+class SwimVSolid(TypedDict):
+    col_start: int
+    col_end: int
+    row_start: int
+    row_end: int
+
+
+class SwimVDash(TypedDict):
+    col_start: int
+    col_end: int
+    row_start: int
+    row_end: int
+
+
+class SwimLayout(TypedDict):
+    has_groups: bool
+    col_template: str
+    row_template: str
+    subcols: list[SwimSubcol]
+    headers: list[SwimHeader]
+    header_tints: list[SwimTint]
+    gutter: list[SwimGutter]
+    cells: list[SwimCell]
+    caps: list[SwimCap]
+    caps_bottom: list[SwimCapBottom]
+    vsolid: list[SwimVSolid]
+    vdash: list[SwimVDash]
+    hdiv: list[int]
+    tbl: _SwimBox
+
+
+def swimlane_layout(block: Swimlane) -> SwimLayout:
+    """Everything the swimlane macro places on its CSS grid, as absolute 1-based grid line numbers so
+    the template only loops and never computes. The grid is a lane gutter (track 1) + one track per
+    atomic sub-column (a `(column, group)` segment); rows are an optional top poke zone (group caps),
+    the sprint header, one row per lane, and an optional bottom poke zone.
+
+    Line languages, all one grey: SOLID verticals mark real column (sprint) boundaries and live inside
+    the table rows only (a group cap spans across them); DASHED verticals mark a group split within a
+    column and run the full height (poke zones + table) so caps sit flush and the divider is continuous.
+    Horizontal dividers span the full width as one line each (never stitched from cell borders)."""
+    subcols = block.subcolumns()
+    ncols = len(subcols)
+    nlanes = len(block.lanes)
+    has_groups = bool(block.groups)
+    # group name → its palette colour (an ungrouped segment's None group has no tint).
+    color_of = {group.name: group.color for group in block.groups}
+
+    # rows: [poke-top] header [lane…] [poke-bottom]. Header starts at line `top`.
+    top = 2 if has_groups else 1
+    header_row = (top, top + 1)
+    lane_rows = [(top + 1 + index, top + 2 + index) for index in range(nlanes)]
+    table_rows = (top, top + 1 + nlanes)
+    full_rows = (1, top + 2 + nlanes) if has_groups else table_rows
+    poke_top_row = (1, 2)
+    poke_bottom_row = (top + 1 + nlanes, top + 2 + nlanes)
+
+    # column line for sub-column index i: track (i + 2), spanning lines (i + 2)..(i + 3).
+    def col_lines(index: int) -> tuple[int, int]:
+        return index + 2, index + 3
+
+    subcol_out: list[SwimSubcol] = []
+    for index, (col, group_name) in enumerate(subcols):
+        start, end = col_lines(index)
+        subcol_out.append(
+            {
+                "col": col,
+                "group": group_name,
+                "tone": color_of[group_name] if group_name is not None else None,
+                "line_start": start,
+                "line_end": end,
+            }
+        )
+
+    # sprint-header tint sub-cells (one per sub-column) + one label per column spanning its sub-columns.
+    header_tints: list[SwimTint] = [
+        {
+            "tone": sub["tone"],
+            "line_start": sub["line_start"],
+            "line_end": sub["line_end"],
+            "row_start": header_row[0],
+            "row_end": header_row[1],
+        }
+        for sub in subcol_out
+    ]
+    headers: list[SwimHeader] = []
+    for col in block.columns:
+        indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
+        headers.append(
+            {
+                "label": col,
+                "line_start": col_lines(indices[0])[0],
+                "line_end": col_lines(indices[-1])[1],
+                "row_start": header_row[0],
+                "row_end": header_row[1],
+            }
+        )
+
+    gutter: list[SwimGutter] = [
+        {"lane": lane, "row_start": lane_rows[index][0], "row_end": lane_rows[index][1]}
+        for index, lane in enumerate(block.lanes)
+    ]
+
+    cells: list[SwimCell] = []
+    for lane_index, lane in enumerate(block.lanes):
+        row_start, row_end = lane_rows[lane_index]
+        for sub in subcol_out:
+            steps: list[SwimStep] = [
+                {"n": step.n, "label": step.label}
+                for step in block.steps
+                if step.lane == lane and step.col == sub["col"] and block.step_group(step) == sub["group"]
+            ]
+            cells.append(
+                {
+                    "tone": sub["tone"],
+                    "line_start": sub["line_start"],
+                    "line_end": sub["line_end"],
+                    "row_start": row_start,
+                    "row_end": row_end,
+                    "steps": steps,
+                }
+            )
+
+    # caps: each group's contiguous sub-column run, top cap (labelled) + bottom cap. The leftmost /
+    # rightmost cap carries a grey outer edge (`edges`) so its rounded outer corner is concentric with
+    # the table frame's — a grey rounded border with the group's coloured accent on top, same radius.
+    # Interior cap sides are the dashed splits.
+    right_edge = ncols + 2
+    caps: list[SwimCap] = []
+    caps_bottom: list[SwimCapBottom] = []
+    for group in block.groups:
+        indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
+        line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
+        edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
+        caps.append(
+            {
+                "label": group.name,
+                "color": group.color,
+                "edges": edges.strip(),
+                "line_start": line_start,
+                "line_end": line_end,
+                "row_start": poke_top_row[0],
+                "row_end": poke_top_row[1],
+            }
+        )
+        caps_bottom.append(
+            {
+                "color": group.color,
+                "edges": edges.strip(),
+                "line_start": line_start,
+                "line_end": line_end,
+                "row_start": poke_bottom_row[0],
+                "row_end": poke_bottom_row[1],
+            }
+        )
+
+    # interior vertical lines from sub-column boundaries. Column change → solid (table rows); same
+    # column, different group → dashed (full height). The table's outer edges come from the rounded
+    # frame overlay (see `tbl`) and the outer cap corners from the caps' own grey `edges` borders, so
+    # the only always-present solid here is the gutter seam.
+    vsolid: list[SwimVSolid] = [
+        {"col_start": 2, "col_end": 3, "row_start": table_rows[0], "row_end": table_rows[1]}
+    ]
+    vdash: list[SwimVDash] = []
+    for index in range(ncols - 1):
+        boundary_line = col_lines(index)[1]
+        (left_col, left_group), (right_col, right_group) = subcols[index], subcols[index + 1]
+        if left_col != right_col:
+            vsolid.append(
+                {
+                    "col_start": boundary_line,
+                    "col_end": boundary_line + 1,
+                    "row_start": table_rows[0],
+                    "row_end": table_rows[1],
+                }
+            )
+        elif left_group != right_group:
+            vdash.append(
+                {
+                    "col_start": boundary_line,
+                    "col_end": boundary_line + 1,
+                    "row_start": full_rows[0],
+                    "row_end": full_rows[1],
+                }
+            )
+    # horizontal dividers: header/body + between lanes, each one continuous full-width line. The outer
+    # top/bottom edges come from the rounded frame overlay, not from here.
+    hdiv = [header_row[1]] + [lane_rows[index][0] for index in range(1, nlanes)]
+
+    return {
+        "has_groups": has_groups,
+        "col_template": f"max-content repeat({ncols}, var(--swim-col))",
+        "row_template": _swim_row_template(has_groups, nlanes),
+        "subcols": subcol_out,
+        "headers": headers,
+        "header_tints": header_tints,
+        "gutter": gutter,
+        "cells": cells,
+        "caps": caps,
+        "caps_bottom": caps_bottom,
+        "vsolid": vsolid,
+        "vdash": vdash,
+        "hdiv": hdiv,
+        "tbl": {"line_start": 1, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
+    }
+
+
+def _swim_row_template(has_groups: bool, nlanes: int) -> str:
+    lane_tracks = " ".join(["auto"] * nlanes)
+    if has_groups:
+        return f"var(--swim-poke) auto {lane_tracks} var(--swim-pokeb)"
+    return f"auto {lane_tracks}"
 
 
 def provenance_footer(report: Report) -> str | None:

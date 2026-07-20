@@ -502,101 +502,93 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
     assert '<td><span class="ct danger">high</span></td>' in html
 
 
-def test_swimlane_renders_lane_gutter_and_placed_steps_with_auto_tones() -> None:
-    """Lanes get palette tones in order (neutral, info, success…); a step's number cell carries its
-    lane tone; a step lands in its lane row at its `col` (offset by the gutter column)."""
-    block = {
-        "type": "swimlane",
-        "lanes": ["Plan", "Do"],
-        "steps": [
-            {"lane": "Plan", "col": 1, "n": "1", "label": "Draft"},
-            {"lane": "Do", "col": 2, "n": "2", "label": "Build"},
-        ],
-    }
-
-    html = render_html(parse_report(make_report(blocks=[block])))
-
-    # two columns (max col) after the max-content gutter
-    assert 'style="grid-template-columns:max-content repeat(2, var(--swim-col))"' in html
-    # lane gutters carry the auto-assigned tone (Plan → neutral, Do → info)
-    assert '<div class="sw-lane neutral">Plan</div>' in html
-    assert '<div class="sw-lane info">Do</div>' in html
-    # a step renders n + label inside a tone-classed box
-    assert (
-        '<div class="sw-step neutral"><span class="sw-n">1</span><span class="sw-label">Draft</span></div>'
-        in html
-    )
-    assert (
-        '<div class="sw-step info"><span class="sw-n">2</span><span class="sw-label">Build</span></div>'
-        in html
-    )
-    # Plan's whole row: gutter, its step at col 1, then an EMPTY sw-cell at col 2 (no step there)
-    assert (
-        '<div class="sw-lane neutral">Plan</div>'
-        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">1</span>'
-        '<span class="sw-label">Draft</span></div></div>'
-        '<div class="sw-cell"></div>' in html
-    )
-
-
-def test_swimlane_column_gap_renders_an_empty_middle_column() -> None:
-    """Steps at col 1 and 3 leave col 2 an empty cell — the range(1, maxcol+1) fill, not a skipped col."""
-    block = {
-        "type": "swimlane",
-        "lanes": ["A"],
-        "steps": [
-            {"lane": "A", "col": 1, "n": "1", "label": "x"},
-            {"lane": "A", "col": 3, "n": "3", "label": "z"},
-        ],
-    }
-
-    html = render_html(parse_report(make_report(blocks=[block])))
-
-    assert 'style="grid-template-columns:max-content repeat(3, var(--swim-col))"' in html
-    assert (
-        '<div class="sw-lane neutral">A</div>'
-        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">1</span>'
-        '<span class="sw-label">x</span></div></div>'
-        '<div class="sw-cell"></div>'
-        '<div class="sw-cell"><div class="sw-step neutral"><span class="sw-n">3</span>'
-        '<span class="sw-label">z</span></div></div>' in html
-    )
-
-
-def test_swimlane_parallel_steps_share_a_column_cell() -> None:
-    """Two steps in the same lane+col stack in one cell; the free-string `n` renders verbatim."""
+def test_swimlane_plain_renders_gutter_labels_and_stacked_tickets() -> None:
+    """A groupless swimlane: header + lane rows only (no poke zones), gutter labels, and two steps in
+    the same lane/column stacked in one cell with their free-string `n` verbatim. No group caps."""
     block = {
         "type": "swimlane",
         "lanes": ["Eng"],
+        "columns": ["S1"],
         "steps": [
-            {"lane": "Eng", "col": 1, "n": "3a", "label": "A"},
-            {"lane": "Eng", "col": 1, "n": "3b", "label": "B"},
+            {"lane": "Eng", "col": "S1", "n": "3a", "label": "A"},
+            {"lane": "Eng", "col": "S1", "n": "3b", "label": "B"},
         ],
     }
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
+    assert "grid-template-columns:max-content repeat(1, var(--swim-col))" in html
+    assert "grid-template-rows:auto auto" in html  # header + one lane, no poke zones
+    assert 'class="swim-gut"' in html and ">Eng</div>" in html
+    assert 'class="swim-hlabel"' in html and ">S1</div>" in html
+    # both tickets stacked in a single cell, in order
     assert (
-        '<div class="sw-cell">'
-        '<div class="sw-step neutral"><span class="sw-n">3a</span><span class="sw-label">A</span></div>'
-        '<div class="sw-step neutral"><span class="sw-n">3b</span><span class="sw-label">B</span></div>'
-        "</div>" in html
+        '<div class="swim-tkt"><span class="swim-n">3a</span><span class="swim-l">A</span></div>'
+        '<div class="swim-tkt"><span class="swim-n">3b</span><span class="swim-l">B</span></div>' in html
     )
+    assert 'class="swim-cap' not in html  # no groups → no caps
+    assert 'class="swim-vdash"' not in html  # no group splits → no dashed lines
 
 
-def test_swimlane_tone_override_wins_over_auto_assignment() -> None:
+def test_swimlane_grouped_renders_coloured_caps_tints_and_dashed_splits() -> None:
+    """MVP spans S1-S2, Beta and GA split S2, GA continues to S3. Caps carry the group's palette class
+    and label, cells and header cells carry the group tint, S2's internal splits render as dashes, and
+    the split sprint's label is written exactly once."""
     block = {
         "type": "swimlane",
-        "lanes": ["A", "B"],
-        "tones": {"B": "danger"},
-        "steps": [{"lane": "B", "col": 1, "n": "1", "label": "x"}],
+        "lanes": ["R"],
+        "columns": ["S1", "S2", "S3"],
+        "groups": [
+            {"name": "MVP", "color": "blue", "columns": ["S1", "S2"]},
+            {"name": "Beta", "color": "amber", "columns": ["S2"]},
+            {"name": "GA", "color": "violet", "columns": ["S2", "S3"]},
+        ],
+        "steps": [
+            {"lane": "R", "col": "S1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "S2", "group": "Beta", "n": "2", "label": "b"},
+            {"lane": "R", "col": "S3", "n": "3", "label": "c"},
+        ],
     }
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
-    assert '<div class="sw-lane danger">B</div>' in html  # override, not the auto tone (info)
-    assert '<div class="sw-step danger">' in html
-    assert '<div class="sw-lane neutral">A</div>' in html  # sibling lane's auto tone is undisturbed
+    assert "grid-template-rows:var(--swim-poke) auto auto var(--swim-pokeb)" in html
+    # top caps carry the palette colour class + a dot + the group label; the outermost caps also carry
+    # a grey outer edge (MVP leftmost → left, GA rightmost → right) that rounds with the accent corner
+    assert 'class="swim-cap blue left"' in html and '<span class="swim-dot"></span>MVP</div>' in html
+    assert 'class="swim-cap amber"' in html and '<span class="swim-dot"></span>Beta</div>' in html
+    assert 'class="swim-cap violet right"' in html and '<span class="swim-dot"></span>GA</div>' in html
+    assert 'class="swim-capb blue left"' in html  # matching bottom cap, same edge
+    # the rounded outer frame is drawn on top of the tints
+    assert 'class="swim-frame"' in html
+    # cells and header cells carry the group tint class
+    assert 'class="swim-cell blue"' in html and 'class="swim-cell amber"' in html
+    assert 'class="swim-hcell blue"' in html
+    # the two S2-internal group splits render as dashed overlays
+    assert html.count('class="swim-vdash"') == 2
+    # the split sprint's label is written exactly once, spanning its sub-columns
+    assert html.count(">S2</div>") == 1
+    # the Beta step landed in its resolved sub-column
+    assert '<span class="swim-n">2</span><span class="swim-l">b</span>' in html
+
+
+def test_swimlane_group_spanning_all_columns_renders_both_edge_classes() -> None:
+    """A group covering every column is leftmost AND rightmost, so its cap carries both edge classes."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2"],
+        "groups": [{"name": "All", "color": "green", "columns": ["C1", "C2"]}],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert 'class="swim-cap green left right"' in html
+    assert 'class="swim-capb green left right"' in html
 
 
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:

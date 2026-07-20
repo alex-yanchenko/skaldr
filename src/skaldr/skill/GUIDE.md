@@ -127,7 +127,7 @@ infinities.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `swimlane` | Multi-track process on a lane × time grid (see below) | `lanes[]`, `steps: [{lane, col, n, label}]`, `tones?`, `connect?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -345,32 +345,61 @@ present/absent; only the colour flips, and only on bool cells.
 
 ## The `swimlane`
 
-A process that runs across several **tracks** (teams, systems, roles) laid on a grid: `lanes` are the
-rows, and each step's `col` is its position along the timeline (left to right). The sequence reads as a
-staircase stepping down and across the lanes. Reach for it when **who does what, when** is the message
-and a single-track `flow` can't show the hand-offs between lanes.
+A process laid on a grid: `lanes` are the rows (teams, systems, roles) and `columns` are the axis
+across the top (sprints, phases, weeks). Each step sits in one `lane`/`col` cell. Reach for it when
+**who does what, when** is the message and a single-track `flow` can't show the hand-offs. Both
+`lanes` and `columns` are declared up front, ordered, and unique; up to **8 lanes** (more rows stop
+reading as a matrix — split into two swimlanes). Every declared lane and column must carry at least
+one step (no empty rows or columns).
 
-Every step field is explicit — skaldr never derives or renumbers: `lane` (one of `lanes`), `col`
-(1-based timeline column), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`.
-Two steps sharing a `col` are **parallel** — they stack in that column. Column gaps are allowed. Each
-lane gets a palette colour auto-assigned in `lanes` order (carried on its label and its steps' number
-cells); override any lane with `tones`. Up to **8 lanes** (one per palette colour) — more tracks than
-that stop reading as a matrix, so split into two swimlanes.
+Step fields are explicit — skaldr never derives or renumbers: `lane` (one of `lanes`), `col` (one of
+`columns`), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`. Two steps in
+the same cell stack.
 
 ```yaml
 - type: swimlane
   lanes: ["Product", "Eng", "QA"]
-  tones: { QA: success }          # optional per-lane override; others auto-assigned
+  columns: ["Sprint 1", "Sprint 2", "Sprint 3"]
   steps:
-    - { lane: "Product", col: 1, n: "1", label: "Spec" }
-    - { lane: "Eng", col: 2, n: "2", label: "Build" }
-    - { lane: "Eng", col: 3, n: "3a", label: "Feature flag" }   # parallel with 3b (same col)
-    - { lane: "QA", col: 3, n: "3b", label: "Test plan" }
-    - { lane: "QA", col: 4, n: "4", label: "Regression" }
+    - { lane: "Product", col: "Sprint 1", n: "1", label: "Spec" }
+    - { lane: "Eng", col: "Sprint 2", n: "2", label: "Build" }
+    - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag" }   # stacks with 3b (same cell)
+    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan" }
+    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }
 ```
 
-The columns are fixed-width and the block scrolls horizontally when wide, so a long timeline stays a
-grid rather than reflowing (and fits the page when printed). Cross-lane connector lines are a future addition.
+### Optional group (milestone) overlay
+
+Add `groups` to overlay milestones/deliveries: each group has an author-chosen `color` and a
+**contiguous** run of `columns`, drawn as a coloured cap poking above and below the table plus a faint
+cell tint. Inside the table stays a plain grey grid — solid lines between columns, a dashed line where
+a column is split between groups. Omit `groups` entirely for a plain swimlane.
+
+A column may be split across **several** groups (e.g. two deliveries inside one sprint). When a step's
+`col` is covered by more than one group, name its `group`; when the column has one group (or none),
+`group` is inferred and can be left off. Every declared group must carry at least one step.
+
+```yaml
+- type: swimlane
+  lanes: ["Robin", "Sam"]
+  columns: ["Sprint 1", "Sprint 2", "Sprint 3"]
+  groups:
+    - { name: "MVP demo", color: blue,   columns: ["Sprint 1", "Sprint 2"] }
+    - { name: "Beta",     color: amber,  columns: ["Sprint 2"] }
+    - { name: "GA",       color: violet, columns: ["Sprint 2", "Sprint 3"] }   # Sprint 2 is 3-way split
+  steps:
+    - { lane: "Robin", col: "Sprint 1", n: "101", label: "auth service" }      # group inferred (one group)
+    - { lane: "Robin", col: "Sprint 2", group: "Beta", n: "104", label: "beta gate" }   # split → name it
+    - { lane: "Robin", col: "Sprint 3", n: "106", label: "store submit" }
+    - { lane: "Sam",   col: "Sprint 1", n: "110", label: "onboarding UI" }
+    - { lane: "Sam",   col: "Sprint 2", group: "MVP demo", n: "111", label: "profile screen" }
+    - { lane: "Sam",   col: "Sprint 2", group: "GA", n: "113", label: "error states" }
+```
+
+Groups must **nest, not interleave**: because a group's cap spans its columns as one contiguous band,
+a group that spans past a column cannot also share that column with another group (skaldr rejects the
+layout). Columns are fixed-width and the block scrolls horizontally when wide, so a long row of columns
+stays a grid rather than reflowing (and fits the page when printed).
 
 ## The `references`
 

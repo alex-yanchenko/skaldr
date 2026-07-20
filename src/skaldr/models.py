@@ -106,9 +106,6 @@ Tone = Annotated[
     Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
     BeforeValidator(_to_tone),
 ]
-# The canonical tone names in order — the one source for anything that assigns tones by position
-# (e.g. a swimlane lane's auto-colour), so a palette can't drift from the Tone literal.
-TONE_NAMES = _tone_names(Tone)
 RowTone = Annotated[
     Literal["muted", "danger"], BeforeValidator(_to_tone)
 ]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
@@ -830,10 +827,10 @@ class Comparison(_Frozen):
 
 class SwimlaneStep(_Frozen):
     lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
-    col: Count = Field(
-        ge=1,
-        description="1-based column (its position along the timeline). Two steps sharing a `col` are "
-        "parallel — they stack in that column.",
+    col: str = Field(
+        min_length=1,
+        description="Which column (sprint) this step sits in — one of the block's `columns`. Two steps "
+        "sharing a lane/col stack in that cell.",
     )
     n: str = Field(
         min_length=1,
@@ -841,11 +838,18 @@ class SwimlaneStep(_Frozen):
         "derives or renumbers it, so it reads exactly as written.",
     )
     label: str = Field(min_length=1, description="Step label, shown beside the number.")
+    group: str | None = Field(
+        default=None,
+        description="Which group (milestone) this step belongs to — one of the block's `groups` that covers "
+        "its `col`. Required only when the column is split across more than one group; inferred otherwise.",
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "SwimlaneStep":
         if not self.lane.strip():
             raise ValueError("swimlane step lane must not be blank")
+        if not self.col.strip():
+            raise ValueError("swimlane step col must not be blank")
         if not self.n.strip():
             raise ValueError("swimlane step n must not be blank")
         if not self.label.strip():
@@ -853,34 +857,139 @@ class SwimlaneStep(_Frozen):
         return self
 
 
+class SwimlaneGroup(_Frozen):
+    name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
+    color: BadgeColor = Field(
+        description="Cap colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
+        "Author-chosen, never auto-assigned: a group's colour carries meaning."
+    )
+    columns: list[str] = Field(
+        min_length=1,
+        description="The columns this group spans — a CONTIGUOUS run of the block's `columns` (a group "
+        "cannot skip a column). Order need not match; it is derived from the block `columns`.",
+    )
+
+
 class Swimlane(_Frozen):
     type: Literal["swimlane"]
     lanes: list[str] = Field(
         min_length=1,
         max_length=8,
-        description="Lane names, in row order (top to bottom). Capped at 8 — one per palette colour, and "
-        "more tracks than that stop reading as a matrix; split into two swimlanes instead.",
+        description="Lane names, in row order (top to bottom). Capped at 8 — more rows than that stop "
+        "reading as a matrix; split into two swimlanes instead.",
+    )
+    columns: list[str] = Field(
+        min_length=1,
+        description="Column names, left to right — the sprint / phase axis. Ordered and unique.",
+    )
+    groups: list[SwimlaneGroup] = Field(
+        default_factory=list[SwimlaneGroup],
+        description="Optional milestone overlay: coloured caps beyond the table, each spanning a contiguous "
+        "run of columns. Omit entirely for a plain swimlane.",
     )
     steps: list[SwimlaneStep] = Field(
         min_length=1, description="Steps placed on the lane/column grid; the sequence reads as a staircase."
     )
-    tones: dict[str, Tone] = Field(
-        default_factory=dict,
-        description="Optional per-lane tone override, keyed by lane name. Lanes without an override get a "
-        "colour auto-assigned from the 8-colour palette in `lanes` order.",
-    )
+
+    def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
+        return [group for group in self.groups if col in group.columns]
+
+    def step_group(self, step: SwimlaneStep) -> str | None:
+        """The group a step resolves to: its explicit `group`, else the sole group covering its column,
+        else None (an ungrouped column)."""
+        if step.group is not None:
+            return step.group
+        covering = self._groups_covering(step.col)
+        return covering[0].name if len(covering) == 1 else None
+
+    def subcolumns(self) -> list[tuple[str, str | None]]:
+        """The ordered atomic (column, group-name) segments the grid is built from. A column with no
+        group → one `(col, None)` segment; a column split across N groups → N segments in canonical
+        order (by column span, then declaration order). Raises if a group's segments cannot be laid out
+        contiguously (it interleaves with another group instead of nesting)."""
+        if not self.groups:
+            return [(col, None) for col in self.columns]
+        col_index = {col: index for index, col in enumerate(self.columns)}
+        group_index = {group.name: index for index, group in enumerate(self.groups)}
+
+        def span(group: "SwimlaneGroup") -> tuple[int, int]:
+            indices = [col_index[col] for col in group.columns]
+            return min(indices), max(indices)
+
+        segments: list[tuple[str, str | None]] = []
+        for col in self.columns:
+            covering = sorted(
+                self._groups_covering(col),
+                key=lambda group: (*span(group), group_index[group.name]),
+            )
+            if covering:
+                segments.extend((col, group.name) for group in covering)
+            else:
+                segments.append((col, None))
+        for group in self.groups:
+            positions = [index for index, (_, name) in enumerate(segments) if name == group.name]
+            if positions and positions != list(range(positions[0], positions[-1] + 1)):
+                raise ValueError(
+                    f"swimlane group '{group.name}' cannot be laid out contiguously — it shares a column "
+                    "with another group while spanning past it; groups must nest, not interleave"
+                )
+        return segments
 
     @model_validator(mode="after")
     def _shape(self) -> "Swimlane":
         if len(set(self.lanes)) != len(self.lanes):
             raise ValueError("swimlane lanes must be unique")
+        if len(set(self.columns)) != len(self.columns):
+            raise ValueError("swimlane columns must be unique")
         lane_set = set(self.lanes)
+        col_set = set(self.columns)
+        col_index = {col: index for index, col in enumerate(self.columns)}
+
+        group_names = [group.name for group in self.groups]
+        if len(set(group_names)) != len(group_names):
+            raise ValueError("swimlane group names must be unique")
+        for group in self.groups:
+            undeclared = [col for col in group.columns if col not in col_set]
+            if undeclared:
+                raise ValueError(
+                    f"swimlane group '{group.name}' references undeclared column(s): {', '.join(undeclared)}"
+                )
+            indices = sorted(col_index[col] for col in group.columns)
+            if indices != list(range(indices[0], indices[-1] + 1)):
+                raise ValueError(f"swimlane group '{group.name}' columns must be contiguous in column order")
+
+        group_name_set = set(group_names)
         for step in self.steps:
             if step.lane not in lane_set:
                 raise ValueError(f"swimlane step lane '{step.lane}' is not one of the declared lanes")
-        for lane in self.tones:
-            if lane not in lane_set:
-                raise ValueError(f"swimlane tones key '{lane}' is not a declared lane")
+            if step.col not in col_set:
+                raise ValueError(f"swimlane step col '{step.col}' is not one of the declared columns")
+            covering = {group.name for group in self._groups_covering(step.col)}
+            if step.group is not None:
+                if step.group not in group_name_set:
+                    raise ValueError(f"swimlane step group '{step.group}' is not a declared group")
+                if step.group not in covering:
+                    raise ValueError(f"swimlane step group '{step.group}' does not cover column '{step.col}'")
+            elif len(covering) > 1:
+                raise ValueError(
+                    f"swimlane step in column '{step.col}' must name a group — that column is split across "
+                    f"{len(covering)} groups"
+                )
+
+        used_lanes = {step.lane for step in self.steps}
+        for lane in self.lanes:
+            if lane not in used_lanes:
+                raise ValueError(f"swimlane lane '{lane}' has no steps")
+        used_cols = {step.col for step in self.steps}
+        for col in self.columns:
+            if col not in used_cols:
+                raise ValueError(f"swimlane column '{col}' has no steps")
+        used_groups = {resolved for step in self.steps if (resolved := self.step_group(step)) is not None}
+        for group in self.groups:
+            if group.name not in used_groups:
+                raise ValueError(f"swimlane group '{group.name}' has no steps")
+
+        self.subcolumns()  # trigger the contiguity / ordering check
         return self
 
 

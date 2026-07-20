@@ -137,14 +137,25 @@
 </div>
 {% endmacro %}
 
-{# Swimlane: a time-matrix — rows are lanes, columns are `col` (timeline position). Each lane gets a
-   palette tone (auto-assigned in lanes order, overridable via `tones`); a step's number cell carries it.
-   Parallel steps (same lane+col) stack in one cell. Fixed-width columns; the wrap scrolls horizontally. #}
+{# Swimlane: a lane×column matrix (rows = lanes, columns = the declared sprint/phase axis) with an
+   optional group (milestone) overlay. `swimlane_layout` computes every element's grid placement, so
+   this macro only places pre-computed lines: the table fill, the sprint header (tinted per group with
+   one label per column), lane gutter, cells, the grey grid (solid column boundaries + dashed group
+   splits), the group caps beyond the table, and the rounded frame. Fixed-width columns; scrolls wide. #}
 {% macro swimlane(b) %}
-{% set lane_tone = lane_tones(b) %}
-{% set maxcol = b.steps | map(attribute="col") | max %}
-<div class="swim-wrap"><div class="swim" style="grid-template-columns:max-content repeat({{ maxcol }}, var(--swim-col))">
-{% for lane in b.lanes %}<div class="sw-lane {{ lane_tone[lane] }}">{{ lane }}</div>{% for c in range(1, maxcol + 1) %}<div class="sw-cell">{% for s in b.steps if s.lane == lane and s.col == c %}<div class="sw-step {{ lane_tone[lane] }}"><span class="sw-n">{{ s.n }}</span><span class="sw-label">{{ s.label }}</span></div>{% endfor %}</div>{% endfor %}{% endfor %}
+{% set layout = swimlane_layout(b) %}
+<div class="swim-wrap"><div class="swim" style="grid-template-columns:{{ layout.col_template }};grid-template-rows:{{ layout.row_template }}">
+<div class="swim-tbl" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
+{% for h in layout.header_tints %}<div class="swim-hcell{% if h.tone %} {{ h.tone }}{% endif %}" style="grid-column:{{ h.line_start }}/{{ h.line_end }};grid-row:{{ h.row_start }}/{{ h.row_end }}"></div>{% endfor %}
+{% for h in layout.headers %}<div class="swim-hlabel" style="grid-column:{{ h.line_start }}/{{ h.line_end }};grid-row:{{ h.row_start }}/{{ h.row_end }}">{{ h.label }}</div>{% endfor %}
+{% for g in layout.gutter %}<div class="swim-gut" style="grid-column:1;grid-row:{{ g.row_start }}/{{ g.row_end }}">{{ g.lane }}</div>{% endfor %}
+{% for c in layout.cells %}<div class="swim-cell{% if c.tone %} {{ c.tone }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}">{% for s in c.steps %}<div class="swim-tkt"><span class="swim-n">{{ s.n }}</span><span class="swim-l">{{ s.label }}</span></div>{% endfor %}</div>{% endfor %}
+{% for r in layout.hdiv %}<div class="swim-hdiv" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ r }}"></div>{% endfor %}
+{% for v in layout.vdash %}<div class="swim-vdash" style="grid-column:{{ v.col_start }}/{{ v.col_end }};grid-row:{{ v.row_start }}/{{ v.row_end }}"></div>{% endfor %}
+{% for v in layout.vsolid %}<div class="swim-vsolid" style="grid-column:{{ v.col_start }}/{{ v.col_end }};grid-row:{{ v.row_start }}/{{ v.row_end }}"></div>{% endfor %}
+{% for c in layout.caps %}<div class="swim-cap {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"><span class="swim-dot"></span>{{ c.label }}</div>{% endfor %}
+{% for c in layout.caps_bottom %}<div class="swim-capb {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"></div>{% endfor %}
+<div class="swim-frame" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
 </div></div>
 {% endmacro %}
 
