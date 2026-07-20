@@ -99,7 +99,7 @@ def _environment() -> Environment:
         pct=compute.pct,
         col_sum=compute.col_sum,
         reconcile_line=compute.reconcile_line,
-        lane_tones=compute.lane_tones,
+        swimlane_layout=compute.swimlane_layout,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
     )

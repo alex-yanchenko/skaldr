@@ -438,27 +438,61 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
 		& .ct.teal{color:var(--teal-fg)} & .ct.sky{color:var(--sky-fg)}}
 
-	/* swimlane — a time-matrix: rows are lanes, columns are the `col` timeline position. Fixed-width
-	   columns inside a horizontally-scrolling wrap; hairline column rules + lane baselines use --rule
-	   (visible in dark). Each lane owns a palette tone (auto-assigned, overridable) carried on its gutter
-	   label and every step's number cell; --t/--tb hold that tone like flow/range. */
+	/* swimlane — a lane×column matrix (rows = lanes, columns = sprints/phases) with an optional group
+	   (milestone) overlay. Everything sits on ONE grid: a lane gutter track + one track per atomic
+	   sub-column (a (column, group) segment). Grey grid lines (--rule) read as a normal table — SOLID
+	   between columns (table rows only, so a group cap spans across them), DASHED at a group split
+	   (full height, trimmed by the cap radius so it hugs the rounded caps). Group colour lives only
+	   BEYOND the table: a coloured cap poking above/below + a faint cell tint (--gc accent, --gt tint,
+	   set by a palette class). Lines are on-top overlays because cell tints paint over box borders. */
 	.swim-wrap{overflow-x:auto; margin-block:var(--s6)}
-	.swim{display:grid; --swim-col:150px; width:max-content; min-width:100%;
-		& .sw-lane{display:flex; align-items:center; justify-content:flex-end; padding:var(--s2) var(--s3);
-			font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
-			color:var(--t,var(--muted)); text-align:end; border-block-end:1px solid var(--rule)}
-		& .sw-cell{display:flex; flex-direction:column; justify-content:center; gap:var(--s2); padding:var(--s2);
-			border-inline-start:1px solid var(--rule); border-block-end:1px solid var(--rule)}
-		& .sw-step{display:flex; align-items:stretch; overflow:hidden; font-size:12.5px;
+	.swim{display:grid; position:relative; --swim-col:150px; --swim-poke:28px; --swim-pokeb:12px;
+		width:max-content; min-width:100%;
+		& .swim-tbl{background:var(--surface); border-radius:var(--r-md)}
+		/* the outer table border as a rounded frame ON TOP of the tints (which would otherwise cover a
+		   plain box border) — its rounded corners keep it from poking past the table, and its top/bottom
+		   edges separate the group caps (above/below) from the table body */
+		& .swim-frame{z-index:4; border:1px solid var(--rule); border-radius:var(--r-md); pointer-events:none}
+		& .swim-hcell{z-index:1; background:var(--gt,transparent)}
+		& .swim-hlabel{z-index:3; padding:var(--s2) var(--s3); font-size:12.5px; font-weight:600;
+			color:var(--muted); pointer-events:none}
+		& .swim-gut{z-index:1; display:flex; align-items:center; justify-content:flex-end; padding:0 var(--s3);
+			font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted)}
+		& .swim-cell{z-index:1; display:flex; flex-direction:column; gap:var(--s2); padding:var(--s2) 9px;
+			background:var(--gt,transparent)}
+		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:12px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
-		& .sw-n{flex:none; display:flex; align-items:center; padding:4px 8px; font-family:var(--mono);
-			font-weight:700; font-size:11px; border-inline-end:1px solid var(--line);
-			background:var(--tb,var(--neutral-bg)); color:var(--t,var(--neutral-fg))}
-		& .sw-label{align-self:center; padding:4px 9px}
-		& .info{--t:var(--info-fg); --tb:var(--info-bg)} & .success{--t:var(--success-fg); --tb:var(--success-bg)}
-		& .warning{--t:var(--warning-fg); --tb:var(--warning-bg)} & .danger{--t:var(--danger-fg); --tb:var(--danger-bg)}
-		& .accent{--t:var(--accent-fg); --tb:var(--accent-bg)} & .neutral{--t:var(--neutral-fg); --tb:var(--neutral-bg)}
-		& .teal{--t:var(--teal-fg); --tb:var(--teal-bg)} & .sky{--t:var(--sky-fg); --tb:var(--sky-bg)}}
+		& .swim-n{flex:none; display:flex; align-items:center; padding:3px 7px; font-family:var(--mono);
+			font-size:10.5px; font-weight:700; color:var(--muted); background:var(--neutral-bg);
+			border-inline-end:1px solid var(--line)}
+		& .swim-l{align-self:center; padding:3px 8px}
+		& .swim-vsolid{z-index:2; width:0; justify-self:start; border-inline-start:1px solid var(--rule);
+			pointer-events:none}
+		& .swim-vdash{z-index:2; width:0; margin-block:var(--r-md); justify-self:start;
+			border-inline-start:1.5px dashed var(--rule); pointer-events:none;
+			/* nudge left so the 1.5px stroke centres on the grid line (between the two caps) rather than
+			   sitting entirely to its right */
+			margin-inline-start:-0.75px}
+		& .swim-hdiv{z-index:2; height:0; align-self:start; border-block-start:1px solid var(--rule);
+			pointer-events:none}
+		& .swim-cap{z-index:1; display:flex; align-items:center; gap:6px; padding:0 var(--s3); pointer-events:none;
+			color:var(--gc); background:var(--gt); border-block-start:2.5px solid var(--gc);
+			border-radius:var(--r-md) var(--r-md) 0 0; font-size:11px; font-weight:700}
+		& .swim-capb{z-index:1; pointer-events:none; background:var(--gt); border-block-end:2.5px solid var(--gc);
+			border-radius:0 0 var(--r-md) var(--r-md)}
+		/* the leftmost/rightmost cap's outer side carries a grey (frame-matching) edge, drawn as an INSET
+		   box-shadow rather than a border: an inset shadow follows border-radius exactly, so it rounds
+		   concentrically with the coloured accent instead of splitting the corner diagonally the way two
+		   adjacent borders of different widths do. It sits at the same line as the gutter seam / frame it
+		   continues below. */
+		& .swim-cap.left, & .swim-capb.left{box-shadow:inset 1px 0 0 0 var(--rule)}
+		& .swim-cap.right, & .swim-capb.right{box-shadow:inset -1px 0 0 0 var(--rule)}
+		& .swim-cap.left.right, & .swim-capb.left.right{box-shadow:inset 1px 0 0 0 var(--rule), inset -1px 0 0 0 var(--rule)}
+		& .swim-dot{width:7px; height:7px; border-radius:50%; background:var(--gc)}
+		& .slate{--gc:var(--neutral-fg); --gt:var(--neutral-bg)} & .blue{--gc:var(--info-fg); --gt:var(--info-bg)}
+		& .green{--gc:var(--success-fg); --gt:var(--success-bg)} & .amber{--gc:var(--warning-fg); --gt:var(--warning-bg)}
+		& .red{--gc:var(--danger-fg); --gt:var(--danger-bg)} & .violet{--gc:var(--accent-fg); --gt:var(--accent-bg)}
+		& .teal{--gc:var(--teal-fg); --gt:var(--teal-bg)} & .sky{--gc:var(--sky-fg); --gt:var(--sky-bg)}}
 
 	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
 	   links down here; the number in the list links back up to its marker (bidirectional). */
