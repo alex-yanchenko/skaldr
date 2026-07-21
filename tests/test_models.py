@@ -1404,6 +1404,94 @@ def test_swimlane_step_cannot_depend_on_itself() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_lane_and_column_ids_decouple_reference_from_display() -> None:
+    """A lane/column may carry an id (the reference key) distinct from its display name; a bare string
+    is shorthand for name-as-key. Columns also carry an optional `sub` caption."""
+    block = {
+        "type": "swimlane",
+        "lanes": [{"id": "eng", "name": "Engineering"}],
+        "columns": ["S1", {"id": "s2", "name": "Sprint 2", "sub": "→ MVP demo"}],
+        "steps": [
+            {"lane": "eng", "col": "S1", "n": "1", "label": "a"},
+            {"lane": "eng", "col": "s2", "n": "2", "label": "b"},
+        ],
+    }
+    parsed = _swimlane_block(make_report(blocks=[block]))
+    assert [(lane.key, lane.name) for lane in parsed.lanes] == [("eng", "Engineering")]
+    assert [(col.key, col.name, col.sub) for col in parsed.columns] == [
+        ("S1", "S1", None),  # bare string → key == name, no sub
+        ("s2", "Sprint 2", "→ MVP demo"),
+    ]
+
+
+def test_swimlane_column_ids_must_be_unique() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": ["A"],
+        "columns": [{"id": "x", "name": "First"}, {"id": "x", "name": "Second"}],
+        "steps": [{"lane": "A", "col": "x", "n": "1", "label": "a"}],
+    }
+    with pytest.raises(ReportError, match=r"swimlane columns must be unique"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_lane_id_must_be_a_safe_slug() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": [{"id": "bad id", "name": "X"}],
+        "columns": ["C1"],
+        "steps": [{"lane": "bad id", "col": "C1", "n": "1", "label": "a"}],
+    }
+    with pytest.raises(ReportError, match=r"lanes\.0\.id"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_column_id_must_be_a_safe_slug() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": ["A"],
+        "columns": [{"id": "bad id", "name": "X"}],
+        "steps": [{"lane": "A", "col": "bad id", "n": "1", "label": "a"}],
+    }
+    with pytest.raises(ReportError, match=r"columns\.0\.id"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_lane_ids_must_be_unique() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": [{"id": "x", "name": "First"}, {"id": "x", "name": "Second"}],
+        "columns": ["C1"],
+        "steps": [{"lane": "x", "col": "C1", "n": "1", "label": "a"}],
+    }
+    with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_column_key_collides_across_string_and_object_forms() -> None:
+    """A bare-string column's implicit key (its name) collides with another column's explicit id."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["A"],
+        "columns": ["S1", {"id": "S1", "name": "Other"}],  # both resolve to key "S1"
+        "steps": [{"lane": "A", "col": "S1", "n": "1", "label": "a"}],
+    }
+    with pytest.raises(ReportError, match=r"swimlane columns must be unique"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_step_col_references_the_key_not_the_display_name() -> None:
+    """With an explicit id, a step must reference the id — the display name is not the key."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["A"],
+        "columns": [{"id": "s1", "name": "Sprint 1"}],
+        "steps": [{"lane": "A", "col": "Sprint 1", "n": "1", "label": "a"}],  # uses the name, not the id
+    }
+    with pytest.raises(ReportError, match=r"swimlane step col 'Sprint 1' is not one of the declared columns"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_lanes_must_be_unique() -> None:
     block = _swimlane(lanes=["A", "A"])
     with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):

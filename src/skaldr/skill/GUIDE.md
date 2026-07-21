@@ -358,9 +358,21 @@ across the top (sprints, phases, weeks). Each step sits in one `lane`/`col` cell
 reading as a matrix — split into two swimlanes). Every declared lane and column must carry at least
 one step (no empty rows or columns).
 
-Step fields are explicit — skaldr never derives or renumbers: `lane` (one of `lanes`), `col` (one of
-`columns`), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`. Two steps in
-the same cell stack.
+A lane or column is either a **bare string** (the simple case — the string is both the label and the
+reference key) or an **object** for more control: `{id, name}` on a lane, `{id, name, sub}` on a
+column. `id` (a safe slug — letters, digits, `_`, `-`) is the key steps reference, defaulting to
+`name`; set it to rename a header without touching every step. `sub` puts a secondary caption under a
+column header (e.g. `sub: "→ MVP demo"` or a date range).
+
+```yaml
+columns:
+  - "Sprint 1"                                        # bare string: key == label
+  - { id: s2, name: "Sprint 2", sub: "→ MVP demo" }   # id key, display name, sub-caption
+```
+
+Step fields are explicit — skaldr never derives or renumbers: `lane` (a lane's key), `col` (a column's
+key), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`. Two steps in the
+same cell stack.
 
 Give steps an optional numeric `value` (points, hours, cost, headcount — whatever the matrix measures)
 and skaldr auto-sums it into **totals that never drift by hand**: a footer row of per-column sums, a

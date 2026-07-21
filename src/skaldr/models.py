@@ -31,6 +31,7 @@ from pydantic import (
     Field,
     StrictBool,
     ValidationError,
+    field_validator,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
@@ -912,6 +913,43 @@ class SwimlaneStep(_Frozen):
         return self
 
 
+class SwimlaneLane(_Frozen):
+    name: str = Field(min_length=1, description="Lane label shown in the row gutter.")
+    id: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Optional stable id (ASCII letters, digits, _, -) that a step references via `lane`; "
+        "defaults to `name`. Set it to rename the displayed label without touching every step.",
+    )
+
+    @property
+    def key(self) -> str:
+        """The reference key steps use — the explicit id, or the name when no id is given."""
+        return self.id if self.id is not None else self.name
+
+
+class SwimlaneColumn(_Frozen):
+    name: str = Field(min_length=1, description="Column header label.")
+    id: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Optional stable id (ASCII letters, digits, _, -) that a step references via `col` "
+        "and a group via `columns`; defaults to `name`. Set it to rename the header without touching "
+        "every step/group.",
+    )
+    sub: str | None = Field(
+        default=None,
+        description="Optional secondary caption under the header (e.g. a delivery target or date range).",
+    )
+
+    @property
+    def key(self) -> str:
+        """The reference key steps/groups use — the explicit id, or the name when no id is given."""
+        return self.id if self.id is not None else self.name
+
+
 class SwimlaneGroup(_Frozen):
     name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
     color: BadgeColor = Field(
@@ -920,22 +958,25 @@ class SwimlaneGroup(_Frozen):
     )
     columns: list[str] = Field(
         min_length=1,
-        description="The columns this group spans — a CONTIGUOUS run of the block's `columns` (a group "
-        "cannot skip a column). Order need not match; it is derived from the block `columns`.",
+        description="The columns this group spans, by their key (id, or name if no id) — a CONTIGUOUS run "
+        "of the block's `columns` (a group cannot skip a column). Order need not match; it is derived "
+        "from the block `columns`.",
     )
 
 
 class Swimlane(_Block):
     type: Literal["swimlane"]
-    lanes: list[str] = Field(
+    lanes: list[SwimlaneLane] = Field(
         min_length=1,
         max_length=8,
-        description="Lane names, in row order (top to bottom). Capped at 8 — more rows than that stop "
+        description="Lanes, in row order (top to bottom). A bare string is shorthand for `{name: …}`; "
+        "use `{id, name}` to give a stable reference key. Capped at 8 — more rows than that stop "
         "reading as a matrix; split into two swimlanes instead.",
     )
-    columns: list[str] = Field(
+    columns: list[SwimlaneColumn] = Field(
         min_length=1,
-        description="Column names, left to right — the sprint / phase axis. Ordered and unique.",
+        description="Columns, left to right — the sprint / phase axis. A bare string is shorthand for "
+        "`{name: …}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
     )
     groups: list[SwimlaneGroup] = Field(
         default_factory=list[SwimlaneGroup],
@@ -945,6 +986,14 @@ class Swimlane(_Block):
     steps: list[SwimlaneStep] = Field(
         min_length=1, description="Steps placed on the lane/column grid; the sequence reads as a staircase."
     )
+
+    @field_validator("lanes", "columns", mode="before")
+    @classmethod
+    def _wrap_bare_names(cls, value: Any) -> Any:
+        """A bare string lane/column is shorthand for `{name: <string>}` (key defaults to the name)."""
+        if not isinstance(value, list):
+            return value
+        return [{"name": item} if isinstance(item, str) else item for item in cast("list[object]", value)]
 
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
@@ -963,8 +1012,8 @@ class Swimlane(_Block):
         order (by column span, then declaration order). Raises if a group's segments cannot be laid out
         contiguously (it interleaves with another group instead of nesting)."""
         if not self.groups:
-            return [(col, None) for col in self.columns]
-        col_index = {col: index for index, col in enumerate(self.columns)}
+            return [(col.key, None) for col in self.columns]
+        col_index = {col.key: index for index, col in enumerate(self.columns)}
         group_index = {group.name: index for index, group in enumerate(self.groups)}
 
         def span(group: "SwimlaneGroup") -> tuple[int, int]:
@@ -974,13 +1023,13 @@ class Swimlane(_Block):
         segments: list[tuple[str, str | None]] = []
         for col in self.columns:
             covering = sorted(
-                self._groups_covering(col),
+                self._groups_covering(col.key),
                 key=lambda group: (*span(group), group_index[group.name]),
             )
             if covering:
-                segments.extend((col, group.name) for group in covering)
+                segments.extend((col.key, group.name) for group in covering)
             else:
-                segments.append((col, None))
+                segments.append((col.key, None))
         for group in self.groups:
             positions = [index for index, (_, name) in enumerate(segments) if name == group.name]
             if positions and positions != list(range(positions[0], positions[-1] + 1)):
@@ -992,13 +1041,15 @@ class Swimlane(_Block):
 
     @model_validator(mode="after")
     def _shape(self) -> "Swimlane":
-        if len(set(self.lanes)) != len(self.lanes):
+        lane_keys = [lane.key for lane in self.lanes]
+        col_keys = [col.key for col in self.columns]
+        if len(set(lane_keys)) != len(lane_keys):
             raise ValueError("swimlane lanes must be unique")
-        if len(set(self.columns)) != len(self.columns):
+        if len(set(col_keys)) != len(col_keys):
             raise ValueError("swimlane columns must be unique")
-        lane_set = set(self.lanes)
-        col_set = set(self.columns)
-        col_index = {col: index for index, col in enumerate(self.columns)}
+        lane_set = set(lane_keys)
+        col_set = set(col_keys)
+        col_index = {col: index for index, col in enumerate(col_keys)}
 
         group_names = [group.name for group in self.groups]
         if len(set(group_names)) != len(group_names):
@@ -1033,12 +1084,12 @@ class Swimlane(_Block):
 
         used_lanes = {step.lane for step in self.steps}
         for lane in self.lanes:
-            if lane not in used_lanes:
-                raise ValueError(f"swimlane lane '{lane}' has no steps")
+            if lane.key not in used_lanes:
+                raise ValueError(f"swimlane lane '{lane.key}' has no steps")
         used_cols = {step.col for step in self.steps}
         for col in self.columns:
-            if col not in used_cols:
-                raise ValueError(f"swimlane column '{col}' has no steps")
+            if col.key not in used_cols:
+                raise ValueError(f"swimlane column '{col.key}' has no steps")
         used_groups = {resolved for step in self.steps if (resolved := self.step_group(step)) is not None}
         for group in self.groups:
             if group.name not in used_groups:
