@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/alex-yanchenko/skaldr/compare/v1.3.1...v1.3.2) (2026-07-21)
+
+
+### Bug Fixes
+
+* **swimlane:** roomier ticket cells + drop the empty gutter/header corner ([#59](https://github.com/alex-yanchenko/skaldr/issues/59)) ([98a3f2b](https://github.com/alex-yanchenko/skaldr/commit/98a3f2b5989cacbebc8d5d5d69d07f7f44ab812e))
+
 ## [1.3.1](https://github.com/alex-yanchenko/skaldr/compare/v1.3.0...v1.3.1) (2026-07-21)
 
 
