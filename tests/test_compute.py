@@ -38,14 +38,15 @@ def test_swimlane_layout_plain_has_no_poke_rows_caps_or_dashes() -> None:
     assert layout["caps"] == []
     assert layout["caps_bottom"] == []
     assert layout["vdash"] == []
-    # one interior column boundary (line 3), table-rows. The outer edges — incl. the gutter/data
-    # separator — come from the frame overlay (see tbl), so no gutter seam is seeded here.
+    # gutter seam (line 2) + one column boundary (line 3), both table-rows; neither pokes (no caps).
     assert layout["vsolid"] == [
-        {"col_start": 3, "col_end": 4, "row_start": 1, "row_end": 4},
+        {"col_start": 2, "col_end": 3, "poke": False, "row_start": 1, "row_end": 4},
+        {"col_start": 3, "col_end": 4, "poke": False, "row_start": 1, "row_end": 4},
     ]
-    assert layout["hdiv"] == [2, 3]  # header/body divider + the A/B lane divider
-    # framed table covers the data columns only (line 2 → right edge); the gutter sits outside it
-    assert layout["tbl"] == {"line_start": 2, "line_end": 4, "row_start": 1, "row_end": 4}
+    # header/body divider spans the data columns only (col_start 2); the A/B lane divider is full-width
+    assert layout["hdiv"] == [{"row": 2, "col_start": 2}, {"row": 3, "col_start": 1}]
+    # the frame wraps the whole table incl. the gutter (line 1 → right edge)
+    assert layout["tbl"] == {"line_start": 1, "line_end": 4, "row_start": 1, "row_end": 4}
 
 
 def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> None:
@@ -95,8 +96,8 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
         {"tone": "violet", "line_start": 6, "line_end": 7, "row_start": 2, "row_end": 3},
     ]
     assert layout["gutter"] == [{"lane": "R", "row_start": 3, "row_end": 4}]
-    # framed table = data columns only (line 2 → right edge 7); gutter is outside, no corner cell
-    assert layout["tbl"] == {"line_start": 2, "line_end": 7, "row_start": 2, "row_end": 4}
+    # the frame wraps the whole table incl. the gutter (line 1 → right edge 7)
+    assert layout["tbl"] == {"line_start": 1, "line_end": 7, "row_start": 2, "row_end": 4}
     # caps: MVP over its 2 sub-columns (lines 2-4, leftmost → left edge), Beta 1 (4-5, interior),
     # GA 2 (5-7, rightmost → right edge); bottom caps mirror them
     assert layout["caps"] == [
@@ -138,16 +139,49 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
         {"col_start": 4, "col_end": 5, "row_start": 1, "row_end": 5},
         {"col_start": 5, "col_end": 6, "row_start": 1, "row_end": 5},
     ]
-    # interior sprint boundaries only (S1|S2 at line 3, S2|S3 at line 6), table-rows. The outer edges
-    # incl. the gutter/data separator come from the frame overlay; the outer cap corners from the caps'
-    # own grey `edges` borders.
+    # gutter seam (2) + sprint boundaries S1|S2 (3) and S2|S3 (6), all table-rows and NOT poking:
+    # MVP spans S1|S2 and GA spans S2|S3, so each boundary sits inside one cap (no separator needed).
     assert layout["vsolid"] == [
-        {"col_start": 3, "col_end": 4, "row_start": 2, "row_end": 4},
-        {"col_start": 6, "col_end": 7, "row_start": 2, "row_end": 4},
+        {"col_start": 2, "col_end": 3, "poke": False, "row_start": 2, "row_end": 4},
+        {"col_start": 3, "col_end": 4, "poke": False, "row_start": 2, "row_end": 4},
+        {"col_start": 6, "col_end": 7, "poke": False, "row_start": 2, "row_end": 4},
     ]
-    # interior horizontal lines only: header/body divider (3). The outer top/bottom edges (caps↔header,
-    # lane↔bottom caps) come from the rounded frame overlay.
-    assert layout["hdiv"] == [3]
+    # interior horizontal line only: the header/body divider across the data columns (col_start 2).
+    assert layout["hdiv"] == [{"row": 3, "col_start": 2}]
+
+
+def test_swimlane_layout_separates_adjacent_caps_at_a_sprint_boundary() -> None:
+    """When two different groups each own a whole column (caps meet at a sprint boundary), that solid
+    boundary pokes through the poke zone (full height) to separate the caps — unlike a cap that spans
+    a boundary, which keeps a table-rows-only line so it reads as continuous."""
+    block = parse_report(
+        make_report(
+            blocks=[
+                {
+                    "type": "swimlane",
+                    "lanes": ["R"],
+                    "columns": ["S1", "S2"],
+                    "groups": [
+                        {"name": "A", "color": "blue", "columns": ["S1"]},
+                        {"name": "B", "color": "amber", "columns": ["S2"]},
+                    ],
+                    "steps": [
+                        {"lane": "R", "col": "S1", "n": "1", "label": "a"},
+                        {"lane": "R", "col": "S2", "n": "2", "label": "b"},
+                    ],
+                }
+            ]
+        )
+    ).blocks[0]
+    assert isinstance(block, Swimlane)
+
+    layout = swimlane_layout(block)
+
+    # gutter seam (table-rows, no poke) + the S1|S2 boundary between caps A and B (full height, poking)
+    assert layout["vsolid"] == [
+        {"col_start": 2, "col_end": 3, "poke": False, "row_start": 2, "row_end": 4},
+        {"col_start": 3, "col_end": 4, "poke": True, "row_start": 1, "row_end": 5},
+    ]
 
 
 def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
