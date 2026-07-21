@@ -481,8 +481,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .swim-hcell{z-index:1; background:var(--gt,transparent)}
 		& .swim-hlabel{z-index:3; padding:var(--s2) var(--s3); font-size:12.5px; font-weight:600;
 			color:var(--muted); pointer-events:none}
-		& .swim-gut{z-index:1; display:flex; align-items:center; justify-content:flex-end; padding:0 var(--s3);
-			font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted)}
+		& .swim-gut{z-index:1; display:flex; align-items:center; justify-content:flex-end; gap:var(--s4);
+			padding:0 var(--s3); font-size:11px; font-weight:700; text-transform:uppercase;
+			letter-spacing:0.06em; color:var(--muted)}
 		& .swim-cell{z-index:1; display:flex; flex-direction:column; gap:var(--s2); padding:var(--s3);
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
@@ -516,6 +517,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .swim-cap.left, & .swim-capb.left{box-shadow:inset 1px 0 0 0 var(--rule)}
 		& .swim-cap.right, & .swim-capb.right{box-shadow:inset -1px 0 0 0 var(--rule)}
 		& .swim-cap.left.right, & .swim-capb.left.right{box-shadow:inset 1px 0 0 0 var(--rule), inset -1px 0 0 0 var(--rule)}
+		/* auto-summed value totals — ONE pill token everywhere (beside a lane label, on a group cap, in
+		   the footer row) so the three counters read as the same thing. margin-inline-start:auto pushes
+		   the pill to the trailing edge of its container; the footer cell just carries the panel band. */
+		& .swim-tot{margin-inline-start:auto; padding:1px 8px; border-radius:var(--r-pill); font-size:11px;
+			font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); background:var(--neutral-bg)}
+		& .swim-foot{z-index:1; display:flex; align-items:center; justify-content:flex-end;
+			padding:var(--s2) var(--s3); background:var(--panel)}
+		& .swim-foot-lbl{background:var(--panel)}
 		& .swim-dot{width:7px; height:7px; border-radius:50%; background:var(--gc)}
 		& .slate{--gc:var(--neutral-fg); --gt:var(--neutral-bg)} & .blue{--gc:var(--info-fg); --gt:var(--info-bg)}
 		& .green{--gc:var(--success-fg); --gt:var(--success-bg)} & .amber{--gc:var(--warning-fg); --gt:var(--warning-bg)}

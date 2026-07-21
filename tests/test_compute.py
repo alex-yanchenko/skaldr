@@ -95,7 +95,7 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
         {"tone": "violet", "line_start": 5, "line_end": 6, "row_start": 2, "row_end": 3},
         {"tone": "violet", "line_start": 6, "line_end": 7, "row_start": 2, "row_end": 3},
     ]
-    assert layout["gutter"] == [{"lane": "R", "row_start": 3, "row_end": 4}]
+    assert layout["gutter"] == [{"lane": "R", "total": None, "row_start": 3, "row_end": 4}]
     # the frame wraps the whole table incl. the gutter (line 1 → right edge 7)
     assert layout["tbl"] == {"line_start": 1, "line_end": 7, "row_start": 2, "row_end": 4}
     # caps: MVP over its 2 sub-columns (lines 2-4, leftmost → left edge), Beta 1 (4-5, interior),
@@ -105,6 +105,7 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
             "label": "MVP",
             "color": "blue",
             "edges": "left",
+            "total": None,
             "line_start": 2,
             "line_end": 4,
             "row_start": 1,
@@ -114,6 +115,7 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
             "label": "Beta",
             "color": "amber",
             "edges": "",
+            "total": None,
             "line_start": 4,
             "line_end": 5,
             "row_start": 1,
@@ -123,6 +125,7 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
             "label": "GA",
             "color": "violet",
             "edges": "right",
+            "total": None,
             "line_start": 5,
             "line_end": 7,
             "row_start": 1,
@@ -289,12 +292,86 @@ def test_swimlane_layout_group_spanning_every_column_gets_both_edges() -> None:
             "label": "All",
             "color": "green",
             "edges": "left right",
+            "total": None,
             "line_start": 2,
             "line_end": 4,
             "row_start": 1,
             "row_end": 2,
         }
     ]
+
+
+def test_swimlane_layout_sums_values_into_column_lane_and_group_totals() -> None:
+    """When steps carry `value`, a footer row holds per-column sums, the gutter carries per-lane sums,
+    and each cap carries its group's sum (an ungrouped step counts toward column/lane but no group).
+    The footer is a real table row, so it extends table_rows and shifts the bottom poke zone down."""
+    block = _swimlane(
+        lanes=["R"],
+        columns=["S1", "S2", "S3"],
+        groups=[{"name": "Push", "color": "blue", "columns": ["S1", "S2"]}],
+        steps=[
+            {"lane": "R", "col": "S1", "n": "1", "label": "a", "value": 3},
+            {"lane": "R", "col": "S2", "n": "2", "label": "b", "value": 5},
+            {"lane": "R", "col": "S3", "n": "3", "label": "c", "value": 2},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    # header + lane + footer + poke zones → one extra `auto` track vs the no-value case
+    assert layout["row_template"] == "var(--swim-poke) auto auto auto var(--swim-pokeb)"
+    # per-column footer (row 4-5), each cell spanning its column's sub-columns
+    assert layout["foot"] == {
+        "label": "Total",
+        "row_start": 4,
+        "row_end": 5,
+        "cells": [
+            {"value": 3, "line_start": 2, "line_end": 3, "row_start": 4, "row_end": 5},
+            {"value": 5, "line_start": 3, "line_end": 4, "row_start": 4, "row_end": 5},
+            {"value": 2, "line_start": 4, "line_end": 5, "row_start": 4, "row_end": 5},
+        ],
+    }
+    # per-lane total beside the label
+    assert layout["gutter"] == [{"lane": "R", "total": 10, "row_start": 3, "row_end": 4}]
+    # Push's cap total is 3+5 (S3 is ungrouped, so its 2 is excluded)
+    assert layout["caps"] == [
+        {
+            "label": "Push",
+            "color": "blue",
+            "edges": "left",
+            "total": 8,
+            "line_start": 2,
+            "line_end": 4,
+            "row_start": 1,
+            "row_end": 2,
+        }
+    ]
+    # the footer is inside the table (frame wraps it), and the bottom cap sits below it
+    assert layout["tbl"] == {"line_start": 1, "line_end": 5, "row_start": 2, "row_end": 5}
+    assert layout["caps_bottom"][0]["row_start"] == 5
+
+
+def test_swimlane_layout_without_values_has_no_footer_or_totals() -> None:
+    """No step carries a value → no footer row (row_template unchanged), and every lane/group total is
+    None so the macro renders nothing extra."""
+    block = _swimlane(
+        lanes=["R"],
+        columns=["S1", "S2"],
+        groups=[{"name": "All", "color": "green", "columns": ["S1", "S2"]}],
+        steps=[
+            {"lane": "R", "col": "S1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "S2", "n": "2", "label": "b"},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    assert layout["foot"] is None
+    assert layout["row_template"] == "var(--swim-poke) auto auto var(--swim-pokeb)"
+    assert [gut["total"] for gut in layout["gutter"]] == [None]
+    assert [cap["total"] for cap in layout["caps"]] == [None]
+    # table stops at the lane row (no footer): header + 1 lane = rows 2-4
+    assert layout["tbl"]["row_end"] == 4
 
 
 def test_fmt_variants() -> None:

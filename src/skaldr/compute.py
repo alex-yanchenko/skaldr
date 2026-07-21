@@ -7,7 +7,7 @@ it, and models must not import compute) so templates can reach it through this o
 """
 
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from typing import Any, TypedDict
 
 from skaldr.models import (
@@ -19,6 +19,7 @@ from skaldr.models import (
     Report,
     Section,
     Swimlane,
+    SwimlaneStep,
     Table,
     Walkthrough,
     col_sum,
@@ -154,6 +155,7 @@ class SwimTint(_SwimBox):
 
 class SwimGutter(TypedDict):
     lane: str
+    total: float | None  # the lane's summed step values, shown beside the label; None when off
     row_start: int
     row_end: int
 
@@ -170,6 +172,18 @@ class SwimCapBottom(_SwimBox):
 
 class SwimCap(SwimCapBottom):
     label: str
+    total: float | None  # the group's summed step values, shown beside the label; None when off
+
+
+class SwimFoot(_SwimBox):
+    value: float  # one column's summed step values, in the footer totals row
+
+
+class SwimFootRow(TypedDict):
+    label: str  # gutter label for the totals row (e.g. "Total")
+    row_start: int
+    row_end: int
+    cells: list[SwimFoot]  # one per column
 
 
 class SwimVSolid(TypedDict):
@@ -206,6 +220,7 @@ class SwimLayout(TypedDict):
     vsolid: list[SwimVSolid]
     vdash: list[SwimVDash]
     hdiv: list[SwimHDiv]
+    foot: SwimFootRow | None  # per-column totals row; None when no step carries a value
     tbl: _SwimBox
     frame_square_right: bool  # square the frame's right corners when a cap owns the right edge
 
@@ -231,17 +246,22 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     ncols = len(subcols)
     nlanes = len(block.lanes)
     has_groups = bool(block.groups)
+    has_totals = any(step.value is not None for step in block.steps)
+    nfoot = 1 if has_totals else 0
     # group name → its palette colour (an ungrouped segment's None group has no tint).
     color_of = {group.name: group.color for group in block.groups}
 
-    # rows: [poke-top] header [lane…] [poke-bottom]. Header starts at line `top`.
+    # rows: [poke-top] header [lane…] [footer?] [poke-bottom]. Header starts at line `top`. The footer
+    # (per-column totals) only exists when a step carries a value, and it counts as a table row — the
+    # frame, column solids and gutter seam all extend through it.
     top = 2 if has_groups else 1
     header_row = (top, top + 1)
     lane_rows = [(top + 1 + index, top + 2 + index) for index in range(nlanes)]
-    table_rows = (top, top + 1 + nlanes)
-    full_rows = (1, top + 2 + nlanes) if has_groups else table_rows
+    footer_row = (top + 1 + nlanes, top + 2 + nlanes)
+    table_rows = (top, top + 1 + nlanes + nfoot)
+    full_rows = (1, top + 2 + nlanes + nfoot) if has_groups else table_rows
     poke_top_row = (1, 2)
-    poke_bottom_row = (top + 1 + nlanes, top + 2 + nlanes)
+    poke_bottom_row = (top + 1 + nlanes + nfoot, top + 2 + nlanes + nfoot)
 
     # column line for sub-column index i: track (i + 2), spanning lines (i + 2)..(i + 3).
     def col_lines(index: int) -> tuple[int, int]:
@@ -284,8 +304,23 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
             }
         )
 
+    # value rollups (only surfaced when has_totals). A step with no value counts as 0; a group total
+    # sums the steps resolved into that group, so it composes with the cap overlay.
+    def value_of(step: SwimlaneStep) -> float:
+        return step.value if step.value is not None else 0
+
+    def total_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
+        return sum(value_of(step) for step in block.steps if predicate(step))
+
+    lane_total = {lane: total_where(lambda step, lane=lane: step.lane == lane) for lane in block.lanes}
+
     gutter: list[SwimGutter] = [
-        {"lane": lane, "row_start": lane_rows[index][0], "row_end": lane_rows[index][1]}
+        {
+            "lane": lane,
+            "total": lane_total[lane] if has_totals else None,
+            "row_start": lane_rows[index][0],
+            "row_end": lane_rows[index][1],
+        }
         for index, lane in enumerate(block.lanes)
     ]
 
@@ -320,11 +355,13 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
         line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
+        group_total = total_where(lambda step, name=group.name: block.step_group(step) == name)
         caps.append(
             {
                 "label": group.name,
                 "color": group.color,
                 "edges": edges.strip(),
+                "total": group_total if has_totals else None,
                 "line_start": line_start,
                 "line_end": line_end,
                 "row_start": poke_top_row[0],
@@ -386,11 +423,31 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     hdiv: list[SwimHDiv] = [{"row": header_row[1], "col_start": 2}]
     for index in range(1, nlanes):
         hdiv.append({"row": lane_rows[index][0], "col_start": 1})
+    # a full-width divider above the totals row sets it off from the lane rows.
+    if has_totals:
+        hdiv.append({"row": footer_row[0], "col_start": 1})
+
+    # footer totals row: one cell per column, summing that column's step values across all lanes/groups.
+    foot: SwimFootRow | None = None
+    if has_totals:
+        foot_cells: list[SwimFoot] = []
+        for col in block.columns:
+            indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
+            foot_cells.append(
+                {
+                    "value": total_where(lambda step, col=col: step.col == col),
+                    "line_start": col_lines(indices[0])[0],
+                    "line_end": col_lines(indices[-1])[1],
+                    "row_start": footer_row[0],
+                    "row_end": footer_row[1],
+                }
+            )
+        foot = {"label": "Total", "row_start": footer_row[0], "row_end": footer_row[1], "cells": foot_cells}
 
     return {
         "has_groups": has_groups,
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
-        "row_template": _swim_row_template(has_groups, nlanes),
+        "row_template": _swim_row_template(has_groups, nlanes, has_totals),
         "subcols": subcol_out,
         "headers": headers,
         "header_tints": header_tints,
@@ -401,6 +458,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         "vsolid": vsolid,
         "vdash": vdash,
         "hdiv": hdiv,
+        "foot": foot,
         # the rounded frame wraps the whole table incl. the lane gutter (line 1 to the right edge), so
         # the row-header column keeps its borders.
         "tbl": {"line_start": 1, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
@@ -411,11 +469,14 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     }
 
 
-def _swim_row_template(has_groups: bool, nlanes: int) -> str:
-    lane_tracks = " ".join(["auto"] * nlanes)
+def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
+    tracks = ["auto"] * nlanes  # one per lane
+    if has_totals:
+        tracks.append("auto")  # the footer totals row
+    body = " ".join(["auto", *tracks])  # header + lanes + footer
     if has_groups:
-        return f"var(--swim-poke) auto {lane_tracks} var(--swim-pokeb)"
-    return f"auto {lane_tracks}"
+        return f"var(--swim-poke) {body} var(--swim-pokeb)"
+    return body
 
 
 def provenance_footer(report: Report) -> str | None:

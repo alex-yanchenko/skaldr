@@ -1313,6 +1313,29 @@ def test_swimlane_step_col_must_be_a_declared_column() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_step_value_accepts_int_and_float_and_defaults_to_none() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "x", "value": 3},
+            {"lane": "A", "col": "C2", "n": "2", "label": "y", "value": 0.5},
+            {"lane": "A", "col": "C1", "n": "3", "label": "z"},
+        ],
+    )
+    parsed = _swimlane_block(make_report(blocks=[block]))
+    assert [step.value for step in parsed.steps] == [3, 0.5, None]
+
+
+def test_swimlane_step_value_rejects_a_boolean() -> None:
+    """`value` is a Number, so a bool (an int subclass pydantic would coerce) is rejected."""
+    block = _swimlane(
+        lanes=["A"], columns=["C1"], steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "value": True}]
+    )
+    with pytest.raises(ReportError, match=r"steps\.0\.value.*number, not a boolean"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_lanes_must_be_unique() -> None:
     block = _swimlane(lanes=["A", "A"])
     with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):
