@@ -209,10 +209,13 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     atomic sub-column (a `(column, group)` segment); rows are an optional top poke zone (group caps),
     the sprint header, one row per lane, and an optional bottom poke zone.
 
-    Line languages, all one grey: SOLID verticals mark real column (sprint) boundaries and live inside
-    the table rows only (a group cap spans across them); DASHED verticals mark a group split within a
-    column and run the full height (poke zones + table) so caps sit flush and the divider is continuous.
-    Horizontal dividers span the full width as one line each (never stitched from cell borders)."""
+    The lane gutter (track 1) is a bare row-label column OUTSIDE the framed table — no corner cell
+    where the gutter meets the sprint-header row. Line languages, all one grey: SOLID verticals mark
+    real column (sprint) boundaries and live inside the table rows only (a group cap spans across
+    them); DASHED verticals mark a group split within a column and run the full height (poke zones +
+    table) so caps sit flush and the divider is continuous. Horizontal dividers span the data columns
+    as one line each (never stitched from cell borders); the gutter/data separator and the table's
+    outer edges come from the frame overlay."""
     subcols = block.subcolumns()
     ncols = len(subcols)
     nlanes = len(block.lanes)
@@ -329,12 +332,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         )
 
     # interior vertical lines from sub-column boundaries. Column change → solid (table rows); same
-    # column, different group → dashed (full height). The table's outer edges come from the rounded
-    # frame overlay (see `tbl`) and the outer cap corners from the caps' own grey `edges` borders, so
-    # the only always-present solid here is the gutter seam.
-    vsolid: list[SwimVSolid] = [
-        {"col_start": 2, "col_end": 3, "row_start": table_rows[0], "row_end": table_rows[1]}
-    ]
+    # column, different group → dashed (full height). The table's outer edges — including the gutter↔data
+    # separator (its left edge) — come from the rounded frame overlay (see `tbl`), and the outer cap
+    # corners from the caps' own grey `edges` borders, so nothing is seeded here.
+    vsolid: list[SwimVSolid] = []
     vdash: list[SwimVDash] = []
     for index in range(ncols - 1):
         boundary_line = col_lines(index)[1]
@@ -357,8 +358,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "row_end": full_rows[1],
                 }
             )
-    # horizontal dividers: header/body + between lanes, each one continuous full-width line. The outer
-    # top/bottom edges come from the rounded frame overlay, not from here.
+    # horizontal dividers: header/body + between lanes, each a continuous line across the data columns
+    # (the macro spans them tbl.line_start→line_end). The outer edges come from the frame overlay.
     hdiv = [header_row[1]] + [lane_rows[index][0] for index in range(1, nlanes)]
 
     return {
@@ -375,7 +376,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         "vsolid": vsolid,
         "vdash": vdash,
         "hdiv": hdiv,
-        "tbl": {"line_start": 1, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
+        # the framed table covers the DATA columns only (line 2 to the right edge); the lane gutter
+        # (column 1) sits outside it as bare row labels, so there's no empty gutter/header corner cell.
+        # The frame's left edge is the gutter/data separator.
+        "tbl": {"line_start": 2, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
     }
 
 
