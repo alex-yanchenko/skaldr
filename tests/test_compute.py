@@ -182,6 +182,8 @@ def test_swimlane_layout_separates_adjacent_caps_at_a_sprint_boundary() -> None:
         {"col_start": 2, "col_end": 3, "poke": False, "row_start": 2, "row_end": 4},
         {"col_start": 3, "col_end": 4, "poke": True, "row_start": 1, "row_end": 5},
     ]
+    # both outer columns carry a cap, so the rightmost cap's right border squares the frame's corners
+    assert layout["frame_square_right"] is True
 
 
 def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
@@ -256,6 +258,15 @@ def test_swimlane_layout_ungrouped_outer_column_is_untinted_with_no_right_edge()
     assert [(cap["label"], cap["edges"], cap["line_start"], cap["line_end"]) for cap in layout["caps"]] == [
         ("Push", "left", 2, 4)
     ]
+    # the Mid|Late boundary is grouped-vs-ungrouped: only one cap, so it stays table-rows only (poke
+    # False) — a full-height line there would jut into the poke zone with nothing beside it.
+    assert layout["vsolid"] == [
+        {"col_start": 2, "col_end": 3, "poke": False, "row_start": 2, "row_end": 4},  # gutter seam
+        {"col_start": 3, "col_end": 4, "poke": False, "row_start": 2, "row_end": 4},  # Early|Mid (same cap)
+        {"col_start": 4, "col_end": 5, "poke": False, "row_start": 2, "row_end": 4},  # Mid|Late (cap|none)
+    ]
+    # rightmost column is ungrouped, so the frame keeps its rounded right corners
+    assert layout["frame_square_right"] is False
 
 
 def test_swimlane_layout_group_spanning_every_column_gets_both_edges() -> None:

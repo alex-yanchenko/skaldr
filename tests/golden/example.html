@@ -462,8 +462,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	/* swimlane — a lane×column matrix (rows = lanes, columns = sprints/phases) with an optional group
 	   (milestone) overlay. Everything sits on ONE grid: a lane gutter track + one track per atomic
 	   sub-column (a (column, group) segment). Grey grid lines (--rule) read as a normal table — SOLID
-	   between columns (table rows only, so a group cap spans across them), DASHED at a group split
-	   (full height, trimmed by the cap radius so it hugs the rounded caps). Group colour lives only
+	   between columns (table rows only, so a group cap spans across them; full height only where two
+	   different caps meet, to separate them), DASHED at a group split (full height, trimmed by the cap
+	   radius so it hugs the rounded caps). Group colour lives only
 	   BEYOND the table: a coloured cap poking above/below + a faint cell tint (--gc accent, --gt tint,
 	   set by a palette class). Lines are on-top overlays because cell tints paint over box borders. */
 	.swim-wrap{overflow-x:auto; margin-block:var(--s6)}

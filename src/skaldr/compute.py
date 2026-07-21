@@ -221,10 +221,12 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     only (it skips the gutter), so that cell opens down into the row-label column rather than being a
     closed box; the gutter/data seam still runs the full height (it is the sprint header's left border).
     Line languages, all one grey: SOLID
-    verticals mark real column (sprint) boundaries and live inside the table rows only (a group cap
-    spans across them); DASHED verticals mark a group split within a column and run the full height
-    (poke zones + table) so caps sit flush and the divider is continuous. Horizontal dividers are one
-    line each (never stitched from cell borders); the table's outer edges come from the frame overlay."""
+    verticals mark real column (sprint) boundaries and normally live inside the table rows only (a
+    group cap spans across them), except where two DIFFERENT group caps meet — there the solid runs
+    full height (poke zones + table) to separate the caps; DASHED verticals mark a group split within
+    a column and run the full height so caps sit flush and the divider is continuous. Horizontal
+    dividers are one line each (never stitched from cell borders); the table's outer edges come from
+    the frame overlay."""
     subcols = block.subcolumns()
     ncols = len(subcols)
     nlanes = len(block.lanes)
@@ -354,8 +356,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         if left_col != right_col:
             # A sprint boundary. If two DIFFERENT group caps meet here, run the line full height
             # (trimmed, like a group split) so the caps are separated; if one cap SPANS the boundary
-            # (same group either side), keep it table-rows only so the cap reads as continuous.
-            caps_differ = left_group != right_group
+            # (same group either side), keep it table-rows only so the cap reads as continuous. A
+            # boundary against an ungrouped column has only one cap, so it stays table-rows only too —
+            # a full-height line there would poke into the cap zone with nothing beside it.
+            caps_differ = left_group is not None and right_group is not None and left_group != right_group
             vsolid.append(
                 {
                     "col_start": boundary_line,

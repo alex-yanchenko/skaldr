@@ -404,8 +404,9 @@ A column may be split across **several** groups (e.g. two deliveries inside one 
 
 Groups must **nest, not interleave**: because a group's cap spans its columns as one contiguous band,
 a group that spans past a column cannot also share that column with another group (skaldr rejects the
-layout). Columns are fixed-width and the block scrolls horizontally when wide, so a long row of columns
-stays a grid rather than reflowing (and fits the page when printed).
+layout). Columns share the width evenly with a 150px floor, so a few columns fill the page rather than
+huddling at the left; once that floor would overflow, the block scrolls horizontally, staying a grid
+rather than reflowing (and fits the page when printed).
 
 ## The `references`
 
