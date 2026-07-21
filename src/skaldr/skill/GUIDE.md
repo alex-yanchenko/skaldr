@@ -480,13 +480,21 @@ link instead.
 ```
 
 - **Columns** need at least one `text`/`rich` column (it hosts the row title and any chips). A
-  `badge` column's value renders as a chip under the title, not in its own cell. An `indicator`
-  column renders a colour-only **dot in its own cell** — the cell value is a tone name
-  (`success`/`warning`/`danger`/…) or blank; use it for several orthogonal green/amber/red signals
-  per row (e.g. Reliability, Cost) that each want their own at-a-glance column.
-- **Column widths** are automatic by default. To set proportions, give every non-badge column a
+  `badge` column defaults to `placement: title` — its value chips **under the row title** and the
+  column `label` is ignored. Set `placement: cell` to give the badge **its own labelled column**
+  instead, where the cell value is a badge key *or a list of keys* (several chips, wrapping) — reach
+  for it when the chip is a real column like "Access" or "Severity". An `indicator` column renders a
+  colour-only **dot in its own cell** (the value is a tone name or blank) — for orthogonal
+  green/amber/red signals per row that each want an at-a-glance column.
+
+  ```yaml
+  - { key: access, label: "Access", kind: badge, placement: cell, width: 1 }
+  # row: { name: "SOAXREF", access: [WRITE, PARTNER], … }   # two chips in one cell
+  ```
+- **Column widths** are automatic by default. To set proportions, give every in-cell column a
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
-  It's all-or-none — set `width` on every non-badge column or none; `badge` columns can't take one.
+  It's all-or-none — set `width` on every in-cell column or none. A `placement: title` badge takes
+  no width (it rides under the title); a `placement: cell` badge is a normal column and does.
 - **Every row supplies every column key and nothing else** (plus an optional `subrows`, and an
   optional `tone: muted | danger`). A row `tone` emphasises the whole row: `muted` dims and strikes
   it (a rejected/superseded row), `danger` tints it red (a bad row).

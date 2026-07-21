@@ -708,7 +708,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "text/rich (first one becomes the title column), number, badge (chip under title), or indicator (a colour-only dot in its own column; the cell value is a tone name).",
+          "description": "text/rich (first one becomes the title column), number, badge (a coloured chip \u2014 see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone name).",
           "enum": [
             "text",
             "number",
@@ -717,6 +717,16 @@
             "indicator"
           ],
           "title": "Kind",
+          "type": "string"
+        },
+        "placement": {
+          "default": "title",
+          "description": "For a `badge` column: `title` (default) chips the badge under the row's title and ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is rejected; the default is a no-op elsewhere.",
+          "enum": [
+            "title",
+            "cell"
+          ],
+          "title": "Placement",
           "type": "string"
         },
         "pct_of_total": {
@@ -737,7 +747,7 @@
             }
           ],
           "default": null,
-          "description": "Proportional width weight (1-6); set it on every non-badge column, or none.",
+          "description": "Proportional width weight (1-6); set it on every in-cell column, or none. A `title`-placement badge column takes no width (it rides under the title).",
           "title": "Width"
         }
       },

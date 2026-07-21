@@ -129,6 +129,7 @@ CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeV
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
 FanDirection = Literal["in", "out"]
@@ -595,8 +596,16 @@ class Column(_Frozen):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
     kind: ColumnKind = Field(
-        description="text/rich (first one becomes the title column), number, badge (chip under title), "
-        "or indicator (a colour-only dot in its own column; the cell value is a tone name)."
+        description="text/rich (first one becomes the title column), number, badge (a coloured chip — "
+        "see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone "
+        "name)."
+    )
+    placement: ColumnPlacement = Field(
+        default="title",
+        description="For a `badge` column: `title` (default) chips the badge under the row's title and "
+        "ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a "
+        "badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is "
+        "rejected; the default is a no-op elsewhere.",
     )
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
@@ -605,7 +614,8 @@ class Column(_Frozen):
         default=None,
         ge=1,
         le=6,
-        description="Proportional width weight (1-6); set it on every non-badge column, or none.",
+        description="Proportional width weight (1-6); set it on every in-cell column, or none. A "
+        "`title`-placement badge column takes no width (it rides under the title).",
     )
 
 
@@ -627,6 +637,11 @@ class Totals(_Frozen):
 def col_sum(rows: Sequence[dict[str, Any]], key: str) -> float:
     """Sum a number column's raw values (ints stay ints; floats are not truncated)."""
     return sum(row[key] for row in rows)
+
+
+def _as_badge_list(value: Any) -> list[Any]:
+    """A badge cell holds one key or a list of keys; normalise to a list either way."""
+    return cast("list[Any]", value) if isinstance(value, list) else [value]
 
 
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
@@ -651,6 +666,13 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                     raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
                 if not math.isfinite(value):
                     raise ValueError(f"{loc}.{index}.{column.key}: number column must be finite")
+            elif column.kind == "badge" and column.placement == "cell":
+                # an in-cell badge holds one key or a list of keys (several wrapping chips)
+                badge_vals = _as_badge_list(value)
+                if not badge_vals or not all(isinstance(key, str) for key in badge_vals):
+                    raise ValueError(
+                        f"{loc}.{index}.{column.key}: cell badge needs a key or a non-empty list of keys"
+                    )
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
@@ -723,13 +745,22 @@ class Table(_Block):
                 raise ValueError(f"{name}.column '{spec.column}' must be a number column")
         if self.reconcile is None and any(column.pct_of_total for column in self.columns):
             raise ValueError("pct_of_total requires a reconcile total")
-        badge_widths = [c.key for c in self.columns if c.kind == "badge" and c.width is not None]
-        if badge_widths:
-            raise ValueError(f"badge column(s) {badge_widths} can't take a width (rendered under the title)")
-        non_badge = [column for column in self.columns if column.kind != "badge"]
-        widthed = [column for column in non_badge if column.width is not None]
-        if widthed and len(widthed) != len(non_badge):
-            raise ValueError("set width on every non-badge column, or none")
+        placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
+        if placement_misuse:
+            raise ValueError(f"column(s) {placement_misuse}: placement 'cell' is only for badge columns")
+        title_badge_widths = [
+            c.key
+            for c in self.columns
+            if c.kind == "badge" and c.placement == "title" and c.width is not None
+        ]
+        if title_badge_widths:
+            raise ValueError(
+                f"badge column(s) {title_badge_widths} can't take a width (they ride under the title)"
+            )
+        # in-cell columns get their own <td>: everything except title-placement badge chips.
+        widthed = [c for c in self.cell_columns if c.width is not None]
+        if widthed and len(widthed) != len(self.cell_columns):
+            raise ValueError("set width on every in-cell column, or none")
         if self.groups is not None:
             for group_index, group in enumerate(self.groups):
                 _validate_rows(group.rows, self.columns, f"groups.{group_index}.rows")
@@ -737,6 +768,17 @@ class Table(_Block):
             _validate_rows(self.rows, self.columns, "rows")
         self._reconcile()
         return self
+
+    @property
+    def cell_columns(self) -> list[Column]:
+        """Columns that get their own <td>, in declared order — everything except title-placement
+        badge columns (whose chip rides under the row title). The render's single source of order."""
+        return [c for c in self.columns if not (c.kind == "badge" and c.placement == "title")]
+
+    @property
+    def title_badges(self) -> list[Column]:
+        """Badge columns whose chip renders under the row title (placement 'title')."""
+        return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
     def all_rows(self) -> list[dict[str, Any]]:
         if self.groups is not None:
@@ -1283,9 +1325,11 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
             for row in block.all_rows():
                 for key in badge_columns:
                     value = row.get(key)
-                    # A blank badge cell is an opt-out (no chip on that row), not a reference.
-                    if isinstance(value, str) and value.strip():
-                        yield value
+                    # A cell badge may hold a list of keys; a title badge holds one. A blank string is
+                    # an opt-out (no chip on that row), not a reference.
+                    for candidate in _as_badge_list(value):
+                        if isinstance(candidate, str) and candidate.strip():
+                            yield candidate
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:

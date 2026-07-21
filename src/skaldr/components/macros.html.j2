@@ -24,19 +24,21 @@
 </details>
 {% endmacro %}
 
-{% macro table_row(b, row, non_badge, badge_cols, title_key) %}
+{% macro table_row(b, row, cell_cols, title_badges, title_key) %}
 {% set rtone = row.get("tone") %}
 <tr class="row{% if rtone %} {{ rtone }}{% endif %}">
-{% for c in non_badge %}
+{% for c in cell_cols %}
 {% if c.key == title_key %}
 <td class="title">{{ row[c.key] | richtext }}
-{% for bc in badge_cols %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
+{% for bc in title_badges %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
 {% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
 {% elif c.kind == "number" %}
 <td class="num">{{ row[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
 {% elif c.kind == "indicator" %}
 <td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
+{% elif c.kind == "badge" %}
+<td class="bc">{% set raw = row[c.key] %}{% for key in (raw if raw is iterable and raw is not string else [raw]) %}{% set k = key | trim %}{% if k %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endif %}{% endfor %}</td>
 {% else %}
 <td>{{ row[c.key] | richtext }}</td>
 {% endif %}
@@ -45,28 +47,30 @@
 {% endmacro %}
 
 {% macro table(b) %}
-{% set non_badge = b.columns | rejectattr("kind", "equalto", "badge") | list %}
-{% set badge_cols = b.columns | selectattr("kind", "equalto", "badge") | list %}
+{# in-cell columns (their own <td>, declared order) vs badges that chip under the title — the model
+   owns the split so template and validation can't drift. #}
+{% set cell_cols = b.cell_columns %}
+{% set title_badges = b.title_badges %}
 {% set text_cols = b.columns | selectattr("kind", "equalto", "text") | map(attribute="key") | list %}
 {% set rich_cols = b.columns | selectattr("kind", "equalto", "rich") | map(attribute="key") | list %}
-{% set title_key = text_cols[0] if text_cols else (rich_cols[0] if rich_cols else non_badge[0].key) %}
+{% set title_key = text_cols[0] if text_cols else (rich_cols[0] if rich_cols else cell_cols[0].key) %}
 {% set sum_key = b.reconcile.column if b.reconcile else (b.totals.column if b.totals else none) %}
 <div class="table-wrap"><table class="rep">
-{% set width_total = non_badge | selectattr("width") | map(attribute="width") | sum %}
-<colgroup>{% for c in non_badge %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
-<thead><tr>{% for c in non_badge %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
+{% set width_total = cell_cols | selectattr("width") | map(attribute="width") | sum %}
+<colgroup>{% for c in cell_cols %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
+<thead><tr>{% for c in cell_cols %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% if b.groups is not none %}
 {% for g in b.groups %}
-<tr class="group"><td colspan="{{ non_badge | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
-{% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, non_badge, badge_cols, title_key) }}{% endfor %}
-{% else %}<tr class="empty"><td colspan="{{ non_badge | length }}">— none —</td></tr>{% endif %}
+<tr class="group"><td colspan="{{ cell_cols | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
+{% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
+{% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">— none —</td></tr>{% endif %}
 {% endfor %}
 {% else %}
-{% for row in b.rows %}{{ table_row(b, row, non_badge, badge_cols, title_key) }}{% endfor %}
+{% for row in b.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
 {% endif %}
 </tbody>
-{% if b.totals %}<tfoot><tr>{% for c in non_badge %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif loop.first %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
+{% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif loop.first %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
 </table></div>
 {% if b.reconcile %}<p class="reconcile">{{ reconcile_line(b) }}</p>{% endif %}
 {% endmacro %}

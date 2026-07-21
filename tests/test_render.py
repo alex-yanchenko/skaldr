@@ -959,6 +959,46 @@ def test_badge_colour_accepts_a_semantic_alias() -> None:
     assert '<span class="chip green">OK</span>' in html  # success normalised to the palette name
 
 
+def test_table_placement_cell_badge_renders_its_own_labelled_column() -> None:
+    """A placement:cell badge column gets a header + a chip cell (single or list), a title-placement
+    badge still chips under the title, and both keys feed the legend."""
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "name", "label": "View", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},  # default title-placement
+            {"key": "access", "label": "Access", "kind": "badge", "placement": "cell"},  # mid-declared
+            {"key": "note", "label": "Notes", "kind": "rich"},
+        ],
+        "rows": [
+            {"name": "One", "status": "LIVE", "access": "WRITE", "note": "a"},
+            {"name": "Two", "status": "LIVE", "access": ["WRITE", "READ"], "note": "b"},
+        ],
+    }
+    badges = {
+        "LIVE": {"label": "Live", "tone": "green", "legend": "In production."},
+        "WRITE": {"label": "Write", "tone": "blue", "legend": "Read-write."},
+        "READ": {"label": "Read", "tone": "amber", "legend": "Read-only."},
+    }
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[table])))
+
+    # the cell-badge column keeps its DECLARED position (between View and Notes), not shoved to the end
+    assert "<thead><tr><th>View</th><th>Access</th><th>Notes</th></tr></thead>" in html
+    assert "<th></th>" not in html  # the title-placement badge column contributes no header cell
+    # the in-cell chip(s): row Two lists two, in one bc cell
+    assert '<td class="bc"><span class="chip blue">Write</span></td>' in html
+    assert (
+        '<td class="bc"><span class="chip blue">Write</span><span class="chip amber">Read</span></td>' in html
+    )
+    # the title-placement status chip still rides under the title (not in its own column)
+    assert '<td class="title">One' in html
+    assert '<div><span class="chip green">Live</span></div>' in html
+    # a cell-only badge key (READ, never used in a title column) feeds the legend — assert the legend
+    # MEANING text, which appears only in the legend row (not on a chip)
+    assert '<span class="meaning">Read-only.</span>' in html
+
+
 def test_row_and_indicator_tones_accept_palette_aliases() -> None:
     """The manually-validated tones (table row emphasis, indicator dot) alias too: red→danger,
     green→success — and the normalised name drives the rendered class."""

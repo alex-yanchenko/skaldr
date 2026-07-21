@@ -1010,7 +1010,7 @@ def test_table_mixed_widths_are_rejected() -> None:
         rows=[{"a": "x", "b": 10}],
     )
 
-    with pytest.raises(ReportError, match=r"set width on every non-badge column, or none"):
+    with pytest.raises(ReportError, match=r"set width on every in-cell column, or none"):
         parse_report(make_report(blocks=[table]))
 
 
@@ -1026,6 +1026,83 @@ def test_badge_column_cannot_take_a_width() -> None:
     with pytest.raises(ReportError, match=r"badge column\(s\).*can't take a width"):
         parse_report(
             make_report(badges={"OK": {"label": "Ok", "tone": "green", "legend": "l"}}, blocks=[table])
+        )
+
+
+def test_placement_cell_is_only_for_badge_columns() -> None:
+    table = make_table(
+        [{"key": "a", "label": "A", "kind": "text", "placement": "cell"}],
+        rows=[{"a": "x"}],
+    )
+    with pytest.raises(ReportError, match=r"placement 'cell' is only for badge columns"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_cell_badge_column_takes_a_width_and_accepts_a_key_or_list() -> None:
+    """A placement:cell badge is an in-cell column: it may take a width, and its cell value is a single
+    key or a list of keys."""
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "kind": "text", "width": 2},
+            {"key": "acc", "label": "Access", "kind": "badge", "placement": "cell", "width": 1},
+        ],
+        rows=[{"a": "one", "acc": "W"}, {"a": "two", "acc": ["W", "R"]}],
+    )
+    report = parse_report(
+        make_report(
+            badges={
+                "W": {"label": "Write", "tone": "green", "legend": "rw"},
+                "R": {"label": "Read", "tone": "blue", "legend": "ro"},
+            },
+            blocks=[table],
+        )
+    )
+    parsed = report.blocks[0]
+    assert isinstance(parsed, Table)
+    assert [row["acc"] for row in parsed.all_rows()] == ["W", ["W", "R"]]
+
+
+def test_cell_badge_undeclared_key_in_a_list_still_fails() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "kind": "text"},
+            {"key": "acc", "label": "Access", "kind": "badge", "placement": "cell"},
+        ],
+        rows=[{"a": "one", "acc": ["W", "GHOST"]}],
+    )
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared"):
+        parse_report(
+            make_report(badges={"W": {"label": "Write", "tone": "green", "legend": "rw"}}, blocks=[table])
+        )
+
+
+@pytest.mark.parametrize("bad_value", [[], ["W", 123]])
+def test_cell_badge_value_must_be_a_key_or_nonempty_string_list(bad_value: object) -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "kind": "text"},
+            {"key": "acc", "label": "Access", "kind": "badge", "placement": "cell"},
+        ],
+        rows=[{"a": "x", "acc": bad_value}],
+    )
+    with pytest.raises(ReportError, match=r"cell badge needs a key or a non-empty list of keys"):
+        parse_report(
+            make_report(badges={"W": {"label": "Write", "tone": "green", "legend": "rw"}}, blocks=[table])
+        )
+
+
+def test_mixed_widths_rejected_when_a_cell_badge_column_is_in_the_set() -> None:
+    """A cell-placement badge joins the in-cell width set, so widthing it but not a sibling still fails."""
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "kind": "text"},  # no width
+            {"key": "acc", "label": "Access", "kind": "badge", "placement": "cell", "width": 1},
+        ],
+        rows=[{"a": "x", "acc": "W"}],
+    )
+    with pytest.raises(ReportError, match=r"set width on every in-cell column, or none"):
+        parse_report(
+            make_report(badges={"W": {"label": "Write", "tone": "green", "legend": "rw"}}, blocks=[table])
         )
 
 
