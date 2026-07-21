@@ -488,10 +488,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
-		/* the leading number is the step's identifier and the click target once a step carries a url:
-		   a solid blue compartment flush to the ticket's left edge (theme-safe fill + contrasting
-		   text), with an inset bevel — light top, dark bottom — so it reads as a raised, clickable
-		   button. The value compartment stays a neutral flat chip so the two never read alike. */
+		/* the leading number is the step's identifier: a solid blue compartment flush to the ticket's
+		   left edge (theme-safe fill + contrasting text) with an inset bevel — light top, dark bottom —
+		   so it reads as a raised button, the intended click target for a future step link. The value
+		   compartment stays a neutral flat chip so the two never read alike. */
 		& .swim-n{flex:none; display:flex; align-items:center; padding:6px 10px; font-family:var(--mono);
 			font-size:12px; font-weight:700; color:var(--info-bg); cursor:pointer;
 			background:light-dark(color-mix(in srgb, var(--info-fg) 78%, white), var(--info-fg));
@@ -534,9 +534,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   the pill to the trailing edge of its container; the footer cell just carries the panel band. */
 		& .swim-tot{margin-inline-start:auto; padding:1px 8px; border-radius:var(--r-pill); font-size:11px;
 			font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); background:var(--neutral-bg)}
-		/* the totals band sits above the group-split dashes (z 2) so a per-column total — which is not
-		   itself split — reads as a clean strip; the column solids are lifted above it (below) so they
-		   still separate the totals. */
+		/* the totals row (per-column sums). The group-split dashes are trimmed in compute (they stop at
+		   the footer's top edge), so no stacking trick is needed to keep the totals clean. */
 		& .swim-foot{z-index:1; display:flex; align-items:center; justify-content:flex-end;
 			padding:var(--s2) var(--s3); background:var(--panel)}
 		& .swim-foot-lbl{background:var(--panel)}

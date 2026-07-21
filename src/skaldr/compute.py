@@ -181,7 +181,7 @@ class SwimFoot(_SwimBox):
 
 
 class SwimFootRow(TypedDict):
-    label: str  # gutter label for the totals row (e.g. "Total")
+    label: str  # gutter label for the totals row; currently always "Total"
     banded: bool  # True → panel background; False (a column is split across groups) → transparent
     row_start: int
     row_end: int
@@ -231,7 +231,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     """Everything the swimlane macro places on its CSS grid, as absolute 1-based grid line numbers so
     the template only loops and never computes. The grid is a lane gutter (track 1) + one track per
     atomic sub-column (a `(column, group)` segment); rows are an optional top poke zone (group caps),
-    the sprint header, one row per lane, and an optional bottom poke zone.
+    the sprint header, one row per lane, an optional footer totals row (when steps carry a `value`),
+    and an optional bottom poke zone.
 
     The frame wraps the whole table incl. the lane gutter (track 1). The empty top-left cell where the
     gutter meets the sprint-header row is not boxed off: the header/body divider spans the data columns
@@ -241,9 +242,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     verticals mark real column (sprint) boundaries and normally live inside the table rows only (a
     group cap spans across them), except where two DIFFERENT group caps meet — there the solid runs
     full height (poke zones + table) to separate the caps; DASHED verticals mark a group split within
-    a column and run the full height so caps sit flush and the divider is continuous. Horizontal
-    dividers are one line each (never stitched from cell borders); the table's outer edges come from
-    the frame overlay."""
+    a column and run from the top cap down to the last lane. When a totals footer is present the dash
+    stops at its top edge (a per-column total is not split), so the bottom caps below it read as
+    colour-separated rather than dash-separated. Horizontal dividers are one line each (never stitched
+    from cell borders); the table's outer edges come from the frame overlay."""
     subcols = block.subcolumns()
     ncols = len(subcols)
     nlanes = len(block.lanes)
@@ -366,13 +368,15 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
         line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
-        group_total = sum_where(lambda step, name=group.name: block.step_group(step) == name)
+        group_total = (
+            sum_where(lambda step, name=group.name: block.step_group(step) == name) if has_totals else None
+        )
         caps.append(
             {
                 "label": group.name,
                 "color": group.color,
                 "edges": edges.strip(),
-                "total": group_total if has_totals else None,
+                "total": group_total,
                 "line_start": line_start,
                 "line_end": line_end,
                 "row_start": poke_top_row[0],
@@ -418,9 +422,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                 }
             )
         elif left_group != right_group:
-            # a group split within a column, full height so it hugs the caps. Stop it at the footer's
-            # top edge when a totals row is present — a per-column total is not itself split, so the
-            # dash must not run into (or through) the totals row.
+            # a group split within a column, full height so it hugs the caps. A totals footer stops it
+            # at the footer's top edge — a per-column total is not itself split. The dash must cross the
+            # footer to reach the bottom caps, so trimming it there trades the bottom caps' dash for
+            # colour separation; keeping the totals row dash-free wins that trade.
             vdash.append(
                 {
                     "col_start": boundary_line,

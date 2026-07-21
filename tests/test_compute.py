@@ -391,10 +391,21 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
 
     layout = swimlane_layout(block)
 
+    # groupless + totals → header + 2 lanes + footer, no poke tracks
+    assert layout["row_template"] == "auto auto auto auto"
     assert layout["gutter"] == [
         {"lane": "A", "total": 2.5, "row_start": 2, "row_end": 3},
         {"lane": "B", "total": 5.5, "row_start": 3, "row_end": 4},
     ]
+    # the fractional value flows onto its cell's step
+    assert layout["cells"][0] == {
+        "tone": None,
+        "line_start": 2,
+        "line_end": 3,
+        "row_start": 2,
+        "row_end": 3,
+        "steps": [{"n": "1", "label": "a", "value": 2.5}],
+    }
     # footer sums each column across both lanes; fractional preserved, zero included
     assert layout["foot"] == {
         "label": "Total",
@@ -406,6 +417,34 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
             {"total": 1.5, "line_start": 3, "line_end": 4, "row_start": 4, "row_end": 5},
         ],
     }
+    # header/body divider (data cols), inter-lane divider (full width), footer divider (full width)
+    assert layout["hdiv"] == [
+        {"row": 2, "col_start": 2},
+        {"row": 3, "col_start": 1},
+        {"row": 4, "col_start": 1},
+    ]
+    assert layout["tbl"] == {"line_start": 1, "line_end": 4, "row_start": 1, "row_end": 5}
+
+
+def test_swimlane_layout_a_lone_zero_value_still_activates_totals() -> None:
+    """A single step whose only value is 0 turns totals on (0 is not None); a truthy check would miss it
+    and silently drop the totals row."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "a", "value": 0}],
+    )
+
+    layout = swimlane_layout(block)
+
+    assert layout["foot"] == {
+        "label": "Total",
+        "banded": True,
+        "row_start": 3,
+        "row_end": 4,
+        "cells": [{"total": 0, "line_start": 2, "line_end": 3, "row_start": 3, "row_end": 4}],
+    }
+    assert layout["gutter"] == [{"lane": "A", "total": 0, "row_start": 2, "row_end": 3}]
 
 
 def test_swimlane_layout_split_column_with_values_drops_band_and_trims_dashes() -> None:

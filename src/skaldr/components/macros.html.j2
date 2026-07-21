@@ -140,8 +140,9 @@
 {# Swimlane: a lane×column matrix (rows = lanes, columns = the declared sprint/phase axis) with an
    optional group (milestone) overlay. `swimlane_layout` computes every element's grid placement, so
    this macro only places pre-computed lines: the table fill, the sprint header (tinted per group with
-   one label per column), lane gutter, cells, the grey grid (solid column boundaries + dashed group
-   splits), the group caps beyond the table, and the rounded frame. Fixed-width columns; scrolls wide. #}
+   one label per column), lane gutter, cells (each step shows its number, label, and optional value),
+   the grey grid (solid column boundaries + dashed group splits), the group caps beyond the table, an
+   optional footer totals row, and the rounded frame. Columns fill the width, scrolling when narrow. #}
 {% macro swimlane(b) %}
 {% set layout = swimlane_layout(b) %}
 <div class="swim-wrap"><div class="swim" style="grid-template-columns:{{ layout.col_template }};grid-template-rows:{{ layout.row_template }}">
