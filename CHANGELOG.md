@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/alex-yanchenko/skaldr/compare/v1.2.0...v1.3.0) (2026-07-21)
+
+
+### Features
+
+* **blocks:** add a per-block span width primitive ([#55](https://github.com/alex-yanchenko/skaldr/issues/55)) ([e83d83b](https://github.com/alex-yanchenko/skaldr/commit/e83d83b343f6a23bbd3597c3432c1ae9a14631fd))
+
 ## [1.2.0](https://github.com/alex-yanchenko/skaldr/compare/v1.1.0...v1.2.0) (2026-07-20)
 
 
