@@ -38,13 +38,14 @@ def test_swimlane_layout_plain_has_no_poke_rows_caps_or_dashes() -> None:
     assert layout["caps"] == []
     assert layout["caps_bottom"] == []
     assert layout["vdash"] == []
-    # gutter seam (line 2) + one column boundary (line 3), both table-rows. The outer top/left/right/
-    # bottom edges come from the rounded frame overlay (see tbl).
+    # one interior column boundary (line 3), table-rows. The outer edges — incl. the gutter/data
+    # separator — come from the frame overlay (see tbl), so no gutter seam is seeded here.
     assert layout["vsolid"] == [
-        {"col_start": 2, "col_end": 3, "row_start": 1, "row_end": 4},
         {"col_start": 3, "col_end": 4, "row_start": 1, "row_end": 4},
     ]
     assert layout["hdiv"] == [2, 3]  # header/body divider + the A/B lane divider
+    # framed table covers the data columns only (line 2 → right edge); the gutter sits outside it
+    assert layout["tbl"] == {"line_start": 2, "line_end": 4, "row_start": 1, "row_end": 4}
 
 
 def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> None:
@@ -94,7 +95,8 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
         {"tone": "violet", "line_start": 6, "line_end": 7, "row_start": 2, "row_end": 3},
     ]
     assert layout["gutter"] == [{"lane": "R", "row_start": 3, "row_end": 4}]
-    assert layout["tbl"] == {"line_start": 1, "line_end": 7, "row_start": 2, "row_end": 4}
+    # framed table = data columns only (line 2 → right edge 7); gutter is outside, no corner cell
+    assert layout["tbl"] == {"line_start": 2, "line_end": 7, "row_start": 2, "row_end": 4}
     # caps: MVP over its 2 sub-columns (lines 2-4, leftmost → left edge), Beta 1 (4-5, interior),
     # GA 2 (5-7, rightmost → right edge); bottom caps mirror them
     assert layout["caps"] == [
@@ -136,10 +138,10 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
         {"col_start": 4, "col_end": 5, "row_start": 1, "row_end": 5},
         {"col_start": 5, "col_end": 6, "row_start": 1, "row_end": 5},
     ]
-    # gutter seam (2) + interior sprint boundaries (3, 6), all table-rows. The outer edges come from the
-    # frame overlay; the outer cap corners from the caps' own grey `edges` borders.
+    # interior sprint boundaries only (S1|S2 at line 3, S2|S3 at line 6), table-rows. The outer edges
+    # incl. the gutter/data separator come from the frame overlay; the outer cap corners from the caps'
+    # own grey `edges` borders.
     assert layout["vsolid"] == [
-        {"col_start": 2, "col_end": 3, "row_start": 2, "row_end": 4},
         {"col_start": 3, "col_end": 4, "row_start": 2, "row_end": 4},
         {"col_start": 6, "col_end": 7, "row_start": 2, "row_end": 4},
     ]

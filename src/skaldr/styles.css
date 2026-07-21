@@ -465,14 +465,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			color:var(--muted); pointer-events:none}
 		& .swim-gut{z-index:1; display:flex; align-items:center; justify-content:flex-end; padding:0 var(--s3);
 			font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted)}
-		& .swim-cell{z-index:1; display:flex; flex-direction:column; gap:var(--s2); padding:var(--s2) 9px;
+		& .swim-cell{z-index:1; display:flex; flex-direction:column; gap:var(--s2); padding:var(--s3);
 			background:var(--gt,transparent)}
-		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:12px;
+		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
-		& .swim-n{flex:none; display:flex; align-items:center; padding:3px 7px; font-family:var(--mono);
-			font-size:10.5px; font-weight:700; color:var(--muted); background:var(--neutral-bg);
+		& .swim-n{flex:none; display:flex; align-items:center; padding:6px 10px; font-family:var(--mono);
+			font-size:12px; font-weight:700; color:var(--muted); background:var(--neutral-bg);
 			border-inline-end:1px solid var(--line)}
-		& .swim-l{align-self:center; padding:3px 8px}
+		& .swim-l{align-self:center; padding:6px 11px}
 		& .swim-vsolid{z-index:2; width:0; justify-self:start; border-inline-start:1px solid var(--rule);
 			pointer-events:none}
 		& .swim-vdash{z-index:2; width:0; margin-block:var(--r-md); justify-self:start;
