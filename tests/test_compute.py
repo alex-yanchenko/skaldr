@@ -215,7 +215,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 3,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "1", "label": "a", "value": None}],
+            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "muted": False}],
         },  # S1/MVP — inferred group
         {
             "tone": "blue",
@@ -231,7 +231,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 5,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "2", "label": "b", "value": None}],
+            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "muted": False}],
         },  # S2/Beta
     ]
 
@@ -404,7 +404,7 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
         "line_end": 3,
         "row_start": 2,
         "row_end": 3,
-        "steps": [{"n": "1", "label": "a", "value": 2.5}],
+        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "muted": False}],
     }
     # footer sums each column across both lanes; fractional preserved, zero included
     assert layout["foot"] == {
@@ -489,6 +489,31 @@ def test_swimlane_layout_split_column_with_values_drops_band_and_trims_dashes() 
     ]
     # header/body divider (data cols) + a full-width divider above the totals row
     assert layout["hdiv"] == [{"row": 3, "col_start": 2}, {"row": 4, "col_start": 1}]
+
+
+def test_swimlane_layout_a_muted_step_value_still_counts_in_totals() -> None:
+    """`muted` only de-emphasises visually — the step's value is still summed into the totals, so a
+    muted step must not silently drop out of the column/lane sums."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "value": 3},
+            {"lane": "A", "col": "C1", "n": "2", "label": "b", "value": 4, "muted": True},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    # 3 + 4: the muted step's 4 is included
+    assert layout["foot"] == {
+        "label": "Total",
+        "banded": True,
+        "row_start": 3,
+        "row_end": 4,
+        "cells": [{"total": 7, "line_start": 2, "line_end": 3, "row_start": 3, "row_end": 4}],
+    }
+    assert layout["gutter"] == [{"lane": "A", "total": 7, "row_start": 2, "row_end": 3}]
 
 
 def test_fmt_variants() -> None:

@@ -1336,6 +1336,17 @@ def test_swimlane_step_value_rejects_a_boolean() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_step_url_rejects_an_unsafe_scheme() -> None:
+    """A step `url` is gated to http/https/mailto so a `javascript:` link can't reach the href."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "url": "javascript:alert(1)"}],
+    )
+    with pytest.raises(ReportError, match=r"steps\.0.*url must be an http://, https://, or mailto: link"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_lanes_must_be_unique() -> None:
     block = _swimlane(lanes=["A", "A"])
     with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):
