@@ -503,10 +503,8 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
 
 
 def test_swimlane_columns_are_fluid_so_a_few_columns_fill_the_width() -> None:
-    """Regression: data columns must be a minmax(150px, 1fr) track (grow to fill, floor at 150px), not
-    a fixed 150px — otherwise a 3-column matrix sits ~450px wide in a full-width page. Verified in a
-    browser: with this token 3 columns each render ~490px of a 1504px content area; a fixed 150px left
-    the matrix half-empty."""
+    """Data columns are a minmax(150px, 1fr) track: they share the width evenly with a 150px floor, so
+    a few columns fill the page instead of huddling at a fixed 150px."""
     html = render_html(
         parse_report(
             make_report(
@@ -594,6 +592,41 @@ def test_swimlane_grouped_renders_coloured_caps_tints_and_dashed_splits() -> Non
     assert html.count(">S2</div>") == 1
     # the Beta step landed in its resolved sub-column
     assert '<span class="swim-n">2</span><span class="swim-l">b</span>' in html
+
+
+def test_swimlane_adjacent_caps_render_a_poke_solid_but_an_ungrouped_boundary_does_not() -> None:
+    """Two groups each owning a whole column render a full-height `poke` solid at the boundary between
+    them; a boundary where one side is ungrouped renders a plain (non-poke) solid instead."""
+    two_caps = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["S1", "S2"],
+        "groups": [
+            {"name": "A", "color": "blue", "columns": ["S1"]},
+            {"name": "B", "color": "amber", "columns": ["S2"]},
+        ],
+        "steps": [
+            {"lane": "R", "col": "S1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "S2", "n": "2", "label": "b"},
+        ],
+    }
+    grouped_then_ungrouped = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["S1", "S2"],
+        "groups": [{"name": "A", "color": "blue", "columns": ["S1"]}],
+        "steps": [
+            {"lane": "R", "col": "S1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "S2", "n": "2", "label": "b"},
+        ],
+    }
+
+    two_caps_html = render_html(parse_report(make_report(blocks=[two_caps])))
+    ungrouped_html = render_html(parse_report(make_report(blocks=[grouped_then_ungrouped])))
+
+    assert 'class="swim-vsolid poke"' in two_caps_html
+    assert "poke" not in ungrouped_html.split('class="swim-vsolid', 1)[1].split(">", 1)[0]
+    assert 'class="swim-vsolid poke"' not in ungrouped_html
 
 
 def test_swimlane_group_spanning_all_columns_renders_both_edge_classes() -> None:
@@ -1055,7 +1088,7 @@ def test_block_span_wraps_the_block_in_a_width_container() -> None:
     unchanged inside it."""
     html = render_html(parse_report(make_report(blocks=[{"type": "list", "span": 4, "items": ["a"]}])))
 
-    assert '<div class="blk span-4"><ul class="list"><li>a</li></ul>' in html
+    assert '<div class="blk span-4"><ul class="list"><li>a</li></ul>\n</div>' in html
 
 
 def test_block_without_span_is_not_wrapped() -> None:
