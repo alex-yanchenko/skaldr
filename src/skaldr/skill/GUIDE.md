@@ -133,7 +133,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?}]`, `groups?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, muted?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -368,15 +368,19 @@ per-lane sum beside each lane label, and — with `groups` — a per-group sum o
 counts only the steps resolved into it). Totals appear only when at least one step has a `value`; a step
 without one counts as 0.
 
+A step may also carry an optional `url` (http/https/mailto — e.g. its Jira/GitHub ticket), which turns
+its number into a link, and `muted: true` to de-emphasise tail/low-priority work (the ticket renders
+faded and dashed but stays in place; its `value` still counts toward the totals).
+
 ```yaml
 - type: swimlane
   lanes: ["Product", "Eng", "QA"]
   columns: ["Sprint 1", "Sprint 2", "Sprint 3"]
   steps:
-    - { lane: "Product", col: "Sprint 1", n: "1", label: "Spec" }
-    - { lane: "Eng", col: "Sprint 2", n: "2", label: "Build" }
+    - { lane: "Product", col: "Sprint 1", n: "1", label: "Spec", url: "https://jira/PROJ-1" }
+    - { lane: "Eng", col: "Sprint 2", n: "2", label: "Build", value: 5 }
     - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag" }   # stacks with 3b (same cell)
-    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan" }
+    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan", muted: true }   # de-emphasised
     - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }
 ```
 

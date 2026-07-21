@@ -136,6 +136,8 @@ class SwimStep(TypedDict):
     n: str
     label: str
     value: float | None  # the step's own value, shown on the ticket's trailing edge; None → hidden
+    url: str | None  # optional link; the number becomes an <a> when set
+    muted: bool  # de-emphasise (faded + dashed) — tail/low-priority work
 
 
 class SwimSubcol(TypedDict):
@@ -342,7 +344,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         row_start, row_end = lane_rows[lane_index]
         for sub in subcol_out:
             steps: list[SwimStep] = [
-                {"n": step.n, "label": step.label, "value": step.value}
+                {"n": step.n, "label": step.label, "value": step.value, "url": step.url, "muted": step.muted}
                 for step in block.steps
                 if step.lane == lane and step.col == sub["col"] and block.step_group(step) == sub["group"]
             ]

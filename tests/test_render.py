@@ -710,6 +710,53 @@ def test_swimlane_step_value_renders_on_the_ticket() -> None:
     assert html.count('class="swim-tkt-v"') == 1
 
 
+def test_swimlane_step_url_links_the_number_and_muted_fades_the_ticket() -> None:
+    """A step `url` renders the number as a link; `muted` marks the ticket for the faded/dashed style;
+    the two compose on one step. A plain step keeps a <span> number and no muted class."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2", "C3"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "linked", "url": "https://example.com/PROJ-1"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "plain", "muted": True},
+            {
+                "lane": "R",
+                "col": "C3",
+                "n": "3",
+                "label": "both",
+                "url": "https://example.com/PROJ-3",
+                "muted": True,
+            },
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<a class="swim-n" href="https://example.com/PROJ-1">1</a>' in html
+    assert '<span class="swim-n">2</span>' in html  # no url → plain span, not a link
+    # url + muted compose: a muted ticket whose number is a link
+    assert '<div class="swim-tkt muted"><a class="swim-n" href="https://example.com/PROJ-3">3</a>' in html
+    assert html.count('class="swim-tkt muted"') == 2
+
+
+@pytest.mark.parametrize(
+    "url", ["https://example.com/PROJ-1", "http://example.com/PROJ-1", "mailto:pm@example.com"]
+)
+def test_swimlane_step_url_accepts_each_safe_scheme(url: str) -> None:
+    """All three allowed schemes render the number as a link out to the given url."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1"],
+        "steps": [{"lane": "R", "col": "C1", "n": "1", "label": "a", "url": url}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert f'<a class="swim-n" href="{url}">1</a>' in html
+
+
 def test_swimlane_split_column_footer_is_bare_but_normal_footer_is_banded() -> None:
     """A column split across groups renders a bare (bandless) totals row; an unsplit one keeps the band."""
     split = {

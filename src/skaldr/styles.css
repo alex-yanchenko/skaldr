@@ -474,17 +474,21 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
+		/* de-emphasised (step.muted): faded + dashed so tail/low-priority work recedes but stays put */
+		& .swim-tkt.muted{opacity:0.5; border-style:dashed}
 		/* the leading number is the step's identifier: a solid blue compartment flush to the ticket's
 		   left edge (theme-safe fill + contrasting text) with an inset bevel — light top, dark bottom —
-		   so it reads as a raised button, the intended click target for a future step link. The value
-		   compartment stays a neutral flat chip so the two never read alike. */
+		   so it reads as a raised button. When the step carries a `url` it renders as an <a> and is the
+		   click target; the pointer + hover apply only to that linked form. The value compartment stays
+		   a neutral flat chip so the two never read alike. */
 		& .swim-n{flex:none; display:flex; align-items:center; padding:6px 10px; font-family:var(--mono);
-			font-size:12px; font-weight:700; color:var(--info-bg); cursor:pointer;
+			font-size:12px; font-weight:700; color:var(--info-bg); text-decoration:none;
 			background:light-dark(color-mix(in srgb, var(--info-fg) 78%, white), var(--info-fg));
 			border-inline-end:1px solid var(--line);
 			box-shadow:inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
 				inset 0 -1px 0 color-mix(in srgb, #000 16%, transparent)}
-		& .swim-n:hover{filter:brightness(1.08)}
+		& a.swim-n{cursor:pointer}
+		& a.swim-n:hover{filter:brightness(1.08)}
 		& .swim-l{align-self:center; padding:6px 11px}
 		/* the step's own value, a trailing compartment mirroring the leading number badge */
 		& .swim-tkt-v{flex:none; margin-inline-start:auto; display:flex; align-items:center; padding:6px 10px;

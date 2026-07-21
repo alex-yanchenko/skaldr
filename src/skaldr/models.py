@@ -41,6 +41,15 @@ _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
 # links in render.py and reference `url`s here), so a `javascript:`/`data:text/html:` link can't ship.
 ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:")
+
+
+def _require_url_scheme(url: str | None, subject: str) -> None:
+    """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
+    field so the gate (and message) can't drift; `subject` names the field in the error."""
+    if url is not None and not url.startswith(ALLOWED_URL_SCHEMES):
+        raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
+
+
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
 # render.py; both derive from this one class so key-validation and marker-matching can't drift.
 REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
@@ -776,8 +785,7 @@ class ReferenceItem(_Frozen):
 
     @model_validator(mode="after")
     def _url_scheme(self) -> "ReferenceItem":
-        if self.url is not None and not self.url.startswith(ALLOWED_URL_SCHEMES):
-            raise ValueError("'url' must be an http://, https://, or mailto: link")
+        _require_url_scheme(self.url, "'url'")
         return self
 
 
@@ -866,6 +874,16 @@ class SwimlaneStep(_Frozen):
         "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals — so the "
         "numbers never drift by hand. A step with no value counts as 0.",
     )
+    url: str | None = Field(
+        default=None,
+        description="Optional link (http/https/mailto) for the step — e.g. its Jira/GitHub ticket. The "
+        "step's number becomes a link out to it.",
+    )
+    muted: bool = Field(
+        default=False,
+        description="De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed "
+        "so it recedes without leaving the matrix. Its value still counts toward the totals.",
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "SwimlaneStep":
@@ -877,6 +895,7 @@ class SwimlaneStep(_Frozen):
             raise ValueError("swimlane step n must not be blank")
         if not self.label.strip():
             raise ValueError("swimlane step label must not be blank")
+        _require_url_scheme(self.url, "swimlane step url")
         return self
 
 

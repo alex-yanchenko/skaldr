@@ -2652,6 +2652,25 @@
           "default": null,
           "description": "Optional numeric weight for this step (points, hours, cost, count \u2014 whatever the matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column (footer row), per-lane (beside the lane label), and per-group (on the cap) totals \u2014 so the numbers never drift by hand. A step with no value counts as 0.",
           "title": "Value"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional link (http/https/mailto) for the step \u2014 e.g. its Jira/GitHub ticket. The step's number becomes a link out to it.",
+          "title": "Url"
+        },
+        "muted": {
+          "default": false,
+          "description": "De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed so it recedes without leaving the matrix. Its value still counts toward the totals.",
+          "title": "Muted",
+          "type": "boolean"
         }
       },
       "required": [
