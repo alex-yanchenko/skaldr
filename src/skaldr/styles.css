@@ -474,10 +474,26 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
+		/* de-emphasised (step.muted): faded + dashed so tail/low-priority work recedes but stays put */
+		& .swim-tkt.muted{opacity:0.5; border-style:dashed}
+		/* the leading number is the step's identifier: a solid blue compartment flush to the ticket's
+		   left edge (theme-safe fill + contrasting text) with an inset bevel — light top, dark bottom —
+		   so it reads as a raised button. When the step carries a `url` it renders as an <a> and is the
+		   click target; the pointer + hover apply only to that linked form. The value compartment stays
+		   a neutral flat chip so the two never read alike. */
 		& .swim-n{flex:none; display:flex; align-items:center; padding:6px 10px; font-family:var(--mono);
-			font-size:12px; font-weight:700; color:var(--muted); background:var(--neutral-bg);
-			border-inline-end:1px solid var(--line)}
+			font-size:12px; font-weight:700; color:var(--info-bg); text-decoration:none;
+			background:light-dark(color-mix(in srgb, var(--info-fg) 78%, white), var(--info-fg));
+			border-inline-end:1px solid var(--line);
+			box-shadow:inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
+				inset 0 -1px 0 color-mix(in srgb, #000 16%, transparent)}
+		& a.swim-n{cursor:pointer}
+		& a.swim-n:hover{filter:brightness(1.08)}
 		& .swim-l{align-self:center; padding:6px 11px}
+		/* the step's own value, a trailing compartment mirroring the leading number badge */
+		& .swim-tkt-v{flex:none; margin-inline-start:auto; display:flex; align-items:center; padding:6px 10px;
+			font-family:var(--mono); font-size:12px; font-weight:700; color:var(--muted);
+			font-variant-numeric:tabular-nums; background:var(--neutral-bg); border-inline-start:1px solid var(--line)}
 		& .swim-vsolid{z-index:2; width:0; justify-self:start; border-inline-start:1px solid var(--rule);
 			pointer-events:none}
 		/* a sprint boundary where two different caps meet runs through the poke zone to separate them —
@@ -508,9 +524,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   the pill to the trailing edge of its container; the footer cell just carries the panel band. */
 		& .swim-tot{margin-inline-start:auto; padding:1px 8px; border-radius:var(--r-pill); font-size:11px;
 			font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); background:var(--neutral-bg)}
+		/* the totals row (per-column sums). The group-split dashes are trimmed in compute (they stop at
+		   the footer's top edge), so no stacking trick is needed to keep the totals clean. */
 		& .swim-foot{z-index:1; display:flex; align-items:center; justify-content:flex-end;
 			padding:var(--s2) var(--s3); background:var(--panel)}
 		& .swim-foot-lbl{background:var(--panel)}
+		/* a swimlane with a split column gets a transparent totals row instead of the panel band — a
+		   lighter treatment, so the totals don't read as a heavy strip over the busier split structure. */
+		& .swim-foot.bare, & .swim-foot-lbl.bare{background:transparent}
 		& .swim-dot{width:7px; height:7px; border-radius:50%; background:var(--gc)}
 		& .slate{--gc:var(--neutral-fg); --gt:var(--neutral-bg)} & .blue{--gc:var(--info-fg); --gt:var(--info-bg)}
 		& .green{--gc:var(--success-fg); --gt:var(--success-bg)} & .amber{--gc:var(--warning-fg); --gt:var(--warning-bg)}
