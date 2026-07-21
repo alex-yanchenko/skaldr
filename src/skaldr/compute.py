@@ -135,6 +135,7 @@ class _SwimBox(TypedDict):
 class SwimStep(TypedDict):
     n: str
     label: str
+    value: float | None  # the step's own value, shown on the ticket's trailing edge; None → hidden
 
 
 class SwimSubcol(TypedDict):
@@ -176,11 +177,12 @@ class SwimCap(SwimCapBottom):
 
 
 class SwimFoot(_SwimBox):
-    value: float  # one column's summed step values, in the footer totals row
+    total: float  # one column's summed step values, in the footer totals row
 
 
 class SwimFootRow(TypedDict):
     label: str  # gutter label for the totals row (e.g. "Total")
+    banded: bool  # True → panel background; False (a column is split across groups) → transparent
     row_start: int
     row_end: int
     cells: list[SwimFoot]  # one per column
@@ -247,7 +249,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     nlanes = len(block.lanes)
     has_groups = bool(block.groups)
     has_totals = any(step.value is not None for step in block.steps)
-    nfoot = 1 if has_totals else 0
+    nfoot = int(has_totals)  # 1 when a totals footer row is present
     # group name → its palette colour (an ungrouped segment's None group has no tint).
     color_of = {group.name: group.color for group in block.groups}
 
@@ -266,6 +268,11 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     # column line for sub-column index i: track (i + 2), spanning lines (i + 2)..(i + 3).
     def col_lines(index: int) -> tuple[int, int]:
         return index + 2, index + 3
+
+    def column_span(col: str) -> tuple[int, int]:
+        """Grid lines spanning every sub-column of `col` (a column split across groups has several)."""
+        indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
+        return col_lines(indices[0])[0], col_lines(indices[-1])[1]
 
     subcol_out: list[SwimSubcol] = []
     for index, (col, group_name) in enumerate(subcols):
@@ -293,12 +300,12 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     ]
     headers: list[SwimHeader] = []
     for col in block.columns:
-        indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
+        line_start, line_end = column_span(col)
         headers.append(
             {
                 "label": col,
-                "line_start": col_lines(indices[0])[0],
-                "line_end": col_lines(indices[-1])[1],
+                "line_start": line_start,
+                "line_end": line_end,
                 "row_start": header_row[0],
                 "row_end": header_row[1],
             }
@@ -309,15 +316,19 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     def value_of(step: SwimlaneStep) -> float:
         return step.value if step.value is not None else 0
 
-    def total_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
+    def sum_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
         return sum(value_of(step) for step in block.steps if predicate(step))
 
-    lane_total = {lane: total_where(lambda step, lane=lane: step.lane == lane) for lane in block.lanes}
+    lane_total = (
+        {lane: sum_where(lambda step, lane=lane: step.lane == lane) for lane in block.lanes}
+        if has_totals
+        else {}
+    )
 
     gutter: list[SwimGutter] = [
         {
             "lane": lane,
-            "total": lane_total[lane] if has_totals else None,
+            "total": lane_total.get(lane),
             "row_start": lane_rows[index][0],
             "row_end": lane_rows[index][1],
         }
@@ -329,7 +340,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         row_start, row_end = lane_rows[lane_index]
         for sub in subcol_out:
             steps: list[SwimStep] = [
-                {"n": step.n, "label": step.label}
+                {"n": step.n, "label": step.label, "value": step.value}
                 for step in block.steps
                 if step.lane == lane and step.col == sub["col"] and block.step_group(step) == sub["group"]
             ]
@@ -355,7 +366,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
         line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
-        group_total = total_where(lambda step, name=group.name: block.step_group(step) == name)
+        group_total = sum_where(lambda step, name=group.name: block.step_group(step) == name)
         caps.append(
             {
                 "label": group.name,
@@ -407,12 +418,15 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                 }
             )
         elif left_group != right_group:
+            # a group split within a column, full height so it hugs the caps. Stop it at the footer's
+            # top edge when a totals row is present — a per-column total is not itself split, so the
+            # dash must not run into (or through) the totals row.
             vdash.append(
                 {
                     "col_start": boundary_line,
                     "col_end": boundary_line + 1,
                     "row_start": full_rows[0],
-                    "row_end": full_rows[1],
+                    "row_end": footer_row[0] if has_totals else full_rows[1],
                 }
             )
     # horizontal dividers, each a continuous line. The header/body divider spans the DATA columns only
@@ -432,17 +446,26 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     if has_totals:
         foot_cells: list[SwimFoot] = []
         for col in block.columns:
-            indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
+            line_start, line_end = column_span(col)
             foot_cells.append(
                 {
-                    "value": total_where(lambda step, col=col: step.col == col),
-                    "line_start": col_lines(indices[0])[0],
-                    "line_end": col_lines(indices[-1])[1],
+                    "total": sum_where(lambda step, col=col: step.col == col),
+                    "line_start": line_start,
+                    "line_end": line_end,
                     "row_start": footer_row[0],
                     "row_end": footer_row[1],
                 }
             )
-        foot = {"label": "Total", "row_start": footer_row[0], "row_end": footer_row[1], "cells": foot_cells}
+        # a split column (more sub-columns than columns) drops the footer's panel band for a lighter,
+        # transparent totals row over the busier split structure; an unsplit swimlane keeps the band.
+        banded = ncols == len(block.columns)
+        foot = {
+            "label": "Total",
+            "banded": banded,
+            "row_start": footer_row[0],
+            "row_end": footer_row[1],
+            "cells": foot_cells,
+        }
 
     return {
         "has_groups": has_groups,

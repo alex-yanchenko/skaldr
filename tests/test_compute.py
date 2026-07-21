@@ -215,7 +215,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 3,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "1", "label": "a"}],
+            "steps": [{"n": "1", "label": "a", "value": None}],
         },  # S1/MVP — inferred group
         {
             "tone": "blue",
@@ -231,7 +231,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 5,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "2", "label": "b"}],
+            "steps": [{"n": "2", "label": "b", "value": None}],
         },  # S2/Beta
     ]
 
@@ -323,12 +323,13 @@ def test_swimlane_layout_sums_values_into_column_lane_and_group_totals() -> None
     # per-column footer (row 4-5), each cell spanning its column's sub-columns
     assert layout["foot"] == {
         "label": "Total",
+        "banded": True,  # no column is split across groups → keeps the panel band
         "row_start": 4,
         "row_end": 5,
         "cells": [
-            {"value": 3, "line_start": 2, "line_end": 3, "row_start": 4, "row_end": 5},
-            {"value": 5, "line_start": 3, "line_end": 4, "row_start": 4, "row_end": 5},
-            {"value": 2, "line_start": 4, "line_end": 5, "row_start": 4, "row_end": 5},
+            {"total": 3, "line_start": 2, "line_end": 3, "row_start": 4, "row_end": 5},
+            {"total": 5, "line_start": 3, "line_end": 4, "row_start": 4, "row_end": 5},
+            {"total": 2, "line_start": 4, "line_end": 5, "row_start": 4, "row_end": 5},
         ],
     }
     # per-lane total beside the label
@@ -372,6 +373,83 @@ def test_swimlane_layout_without_values_has_no_footer_or_totals() -> None:
     assert [cap["total"] for cap in layout["caps"]] == [None]
     # table stops at the lane row (no footer): header + 1 lane = rows 2-4
     assert layout["tbl"]["row_end"] == 4
+
+
+def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional() -> None:
+    """Per-lane totals partition across ≥2 lanes; a `value: 0` still activates totals (0 is not None)
+    and is summed; fractional values are preserved through the sums."""
+    block = _swimlane(
+        lanes=["A", "B"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "value": 2.5},
+            {"lane": "A", "col": "C2", "n": "2", "label": "b", "value": 0},
+            {"lane": "B", "col": "C1", "n": "3", "label": "c", "value": 4},
+            {"lane": "B", "col": "C2", "n": "4", "label": "d", "value": 1.5},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    assert layout["gutter"] == [
+        {"lane": "A", "total": 2.5, "row_start": 2, "row_end": 3},
+        {"lane": "B", "total": 5.5, "row_start": 3, "row_end": 4},
+    ]
+    # footer sums each column across both lanes; fractional preserved, zero included
+    assert layout["foot"] == {
+        "label": "Total",
+        "banded": True,
+        "row_start": 4,
+        "row_end": 5,
+        "cells": [
+            {"total": 6.5, "line_start": 2, "line_end": 3, "row_start": 4, "row_end": 5},
+            {"total": 1.5, "line_start": 3, "line_end": 4, "row_start": 4, "row_end": 5},
+        ],
+    }
+
+
+def test_swimlane_layout_split_column_with_values_drops_band_and_trims_dashes() -> None:
+    """A column split across groups: the footer sums across all its sub-columns, the band is dropped
+    (banded False), the group-split dashes stop at the footer's top edge, and a divider sits above the
+    totals row."""
+    block = _swimlane(
+        lanes=["R"],
+        columns=["S1", "S2", "S3"],
+        groups=[
+            {"name": "MVP", "color": "blue", "columns": ["S1", "S2"]},
+            {"name": "Beta", "color": "amber", "columns": ["S2"]},
+            {"name": "GA", "color": "violet", "columns": ["S2", "S3"]},
+        ],
+        steps=[
+            {"lane": "R", "col": "S1", "n": "1", "label": "a", "value": 4},
+            {"lane": "R", "col": "S2", "group": "MVP", "n": "2", "label": "b", "value": 3},
+            {"lane": "R", "col": "S2", "group": "Beta", "n": "3", "label": "c", "value": 6},
+            {"lane": "R", "col": "S2", "group": "GA", "n": "4", "label": "d", "value": 2},
+            {"lane": "R", "col": "S3", "n": "5", "label": "e", "value": 5},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    # band dropped, and S2's footer cell spans its 3 sub-columns summing all three (3+6+2)
+    assert layout["foot"] == {
+        "label": "Total",
+        "banded": False,
+        "row_start": 4,
+        "row_end": 5,
+        "cells": [
+            {"total": 4, "line_start": 2, "line_end": 3, "row_start": 4, "row_end": 5},
+            {"total": 11, "line_start": 3, "line_end": 6, "row_start": 4, "row_end": 5},
+            {"total": 5, "line_start": 6, "line_end": 7, "row_start": 4, "row_end": 5},
+        ],
+    }
+    # the two S2-internal dashes stop at the footer's top edge (row_end 4), not through it
+    assert layout["vdash"] == [
+        {"col_start": 4, "col_end": 5, "row_start": 1, "row_end": 4},
+        {"col_start": 5, "col_end": 6, "row_start": 1, "row_end": 4},
+    ]
+    # header/body divider (data cols) + a full-width divider above the totals row
+    assert layout["hdiv"] == [{"row": 3, "col_start": 2}, {"row": 4, "col_start": 1}]
 
 
 def test_fmt_variants() -> None:
