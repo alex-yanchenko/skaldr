@@ -1347,6 +1347,63 @@ def test_swimlane_step_url_rejects_an_unsafe_scheme() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_step_id_must_be_a_safe_slug() -> None:
+    """A step `id` is a safe slug (ASCII letters/digits/_/-) so `depends_on` can reference it cleanly."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "id": "bad id"}],
+    )
+    with pytest.raises(ReportError, match=r"steps\.0\.id"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_step_id_and_depends_on_are_retained() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "id": "x"},
+            {"lane": "A", "col": "C2", "n": "2", "label": "b", "id": "y", "depends_on": ["x"]},
+        ],
+    )
+    parsed = _swimlane_block(make_report(blocks=[block]))
+    assert [(step.id, step.depends_on) for step in parsed.steps] == [("x", []), ("y", ["x"])]
+
+
+def test_swimlane_step_ids_must_be_unique() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "x", "id": "dup"},
+            {"lane": "A", "col": "C2", "n": "2", "label": "y", "id": "dup"},
+        ],
+    )
+    with pytest.raises(ReportError, match=r"swimlane step ids must be unique"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_depends_on_must_reference_a_known_id() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "depends_on": ["ghost"]}],
+    )
+    with pytest.raises(ReportError, match=r"depends_on references unknown step id 'ghost'"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_swimlane_step_cannot_depend_on_itself() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "id": "a", "depends_on": ["a"]}],
+    )
+    with pytest.raises(ReportError, match=r"'a' cannot depend on itself"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_lanes_must_be_unique() -> None:
     block = _swimlane(lanes=["A", "A"])
     with pytest.raises(ReportError, match=r"swimlane lanes must be unique"):
