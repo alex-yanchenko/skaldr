@@ -138,6 +138,7 @@ class SwimStep(TypedDict):
     value: float | None  # the step's own value, shown on the ticket's trailing edge; None → hidden
     url: str | None  # optional link; the number becomes an <a> when set
     muted: bool  # de-emphasise (faded + dashed) — tail/low-priority work
+    deps: list[str]  # the numbers (n) of the steps this one depends on, for a compact blocked-by marker
 
 
 class SwimSubcol(TypedDict):
@@ -339,12 +340,23 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         for index, lane in enumerate(block.lanes)
     ]
 
+    # a step's `depends_on` holds other steps' ids; show the reader the numbers (n) they recognise.
+    id_to_n = {step.id: step.n for step in block.steps if step.id is not None}
+
     cells: list[SwimCell] = []
     for lane_index, lane in enumerate(block.lanes):
         row_start, row_end = lane_rows[lane_index]
         for sub in subcol_out:
             steps: list[SwimStep] = [
-                {"n": step.n, "label": step.label, "value": step.value, "url": step.url, "muted": step.muted}
+                {
+                    "n": step.n,
+                    "label": step.label,
+                    "value": step.value,
+                    "url": step.url,
+                    "muted": step.muted,
+                    # dedupe on the displayed number (order-preserving) so repeats never show "needs 1, 1"
+                    "deps": list(dict.fromkeys(id_to_n[dep] for dep in step.depends_on)),
+                }
                 for step in block.steps
                 if step.lane == lane and step.col == sub["col"] and block.step_group(step) == sub["group"]
             ]

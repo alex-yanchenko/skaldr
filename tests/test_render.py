@@ -544,8 +544,10 @@ def test_swimlane_plain_renders_gutter_labels_and_stacked_tickets() -> None:
     assert 'class="swim-hlabel"' in html and ">S1</div>" in html
     # both tickets stacked in a single cell, in order
     assert (
-        '<div class="swim-tkt"><span class="swim-n">3a</span><span class="swim-l">A</span></div>'
-        '<div class="swim-tkt"><span class="swim-n">3b</span><span class="swim-l">B</span></div>' in html
+        '<div class="swim-tkt"><span class="swim-n">3a</span>'
+        '<span class="swim-body"><span class="swim-l">A</span></span></div>'
+        '<div class="swim-tkt"><span class="swim-n">3b</span>'
+        '<span class="swim-body"><span class="swim-l">B</span></span></div>' in html
     )
     assert 'class="swim-cap' not in html  # no groups → no caps
     assert 'class="swim-vdash"' not in html  # no group splits → no dashed lines
@@ -591,7 +593,7 @@ def test_swimlane_grouped_renders_coloured_caps_tints_and_dashed_splits() -> Non
     # the split sprint's label is written exactly once, spanning its sub-columns
     assert html.count(">S2</div>") == 1
     # the Beta step landed in its resolved sub-column
-    assert '<span class="swim-n">2</span><span class="swim-l">b</span>' in html
+    assert '<span class="swim-n">2</span><span class="swim-body"><span class="swim-l">b</span></span>' in html
 
 
 def test_swimlane_adjacent_caps_render_a_poke_solid_but_an_ungrouped_boundary_does_not() -> None:
@@ -705,8 +707,11 @@ def test_swimlane_step_value_renders_on_the_ticket() -> None:
     html = render_html(parse_report(make_report(blocks=[block])))
 
     # the sized ticket carries its value compartment; exactly one ticket has one
-    assert '<span class="swim-l">sized</span><span class="swim-tkt-v">5</span>' in html
-    assert '<span class="swim-l">unsized</span></div>' in html
+    assert (
+        '<span class="swim-body"><span class="swim-l">sized</span></span><span class="swim-tkt-v">5</span>'
+        in html
+    )
+    assert '<span class="swim-l">unsized</span></span></div>' in html
     assert html.count('class="swim-tkt-v"') == 1
 
 
@@ -738,6 +743,27 @@ def test_swimlane_step_url_links_the_number_and_muted_fades_the_ticket() -> None
     # url + muted compose: a muted ticket whose number is a link
     assert '<div class="swim-tkt muted"><a class="swim-n" href="https://example.com/PROJ-3">3</a>' in html
     assert html.count('class="swim-tkt muted"') == 2
+
+
+def test_swimlane_depends_on_renders_a_needs_marker_of_the_dependency_numbers() -> None:
+    """`depends_on` renders a marker of the referenced steps' numbers, comma-joined; a step with none
+    gets no marker. The "needs " prefix is CSS, so the element text is just the numbers."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2", "C3"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a", "id": "first"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b", "id": "second", "depends_on": ["first"]},
+            {"lane": "R", "col": "C3", "n": "3", "label": "c", "depends_on": ["first", "second"]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="swim-dep">1</span>' in html  # step 2 needs step 1
+    assert '<span class="swim-dep">1, 2</span>' in html  # step 3 needs steps 1 and 2
+    assert html.count('class="swim-dep"') == 2  # step 1 has no dependency → no marker
 
 
 @pytest.mark.parametrize(

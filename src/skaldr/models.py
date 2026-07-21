@@ -884,6 +884,19 @@ class SwimlaneStep(_Frozen):
         description="De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed "
         "so it recedes without leaving the matrix. Its value still counts toward the totals.",
     )
+    id: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Optional stable id (ASCII letters, digits, _, -) so other steps can point at this "
+        "one via `depends_on`. Unique across the block's steps.",
+    )
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="Ids of steps this one depends on. The dependent renders a compact 'needs N' marker "
+        "listing each referenced step's number. Each id must be a step's `id`; a step can't depend on "
+        "itself.",
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "SwimlaneStep":
@@ -1030,6 +1043,17 @@ class Swimlane(_Block):
         for group in self.groups:
             if group.name not in used_groups:
                 raise ValueError(f"swimlane group '{group.name}' has no steps")
+
+        step_ids = [step.id for step in self.steps if step.id is not None]
+        if len(set(step_ids)) != len(step_ids):
+            raise ValueError("swimlane step ids must be unique")
+        id_set = set(step_ids)
+        for step in self.steps:
+            for dep in step.depends_on:
+                if dep not in id_set:
+                    raise ValueError(f"swimlane step depends_on references unknown step id '{dep}'")
+                if dep == step.id:
+                    raise ValueError(f"swimlane step '{dep}' cannot depend on itself")
 
         self.subcolumns()  # trigger the contiguity / ordering check
         return self

@@ -133,7 +133,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, muted?}]`, `groups?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, muted?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -371,6 +371,11 @@ without one counts as 0.
 A step may also carry an optional `url` (http/https/mailto — e.g. its Jira/GitHub ticket), which turns
 its number into a link, and `muted: true` to de-emphasise tail/low-priority work (the ticket renders
 faded and dashed but stays in place; its `value` still counts toward the totals).
+
+To record dependencies, give a step an `id` (a safe slug — letters, digits, `_`, `-`) and point at it
+from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the
+numbers of the steps it waits on. (skaldr doesn't draw arrows across the matrix — a dense grid leaves no
+room; the "needs" marker is the compact, readable form.)
 
 ```yaml
 - type: swimlane

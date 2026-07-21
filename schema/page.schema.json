@@ -2671,6 +2671,29 @@
           "description": "De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed so it recedes without leaving the matrix. Its value still counts toward the totals.",
           "title": "Muted",
           "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable id (ASCII letters, digits, _, -) so other steps can point at this one via `depends_on`. Unique across the block's steps.",
+          "title": "Id"
+        },
+        "depends_on": {
+          "description": "Ids of steps this one depends on. The dependent renders a compact 'needs N' marker listing each referenced step's number. Each id must be a step's `id`; a step can't depend on itself.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
         }
       },
       "required": [

@@ -215,7 +215,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 3,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "muted": False}],
+            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "muted": False, "deps": []}],
         },  # S1/MVP — inferred group
         {
             "tone": "blue",
@@ -231,7 +231,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 5,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "muted": False}],
+            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "muted": False, "deps": []}],
         },  # S2/Beta
     ]
 
@@ -404,7 +404,7 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
         "line_end": 3,
         "row_start": 2,
         "row_end": 3,
-        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "muted": False}],
+        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "muted": False, "deps": []}],
     }
     # footer sums each column across both lanes; fractional preserved, zero included
     assert layout["foot"] == {
@@ -514,6 +514,44 @@ def test_swimlane_layout_a_muted_step_value_still_counts_in_totals() -> None:
         "cells": [{"total": 7, "line_start": 2, "line_end": 3, "row_start": 3, "row_end": 4}],
     }
     assert layout["gutter"] == [{"lane": "A", "total": 7, "row_start": 2, "row_end": 3}]
+
+
+def test_swimlane_layout_resolves_depends_on_ids_to_the_dependency_numbers() -> None:
+    """A step's `depends_on` (ids) resolves to the referenced steps' numbers on the rendered step, so
+    the reader sees "needs 1", not an internal id."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "id": "x"},
+            {"lane": "A", "col": "C2", "n": "2", "label": "b", "depends_on": ["x"]},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    # C2's step carries the dependency's NUMBER (1), not its id ("x")
+    assert layout["cells"][1]["steps"] == [
+        {"n": "2", "label": "b", "value": None, "url": None, "muted": False, "deps": ["1"]}
+    ]
+
+
+def test_swimlane_layout_dedupes_repeated_dependency_numbers() -> None:
+    """Two distinct ids sharing a display number, both depended on, collapse to one entry — the marker
+    never reads "needs 1, 1"."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2", "C3"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "id": "x"},
+            {"lane": "A", "col": "C2", "n": "1", "label": "b", "id": "y"},  # same number, different id
+            {"lane": "A", "col": "C3", "n": "3", "label": "c", "depends_on": ["x", "y"]},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    assert layout["cells"][2]["steps"][0]["deps"] == ["1"]
 
 
 def test_fmt_variants() -> None:
