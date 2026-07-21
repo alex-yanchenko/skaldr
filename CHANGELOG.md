@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/alex-yanchenko/skaldr/compare/v1.3.0...v1.3.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **swimlane:** columns fill available width instead of sitting at 150px ([#57](https://github.com/alex-yanchenko/skaldr/issues/57)) ([41f11bc](https://github.com/alex-yanchenko/skaldr/commit/41f11bc7b45c7756927e549e4249e3510399a7ac))
+
 ## [1.3.0](https://github.com/alex-yanchenko/skaldr/compare/v1.2.0...v1.3.0) (2026-07-21)
 
 
