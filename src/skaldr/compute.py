@@ -151,6 +151,7 @@ class SwimSubcol(TypedDict):
 
 class SwimHeader(_SwimBox):
     label: str  # one per column, spanning that column's sub-columns
+    sub: str | None  # optional secondary caption under the header label
 
 
 class SwimTint(_SwimBox):
@@ -305,10 +306,11 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     ]
     headers: list[SwimHeader] = []
     for col in block.columns:
-        line_start, line_end = column_span(col)
+        line_start, line_end = column_span(col.key)
         headers.append(
             {
-                "label": col,
+                "label": col.name,
+                "sub": col.sub,
                 "line_start": line_start,
                 "line_end": line_end,
                 "row_start": header_row[0],
@@ -325,15 +327,15 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         return sum(value_of(step) for step in block.steps if predicate(step))
 
     lane_total = (
-        {lane: sum_where(lambda step, lane=lane: step.lane == lane) for lane in block.lanes}
+        {lane.key: sum_where(lambda step, key=lane.key: step.lane == key) for lane in block.lanes}
         if has_totals
         else {}
     )
 
     gutter: list[SwimGutter] = [
         {
-            "lane": lane,
-            "total": lane_total.get(lane),
+            "lane": lane.name,
+            "total": lane_total.get(lane.key),
             "row_start": lane_rows[index][0],
             "row_end": lane_rows[index][1],
         }
@@ -358,7 +360,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "deps": list(dict.fromkeys(id_to_n[dep] for dep in step.depends_on)),
                 }
                 for step in block.steps
-                if step.lane == lane and step.col == sub["col"] and block.step_group(step) == sub["group"]
+                if step.lane == lane.key and step.col == sub["col"] and block.step_group(step) == sub["group"]
             ]
             cells.append(
                 {
@@ -465,10 +467,10 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     if has_totals:
         foot_cells: list[SwimFoot] = []
         for col in block.columns:
-            line_start, line_end = column_span(col)
+            line_start, line_end = column_span(col.key)
             foot_cells.append(
                 {
-                    "total": sum_where(lambda step, col=col: step.col == col),
+                    "total": sum_where(lambda step, key=col.key: step.col == key),
                     "line_start": line_start,
                     "line_end": line_end,
                     "row_start": footer_row[0],

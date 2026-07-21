@@ -83,9 +83,9 @@ def test_swimlane_layout_places_caps_tints_and_dashes_for_a_split_column() -> No
     ]
     # one header label per column, spanning that column's sub-columns (S2 spans its 3-way split)
     assert layout["headers"] == [
-        {"label": "S1", "line_start": 2, "line_end": 3, "row_start": 2, "row_end": 3},
-        {"label": "S2", "line_start": 3, "line_end": 6, "row_start": 2, "row_end": 3},
-        {"label": "S3", "line_start": 6, "line_end": 7, "row_start": 2, "row_end": 3},
+        {"label": "S1", "sub": None, "line_start": 2, "line_end": 3, "row_start": 2, "row_end": 3},
+        {"label": "S2", "sub": None, "line_start": 3, "line_end": 6, "row_start": 2, "row_end": 3},
+        {"label": "S3", "sub": None, "line_start": 6, "line_end": 7, "row_start": 2, "row_end": 3},
     ]
     # a tinted header sub-cell per sub-column
     assert layout["header_tints"] == [
@@ -552,6 +552,41 @@ def test_swimlane_layout_dedupes_repeated_dependency_numbers() -> None:
     layout = swimlane_layout(block)
 
     assert layout["cells"][2]["steps"][0]["deps"] == ["1"]
+
+
+def test_swimlane_layout_groups_and_headers_use_column_ids_and_subs() -> None:
+    """Groups and steps address a split column by its id (not display name); the header spanning that
+    split column still carries its `sub` caption."""
+    block = _swimlane(
+        lanes=["R"],
+        columns=[
+            {"id": "a", "name": "Alpha"},
+            {"id": "b", "name": "Beta col", "sub": "→ MVP demo"},
+        ],
+        groups=[
+            {"name": "G1", "color": "blue", "columns": ["a", "b"]},
+            {"name": "G2", "color": "amber", "columns": ["b"]},
+        ],
+        steps=[
+            {"lane": "R", "col": "a", "n": "1", "label": "x"},
+            {"lane": "R", "col": "b", "group": "G1", "n": "2", "label": "y"},
+            {"lane": "R", "col": "b", "group": "G2", "n": "3", "label": "z"},
+        ],
+    )
+
+    layout = swimlane_layout(block)
+
+    # sub-columns key on the column id "b" (split across G1/G2), not the display name
+    assert [(sub["col"], sub["group"]) for sub in layout["subcols"]] == [
+        ("a", "G1"),
+        ("b", "G1"),
+        ("b", "G2"),
+    ]
+    # headers show display names; the split column's header carries its sub caption
+    assert [(header["label"], header["sub"]) for header in layout["headers"]] == [
+        ("Alpha", None),
+        ("Beta col", "→ MVP demo"),
+    ]
 
 
 def test_fmt_variants() -> None:

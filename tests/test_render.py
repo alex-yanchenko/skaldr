@@ -745,6 +745,23 @@ def test_swimlane_step_url_links_the_number_and_muted_fades_the_ticket() -> None
     assert html.count('class="swim-tkt muted"') == 2
 
 
+def test_swimlane_column_sub_renders_and_ids_decouple_reference_from_display() -> None:
+    """A column `sub` renders as a caption under the header; with ids, steps reference the id while the
+    header shows the display name and the gutter shows the lane's display name."""
+    block = {
+        "type": "swimlane",
+        "lanes": [{"id": "eng", "name": "Engineering"}],
+        "columns": [{"id": "s1", "name": "Sprint 1", "sub": "→ MVP demo"}],
+        "steps": [{"lane": "eng", "col": "s1", "n": "1", "label": "Build"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span class="swim-hsub">→ MVP demo</span>' in html  # caption under the header
+    assert ">Sprint 1<span" in html  # header shows the display name, not the id "s1"
+    assert ">Engineering</div>" in html  # gutter shows the lane's display name, not "eng"
+
+
 def test_swimlane_depends_on_renders_a_needs_marker_of_the_dependency_numbers() -> None:
     """`depends_on` renders a marker of the referenced steps' numbers, comma-joined; a step with none
     gets no marker. The "needs " prefix is CSS, so the element text is just the numbers."""

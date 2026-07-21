@@ -2510,9 +2510,9 @@
           "type": "string"
         },
         "lanes": {
-          "description": "Lane names, in row order (top to bottom). Capped at 8 \u2014 more rows than that stop reading as a matrix; split into two swimlanes instead.",
+          "description": "Lanes, in row order (top to bottom). A bare string is shorthand for `{name: \u2026}`; use `{id, name}` to give a stable reference key. Capped at 8 \u2014 more rows than that stop reading as a matrix; split into two swimlanes instead.",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/SwimlaneLane"
           },
           "maxItems": 8,
           "minItems": 1,
@@ -2520,9 +2520,9 @@
           "type": "array"
         },
         "columns": {
-          "description": "Column names, left to right \u2014 the sprint / phase axis. Ordered and unique.",
+          "description": "Columns, left to right \u2014 the sprint / phase axis. A bare string is shorthand for `{name: \u2026}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/SwimlaneColumn"
           },
           "minItems": 1,
           "title": "Columns",
@@ -2555,6 +2555,50 @@
       "title": "Swimlane",
       "type": "object"
     },
+    "SwimlaneColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Column header label.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable id (ASCII letters, digits, _, -) that a step references via `col` and a group via `columns`; defaults to `name`. Set it to rename the header without touching every step/group.",
+          "title": "Id"
+        },
+        "sub": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional secondary caption under the header (e.g. a delivery target or date range).",
+          "title": "Sub"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SwimlaneColumn",
+      "type": "object"
+    },
     "SwimlaneGroup": {
       "additionalProperties": false,
       "properties": {
@@ -2580,7 +2624,7 @@
           "type": "string"
         },
         "columns": {
-          "description": "The columns this group spans \u2014 a CONTIGUOUS run of the block's `columns` (a group cannot skip a column). Order need not match; it is derived from the block `columns`.",
+          "description": "The columns this group spans, by their key (id, or name if no id) \u2014 a CONTIGUOUS run of the block's `columns` (a group cannot skip a column). Order need not match; it is derived from the block `columns`.",
           "items": {
             "type": "string"
           },
@@ -2595,6 +2639,37 @@
         "columns"
       ],
       "title": "SwimlaneGroup",
+      "type": "object"
+    },
+    "SwimlaneLane": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Lane label shown in the row gutter.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable id (ASCII letters, digits, _, -) that a step references via `lane`; defaults to `name`. Set it to rename the displayed label without touching every step.",
+          "title": "Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SwimlaneLane",
       "type": "object"
     },
     "SwimlaneStep": {
