@@ -70,6 +70,12 @@ def test_block_span_out_of_range_is_rejected(span: int) -> None:
         parse_report(make_report(blocks=[{"type": "text", "body": "x", "span": span}]))
 
 
+def test_block_span_rejects_a_boolean() -> None:
+    """`span` is a Count, so a bool (an int subclass pydantic would coerce to 1) is rejected."""
+    with pytest.raises(ReportError, match=r"blocks\.0\.text\.span.*number, not a boolean"):
+        parse_report(make_report(blocks=[{"type": "text", "body": "x", "span": True}]))
+
+
 def test_meta_rejects_an_authored_width() -> None:
     """Width is reader-only — there is no meta.width. Authoring one fails the strict extra-key guard."""
     with pytest.raises(ReportError, match=r"meta\.width.*not permitted"):
