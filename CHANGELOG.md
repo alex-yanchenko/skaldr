@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/alex-yanchenko/skaldr/compare/v1.3.2...v1.3.3) (2026-07-21)
+
+
+### Bug Fixes
+
+* **swimlane:** surgical corner, cap separators, square frame edge at caps ([#61](https://github.com/alex-yanchenko/skaldr/issues/61)) ([9ab90d4](https://github.com/alex-yanchenko/skaldr/commit/9ab90d41d15e471eae0f6ccfd78f02b9434916a8))
+
 ## [1.3.2](https://github.com/alex-yanchenko/skaldr/compare/v1.3.1...v1.3.2) (2026-07-21)
 
 
