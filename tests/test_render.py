@@ -648,6 +648,48 @@ def test_swimlane_group_spanning_all_columns_renders_both_edge_classes() -> None
     assert 'class="swim-capb green left right"' in html
 
 
+def test_swimlane_values_render_a_footer_row_and_lane_and_group_totals() -> None:
+    """`value` on steps renders a footer totals row (label + per-column sums), a lane total beside the
+    gutter label, and a group total on the cap."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["Brent"],
+        "columns": ["S1", "S2"],
+        "groups": [{"name": "MVP", "color": "blue", "columns": ["S1", "S2"]}],
+        "steps": [
+            {"lane": "Brent", "col": "S1", "n": "1", "label": "a", "value": 3},
+            {"lane": "Brent", "col": "S2", "n": "2", "label": "b", "value": 5},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # footer row: the "Total" gutter label and each column's sum, each as a swim-tot pill in a cell
+    assert '<div class="swim-gut swim-foot-lbl"' in html
+    assert html.count('class="swim-foot"') == 2
+    assert '<span class="swim-tot">3</span>' in html and '<span class="swim-tot">5</span>' in html
+    # lane total (3+5) beside the gutter label AND the MVP cap's group total → two more totals of 8
+    assert html.count('<span class="swim-tot">8</span>') == 2
+
+
+def test_swimlane_without_values_renders_no_footer_or_totals() -> None:
+    """No `value` anywhere → no footer row and no inline totals."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["Brent"],
+        "columns": ["S1"],
+        "groups": [{"name": "MVP", "color": "blue", "columns": ["S1"]}],
+        "steps": [{"lane": "Brent", "col": "S1", "n": "1", "label": "a"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    # the .swim-foot/.swim-tot CSS rules are always inlined; assert no rendered ELEMENT carries them
+    assert 'class="swim-foot"' not in html
+    assert 'class="swim-gut swim-foot-lbl"' not in html
+    assert 'class="swim-tot"' not in html
+
+
 def test_references_render_bidirectional_links_and_leave_unknown_keys_literal() -> None:
     blocks = [
         {"type": "text", "body": "Method [^sop]; thresholds [^audit]; typo [^missing]."},

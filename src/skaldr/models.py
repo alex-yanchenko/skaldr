@@ -859,6 +859,13 @@ class SwimlaneStep(_Frozen):
         description="Which group (milestone) this step belongs to — one of the block's `groups` that covers "
         "its `col`. Required only when the column is split across more than one group; inferred otherwise.",
     )
+    value: Number | None = Field(
+        default=None,
+        description="Optional numeric weight for this step (points, hours, cost, count — whatever the "
+        "matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column "
+        "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals — so the "
+        "numbers never drift by hand. A step with no value counts as 0.",
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "SwimlaneStep":

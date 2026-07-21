@@ -133,7 +133,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?}]`, `groups?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -361,6 +361,12 @@ one step (no empty rows or columns).
 Step fields are explicit — skaldr never derives or renumbers: `lane` (one of `lanes`), `col` (one of
 `columns`), `n` (the number shown, a free string — `"1"`, `"3a"`, `"R1"`), and `label`. Two steps in
 the same cell stack.
+
+Give steps an optional numeric `value` (points, hours, cost, headcount — whatever the matrix measures)
+and skaldr auto-sums it into **totals that never drift by hand**: a footer row of per-column sums, a
+per-lane sum beside each lane label, and — with `groups` — a per-group sum on each cap (a group's total
+counts only the steps resolved into it). Totals appear only when at least one step has a `value`; a step
+without one counts as 0.
 
 ```yaml
 - type: swimlane
