@@ -502,6 +502,29 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
     assert '<td><span class="ct danger">high</span></td>' in html
 
 
+def test_swimlane_columns_are_fluid_so_a_few_columns_fill_the_width() -> None:
+    """Regression: data columns must be a minmax(150px, 1fr) track (grow to fill, floor at 150px), not
+    a fixed 150px — otherwise a 3-column matrix sits ~450px wide in a full-width page. Verified in a
+    browser: with this token 3 columns each render ~490px of a 1504px content area; a fixed 150px left
+    the matrix half-empty."""
+    html = render_html(
+        parse_report(
+            make_report(
+                blocks=[
+                    {
+                        "type": "swimlane",
+                        "lanes": ["A"],
+                        "columns": ["C1"],
+                        "steps": [{"lane": "A", "col": "C1", "n": "1", "label": "x"}],
+                    }
+                ]
+            )
+        )
+    )
+
+    assert "--swim-col:minmax(150px, 1fr)" in html
+
+
 def test_swimlane_plain_renders_gutter_labels_and_stacked_tickets() -> None:
     """A groupless swimlane: header + lane rows only (no poke zones), gutter labels, and two steps in
     the same lane/column stacked in one cell with their free-string `n` verbatim. No group caps."""
