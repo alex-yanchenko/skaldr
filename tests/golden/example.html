@@ -100,13 +100,20 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	:root[data-width="wide"] .wrap{max-width:1920px}
 	:root[data-width="full"] .wrap{max-width:none}
 
+	/* Per-block width primitive (block.span): a block occupies N of the 6 content columns — the same
+	   column-count as a grid cell. Width only, left-aligned; blocks still stack vertically (use a grid
+	   to place several in a row). Only emitted when span is set, so an unspanned block is full width. */
+	.blk.span-1{max-width:calc(100% * 1 / 6)} .blk.span-2{max-width:calc(100% * 2 / 6)}
+	.blk.span-3{max-width:calc(100% * 3 / 6)} .blk.span-4{max-width:calc(100% * 4 / 6)}
+	.blk.span-5{max-width:calc(100% * 5 / 6)} .blk.span-6{max-width:100%}
+
 	h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-block-end:6px; text-wrap:balance}
 	.subtitle{color:var(--muted); font-size:14px}
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
 
-	.text{margin-block:var(--s3); max-width:80ch}
+	.text{margin-block:var(--s3)}
 	.text.muted{color:var(--muted)}
 	.text strong,td strong,.tb strong{font-weight:680}
 	em{font-style:italic}
@@ -216,7 +223,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .danger{--t:var(--danger-fg); --tb:var(--danger-bg)} & .accent{--t:var(--accent-fg); --tb:var(--accent-bg)}
 		& .teal{--t:var(--teal-fg); --tb:var(--teal-bg)} & .sky{--t:var(--sky-fg); --tb:var(--sky-bg)}}
 
-	.list{margin-block:var(--s3); padding-inline-start:var(--s6); max-width:80ch}
+	.list{margin-block:var(--s3); padding-inline-start:var(--s6)}
 	.list li{margin-block:var(--s1)}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);

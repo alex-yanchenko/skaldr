@@ -160,6 +160,7 @@
 {% endmacro %}
 
 {% macro render_block(block) %}
+{%- if block.span %}<div class="blk span-{{ block.span }}">{% endif -%}
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
 {% elif block.type == "text" %}
@@ -211,4 +212,5 @@
 {% elif block.type == "walkthrough" %}
 <div class="walk" style="grid-template-columns:minmax(120px,{{ block.step_span }}fr) {{ 6 - block.step_span }}fr">{% for step in block.steps %}<div class="wstep{% if step.tone %} {{ step.tone }}{% endif %}"><span class="wnum">{{ loop.index }}</span><span class="wlabel">{{ step.label }}{% if step.sub %}<span class="wsub">{{ step.sub | richtext }}</span>{% endif %}</span></div><div class="wdetail">{% for inner in step.detail %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
 {% endif %}
+{%- if block.span %}</div>{% endif -%}
 {% endmacro %}
