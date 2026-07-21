@@ -175,6 +175,7 @@ class SwimCap(SwimCapBottom):
 class SwimVSolid(TypedDict):
     col_start: int
     col_end: int
+    poke: bool  # True → runs through the poke zone (trimmed) to separate two group caps
     row_start: int
     row_end: int
 
@@ -184,6 +185,11 @@ class SwimVDash(TypedDict):
     col_end: int
     row_start: int
     row_end: int
+
+
+class SwimHDiv(TypedDict):
+    row: int  # grid row line the divider sits on
+    col_start: int  # 1 = full width incl. the gutter (inter-lane); 2 = data columns only (header/body)
 
 
 class SwimLayout(TypedDict):
@@ -199,8 +205,9 @@ class SwimLayout(TypedDict):
     caps_bottom: list[SwimCapBottom]
     vsolid: list[SwimVSolid]
     vdash: list[SwimVDash]
-    hdiv: list[int]
+    hdiv: list[SwimHDiv]
     tbl: _SwimBox
+    frame_square_right: bool  # square the frame's right corners when a cap owns the right edge
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:
@@ -209,13 +216,15 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     atomic sub-column (a `(column, group)` segment); rows are an optional top poke zone (group caps),
     the sprint header, one row per lane, and an optional bottom poke zone.
 
-    The lane gutter (track 1) is a bare row-label column OUTSIDE the framed table — no corner cell
-    where the gutter meets the sprint-header row. Line languages, all one grey: SOLID verticals mark
-    real column (sprint) boundaries and live inside the table rows only (a group cap spans across
-    them); DASHED verticals mark a group split within a column and run the full height (poke zones +
-    table) so caps sit flush and the divider is continuous. Horizontal dividers span the data columns
-    as one line each (never stitched from cell borders); the gutter/data separator and the table's
-    outer edges come from the frame overlay."""
+    The frame wraps the whole table incl. the lane gutter (track 1). The empty top-left cell where the
+    gutter meets the sprint-header row is not boxed off: the header/body divider spans the data columns
+    only (it skips the gutter), so that cell opens down into the row-label column rather than being a
+    closed box; the gutter/data seam still runs the full height (it is the sprint header's left border).
+    Line languages, all one grey: SOLID
+    verticals mark real column (sprint) boundaries and live inside the table rows only (a group cap
+    spans across them); DASHED verticals mark a group split within a column and run the full height
+    (poke zones + table) so caps sit flush and the divider is continuous. Horizontal dividers are one
+    line each (never stitched from cell borders); the table's outer edges come from the frame overlay."""
     subcols = block.subcolumns()
     ncols = len(subcols)
     nlanes = len(block.lanes)
@@ -332,21 +341,28 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         )
 
     # interior vertical lines from sub-column boundaries. Column change → solid (table rows); same
-    # column, different group → dashed (full height). The table's outer edges — including the gutter↔data
-    # separator (its left edge) — come from the rounded frame overlay (see `tbl`), and the outer cap
-    # corners from the caps' own grey `edges` borders, so nothing is seeded here.
-    vsolid: list[SwimVSolid] = []
+    # column, different group → dashed (full height). Plus the gutter/data seam across the whole table
+    # body (header + lanes) — it is the sprint header's left border as well as the row-label separator.
+    # The table's outer edges come from the frame overlay.
+    vsolid: list[SwimVSolid] = [
+        {"col_start": 2, "col_end": 3, "poke": False, "row_start": table_rows[0], "row_end": table_rows[1]}
+    ]
     vdash: list[SwimVDash] = []
     for index in range(ncols - 1):
         boundary_line = col_lines(index)[1]
         (left_col, left_group), (right_col, right_group) = subcols[index], subcols[index + 1]
         if left_col != right_col:
+            # A sprint boundary. If two DIFFERENT group caps meet here, run the line full height
+            # (trimmed, like a group split) so the caps are separated; if one cap SPANS the boundary
+            # (same group either side), keep it table-rows only so the cap reads as continuous.
+            caps_differ = left_group != right_group
             vsolid.append(
                 {
                     "col_start": boundary_line,
                     "col_end": boundary_line + 1,
-                    "row_start": table_rows[0],
-                    "row_end": table_rows[1],
+                    "poke": caps_differ,
+                    "row_start": full_rows[0] if caps_differ else table_rows[0],
+                    "row_end": full_rows[1] if caps_differ else table_rows[1],
                 }
             )
         elif left_group != right_group:
@@ -358,9 +374,14 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "row_end": full_rows[1],
                 }
             )
-    # horizontal dividers: header/body + between lanes, each a continuous line across the data columns
-    # (the macro spans them tbl.line_start→line_end). The outer edges come from the frame overlay.
-    hdiv = [header_row[1]] + [lane_rows[index][0] for index in range(1, nlanes)]
+    # horizontal dividers, each a continuous line. The header/body divider spans the DATA columns only
+    # (`col_start` 2), NOT the gutter — that gutter segment was the line that closed off the empty
+    # top-left corner cell, so dropping it opens the corner into the row-label column. Inter-lane
+    # dividers span the full width (incl. the gutter) so the row labels stay separated. The outer
+    # top/bottom edges come from the frame overlay.
+    hdiv: list[SwimHDiv] = [{"row": header_row[1], "col_start": 2}]
+    for index in range(1, nlanes):
+        hdiv.append({"row": lane_rows[index][0], "col_start": 1})
 
     return {
         "has_groups": has_groups,
@@ -376,10 +397,13 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         "vsolid": vsolid,
         "vdash": vdash,
         "hdiv": hdiv,
-        # the framed table covers the DATA columns only (line 2 to the right edge); the lane gutter
-        # (column 1) sits outside it as bare row labels, so there's no empty gutter/header corner cell.
-        # The frame's left edge is the gutter/data separator.
-        "tbl": {"line_start": 2, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
+        # the rounded frame wraps the whole table incl. the lane gutter (line 1 to the right edge), so
+        # the row-header column keeps its borders.
+        "tbl": {"line_start": 1, "line_end": ncols + 2, "row_start": table_rows[0], "row_end": table_rows[1]},
+        # when the rightmost column carries a cap, its right edge IS the table's right edge — so square
+        # the frame's right corners, letting the cap's right border run straight down to meet the frame
+        # instead of gapping against a rounded corner. The left (gutter) corners stay rounded.
+        "frame_square_right": has_groups and subcols[-1][1] is not None,
     }
 
 

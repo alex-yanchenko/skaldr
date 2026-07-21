@@ -150,12 +150,12 @@
 {% for h in layout.headers %}<div class="swim-hlabel" style="grid-column:{{ h.line_start }}/{{ h.line_end }};grid-row:{{ h.row_start }}/{{ h.row_end }}">{{ h.label }}</div>{% endfor %}
 {% for g in layout.gutter %}<div class="swim-gut" style="grid-column:1;grid-row:{{ g.row_start }}/{{ g.row_end }}">{{ g.lane }}</div>{% endfor %}
 {% for c in layout.cells %}<div class="swim-cell{% if c.tone %} {{ c.tone }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}">{% for s in c.steps %}<div class="swim-tkt"><span class="swim-n">{{ s.n }}</span><span class="swim-l">{{ s.label }}</span></div>{% endfor %}</div>{% endfor %}
-{% for r in layout.hdiv %}<div class="swim-hdiv" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ r }}"></div>{% endfor %}
+{% for h in layout.hdiv %}<div class="swim-hdiv" style="grid-column:{{ h.col_start }}/{{ layout.tbl.line_end }};grid-row:{{ h.row }}"></div>{% endfor %}
 {% for v in layout.vdash %}<div class="swim-vdash" style="grid-column:{{ v.col_start }}/{{ v.col_end }};grid-row:{{ v.row_start }}/{{ v.row_end }}"></div>{% endfor %}
-{% for v in layout.vsolid %}<div class="swim-vsolid" style="grid-column:{{ v.col_start }}/{{ v.col_end }};grid-row:{{ v.row_start }}/{{ v.row_end }}"></div>{% endfor %}
+{% for v in layout.vsolid %}<div class="swim-vsolid{% if v.poke %} poke{% endif %}" style="grid-column:{{ v.col_start }}/{{ v.col_end }};grid-row:{{ v.row_start }}/{{ v.row_end }}"></div>{% endfor %}
 {% for c in layout.caps %}<div class="swim-cap {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"><span class="swim-dot"></span>{{ c.label }}</div>{% endfor %}
 {% for c in layout.caps_bottom %}<div class="swim-capb {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"></div>{% endfor %}
-<div class="swim-frame" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
+<div class="swim-frame{% if layout.frame_square_right %} sq-right{% endif %}" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
 </div></div>
 {% endmacro %}
 

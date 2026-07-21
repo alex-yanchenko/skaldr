@@ -583,7 +583,8 @@ def test_swimlane_grouped_renders_coloured_caps_tints_and_dashed_splits() -> Non
     assert 'class="swim-cap violet right"' in html and '<span class="swim-dot"></span>GA</div>' in html
     assert 'class="swim-capb blue left"' in html  # matching bottom cap, same edge
     # the rounded outer frame is drawn on top of the tints
-    assert 'class="swim-frame"' in html
+    # GA owns the rightmost column, so the frame squares its right corners to meet GA's right border
+    assert 'class="swim-frame sq-right"' in html
     # cells and header cells carry the group tint class
     assert 'class="swim-cell blue"' in html and 'class="swim-cell amber"' in html
     assert 'class="swim-hcell blue"' in html

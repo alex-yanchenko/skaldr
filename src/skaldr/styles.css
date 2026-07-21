@@ -460,6 +460,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   plain box border) — its rounded corners keep it from poking past the table, and its top/bottom
 		   edges separate the group caps (above/below) from the table body */
 		& .swim-frame{z-index:4; border:1px solid var(--rule); border-radius:var(--r-md); pointer-events:none}
+		/* when the rightmost column carries a cap, its right edge is the table edge — square the frame's
+		   right corners so that cap's right border meets the frame straight instead of gapping at a curve */
+		& .swim-frame.sq-right{border-start-end-radius:0; border-end-end-radius:0}
 		& .swim-hcell{z-index:1; background:var(--gt,transparent)}
 		& .swim-hlabel{z-index:3; padding:var(--s2) var(--s3); font-size:12.5px; font-weight:600;
 			color:var(--muted); pointer-events:none}
@@ -475,6 +478,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .swim-l{align-self:center; padding:6px 11px}
 		& .swim-vsolid{z-index:2; width:0; justify-self:start; border-inline-start:1px solid var(--rule);
 			pointer-events:none}
+		/* a sprint boundary where two different caps meet runs through the poke zone to separate them —
+		   trimmed by the cap radius (like the dashed split) so it hugs the caps' straight sides */
+		& .swim-vsolid.poke{margin-block:var(--r-md)}
 		& .swim-vdash{z-index:2; width:0; margin-block:var(--r-md); justify-self:start;
 			border-inline-start:1.5px dashed var(--rule); pointer-events:none;
 			/* nudge left so the 1.5px stroke centres on the grid line (between the two caps) rather than
