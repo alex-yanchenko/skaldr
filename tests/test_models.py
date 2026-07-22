@@ -417,6 +417,45 @@ def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
     assert flow.steps[0].badges == ["OK"]
 
 
+def test_rollup_by_a_non_badge_column_is_rejected() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "n", "label": "N", "kind": "number"},
+        ],
+        rows=[{"item": "a", "n": 1}],
+        rollup={"by": "n"},
+    )
+
+    with pytest.raises(ReportError, match=r"rollup.by 'n' must be a badge column"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_rollup_by_an_unknown_column_is_rejected() -> None:
+    table = make_table(
+        columns=[{"key": "item", "label": "I", "kind": "text"}],
+        rows=[{"item": "a"}],
+        rollup={"by": "nope"},
+    )
+
+    with pytest.raises(ReportError, match=r"rollup.by 'nope' must be a badge column"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "tag", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "tag": ""}, {"item": "b", "tag": ""}],
+        rollup={"by": "tag"},
+    )
+
+    with pytest.raises(ReportError, match=r"rollup.by 'tag' has no values to count"):
+        parse_report(make_report(blocks=[table]))
+
+
 def test_row_tone_is_a_reserved_key_not_an_unknown_column() -> None:
     table = make_table(
         columns=[{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x", "tone": "muted"}]

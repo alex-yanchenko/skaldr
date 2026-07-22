@@ -125,7 +125,7 @@ or to keep a small block from stretching across the whole page.
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?` |
+| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
@@ -504,6 +504,10 @@ link instead.
   `total` or the build fails naming the delta. With `pct_of_total` on a number column, each cell
   also shows its share of the reconcile total.
 - **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
+- **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
+  counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
+  The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
+  `by` must name a `badge` column.
 - A group with an empty `rows: []` renders a "— none —" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 

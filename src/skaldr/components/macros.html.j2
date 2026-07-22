@@ -72,6 +72,8 @@
 </tbody>
 {% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif loop.first %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
 </table></div>
+{% set buckets = table_rollup(b) %}
+{% if buckets %}<div class="rollup">{% if b.rollup.label %}<span class="rollup-lab">{{ b.rollup.label }}</span>{% endif %}{% for r in buckets %}<span class="rollup-item"><span class="chip {{ badges[r.key].tone }}">{{ badges[r.key].label }}</span><span class="rollup-n">{{ r.count }}</span></span>{% endfor %}</div>{% endif %}
 {% if b.reconcile %}<p class="reconcile">{{ reconcile_line(b) }}</p>{% endif %}
 {% endmacro %}
 

@@ -2295,6 +2295,34 @@
       "title": "References",
       "type": "object"
     },
+    "Rollup": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "Key of the badge column whose per-row values are counted.",
+          "title": "By",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional label shown before the counted chips.",
+          "title": "Label"
+        }
+      },
+      "required": [
+        "by"
+      ],
+      "title": "Rollup",
+      "type": "object"
+    },
     "Section": {
       "additionalProperties": false,
       "properties": {
@@ -2904,6 +2932,18 @@
           ],
           "default": null,
           "description": "Sum a number column into a footer row."
+        },
+        "rollup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rollup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opt-in summary strip below the table: counts the rows by a badge column and shows one '<chip> <count>' per value, derived from the rows so it can never drift from them."
         }
       },
       "required": [

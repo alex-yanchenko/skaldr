@@ -1636,6 +1636,72 @@ def test_section_without_updated_has_no_stamp() -> None:
     assert 'class="upd"' not in html
 
 
+def test_table_rollup_renders_counted_chips_in_first_appearance_order() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=[
+            {"item": "a", "status": "DONE"},
+            {"item": "b", "status": "DONE"},
+            {"item": "c", "status": "PENDING"},
+        ],
+        rollup={"by": "status", "label": "By status:"},
+    )
+    report = parse_report(
+        make_report(
+            blocks=[table],
+            badges={
+                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
+                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    # both buckets, in first-appearance order; semantic tones render as their palette twins
+    # (success→green, warning→amber)
+    assert (
+        '<div class="rollup"><span class="rollup-lab">By status:</span>'
+        '<span class="rollup-item"><span class="chip green">Done</span>'
+        '<span class="rollup-n">2</span></span>'
+        '<span class="rollup-item"><span class="chip amber">Pending</span>'
+        '<span class="rollup-n">1</span></span>'
+        "</div>"
+    ) in html
+
+
+def test_table_rollup_without_a_label_omits_the_label_span() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "status": "DONE"}],
+        rollup={"by": "status"},
+    )
+    report = parse_report(
+        make_report(
+            blocks=[table],
+            badges={"DONE": {"label": "Done", "tone": "success", "legend": "finished"}},
+        )
+    )
+
+    html = render_html(report)
+
+    assert '<div class="rollup"><span class="rollup-item">' in html  # chips start right after the div
+    assert '<span class="rollup-lab">' not in html  # no label span (the CSS rule still defines .rollup-lab)
+
+
+def test_table_without_rollup_renders_no_strip() -> None:
+    table = make_table(columns=[{"key": "item", "label": "I", "kind": "text"}], rows=[{"item": "a"}])
+    report = parse_report(make_report(blocks=[table]))
+
+    assert 'class="rollup"' not in render_html(report)
+
+
 def test_image_max_width_renders_style() -> None:
     src = "data:image/svg+xml,<svg/>"
     block = {"type": "image", "src": src, "alt": "a", "max_width": 400}

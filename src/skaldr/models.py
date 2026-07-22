@@ -639,6 +639,11 @@ class Totals(_Frozen):
     column: str = Field(description="Key of the number column to sum into a footer row.")
 
 
+class Rollup(_Frozen):
+    by: str = Field(description="Key of the badge column whose per-row values are counted.")
+    label: str | None = Field(default=None, description="Optional label shown before the counted chips.")
+
+
 def col_sum(rows: Sequence[dict[str, Any]], key: str) -> float:
     """Sum a number column's raw values (ints stay ints; floats are not truncated)."""
     return sum(row[key] for row in rows)
@@ -731,6 +736,11 @@ class Table(_Block):
     )
     reconcile: Reconcile | None = Field(default=None, description="Opt-in trust check on a number column.")
     totals: Totals | None = Field(default=None, description="Sum a number column into a footer row.")
+    rollup: Rollup | None = Field(
+        default=None,
+        description="Opt-in summary strip below the table: counts the rows by a badge column and shows "
+        "one '<chip> <count>' per value, derived from the rows so it can never drift from them.",
+    )
 
     @model_validator(mode="after")
     def _validate_table(self) -> "Table":
@@ -771,6 +781,16 @@ class Table(_Block):
                 _validate_rows(group.rows, self.columns, f"groups.{group_index}.rows")
         if self.rows is not None:
             _validate_rows(self.rows, self.columns, "rows")
+        if self.rollup is not None:
+            # Rows are validated above, so every row carries `by` as a string. Both checks run here so
+            # the "has values" test sees well-formed rows (a malformed row reports its own error first).
+            badge_keys = {column.key for column in self.columns if column.kind == "badge"}
+            if self.rollup.by not in badge_keys:
+                raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
+            if not any(row[self.rollup.by].strip() for row in self.all_rows()):
+                raise ValueError(
+                    f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
+                )
         self._reconcile()
         return self
 
