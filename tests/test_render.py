@@ -999,6 +999,57 @@ def test_table_placement_cell_badge_renders_its_own_labelled_column() -> None:
     assert '<span class="meaning">Read-only.</span>' in html
 
 
+def _cell_table(detail: str) -> dict[str, object]:
+    return make_table(
+        columns=[
+            {"key": "name", "label": "Name", "kind": "text"},
+            {"key": "detail", "label": "Detail", "kind": "rich"},
+        ],
+        rows=[{"name": "x", "detail": detail}],
+    )
+
+
+def test_rich_cell_blank_line_renders_stacked_paragraphs() -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table("First para.\n\nSecond para.")])))
+
+    assert '<td><p class="cell-p">First para.</p><p class="cell-p">Second para.</p></td>' in html
+
+
+def test_rich_cell_single_paragraph_renders_inline_without_a_wrapper() -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table("Just one line.")])))
+
+    assert "<td>Just one line.</td>" in html
+    assert '<p class="cell-p">' not in html  # no wrapper for a one-paragraph cell (CSS still defines it)
+
+
+def test_rich_cell_single_newline_is_not_a_paragraph_break() -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table("Line one.\nLine two.")])))
+
+    # one inline run (the newline collapses to a space at render); no paragraph wrapper
+    assert "<td>Line one.\nLine two.</td>" in html
+    assert '<p class="cell-p">' not in html
+
+
+def test_rich_cell_paragraph_breaks_work_in_the_title_cell_alongside_a_badge() -> None:
+    # the title cell is the other rich_cell call site; a multi-paragraph title stacks and the
+    # title-placement badge still chips under it.
+    table = make_table(
+        columns=[
+            {"key": "name", "label": "Name", "kind": "rich"},  # first rich column becomes the title
+            {"key": "tag", "label": "", "kind": "badge"},
+        ],
+        rows=[{"name": "Intro para.\n\nSecond para.", "tag": "LIVE"}],
+    )
+    report = parse_report(
+        make_report(blocks=[table], badges={"LIVE": {"label": "Live", "tone": "green", "legend": "up"}})
+    )
+
+    html = render_html(report)
+
+    assert '<td class="title"><p class="cell-p">Intro para.</p><p class="cell-p">Second para.</p>' in html
+    assert '<div><span class="chip green">Live</span></div>' in html  # badge still chips under the title
+
+
 def test_row_and_indicator_tones_accept_palette_aliases() -> None:
     """The manually-validated tones (table row emphasis, indicator dot) alias too: red→danger,
     green→success — and the normalised name drives the rendered class."""
