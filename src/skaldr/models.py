@@ -202,7 +202,9 @@ class Meta(_Frozen):
 class Heading(_Block):
     type: Literal["heading"]
     text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
-    level: Literal[2, 3] = Field(default=2, description="Heading level: 2 (section) or 3 (sub-heading).")
+    level: Literal[2, 3] = Field(
+        default=2, description="Heading level: 2 (major heading) or 3 (sub-heading)."
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "Heading":
@@ -1288,13 +1290,20 @@ InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 class Section(_Block):
     type: Literal["section"]
     title: str = Field(description="Summary label shown on the collapsible.")
-    collapsed: bool = Field(default=True, description="Whether the section starts collapsed.")
+    collapsed: bool = Field(
+        default=True,
+        description="Whether the section starts collapsed. Default true suits an appendix / detail; set "
+        "false for a read-through living doc so the section opens expanded.",
+    )
     updated: str | None = Field(
         default=None,
         description="When this section was last revised; shown as a muted stamp in its header. A "
         "free-form label like the report date (author it — never auto-now).",
     )
-    blocks: list[InnerBlock] = Field(min_length=1, description="Blocks; no nested section.")
+    blocks: list[InnerBlock] = Field(
+        min_length=1,
+        description="Blocks in the section — any block except another section, grid, or walkthrough.",
+    )
 
 
 # Grid: a bounded side-by-side layout over a 6-column base.
