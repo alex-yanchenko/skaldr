@@ -353,8 +353,41 @@ def test_walkthrough_heading_in_a_step_detail_gets_a_slug_id() -> None:
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
-    # heading_slugs recurses into step details, so the nested heading gets an anchorable id
+    # anchor_slugs recurses into step details, so the nested heading gets an anchorable id
     assert '<h3 id="nested-step-note">Nested step note</h3>' in html
+
+
+def test_section_gets_an_anchor_id_and_appears_in_the_toc() -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "toc": True},
+            blocks=[
+                {"type": "heading", "text": "Overview"},
+                {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "x"}]},
+            ],
+        )
+    )
+
+    html = render_html(report)
+
+    # the section is a TOC target: it carries a matching anchor id and a nav link points at it
+    assert '<details class="section" id="appendix"' in html
+    assert '<a href="#appendix">Appendix</a>' in html
+    assert '<a href="#overview">Overview</a>' in html  # heading still linked, in order
+
+
+def test_section_and_its_inner_heading_both_get_anchor_ids() -> None:
+    block = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "level": 3, "text": "Notes"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<details class="section" id="appendix"' in html
+    assert '<h3 id="notes">Notes</h3>' in html  # nested heading still gets its own anchor
 
 
 def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
@@ -389,8 +422,8 @@ def test_expand_forces_collapsed_sections_open_for_pdf() -> None:
     report = parse_report(make_report(blocks=[section]))
 
     # a collapsed section stays closed in the default render, but --pdf renders it open
-    assert '<details class="section"><summary>S</summary>' in render_html(report)
-    assert '<details class="section" open><summary>S</summary>' in render_html(report, expand=True)
+    assert '<details class="section" id="s"><summary>S</summary>' in render_html(report)
+    assert '<details class="section" id="s" open><summary>S</summary>' in render_html(report, expand=True)
 
 
 @pytest.mark.parametrize(
@@ -1661,7 +1694,7 @@ def test_section_collapsed_false_renders_open() -> None:
 
     html = render_html(report)
 
-    assert '<details class="section" open>' in html
+    assert '<details class="section" id="s" open>' in html
 
 
 def test_section_updated_renders_a_stamp_in_the_summary() -> None:

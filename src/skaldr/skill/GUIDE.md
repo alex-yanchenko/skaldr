@@ -28,7 +28,7 @@ meta:
   source: "WMS export"           # optional; shown in the provenance footer
   date: "Q3 2026"                # optional; footer. Author it — skaldr never inserts "now"
   updated: "18 Jul 2026"         # optional; footer "updated <value>" — a living-doc freshness stamp
-  toc: true                      # optional; auto table-of-contents from level-2 headings
+  toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
 ```
 
@@ -148,6 +148,8 @@ embeds images, it does not fetch or generate them; **base64-encode the payload**
 unencoded SVG isn't a valid URI and won't render). A `section` holds any blocks except another
 `section` (one level of nesting only); its optional `updated` shows a muted "updated <value>" stamp
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
+A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
+`meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`

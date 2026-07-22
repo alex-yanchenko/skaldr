@@ -177,7 +177,7 @@
 {% macro render_block(block) %}
 {%- if block.span %}<div class="blk span-{{ block.span }}">{% endif -%}
 {% if block.type == "heading" %}
-<h{{ block.level }} id="{{ heading_id(block) }}">{{ block.text }}</h{{ block.level }}>
+<h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}</h{{ block.level }}>
 {% elif block.type == "text" %}
 {% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
@@ -221,7 +221,7 @@
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}
-<details class="section"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+<details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "grid" %}
 <div class="grid">{% for cell in block.cells %}<div class="cell span-{{ cell.span }}{% if cell.tone %} panel {{ cell.tone }}{% endif %}">{% for inner in cell.blocks %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
 {% elif block.type == "walkthrough" %}

@@ -1872,7 +1872,7 @@
         },
         "toc": {
           "default": false,
-          "description": "Render a table of contents from level-2 headings.",
+          "description": "Render a table of contents from top-level level-2 headings and sections.",
           "title": "Toc",
           "type": "boolean"
         },

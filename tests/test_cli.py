@@ -89,7 +89,7 @@ def test_pdf_renders_the_full_page_with_sections_expanded(
     html, path = calls[0]
     assert path == pdf_out.resolve()
     # a collapsed section is forced open so the PDF captures its body (headless print can't run JS)
-    assert '<details class="section" open><summary>S</summary>' in html
+    assert '<details class="section" id="s" open><summary>S</summary>' in html
 
 
 def test_pdf_with_out_writes_html_first_then_the_pdf(

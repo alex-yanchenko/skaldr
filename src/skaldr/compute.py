@@ -30,10 +30,10 @@ from skaldr.models import (
 )
 
 __all__ = [
+    "anchor_slugs",
     "col_sum",
     "first_table_index",
     "fmt",
-    "heading_slugs",
     "pct",
     "provenance_footer",
     "reconcile_line",
@@ -51,18 +51,21 @@ def _slugify(text: str) -> str:
     return _SLUG_STRIP.sub("-", text.lower()).strip("-") or "section"
 
 
-def _iter_headings(blocks: Sequence[AnyBlock]) -> Iterator[Heading]:
+def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
+    """Headings (any level, nested) and sections, in document order — the blocks that carry an anchor
+    id and can appear in the TOC. A section yields itself, then its inner headings."""
     for block in blocks:
         if isinstance(block, Heading):
             yield block
         elif isinstance(block, Section):
-            yield from _iter_headings(block.blocks)
+            yield block
+            yield from _iter_anchored(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
-                yield from _iter_headings(cell.blocks)
+                yield from _iter_anchored(cell.blocks)
         elif isinstance(block, Walkthrough):
             for step in block.steps:
-                yield from _iter_headings(step.detail)
+                yield from _iter_anchored(step.detail)
 
 
 def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
@@ -89,27 +92,30 @@ def reference_numbers(report: Report) -> dict[str, int]:
     return numbers
 
 
-def heading_slugs(report: Report) -> dict[int, str]:
-    """`id(heading) -> slug`, de-duplicated with `-2` suffixes across every heading in document
-    order. One source for both the heading `id` and the TOC so anchors can't drift."""
+def anchor_slugs(report: Report) -> dict[int, str]:
+    """`id(block) -> slug` for every heading and section, de-duplicated with `-2` suffixes in document
+    order. One source for the heading/section `id` and the TOC so anchors can't drift."""
     slugs: dict[int, str] = {}
     seen: dict[str, int] = {}
-    for heading in _iter_headings(report.blocks):
-        base = _slugify(heading.text)
+    for block in _iter_anchored(report.blocks):
+        base = _slugify(block.text if isinstance(block, Heading) else block.title)
         seen[base] = seen.get(base, 0) + 1
-        slugs[id(heading)] = base if seen[base] == 1 else f"{base}-{seen[base]}"
+        slugs[id(block)] = base if seen[base] == 1 else f"{base}-{seen[base]}"
     return slugs
 
 
 def toc_entries(report: Report, slugs: dict[int, str]) -> list[tuple[str, str]]:
-    """(slug, text) for top-level level-2 headings, using the shared de-duplicated slugs."""
+    """(slug, text) for top-level level-2 headings and sections, in document order — the TOC targets.
+    A section is a top-level region on a par with an h2, so it earns a TOC entry and its own anchor."""
     if not report.meta.toc:
         return []
-    return [
-        (slugs[id(block)], block.text)
-        for block in report.blocks
-        if isinstance(block, Heading) and block.level == 2
-    ]
+    entries: list[tuple[str, str]] = []
+    for block in report.blocks:
+        if isinstance(block, Heading) and block.level == 2:
+            entries.append((slugs[id(block)], block.text))
+        elif isinstance(block, Section):
+            entries.append((slugs[id(block)], block.title))
+    return entries
 
 
 def first_table_index(report: Report) -> int | None:

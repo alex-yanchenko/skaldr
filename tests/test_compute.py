@@ -1,7 +1,7 @@
 from skaldr.compute import (
+    anchor_slugs,
     first_table_index,
     fmt,
-    heading_slugs,
     provenance_footer,
     reconcile_line,
     reference_numbers,
@@ -598,15 +598,37 @@ def test_fmt_variants() -> None:
     assert fmt(True) == "True"
 
 
-def test_heading_slugs_dedup_collisions() -> None:
+def test_anchor_slugs_dedup_collisions_across_headings_and_sections() -> None:
+    # a heading and a section that share a title share the de-dup namespace, so their anchors differ
     report = parse_report(
         make_report(
             meta={"title": "T", "toc": True},
-            blocks=[{"type": "heading", "text": "Details"}, {"type": "heading", "text": "Details"}],
+            blocks=[
+                {"type": "heading", "text": "Details"},
+                {"type": "section", "title": "Details", "blocks": [{"type": "text", "body": "x"}]},
+            ],
         )
     )
 
-    assert sorted(heading_slugs(report).values()) == ["details", "details-2"]
+    assert sorted(anchor_slugs(report).values()) == ["details", "details-2"]
+
+
+def test_anchor_slugs_covers_a_section_and_its_inner_heading() -> None:
+    # the Section branch self-yields AND recurses, so the section and a heading inside it both get
+    # their own distinct anchor slug.
+    report = parse_report(
+        make_report(
+            blocks=[
+                {
+                    "type": "section",
+                    "title": "Appendix",
+                    "blocks": [{"type": "heading", "level": 3, "text": "Notes"}],
+                }
+            ],
+        )
+    )
+
+    assert sorted(anchor_slugs(report).values()) == ["appendix", "notes"]
 
 
 def test_toc_uses_deduped_slugs() -> None:
@@ -617,13 +639,32 @@ def test_toc_uses_deduped_slugs() -> None:
         )
     )
 
-    assert toc_entries(report, heading_slugs(report)) == [("details", "Details"), ("details-2", "Details")]
+    assert toc_entries(report, anchor_slugs(report)) == [("details", "Details"), ("details-2", "Details")]
+
+
+def test_toc_includes_sections_interleaved_in_document_order() -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "toc": True},
+            blocks=[
+                {"type": "heading", "text": "Overview"},
+                {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "x"}]},
+                {"type": "heading", "text": "Wrap-up"},
+            ],
+        )
+    )
+
+    assert toc_entries(report, anchor_slugs(report)) == [
+        ("overview", "Overview"),
+        ("appendix", "Appendix"),
+        ("wrap-up", "Wrap-up"),
+    ]
 
 
 def test_toc_empty_when_toc_disabled() -> None:
     report = parse_report(make_report(blocks=[{"type": "heading", "text": "X"}]))
 
-    assert toc_entries(report, heading_slugs(report)) == []
+    assert toc_entries(report, anchor_slugs(report)) == []
 
 
 def test_used_badges_returns_referenced_in_declaration_order() -> None:
