@@ -51,7 +51,7 @@ blocks:
       - { label: "Vendor", span: 4, tone: danger, sub: "400" }
 
   - type: text
-    body: "The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin > 12~~ scan rule is under review; see the [method](https://example.com/runbook). Full breakdown in [Discrepancies & fixes](#discrepancies-fixes) below."
+    body: "The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin > 12~~ scan rule is under review; see the [method](https://example.com/runbook)."
   - type: text
     muted: true
     body: "Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated."
