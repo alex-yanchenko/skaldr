@@ -1361,10 +1361,18 @@
           "type": "string"
         },
         "rows": {
-          "description": "Empty renders a '\u2014 none \u2014' row.",
+          "description": "Rows in this group \u2014 each a mapping or a positional list in the declared column order. Empty renders a '\u2014 none \u2014' row.",
           "items": {
-            "additionalProperties": true,
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
           },
           "title": "Rows",
           "type": "array"
@@ -2901,8 +2909,16 @@
           "anyOf": [
             {
               "items": {
-                "additionalProperties": true,
-                "type": "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "items": {},
+                    "type": "array"
+                  }
+                ]
               },
               "type": "array"
             },
@@ -2911,7 +2927,7 @@
             }
           ],
           "default": null,
-          "description": "Ungrouped rows; provide this OR `groups`, not both.",
+          "description": "Ungrouped rows; provide this OR `groups`, not both. Each row is a mapping (column key \u2192 value) or a positional list in the declared column order.",
           "title": "Rows"
         },
         "reconcile": {

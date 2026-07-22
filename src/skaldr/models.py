@@ -719,11 +719,29 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                     raise ValueError(f"{sub_loc}.value: number must be finite")
 
 
+# A table row is authored as a mapping (column key → value) OR a positional list of values in column
+# order. `Table._expand_positional_rows` normalises list rows to mappings before validation. The field
+# type is the union (not just dict) so the JSON schema advertises both input shapes; downstream reads
+# cast back to a dict, which the normalisation (asserted on Group, guaranteed on Table) makes safe.
+TableRow = dict[str, Any] | list[Any]
+
+
 class Group(_Frozen):
     name: str = Field(description="Group band label; shows the derived subtotal.")
-    rows: list[dict[str, Any]] = Field(
-        default_factory=list[dict[str, Any]], description="Empty renders a '— none —' row."
+    rows: list[TableRow] = Field(
+        default_factory=list[TableRow],
+        description="Rows in this group — each a mapping or a positional list in the declared column "
+        "order. Empty renders a '— none —' row.",
     )
+
+    @model_validator(mode="after")
+    def _rows_are_mappings(self) -> "Group":
+        # `Table._expand_positional_rows` turns positional list rows into mappings before a Group is
+        # built. Assert it so a Group constructed some other way fails loud here, not with an opaque
+        # AttributeError deep in the render — the `list[dict]` casts on the rows rely on this holding.
+        if not all(isinstance(row, dict) for row in self.rows):
+            raise ValueError("group rows must be mappings (positional list rows are expanded by the table)")
+        return self
 
 
 class Table(_Block):
@@ -732,8 +750,10 @@ class Table(_Block):
     groups: list[Group] | None = Field(
         default=None, description="Grouped rows with derived subtotals; provide this OR `rows`, not both."
     )
-    rows: list[dict[str, Any]] | None = Field(
-        default=None, description="Ungrouped rows; provide this OR `groups`, not both."
+    rows: list[TableRow] | None = Field(
+        default=None,
+        description="Ungrouped rows; provide this OR `groups`, not both. Each row is a mapping (column "
+        "key → value) or a positional list in the declared column order.",
     )
     reconcile: Reconcile | None = Field(default=None, description="Opt-in trust check on a number column.")
     totals: Totals | None = Field(default=None, description="Sum a number column into a footer row.")
@@ -742,6 +762,58 @@ class Table(_Block):
         description="Opt-in summary strip below the table: counts the rows by a badge column and shows "
         "one '<chip> <count>' per value, derived from the rows so it can never drift from them.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_positional_rows(cls, data: Any) -> Any:
+        """Normalise a positional (list) row to a mapping before field validation: zip its values with
+        the column keys in declared order. A list whose length doesn't match the columns is an error
+        (a silent zip would drop or blank cells). Mapping rows pass through untouched."""
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        raw_columns = fields.get("columns")
+        if not isinstance(raw_columns, list):
+            return fields  # malformed columns — let field validation report it
+        keys: list[str] = []
+        for col in cast("list[Any]", raw_columns):
+            key = cast("dict[str, Any]", col).get("key") if isinstance(col, dict) else None
+            if not isinstance(key, str):
+                return fields  # a column missing a string key — let Column validation report it precisely
+            keys.append(key)
+
+        def _expand_row_list(rows: Any, loc: str) -> Any:
+            if not isinstance(rows, list):
+                return rows
+            expanded: list[Any] = []
+            for index, row in enumerate(cast("list[Any]", rows)):
+                if isinstance(row, list):
+                    values = cast("list[Any]", row)
+                    if len(values) != len(keys):
+                        raise ValueError(
+                            f"{loc}.{index}: a positional row needs exactly {len(keys)} values, one per "
+                            f"column; got {len(values)}"
+                        )
+                    expanded.append(dict(zip(keys, values, strict=True)))
+                else:
+                    expanded.append(row)
+            return expanded
+
+        updated = {**fields}
+        if "rows" in updated:
+            updated["rows"] = _expand_row_list(updated["rows"], "rows")
+        groups = updated.get("groups")
+        if isinstance(groups, list):
+            new_groups: list[Any] = []
+            for index, group in enumerate(cast("list[Any]", groups)):
+                if isinstance(group, dict) and "rows" in group:
+                    group_fields = cast("dict[str, Any]", group)
+                    rows = _expand_row_list(group_fields["rows"], f"groups.{index}.rows")
+                    new_groups.append({**group_fields, "rows": rows})
+                else:
+                    new_groups.append(group)
+            updated["groups"] = new_groups
+        return updated
 
     @model_validator(mode="after")
     def _validate_table(self) -> "Table":
@@ -777,11 +849,14 @@ class Table(_Block):
         widthed = [c for c in self.cell_columns if c.width is not None]
         if widthed and len(widthed) != len(self.cell_columns):
             raise ValueError("set width on every in-cell column, or none")
+        # casts: rows are mappings post-expansion (guaranteed by `_expand_positional_rows`).
         if self.groups is not None:
             for group_index, group in enumerate(self.groups):
-                _validate_rows(group.rows, self.columns, f"groups.{group_index}.rows")
+                _validate_rows(
+                    cast("Sequence[dict[str, Any]]", group.rows), self.columns, f"groups.{group_index}.rows"
+                )
         if self.rows is not None:
-            _validate_rows(self.rows, self.columns, "rows")
+            _validate_rows(cast("Sequence[dict[str, Any]]", self.rows), self.columns, "rows")
         if self.rollup is not None:
             # Rows are validated above, so every row carries `by` as a string. Both checks run here so
             # the "has values" test sees well-formed rows (a malformed row reports its own error first).
@@ -807,9 +882,10 @@ class Table(_Block):
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
     def all_rows(self) -> list[dict[str, Any]]:
+        # casts: rows are mappings post-expansion (see `_expand_positional_rows`).
         if self.groups is not None:
-            return [row for group in self.groups for row in group.rows]
-        return self.rows or []
+            return cast("list[dict[str, Any]]", [row for group in self.groups for row in group.rows])
+        return cast("list[dict[str, Any]]", self.rows or [])
 
     def _reconcile(self) -> None:
         if self.reconcile is None:
