@@ -106,6 +106,7 @@ blocks:
       total: 10000
       column: count
       handled: { label: "Matched cleanly", value: 8500 }
+    rollup: { by: tag, label: "Discrepancies by owner:" }
     groups:
       - name: "Floor — fixable"
         rows:

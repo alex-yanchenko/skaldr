@@ -6,11 +6,12 @@ from skaldr.compute import (
     reconcile_line,
     reference_numbers,
     swimlane_layout,
+    table_rollup,
     toc_entries,
     used_badges,
 )
 from skaldr.models import Swimlane, Table, parse_report
-from tests.factories import make_cell, make_grid, make_reconciled_table, make_report
+from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
 def _swimlane(**overrides: object) -> Swimlane:
@@ -705,6 +706,68 @@ def test_provenance_footer_omits_updated_when_blank() -> None:
     report = parse_report(make_report(meta={"title": "T", "source": "src", "updated": ""}))
 
     assert provenance_footer(report) == "src"
+
+
+def test_table_rollup_counts_rows_by_the_badge_column_in_first_appearance_order() -> None:
+    # PENDING appears first but ends with the LOWER count — so this distinguishes first-appearance
+    # order (the contract) from a count-descending sort, which would flip the two buckets.
+    table = Table.model_validate(
+        make_table(
+            columns=[
+                {"key": "item", "label": "Item", "kind": "text"},
+                {"key": "status", "label": "", "kind": "badge"},
+            ],
+            rows=[
+                {"item": "a", "status": "PENDING"},
+                {"item": "b", "status": "DONE"},
+                {"item": "c", "status": "DONE"},
+            ],
+            rollup={"by": "status"},
+        )
+    )
+
+    assert table_rollup(table) == [{"key": "PENDING", "count": 1}, {"key": "DONE", "count": 2}]
+
+
+def test_table_rollup_sums_a_value_across_groups() -> None:
+    table = Table.model_validate(
+        make_table(
+            columns=[
+                {"key": "item", "label": "Item", "kind": "text"},
+                {"key": "status", "label": "", "kind": "badge"},
+            ],
+            groups=[
+                {"name": "A", "rows": [{"item": "a", "status": "DONE"}]},
+                {"name": "B", "rows": [{"item": "b", "status": "DONE"}, {"item": "c", "status": "OPEN"}]},
+            ],
+            rollup={"by": "status"},
+        )
+    )
+
+    assert table_rollup(table) == [{"key": "DONE", "count": 2}, {"key": "OPEN", "count": 1}]
+
+
+def test_table_rollup_is_none_without_a_rollup() -> None:
+    table = Table.model_validate(
+        make_table(columns=[{"key": "item", "label": "I", "kind": "text"}], rows=[{"item": "a"}])
+    )
+
+    assert table_rollup(table) is None
+
+
+def test_table_rollup_skips_blank_badge_values() -> None:
+    table = Table.model_validate(
+        make_table(
+            columns=[
+                {"key": "item", "label": "I", "kind": "text"},
+                {"key": "status", "label": "", "kind": "badge"},
+            ],
+            rows=[{"item": "a", "status": "DONE"}, {"item": "b", "status": ""}],
+            rollup={"by": "status"},
+        )
+    )
+
+    assert table_rollup(table) == [{"key": "DONE", "count": 1}]
 
 
 def test_first_table_index() -> None:

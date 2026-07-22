@@ -7,6 +7,7 @@ it, and models must not import compute) so templates can reach it through this o
 """
 
 import re
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, TypedDict
 
@@ -37,6 +38,7 @@ __all__ = [
     "reconcile_line",
     "reference_numbers",
     "swimlane_layout",
+    "table_rollup",
     "toc_entries",
     "used_badges",
 ]
@@ -552,6 +554,25 @@ def pct(value: float, of: float) -> str:
     if 0 < ratio < 0.1:
         return "<0.1%"
     return f"{ratio:.1f}%"
+
+
+class RollupBucket(TypedDict):
+    key: str  # a badge key, resolved to its chip label/tone at render time
+    count: int
+
+
+def table_rollup(table: Table) -> list[RollupBucket] | None:
+    """Count the table's rows by its rollup badge column, in first-appearance order — a summary
+    derived from the rows, so it cannot drift from them. None when no rollup is declared. A row left
+    blank in that column contributes to no bucket; the table validator guarantees at least one is set."""
+    if table.rollup is None:
+        return None
+    counts: Counter[str] = Counter()
+    for row in table.all_rows():
+        key = row[table.rollup.by].strip()
+        if key:
+            counts[key] += 1
+    return [{"key": key, "count": count} for key, count in counts.items()]
 
 
 def reconcile_line(table: Table) -> str:
