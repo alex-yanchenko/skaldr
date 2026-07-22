@@ -216,7 +216,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 3,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "muted": False, "deps": []}],
+            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "state": "normal", "deps": []}],
         },  # S1/MVP — inferred group
         {
             "tone": "blue",
@@ -232,7 +232,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 5,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "muted": False, "deps": []}],
+            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "state": "normal", "deps": []}],
         },  # S2/Beta
     ]
 
@@ -405,7 +405,7 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
         "line_end": 3,
         "row_start": 2,
         "row_end": 3,
-        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "muted": False, "deps": []}],
+        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "state": "normal", "deps": []}],
     }
     # footer sums each column across both lanes; fractional preserved, zero included
     assert layout["foot"] == {
@@ -492,21 +492,21 @@ def test_swimlane_layout_split_column_with_values_drops_band_and_trims_dashes() 
     assert layout["hdiv"] == [{"row": 3, "col_start": 2}, {"row": 4, "col_start": 1}]
 
 
-def test_swimlane_layout_a_muted_step_value_still_counts_in_totals() -> None:
-    """`muted` only de-emphasises visually — the step's value is still summed into the totals, so a
-    muted step must not silently drop out of the column/lane sums."""
+def test_swimlane_layout_a_de_emphasised_step_value_still_counts_in_totals() -> None:
+    """`state` only de-emphasises visually — the step's value is still summed into the totals, so a
+    low/blocked step must not silently drop out of the column/lane sums."""
     block = _swimlane(
         lanes=["A"],
         columns=["C1"],
         steps=[
             {"lane": "A", "col": "C1", "n": "1", "label": "a", "value": 3},
-            {"lane": "A", "col": "C1", "n": "2", "label": "b", "value": 4, "muted": True},
+            {"lane": "A", "col": "C1", "n": "2", "label": "b", "value": 4, "state": "blocked"},
         ],
     )
 
     layout = swimlane_layout(block)
 
-    # 3 + 4: the muted step's 4 is included
+    # 3 + 4: the blocked step's 4 is included
     assert layout["foot"] == {
         "label": "Total",
         "banded": True,
@@ -533,7 +533,7 @@ def test_swimlane_layout_resolves_depends_on_ids_to_the_dependency_numbers() -> 
 
     # C2's step carries the dependency's NUMBER (1), not its id ("x")
     assert layout["cells"][1]["steps"] == [
-        {"n": "2", "label": "b", "value": None, "url": None, "muted": False, "deps": ["1"]}
+        {"n": "2", "label": "b", "value": None, "url": None, "state": "normal", "deps": ["1"]}
     ]
 
 

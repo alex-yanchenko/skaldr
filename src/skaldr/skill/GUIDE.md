@@ -134,7 +134,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, muted?, id?, depends_on?}]`, `groups?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `collapsed?` (default true), `updated?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
@@ -383,8 +383,10 @@ counts only the steps resolved into it). Totals appear only when at least one st
 without one counts as 0.
 
 A step may also carry an optional `url` (http/https/mailto — e.g. its Jira/GitHub ticket), which turns
-its number into a link, and `muted: true` to de-emphasise tail/low-priority work (the ticket renders
-faded and dashed but stays in place; its `value` still counts toward the totals).
+its number into a link, and a `state` — `normal` (default), `low`, or `blocked` — for emphasis. `low`
+fades the ticket (solid, still clearly live) for tail/low-priority work; `blocked` marks it waiting /
+on-hold with a dashed outline and a greyed number badge, so it reads as *stopped*, not merely quiet.
+The two are deliberately distinct. A step's `value` counts toward the totals in every state.
 
 To record dependencies, give a step an `id` (a safe slug — letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the
@@ -399,7 +401,8 @@ room; the "needs" marker is the compact, readable form.)
     - { lane: "Product", col: "Sprint 1", n: "1", label: "Spec", url: "https://jira/PROJ-1" }
     - { lane: "Eng", col: "Sprint 2", n: "2", label: "Build", value: 5 }
     - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag" }   # stacks with 3b (same cell)
-    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan", muted: true }   # de-emphasised
+    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan", state: low }   # low-priority
+    - { lane: "QA", col: "Sprint 2", n: "2b", label: "Vendor sign-off", state: blocked }   # waiting
     - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }
 ```
 

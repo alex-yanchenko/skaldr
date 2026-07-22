@@ -715,23 +715,23 @@ def test_swimlane_step_value_renders_on_the_ticket() -> None:
     assert html.count('class="swim-tkt-v"') == 1
 
 
-def test_swimlane_step_url_links_the_number_and_muted_fades_the_ticket() -> None:
-    """A step `url` renders the number as a link; `muted` marks the ticket for the faded/dashed style;
-    the two compose on one step. A plain step keeps a <span> number and no muted class."""
+def test_swimlane_step_url_links_the_number_and_state_styles_the_ticket() -> None:
+    """A step `url` renders the number as a link; `state` adds its emphasis class (`low`/`blocked`);
+    the two compose on one step. A `normal` step keeps a <span> number and no state class."""
     block = {
         "type": "swimlane",
         "lanes": ["R"],
         "columns": ["C1", "C2", "C3"],
         "steps": [
             {"lane": "R", "col": "C1", "n": "1", "label": "linked", "url": "https://example.com/PROJ-1"},
-            {"lane": "R", "col": "C2", "n": "2", "label": "plain", "muted": True},
+            {"lane": "R", "col": "C2", "n": "2", "label": "low-pri", "state": "low"},
             {
                 "lane": "R",
                 "col": "C3",
                 "n": "3",
                 "label": "both",
                 "url": "https://example.com/PROJ-3",
-                "muted": True,
+                "state": "blocked",
             },
         ],
     }
@@ -740,9 +740,11 @@ def test_swimlane_step_url_links_the_number_and_muted_fades_the_ticket() -> None
 
     assert '<a class="swim-n" href="https://example.com/PROJ-1">1</a>' in html
     assert '<span class="swim-n">2</span>' in html  # no url → plain span, not a link
-    # url + muted compose: a muted ticket whose number is a link
-    assert '<div class="swim-tkt muted"><a class="swim-n" href="https://example.com/PROJ-3">3</a>' in html
-    assert html.count('class="swim-tkt muted"') == 2
+    assert '<div class="swim-tkt low">' in html  # low-priority step carries the `low` class
+    # url + blocked compose: a blocked ticket whose number is a link
+    assert '<div class="swim-tkt blocked"><a class="swim-n" href="https://example.com/PROJ-3">3</a>' in html
+    # the normal (state-less) step gets no emphasis class
+    assert '<div class="swim-tkt">' in html
 
 
 def test_swimlane_column_sub_renders_and_ids_decouple_reference_from_display() -> None:

@@ -133,6 +133,7 @@ ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip render
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
 FanDirection = Literal["in", "out"]
+SwimlaneStepState = Literal["normal", "low", "blocked"]  # ticket emphasis: normal / low-pri / blocked
 
 
 def _resource(name: str) -> Traversable:
@@ -947,10 +948,12 @@ class SwimlaneStep(_Frozen):
         description="Optional link (http/https/mailto) for the step — e.g. its Jira/GitHub ticket. The "
         "step's number becomes a link out to it.",
     )
-    muted: bool = Field(
-        default=False,
-        description="De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed "
-        "so it recedes without leaving the matrix. Its value still counts toward the totals.",
+    state: SwimlaneStepState = Field(
+        default="normal",
+        description="Ticket emphasis. `normal` (default) is full-weight active work. `low` fades the "
+        "ticket (solid, still clearly live) for low-priority / tail work. `blocked` marks it waiting / "
+        "on-hold — dashed outline + a greyed number badge, distinct from `low`. The value counts toward "
+        "the totals in every state.",
     )
     id: str | None = Field(
         default=None,

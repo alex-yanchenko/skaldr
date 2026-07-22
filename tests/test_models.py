@@ -1611,6 +1611,16 @@ def test_swimlane_step_url_rejects_an_unsafe_scheme() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_step_state_rejects_an_unknown_value() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "state": "urgent"}],
+    )
+    with pytest.raises(ReportError, match=r"steps\.0\.state"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_step_id_must_be_a_safe_slug() -> None:
     """A step `id` is a safe slug (ASCII letters/digits/_/-) so `depends_on` can reference it cleanly."""
     block = _swimlane(

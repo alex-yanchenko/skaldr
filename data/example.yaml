@@ -80,9 +80,9 @@ blocks:
     steps:
       - { lane: "Floor", col: "Detect", n: "1", label: "Recount bin" }
       - { lane: "System", col: "Investigate", n: "2a", label: "Check scan log" }
-      - { lane: "Floor", col: "Investigate", n: "2b", label: "Re-label" }
+      - { lane: "Floor", col: "Investigate", n: "2b", label: "Re-label", state: low }
       - { lane: "System", col: "Resolve", n: "3", label: "Reconcile" }
-      - { lane: "Vendor", col: "Escalate", n: "4", label: "Escalate short-ship" }
+      - { lane: "Vendor", col: "Escalate", n: "4", label: "Escalate short-ship", state: blocked }
 
   - type: callout
     tone: warning
