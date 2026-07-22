@@ -570,6 +570,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
+		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);
+			letter-spacing:0.02em; font-variant-numeric:tabular-nums}
 		& > summary::-webkit-details-marker{display:none}
 		& > summary::before{content:"▸"; color:var(--muted); font-size:12px}
 		&[open] > summary::before{content:"▾"}

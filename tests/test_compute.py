@@ -680,6 +680,33 @@ def test_provenance_footer_recurses_into_sections() -> None:
     assert footer == "src · Reconciles: 10 + 90 clean = 100."
 
 
+def test_provenance_footer_includes_updated_after_the_date() -> None:
+    report = parse_report(
+        make_report(meta={"title": "T", "source": "src", "date": "Q3 2026", "updated": "18 Jul 2026"})
+    )
+
+    assert provenance_footer(report) == "src · Q3 2026 · updated 18 Jul 2026"
+
+
+def test_provenance_footer_updated_alone() -> None:
+    report = parse_report(make_report(meta={"title": "T", "updated": "18 Jul 2026"}))
+
+    assert provenance_footer(report) == "updated 18 Jul 2026"
+
+
+def test_provenance_footer_omits_updated_when_absent() -> None:
+    report = parse_report(make_report(meta={"title": "T", "source": "src"}))
+
+    assert provenance_footer(report) == "src"
+
+
+def test_provenance_footer_omits_updated_when_blank() -> None:
+    # a blank string is absent: no stray "updated " segment in the footer
+    report = parse_report(make_report(meta={"title": "T", "source": "src", "updated": ""}))
+
+    assert provenance_footer(report) == "src"
+
+
 def test_first_table_index() -> None:
     report = parse_report(make_report(blocks=[{"type": "text", "body": "x"}, make_reconciled_table()]))
 

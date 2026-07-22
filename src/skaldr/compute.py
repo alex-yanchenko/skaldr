@@ -524,8 +524,10 @@ def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
 
 
 def provenance_footer(report: Report) -> str | None:
-    """Composed footer: meta source/date + each reconciled table's 'Reconciles: …' line."""
+    """Composed footer: meta source/date/updated + each reconciled table's 'Reconciles: …' line."""
     parts = [part for part in (report.meta.source, report.meta.date) if part]
+    if report.meta.updated:
+        parts.append(f"updated {report.meta.updated}")
     parts.extend(
         reconcile_line(table) for table in _iter_tables(report.blocks) if table.reconcile is not None
     )

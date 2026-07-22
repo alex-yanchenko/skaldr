@@ -183,6 +183,11 @@ class Meta(_Frozen):
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
     source: str | None = Field(default=None, description="Provenance; feeds the footer.")
     date: str | None = Field(default=None, description="Report date; feeds the footer (never auto-now).")
+    updated: str | None = Field(
+        default=None,
+        description="When the report was last revised; feeds the footer as 'updated <value>'. A "
+        "free-form label like the date (author it — never auto-now).",
+    )
     toc: bool = Field(default=False, description="Render a table of contents from level-2 headings.")
     hero: bool = Field(
         default=False,
@@ -1183,6 +1188,11 @@ class Section(_Block):
     type: Literal["section"]
     title: str = Field(description="Summary label shown on the collapsible.")
     collapsed: bool = Field(default=True, description="Whether the section starts collapsed.")
+    updated: str | None = Field(
+        default=None,
+        description="When this section was last revised; shown as a muted stamp in its header. A "
+        "free-form label like the report date (author it — never auto-now).",
+    )
     blocks: list[InnerBlock] = Field(min_length=1, description="Blocks; no nested section.")
 
 

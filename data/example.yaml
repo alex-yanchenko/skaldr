@@ -9,6 +9,7 @@ meta:
     - "Mixed audience — ops reads the impact, the floor team reads the fix."
   source: "WMS export"
   date: "Q3 2026"
+  updated: "18 Jul 2026"
   toc: true
   hero: true
 
@@ -242,6 +243,7 @@ blocks:
 
   - type: section
     title: "Appendix — discrepancy-reason raw counts"
+    updated: "18 Jul 2026"
     blocks:
       - type: list
         items:

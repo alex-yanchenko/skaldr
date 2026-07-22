@@ -213,7 +213,7 @@
 {% elif block.type == "table" %}
 {{ table(block) }}
 {% elif block.type == "section" %}
-<details class="section"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+<details class="section"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "grid" %}
 <div class="grid">{% for cell in block.cells %}<div class="cell span-{{ cell.span }}{% if cell.tone %} panel {{ cell.tone }}{% endif %}">{% for inner in cell.blocks %}{{ render_block(inner) }}{% endfor %}</div>{% endfor %}</div>
 {% elif block.type == "walkthrough" %}
