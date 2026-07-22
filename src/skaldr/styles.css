@@ -581,7 +581,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rlink{color:var(--muted); text-decoration:none}
 		& .rlink:hover{color:var(--accent-fg)}}
 
-	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow);
+	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow); scroll-margin-top:var(--hdr-h);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
 		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);

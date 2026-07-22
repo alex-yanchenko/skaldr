@@ -20,6 +20,7 @@ from skaldr.models import (
     REFERENCE_KEY_PATTERN,
     Heading,
     Report,
+    Section,
     load_report,
     package_text,
 )
@@ -109,9 +110,9 @@ def _environment() -> Environment:
 
 def _render(report: Report, template: str, *, expand: bool = False) -> str:
     env = _environment()
-    slugs = compute.heading_slugs(report)
+    slugs = compute.anchor_slugs(report)
 
-    def heading_id(block: Heading) -> str:
+    def anchor_id(block: Heading | Section) -> str:
         return slugs[id(block)]
 
     ref_numbers = compute.reference_numbers(report)
@@ -127,7 +128,7 @@ def _render(report: Report, template: str, *, expand: bool = False) -> str:
 
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
-    globals_["heading_id"] = heading_id
+    globals_["anchor_id"] = anchor_id
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references

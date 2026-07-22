@@ -189,7 +189,9 @@ class Meta(_Frozen):
         description="When the report was last revised; feeds the footer as 'updated <value>'. A "
         "free-form label like the date (author it — never auto-now).",
     )
-    toc: bool = Field(default=False, description="Render a table of contents from level-2 headings.")
+    toc: bool = Field(
+        default=False, description="Render a table of contents from top-level level-2 headings and sections."
+    )
     hero: bool = Field(
         default=False,
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
