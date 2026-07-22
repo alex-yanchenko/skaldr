@@ -505,6 +505,25 @@ link instead.
 - A group with an empty `rows: []` renders a "— none —" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 
+## Reusing fragments — `!include`
+
+Pull a chunk of YAML in from another file with `!include <path>`. The referenced file is parsed and
+spliced in where the tag sits, so it works for a whole list or a single node:
+
+```yaml
+badges: !include shared/badges.yaml   # a shared vocabulary across several reports
+blocks:
+  - !include shared/legend-block.yaml # one reused block
+  - type: text
+    body: "…the rest, inline."
+```
+
+Paths resolve relative to the file doing the including (not your shell's directory), so a set of
+fragments can move as a unit. Includes can nest; a file that includes itself — directly or through a
+chain — fails the build rather than looping. A missing fragment fails with the path that named it.
+`--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
+pulls in, and the emitted JSON is fully flattened.
+
 ## What you never write
 
 Colours, CSS, fonts, pixel sizes, HTML, the legend, the TOC, percentages, subtotals, the

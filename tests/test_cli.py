@@ -236,6 +236,35 @@ def test_check_reports_a_missing_file_as_a_failure(
     assert f"FAIL  {missing}: file not found" in captured.err  # no traceback escapes
 
 
+def test_check_validates_through_an_include(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # an invalid block hidden inside an !included fragment must fail --check on that block's error,
+    # not merely because the splice produced something else — so assert the offending field surfaces.
+    (tmp_path / "blocks.yaml").write_text("- type: text\n  oops: 1\n", encoding="utf-8")
+    main_path = tmp_path / "main.yaml"
+    main_path.write_text("version: 1\nmeta:\n  title: T\nblocks: !include blocks.yaml\n", encoding="utf-8")
+
+    exit_code = main(["--check", str(main_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"FAIL  {main_path}" in captured.err
+    assert "oops" in captured.err  # the fragment's bad field, not a generic splice failure
+
+
+def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "blocks.yaml").write_text("- type: text\n  body: from fragment\n", encoding="utf-8")
+    main_path = tmp_path / "main.yaml"
+    main_path.write_text("version: 1\nmeta:\n  title: T\nblocks: !include blocks.yaml\n", encoding="utf-8")
+
+    exit_code = main(["--emit-json", str(main_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert json.loads(captured.out)["blocks"] == [
+        {"type": "text", "body": "from fragment", "muted": False, "span": None}
+    ]
+
+
 def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     good = _write(tmp_path, make_report(), "a.yaml")
     other = _write(tmp_path, make_report(), "b.yaml")
