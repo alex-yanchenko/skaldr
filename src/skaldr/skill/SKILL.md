@@ -43,7 +43,9 @@ fabrication, so honesty is on you.
 3. **Render:** `skaldr report.yaml -o report.html`.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`) — read it, fix, re-run. Done = skaldr prints `OK` and the output
-   file exists.
+   file exists. To validate without writing anything (e.g. before committing, or over a glob), use
+   `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
+   report.yaml`.
 5. **Surface it, local-first.** Hand over (or open) the rendered file — private by default. Publish a
    claude.ai Artifact only if the user wants to share it, and only with non-sensitive data — never
    real customer, personal, or privileged content on a surface that leaves the machine. To publish,
