@@ -3,11 +3,13 @@ normalised model (--emit-json), print the guide, export the schema, or install t
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, package_text
@@ -15,6 +17,27 @@ from skaldr.pdf import html_to_pdf
 from skaldr.render import render_html, render_report
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
+
+# Markers delimiting skaldr's managed plan-workflow block inside the user's CLAUDE.md. ASCII only —
+# they're matched by `re`/string ops on every re-install, so no fragile non-ASCII in the anchor.
+_PLAN_RULE_BEGIN = (
+    "<!-- skaldr:plan-rule - managed by `skaldr --install-skill`; delete this block to remove -->"
+)
+_PLAN_RULE_END = "<!-- /skaldr:plan-rule -->"
+# Match one COMPLETE block only. The tempered body `(?:(?!BEGIN|END).)*` refuses to span another
+# marker, so a stray unpaired BEGIN can never pair with a later block's END and swallow the user's
+# content between them — the rule body itself never contains a marker, so this stays exact.
+_PLAN_RULE_BLOCK = re.compile(
+    re.escape(_PLAN_RULE_BEGIN)
+    + r"(?:(?!"
+    + re.escape(_PLAN_RULE_BEGIN)
+    + r"|"
+    + re.escape(_PLAN_RULE_END)
+    + r").)*"
+    + re.escape(_PLAN_RULE_END)
+    + r"\n?",
+    re.DOTALL,
+)
 
 
 def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
@@ -75,8 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--install-skill",
         action="store_true",
-        help="install skaldr's Claude skill into ~/.claude/skills (copies it — run once, survives "
-        "upgrades), then exit",
+        help="install skaldr's Claude skill into ~/.claude/skills and add a live-plan-doc rule to "
+        "~/.claude/CLAUDE.md (run once, survives upgrades), then exit",
     )
     args = parser.parse_args(argv)
 
@@ -230,9 +253,10 @@ def _guide_text() -> str:
 
 
 def install_skill(home: Path | None = None) -> int:
-    """Copy the bundled skill (a thin, version-agnostic SKILL.md) into <home>/.claude/skills/skaldr.
-    Because it's a copy of a stable file — not a link into the versioned install — it runs ONCE and
-    survives upgrades; the version-specific detail is fetched at author time via `skaldr --guide` /
+    """Copy the bundled skill (a thin, version-agnostic SKILL.md) into <home>/.claude/skills/skaldr, and
+    add/refresh the live-plan-doc rule in <home>/.claude/CLAUDE.md (see `_install_plan_rule`). Because
+    it's a copy of a stable file — not a link into the versioned install — it runs ONCE and survives
+    upgrades; the version-specific detail is fetched at author time via `skaldr --guide` /
     `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent."""
     if home is None:
         home = Path.home()
@@ -260,8 +284,38 @@ def install_skill(home: Path | None = None) -> int:
         print(f"error: could not install the skill into {dest_dir}: {err}", file=sys.stderr)
         return 1
     print(f"OK  installed skaldr skill -> {dest_dir / 'SKILL.md'}")
+    # Separate step, separate try: the skill copy already succeeded, so a CLAUDE.md write failure must
+    # be reported as its own thing, not as "could not install the skill".
+    try:
+        rule_action = _install_plan_rule(claude_dir)
+    except OSError as err:
+        print(
+            f"error: skill installed, but could not update {claude_dir / 'CLAUDE.md'}: {err}", file=sys.stderr
+        )
+        return 1
+    print(f"OK  {rule_action} the plan-workflow rule in {claude_dir / 'CLAUDE.md'}")
+    print("    (the skaldr:plan-rule block — delete it to opt out)")
     print("    Restart Claude Code (or reload skills) to pick it up.")
     return 0
+
+
+def _install_plan_rule(claude_dir: Path) -> Literal["added", "updated"]:
+    """Add or refresh the skaldr plan-workflow rule in <claude_dir>/CLAUDE.md as a marker-delimited
+    block. Strips every complete existing block and re-appends one fresh, so a re-install never
+    duplicates and only ever touches its own block — all other content is preserved (a stray, unpaired
+    marker is left untouched, never built on). Raises OSError on a read/write failure."""
+    rule = package_text("skill/plan-rule.md").rstrip()
+    block = f"{_PLAN_RULE_BEGIN}\n{rule}\n{_PLAN_RULE_END}\n"
+    md_path = claude_dir / "CLAUDE.md"
+    existing = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    had_block = bool(_PLAN_RULE_BLOCK.search(existing))
+    kept = _PLAN_RULE_BLOCK.sub("", existing).rstrip()
+    # Write atomically: `write_text` truncates at open(), so a mid-write failure (disk full) would
+    # otherwise wipe the user's hand-maintained CLAUDE.md. Write a sibling temp, then atomically swap.
+    tmp_path = md_path.with_suffix(md_path.suffix + ".skaldr-tmp")
+    tmp_path.write_text(f"{kept}\n\n{block}" if kept else block, encoding="utf-8")
+    tmp_path.replace(md_path)
+    return "updated" if had_block else "added"
 
 
 def _plural(count: int, noun: str) -> str:
