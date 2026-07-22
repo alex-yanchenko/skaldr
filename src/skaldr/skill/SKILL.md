@@ -20,15 +20,12 @@ skaldr is a **CLI already on your PATH** — do not look for a source repo, a `u
 `python -m`; just run `skaldr`. You write one YAML content file; skaldr renders one self-contained
 HTML page and owns all the design.
 
-It covers visual structure (flows, comparison tables, stat cards, charts, timelines) plus living-doc
-support (freshness stamps, `!include`, rollups, `--watch`), so for a report, status doc, plan, or any
-ongoing documentation, reach for it before hand-building HTML or a markdown file. Run `skaldr --guide`
-for the full block palette.
+It covers visual structure (flows, tables, cards, charts, timelines) plus living-doc support
+(freshness stamps, `!include`, rollups, `--watch`). Run `skaldr --guide` for the full block palette.
 
 **If it turns out not to fit** — the content is really freeform prose, or a diagram skaldr can't
 express, or `skaldr` isn't on PATH — say so in one line and fall back to markdown or hand-authored
-HTML rather than forcing it. (Whether skaldr fits at all is a routing call the description already
-makes; this is the render-time bail.)
+HTML rather than forcing it.
 
 **Author from real evidence.** Every number, date, and claim must come from the data, files, or
 facts in front of you. If you don't have a value, ask for it or leave the block out — never invent
@@ -49,13 +46,14 @@ fabrication, so honesty is on you.
    file exists. To validate without writing anything (e.g. before committing, or over a glob), use
    `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
    report.yaml`.
-5. **Surface it, local-first.** Hand over (or open) the rendered file — private by default. Publish a
+5. **Surface it, local-first.** A skaldr page needn't be a one-shot deliverable — it can be a live
+   working doc you keep updating (`skaldr --watch report.yaml -o report.html` re-renders on every
+   save). Either way, hand over (or open) the rendered file — private by default. Publish a
    claude.ai Artifact only if the user wants to share it, and only with non-sensitive data — never
    real customer, personal, or privileged content on a surface that leaves the machine. To publish,
    render with `skaldr report.yaml --embed -o report.html` and publish *that*: `--embed` drops the
    `<html>`/`<head>`/`<body>` skeleton so it slots into the Artifact host cleanly (a full document
-   would double-wrap). The embedded page carries its own theme + width control and follows the
-   reader's OS theme.
+   would double-wrap).
 
 This file is intentionally thin and stable: the version-specific detail lives in `skaldr --guide`
 and `skaldr --write-schema`, so it stays correct across upgrades without reinstalling the skill.
