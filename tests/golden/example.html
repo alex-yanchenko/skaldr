@@ -489,8 +489,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   right corners so that cap's right border meets the frame straight instead of gapping at a curve */
 		& .swim-frame.sq-right{border-start-end-radius:0; border-end-end-radius:0}
 		& .swim-hcell{z-index:1; background:var(--gt,transparent)}
+		/* the column header + group cap hold selectable text, so they keep pointer events (the I-beam +
+		   drag-select) — unlike the overlay lines/frame below, which stay pointer-events:none. */
 		& .swim-hlabel{z-index:3; padding:var(--s2) var(--s3); font-size:12.5px; font-weight:600;
-			color:var(--muted); pointer-events:none}
+			color:var(--muted)}
 		/* optional secondary caption under a column header (column.sub) — its own line, lighter */
 		& .swim-hsub{display:block; margin-block-start:1px; font-size:10.5px; font-weight:500; opacity:0.8}
 		& .swim-gut{z-index:1; display:flex; align-items:center; justify-content:flex-end; gap:var(--s4);
@@ -540,7 +542,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			margin-inline-start:-0.75px}
 		& .swim-hdiv{z-index:2; height:0; align-self:start; border-block-start:1px solid var(--rule);
 			pointer-events:none}
-		& .swim-cap{z-index:1; display:flex; align-items:center; gap:6px; padding:0 var(--s3); pointer-events:none;
+		& .swim-cap{z-index:1; display:flex; align-items:center; gap:6px; padding:0 var(--s3);
 			color:var(--gc); background:var(--gt); border-block-start:2.5px solid var(--gc);
 			border-radius:var(--r-md) var(--r-md) 0 0; font-size:11px; font-weight:700}
 		& .swim-capb{z-index:1; pointer-events:none; background:var(--gt); border-block-end:2.5px solid var(--gc);
