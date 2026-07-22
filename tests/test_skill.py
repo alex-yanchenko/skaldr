@@ -6,6 +6,13 @@ from skaldr.cli import install_skill, main
 from skaldr.models import load_report, package_path
 from skaldr.render import render_html
 
+# The frozen CLAUDE.md managed-block delimiters — a user-facing contract (the block the README tells
+# users to delete). Held as literals so the tests don't reach for module-private names in cli.py.
+_PLAN_RULE_BEGIN = (
+    "<!-- skaldr:plan-rule - managed by `skaldr --install-skill`; delete this block to remove -->"
+)
+_PLAN_RULE_END = "<!-- /skaldr:plan-rule -->"
+
 
 def test_skill_ships_the_thin_skill_guide_and_example() -> None:
     skill = package_path("skill")
@@ -85,6 +92,125 @@ def test_install_skill_migrates_an_older_symlinked_install(tmp_path: Path) -> No
     assert rc == 0
     assert not dest_dir.is_symlink()  # migrated to a real dir
     assert (dest_dir / "SKILL.md").read_text(encoding="utf-8") == src.read_text(encoding="utf-8")
+
+
+def test_install_skill_adds_the_plan_rule_to_claude_md(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".claude").mkdir()
+
+    rc = install_skill(home=tmp_path)
+
+    out = capsys.readouterr().out
+    claude_md = (tmp_path / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
+    assert rc == 0
+    assert "Working plans as live skaldr docs" in claude_md
+    assert "compaction-proof" in claude_md  # a line countering the "shareable-only" misconception
+    assert "skaldr:plan-rule" in claude_md  # delimited by the managed markers
+    assert "added the plan-workflow rule" in out  # a fresh install reports it as added
+
+
+def test_install_skill_plan_rule_is_idempotent_and_preserves_existing_content(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text("# My global rules\n\nkeep this line.\n", encoding="utf-8")
+
+    assert install_skill(home=tmp_path) == 0
+    assert install_skill(home=tmp_path) == 0  # a second install must not duplicate the block
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert "keep this line." in claude_md  # pre-existing content untouched
+    assert claude_md.count("Working plans as live skaldr docs") == 1  # exactly one managed block
+
+
+def test_install_skill_plan_rule_refreshes_the_block_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    install_skill(home=tmp_path)
+    # simulate a stale prior install by mangling the managed block's body
+    md_path.write_text(
+        md_path.read_text(encoding="utf-8").replace("compaction-proof", "STALE"), encoding="utf-8"
+    )
+
+    install_skill(home=tmp_path)  # re-install refreshes the block in place
+
+    refreshed = md_path.read_text(encoding="utf-8")
+    assert "updated the plan-workflow rule" in capsys.readouterr().out  # reported as a refresh
+    assert "STALE" not in refreshed  # the old block was replaced, not left alongside
+    assert "compaction-proof" in refreshed
+    assert refreshed.count("Working plans as live skaldr docs") == 1
+
+
+def test_install_skill_plan_rule_places_existing_content_before_the_block(tmp_path: Path) -> None:
+    # The managed block must be appended AFTER the user's own content, never prepended over it.
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text("# My global rules\n\nkeep this line.\n", encoding="utf-8")
+
+    assert install_skill(home=tmp_path) == 0
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert claude_md.index("keep this line.") < claude_md.index(_PLAN_RULE_BEGIN)
+
+
+def test_install_skill_plan_rule_never_builds_on_an_unpaired_marker(tmp_path: Path) -> None:
+    # A hand-edited/partial CLAUDE.md with a lone BEGIN (no END) must not be treated as a managed
+    # block: content after the stray marker must survive a re-install, not be swallowed.
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text(
+        f"# Header\n\n{_PLAN_RULE_BEGIN}\nhalf-written\n\nreal content below\n", encoding="utf-8"
+    )
+
+    assert install_skill(home=tmp_path) == 0
+    assert install_skill(home=tmp_path) == 0  # the second run is where a naive parser eats content
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert "real content below" in claude_md
+    assert claude_md.count(_PLAN_RULE_END) == 1  # exactly one complete managed block
+
+
+def test_install_skill_reports_a_claude_md_write_error_but_keeps_the_installed_skill(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # CLAUDE.md is a directory, so the rule write raises OSError after the skill copy already
+    # succeeded — the error must name CLAUDE.md, not claim the skill install failed.
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "CLAUDE.md").mkdir()
+
+    rc = install_skill(home=tmp_path)
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert (tmp_path / ".claude" / "skills" / "skaldr" / "SKILL.md").is_file()  # skill copy survived
+    assert "could not update" in err
+    assert "CLAUDE.md" in err
+    assert "could not install the skill" not in err  # not misattributed to the skill copy
+
+
+def test_install_skill_plan_rule_leaves_claude_md_intact_when_the_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A mid-write failure (disk full) must not truncate the user's CLAUDE.md: the atomic temp-then-swap
+    # means the original survives untouched when the write raises.
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text("precious content\n", encoding="utf-8")
+    real_write_text = Path.write_text
+
+    def failing_write_text(self: Path, *args: object, **kwargs: object) -> int:
+        if self.name.endswith(".skaldr-tmp"):
+            raise OSError("No space left on device")
+        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", failing_write_text)
+
+    rc = install_skill(home=tmp_path)
+
+    assert rc == 1
+    assert md_path.read_text(encoding="utf-8") == "precious content\n"  # untouched, not truncated
 
 
 def test_install_skill_preserves_other_files_in_the_dir(tmp_path: Path) -> None:
