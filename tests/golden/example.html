@@ -225,6 +225,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	.list{margin-block:var(--s3); padding-inline-start:var(--s6)}
 	.list li{margin-block:var(--s1)}
+	.list .list{margin-block:var(--s1) 0}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
@@ -829,7 +830,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <h3 id="follow-up-checklist">Follow-up checklist</h3>
 
-<ol class="list"><li>Confirm the <code>bin &gt; 12</code> scan rule with the site lead.</li><li>Ship the 9-digit bin-code widening behind the scan flag.</li><li>Re-run the count and re-verify reconciliation.</li></ol>
+<ol class="list"><li>Confirm the <code>bin &gt; 12</code> scan rule with the site lead.</li><li>Ship the 9-digit bin-code widening behind the scan flag.<ol class="list"><li>Stage on the pilot aisle first.</li><li>Watch the mis-scan rate for one shift before widening.</li></ol></li><li>Re-run the count and re-verify reconciliation.</li></ol>
 
 <h2 id="rollout">Rollout</h2>
 

@@ -87,6 +87,7 @@
    of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
 {# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
+{% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list">{% for item in items %}{% if item is string %}<li>{{ item | richtext }}</li>{% else %}<li>{{ item.text | richtext }}{% if item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endif %}{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
 
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">
@@ -181,7 +182,7 @@
 {% elif block.type == "text" %}
 {% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
-<{{ "ol" if block.style == "number" else "ul" }} class="list">{% for item in block.items %}<li>{{ item | richtext }}</li>{% endfor %}</{{ "ol" if block.style == "number" else "ul" }}>
+{{ rich_list(block.items, block.style) }}
 {% elif block.type == "fact_strip" %}
 <div class="facts">{% for f in block.facts %}<span class="fact"><span class="k">{{ f.label }}</span><span>{{ f.value }}</span></span>{% endfor %}</div>
 {% elif block.type == "key_value" %}

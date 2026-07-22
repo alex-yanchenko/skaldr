@@ -169,7 +169,10 @@ blocks:
     style: number
     items:
       - "Confirm the `bin > 12` scan rule with the site lead."
-      - "Ship the 9-digit bin-code widening behind the scan flag."
+      - text: "Ship the 9-digit bin-code widening behind the scan flag."
+        items:
+          - "Stage on the pilot aisle first."
+          - "Watch the mis-scan rate for one shift before widening."
       - "Re-run the count and re-verify reconciliation."
 
   - type: heading

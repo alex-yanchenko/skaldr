@@ -211,6 +211,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	.list{margin-block:var(--s3); padding-inline-start:var(--s6)}
 	.list li{margin-block:var(--s1)}
+	.list .list{margin-block:var(--s1) 0}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}

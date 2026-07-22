@@ -345,6 +345,38 @@ def test_walkthrough_detail_renders_the_full_nested_block_list() -> None:
     assert '<div class="code"><div class="code-label">k</div><pre>x = 1</pre></div>' in html
 
 
+def test_list_renders_nested_sub_items_as_an_indented_child_list() -> None:
+    block = {
+        "type": "list",
+        "items": ["flat", {"text": "parent", "items": ["child a", {"text": "child b", "items": ["deep"]}]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ul class="list"><li>flat</li><li>parent'
+        '<ul class="list"><li>child a</li><li>child b'
+        '<ul class="list"><li>deep</li></ul></li></ul></li></ul>' in html
+    )
+
+
+def test_numbered_list_nests_ordered_children_in_the_parent_style() -> None:
+    block = {"type": "list", "style": "number", "items": [{"text": "step", "items": ["sub"]}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<ol class="list"><li>step<ol class="list"><li>sub</li></ol></li></ol>' in html
+
+
+def test_list_item_rich_text_is_formatted_at_every_level() -> None:
+    block = {"type": "list", "items": [{"text": "**bold** parent", "items": ["*em* child"]}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "<strong>bold</strong> parent" in html
+    assert "<em>em</em> child" in html
+
+
 def test_walkthrough_heading_in_a_step_detail_gets_a_slug_id() -> None:
     block = {
         "type": "walkthrough",

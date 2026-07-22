@@ -118,7 +118,7 @@ or to keep a small block from stretching across the whole page.
 |---|---|---|
 | `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
-| `list` | Bulleted or numbered points | `style: bullet\|number`, `items[]` |
+| `list` | Bulleted or numbered points (nestable) | `style: bullet\|number`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep) |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
 | `cards` | Headline numbers | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` |
