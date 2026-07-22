@@ -406,6 +406,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}
+		/* a rich cell with a blank line renders stacked cell paragraphs; gap between them, none before
+		   the first, so a one-paragraph cell is unchanged. */
+		& td .cell-p + .cell-p{margin-block-start:var(--s3)}
 		/* placement:cell badge column — the inline-block chips space out and wrap within the cell. */
 		& td.bc .chip{margin:1px 4px 1px 0}
 		& td.num{text-align:end; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}

@@ -24,12 +24,18 @@
 </details>
 {% endmacro %}
 
+{# A rich/text table cell: a blank line is a paragraph break (like text.body); a single newline
+   collapses. A one-paragraph cell renders inline, so single-line cells are unchanged. #}
+{% macro rich_cell(value) -%}
+{% set paras = value.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
+{%- endmacro %}
+
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
 {% set rtone = row.get("tone") %}
 <tr class="row{% if rtone %} {{ rtone }}{% endif %}">
 {% for c in cell_cols %}
 {% if c.key == title_key %}
-<td class="title">{{ row[c.key] | richtext }}
+<td class="title">{{ rich_cell(row[c.key]) }}
 {% for bc in title_badges %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
 {% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
@@ -40,7 +46,7 @@
 {% elif c.kind == "badge" %}
 <td class="bc">{% set raw = row[c.key] %}{% for key in (raw if raw is iterable and raw is not string else [raw]) %}{% set k = key | trim %}{% if k %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endif %}{% endfor %}</td>
 {% else %}
-<td>{{ row[c.key] | richtext }}</td>
+<td>{{ rich_cell(row[c.key]) }}</td>
 {% endif %}
 {% endfor %}
 </tr>

@@ -480,6 +480,8 @@ link instead.
 ```
 
 - **Columns** need at least one `text`/`rich` column (it hosts the row title and any chips). A
+  `text`/`rich` cell may hold **multiple paragraphs**: separate them with a blank line (like a
+  `text` block's `body`) and they stack; a single newline collapses to a space. A
   `badge` column defaults to `placement: title` — its value chips **under the row title** and the
   column `label` is ignored. Set `placement: cell` to give the badge **its own labelled column**
   instead, where the cell value is a badge key *or a list of keys* (several chips, wrapping) — reach
