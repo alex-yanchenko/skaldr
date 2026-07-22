@@ -17,7 +17,9 @@ blocks: [ ... ]     # the ordered content
 Top level is exactly `version`, `meta`, optional `badges`, `blocks` — nothing else. Every block
 is a mapping with a `type` discriminator. **Validation is strict:** an unknown block type, a
 field that doesn't belong to that block, an unknown top-level key, or a value of the wrong shape
-each fails the build with a precise path.
+each fails the build with a precise path — e.g. `error: invalid content data: blocks.3.items.2.value:
+number column needs a numeric value`. Run `skaldr --check <file>` to validate without rendering; read
+the path, fix, re-run.
 
 ## `meta`
 
@@ -114,7 +116,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level: 2\|3` |
+| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted or numbered points | `style: bullet\|number`, `items[]` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -145,8 +147,10 @@ string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside th
 `{label, direction?: up|down|flat, tone?}` — where you choose the `tone` (up isn't always
 good: for cost or errors, down is, so skaldr won't infer it) and `direction` sets the glyph. Images must be self-contained `data:` URIs — skaldr
 embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
-unencoded SVG isn't a valid URI and won't render). A `section` holds any blocks except another
-`section` (one level of nesting only); its optional `updated` shows a muted "updated <value>" stamp
+unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
+`section`, a `grid`, or a `walkthrough`. It **starts collapsed** (`collapsed: true` default) — right
+for an appendix or detail-on-demand; for a doc meant to be **read through** (a weekly status doc), set
+`collapsed: false` so it opens expanded. Its optional `updated` shows a muted "updated <value>" stamp
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
@@ -363,9 +367,10 @@ reading as a matrix — split into two swimlanes). Every declared lane and colum
 one step (no empty rows or columns).
 
 A lane or column is either a **bare string** (the simple case — the string is both the label and the
-reference key) or an **object** for more control: `{id, name}` on a lane, `{id, name, sub}` on a
-column. `id` (a safe slug — letters, digits, `_`, `-`) is the key steps reference, defaulting to
-`name`; set it to rename a header without touching every step. `sub` puts a secondary caption under a
+reference key, used verbatim; spaces are fine, e.g. `col: "Sprint 1"`) or an **object** for more
+control: `{id, name}` on a lane, `{id, name, sub}` on a column. The slug rule (letters, digits, `_`,
+`-` — no spaces) applies **only to an explicit `id`**, not to a bare-string name. `id` is the key steps
+reference, defaulting to `name`; set it to rename a header without touching every step. `sub` puts a secondary caption under a
 column header (e.g. `sub: "→ MVP demo"` or a date range).
 
 ```yaml
@@ -388,7 +393,9 @@ A step may also carry an optional `url` (http/https/mailto — e.g. its Jira/Git
 its number into a link, and a `state` — `normal` (default), `low`, or `blocked` — for emphasis. `low`
 fades the ticket (solid, still clearly live) for tail/low-priority work; `blocked` marks it waiting /
 on-hold with a dashed outline and a greyed number badge, so it reads as *stopped*, not merely quiet.
-The two are deliberately distinct. A step's `value` counts toward the totals in every state.
+The two are deliberately distinct. A step's `value` counts toward the totals in every state. States are
+conveyed by the styling alone — there's no auto-generated legend for them (unlike `badges`), so if your
+audience needs the meaning spelled out, add a short `callout`.
 
 To record dependencies, give a step an `id` (a safe slug — letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the

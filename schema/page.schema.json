@@ -1436,7 +1436,7 @@
         },
         "level": {
           "default": 2,
-          "description": "Heading level: 2 (section) or 3 (sub-heading).",
+          "description": "Heading level: 2 (major heading) or 3 (sub-heading).",
           "enum": [
             2,
             3
@@ -2361,7 +2361,7 @@
         },
         "collapsed": {
           "default": true,
-          "description": "Whether the section starts collapsed.",
+          "description": "Whether the section starts collapsed. Default true suits an appendix / detail; set false for a read-through living doc so the section opens expanded.",
           "title": "Collapsed",
           "type": "boolean"
         },
@@ -2379,7 +2379,7 @@
           "title": "Updated"
         },
         "blocks": {
-          "description": "Blocks; no nested section.",
+          "description": "Blocks in the section \u2014 any block except another section, grid, or walkthrough.",
           "items": {
             "discriminator": {
               "mapping": {
