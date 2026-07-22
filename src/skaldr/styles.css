@@ -486,8 +486,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
 			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
-		/* de-emphasised (step.muted): faded + dashed so tail/low-priority work recedes but stays put */
-		& .swim-tkt.muted{opacity:0.5; border-style:dashed}
+		/* step.state — two de-emphasis levels that must not read alike. `low`: solid, gently faded, so
+		   tail/low-priority work recedes but still looks live. `blocked`: dashed + a greyed (not blue)
+		   number badge, so waiting/on-hold work reads as stopped, not merely quiet. */
+		& .swim-tkt.low{opacity:0.6}
+		& .swim-tkt.blocked{opacity:0.85; border-style:dashed}
+		& .swim-tkt.blocked .swim-n{background:var(--neutral-bg); color:var(--muted); box-shadow:none}
 		/* the leading number is the step's identifier: a solid blue compartment flush to the ticket's
 		   left edge (theme-safe fill + contrasting text) with an inset bevel — light top, dark bottom —
 		   so it reads as a raised button. When the step carries a `url` it renders as an <a> and is the

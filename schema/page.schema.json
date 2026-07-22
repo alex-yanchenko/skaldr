@@ -2805,11 +2805,16 @@
           "description": "Optional link (http/https/mailto) for the step \u2014 e.g. its Jira/GitHub ticket. The step's number becomes a link out to it.",
           "title": "Url"
         },
-        "muted": {
-          "default": false,
-          "description": "De-emphasise this step (tail/low-priority work): the ticket renders faded and dashed so it recedes without leaving the matrix. Its value still counts toward the totals.",
-          "title": "Muted",
-          "type": "boolean"
+        "state": {
+          "default": "normal",
+          "description": "Ticket emphasis. `normal` (default) is full-weight active work. `low` fades the ticket (solid, still clearly live) for low-priority / tail work. `blocked` marks it waiting / on-hold \u2014 dashed outline + a greyed number badge, distinct from `low`. The value counts toward the totals in every state.",
+          "enum": [
+            "normal",
+            "low",
+            "blocked"
+          ],
+          "title": "State",
+          "type": "string"
         },
         "id": {
           "anyOf": [

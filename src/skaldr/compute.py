@@ -21,6 +21,7 @@ from skaldr.models import (
     Section,
     Swimlane,
     SwimlaneStep,
+    SwimlaneStepState,
     Table,
     Walkthrough,
     col_sum,
@@ -139,7 +140,7 @@ class SwimStep(TypedDict):
     label: str
     value: float | None  # the step's own value, shown on the ticket's trailing edge; None → hidden
     url: str | None  # optional link; the number becomes an <a> when set
-    muted: bool  # de-emphasise (faded + dashed) — tail/low-priority work
+    state: SwimlaneStepState  # normal | low (faded, live) | blocked (dashed + greyed badge)
     deps: list[str]  # the numbers (n) of the steps this one depends on, for a compact blocked-by marker
 
 
@@ -357,7 +358,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "label": step.label,
                     "value": step.value,
                     "url": step.url,
-                    "muted": step.muted,
+                    "state": step.state,
                     # dedupe on the displayed number (order-preserving) so repeats never show "needs 1, 1"
                     "deps": list(dict.fromkeys(id_to_n[dep] for dep in step.depends_on)),
                 }
