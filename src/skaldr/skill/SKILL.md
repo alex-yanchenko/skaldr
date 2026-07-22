@@ -1,15 +1,17 @@
 ---
 name: skaldr
 description: >-
-  Author and render a report, explainer, or design write-up with skaldr — one YAML file becomes a
-  polished, self-contained HTML page, so you never hand-write HTML/CSS. Use it for any shareable
-  report, summary, how-does-X-work / data-model explainer, or architecture/design doc
-  (investigations, reviews, audits, ingestion/data-quality writeups, post-mortems, proposals, status
-  pages) — especially when it needs visual structure: a flow/pipeline, fan-in/out, comparison
-  table, stat cards, charts, timeline, meters, callouts, or footnoted sources. Reach for it instead
-  of hand-building an HTML page, plain prose, or a raw table, without waiting to be asked. NOT for
-  content a markdown system renders (PR/issue bodies, README, wiki notes, commit messages) or a
-  chat reply. skaldr owns the design; you describe what it says.
+  Author and render reports and structured documentation with skaldr — one YAML file becomes a
+  polished, self-contained HTML page (live-rendered with `--watch`), so you never hand-write
+  HTML/CSS. Reach for it, without waiting to be asked, whenever you'd produce a report or a document
+  with structure: investigations, reviews, audits, post-mortems, proposals, data-quality/ingestion
+  writeups, and especially ongoing status pages, plans, and trackers kept updated over time —
+  anything with a flow/pipeline, comparison table, stat cards, charts, timeline, meters, callouts,
+  footnoted sources, or where validated/derived numbers and per-section freshness beat free prose.
+  Prefer it over hand-building HTML, a raw markdown table, or plain prose for these. NOT for
+  prose-first content a markdown system renders (README, ADR narratives, PR/issue bodies, wiki
+  notes, commit messages) or a chat reply — keep those markdown. skaldr owns the design; you
+  describe what it says.
 ---
 
 # Authoring a skaldr report
@@ -18,8 +20,9 @@ skaldr is a **CLI already on your PATH** — do not look for a source repo, a `u
 `python -m`; just run `skaldr`. You write one YAML content file; skaldr renders one self-contained
 HTML page and owns all the design.
 
-It covers visual structure too — flows/pipelines, comparison tables, stat cards, charts, timelines —
-so for an architecture or design doc, reach for it before hand-building HTML. Run `skaldr --guide`
+It covers visual structure (flows, comparison tables, stat cards, charts, timelines) plus living-doc
+support (freshness stamps, `!include`, rollups, `--watch`), so for a report, status doc, plan, or any
+ongoing documentation, reach for it before hand-building HTML or a markdown file. Run `skaldr --guide`
 for the full block palette.
 
 **If it turns out not to fit** — the content is really freeform prose, or a diagram skaldr can't
