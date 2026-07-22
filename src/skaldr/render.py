@@ -15,6 +15,7 @@ from markupsafe import Markup, escape
 
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
+from skaldr.errors import ReportError
 from skaldr.models import (
     ALLOWED_URL_SCHEMES,
     REFERENCE_KEY_PATTERN,
@@ -34,7 +35,10 @@ _ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
 
 
 def render_richtext(
-    text: str, ref_numbers: dict[str, int] | None = None, cited: set[str] | None = None
+    text: str,
+    ref_numbers: dict[str, int] | None = None,
+    cited: set[str] | None = None,
+    anchor_ids: frozenset[str] | None = None,
 ) -> Markup:
     """Escape, then apply the limited inline markdown subset. Code spans, footnote markers, and
     links are stashed as finished HTML *before* the bold/strike/italic passes run, so a stray `*`
@@ -69,6 +73,18 @@ def render_richtext(
 
     def _link(match: re.Match[str]) -> str:
         label, url = match.group(1), match.group(2)
+        if url.startswith("#"):
+            # Same-page anchor: the target must be a real heading/section id, so a dangling `#link`
+            # fails the build instead of shipping a jump-to-nowhere. `url` is already HTML-escaped, and
+            # every valid slug is `[a-z0-9-]`. Only a full render supplies the anchor set; without one
+            # (a bare render_richtext call) there is nothing to resolve against, so leave it literal.
+            if anchor_ids is None:
+                return match.group(0)
+            if url[1:] not in anchor_ids:
+                raise ReportError(
+                    f"rich text links to unknown anchor '{url}' — no heading or section has that id"
+                )
+            return _stash(f'<a href="{url}">{label}</a>')
         if url.startswith(ALLOWED_URL_SCHEMES):
             return _stash(f'<a href="{url}">{label}</a>')
         return match.group(0)
@@ -116,12 +132,13 @@ def _render(report: Report, template: str, *, expand: bool = False) -> str:
         return slugs[id(block)]
 
     ref_numbers = compute.reference_numbers(report)
+    anchor_ids = frozenset(slugs.values())
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
     # trailing references list reads it to give a cited key a backlink and skip one never cited.
     cited_references: set[str] = set()
 
     def richtext(text: str) -> Markup:
-        return render_richtext(text, ref_numbers, cited_references)
+        return render_richtext(text, ref_numbers, cited_references, anchor_ids)
 
     filters = cast("dict[str, Any]", env.filters)
     filters["richtext"] = richtext

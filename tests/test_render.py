@@ -4,6 +4,7 @@ import re
 
 import pytest
 
+from skaldr.errors import ReportError
 from skaldr.models import load_report, parse_report
 from skaldr.render import render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
@@ -1351,6 +1352,40 @@ def test_richtext_escapes_raw_html() -> None:
 
 def test_richtext_rejects_disallowed_link_scheme() -> None:
     assert str(render_richtext("[x](javascript:alert)")) == "[x](javascript:alert)"
+
+
+def test_richtext_renders_a_known_same_page_anchor_link() -> None:
+    html = str(render_richtext("see [the overview](#overview)", anchor_ids=frozenset({"overview"})))
+
+    assert html == 'see <a href="#overview">the overview</a>'
+
+
+def test_richtext_rejects_a_dangling_same_page_anchor() -> None:
+    with pytest.raises(ReportError, match=r"unknown anchor '#missing'"):
+        render_richtext("[x](#missing)", anchor_ids=frozenset({"overview"}))
+
+
+def test_richtext_leaves_an_anchor_link_literal_without_an_anchor_set() -> None:
+    assert str(render_richtext("[x](#overview)")) == "[x](#overview)"
+
+
+def test_same_page_anchor_link_resolves_to_a_heading_id_in_a_full_render() -> None:
+    blocks = [
+        {"type": "heading", "text": "Overview"},
+        {"type": "text", "body": "Jump to [the overview](#overview)."},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert '<a href="#overview">the overview</a>' in html
+    assert 'id="overview"' in html  # the heading it targets
+
+
+def test_dangling_anchor_link_fails_the_whole_render() -> None:
+    blocks = [{"type": "text", "body": "[broken](#nope)"}]
+
+    with pytest.raises(ReportError, match=r"unknown anchor '#nope'"):
+        render_html(parse_report(make_report(blocks=blocks)))
 
 
 def test_richtext_leaves_marks_literal_inside_a_code_span() -> None:
