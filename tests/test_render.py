@@ -1611,6 +1611,31 @@ def test_section_collapsed_false_renders_open() -> None:
     assert '<details class="section" open>' in html
 
 
+def test_section_updated_renders_a_stamp_in_the_summary() -> None:
+    block = {
+        "type": "section",
+        "title": "S",
+        "collapsed": False,
+        "updated": "18 Jul 2026",
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+    report = parse_report(make_report(blocks=[block]))
+
+    html = render_html(report)
+
+    assert '<summary>S<span class="upd">updated 18 Jul 2026</span></summary>' in html
+
+
+def test_section_without_updated_has_no_stamp() -> None:
+    block = {"type": "section", "title": "S", "collapsed": False, "blocks": [{"type": "text", "body": "x"}]}
+    report = parse_report(make_report(blocks=[block]))
+
+    html = render_html(report)
+
+    assert "<summary>S</summary>" in html
+    assert 'class="upd"' not in html
+
+
 def test_image_max_width_renders_style() -> None:
     src = "data:image/svg+xml,<svg/>"
     block = {"type": "image", "src": src, "alt": "a", "max_width": 400}

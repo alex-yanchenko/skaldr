@@ -27,6 +27,7 @@ meta:
   subtitle: ["one line", "another"]                    # optional
   source: "WMS export"           # optional; shown in the provenance footer
   date: "Q3 2026"                # optional; footer. Author it — skaldr never inserts "now"
+  updated: "18 Jul 2026"         # optional; footer "updated <value>" — a living-doc freshness stamp
   toc: true                      # optional; auto table-of-contents from level-2 headings
   hero: true                     # optional; a larger display title + subtitle in a tinted band
 ```
@@ -135,7 +136,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, muted?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
-| `section` | Collapsible container | `title`, `collapsed?` (default true), `blocks[]` |
+| `section` | Collapsible container | `title`, `collapsed?` (default true), `updated?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 | `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` |
 
@@ -145,7 +146,8 @@ string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside th
 good: for cost or errors, down is, so skaldr won't infer it) and `direction` sets the glyph. Images must be self-contained `data:` URIs — skaldr
 embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any blocks except another
-`section` (one level of nesting only).
+`section` (one level of nesting only); its optional `updated` shows a muted "updated <value>" stamp
+in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
