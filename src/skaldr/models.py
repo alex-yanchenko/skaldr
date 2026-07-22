@@ -1402,9 +1402,48 @@ def parse_report(data: Any) -> Report:
         raise ReportError(_format_validation_error(err)) from err
 
 
-def load_report(path: Path) -> Report:
+# Non-cyclic depth cap: cycles are already caught by `ancestors`, but a pathological non-cyclic chain
+# would recurse until Python's own recursion limit and surface as a raw RecursionError. Every other
+# load failure is a ReportError, so cap the depth to keep that contract. Real docs never nest this far.
+_MAX_INCLUDE_DEPTH = 50
+
+
+def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
+    """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
+    of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
+    so a fragment set can move as a unit. `ancestors` is the chain of files currently being loaded —
+    a resolved path reappearing in it is a cycle and raises rather than recursing forever."""
     try:
-        data = yaml.safe_load(read_text_file(path))
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as err:  # RuntimeError: a symlink loop while resolving
+        raise ReportError(f"could not resolve {path}: {err}") from err
+    if resolved in ancestors:
+        chain = " -> ".join(str(ancestor) for ancestor in (*ancestors, resolved))
+        raise ReportError(f"circular !include: {chain}")
+    if len(ancestors) >= _MAX_INCLUDE_DEPTH:
+        raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path} — likely a mistake")
+    text = read_text_file(path)
+
+    class _IncludeLoader(yaml.SafeLoader):
+        """SafeLoader subclass — `!include` scoped to this file's dir; keeps `yaml.load` safe."""
+
+    def _construct_include(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
+        if not isinstance(node, yaml.ScalarNode):
+            raise ReportError(f"!include in {path} takes a single file path, not a list or mapping")
+        target = str(loader.construct_scalar(node)).strip()
+        if not target:
+            raise ReportError(f"!include in {path} needs a file path")
+        if Path(target).is_absolute():
+            raise ReportError(f"!include in {path} must be a relative path, not absolute: {target}")
+        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved))
+
+    _IncludeLoader.add_constructor("!include", _construct_include)
+    try:
+        return yaml.load(text, Loader=_IncludeLoader)
     except yaml.YAMLError as err:
         raise ReportError(f"invalid YAML in {path}: {err}") from err
+
+
+def load_report(path: Path) -> Report:
+    data = _load_yaml_with_includes(path, ())
     return parse_report(data)
