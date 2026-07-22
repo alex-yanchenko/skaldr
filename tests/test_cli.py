@@ -327,3 +327,149 @@ def test_emit_json_invalid_file_exits_1(tmp_path: Path, capsys: pytest.CaptureFi
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "error: invalid content data" in captured.err
+
+
+def test_watch_renders_on_start_then_stops_on_interrupt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # the initial render runs before the first sleep; interrupting there leaves just that render
+    def stop(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", stop)
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "out.html"
+
+    rc = main(["--watch", str(data_path), "-o", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert out_path.exists()  # the real render ran on start
+    assert f"OK  {out_path}" in captured.out
+    assert "stopped watching" in captured.out
+
+
+def test_watch_survives_an_invalid_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # an invalid file must not crash the loop: the start render prints its error and returns, the loop
+    # reaches the interrupt and exits 0.
+    def stop(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", stop)
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
+    out_path = tmp_path / "out.html"
+
+    rc = main(["--watch", str(data_path), "-o", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert rc == 0  # the bad render didn't crash the loop
+    assert "error:" in captured.err
+    assert not out_path.exists()
+    assert "stopped watching" in captured.out
+
+
+@pytest.mark.parametrize("argv_tail", [["--check"], ["--emit-json"], ["--pdf", "r.pdf"]])
+def test_watch_rejects_incompatible_modes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--watch", str(data_path), *argv_tail])
+
+    assert excinfo.value.code == 2
+    assert "--watch" in capsys.readouterr().err
+
+
+def test_watch_re_renders_only_when_the_file_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "out.html"
+    renders: list[Path] = []
+
+    def fake_render(_dp: Path, op: Path, *, embed: bool) -> int:  # noqa: ARG001
+        renders.append(op)
+        return 0
+
+    monkeypatch.setattr("skaldr.cli._render_once", fake_render)
+    # after the initial render (last=1.0): unchanged (1.0, no render), momentarily missing (None, no
+    # render), then changed (2.0, one render) — exercises all three branches of the poll guard.
+    mtimes = iter([1.0, 1.0, None, 2.0])
+
+    def fake_mtime(_p: Path) -> float | None:
+        return next(mtimes)
+
+    monkeypatch.setattr("skaldr.cli._mtime", fake_mtime)
+    sleeps = {"n": 0}
+
+    def fake_sleep(_seconds: float) -> None:
+        sleeps["n"] += 1
+        if sleeps["n"] >= 4:  # let the same / missing / changed iterations all run first
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", fake_sleep)
+
+    rc = main(["--watch", str(data_path), "-o", str(out_path)])
+
+    assert rc == 0
+    # initial render + exactly one on-change render (the unchanged and missing polls did NOT render)
+    assert len(renders) == 2
+    assert "stopped watching" in capsys.readouterr().out
+
+
+def test_watch_uses_the_default_out_path_when_no_output_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def stop(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", stop)
+    monkeypatch.chdir(tmp_path)  # default out is out/<stem>.html under the cwd
+    data_path = _write(tmp_path, make_report(), "plan.yaml")
+
+    rc = main(["--watch", str(data_path)])
+
+    assert rc == 0
+    assert (tmp_path / "out" / "plan.html").exists()
+
+
+def test_watch_exits_cleanly_on_interrupt_during_the_initial_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Ctrl-C landing during the very first render must still exit cleanly (the initial render is inside
+    # the interrupt handler, not before it).
+    def interrupt(_dp: Path, _op: Path, *, embed: bool) -> int:  # noqa: ARG001
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("skaldr.cli._render_once", interrupt)
+    data_path = _write(tmp_path, make_report())
+
+    rc = main(["--watch", str(data_path), "-o", str(tmp_path / "o.html")])
+
+    assert rc == 0
+    assert "stopped watching" in capsys.readouterr().out
+
+
+def test_watch_survives_a_render_error_that_is_not_a_report_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # a non-ReportError/OSError failure (e.g. a template bug) must be caught too, not crash the loop
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("boom")
+
+    monkeypatch.setattr("skaldr.cli.render_report", boom)
+
+    def stop(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", stop)
+    data_path = _write(tmp_path, make_report())
+
+    rc = main(["--watch", str(data_path), "-o", str(tmp_path / "o.html")])
+
+    captured = capsys.readouterr()
+    assert rc == 0  # the ValueError was caught; the loop reached the interrupt
+    assert "boom" in captured.err

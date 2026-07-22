@@ -25,6 +25,7 @@ installing.)
 ```bash
 skaldr report.yaml                 # → out/report.html
 skaldr report.yaml -o review.html  # choose the output path
+skaldr report.yaml --watch -o review.html  # re-render on every save (live edit→preview; Ctrl-C to stop)
 skaldr report.yaml --pdf report.pdf  # a ready-to-share PDF (drives a headless Chrome/Chromium)
 open review.html                   # a self-contained file — open it, host it, or share it
 ```

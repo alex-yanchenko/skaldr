@@ -1,10 +1,11 @@
-"""CLI entry point: render a content file, validate it (--check), dump its normalised model
-(--emit-json), print the guide, export the schema, or install the skill."""
+"""CLI entry point: render a content file (once or on a --watch loop), validate it (--check), dump its
+normalised model (--emit-json), print the guide, export the schema, or install the skill."""
 
 import argparse
 import json
 import shutil
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -12,6 +13,13 @@ from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import render_html, render_report
+
+_POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
+
+
+def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
+    """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
+    return Path(out_arg).resolve() if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,6 +54,13 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge — needs one "
         "installed; set SKALDR_BROWSER to override discovery). Prints the full page's print styling.",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="re-render to HTML on every save of the content file — a live edit-preview loop; Ctrl-C to "
+        "stop. HTML only; can't combine with --check/--emit-json/--pdf. (Watches the file itself, not "
+        "its !include fragments.)",
     )
     parser.add_argument(
         "--write-schema",
@@ -88,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--check and --emit-json are mutually exclusive (each is a distinct validate-only mode)")
     if (args.check or args.emit_json) and (args.out or args.pdf or args.embed):
         parser.error("--check/--emit-json only validate — they write no HTML, so -o/--pdf/--embed do nothing")
+    if args.watch and (args.check or args.emit_json or args.pdf):
+        parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
 
     if args.check:
         if not args.data:
@@ -100,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("only one content file can be processed at a time (use --check to validate several)")
 
     data_path = Path(args.data[0]).resolve()
+
+    if args.watch:
+        return _watch(data_path, _resolve_out_path(data_path, args.out), embed=args.embed)
 
     if args.emit_json:
         try:
@@ -121,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         # HTML first — it needs no browser, so a later PDF failure never costs the reader the HTML.
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
-            out_path = Path(args.out).resolve() if args.out else Path.cwd() / "out" / f"{data_path.stem}.html"
+            out_path = _resolve_out_path(data_path, args.out)
             render_report(report, out_path, embed=args.embed)
             written.append(out_path)
         if args.pdf:
@@ -139,6 +159,49 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OK  {path}")
     print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
     return 0
+
+
+def _render_once(data_path: Path, out_path: Path, *, embed: bool) -> int:
+    """Render the content file to HTML once. Returns 0 on success, 1 on a load/render error (printed) —
+    it never raises, so the --watch loop survives an invalid mid-edit save."""
+    try:
+        report = load_report(data_path)
+        render_report(report, out_path, embed=embed)
+    except Exception as exc:
+        # Resilience boundary: any render failure prints and keeps the --watch loop alive. Catching
+        # Exception (not BaseException) still lets a Ctrl-C KeyboardInterrupt propagate to the loop.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"OK  {out_path}")
+    print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
+    return 0
+
+
+def _mtime(path: Path) -> float | None:
+    """The file's modification time, or None if it's momentarily missing (mid-save/rename)."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _watch(data_path: Path, out_path: Path, *, embed: bool, interval: float = _POLL_INTERVAL_SECONDS) -> int:
+    """Re-render to HTML whenever the content file changes, until interrupted. Polls the mtime (no
+    third-party watcher); a failing render prints its error and the loop keeps going."""
+    print(f"watching {data_path} — re-rendering to {out_path} on change (Ctrl-C to stop)")
+    try:
+        _render_once(data_path, out_path, embed=embed)
+        last = _mtime(data_path)
+        while True:
+            time.sleep(interval)
+            current = _mtime(data_path)
+            if current is not None and current != last:
+                last = current
+                print(f"\n{data_path} changed — re-rendering:")
+                _render_once(data_path, out_path, embed=embed)
+    except KeyboardInterrupt:
+        print("\nstopped watching")
+        return 0
 
 
 def _check_files(paths: Sequence[str]) -> int:
