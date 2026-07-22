@@ -360,6 +360,14 @@ def test_list_renders_nested_sub_items_as_an_indented_child_list() -> None:
     )
 
 
+def test_list_item_object_without_children_emits_no_nested_list() -> None:
+    block = {"type": "list", "items": [{"text": "leaf"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<ul class="list"><li>leaf</li></ul>' in html  # no empty child <ul></ul>
+
+
 def test_numbered_list_nests_ordered_children_in_the_parent_style() -> None:
     block = {"type": "list", "style": "number", "items": [{"text": "step", "items": ["sub"]}]}
 

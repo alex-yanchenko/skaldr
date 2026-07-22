@@ -282,6 +282,20 @@ def test_list_parses_flat_and_nested_items_to_whole_model() -> None:
     )
 
 
+def test_list_nesting_at_the_max_depth_is_accepted() -> None:
+    four_deep = {
+        "type": "list",
+        "items": [{"text": "1", "items": [{"text": "2", "items": [{"text": "3", "items": ["4"]}]}]}],
+    }
+
+    report = parse_report(make_report(blocks=[four_deep]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        items=[ListItem(text="1", items=[ListItem(text="2", items=[ListItem(text="3", items=["4"])])])],
+    )
+
+
 def test_list_nesting_beyond_the_max_depth_is_rejected() -> None:
     five_deep = {
         "type": "list",
