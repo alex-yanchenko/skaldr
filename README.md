@@ -36,6 +36,9 @@ help you write the content file and share the result:
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
+skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
+skaldr --check reports/*.yaml      # validate a whole set at once — for a pre-commit hook or CI
+skaldr --emit-json report.yaml     # print the normalised model as JSON on stdout (for tooling/agents)
 ```
 
 For a **PDF**, use `--pdf` (above): it prints the page's print styling with a headless browser you

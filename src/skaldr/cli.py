@@ -1,9 +1,11 @@
-"""CLI entry point: render a content file, print the guide, export the schema, or install the skill."""
+"""CLI entry point: render a content file, validate it (--check), dump its normalised model
+(--emit-json), print the guide, export the schema, or install the skill."""
 
 import argparse
 import json
 import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from skaldr.errors import ReportError
@@ -14,8 +16,24 @@ from skaldr.render import render_html, render_report
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render a skaldr content file to an HTML page.")
-    parser.add_argument("data", nargs="?", help="path to the content YAML")
+    parser.add_argument(
+        "data",
+        nargs="*",
+        help="path to the content YAML (one to render; one or more with --check)",
+    )
     parser.add_argument("-o", "--out", help="output HTML path (default: out/<data-stem>.html)")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate the content file(s) against the schema and exit — no HTML written. Pass several "
+        "(e.g. a glob) to validate a whole set; exits non-zero if any file is invalid.",
+    )
+    parser.add_argument(
+        "--emit-json",
+        action="store_true",
+        help="validate the content file and print its normalised model as JSON to stdout (no HTML) — "
+        "for tooling/an agent to query the data without re-parsing YAML + markdown.",
+    )
     parser.add_argument(
         "--embed",
         action="store_true",
@@ -65,10 +83,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OK  {schema_path}")
         return 0
 
+    # --check and --emit-json are validate-only: they never write, so an output flag is a silent no-op.
+    if args.check and args.emit_json:
+        parser.error("--check and --emit-json are mutually exclusive (each is a distinct validate-only mode)")
+    if (args.check or args.emit_json) and (args.out or args.pdf or args.embed):
+        parser.error("--check/--emit-json only validate — they write no HTML, so -o/--pdf/--embed do nothing")
+
+    if args.check:
+        if not args.data:
+            parser.error("--check needs at least one content file")
+        return _check_files(args.data)
+
     if not args.data:
         parser.error("a content file is required (or use --write-schema)")
+    if len(args.data) > 1:
+        parser.error("only one content file can be processed at a time (use --check to validate several)")
 
-    data_path = Path(args.data).resolve()
+    data_path = Path(args.data[0]).resolve()
+
+    if args.emit_json:
+        try:
+            report = load_report(data_path)
+        except ReportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(report.model_dump(mode="json"), indent=2))
+        return 0
     # --embed only shapes HTML output; with --pdf and no -o no HTML is written, so it would be inert.
     if args.embed and args.pdf and not args.out:
         parser.error(
@@ -99,6 +139,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OK  {path}")
     print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
     return 0
+
+
+def _check_files(paths: Sequence[str]) -> int:
+    """Validate each content file against the schema without rendering. Prints one line per file and
+    returns 1 if any file is invalid, so it drops straight into a pre-commit hook or CI over a glob."""
+    failed = 0
+    for raw_path in paths:
+        path = Path(raw_path)
+        try:
+            load_report(path)
+        except ReportError as exc:
+            failed += 1
+            print(f"FAIL  {path}: {exc}", file=sys.stderr)
+        else:
+            print(f"OK    {path}")
+    if failed:
+        print(f"\n{_plural(failed, 'file')} failed", file=sys.stderr)
+    return 1 if failed else 0
 
 
 def _guide_text() -> str:

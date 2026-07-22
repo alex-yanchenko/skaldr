@@ -11,8 +11,8 @@ from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
 
-def _write(tmp_path: Path, data: dict[str, object]) -> Path:
-    path = tmp_path / "report.yaml"
+def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -> Path:
+    path = tmp_path / name
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
     return path
 
@@ -173,3 +173,128 @@ def test_every_field_has_a_description() -> None:
     ]
 
     assert undocumented == []
+
+
+def test_check_valid_file_exits_0_without_rendering(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--check", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert f"OK    {data_path}" in captured.out
+    assert not out_path.exists()  # --check never writes
+
+
+def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"FAIL  {data_path}" in captured.err
+
+
+def test_check_multiple_files_fails_if_any_is_invalid(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # bad BEFORE good: proves --check keeps going after the first failure (a stop-on-first-failure
+    # regression would drop the trailing good file and its OK line).
+    bad = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]), "bad.yaml")
+    good = _write(tmp_path, make_report(), "good.yaml")
+
+    exit_code = main(["--check", str(bad), str(good)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"OK    {good}" in captured.out  # the good one, reported after the failing one
+    assert f"FAIL  {bad}" in captured.err
+    assert "1 file failed" in captured.err
+
+
+def test_check_without_a_file_errors(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--check"])
+
+    assert excinfo.value.code == 2
+    assert "--check needs at least one content file" in capsys.readouterr().err
+
+
+def test_check_reports_a_missing_file_as_a_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "nope.yaml"
+
+    exit_code = main(["--check", str(missing)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"FAIL  {missing}: file not found" in captured.err  # no traceback escapes
+
+
+def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    good = _write(tmp_path, make_report(), "a.yaml")
+    other = _write(tmp_path, make_report(), "b.yaml")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(good), str(other), "-o", str(tmp_path / "out.html")])
+
+    assert excinfo.value.code == 2
+    assert "only one content file can be processed at a time" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("argv_tail", "expected"),
+    [
+        (["--emit-json"], "mutually exclusive"),
+        (["-o", "out.html"], "-o/--pdf/--embed do nothing"),
+        (["--embed"], "-o/--pdf/--embed do nothing"),
+    ],
+)
+def test_check_rejects_conflicting_output_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str], expected: str
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--check", str(data_path), *argv_tail])
+
+    assert excinfo.value.code == 2
+    assert expected in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        make_report(blocks=[{"type": "text", "body": "hi"}]),
+        make_report(blocks=[make_reconciled_table()]),  # a nested block with rows + reconcile
+    ],
+)
+def test_emit_json_prints_the_normalised_model(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], raw: dict[str, object]
+) -> None:
+    data_path = _write(tmp_path, raw)
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert not out_path.exists()  # no HTML written
+    # stdout is exactly the validated model dumped as JSON — every field (meta, badges, nested
+    # blocks) filled with its normalised default, nothing dropped or reshaped.
+    assert json.loads(captured.out) == Report.model_validate(raw).model_dump(mode="json")
+
+
+def test_emit_json_invalid_file_exits_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "error: invalid content data" in captured.err
