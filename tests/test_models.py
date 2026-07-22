@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from skaldr.errors import ReportError
 from skaldr.models import (
@@ -11,6 +12,7 @@ from skaldr.models import (
     Flow,
     FlowStep,
     Grid,
+    Group,
     Meta,
     Report,
     Swimlane,
@@ -454,6 +456,84 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"rollup.by 'tag' has no values to count"):
         parse_report(make_report(blocks=[table]))
+
+
+_POSITIONAL_COLUMNS = [
+    {"key": "issue", "label": "Issue", "kind": "text"},
+    {"key": "tag", "label": "", "kind": "badge"},
+    {"key": "n", "label": "N", "kind": "number"},
+]
+
+
+def test_positional_row_expands_to_the_same_as_a_mapping_row() -> None:
+    positional = Table.model_validate(make_table(columns=_POSITIONAL_COLUMNS, rows=[["Dupe", "FLOOR", 600]]))
+    mapping = Table.model_validate(
+        make_table(columns=_POSITIONAL_COLUMNS, rows=[{"issue": "Dupe", "tag": "FLOOR", "n": 600}])
+    )
+
+    assert positional.model_dump() == mapping.model_dump()
+
+
+def test_positional_row_alongside_a_malformed_column_reports_the_column_error() -> None:
+    # malformed columns make row-expansion early-return; the positional list row must then surface the
+    # column error cleanly, not crash validation.
+    table = make_table(
+        columns=[{"key": "a", "label": "A", "kind": "text"}, {"key": 5, "label": "N", "kind": "number"}],
+        rows=[["x", 1]],
+    )
+
+    with pytest.raises(ReportError, match=r"Input should be a valid string"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_positional_and_mapping_rows_mix_in_one_table() -> None:
+    cols = [{"key": "a", "label": "A", "kind": "text"}, {"key": "n", "label": "N", "kind": "number"}]
+    table = Table.model_validate(make_table(columns=cols, rows=[["x", 1], {"a": "y", "n": 2}]))
+
+    assert table.all_rows() == [{"a": "x", "n": 1}, {"a": "y", "n": 2}]
+
+
+def test_positional_rows_expand_inside_groups() -> None:
+    cols = [{"key": "a", "label": "A", "kind": "text"}, {"key": "n", "label": "N", "kind": "number"}]
+    table = Table.model_validate(
+        make_table(columns=cols, groups=[{"name": "G", "rows": [["x", 1], ["y", 2]]}])
+    )
+
+    assert table.all_rows() == [{"a": "x", "n": 1}, {"a": "y", "n": 2}]
+
+
+def test_positional_row_preserves_a_list_cell_value() -> None:
+    cols = [
+        {"key": "name", "label": "N", "kind": "text"},
+        {"key": "access", "label": "Access", "kind": "badge", "placement": "cell"},
+    ]
+    table = Table.model_validate(make_table(columns=cols, rows=[["SOAXREF", ["WRITE", "READ"]]]))
+
+    assert table.all_rows() == [{"name": "SOAXREF", "access": ["WRITE", "READ"]}]
+
+
+@pytest.mark.parametrize("row", [["x"], ["x", 1, "extra"]], ids=["too-few", "too-many"])
+def test_positional_row_with_the_wrong_length_is_rejected(row: list[Any]) -> None:
+    cols = [{"key": "a", "label": "A", "kind": "text"}, {"key": "n", "label": "N", "kind": "number"}]
+    table = make_table(columns=cols, rows=[row])
+
+    with pytest.raises(ReportError, match=rf"positional row needs exactly 2 values.*got {len(row)}"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_positional_row_still_validates_cell_types() -> None:
+    cols = [{"key": "a", "label": "A", "kind": "text"}, {"key": "n", "label": "N", "kind": "number"}]
+    table = make_table(columns=cols, rows=[["x", "not-a-number"]])
+
+    with pytest.raises(ReportError, match=r"rows\.0\.n: number column needs a numeric value"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_group_built_with_an_unexpanded_positional_row_is_rejected() -> None:
+    # the loud guard: a Group constructed outside the table's row-expansion (which turns list rows
+    # into mappings) must reject a raw list row, not let it crash the render.
+    with pytest.raises(ValidationError, match=r"group rows must be mappings"):
+        Group.model_validate({"name": "G", "rows": [["x", "y"]]})
 
 
 def test_row_tone_is_a_reserved_key_not_an_unknown_column() -> None:

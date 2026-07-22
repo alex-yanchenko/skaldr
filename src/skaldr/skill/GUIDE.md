@@ -502,6 +502,19 @@ link instead.
 - **Every row supplies every column key and nothing else** (plus an optional `subrows`, and an
   optional `tone: muted | danger`). A row `tone` emphasises the whole row: `muted` dims and strikes
   it (a rejected/superseded row), `danger` tints it red (a bad row).
+- **Compact rows.** For a dense, data-heavy table, write a row as a **positional list** of values in
+  column order instead of a mapping — no repeated keys:
+
+  ```yaml
+  columns: [{key: issue, kind: text}, {key: tag, kind: badge}, {key: n, kind: number}]
+  rows:
+    - [Double-counted units, FLOOR, 600]     # positional: values in column order
+    - {issue: Complex, tag: FLOOR, n: 10, subrows: […]}   # still a mapping — mix freely
+  ```
+
+  A list row must have exactly one value per column (a length mismatch fails the build). Types and
+  list cells (a `placement: cell` badge column's `[KEY, KEY]`) work the same as in a mapping; a row
+  that needs `subrows` or `tone` stays a mapping (a list has no slot for them).
 - **`reconcile`** is the trust check: the column sum, plus any `handled` bucket, must equal
   `total` or the build fails naming the delta. With `pct_of_total` on a number column, each cell
   also shows its share of the reconcile total.
