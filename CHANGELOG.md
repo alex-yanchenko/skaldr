@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0](https://github.com/alex-yanchenko/skaldr/compare/v1.3.3...v1.4.0) (2026-07-22)
+
+
+### Features
+
+* **cli:** --check (validate without rendering) and --emit-json (normalised model) ([#71](https://github.com/alex-yanchenko/skaldr/issues/71)) ([e2e91bb](https://github.com/alex-yanchenko/skaldr/commit/e2e91bb0d7eb5b38e3e4b04d7094287db6a5142f))
+* **freshness:** per-section and document updated: stamps for living docs ([#73](https://github.com/alex-yanchenko/skaldr/issues/73)) ([1eb4640](https://github.com/alex-yanchenko/skaldr/commit/1eb46408a1706dde2895b6e3fafb00321d6e1b7b))
+* **models:** !include for shared YAML fragments (relative paths, cycle detection) ([#72](https://github.com/alex-yanchenko/skaldr/issues/72)) ([bdab59d](https://github.com/alex-yanchenko/skaldr/commit/bdab59d0d68540b9d215651307033625dbd72f91))
+* **swimlane:** lane/column ids + column sub-captions (string-or-object addressing) ([#69](https://github.com/alex-yanchenko/skaldr/issues/69)) ([ec2f9d6](https://github.com/alex-yanchenko/skaldr/commit/ec2f9d68232d2d0d7241e0deb56116cedf170b27))
+* **swimlane:** per-step value on the ticket + totals-row refinements ([#66](https://github.com/alex-yanchenko/skaldr/issues/66)) ([1420889](https://github.com/alex-yanchenko/skaldr/commit/14208891580cc25b64e245d7e589b07a994bf5da))
+* **swimlane:** step dependencies via id + depends_on, shown as a "needs N" marker ([#68](https://github.com/alex-yanchenko/skaldr/issues/68)) ([73a2f72](https://github.com/alex-yanchenko/skaldr/commit/73a2f724d6fb938d5abf7714c04fc0a1f762c9fa))
+* **swimlane:** sum step values into per-column, per-lane and per-group totals ([#65](https://github.com/alex-yanchenko/skaldr/issues/65)) ([5b18ce2](https://github.com/alex-yanchenko/skaldr/commit/5b18ce27c3ed3c82a2937bf6e767c788d5216cdd))
+* **table:** badge column placement:cell — chips in their own labelled column ([#70](https://github.com/alex-yanchenko/skaldr/issues/70)) ([7de24f7](https://github.com/alex-yanchenko/skaldr/commit/7de24f7843e4cfe82b1de151e0543a22e2f80ee3))
+* **table:** render blank lines in rich/text cells as paragraph breaks ([#75](https://github.com/alex-yanchenko/skaldr/issues/75)) ([734d05c](https://github.com/alex-yanchenko/skaldr/commit/734d05ca3c502011e592f6bfbaa86b18175526a3))
+* **table:** rollup — counts rows by a badge column into a derived summary strip ([#74](https://github.com/alex-yanchenko/skaldr/issues/74)) ([576538e](https://github.com/alex-yanchenko/skaldr/commit/576538ef461aa33aa7a0c46f52f54cc804e5e965))
+
+
+### Bug Fixes
+
+* **swimlane:** stop the cap-separator poke firing against ungrouped columns ([#63](https://github.com/alex-yanchenko/skaldr/issues/63)) ([c462bde](https://github.com/alex-yanchenko/skaldr/commit/c462bdeac9317677935e0662ea46c5d80279b2b0))
+
 ## [1.3.3](https://github.com/alex-yanchenko/skaldr/compare/v1.3.2...v1.3.3) (2026-07-21)
 
 
