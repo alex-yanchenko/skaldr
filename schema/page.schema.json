@@ -1443,6 +1443,20 @@
           ],
           "title": "Level",
           "type": "integer"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived slug so `[\u2026](#id)` links survive a heading rename. Must be unique across the page.",
+          "title": "Id"
         }
       },
       "required": [
@@ -2397,6 +2411,20 @@
           "description": "Summary label shown on the collapsible.",
           "title": "Title",
           "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived slug so `[\u2026](#id)` links survive a title rename. Must be unique across the page.",
+          "title": "Id"
         },
         "collapsed": {
           "default": true,
