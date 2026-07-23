@@ -21,7 +21,7 @@ _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for 
 # Markers delimiting skaldr's managed plan-workflow block inside the user's CLAUDE.md. ASCII only —
 # they're matched by `re`/string ops on every re-install, so no fragile non-ASCII in the anchor.
 _PLAN_RULE_BEGIN = (
-    "<!-- skaldr:plan-rule - managed by `skaldr --install-skill`; delete this block to remove -->"
+    "<!-- skaldr:plan-rule - managed by `skaldr --install-plan-rule`; delete this block to remove -->"
 )
 _PLAN_RULE_END = "<!-- /skaldr:plan-rule -->"
 # Match one COMPLETE block only. The tempered body `(?:(?!BEGIN|END).)*` refuses to span another
@@ -98,13 +98,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--install-skill",
         action="store_true",
-        help="install skaldr's Claude skill into ~/.claude/skills and add a live-plan-doc rule to "
-        "~/.claude/CLAUDE.md (run once, survives upgrades), then exit",
+        help="install skaldr's Claude skill into ~/.claude/skills (copies it — run once, survives "
+        "upgrades), then exit",
+    )
+    parser.add_argument(
+        "--install-plan-rule",
+        action="store_true",
+        help="add skaldr's live-plan-doc rule to ~/.claude/CLAUDE.md — steers the agent to keep its "
+        "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(argv)
 
     if args.install_skill:
         return install_skill()
+
+    if args.install_plan_rule:
+        return install_plan_rule()
 
     if args.guide:
         try:
@@ -253,11 +262,11 @@ def _guide_text() -> str:
 
 
 def install_skill(home: Path | None = None) -> int:
-    """Copy the bundled skill (a thin, version-agnostic SKILL.md) into <home>/.claude/skills/skaldr, and
-    add/refresh the live-plan-doc rule in <home>/.claude/CLAUDE.md (see `_install_plan_rule`). Because
-    it's a copy of a stable file — not a link into the versioned install — it runs ONCE and survives
-    upgrades; the version-specific detail is fetched at author time via `skaldr --guide` /
-    `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent."""
+    """Copy the bundled skill (a thin, version-agnostic SKILL.md) into <home>/.claude/skills/skaldr.
+    Because it's a copy of a stable file — not a link into the versioned install — it runs ONCE and
+    survives upgrades; the version-specific detail is fetched at author time via `skaldr --guide` /
+    `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent. The
+    live-plan-doc CLAUDE.md rule is a separate opt-in — see `install_plan_rule`."""
     if home is None:
         home = Path.home()
     src = package_path("skill") / "SKILL.md"
@@ -284,18 +293,33 @@ def install_skill(home: Path | None = None) -> int:
         print(f"error: could not install the skill into {dest_dir}: {err}", file=sys.stderr)
         return 1
     print(f"OK  installed skaldr skill -> {dest_dir / 'SKILL.md'}")
-    # Separate step, separate try: the skill copy already succeeded, so a CLAUDE.md write failure must
-    # be reported as its own thing, not as "could not install the skill".
-    try:
-        rule_action = _install_plan_rule(claude_dir)
-    except OSError as err:
-        print(
-            f"error: skill installed, but could not update {claude_dir / 'CLAUDE.md'}: {err}", file=sys.stderr
-        )
-        return 1
-    print(f"OK  {rule_action} the plan-workflow rule in {claude_dir / 'CLAUDE.md'}")
-    print("    (the skaldr:plan-rule block — delete it to opt out)")
     print("    Restart Claude Code (or reload skills) to pick it up.")
+    print("    (run `skaldr --install-plan-rule` to also have the agent keep its working plans as")
+    print("     live skaldr docs)")
+    return 0
+
+
+def install_plan_rule(home: Path | None = None) -> int:
+    """Add or refresh skaldr's live-plan-doc rule in <home>/.claude/CLAUDE.md (see `_install_plan_rule`).
+    A separate opt-in from `install_skill`, so installing the skill never silently edits CLAUDE.md.
+    Advises if ~/.claude is absent."""
+    if home is None:
+        home = Path.home()
+    claude_dir = home / ".claude"
+    md_path = claude_dir / "CLAUDE.md"
+    if not claude_dir.exists():
+        print("Claude Code doesn't appear to be set up (~/.claude is missing).")
+        print(f"If you use Claude Code, add the rule to {md_path} once it exists.")
+        return 0
+
+    try:
+        action = _install_plan_rule(claude_dir)
+    except OSError as err:
+        print(f"error: could not update {md_path}: {err}", file=sys.stderr)
+        return 1
+    print(f"OK  {action} the plan-workflow rule in {md_path}")
+    print("    (the skaldr:plan-rule block — delete it to opt out)")
+    print("    Restart Claude Code to pick it up.")
     return 0
 
 

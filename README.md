@@ -107,11 +107,13 @@ skaldr ships a Claude skill, so you can skip the YAML and just ask. Install it o
 
 ```bash
 skaldr --install-skill      # copies the skill into ~/.claude/skills (survives upgrades)
+skaldr --install-plan-rule  # optional: also have the AI keep its working plans as live skaldr docs
 ```
 
-This also adds a short, marker-delimited rule to `~/.claude/CLAUDE.md` that steers the AI to author
-its working plans as live skaldr docs (rendered with `--watch` so you can follow along). Delete that
-`skaldr:plan-rule` block to opt out; a re-install refreshes it in place.
+`--install-plan-rule` is a separate, optional step: it adds a short, marker-delimited rule to
+`~/.claude/CLAUDE.md` that steers the AI to author its working plans as live skaldr docs (rendered
+with `--watch` so you can follow along). Delete that `skaldr:plan-rule` block to opt out; re-running
+it refreshes the block in place. `--install-skill` never touches `CLAUDE.md` on its own.
 
 Then in Claude Code (or Cowork), ask in plain language — *"make me a skaldr report on this data
 export: what's clean, what's broken, and the fix"* — and it writes the content file and renders the
