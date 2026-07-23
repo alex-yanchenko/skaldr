@@ -55,6 +55,11 @@ def _require_url_scheme(url: str | None, subject: str) -> None:
 # render.py; both derive from this one class so key-validation and marker-matching can't drift.
 REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 
+# An author-assigned heading/section anchor id: lowercase, hyphen-separated, same shape the auto-slug
+# produces (`_slugify` in compute.py) so a hand-written id and a generated one are indistinguishable
+# as a `#link` target, and no id can introduce a character the auto-slugger never would.
+ANCHOR_ID_PATTERN = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+
 
 def _reject_bool_and_non_finite(value: Any) -> Any:
     """Guard numeric fields at the boundary: `bool` is an int subclass pydantic would silently
@@ -204,6 +209,12 @@ class Heading(_Block):
     text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
     level: Literal[2, 3] = Field(
         default=2, description="Heading level: 2 (major heading) or 3 (sub-heading)."
+    )
+    id: str | None = Field(
+        default=None,
+        pattern=rf"^{ANCHOR_ID_PATTERN}$",
+        description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
+        "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
 
     @model_validator(mode="after")
@@ -1290,6 +1301,12 @@ InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 class Section(_Block):
     type: Literal["section"]
     title: str = Field(description="Summary label shown on the collapsible.")
+    id: str | None = Field(
+        default=None,
+        pattern=rf"^{ANCHOR_ID_PATTERN}$",
+        description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived "
+        "slug so `[…](#id)` links survive a title rename. Must be unique across the page.",
+    )
     collapsed: bool = Field(
         default=True,
         description="Whether the section starts collapsed. Default true suits an appendix / detail; set "

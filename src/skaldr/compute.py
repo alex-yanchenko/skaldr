@@ -11,6 +11,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, TypedDict
 
+from skaldr.errors import ReportError
 from skaldr.models import (
     AnyBlock,
     Badge,
@@ -93,14 +94,29 @@ def reference_numbers(report: Report) -> dict[str, int]:
 
 
 def anchor_slugs(report: Report) -> dict[int, str]:
-    """`id(block) -> slug` for every heading and section, de-duplicated with `-2` suffixes in document
-    order. One source for the heading/section `id` and the TOC so anchors can't drift."""
+    """`id(block) -> slug` for every heading and section, in document order. One source for the
+    heading/section `id` attribute, the TOC, and same-page `#link` targets so they can't drift. An
+    author-set `id` is used verbatim (and reserved so a text-derived slug yields to it with a `-N`
+    suffix); a text-derived slug de-dups the same way. Duplicate author ids fail the build."""
+    anchored = list(_iter_anchored(report.blocks))
+    explicit = [block.id for block in anchored if block.id is not None]
+    duplicate = next((anchor for anchor in explicit if explicit.count(anchor) > 1), None)
+    if duplicate is not None:
+        raise ReportError(f"duplicate anchor id '{duplicate}' — a heading/section id must be unique")
+
     slugs: dict[int, str] = {}
-    seen: dict[str, int] = {}
-    for block in _iter_anchored(report.blocks):
+    taken: set[str] = set(explicit)
+    for block in anchored:
+        if block.id is not None:
+            slugs[id(block)] = block.id
+            continue
         base = _slugify(block.text if isinstance(block, Heading) else block.title)
-        seen[base] = seen.get(base, 0) + 1
-        slugs[id(block)] = base if seen[base] == 1 else f"{base}-{seen[base]}"
+        slug, suffix = base, 1
+        while slug in taken:
+            suffix += 1
+            slug = f"{base}-{suffix}"
+        taken.add(slug)
+        slugs[id(block)] = slug
     return slugs
 
 

@@ -116,7 +116,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2) |
+| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted or numbered points | `style: bullet\|number`, `items[]` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -138,7 +138,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
-| `section` | Collapsible container | `title`, `collapsed?` (default true), `updated?`, `blocks[]` |
+| `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 | `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` |
 
