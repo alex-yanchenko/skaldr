@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.0.0](https://github.com/alex-yanchenko/skaldr/compare/v1.4.0...v2.0.0) (2026-07-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **swimlane:** swimlane step `muted: bool` is removed; use `state: normal | low | blocked` instead. A report that sets `muted` on a swimlane step now fails validation.
+
+### Features
+
+* **anchor:** author-assignable ids on headings and sections ([#88](https://github.com/alex-yanchenko/skaldr/issues/88)) ([ed8794d](https://github.com/alex-yanchenko/skaldr/commit/ed8794d3058da854a6553a85b39d4d66d9112193))
+* **cli:** --install-skill also installs a live-plan-doc rule into CLAUDE.md ([#85](https://github.com/alex-yanchenko/skaldr/issues/85)) ([db8184c](https://github.com/alex-yanchenko/skaldr/commit/db8184c127c1b89d91ac534038d87071eda588a1))
+* **cli:** --watch to re-render HTML on every save ([#83](https://github.com/alex-yanchenko/skaldr/issues/83)) ([fa69eb7](https://github.com/alex-yanchenko/skaldr/commit/fa69eb7458a228e8f86e45119f63ce071f2d08fd))
+* **list:** nestable list items ([#86](https://github.com/alex-yanchenko/skaldr/issues/86)) ([de26eda](https://github.com/alex-yanchenko/skaldr/commit/de26edac7567b827e38f455f2e2cb62d5915d919))
+* **richtext:** same-page anchor links ([#89](https://github.com/alex-yanchenko/skaldr/issues/89)) ([cb0a16f](https://github.com/alex-yanchenko/skaldr/commit/cb0a16f7d8e414f50a384a663624097c8f6e2910))
+* **swimlane:** three item states (normal/low/blocked) replacing the muted boolean ([#79](https://github.com/alex-yanchenko/skaldr/issues/79)) ([134e319](https://github.com/alex-yanchenko/skaldr/commit/134e31995670e51a1093790e456697c1275457e4))
+* **table:** positional (list) rows as a compact alternative to mapping rows ([#77](https://github.com/alex-yanchenko/skaldr/issues/77)) ([2878d8e](https://github.com/alex-yanchenko/skaldr/commit/2878d8eaaab385853f66192dc0419bbf3a3c5fc1))
+* **toc:** include top-level sections in the table of contents ([#81](https://github.com/alex-yanchenko/skaldr/issues/81)) ([3a44c96](https://github.com/alex-yanchenko/skaldr/commit/3a44c96b2783efb1ecfc654601522ec1a1ab0928))
+
+
+### Bug Fixes
+
+* **skill:** trim SKILL.md back under the 4KB thinness cap ([#87](https://github.com/alex-yanchenko/skaldr/issues/87)) ([3710cef](https://github.com/alex-yanchenko/skaldr/commit/3710cefe02cc6a9007299bd8077d0c50927f8b1a))
+* **swimlane:** bolder solid grid lines (1.5px); dashed splits unchanged ([#76](https://github.com/alex-yanchenko/skaldr/issues/76)) ([b6a97f3](https://github.com/alex-yanchenko/skaldr/commit/b6a97f39db9808614fa7ef2b978a1271b8e1cf3b))
+* **swimlane:** make column-header and group-cap text selectable ([#78](https://github.com/alex-yanchenko/skaldr/issues/78)) ([2ffd67c](https://github.com/alex-yanchenko/skaldr/commit/2ffd67c316bfdc51782f265f61942ba2aff77ac8))
+
 ## [1.4.0](https://github.com/alex-yanchenko/skaldr/compare/v1.3.3...v1.4.0) (2026-07-22)
 
 
