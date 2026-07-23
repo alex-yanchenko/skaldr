@@ -92,10 +92,15 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 `**bold**` · `*italic*` · `` `code` `` · `~~strike~~` · `[label](https://url)`
 (links allow `http`, `https`, `mailto` only).
 
+**Same-page anchor links.** `[label](#slug)` jumps to a heading or section on the same page. The
+`slug` is the heading text lowercased with non-alphanumerics turned to `-` (so `## Count pipeline` →
+`#count-pipeline`); duplicates get a `-2` suffix, matching the TOC. A `#slug` that names no heading or
+section **fails the build** — a dangling in-page link never ships.
+
 **Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL —
-never a placeholder like `#` or `https://example.com`. (skaldr's own bundled examples use fictional
-links on purpose because they ship publicly; that's the exception, not a pattern to copy into a real
-report.)
+never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a valid anchor and
+fails). (skaldr's own bundled examples use fictional links on purpose because they ship publicly;
+that's the exception, not a pattern to copy into a real report.)
 
 Everything else is escaped and shown literally — there is no raw HTML. A blank line in a `text`
 body starts a new paragraph.
