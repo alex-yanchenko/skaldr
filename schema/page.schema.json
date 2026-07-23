@@ -1813,9 +1813,16 @@
           "type": "string"
         },
         "items": {
-          "description": "Rich-text points; no nesting.",
+          "description": "Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest sub-points (nested lists inherit the parent's style; up to 4 levels deep).",
           "items": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ListItem"
+              }
+            ]
           },
           "minItems": 1,
           "title": "Items",
@@ -1827,6 +1834,38 @@
         "items"
       ],
       "title": "ListBlock",
+      "type": "object"
+    },
+    "ListItem": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "description": "The point's rich-text content.",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "items": {
+          "default": [],
+          "description": "Optional nested sub-points, rendered as an indented list in the parent's style.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ListItem"
+              }
+            ]
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "ListItem",
       "type": "object"
     },
     "Meta": {

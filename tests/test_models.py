@@ -13,6 +13,8 @@ from skaldr.models import (
     FlowStep,
     Grid,
     Group,
+    ListBlock,
+    ListItem,
     Meta,
     Report,
     Section,
@@ -267,6 +269,60 @@ def test_status_list_unknown_state_is_rejected() -> None:
     block = {"type": "status_list", "items": [{"state": "in_progress", "text": "x"}]}
 
     with pytest.raises(ReportError, match=r"blocks\.0\.status_list\.items\.0\.state"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_list_parses_flat_and_nested_items_to_whole_model() -> None:
+    block = {"type": "list", "items": ["flat", {"text": "parent", "items": ["a", {"text": "b"}]}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        items=["flat", ListItem(text="parent", items=["a", ListItem(text="b")])],
+    )
+
+
+def test_list_nesting_at_the_max_depth_is_accepted() -> None:
+    four_deep = {
+        "type": "list",
+        "items": [{"text": "1", "items": [{"text": "2", "items": [{"text": "3", "items": ["4"]}]}]}],
+    }
+
+    report = parse_report(make_report(blocks=[four_deep]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        items=[ListItem(text="1", items=[ListItem(text="2", items=[ListItem(text="3", items=["4"])])])],
+    )
+
+
+def test_list_nesting_beyond_the_max_depth_is_rejected() -> None:
+    five_deep = {
+        "type": "list",
+        "items": [
+            {
+                "text": "1",
+                "items": [{"text": "2", "items": [{"text": "3", "items": [{"text": "4", "items": ["5"]}]}]}],
+            }
+        ],
+    }
+
+    with pytest.raises(ReportError, match=r"list nesting exceeds the maximum depth"):
+        parse_report(make_report(blocks=[five_deep]))
+
+
+def test_list_item_with_blank_text_is_rejected() -> None:
+    block = {"type": "list", "items": [{"text": "", "items": ["x"]}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.list\.items"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_list_item_with_an_unknown_key_is_rejected() -> None:
+    block = {"type": "list", "items": [{"text": "x", "children": ["y"]}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.list\.items"):
         parse_report(make_report(blocks=[block]))
 
 

@@ -230,10 +230,40 @@ class Text(_Block):
     muted: bool = Field(default=False, description="Render in the caption colour, for asides.")
 
 
+_MAX_LIST_DEPTH = 4
+
+
+class ListItem(_Frozen):
+    text: str = Field(min_length=1, description="The point's rich-text content.")
+    items: list["str | ListItem"] = Field(
+        default=[],
+        description="Optional nested sub-points, rendered as an indented list in the parent's style.",
+    )
+
+
+def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
+    """Reject list nesting deeper than `_MAX_LIST_DEPTH` — past that a bullet tree is unreadable and
+    almost always a data-shape mistake. Depth 1 is the top-level list; each nested `items` is +1."""
+    if depth > _MAX_LIST_DEPTH:
+        raise ValueError(f"list nesting exceeds the maximum depth of {_MAX_LIST_DEPTH}")
+    for item in items:
+        if isinstance(item, ListItem):
+            _check_list_depth(item.items, depth + 1)
+
+
 class ListBlock(_Block):
     type: Literal["list"]
     style: Literal["bullet", "number"] = Field(default="bullet", description="Bulleted or numbered.")
-    items: list[str] = Field(min_length=1, description="Rich-text points; no nesting.")
+    items: list[str | ListItem] = Field(
+        min_length=1,
+        description="Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest "
+        f"sub-points (nested lists inherit the parent's style; up to {_MAX_LIST_DEPTH} levels deep).",
+    )
+
+    @model_validator(mode="after")
+    def _bounded_depth(self) -> "ListBlock":
+        _check_list_depth(self.items, 1)
+        return self
 
 
 class Fact(_Frozen):
