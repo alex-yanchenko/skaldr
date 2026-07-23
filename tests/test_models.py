@@ -15,6 +15,7 @@ from skaldr.models import (
     Group,
     Meta,
     Report,
+    Section,
     Swimlane,
     Table,
     Text,
@@ -267,6 +268,29 @@ def test_status_list_unknown_state_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"blocks\.0\.status_list\.items\.0\.state"):
         parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize("bad_id", ["Bad_ID", "has space", "trailing-", "-leading", "double--hyphen"])
+def test_heading_id_with_a_non_slug_shape_is_rejected(bad_id: str) -> None:
+    block = {"type": "heading", "text": "H", "id": bad_id}
+
+    with pytest.raises(ReportError, match=r"blocks\.0\.heading\.id"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_section_accepts_a_slug_shaped_author_id() -> None:
+    block = {
+        "type": "section",
+        "title": "Appendix",
+        "id": "raw-data",
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+
+    report = parse_report(make_report(blocks=[block]))
+
+    section = report.blocks[0]
+    assert isinstance(section, Section)
+    assert section.id == "raw-data"
 
 
 def test_fan_parses_to_whole_model_with_default_direction_in() -> None:

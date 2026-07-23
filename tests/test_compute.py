@@ -1,3 +1,5 @@
+import pytest
+
 from skaldr.compute import (
     anchor_slugs,
     first_table_index,
@@ -10,6 +12,7 @@ from skaldr.compute import (
     toc_entries,
     used_badges,
 )
+from skaldr.errors import ReportError
 from skaldr.models import Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
@@ -629,6 +632,45 @@ def test_anchor_slugs_covers_a_section_and_its_inner_heading() -> None:
     )
 
     assert sorted(anchor_slugs(report).values()) == ["appendix", "notes"]
+
+
+def test_anchor_slugs_uses_an_author_id_verbatim_and_yields_the_derived_slug_to_it() -> None:
+    # the explicit id is reserved, so a later heading whose text derives the same base takes `-2`
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "Results", "id": "overview"},
+                {"type": "heading", "text": "Overview"},
+            ],
+        )
+    )
+
+    assert list(anchor_slugs(report).values()) == ["overview", "overview-2"]
+
+
+def test_anchor_slugs_rejects_a_duplicate_author_id() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "A", "id": "dup"},
+                {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
+            ],
+        )
+    )
+
+    with pytest.raises(ReportError, match=r"duplicate anchor id 'dup'"):
+        anchor_slugs(report)
+
+
+def test_toc_uses_an_author_id_as_the_anchor_target() -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "toc": True},
+            blocks=[{"type": "heading", "text": "Discrepancies & Fixes", "id": "fixes"}],
+        )
+    )
+
+    assert toc_entries(report, anchor_slugs(report)) == [("fixes", "Discrepancies & Fixes")]
 
 
 def test_toc_uses_deduped_slugs() -> None:

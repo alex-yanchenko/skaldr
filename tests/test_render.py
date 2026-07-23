@@ -1350,6 +1350,18 @@ def test_richtext_escapes_raw_html() -> None:
     assert str(render_richtext("<script>x & y")) == "&lt;script&gt;x &amp; y"
 
 
+def test_author_id_becomes_the_heading_and_section_anchor() -> None:
+    blocks = [
+        {"type": "heading", "text": "Discrepancies & Fixes", "id": "fixes"},
+        {"type": "section", "title": "Raw data", "id": "raw", "blocks": [{"type": "text", "body": "x"}]},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert '<h2 id="fixes">Discrepancies &amp; Fixes</h2>' in html
+    assert '<details class="section" id="raw"' in html
+
+
 def test_richtext_rejects_disallowed_link_scheme() -> None:
     assert str(render_richtext("[x](javascript:alert)")) == "[x](javascript:alert)"
 
