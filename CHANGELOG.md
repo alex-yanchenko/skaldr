@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/alex-yanchenko/skaldr/compare/v2.0.0...v2.1.0) (2026-07-23)
+
+
+### Features
+
+* **cli:** split --install-skill and --install-plan-rule so the CLAUDE.md edit is opt-in ([#90](https://github.com/alex-yanchenko/skaldr/issues/90)) ([113ea6d](https://github.com/alex-yanchenko/skaldr/commit/113ea6d24d82b569907d3de221edc70fa28eeeaa))
+
 ## [2.0.0](https://github.com/alex-yanchenko/skaldr/compare/v1.4.0...v2.0.0) (2026-07-23)
 
 
