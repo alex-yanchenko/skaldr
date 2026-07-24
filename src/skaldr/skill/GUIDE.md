@@ -55,7 +55,8 @@ Each key maps to a `label` (chip text), a `tone` (chip colour), and a `legend` (
 meaning). Reference a key from a table `badge` column, a `badge_row`, or a `badges: [KEY, …]` list
 on a **card, timeline entry, or flow step** (the chips render on that container). **A referenced key
 that isn't declared fails the build.** A legend of the badges you actually used is generated
-automatically before the first table — you don't author it.
+automatically before the first table — you don't author it. Set a badge's `legend: false` to keep it
+**out** of that legend — for a one-off inline chip that needs no explanation.
 
 Badge colours: `slate · blue · green · amber · red · violet · teal · sky`.
 
@@ -160,8 +161,9 @@ or to keep a small block from stretching across the whole page.
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
+| `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
-| `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` |
+| `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` — a step's `detail` may include a `grid` for a two-column step (Action \| Script) |
 
 Cards: pass `of` to render a derived percentage (`8,500 · 85.0%`). A `value` may be a short
 string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside the value —

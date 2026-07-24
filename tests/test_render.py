@@ -388,6 +388,71 @@ def test_note_renders_optional_title_and_body() -> None:
     assert '<div class="note"><div>Just an aside.</div></div>' in html
 
 
+def test_panel_renders_a_titled_card_holding_its_blocks() -> None:
+    block = {"type": "panel", "title": "Slide 1", "blocks": [{"type": "text", "body": "Point."}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="panel-card"><div class="panel-card-hd">Slide 1</div><div class="panel-card-body">'
+        in html
+    )
+    assert '<p class="text">Point.</p></div></div>' in html
+
+
+def test_walkthrough_step_detail_can_hold_a_two_column_grid() -> None:
+    block = {
+        "type": "walkthrough",
+        "steps": [
+            {
+                "label": "Deploy",
+                "detail": [
+                    {
+                        "type": "grid",
+                        "cells": [
+                            {"span": 3, "blocks": [{"type": "text", "body": "Action"}]},
+                            {"span": 3, "blocks": [{"type": "code", "content": "deploy.sh"}]},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="wdetail"><div class="grid">' in html
+    assert "<pre>deploy.sh</pre>" in html
+
+
+def test_anchor_link_resolves_to_a_heading_inside_a_panel() -> None:
+    # proves the anchor walker recurses into a panel; without it the #link would fail as dangling
+    blocks = [
+        {"type": "panel", "title": "Deck", "blocks": [{"type": "heading", "text": "Inside", "id": "inside"}]},
+        {"type": "text", "body": "Jump [in](#inside)."},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert '<a href="#inside">in</a>' in html
+
+
+def test_badge_referenced_only_inside_a_panel_still_feeds_the_legend() -> None:
+    # proves the badge walker recurses into a panel; without it this would be an undeclared-reference error
+    report = parse_report(
+        make_report(
+            badges={"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}},
+            blocks=[
+                {"type": "panel", "title": "Deck", "blocks": [{"type": "badge_row", "items": [{"key": "P"}]}]}
+            ],
+        )
+    )
+
+    html = render_html(report)
+
+    assert "the prod tag" in html  # legend picked up the panel-nested reference
+
+
 def test_walkthrough_step_span_sets_the_column_widths() -> None:
     block = {
         "type": "walkthrough",
@@ -1981,6 +2046,24 @@ def test_legend_renders_at_top_when_no_table() -> None:
     html = render_html(report)
 
     assert "Legend — badges used on this page" in html
+
+
+def test_badge_with_legend_false_chips_but_stays_out_of_the_legend() -> None:
+    report = parse_report(
+        make_report(
+            badges={
+                "KEEP": {"label": "keep", "tone": "blue", "legend": "explained"},
+                "ONEOFF": {"label": "oneoff", "tone": "amber", "legend": False},
+            },
+            blocks=[{"type": "badge_row", "items": [{"key": "KEEP"}, {"key": "ONEOFF"}]}],
+        )
+    )
+
+    html = render_html(report)
+
+    assert '<span class="chip amber">oneoff</span>' in html  # the one-off chip still renders
+    assert "explained" in html  # the legend still lists the badge that has one
+    assert html.count('class="legend-row"') == 1  # exactly one legend entry — ONEOFF is excluded
 
 
 def test_empty_badge_cell_renders_no_chip() -> None:

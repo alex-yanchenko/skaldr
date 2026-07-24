@@ -1499,7 +1499,7 @@ class Walkthrough(_Block):
 
 Block = Annotated[_Leaf | Section | Grid | Walkthrough | Panel, Field(discriminator="type")]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Section | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
@@ -1508,7 +1508,7 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
     for block in blocks:
-        if isinstance(block, Section):
+        if isinstance(block, (Section, Panel)):
             yield from iter_referenced_badge_keys(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -1551,7 +1551,7 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
     for block in blocks:
         if isinstance(block, References):
             yield from block.items
-        elif isinstance(block, Section):
+        elif isinstance(block, (Section, Panel)):
             yield from iter_reference_items(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
