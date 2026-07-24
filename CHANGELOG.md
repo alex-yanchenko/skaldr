@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.0](https://github.com/alex-yanchenko/skaldr/compare/v2.1.0...v2.2.0) (2026-07-24)
+
+
+### Features
+
+* {{placeholder}} blanks + --check --strict gate ([#96](https://github.com/alex-yanchenko/skaldr/issues/96)) ([43d4a58](https://github.com/alex-yanchenko/skaldr/commit/43d4a5836e6c186899be40aa82537c4ad4578b52))
+* **blocks:** def_list, note, checkbox lists ([#93](https://github.com/alex-yanchenko/skaldr/issues/93)) ([fd70044](https://github.com/alex-yanchenko/skaldr/commit/fd70044886298a510c2e370724066c40a4b821b6))
+* **blocks:** panel, legend:false, 2-column walkthrough steps ([#95](https://github.com/alex-yanchenko/skaldr/issues/95)) ([29826a3](https://github.com/alex-yanchenko/skaldr/commit/29826a3810f9ec09455bc3e45399a4890cc4e323))
+
+
+### Bug Fixes
+
+* **render:** honor blank-line paragraphs in callout/quote bodies; legible walkthrough step numbers ([#92](https://github.com/alex-yanchenko/skaldr/issues/92)) ([0b5606f](https://github.com/alex-yanchenko/skaldr/commit/0b5606f563f6154b47064384701fad693d74a3fc))
+* **review:** pack follow-ups — --check crash on render error, checked-style guard, .note class leak ([#97](https://github.com/alex-yanchenko/skaldr/issues/97)) ([c11b4a3](https://github.com/alex-yanchenko/skaldr/commit/c11b4a374e202502eccac7538a5af8e5df057e86))
+
 ## [2.1.0](https://github.com/alex-yanchenko/skaldr/compare/v2.0.0...v2.1.0) (2026-07-23)
 
 
