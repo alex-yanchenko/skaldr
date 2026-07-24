@@ -88,6 +88,7 @@
 {# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
 {% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list">{% for item in items %}{% if item is string %}<li>{{ item | richtext }}</li>{% else %}<li>{{ item.text | richtext }}{% if item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endif %}{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
+{% macro prose_paras(text) %}{% set paras = text.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">
@@ -192,7 +193,7 @@
 {% elif block.type == "badge_row" %}
 {% if block.groups %}<dl class="badge-groups">{% for g in block.groups %}<dt>{{ g.label }}</dt><dd>{% for item in g.items %}{{ chip_item(item) }}{% endfor %}</dd>{% endfor %}</dl>{% else %}<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>{% endif %}
 {% elif block.type == "callout" %}
-<div class="callout {{ block.tone }}">{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ block.body | richtext }}</div></div>
+<div class="callout {{ block.tone }}">{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
 {% elif block.type == "status_list" %}
 <ul class="status-list">{% for item in block.items %}<li class="{{ item.state }}"><span class="glyph">{{ STATUS_GLYPHS[item.state] }}</span><span>{{ item.text | richtext }}</span></li>{% endfor %}</ul>
 {% elif block.type == "meter" %}
@@ -202,7 +203,7 @@
 {% elif block.type == "code" %}
 <div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for line in block.content.split("\n") %}<span class="ln {{ 'add' if line.startswith('+') else 'del' if line.startswith('-') else 'ctx' }}">{{ line[1:] if (line.startswith('+') or line.startswith('-')) else line }}</span>{% endfor %}</pre>{% else %}<pre>{{ block.content }}</pre>{% endif %}</div>
 {% elif block.type == "quote" %}
-<blockquote class="quote"><div>{{ block.body | richtext }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
+<blockquote class="quote"><div>{{ prose_paras(block.body) }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}
