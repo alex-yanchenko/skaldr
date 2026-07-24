@@ -24,9 +24,17 @@
           "type": "string"
         },
         "legend": {
-          "description": "One-line meaning, shown in the derived legend.",
-          "title": "Legend",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            }
+          ],
+          "description": "One-line meaning, shown in the derived legend. Set `false` to keep this badge out of the legend entirely \u2014 for a one-off inline chip that needs no explanation.",
+          "title": "Legend"
         }
       },
       "required": [
@@ -2182,6 +2190,155 @@
       "title": "Note",
       "type": "object"
     },
+    "Panel": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "panel",
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "description": "Panel title, shown in the header band.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "blocks": {
+          "description": "Blocks inside the panel (leaf blocks). Unlike a `section`, a panel is always open \u2014 a titled framed card, one per 'slide' in a deck-style doc.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "def_list": "#/$defs/DefList",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "meter": "#/$defs/Meter",
+                "note": "#/$defs/Note",
+                "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
+                "references": "#/$defs/References",
+                "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
+                "table": "#/$defs/Table",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/DefList"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
+                "$ref": "#/$defs/References"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "blocks"
+      ],
+      "title": "Panel",
+      "type": "object"
+    },
     "Quote": {
       "additionalProperties": false,
       "properties": {
@@ -3439,11 +3596,11 @@
             }
           ],
           "default": null,
-          "description": "Optional tone; draws a subtle accent down the step's inline-start edge (the numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
+          "description": "Optional tone; draws a subtle accent down the step's inline-start edge (the numeral itself is always a uniform muted grey, so tone can't leave steps looking mismatched).",
           "title": "Tone"
         },
         "detail": {
-          "description": "The step's detail, a nested block list (paragraphs, lists, code, callouts, tables \u2014 like a grid cell), rendered in the column beside the numbered title.",
+          "description": "The step's detail (paragraphs, lists, code, callouts, tables, or a `grid` for a two-column step like Action | Script), rendered in the column beside the numbered title.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3457,6 +3614,7 @@
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
+                "grid": "#/$defs/InnerGrid",
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
@@ -3546,6 +3704,9 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerGrid"
               }
             ]
           },
@@ -3602,6 +3763,7 @@
             "list": "#/$defs/ListBlock",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
+            "panel": "#/$defs/Panel",
             "quote": "#/$defs/Quote",
             "range": "#/$defs/Range",
             "references": "#/$defs/References",
@@ -3696,6 +3858,9 @@
           },
           {
             "$ref": "#/$defs/Walkthrough"
+          },
+          {
+            "$ref": "#/$defs/Panel"
           }
         ]
       },

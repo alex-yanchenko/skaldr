@@ -181,7 +181,10 @@ class Badge(_Frozen):
     tone: BadgeColor = Field(
         description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
     )
-    legend: str = Field(description="One-line meaning, shown in the derived legend.")
+    legend: str | Literal[False] = Field(
+        description="One-line meaning, shown in the derived legend. Set `false` to keep this badge out "
+        "of the legend entirely — for a one-off inline chip that needs no explanation.",
+    )
 
 
 class Meta(_Frozen):
@@ -1386,6 +1389,16 @@ class Section(_Block):
     )
 
 
+class Panel(_Block):
+    type: Literal["panel"]
+    title: str = Field(min_length=1, description="Panel title, shown in the header band.")
+    blocks: list[InnerBlock] = Field(
+        min_length=1,
+        description="Blocks inside the panel (leaf blocks). Unlike a `section`, a panel is always open — "
+        "a titled framed card, one per 'slide' in a deck-style doc.",
+    )
+
+
 # Grid: a bounded side-by-side layout over a 6-column base.
 # Nesting is capped at depth 2 by the type graph: a top-level GridCell may hold nested InnerGrids,
 # whose cells hold only leaf blocks — so a depth-3 grid is unrepresentable. `span` is required
@@ -1455,12 +1468,12 @@ class WalkthroughStep(_Frozen):
     tone: Tone | None = Field(
         default=None,
         description="Optional tone; draws a subtle accent down the step's inline-start edge (the "
-        "numeral itself is always a uniform faint ghost, so tone can't leave steps looking mismatched).",
+        "numeral itself is always a uniform muted grey, so tone can't leave steps looking mismatched).",
     )
-    detail: list[InnerBlock] = Field(
+    detail: list[CellBlock] = Field(
         min_length=1,
-        description="The step's detail, a nested block list (paragraphs, lists, code, callouts, tables — "
-        "like a grid cell), rendered in the column beside the numbered title.",
+        description="The step's detail (paragraphs, lists, code, callouts, tables, or a `grid` for a "
+        "two-column step like Action | Script), rendered in the column beside the numbered title.",
     )
 
     @model_validator(mode="after")
@@ -1484,9 +1497,9 @@ class Walkthrough(_Block):
     )
 
 
-Block = Annotated[_Leaf | Section | Grid | Walkthrough, Field(discriminator="type")]
+Block = Annotated[_Leaf | Section | Grid | Walkthrough | Panel, Field(discriminator="type")]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Section | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
@@ -1495,7 +1508,7 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
     for block in blocks:
-        if isinstance(block, Section):
+        if isinstance(block, (Section, Panel)):
             yield from iter_referenced_badge_keys(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -1538,7 +1551,7 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
     for block in blocks:
         if isinstance(block, References):
             yield from block.items
-        elif isinstance(block, Section):
+        elif isinstance(block, (Section, Panel)):
             yield from iter_reference_items(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:

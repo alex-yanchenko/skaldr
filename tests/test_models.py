@@ -19,6 +19,7 @@ from skaldr.models import (
     ListItem,
     Meta,
     Note,
+    Panel,
     Report,
     Section,
     Swimlane,
@@ -383,6 +384,30 @@ def test_note_parses_to_whole_model_with_optional_title() -> None:
     report = parse_report(make_report(blocks=[block]))
 
     assert report.blocks[0] == Note(type="note", body="An aside.", title=None)
+
+
+def test_panel_parses_to_whole_model() -> None:
+    block = {"type": "panel", "title": "Slide 1", "blocks": [{"type": "text", "body": "Hi."}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Panel(type="panel", title="Slide 1", blocks=[Text(type="text", body="Hi.")])
+
+
+def test_panel_with_no_blocks_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.panel\.blocks"):
+        parse_report(make_report(blocks=[{"type": "panel", "title": "Empty", "blocks": []}]))
+
+
+def test_badge_legend_false_parses_as_a_legend_optout() -> None:
+    report = parse_report(
+        make_report(
+            badges={"X": {"label": "x", "tone": "blue", "legend": False}},
+            blocks=[{"type": "badge_row", "items": [{"key": "X"}]}],
+        )
+    )
+
+    assert report.badges["X"].legend is False
 
 
 def test_fan_parses_to_whole_model_with_default_direction_in() -> None:

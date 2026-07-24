@@ -18,6 +18,7 @@ from skaldr.models import (
     Grid,
     Heading,
     InnerGrid,
+    Panel,
     Report,
     Section,
     Swimlane,
@@ -61,6 +62,8 @@ def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
         elif isinstance(block, Section):
             yield block
             yield from _iter_anchored(block.blocks)
+        elif isinstance(block, Panel):
+            yield from _iter_anchored(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
                 yield from _iter_anchored(cell.blocks)
@@ -73,7 +76,7 @@ def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     for block in blocks:
         if isinstance(block, Table):
             yield block
-        elif isinstance(block, Section):
+        elif isinstance(block, (Section, Panel)):
             yield from _iter_tables(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -143,9 +146,14 @@ def first_table_index(report: Report) -> int | None:
 
 
 def used_badges(report: Report) -> list[tuple[str, Badge]]:
-    """Declared badges that are actually referenced, in declaration order (drives the legend)."""
+    """Declared badges that are actually referenced AND carry a legend, in declaration order (drives the
+    legend). A badge with `legend: false` opts out — its chips still render, but it never lists."""
     referenced = set(iter_referenced_badge_keys(report.blocks))
-    return [(key, badge) for key, badge in report.badges.items() if key in referenced]
+    return [
+        (key, badge)
+        for key, badge in report.badges.items()
+        if key in referenced and badge.legend is not False
+    ]
 
 
 class _SwimBox(TypedDict):

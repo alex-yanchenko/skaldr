@@ -621,6 +621,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& > summary::before{content:"▸"; color:var(--muted); font-size:12px}
 		&[open] > summary::before{content:"▾"}
 		& .section-body{padding:0 var(--s4) var(--s4)}}
+
+	/* panel: an always-open titled card (one per 'slide'), unlike the collapsible section. */
+	.panel-card{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow)}
+	.panel-card .panel-card-hd{padding:var(--s3) var(--s4); font-weight:650; font-size:14px; border-block-end:1px solid var(--line)}
+	.panel-card .panel-card-body{padding:var(--s2) var(--s4) var(--s4)}
 	.legend-grid{display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:var(--s2) var(--s8)}
 	.legend-row{display:flex; align-items:baseline; gap:10px; font-size:13px}
 	.legend-row .meaning{color:var(--muted)}
