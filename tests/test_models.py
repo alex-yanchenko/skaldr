@@ -8,6 +8,8 @@ from skaldr.errors import ReportError
 from skaldr.models import (
     Callout,
     Cards,
+    DefItem,
+    DefList,
     Fan,
     Flow,
     FlowStep,
@@ -16,6 +18,7 @@ from skaldr.models import (
     ListBlock,
     ListItem,
     Meta,
+    Note,
     Report,
     Section,
     Swimlane,
@@ -347,6 +350,39 @@ def test_section_accepts_a_slug_shaped_author_id() -> None:
     section = report.blocks[0]
     assert isinstance(section, Section)
     assert section.id == "raw-data"
+
+
+def test_check_list_item_carries_a_checked_flag_defaulting_false() -> None:
+    block = {"type": "list", "style": "check", "items": ["open", {"text": "closed", "checked": True}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        style="check",
+        items=["open", ListItem(text="closed", checked=True)],
+    )
+
+
+def test_def_list_parses_to_whole_model() -> None:
+    block = {"type": "def_list", "items": [{"term": "Action", "body": "Do it."}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == DefList(type="def_list", items=[DefItem(term="Action", body="Do it.")])
+
+
+def test_def_list_with_no_items_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.def_list\.items"):
+        parse_report(make_report(blocks=[{"type": "def_list", "items": []}]))
+
+
+def test_note_parses_to_whole_model_with_optional_title() -> None:
+    block = {"type": "note", "body": "An aside."}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Note(type="note", body="An aside.", title=None)
 
 
 def test_fan_parses_to_whole_model_with_default_direction_in() -> None:

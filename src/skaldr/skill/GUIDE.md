@@ -137,9 +137,10 @@ or to keep a small block from stretching across the whole page.
 |---|---|---|
 | `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
-| `list` | Bulleted or numbered points (nestable) | `style: bullet\|number`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep) |
+| `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
+| `def_list` | Labelled list — prominent term + rich body (e.g. Action/Expected/Say) | `items: [{term, body}]` |
 | `cards` | Headline numbers | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` |
 | `badge_row` | A standalone row of chips, flat or grouped | `label?` + `items: [{key} \| {label, tone}]`, OR `groups: [{label, items[]}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
@@ -149,6 +150,7 @@ or to keep a small block from stretching across the whole page.
 | `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
+| `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |

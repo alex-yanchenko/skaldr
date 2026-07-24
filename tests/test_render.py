@@ -339,6 +339,55 @@ def test_quote_body_splits_blank_line_paragraphs() -> None:
     assert '<p class="prose-p">Line one.</p><p class="prose-p">Line two.</p>' in html
 
 
+def test_check_list_renders_tickable_boxes_honoring_the_checked_flag() -> None:
+    block = {"type": "list", "style": "check", "items": ["todo", {"text": "done", "checked": True}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<ul class="list check">' in html
+    assert '<li><label class="chk"><input type="checkbox"><span>todo</span></label></li>' in html
+    assert '<li><label class="chk"><input type="checkbox" checked><span>done</span></label></li>' in html
+
+
+def test_check_list_nests_checkboxes_at_every_level() -> None:
+    block = {"type": "list", "style": "check", "items": [{"text": "parent", "items": ["child"]}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<span>parent</span></label><ul class="list check"><li><label class="chk">' in html
+
+
+def test_bullet_list_has_no_checkboxes() -> None:
+    block = {"type": "list", "items": ["a"]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<ul class="list"><li>a</li></ul>' in html
+    assert 'type="checkbox"' not in html  # only a check-style list emits inputs
+
+
+def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
+    block = {
+        "type": "def_list",
+        "items": [{"term": "Action", "body": "Click **Deploy**."}, {"term": "Say", "body": "One.\n\nTwo."}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<dl class="deflist"><dt>Action</dt><dd>Click <strong>Deploy</strong>.</dd>' in html
+    assert '<dt>Say</dt><dd><p class="prose-p">One.</p><p class="prose-p">Two.</p></dd></dl>' in html
+
+
+def test_note_renders_optional_title_and_body() -> None:
+    titled = {"type": "note", "title": "Read aloud", "body": "Speak softly."}
+    plain = {"type": "note", "body": "Just an aside."}
+
+    html = render_html(parse_report(make_report(blocks=[titled, plain])))
+
+    assert '<div class="note"><div class="note-title">Read aloud</div><div>Speak softly.</div></div>' in html
+    assert '<div class="note"><div>Just an aside.</div></div>' in html
+
+
 def test_walkthrough_step_span_sets_the_column_widths() -> None:
     block = {
         "type": "walkthrough",

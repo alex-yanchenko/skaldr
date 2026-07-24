@@ -127,6 +127,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.kv{display:grid; grid-template-columns:max-content 1fr; gap:9px 24px; font-size:13.5px; margin-block:var(--s4); max-width:640px}
 	.kv dt{color:var(--muted)}
 	.kv dd{font-weight:400; font-variant-numeric:tabular-nums}
+	/* def_list: prominent term + rich body — a labelled list for procedural pairs (Action/Expected/Say). */
+	.deflist{display:grid; grid-template-columns:max-content 1fr; gap:var(--s2) var(--s5); margin-block:var(--s4)}
+	.deflist dt{font-weight:650; color:var(--ink)}
+	.deflist dd{margin:0}
 
 	.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--s3); margin-block:var(--s6)}
 	.card{border:1px solid var(--line); border-radius:var(--r-md); padding:18px;
@@ -214,6 +218,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.list{margin-block:var(--s3); padding-inline-start:var(--s6)}
 	.list li{margin-block:var(--s1)}
 	.list .list{margin-block:var(--s1) 0}
+	/* checkbox list: no bullet, a clickable label per item; ticks are ephemeral unless set in YAML. */
+	.list.check{list-style:none; padding-inline-start:0}
+	.list.check .check{padding-inline-start:0}
+	.list.check .chk{display:flex; gap:var(--s2); align-items:baseline; cursor:pointer}
+	.list.check .chk input{flex:none; margin:0; translate:0 2px; accent-color:var(--accent-fg); cursor:pointer}
+	.list.check .chk input:checked + span{color:var(--muted); text-decoration:line-through}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
@@ -347,6 +357,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	blockquote.quote{border-inline-start:3px solid var(--rule); padding:2px 0 2px 16px; margin-block:var(--s4); color:var(--ink);
 		& .cite{display:block; margin-top:var(--s2); font-size:12.5px; color:var(--muted)}
 		& .cite::before{content:"— "}}
+
+	/* note: a quiet set-apart aside — softer than a callout, for speaker notes / narration / asides. */
+	.note{border-inline-start:2px solid var(--line); padding:2px 0 2px 14px; margin-block:var(--s4); color:var(--muted); font-size:13.5px}
+	.note .note-title{font-weight:600; color:var(--ink); margin-block-end:var(--s1)}
 
 	.code{margin-block:var(--s4); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;
 		background:var(--code-bg); box-shadow:var(--shadow);
