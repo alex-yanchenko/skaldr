@@ -143,9 +143,14 @@ def first_table_index(report: Report) -> int | None:
 
 
 def used_badges(report: Report) -> list[tuple[str, Badge]]:
-    """Declared badges that are actually referenced, in declaration order (drives the legend)."""
+    """Declared badges that are actually referenced AND carry a legend, in declaration order (drives the
+    legend). A badge with `legend: false` opts out — its chips still render, but it never lists."""
     referenced = set(iter_referenced_badge_keys(report.blocks))
-    return [(key, badge) for key, badge in report.badges.items() if key in referenced]
+    return [
+        (key, badge)
+        for key, badge in report.badges.items()
+        if key in referenced and badge.legend is not False
+    ]
 
 
 class _SwimBox(TypedDict):
