@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/alex-yanchenko/skaldr/compare/v2.2.0...v2.2.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **deflist:** undefined --s5 zeroed the term/body gap; guard with a css-var-defined test ([#98](https://github.com/alex-yanchenko/skaldr/issues/98)) ([091151b](https://github.com/alex-yanchenko/skaldr/commit/091151b9e47bb2c4aa359212f1c488f7167d6dbb))
+
 ## [2.2.0](https://github.com/alex-yanchenko/skaldr/compare/v2.1.0...v2.2.0) (2026-07-24)
 
 
