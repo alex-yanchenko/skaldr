@@ -291,8 +291,8 @@ def test_walkthrough_renders_numbered_toned_steps_beside_their_detail() -> None:
 
 
 def test_walkthrough_numeral_is_tone_independent_and_tone_drives_the_step_accent() -> None:
-    """A numeral is the same faint ghost on every step regardless of tone, so an untoned step can't
-    drop to grey beside toned ones; the tone instead drives an inline-start accent on the step. The
+    """A numeral is the same legible muted grey on every step regardless of tone, so an untoned step
+    can't drop beside toned ones; the tone instead drives an inline-start accent on the step. The
     accent lives on `.wstep` (which carries the tone class), never on the numeral."""
     block = {
         "type": "walkthrough",
@@ -307,10 +307,36 @@ def test_walkthrough_numeral_is_tone_independent_and_tone_drives_the_step_accent
     # the tone class rides the step (which owns the accent), not the numeral — untoned gets no class
     assert '<div class="wstep info"><span class="wnum">1</span>' in html
     assert '<div class="wstep"><span class="wnum">2</span>' in html
-    # the numeral colour never reads the tone var; the tone accent lives on the step's inline-start edge
-    assert "color:var(--ghost); opacity:.45}" in html
-    assert "color:var(--wt,var(--ghost))" not in html
+    # the numeral is a flat legible muted, never a tone var, so tone can't recolour or fade it
+    assert ".walk .wnum{" in html
+    assert "color:var(--muted)}" in html
+    assert "color:var(--wt" not in html
     assert "border-inline-start:3px solid var(--wt,transparent)" in html
+
+
+def test_callout_body_splits_blank_line_paragraphs() -> None:
+    block = {"type": "callout", "tone": "info", "body": "First para.\n\nSecond para."}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<p class="prose-p">First para.</p><p class="prose-p">Second para.</p>' in html
+
+
+def test_single_paragraph_callout_stays_inline_without_a_paragraph_wrapper() -> None:
+    block = {"type": "callout", "tone": "info", "body": "Just one line."}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "<div>Just one line.</div>" in html
+    assert '<p class="prose-p">' not in html  # no paragraph wrapper emitted for a single paragraph
+
+
+def test_quote_body_splits_blank_line_paragraphs() -> None:
+    block = {"type": "quote", "body": "Line one.\n\nLine two.", "cite": "src"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<p class="prose-p">Line one.</p><p class="prose-p">Line two.</p>' in html
 
 
 def test_walkthrough_step_span_sets_the_column_widths() -> None:

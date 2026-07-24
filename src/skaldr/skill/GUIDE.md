@@ -102,8 +102,22 @@ never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a 
 fails). (skaldr's own bundled examples use fictional links on purpose because they ship publicly;
 that's the exception, not a pattern to copy into a real report.)
 
-Everything else is escaped and shown literally — there is no raw HTML. A blank line in a `text`
-body starts a new paragraph.
+Everything else is escaped and shown literally — there is no raw HTML.
+
+**Multi-paragraph fields.** A blank line starts a new paragraph in the **set-apart prose** bodies —
+`text.body`, `callout.body`, `quote.body`, and `text`/`rich` table cells. Every other prose field
+(`key_value` values, `list` items, `status_list`/`timeline` text, headings, labels) is single-line:
+a blank line there is just collapsed whitespace.
+
+> **YAML gotcha:** a folded `>` block scalar turns blank lines into spaces *before skaldr sees them*,
+> so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:
+> ```yaml
+> - type: callout
+>   body: |
+>     First paragraph.
+>
+>     Second paragraph.
+> ```
 
 ## Numbers are formatted for you
 
