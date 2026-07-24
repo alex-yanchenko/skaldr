@@ -5,7 +5,7 @@ import re
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import load_report, parse_report
+from skaldr.models import load_report, package_path, parse_report
 from skaldr.render import find_placeholders, render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
@@ -1494,6 +1494,21 @@ def test_host_override_essentials_sit_outside_any_layer() -> None:
     for rule in UNLAYERED_ESSENTIALS:
         assert html.count(rule) == 1
         assert html.index(rule) < first_layer_offset
+
+
+def test_every_referenced_css_var_is_defined() -> None:
+    """A `var(--x)` with no fallback whose token is never assigned resolves to guaranteed-invalid and
+    kills its WHOLE declaration at computed-value time — e.g. one bad token in a `gap` shorthand zeroes
+    both axes, silently. So every no-fallback token reference must be assigned somewhere in the sheet
+    (`:root` globals or a component-local `--c:` alike). This caught `.deflist`'s `var(--s5)` — `--s5`
+    was never in the scale (`--s1/2/3/4/6/8`), so the term/body gap collapsed to 0."""
+    css = package_path("styles.css").read_text(encoding="utf-8")
+    defined = set(re.findall(r"(--[\w-]+)\s*:", css))
+    referenced_no_fallback = set(re.findall(r"var\(\s*(--[\w-]+)\s*\)", css))
+
+    assert referenced_no_fallback <= defined, (
+        f"CSS references undefined tokens (no fallback): {sorted(referenced_no_fallback - defined)}"
+    )
 
 
 @pytest.mark.parametrize(
