@@ -6,7 +6,7 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.models import load_report, parse_report
-from skaldr.render import render_embed, render_html, render_richtext
+from skaldr.render import find_placeholders, render_embed, render_html, render_richtext
 from tests.conftest import REPO_ROOT
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
@@ -1528,6 +1528,39 @@ def test_richtext_applies_the_inline_subset() -> None:
 
 def test_richtext_escapes_raw_html() -> None:
     assert str(render_richtext("<script>x & y")) == "&lt;script&gt;x &amp; y"
+
+
+def test_richtext_renders_a_placeholder_as_a_chip_and_collects_it() -> None:
+    seen: set[str] = set()
+    html = str(render_richtext("Open {{deployed_url}} now", placeholders=seen))
+
+    assert html == 'Open <span class="placeholder">deployed_url</span> now'
+    assert seen == {"deployed_url"}
+
+
+def test_richtext_placeholder_survives_bold_and_italic_neighbours() -> None:
+    html = str(render_richtext("**go** to {{url}} *now*"))
+
+    assert html == '<strong>go</strong> to <span class="placeholder">url</span> <em>now</em>'
+
+
+def test_find_placeholders_collects_sorted_unique_names_across_the_report() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "text", "body": "See {{ticket}} and {{deployed_url}}."},
+                {"type": "callout", "tone": "info", "body": "Ping {{ticket}} again."},
+            ]
+        )
+    )
+
+    assert find_placeholders(report) == ["deployed_url", "ticket"]
+
+
+def test_report_with_no_placeholders_collects_nothing() -> None:
+    report = parse_report(make_report(blocks=[{"type": "text", "body": "All real values here."}]))
+
+    assert find_placeholders(report) == []
 
 
 def test_author_id_becomes_the_heading_and_section_anchor() -> None:

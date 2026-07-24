@@ -199,6 +199,50 @@ def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.Cap
     assert f"FAIL  {data_path}" in captured.err
 
 
+def test_check_notes_unfilled_placeholders_but_passes_without_strict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "Open {{url}}."}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "1 placeholder unfilled: url" in captured.out
+
+
+def test_check_strict_fails_on_an_unfilled_placeholder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "Open {{url}}."}]))
+
+    exit_code = main(["--check", "--strict", str(data_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "1 unfilled placeholder: url" in captured.err
+
+
+def test_check_strict_passes_when_no_placeholders_remain(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "Open the real URL."}]))
+
+    exit_code = main(["--check", "--strict", str(data_path)])
+
+    assert exit_code == 0
+    assert f"OK    {data_path}" in capsys.readouterr().out
+
+
+def test_strict_without_check_is_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit):
+        main(["--strict", str(data_path)])
+
+    assert "--strict only applies to --check" in capsys.readouterr().err
+
+
 def test_check_multiple_files_fails_if_any_is_invalid(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

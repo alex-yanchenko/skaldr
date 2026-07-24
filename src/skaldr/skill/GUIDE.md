@@ -120,6 +120,16 @@ a blank line there is just collapsed whitespace.
 >     Second paragraph.
 > ```
 
+## Placeholders — fill-me-later blanks
+
+For a rehearse-then-finalize doc (a demo runbook whose real URL/ticket doesn't exist yet), write a
+blank as `{{name}}` in any prose field. It renders as a loud `‹name›` chip so it can't ship
+unnoticed, and there's no separate to-fill list to keep in sync. Fill it by replacing the token with
+the real text.
+
+- `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
+- `skaldr --check --strict file.yaml` **fails** while any blank remains — the gate you run before "final".
+
 ## Numbers are formatted for you
 
 Write raw numbers (`8500`, not `"8,500"`). skaldr adds thousands separators, computes

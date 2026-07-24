@@ -32,6 +32,7 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _STRIKE = re.compile(r"~~([^~]+)~~")
 _ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
+_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
 
 def render_richtext(
@@ -39,6 +40,7 @@ def render_richtext(
     ref_numbers: dict[str, int] | None = None,
     cited: set[str] | None = None,
     anchor_ids: frozenset[str] | None = None,
+    placeholders: set[str] | None = None,
 ) -> Markup:
     """Escape, then apply the limited inline markdown subset. Code spans, footnote markers, and
     links are stashed as finished HTML *before* the bold/strike/italic passes run, so a stray `*`
@@ -90,6 +92,16 @@ def render_richtext(
         return match.group(0)
 
     result = _LINK.sub(_link, result)
+
+    def _placeholder(match: re.Match[str]) -> str:
+        # A `{{name}}` fill-me-later blank: always renders as a visible chip so it can't be shipped
+        # unnoticed; `placeholders`, when passed, collects the names for the --check --strict gate.
+        name = match.group(1)
+        if placeholders is not None:
+            placeholders.add(name)
+        return _stash(f'<span class="placeholder">{name}</span>')
+
+    result = _PLACEHOLDER.sub(_placeholder, result)
     result = _BOLD.sub(r"<strong>\1</strong>", result)
     result = _STRIKE.sub(r"<del>\1</del>", result)
     result = _ITALIC.sub(r"<em>\1</em>", result)
@@ -124,7 +136,9 @@ def _environment() -> Environment:
     return env
 
 
-def _render(report: Report, template: str, *, expand: bool = False) -> str:
+def _render(
+    report: Report, template: str, *, expand: bool = False, placeholders: set[str] | None = None
+) -> str:
     env = _environment()
     slugs = compute.anchor_slugs(report)
 
@@ -138,7 +152,7 @@ def _render(report: Report, template: str, *, expand: bool = False) -> str:
     cited_references: set[str] = set()
 
     def richtext(text: str) -> Markup:
-        return render_richtext(text, ref_numbers, cited_references, anchor_ids)
+        return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
 
     filters = cast("dict[str, Any]", env.filters)
     filters["richtext"] = richtext
@@ -165,6 +179,15 @@ def render_html(report: Report, *, expand: bool = False) -> str:
     collapsible `<details>` open; used for PDF output, where headless print can't run the
     beforeprint script that expands sections on screen."""
     return _render(report, "page.html.j2", expand=expand)
+
+
+def find_placeholders(report: Report) -> list[str]:
+    """Names of every `{{placeholder}}` fill-me-later blank in the report, sorted and de-duplicated.
+    Renders once into a throwaway to reuse the rich-text traversal; the --check --strict gate uses it
+    to refuse a doc that still has blanks."""
+    seen: set[str] = set()
+    _render(report, "page.html.j2", placeholders=seen)
+    return sorted(seen)
 
 
 def render_embed(report: Report) -> str:

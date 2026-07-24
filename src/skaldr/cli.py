@@ -14,7 +14,7 @@ from typing import Literal
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
-from skaldr.render import render_html, render_report
+from skaldr.render import find_placeholders, render_html, render_report
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
@@ -58,6 +58,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="validate the content file(s) against the schema and exit — no HTML written. Pass several "
         "(e.g. a glob) to validate a whole set; exits non-zero if any file is invalid.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="with --check: also fail if any `{{placeholder}}` blank is still unfilled — the "
+        "finalize gate for a rehearse-then-fill living doc.",
     )
     parser.add_argument(
         "--emit-json",
@@ -137,11 +143,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--check/--emit-json only validate — they write no HTML, so -o/--pdf/--embed do nothing")
     if args.watch and (args.check or args.emit_json or args.pdf):
         parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
+    if args.strict and not args.check:
+        parser.error("--strict only applies to --check (it gates unfilled placeholders during validation)")
 
     if args.check:
         if not args.data:
             parser.error("--check needs at least one content file")
-        return _check_files(args.data)
+        return _check_files(args.data, strict=args.strict)
 
     if not args.data:
         parser.error("a content file is required (or use --write-schema)")
@@ -236,17 +244,28 @@ def _watch(data_path: Path, out_path: Path, *, embed: bool, interval: float = _P
         return 0
 
 
-def _check_files(paths: Sequence[str]) -> int:
+def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
     """Validate each content file against the schema without rendering. Prints one line per file and
-    returns 1 if any file is invalid, so it drops straight into a pre-commit hook or CI over a glob."""
+    returns 1 if any file is invalid, so it drops straight into a pre-commit hook or CI over a glob.
+    With `strict`, an unfilled `{{placeholder}}` also fails a file (otherwise it's a noted-but-OK count)."""
     failed = 0
     for raw_path in paths:
         path = Path(raw_path)
         try:
-            load_report(path)
+            report = load_report(path)
         except ReportError as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
+            continue
+        unfilled = find_placeholders(report)
+        if unfilled and strict:
+            failed += 1
+            print(
+                f"FAIL  {path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
+                file=sys.stderr,
+            )
+        elif unfilled:
+            print(f"OK    {path}  ({_plural(len(unfilled), 'placeholder')} unfilled: {', '.join(unfilled)})")
         else:
             print(f"OK    {path}")
     if failed:
