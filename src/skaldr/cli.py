@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         "--strict",
         action="store_true",
         help="with --check: also fail if any `{{placeholder}}` blank is still unfilled — the "
-        "finalize gate for a rehearse-then-fill living doc.",
+        "finalize gate for a rehearse-then-finalize living doc.",
     )
     parser.add_argument(
         "--emit-json",
@@ -245,19 +245,22 @@ def _watch(data_path: Path, out_path: Path, *, embed: bool, interval: float = _P
 
 
 def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
-    """Validate each content file against the schema without rendering. Prints one line per file and
-    returns 1 if any file is invalid, so it drops straight into a pre-commit hook or CI over a glob.
-    With `strict`, an unfilled `{{placeholder}}` also fails a file (otherwise it's a noted-but-OK count)."""
+    """Validate each content file and print one line per file, returning 1 if any file is invalid — it
+    drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass (no HTML
+    is written), so a render-time error like a dangling `#anchor` link surfaces as FAIL too, not only
+    schema errors. With `strict`, an unfilled `{{placeholder}}` also fails a file (else a noted-OK count)."""
     failed = 0
     for raw_path in paths:
         path = Path(raw_path)
         try:
             report = load_report(path)
+            # Render (discarding output) to collect placeholders AND surface render-time errors (e.g. a
+            # dangling anchor) as a clean FAIL — must stay inside the try so nothing escapes as a traceback.
+            unfilled = find_placeholders(report)
         except ReportError as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
             continue
-        unfilled = find_placeholders(report)
         if unfilled and strict:
             failed += 1
             print(
@@ -265,7 +268,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
                 file=sys.stderr,
             )
         elif unfilled:
-            print(f"OK    {path}  ({_plural(len(unfilled), 'placeholder')} unfilled: {', '.join(unfilled)})")
+            print(f"OK    {path}  ({_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)})")
         else:
             print(f"OK    {path}")
     if failed:

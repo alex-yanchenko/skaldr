@@ -208,19 +208,19 @@ def test_check_notes_unfilled_placeholders_but_passes_without_strict(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "1 placeholder unfilled: url" in captured.out
+    assert "1 unfilled placeholder: url" in captured.out
 
 
-def test_check_strict_fails_on_an_unfilled_placeholder(
+def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "Open {{url}}."}]))
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
 
     exit_code = main(["--check", "--strict", str(data_path)])
 
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert "1 unfilled placeholder: url" in captured.err
+    assert "2 unfilled placeholders: ticket, url" in captured.err  # plural + sorted
 
 
 def test_check_strict_passes_when_no_placeholders_remain(
@@ -237,10 +237,28 @@ def test_check_strict_passes_when_no_placeholders_remain(
 def test_strict_without_check_is_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report())
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         main(["--strict", str(data_path)])
 
+    assert excinfo.value.code == 2  # argparse usage error
     assert "--strict only applies to --check" in capsys.readouterr().err
+
+
+def test_check_fails_cleanly_on_a_render_time_error_without_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A dangling `#anchor` link is schema-valid but fails at render; --check must report FAIL and keep
+    # going (never escape as a traceback), then still process the next file.
+    bad = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "[x](#nope)"}]), name="bad.yaml")
+    good = _write(tmp_path, make_report(), name="good.yaml")
+
+    exit_code = main(["--check", str(bad), str(good)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"FAIL  {bad}" in captured.err
+    assert "unknown anchor '#nope'" in captured.err
+    assert f"OK    {good}" in captured.out  # the batch continued past the failing file
 
 
 def test_check_multiple_files_fails_if_any_is_invalid(

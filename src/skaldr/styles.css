@@ -364,8 +364,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .cite::before{content:"— "}}
 
 	/* note: a quiet set-apart aside — softer than a callout, for speaker notes / narration / asides. */
-	.note{border-inline-start:2px solid var(--line); padding:2px 0 2px 14px; margin-block:var(--s4); color:var(--muted); font-size:13.5px}
-	.note .note-title{font-weight:600; color:var(--ink); margin-block-end:var(--s1)}
+	.note-block{border-inline-start:2px solid var(--line); padding:2px 0 2px 14px; margin-block:var(--s4); color:var(--muted); font-size:13.5px}
+	.note-block .note-block-title{font-weight:600; color:var(--ink); margin-block-end:var(--s1)}
 
 	.code{margin-block:var(--s4); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;
 		background:var(--code-bg); box-shadow:var(--shadow);
