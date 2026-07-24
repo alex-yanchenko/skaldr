@@ -235,6 +235,12 @@ _MAX_LIST_DEPTH = 4
 
 class ListItem(_Frozen):
     text: str = Field(min_length=1, description="The point's rich-text content.")
+    checked: bool = Field(
+        default=False,
+        description="Only meaningful in a `style: check` list: renders the box ticked. Set it in the "
+        "YAML to record durable progress (an agent editing its plan marks items done here); a reader "
+        "clicking a box in the browser is ephemeral and does not persist.",
+    )
     items: list["str | ListItem"] = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
@@ -253,7 +259,11 @@ def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
 
 class ListBlock(_Block):
     type: Literal["list"]
-    style: Literal["bullet", "number"] = Field(default="bullet", description="Bulleted or numbered.")
+    style: Literal["bullet", "number", "check"] = Field(
+        default="bullet",
+        description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
+        "(the ticks are ephemeral: a browser reload resets them).",
+    )
     items: list[str | ListItem] = Field(
         min_length=1,
         description="Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest "
@@ -284,6 +294,21 @@ class KVPair(_Frozen):
 class KeyValue(_Block):
     type: Literal["key_value"]
     pairs: list[KVPair] = Field(min_length=1, description="Vertical label/value metadata rows.")
+
+
+class DefItem(_Frozen):
+    term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
+    body: str = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
+
+
+class DefList(_Block):
+    type: Literal["def_list"]
+    items: list[DefItem] = Field(
+        min_length=1,
+        description="Term/definition pairs — a real labelled list for procedural sub-labels like "
+        "Action / Expected / Say. Unlike `key_value` (compact muted metadata), the term reads as a "
+        "prominent label and the body is full rich prose.",
+    )
 
 
 class CardDelta(_Frozen):
@@ -466,6 +491,12 @@ class Quote(_Block):
     type: Literal["quote"]
     body: str = Field(description="Rich-text quotation.")
     cite: str | None = Field(default=None, description="Optional attribution line.")
+
+
+class Note(_Block):
+    type: Literal["note"]
+    body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
+    title: str | None = Field(default=None, description="Optional label for the note.")
 
 
 class Image(_Block):
@@ -1307,6 +1338,7 @@ _Leaf = (
     | ListBlock
     | FactStrip
     | KeyValue
+    | DefList
     | Cards
     | BadgeRow
     | Callout
@@ -1316,6 +1348,7 @@ _Leaf = (
     | Table
     | Code
     | Quote
+    | Note
     | Image
     | Timeline
     | Flow

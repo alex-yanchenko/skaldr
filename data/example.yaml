@@ -166,14 +166,21 @@ blocks:
     level: 3
     text: "Follow-up checklist"
   - type: list
-    style: number
+    style: check
     items:
-      - "Confirm the `bin > 12` scan rule with the site lead."
+      - { text: "Confirm the `bin > 12` scan rule with the site lead.", checked: true }
       - text: "Ship the 9-digit bin-code widening behind the scan flag."
         items:
           - "Stage on the pilot aisle first."
           - "Watch the mis-scan rate for one shift before widening."
       - "Re-run the count and re-verify reconciliation."
+  - type: def_list
+    items:
+      - { term: "Owner", body: "Inventory Ops — **@site-lead** signs off each fix." }
+      - { term: "Rollback", body: "Re-disable the scan flag; the widened bins fall back to the 5-digit read." }
+  - type: note
+    title: "For the read-out"
+    body: "Lead with the reconciliation gate — it is the one number leadership tracks."
 
   - type: heading
     text: "Rollout"

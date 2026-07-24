@@ -87,7 +87,8 @@
    of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
 {# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
-{% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list">{% for item in items %}{% if item is string %}<li>{{ item | richtext }}</li>{% else %}<li>{{ item.text | richtext }}{% if item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endif %}{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
+{% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " check" if style == "check" else "" }}">{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
 {% macro prose_paras(text) %}{% set paras = text.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
@@ -188,6 +189,8 @@
 <div class="facts">{% for f in block.facts %}<span class="fact"><span class="k">{{ f.label }}</span><span>{{ f.value }}</span></span>{% endfor %}</div>
 {% elif block.type == "key_value" %}
 <dl class="kv">{% for p in block.pairs %}<dt>{{ p.label }}</dt><dd>{{ p.value | richtext }}</dd>{% endfor %}</dl>
+{% elif block.type == "def_list" %}
+<dl class="deflist">{% for it in block.items %}<dt>{{ it.term }}</dt><dd>{{ prose_paras(it.body) }}</dd>{% endfor %}</dl>
 {% elif block.type == "cards" %}
 <div class="cards">{% for c in block.items %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ DELTA_GLYPHS[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endfor %}</div>
 {% elif block.type == "badge_row" %}
@@ -204,6 +207,8 @@
 <div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for line in block.content.split("\n") %}<span class="ln {{ 'add' if line.startswith('+') else 'del' if line.startswith('-') else 'ctx' }}">{{ line[1:] if (line.startswith('+') or line.startswith('-')) else line }}</span>{% endfor %}</pre>{% else %}<pre>{{ block.content }}</pre>{% endif %}</div>
 {% elif block.type == "quote" %}
 <blockquote class="quote"><div>{{ prose_paras(block.body) }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
+{% elif block.type == "note" %}
+<div class="note">{% if block.title %}<div class="note-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}
