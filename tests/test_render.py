@@ -384,8 +384,11 @@ def test_note_renders_optional_title_and_body() -> None:
 
     html = render_html(parse_report(make_report(blocks=[titled, plain])))
 
-    assert '<div class="note"><div class="note-title">Read aloud</div><div>Speak softly.</div></div>' in html
-    assert '<div class="note"><div>Just an aside.</div></div>' in html
+    assert (
+        '<div class="note-block"><div class="note-block-title">Read aloud</div>'
+        "<div>Speak softly.</div></div>" in html
+    )
+    assert '<div class="note-block"><div>Just an aside.</div></div>' in html
 
 
 def test_panel_renders_a_titled_card_holding_its_blocks() -> None:
@@ -451,6 +454,63 @@ def test_badge_referenced_only_inside_a_panel_still_feeds_the_legend() -> None:
     html = render_html(report)
 
     assert "the prod tag" in html  # legend picked up the panel-nested reference
+
+
+def test_footnote_reference_inside_a_panel_is_numbered_and_backlinked() -> None:
+    # proves iter_reference_items recurses into a panel (footnote numbering + the references list)
+    blocks = [
+        {
+            "type": "panel",
+            "title": "Deck",
+            "blocks": [
+                {"type": "text", "body": "Per the spec[^spec]."},
+                {"type": "references", "items": [{"key": "spec", "text": "The spec doc."}]},
+            ],
+        }
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert 'href="#ref-spec">[1]</a>' in html  # numbered citation
+    assert 'id="ref-spec"' in html  # and the list entry it links to
+
+
+def test_table_inside_a_panel_still_gets_the_badge_legend_before_it() -> None:
+    # proves _iter_tables recurses into a panel (legend placement keys off the first table)
+    report = parse_report(
+        make_report(
+            badges={"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}},
+            blocks=[
+                {
+                    "type": "panel",
+                    "title": "Deck",
+                    "blocks": [
+                        {
+                            "type": "table",
+                            "columns": [
+                                {"key": "name", "label": "Name", "kind": "text"},
+                                {"key": "tag", "label": "", "kind": "badge"},
+                            ],
+                            "rows": [{"name": "svc", "tag": "P"}],
+                        }
+                    ],
+                }
+            ],
+        )
+    )
+
+    html = render_html(report)
+
+    assert "the prod tag" in html  # legend rendered (placement walks into the panel for the table)
+    assert "Legend — badges used on this page" in html
+
+
+def test_note_body_splits_blank_line_paragraphs() -> None:
+    block = {"type": "note", "body": "First aside.\n\nSecond aside."}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<p class="prose-p">First aside.</p><p class="prose-p">Second aside.</p>' in html
 
 
 def test_walkthrough_step_span_sets_the_column_widths() -> None:
@@ -1542,6 +1602,41 @@ def test_richtext_placeholder_survives_bold_and_italic_neighbours() -> None:
     html = str(render_richtext("**go** to {{url}} *now*"))
 
     assert html == '<strong>go</strong> to <span class="placeholder">url</span> <em>now</em>'
+
+
+@pytest.mark.parametrize("token", ["{{url}}", "{{ url }}", "{{  url  }}"])
+def test_richtext_placeholder_tolerates_internal_whitespace(token: str) -> None:
+    seen: set[str] = set()
+    html = str(render_richtext(token, placeholders=seen))
+
+    assert html == '<span class="placeholder">url</span>'
+    assert seen == {"url"}
+
+
+def test_richtext_malformed_empty_placeholder_stays_literal() -> None:
+    seen: set[str] = set()
+    html = str(render_richtext("a {{ }} b", placeholders=seen))
+
+    assert html == "a {{ }} b"  # no name → not a placeholder
+    assert seen == set()
+
+
+def test_find_placeholders_reaches_table_cells_def_list_and_panel_nested_text() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {
+                    "type": "table",
+                    "columns": [{"key": "note", "label": "Note", "kind": "rich"}],
+                    "rows": [{"note": "ping {{cell_ph}}"}],
+                },
+                {"type": "def_list", "items": [{"term": "Owner", "body": "{{def_ph}} owns it"}]},
+                {"type": "panel", "title": "P", "blocks": [{"type": "text", "body": "in {{panel_ph}}"}]},
+            ]
+        )
+    )
+
+    assert find_placeholders(report) == ["cell_ph", "def_ph", "panel_ph"]
 
 
 def test_find_placeholders_collects_sorted_unique_names_across_the_report() -> None:

@@ -208,7 +208,7 @@
 {% elif block.type == "quote" %}
 <blockquote class="quote"><div>{{ prose_paras(block.body) }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
 {% elif block.type == "note" %}
-<div class="note">{% if block.title %}<div class="note-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
+<div class="note-block">{% if block.title %}<div class="note-block-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}

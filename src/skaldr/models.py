@@ -260,6 +260,13 @@ def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
             _check_list_depth(item.items, depth + 1)
 
 
+def _any_item_checked(items: list["str | ListItem"]) -> bool:
+    """Whether any item (at any depth) sets `checked` — used to reject the flag outside a check list."""
+    return any(
+        isinstance(item, ListItem) and (item.checked or _any_item_checked(item.items)) for item in items
+    )
+
+
 class ListBlock(_Block):
     type: Literal["list"]
     style: Literal["bullet", "number", "check"] = Field(
@@ -276,6 +283,12 @@ class ListBlock(_Block):
     @model_validator(mode="after")
     def _bounded_depth(self) -> "ListBlock":
         _check_list_depth(self.items, 1)
+        return self
+
+    @model_validator(mode="after")
+    def _checked_only_in_check_style(self) -> "ListBlock":
+        if self.style != "check" and _any_item_checked(self.items):
+            raise ValueError("`checked` is only valid in a `style: check` list")
         return self
 
 

@@ -365,6 +365,24 @@ def test_check_list_item_carries_a_checked_flag_defaulting_false() -> None:
     )
 
 
+def test_checked_on_a_non_check_style_list_is_rejected() -> None:
+    block = {"type": "list", "style": "bullet", "items": [{"text": "x", "checked": True}]}
+
+    with pytest.raises(ReportError, match=r"`checked` is only valid in a `style: check` list"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_checked_nested_in_a_non_check_style_list_is_rejected() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "items": [{"text": "parent", "items": [{"text": "kid", "checked": True}]}],
+    }
+
+    with pytest.raises(ReportError, match=r"`checked` is only valid"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_def_list_parses_to_whole_model() -> None:
     block = {"type": "def_list", "items": [{"term": "Action", "body": "Do it."}]}
 

@@ -106,9 +106,9 @@ that's the exception, not a pattern to copy into a real report.)
 Everything else is escaped and shown literally — there is no raw HTML.
 
 **Multi-paragraph fields.** A blank line starts a new paragraph in the **set-apart prose** bodies —
-`text.body`, `callout.body`, `quote.body`, and `text`/`rich` table cells. Every other prose field
-(`key_value` values, `list` items, `status_list`/`timeline` text, headings, labels) is single-line:
-a blank line there is just collapsed whitespace.
+`text.body`, `callout.body`, `quote.body`, `note.body`, `def_list` item bodies, and `text`/`rich`
+table cells. Every other prose field (`key_value` values, `list` items, `status_list`/`timeline`
+text, headings, labels) is single-line: a blank line there is just collapsed whitespace.
 
 > **YAML gotcha:** a folded `>` block scalar turns blank lines into spaces *before skaldr sees them*,
 > so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:

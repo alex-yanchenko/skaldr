@@ -49,7 +49,10 @@ def render_richtext(
     unknown key is left as literal text so a typo surfaces instead of vanishing. `cited` records
     which keys have already been rendered so only the first occurrence carries the `fnref-` anchor
     id (keeping ids unique) and the references list knows which keys are actually cited; pass one
-    shared set across a whole render."""
+    shared set across a whole render. `anchor_ids` is the set of valid same-page `#slug` targets — a
+    `[…](#id)` link resolves only if its target is in it (a full render passes it; None leaves such
+    links literal). `placeholders`, when passed, collects every `{{name}}` blank's name (the tokens
+    always render as a chip regardless)."""
     # NUL is the stash sentinel below; strip any literal NUL from input so it can't collide.
     escaped = str(escape(text)).replace("\x00", "")
     stash: list[str] = []
