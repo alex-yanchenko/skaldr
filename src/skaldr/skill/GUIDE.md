@@ -275,11 +275,11 @@ sit in a dashed well; a single arrow joins them to the `hub` (the one). `directi
 ```yaml
 - type: fan
   direction: in           # in (default): spokes → hub (N→1) | out: hub → spokes (1→N)
-  hub: { label: "Student record", tone: accent }
+  hub: { label: "Order record", tone: accent }
   spokes:
-    - { label: "SIS export",  tone: info }
-    - { label: "Transcripts", tone: info, note: "nightly batch" }
-    - { label: "Registrar",   tone: info }
+    - { label: "Payment gateway", tone: info }
+    - { label: "Inventory check",  tone: info, note: "nightly batch" }
+    - { label: "Shipping quote",   tone: info }
 ```
 
 `hub` and `spokes` are flow nodes — each takes `label`, optional `tone`, `note` (rich, one line),
