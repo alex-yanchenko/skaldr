@@ -1,99 +1,122 @@
 ---
 name: skaldr-presentation
 description: >-
-  Build a talk-ready presentation with skaldr — slides plus a word-for-word teleprompter
-  run-of-show with color-coded live-or-recording cues and a built-in fallback plan. Use whenever
-  someone wants to make, build, rework, or tighten a presentation, pitch, deck, demo, board or
-  investor slides, a talk track, a keynote, or a live product walkthrough — including "turn this
-  into slides" or "make a cheatsheet I can read from." NOT for a written report or document
-  (author that with skaldr directly), a single diagram, or an ad-hoc chat answer.
+  Author the presenter's runbook (a verbatim, color-cued teleprompter) for a talk, and drive the
+  audience deck into the org's real brand template — for pitches, demos, board/investor decks,
+  keynotes, or a live product walkthrough. Use on "make/rework/tighten a deck", "build a talk
+  track", "a cheatsheet I can read from", "turn this into slides". NOT for a written report/doc
+  (author that with skaldr directly), a single diagram, or an ad-hoc answer.
 ---
 
 # Presentation
 
-Produce **two skaldr documents**, never hand-written HTML, and re-render both after every edit:
+Split the work by tool, because each is good at a different half:
 
-1. **`slides.yaml`** — what the audience sees. One `panel` per slide.
-2. **`runbook.yaml`** — the presenter's word-for-word run-of-show: a cold-open intro plus one beat per slide.
+- **The deck (what the audience sees) → the org's real presentation template** (Google Slides /
+  PowerPoint). Brand, logo, and layout ARE the credibility — a generic or skaldr-rendered deck
+  reads as off-brand in a high-stakes room. skaldr does **not** render this deck.
+- **The runbook (what the presenter says) → skaldr.** This is skaldr's job and where it's best: a
+  word-for-word teleprompter with cues that can't be misread. skaldr also emits the **build-sheet**
+  (per-slide headline + bullets + speaker notes + which clip) so filling the template is copy-paste.
 
-Run `skaldr --guide` for the block palette. Render after each change:
-`skaldr slides.yaml -o slides.html && skaldr runbook.yaml -o runbook.html`.
+Exception: for a quick internal/no-brand talk, a skaldr `slides.yaml` (one `panel` per slide) is a
+fine deck. For anything brand-critical, use the template.
 
-## Slides — `slides.yaml`
+Run `skaldr --guide` for blocks. Re-render the runbook after every edit:
+`skaldr runbook.yaml -o runbook.html`.
 
-- **4–5 content slides.** Not a stack of ten one-line flash cards; not three thin ones. Each slide is a **punchy headline** plus **a few substantive bullets** — real content, not a single message.
-- One `panel` per slide: `title` is the headline, `blocks` is a short `list`.
-- **Lead with what this audience prices**, differentiation first, reassurance second. Investors: the wedge, first-to-market, defensibility, market size, execution ("last time we showed X — here's what we built with it"). Customers: the outcome and the hours saved.
-- Headlines carry the punch; bullets carry the substance. **No stage directions on a slide** — those live only in the runbook.
+## The runbook — `runbook.yaml` (skaldr's real deliverable)
 
-## Runbook — `runbook.yaml` — the teleprompter
-
-A cold-open **Intro** beat plus **one beat per slide**. Each beat is a `walkthrough` step whose `detail` is an **ordered list of blocks** alternating cues and reads. Three kinds, styled so a cue can never be read aloud by mistake:
+A cold-open **intro** beat plus **one beat per surface** (each slide, and each clip). Every beat is
+a `walkthrough` step whose `detail` is an ordered list alternating cues and reads. Three kinds,
+styled so a cue can never be read aloud:
 
 | Kind | Block | Meaning |
 |---|---|---|
-| **READ** | `{ type: text, body: "…" }` | Plain text — speak it **verbatim** |
-| **SCREEN** | `{ type: callout, tone: info, body: "🖥️ **SCREEN** — …" }` | Blue box — advance / what's on screen |
-| **SHOW** | `{ type: callout, tone: warning, body: "🎬 **SHOW** — *Live:* … · *Plan B:* play **GIF-N**" }` | Amber box — do the live action (or play the recording) |
+| **READ** | `{ type: text, body: "…" }` | Plain text — speak **verbatim** |
+| **SCREEN** | `{ type: callout, tone: info, body: "🖥️ **SLIDE n** — …" }` | Blue — advance / what's on screen |
+| **SHOW/CLIP** | `{ type: callout, tone: warning, body: "🎬 **CLIP n plays** — … narrate over it:" }` | Amber — the demo action or clip |
 
-**The rule the presenter leans on: read the plain lines, never the colored boxes.** Never put read text in a callout; never put a cue in plain text.
+**The rule the presenter leans on: read the plain lines, never the colored boxes.** Never put a
+read in a callout; never put a cue in plain text.
 
-- Give each beat a `sub` with an **honest** time. Verbatim reads run ~2.5 words/second — a four-slide deck is roughly 3–4 minutes of talking; live/recording dwell fills the rest. Don't inflate.
-- **Cold open:** presenter's name, a one-line hook or callback, an optional light line (a "demo gods" joke doubles as cover for the recording fallback). No hello/agenda slide.
+- Give each beat a `sub` with an **honest** time (~2.5 words/sec; don't inflate).
+- **Cold open:** name + a one-line hook/callback. No hello/agenda slide.
+- The runbook is the **single source of truth** for the words. The deck's speaker notes are copied
+  from it, never the other way around.
 
-## Plan A / Plan B — one script, two ways to show
+## The deck — in the brand template
 
-- **Plan A** is live; **Plan B** is pre-recorded clips (GIFs). The **spoken lines are identical either way** — only the *show* differs — so every SHOW cue carries **both**: `*Live:* <action>  ·  *Plan B:* play **GIF-N**`.
-- List the clips to pre-record in the runbook's setup. The fallback means a flaky system, network, or nerves never breaks the talk — you're always already on Plan B.
-- Never let anything spin on the shared screen. **Pre-warm** anything that takes more than ~2 seconds off-camera; the audience only sees the payoff.
+- **Get the real template file** (export the org's deck to `.pptx`) and build the content into its
+  layouts, so it inherits theme, fonts, logo, and footer. Don't hand-pick colors — match the brand.
+- **4–5 content slides.** Punchy headline + a few substantive bullets — not one-liners, not three
+  thin slides. Lead with what the audience prices; substance in the bullets, punch in the headline.
+- **Constant deck title** + a **section-nav that highlights the current section** beats repeating
+  the section as the slide title (that repetition is noise). Highlight one thing per slide.
+- **No stage directions on a slide** — those live only in the runbook.
+- Put speaker notes in the tool's **Presenter view** (or keep the runbook on a phone / 2nd screen).
+
+## Demos: recorded-by-default, live as the fallback
+
+For remote or high-stakes demos, **record the clips and present those by default** — nothing breaks
+live — and keep a live environment ready for Q&A.
+
+- **Interleave** content slide → clip → content slide. Each clip is its own full-bleed slide.
+- **mp4, muted, autoplay, ~30 fps** — NOT GIF (GIFs balloon to tens of MB and can't do smooth
+  motion). For a remote screen-share, clips must be **local files** (never streamed from Drive/
+  YouTube — that adds a second network hop that stalls), and **pre-advance once** to cache them.
+- **Honest, non-defensive disclosure** in the opener: say it's recorded so it runs smoothly and a
+  live environment is ready for questions. State it and move on — don't protest that "it's real."
+- Never let anything spin on the shared screen; the audience sees only the payoff.
 
 ## Placeholders
 
-- Write `{{name}}` for anything unknown until rehearsal (a URL, a demo record, a code). It renders as a loud chip so it can't ship unfilled.
-- Gate before "final": `skaldr --check --strict runbook.yaml` fails while any placeholder remains.
+- Write `{{name}}` for anything unknown until rehearsal (a URL, a demo record, a code) — renders as
+  a loud chip. `skaldr --check --strict runbook.yaml` fails while any remain; run it before "final."
 
 ## Writing rules — the reads are spoken verbatim
 
-- **Plain, natural, spoken English.** If a real person wouldn't say it that way, rewrite it.
-- **No engineer jargon** in reads or slides — say *reads* not "parses", *overnight* not "in a sprint", *shortcut* not "wrapper", *entering it* not "keying it in". The audience isn't engineers.
-- **No boardroom jargon unless the audience genuinely trades in it** — prefer "hard to copy" and "they won't want to go back" over "moat", "switching cost", "durable revenue".
-- **Correct tense.** Describe the product's *nature* ("once someone runs on it, they won't want to go back"), not a headcount you don't have — present tense implies an installed base, so only use it when it's true.
-- **Acronyms:** spell out on **first use, in brackets** — "SIS (Student Information System)". Skip universally-known ones (AI, API).
-- Do a **read-aloud pass**: anything stilted, overlong, or that repeats a claim gets cut.
+- **Plain, natural, spoken English.** If a real person wouldn't say it, rewrite it.
+- **No engineer jargon** (say *reads* not "parses", *overnight* not "in a sprint", *enter* not
+  "key in") and **no boardroom jargon** unless the audience trades in it ("hard to copy", not "moat").
+- **Technical substance, grounded and verified.** For a sophisticated audience don't dumb down —
+  but read the actual code/architecture and say what's true, not a vague gesture. Precise beats big.
+- **Correct tense.** Describe the product's nature, not a headcount you don't have.
+- **Acronyms** spelled out on first use in brackets; skip universal ones (AI, API).
+- **No idea said more than twice.** Do a read-aloud pass and cut the third occurrence of any phrase
+  or point — three times reads as strange.
 
 ## Honesty
 
-- **Verify every factual and traction claim** before it goes on a slide — check the data, don't assume.
-- **Never overclaim** production, partners, or an installed base you don't have.
-- **Never lie — and never expose the soft spot.** When traction is thin, frame the **capability and the product's nature**, not counts ("once it's part of how they work…" is true and reveals nothing).
-- **Match register to the audience** — sophisticated people aren't children; don't dumb it down, and don't cheapen it with vague puffery either.
-- Plant a differentiation claim ("first to market", "no one else can do this") **once**, confidently, no hedge — not three times.
-
-## Export to a slide tool (e.g. Notion)
-
-- One slide per `---` divider (present modes break on dividers). **Clean titles** — drop any "Slide N" working labels.
-- **The exported page's title usually shows on screen.** Never leave an internal or throwaway one; use a real cover line or the org's name, or confirm it.
+- **Verify every factual/traction claim against real data or code** before it ships.
+- **Never claim "first / only / nobody else" unless it's verified.** If you can't prove primacy,
+  frame the gap and the difficulty instead — that lands without the risk.
+- **Never overclaim** production, partners, or an installed base you don't have; frame thin traction
+  as capability and nature, not counts.
+- **No defensiveness** — don't answer a doubt nobody raised ("it's all real"). State it, move on.
 
 ## Iterating without wrecking it
 
-- **Evolve the existing docs — never rebuild from scratch.** They accumulate the presenter's edits; a full rewrite destroys them. Make the smallest change that satisfies the note.
-- **Take each note literally:** "reduce X" is not "delete X"; "more slides" means four or five, not ten.
-- **Ask before a structural reframe** (the arc, the lead, the audience framing); **apply line-edits directly** and show the result.
-- **Re-render after every change** and let the presenter reread. One live click is the goal, not ten.
+- **The runbook is the source of truth — edit there, re-render, let the presenter reread.**
+- **Apply each line-edit exactly, and never silently reintroduce a phrase already fixed** (copying
+  stale text back in is the cardinal sin — it makes the presenter re-catch the same bug).
+- **Take each note literally:** "reduce X" ≠ "delete X"; "more slides" means 4–5, not 10.
+- **Evolve; never rebuild from scratch.** Ask before a structural reframe; apply line-edits directly.
 
 ## Consistency checklist — run every build
 
-Tick all before calling a build done (this is what keeps repeated runs from drifting):
-
-- [ ] Both docs exist (`slides.yaml`, `runbook.yaml`) and are re-rendered after the last edit.
-- [ ] 4–5 slides; each a headline plus a few real bullets (not one-liners, not three slides).
-- [ ] Runbook = intro + one beat per slide; honest per-beat times.
-- [ ] Every cue is a colored callout (🖥️ blue SCREEN / 🎬 amber SHOW); every read is plain `text`; no read is in a box and no cue is plain text.
-- [ ] Every SHOW carries **both** `*Live:*` and `*Plan B:* GIF-N`; the clips are listed in setup.
-- [ ] Reads are plain spoken English — no engineer jargon, no unearned boardroom jargon, correct tense.
-- [ ] Acronyms spelled out on first use; universal ones skipped.
-- [ ] Every factual/traction claim verified; nothing overclaimed; thin spots framed as capability, not counts.
-- [ ] Differentiation planted once, no hedge.
-- [ ] `{{placeholders}}` for unknowns; `skaldr --check --strict` clean (or the open ones are intentional).
-- [ ] Export (if any): one slide per divider, clean titles, safe visible page title.
-- [ ] This pass evolved the existing docs — no from-scratch rewrite; each note taken literally.
+- [ ] Deck is in the org's real template (or a skaldr deck only if it's a quick internal talk).
+- [ ] Runbook exists and is re-rendered after the last edit; it's the source of truth for the words.
+- [ ] 4–5 content slides: headline + real bullets. Constant title + section-nav highlight; no
+      section repeated as its own title.
+- [ ] Runbook = intro + one beat per surface (slide and clip); honest per-beat times.
+- [ ] Every cue is a colored callout (🖥️ blue / 🎬 amber); every read is plain `text`; no read in a
+      box, no cue in plain text.
+- [ ] Demos: mp4 (not GIF), local, muted-autoplay, interleaved, pre-cached; honest non-defensive
+      disclosure; live env ready for Q&A.
+- [ ] Plain spoken English; no jargon; correct tense; acronyms on first use.
+- [ ] Every claim verified; no "first/only" unless proven; thin traction framed as capability.
+- [ ] No idea said 3+ times; no defensive lines.
+- [ ] `{{placeholders}}` for unknowns; `--check --strict` clean (or open ones are intentional).
+- [ ] This pass evolved the docs — no from-scratch rewrite; each note applied exactly, no fixed
+      phrase reintroduced.

@@ -111,8 +111,9 @@ skaldr --install-plan-rule  # optional: also have the AI keep its working plans 
 ```
 
 `--install-skill` installs the core authoring skill **and** task-specific ones — currently a
-**presentation builder** (`skaldr-presentation`) that turns a pitch/demo into slides plus a
-word-for-word teleprompter runbook. Each lands in its own `~/.claude/skills/<name>/`.
+**presentation builder** (`skaldr-presentation`) that writes a word-for-word teleprompter runbook
+(with color-coded live/recording cues) and drives the audience deck into the org's real brand
+template. Each lands in its own `~/.claude/skills/<name>/`.
 
 `--install-plan-rule` is a separate, optional step: it adds a short, marker-delimited rule to
 `~/.claude/CLAUDE.md` that steers the AI to author its working plans as live skaldr docs (rendered
