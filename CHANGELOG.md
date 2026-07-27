@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/alex-yanchenko/skaldr/compare/v2.2.1...v2.3.0) (2026-07-27)
+
+
+### Features
+
+* **skills:** add a skills/ library + a presentation-builder skill; --install-skill installs all ([#100](https://github.com/alex-yanchenko/skaldr/issues/100)) ([93388e2](https://github.com/alex-yanchenko/skaldr/commit/93388e288cf91d23fe3361d9ab1421c3daf2cd5a))
+
 ## [2.2.1](https://github.com/alex-yanchenko/skaldr/compare/v2.2.0...v2.2.1) (2026-07-24)
 
 
