@@ -283,39 +283,51 @@ def _guide_text() -> str:
     return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
+# Bundled skills, as (package resource dir, installed skill name under ~/.claude/skills/). The primary
+# authoring skill plus task-specific add-ons; add a row (and a `skills/<name>/SKILL.md`) to ship more.
+# The installed folder name matches each SKILL.md's `name:` frontmatter, as Claude Code requires.
+_BUNDLED_SKILLS: list[tuple[str, str]] = [
+    ("skill", "skaldr"),
+    ("skills/skaldr-presentation", "skaldr-presentation"),
+]
+
+
 def install_skill(home: Path | None = None) -> int:
-    """Copy the bundled skill (a thin, version-agnostic SKILL.md) into <home>/.claude/skills/skaldr.
-    Because it's a copy of a stable file — not a link into the versioned install — it runs ONCE and
-    survives upgrades; the version-specific detail is fetched at author time via `skaldr --guide` /
-    `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent. The
+    """Copy every bundled skill's SKILL.md into its own <home>/.claude/skills/<name>/ (see
+    `_BUNDLED_SKILLS`). Copies of stable files — not links into the versioned install — so it runs
+    ONCE and survives upgrades; version-specific detail is fetched at author time via `skaldr --guide`
+    / `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent. The
     live-plan-doc CLAUDE.md rule is a separate opt-in — see `install_plan_rule`."""
     if home is None:
         home = Path.home()
-    src = package_path("skill") / "SKILL.md"
-    if not src.is_file():
-        print("error: bundled skill not found in this install", file=sys.stderr)
+    sources = [(package_path(src_dir) / "SKILL.md", name) for src_dir, name in _BUNDLED_SKILLS]
+    missing = [name for src, name in sources if not src.is_file()]
+    if missing:
+        print(f"error: bundled skill(s) not found in this install: {', '.join(missing)}", file=sys.stderr)
         return 1
 
     claude_dir = home / ".claude"
-    dest_dir = claude_dir / "skills" / "skaldr"
+    skills_dir = claude_dir / "skills"
     if not claude_dir.exists():
         print("Claude Code doesn't appear to be set up (~/.claude is missing).")
-        print("If you use Claude Code, copy the skill in yourself:")
-        print(f"    mkdir -p {dest_dir}")
-        print(f"    cp {src} {dest_dir}/")
+        print("If you use Claude Code, copy the skills in yourself:")
+        for src, name in sources:
+            print(f"    mkdir -p {skills_dir / name} && cp {src} {skills_dir / name}/")
         return 0
 
-    try:
-        if dest_dir.is_symlink():
-            print(f"note: migrating an older symlinked install at {dest_dir}")
-            dest_dir.unlink()  # older skaldr symlinked this dir into the versioned install
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dest_dir / "SKILL.md")
-    except OSError as err:
-        print(f"error: could not install the skill into {dest_dir}: {err}", file=sys.stderr)
-        return 1
-    print(f"OK  installed skaldr skill -> {dest_dir / 'SKILL.md'}")
-    print("    Restart Claude Code (or reload skills) to pick it up.")
+    for src, name in sources:
+        dest_dir = skills_dir / name
+        try:
+            if dest_dir.is_symlink():
+                print(f"note: migrating an older symlinked install at {dest_dir}")
+                dest_dir.unlink()  # older skaldr symlinked this dir into the versioned install
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest_dir / "SKILL.md")
+        except OSError as err:
+            print(f"error: could not install the skill into {dest_dir}: {err}", file=sys.stderr)
+            return 1
+        print(f"OK  installed {name} skill -> {dest_dir / 'SKILL.md'}")
+    print("    Restart Claude Code (or reload skills) to pick them up.")
     print("    (run `skaldr --install-plan-rule` to also have the agent keep its working plans as")
     print("     live skaldr docs)")
     return 0
