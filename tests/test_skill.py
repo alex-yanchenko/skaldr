@@ -78,6 +78,37 @@ def test_install_skill_is_idempotent(tmp_path: Path) -> None:
     assert (tmp_path / ".claude" / "skills" / "skaldr" / "SKILL.md").is_file()
 
 
+def test_install_brings_the_presentation_skill_alongside_the_primary(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+
+    assert install_skill(home=tmp_path) == 0
+
+    skills = tmp_path / ".claude" / "skills"
+    assert (skills / "skaldr" / "SKILL.md").is_file()
+    assert (skills / "skaldr-presentation" / "SKILL.md").is_file()  # each skill in its own folder
+
+
+def test_presentation_skill_covers_the_core_workflow() -> None:
+    text = (package_path("skills/skaldr-presentation") / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "slides.yaml" in text and "runbook.yaml" in text  # the two documents it produces
+    assert "--check --strict" in text  # the pre-final placeholder gate
+
+
+def test_every_bundled_skill_name_matches_its_install_folder() -> None:
+    """Claude Code requires a skill's `name:` frontmatter to equal its folder. The primary skill
+    installs to ~/.claude/skills/skaldr; each `skills/<dir>` installs to ~/.claude/skills/<dir>. Assert
+    every bundled skill's `name:` matches the folder it lands in, so a new skill can't ship mismatched."""
+    checks = [(package_path("skill") / "SKILL.md", "skaldr")]
+    for skill_dir in package_path("skills").iterdir():
+        if (skill_dir / "SKILL.md").is_file():
+            checks.append((skill_dir / "SKILL.md", skill_dir.name))
+
+    assert len(checks) >= 2  # primary + at least the presentation skill
+    for skill_md, expected_name in checks:
+        assert f"name: {expected_name}\n" in skill_md.read_text(encoding="utf-8")
+
+
 def test_install_skill_migrates_an_older_symlinked_install(tmp_path: Path) -> None:
     elsewhere = tmp_path / "old-cellar-skill"
     elsewhere.mkdir()
@@ -293,7 +324,7 @@ def test_install_skill_reports_a_missing_bundled_skill(
     rc = install_skill(home=tmp_path)
 
     assert rc == 1
-    assert "bundled skill not found" in capsys.readouterr().err
+    assert "bundled skill(s) not found" in capsys.readouterr().err
 
 
 def test_install_skill_reports_a_filesystem_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

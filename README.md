@@ -103,12 +103,16 @@ Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/
 
 ## Let an AI write it
 
-skaldr ships a Claude skill, so you can skip the YAML and just ask. Install it once:
+skaldr ships Claude skills, so you can skip the YAML and just ask. Install them once:
 
 ```bash
-skaldr --install-skill      # copies the skill into ~/.claude/skills (survives upgrades)
+skaldr --install-skill      # copies skaldr's skills into ~/.claude/skills (survives upgrades)
 skaldr --install-plan-rule  # optional: also have the AI keep its working plans as live skaldr docs
 ```
+
+`--install-skill` installs the core authoring skill **and** task-specific ones — currently a
+**presentation builder** (`skaldr-presentation`) that turns a pitch/demo into slides plus a
+word-for-word teleprompter runbook. Each lands in its own `~/.claude/skills/<name>/`.
 
 `--install-plan-rule` is a separate, optional step: it adds a short, marker-delimited rule to
 `~/.claude/CLAUDE.md` that steers the AI to author its working plans as live skaldr docs (rendered
