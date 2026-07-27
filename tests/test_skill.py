@@ -91,7 +91,8 @@ def test_install_brings_the_presentation_skill_alongside_the_primary(tmp_path: P
 def test_presentation_skill_covers_the_core_workflow() -> None:
     text = (package_path("skills/skaldr-presentation") / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "slides.yaml" in text and "runbook.yaml" in text  # the two documents it produces
+    assert "runbook.yaml" in text  # skaldr's real deliverable — the teleprompter
+    assert "template" in text  # the deck goes into the org's real brand template, not skaldr
     assert "--check --strict" in text  # the pre-final placeholder gate
 
 
