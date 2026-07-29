@@ -40,6 +40,7 @@ skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> sk
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
 skaldr --check reports/*.yaml      # validate a whole set at once — for a pre-commit hook or CI
 skaldr --emit-json report.yaml     # print the normalised model as JSON on stdout (for tooling/agents)
+skaldr --extract-source report.html  # recover the YAML source embedded in a render (a file or an http(s) URL)
 ```
 
 For a **PDF**, use `--pdf` (above): it prints the page's print styling with a headless browser you

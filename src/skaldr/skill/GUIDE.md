@@ -590,6 +590,19 @@ chain — fails the build rather than looping. A missing fragment fails with the
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
 
+## The render carries its own source
+
+Every rendered page embeds its **editable YAML source** in an inert `<script id="skaldr-source">`
+block, placed *before* the stylesheet. So an agent handed a skaldr page — a local `.html`, or a
+shared artifact URL — recovers the source **without** wading through the rendered HTML/CSS:
+
+- `skaldr --extract-source report.html` (or an `http(s)://` URL) prints just the YAML.
+- Reading the top of the file (or a fetch) reaches the source block before the CSS.
+
+A top-of-file comment tells agents this. Pass `--no-source` to omit the embed (e.g. a shared page
+whose authoring notes shouldn't ship). The `--embed` fragment carries it too — that's the artifact
+case, where the page is shared as a URL an agent later has to read back.
+
 ## What you never write
 
 Colours, CSS, fonts, pixel sizes, HTML, the legend, the TOC, percentages, subtotals, the

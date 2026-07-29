@@ -55,5 +55,8 @@ fabrication, so honesty is on you.
    `<html>`/`<head>`/`<body>` skeleton so it slots into the Artifact host cleanly (a full document
    would double-wrap).
 
+**Given a skaldr render (`.html` or artifact URL)?** Recover its YAML with
+`skaldr --extract-source <file|url>`; don't parse the HTML — every render embeds its source.
+
 This file is intentionally thin and stable: the version-specific detail lives in `skaldr --guide`
 and `skaldr --write-schema`, so it stays correct across upgrades without reinstalling the skill.

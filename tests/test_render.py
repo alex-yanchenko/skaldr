@@ -6,7 +6,13 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.models import load_report, package_path, parse_report
-from skaldr.render import find_placeholders, render_embed, render_html, render_richtext
+from skaldr.render import (
+    extract_source,
+    find_placeholders,
+    render_embed,
+    render_html,
+    render_richtext,
+)
 from tests.conftest import REPO_ROOT
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
@@ -1509,6 +1515,44 @@ def test_every_referenced_css_var_is_defined() -> None:
     assert referenced_no_fallback <= defined, (
         f"CSS references undefined tokens (no fallback): {sorted(referenced_no_fallback - defined)}"
     )
+
+
+_SAMPLE_SOURCE = 'version: 1\nmeta: {title: T}\nblocks:\n  - {type: text, body: "bin > 12 & <x> --flag"}\n'
+
+
+def test_full_page_embeds_the_source_before_the_stylesheet() -> None:
+    report = parse_report(make_report())
+
+    html = render_html(report, source=_SAMPLE_SOURCE)
+
+    assert '<script type="application/yaml" id="skaldr-source">' in html
+    # placed before the CSS so a fetch/read reaches the source ahead of the stylesheet
+    assert html.index("skaldr-source") < html.index("<style>")
+
+
+def test_embed_fragment_also_embeds_the_source() -> None:
+    # the artifact case: a shared --embed fragment must carry its own recoverable source
+    html = render_embed(parse_report(make_report()), source=_SAMPLE_SOURCE)
+
+    assert extract_source(html) == _SAMPLE_SOURCE
+
+
+def test_embedded_source_round_trips_through_extract_source_with_specials() -> None:
+    html = render_html(parse_report(make_report()), source=_SAMPLE_SOURCE)
+
+    # plain-text embed survives HTML-special chars (`<`, `&`, `--`) with no escaping/decoding
+    assert extract_source(html) == _SAMPLE_SOURCE
+
+
+def test_render_without_source_embeds_no_block() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert "skaldr-source" not in html
+    assert extract_source(html) is None
+
+
+def test_extract_source_returns_none_for_a_page_without_a_block() -> None:
+    assert extract_source("<html><body>no skaldr here</body></html>") is None
 
 
 @pytest.mark.parametrize(

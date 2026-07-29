@@ -17,6 +17,46 @@ def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -
     return path
 
 
+def test_render_embeds_source_and_extract_source_recovers_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    capsys.readouterr()  # drain the render summary
+    assert main(["--extract-source", str(out_path)]) == 0
+
+    recovered = capsys.readouterr().out
+    assert recovered == data_path.read_text(encoding="utf-8")  # exact round-trip, no HTML/CSS
+
+
+def test_no_source_suppresses_the_embed(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path), "--no-source"]) == 0
+
+    assert "skaldr-source" not in out_path.read_text(encoding="utf-8")
+
+
+def test_extract_source_reports_when_no_source_is_embedded(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plain = tmp_path / "plain.html"
+    plain.write_text("<html><body>not a skaldr page</body></html>", encoding="utf-8")
+
+    assert main(["--extract-source", str(plain)]) == 1
+    assert "no embedded skaldr source" in capsys.readouterr().err
+
+
+def test_extract_source_reports_an_unreadable_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["--extract-source", str(tmp_path / "nope.html")]) == 1
+    assert "could not read" in capsys.readouterr().err
+
+
 def test_success_exit_code_and_summary(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"
@@ -452,7 +492,7 @@ def test_watch_re_renders_only_when_the_file_changes(
     out_path = tmp_path / "out.html"
     renders: list[Path] = []
 
-    def fake_render(_dp: Path, op: Path, *, embed: bool) -> int:  # noqa: ARG001
+    def fake_render(_dp: Path, op: Path, *, embed: bool, no_source: bool = False) -> int:  # noqa: ARG001
         renders.append(op)
         return 0
 
@@ -503,7 +543,7 @@ def test_watch_exits_cleanly_on_interrupt_during_the_initial_render(
 ) -> None:
     # Ctrl-C landing during the very first render must still exit cleanly (the initial render is inside
     # the interrupt handler, not before it).
-    def interrupt(_dp: Path, _op: Path, *, embed: bool) -> int:  # noqa: ARG001
+    def interrupt(_dp: Path, _op: Path, *, embed: bool, no_source: bool = False) -> int:  # noqa: ARG001
         raise KeyboardInterrupt
 
     monkeypatch.setattr("skaldr.cli._render_once", interrupt)
