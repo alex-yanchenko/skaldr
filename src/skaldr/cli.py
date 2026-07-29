@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 import time
+import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -14,7 +15,7 @@ from typing import Literal
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
-from skaldr.render import find_placeholders, render_html, render_report
+from skaldr.render import extract_source, find_placeholders, render_html, render_report
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
@@ -79,6 +80,18 @@ def main(argv: list[str] | None = None) -> int:
         "instead of a full document",
     )
     parser.add_argument(
+        "--no-source",
+        action="store_true",
+        help="don't embed the YAML source in the rendered page (by default a full page carries its own "
+        "source so `skaldr --extract-source` can recover it; --embed fragments never carry it)",
+    )
+    parser.add_argument(
+        "--extract-source",
+        metavar="FILE|URL",
+        help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
+        "and exit — recover the source without parsing the HTML. Exits non-zero if none is embedded.",
+    )
+    parser.add_argument(
         "--pdf",
         metavar="PATH",
         help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge — needs one "
@@ -136,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OK  {schema_path}")
         return 0
 
+    if args.extract_source:
+        return _extract_source(args.extract_source)
+
     # --check and --emit-json are validate-only: they never write, so an output flag is a silent no-op.
     if args.check and args.emit_json:
         parser.error("--check and --emit-json are mutually exclusive (each is a distinct validate-only mode)")
@@ -182,7 +198,8 @@ def main(argv: list[str] | None = None) -> int:
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
             out_path = _resolve_out_path(data_path, args.out)
-            render_report(report, out_path, embed=args.embed)
+            source = None if args.no_source else data_path.read_text(encoding="utf-8")
+            render_report(report, out_path, embed=args.embed, source=source)
             written.append(out_path)
         if args.pdf:
             # PDF prints the full page with every section expanded: the print CSS needs the whole
@@ -201,12 +218,13 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _render_once(data_path: Path, out_path: Path, *, embed: bool) -> int:
+def _render_once(data_path: Path, out_path: Path, *, embed: bool, no_source: bool = False) -> int:
     """Render the content file to HTML once. Returns 0 on success, 1 on a load/render error (printed) —
     it never raises, so the --watch loop survives an invalid mid-edit save."""
     try:
         report = load_report(data_path)
-        render_report(report, out_path, embed=embed)
+        source = None if no_source else data_path.read_text(encoding="utf-8")
+        render_report(report, out_path, embed=embed, source=source)
     except Exception as exc:
         # Resilience boundary: any render failure prints and keeps the --watch loop alive. Catching
         # Exception (not BaseException) still lets a Ctrl-C KeyboardInterrupt propagate to the loop.
@@ -225,12 +243,19 @@ def _mtime(path: Path) -> float | None:
         return None
 
 
-def _watch(data_path: Path, out_path: Path, *, embed: bool, interval: float = _POLL_INTERVAL_SECONDS) -> int:
+def _watch(
+    data_path: Path,
+    out_path: Path,
+    *,
+    embed: bool,
+    no_source: bool = False,
+    interval: float = _POLL_INTERVAL_SECONDS,
+) -> int:
     """Re-render to HTML whenever the content file changes, until interrupted. Polls the mtime (no
     third-party watcher); a failing render prints its error and the loop keeps going."""
     print(f"watching {data_path} — re-rendering to {out_path} on change (Ctrl-C to stop)")
     try:
-        _render_once(data_path, out_path, embed=embed)
+        _render_once(data_path, out_path, embed=embed, no_source=no_source)
         last = _mtime(data_path)
         while True:
             time.sleep(interval)
@@ -242,6 +267,27 @@ def _watch(data_path: Path, out_path: Path, *, embed: bool, interval: float = _P
     except KeyboardInterrupt:
         print("\nstopped watching")
         return 0
+
+
+def _extract_source(target: str) -> int:
+    """Print the YAML source embedded in a rendered skaldr page — `target` is a local file or an
+    http(s) URL. Reads the page (never into the caller's context) and prints only the source, so an
+    agent recovers it without parsing the HTML. Returns 1 if the page carries no embedded source."""
+    try:
+        if target.startswith(("http://", "https://")):
+            with urllib.request.urlopen(target) as response:
+                html = response.read().decode("utf-8")
+        else:
+            html = Path(target).read_text(encoding="utf-8")
+    except (OSError, ValueError) as err:
+        print(f"error: could not read {target}: {err}", file=sys.stderr)
+        return 1
+    source = extract_source(html)
+    if source is None:
+        print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
+        return 1
+    print(source, end="")
+    return 0
 
 
 def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:

@@ -140,7 +140,12 @@ def _environment() -> Environment:
 
 
 def _render(
-    report: Report, template: str, *, expand: bool = False, placeholders: set[str] | None = None
+    report: Report,
+    template: str,
+    *,
+    expand: bool = False,
+    placeholders: set[str] | None = None,
+    source: str | None = None,
 ) -> str:
     env = _environment()
     slugs = compute.anchor_slugs(report)
@@ -174,14 +179,48 @@ def _render(
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
+        source_block=source_block(source) if source else None,
     )
 
 
-def render_html(report: Report, *, expand: bool = False) -> str:
+# A page embeds its own YAML source as PLAIN TEXT between these scissors, inside an inert
+# `<script type="application/yaml" id="skaldr-source">` placed BEFORE the inlined CSS — so a fetch or a
+# top-of-file read reaches it before the stylesheet, and a narrow fetch ("return only the skaldr-source
+# block") gets directly-usable YAML with no decode step. `extract_source` / `skaldr --extract-source`
+# read it back, so an agent recovers the source without parsing the rendered HTML. A `<script>` is a
+# raw-text element: only the literal `</script>` ends it, so YAML's `<`, `&`, `--`, quotes are all safe.
+_SOURCE_BEGIN = "--8<-- skaldr source (yaml) --8<--"
+_SOURCE_END = "--8<-- end skaldr source --8<--"
+_SOURCE_RE = re.compile(re.escape(_SOURCE_BEGIN) + r"\n(.*?)\n" + re.escape(_SOURCE_END), re.DOTALL)
+
+
+def source_block(source: str) -> Markup:
+    """The inert, self-documenting block carrying the page's own YAML `source` as plain text. Its header
+    names the recovery command, so a reader who finds it (or a fetch that returns only it) gets usable
+    YAML and knows where it came from — no decode, no HTML parsing."""
+    return Markup(
+        '<script type="application/yaml" id="skaldr-source">\n'
+        "# skaldr embeds this page's editable YAML source below, so an agent can recover it WITHOUT\n"
+        "# reading the rendered HTML/CSS. Recover it with `skaldr --extract-source <file-or-url>`, or\n"
+        "# read only the lines between the scissor markers. This block does not affect rendering.\n"
+        f"{_SOURCE_BEGIN}\n{source}\n{_SOURCE_END}\n"
+        "</script>"
+    )
+
+
+def extract_source(html: str) -> str | None:
+    """Recover the plain-text YAML source embedded by `source_block`, or None if the page carries none
+    (an older render, or one written with --no-source). The inverse of what `source_block` writes."""
+    match = _SOURCE_RE.search(html)
+    return match.group(1) if match else None
+
+
+def render_html(report: Report, *, expand: bool = False, source: str | None = None) -> str:
     """A complete, self-contained HTML document — the default output. `expand` forces every
     collapsible `<details>` open; used for PDF output, where headless print can't run the
-    beforeprint script that expands sections on screen."""
-    return _render(report, "page.html.j2", expand=expand)
+    beforeprint script that expands sections on screen. `source`, when given, is embedded as plain
+    text (see `source_block`) so the page carries its own recoverable YAML."""
+    return _render(report, "page.html.j2", expand=expand, source=source)
 
 
 def find_placeholders(report: Report) -> list[str]:
@@ -193,22 +232,27 @@ def find_placeholders(report: Report) -> list[str]:
     return sorted(seen)
 
 
-def render_embed(report: Report) -> str:
+def render_embed(report: Report, *, source: str | None = None) -> str:
     """A fragment for embedding in a claude.ai Artifact: an inline `<style>` + the content markup +
     the corner controls, without the `<!doctype>`/`<html>`/`<head>`/`<body>` skeleton or the CSP
     meta. It carries the same theme-boot and controls scripts as the full page (Artifacts allow
-    inline JS), so it self-manages theme/width and stays `light-dark()` + `[data-theme]` aware."""
-    return _render(report, "embed.html.j2")
+    inline JS), so it self-manages theme/width and stays `light-dark()` + `[data-theme]` aware.
+    `source`, when given, is embedded so a shared Artifact carries its own recoverable YAML — the
+    common case, since Artifacts are shared as URLs an agent then has to read back."""
+    return _render(report, "embed.html.j2", source=source)
 
 
-def render_report(report: Report, out_path: Path, *, embed: bool = False) -> None:
-    """Write an already-loaded report to `out_path` (no re-read of the source file)."""
-    html = render_embed(report) if embed else render_html(report)
+def render_report(report: Report, out_path: Path, *, embed: bool = False, source: str | None = None) -> None:
+    """Write an already-loaded report to `out_path` (no re-read of the source file). `source`, when
+    given, is embedded — in the full page AND in an `--embed` fragment — so the artifact carries its own
+    recoverable YAML. Pass source=None (or render with --no-source) to suppress it."""
+    html = render_embed(report, source=source) if embed else render_html(report, source=source)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
 
 
 def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
     report = load_report(data_path)
-    render_report(report, out_path, embed=embed)
+    source = data_path.read_text(encoding="utf-8")
+    render_report(report, out_path, embed=embed, source=source)
     return report
