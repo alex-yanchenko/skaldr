@@ -335,6 +335,7 @@ def _guide_text() -> str:
 _BUNDLED_SKILLS: list[tuple[str, str]] = [
     ("skill", "skaldr"),
     ("skills/skaldr-presentation", "skaldr-presentation"),
+    ("skills/skaldr-reflect", "skaldr-reflect"),
 ]
 
 
