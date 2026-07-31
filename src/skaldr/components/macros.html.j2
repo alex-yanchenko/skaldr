@@ -180,7 +180,7 @@
 {% macro render_block(block) %}
 {%- if block.span %}<div class="blk span-{{ block.span }}">{% endif -%}
 {% if block.type == "heading" %}
-<h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}</h{{ block.level }}>
+<h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}{% if block.sub %}<span class="hsub">{{ block.sub | richtext }}</span>{% endif %}</h{{ block.level }}>
 {% elif block.type == "text" %}
 {% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}

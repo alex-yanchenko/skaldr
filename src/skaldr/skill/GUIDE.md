@@ -146,7 +146,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor) |
+| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -562,7 +562,9 @@ link instead.
   that needs `subrows` or `tone` stays a mapping (a list has no slot for them).
 - **`reconcile`** is the trust check: the column sum, plus any `handled` bucket, must equal
   `total` or the build fails naming the delta. With `pct_of_total` on a number column, each cell
-  also shows its share of the reconcile total.
+  also shows its share of the reconcile total. `pct_of_total` is defined **only** against a
+  `reconcile` total — it has no meaning against a plain `totals` sum, so a table that sets
+  `pct_of_total` without a `reconcile` is rejected at build time (add a `reconcile`, or drop the flag).
 - **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
 - **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
