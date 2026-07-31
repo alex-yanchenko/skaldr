@@ -617,6 +617,32 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def test_tint_by_a_non_badge_column_is_rejected() -> None:
+    table = make_table(
+        columns=[{"key": "item", "label": "I", "kind": "text"}],
+        rows=[{"item": "a"}],
+        tint_by="item",
+    )
+
+    with pytest.raises(ReportError, match=r"tint_by 'item' must be a badge column"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_tint_by_an_all_blank_badge_column_is_allowed() -> None:
+    """Unlike `rollup`, `tint_by` tolerates an all-blank column — a blank cell is a valid untinted
+    row, not an error (the whole column being blank just renders every row untinted)."""
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "tag", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "tag": ""}],
+        tint_by="tag",
+    )
+
+    parse_report(make_report(blocks=[table]))  # no raise
+
+
 _POSITIONAL_COLUMNS = [
     {"key": "issue", "label": "Issue", "kind": "text"},
     {"key": "tag", "label": "", "kind": "badge"},

@@ -158,7 +158,7 @@ or to keep a small block from stretching across the whole page.
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?` |
+| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
@@ -570,6 +570,11 @@ link instead.
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
   The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
   `by` must name a `badge` column.
+- **`tint_by`** — `<badge-column-key>` — faintly tints each row by the tone of the badge in that
+  column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
+  skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
+  (`muted`/`danger`) wins over the tint. Must name a `badge` column — the same column can still show
+  its chip.
 - A group with an empty `rows: []` renders a "— none —" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 

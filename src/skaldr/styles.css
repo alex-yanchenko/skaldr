@@ -429,6 +429,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
+		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone. The tr sets --tb (inherited
+		   by its td); the tint holds through hover so the band stays legible. An explicit row tone
+		   (muted/danger) wins in the template — a toned row never carries a tint class. */
+		& tbody tr.row.tint td{background:var(--tb)}
+		& tbody tr.row.tint:hover td{background:var(--tb)}
+		& tbody tr.row.tint.slate{--tb:var(--neutral-bg)} & tbody tr.row.tint.blue{--tb:var(--info-bg)}
+		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
+		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
+		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}

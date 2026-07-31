@@ -32,7 +32,11 @@
 
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
 {% set rtone = row.get("tone") %}
-<tr class="row{% if rtone %} {{ rtone }}{% endif %}">
+{# tint_by: an explicit row tone wins, so only resolve a tint when the row sets none. A cell-badge value
+   can be a list; the row's tint takes the first key's tone. A blank cell leaves the row untinted. #}
+{% set tinttone = none %}
+{% if b.tint_by and not rtone %}{% set raw = row[b.tint_by] %}{% set tk = ((raw[0] if raw is iterable and raw is not string else raw) or "") | trim %}{% if tk %}{% set tinttone = badges[tk].tone %}{% endif %}{% endif %}
+<tr class="row{% if rtone %} {{ rtone }}{% endif %}{% if tinttone %} tint {{ tinttone }}{% endif %}">
 {% for c in cell_cols %}
 {% if c.key == title_key %}
 <td class="title">{{ rich_cell(row[c.key]) }}

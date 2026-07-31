@@ -443,6 +443,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
+		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone. The tr sets --tb (inherited
+		   by its td); the tint holds through hover so the band stays legible. An explicit row tone
+		   (muted/danger) wins in the template — a toned row never carries a tint class. */
+		& tbody tr.row.tint td{background:var(--tb)}
+		& tbody tr.row.tint:hover td{background:var(--tb)}
+		& tbody tr.row.tint.slate{--tb:var(--neutral-bg)} & tbody tr.row.tint.blue{--tb:var(--info-bg)}
+		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
+		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
+		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}
@@ -820,7 +829,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <thead><tr><th>Discrepancy</th><th class="ind">Risk</th><th class="num">Units</th><th>What the problem is</th><th>Proposed fix</th></tr></thead>
 <tbody>
 <tr class="group"><td colspan="5">Floor — fixable<span class="st">1,100</span></td></tr>
-<tr class="row">
+<tr class="row tint amber">
 <td class="title">Double-counted units
 <div><span class="chip amber">Floor</span></div><table class="subtable"><tbody><tr><td>Skipped, bin &gt; 12</td><td class="sv">260</td></tr><tr><td>Same-window re-scan</td><td class="sv">340</td></tr></tbody></table></td>
 <td class="ind"><span class="dot warning" title="warning"></span></td>
@@ -828,7 +837,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 <td>De-duplicate on the pallet ID (<code>pallet_id</code>) before totalling; keep the most recent scan.</td>
 </tr>
-<tr class="row">
+<tr class="row tint blue">
 <td class="title">Mislabeled bin codes
 <div><span class="chip blue">System</span></div></td>
 <td class="ind"><span class="dot warning" title="warning"></span></td>
