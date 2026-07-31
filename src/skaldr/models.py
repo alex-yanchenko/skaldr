@@ -219,11 +219,19 @@ class Heading(_Block):
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
         "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
+    sub: str | None = Field(
+        default=None,
+        description="Optional caption line under the heading, styled subordinate — a real subtitle "
+        "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
+        "stays the plain `text`).",
+    )
 
     @model_validator(mode="after")
     def _non_blank(self) -> "Heading":
         if not self.text.strip():
             raise ValueError("heading text must not be blank")
+        if self.sub is not None and not self.sub.strip():
+            raise ValueError("heading sub must not be blank (omit it instead)")
         return self
 
 
@@ -470,6 +478,8 @@ class RangeSegment(_Frozen):
             raise ValueError("range segment label must not be blank")
         if self.span <= 0:
             raise ValueError("segment 'span' must be greater than 0")
+        if self.sub is not None and not self.sub.strip():
+            raise ValueError("range segment sub must not be blank (omit it instead)")
         return self
 
 
@@ -1182,6 +1192,12 @@ class SwimlaneColumn(_Frozen):
         description="Optional secondary caption under the header (e.g. a delivery target or date range).",
     )
 
+    @model_validator(mode="after")
+    def _non_blank_sub(self) -> "SwimlaneColumn":
+        if self.sub is not None and not self.sub.strip():
+            raise ValueError("swimlane column sub must not be blank (omit it instead)")
+        return self
+
     @property
     def key(self) -> str:
         """The reference key steps/groups use — the explicit id, or the name when no id is given."""
@@ -1493,6 +1509,8 @@ class WalkthroughStep(_Frozen):
     def _non_blank(self) -> "WalkthroughStep":
         if not self.label.strip():
             raise ValueError("walkthrough step label must not be blank")
+        if self.sub is not None and not self.sub.strip():
+            raise ValueError("walkthrough step sub must not be blank (omit it instead)")
         return self
 
 

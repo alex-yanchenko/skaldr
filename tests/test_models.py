@@ -1019,6 +1019,41 @@ def test_blank_heading_is_rejected() -> None:
         parse_report(make_report(blocks=[{"type": "heading", "text": "   "}]))
 
 
+def test_blank_heading_sub_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"heading sub must not be blank"):
+        parse_report(make_report(blocks=[{"type": "heading", "text": "Overview", "sub": "  "}]))
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        (
+            {
+                "type": "swimlane",
+                "lanes": ["Eng"],
+                "columns": [{"name": "S1", "sub": "  "}],
+                "steps": [{"lane": "Eng", "col": "S1", "n": "1", "label": "Build"}],
+            },
+            "swimlane column sub must not be blank",
+        ),
+        (
+            {
+                "type": "walkthrough",
+                "steps": [{"label": "Step", "sub": "  ", "detail": [{"type": "text", "body": "x"}]}],
+            },
+            "walkthrough step sub must not be blank",
+        ),
+        (
+            {"type": "range", "segments": [{"label": "Q3", "span": 1, "sub": "  "}]},
+            "range segment sub must not be blank",
+        ),
+    ],
+)
+def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_reconcile_without_handled_bucket_passes() -> None:
     table = make_reconciled_table(
         reconcile={"total": 10, "column": "count"},

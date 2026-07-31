@@ -97,6 +97,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
+	   heading's own weight/size so it reads as a subtitle, not part of the title. */
+	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;
+		letter-spacing:0; line-height:1.4}
 
 	.text{margin-block:var(--s3)}
 	.text.muted{color:var(--muted)}
@@ -586,8 +590,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .red{--gc:var(--danger-fg); --gt:var(--danger-bg)} & .violet{--gc:var(--accent-fg); --gt:var(--accent-bg)}
 		& .teal{--gc:var(--teal-fg); --gt:var(--teal-bg)} & .sky{--gc:var(--sky-fg); --gt:var(--sky-bg)}}
 
-	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
-	   links down here; the number in the list links back up to its marker (bidirectional). */
+	/* references — numbered sources. An inline footnote marker (a caret followed by the source key)
+	   resolves to the source's number and links down here; the number in the list links back up to
+	   its marker (bidirectional). */
 	sup.fn{font-size:0.72em; line-height:0; vertical-align:super; white-space:nowrap;
 		& a{color:var(--accent-fg); text-decoration:none; font-weight:600; scroll-margin-block-start:var(--s8)}
 		& a:hover{text-decoration:underline}}
