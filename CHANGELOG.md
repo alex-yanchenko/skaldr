@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/alex-yanchenko/skaldr/compare/v2.3.0...v2.4.0) (2026-07-31)
+
+
+### Features
+
+* **cards:** matrix-derived counts — drift-proof summary cards ([#108](https://github.com/alex-yanchenko/skaldr/issues/108)) ([bdbfd86](https://github.com/alex-yanchenko/skaldr/commit/bdbfd860228b95a88ed54bafec6f07854f924092))
+* **heading:** optional sub caption + uniform blank-sub guard; quick wins (pct_of_total docs, footnote comment) ([#105](https://github.com/alex-yanchenko/skaldr/issues/105)) ([0b3bc22](https://github.com/alex-yanchenko/skaldr/commit/0b3bc22aa0f9e9737c3e9f38f29f7c8f82bcfba3))
+* **matrix:** coverage/RACI grid block — rows, columns, one state per cell ([#107](https://github.com/alex-yanchenko/skaldr/issues/107)) ([a16cfcd](https://github.com/alex-yanchenko/skaldr/commit/a16cfcd0ff07a8b4262ef4702386bb8961293c6f))
+* **render:** embed the YAML source in every render + skaldr --extract-source to recover it ([#103](https://github.com/alex-yanchenko/skaldr/issues/103)) ([963a0f3](https://github.com/alex-yanchenko/skaldr/commit/963a0f3780ee94d4f8235891599ba9ddc3fe7a42))
+* **skills:** add skaldr-reflect — ranked pain-points report for the maintainer ([#109](https://github.com/alex-yanchenko/skaldr/issues/109)) ([c11212e](https://github.com/alex-yanchenko/skaldr/commit/c11212eabf1a11abc4f9049e9e7189214ee9f81a))
+* **table:** tint_by — faint per-row heatmap keyed to a badge column ([#106](https://github.com/alex-yanchenko/skaldr/issues/106)) ([758ae89](https://github.com/alex-yanchenko/skaldr/commit/758ae89575149dc9153bdf53267b00e280bbce65))
+
 ## [2.3.0](https://github.com/alex-yanchenko/skaldr/compare/v2.2.1...v2.3.0) (2026-07-27)
 
 
