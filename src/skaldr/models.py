@@ -854,6 +854,13 @@ class Table(_Block):
         description="Opt-in summary strip below the table: counts the rows by a badge column and shows "
         "one '<chip> <count>' per value, derived from the rows so it can never drift from them.",
     )
+    tint_by: str | None = Field(
+        default=None,
+        description="Opt-in row heatmap: faintly tint each row by the tone of the badge in this column "
+        "(named by its key), so a long table's state reads as bands of colour. A row left blank in that "
+        "column stays untinted; an explicit row `tone` (muted/danger) wins over the tint. Must name a "
+        "`badge` column (the same one may still render its chip).",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -959,6 +966,10 @@ class Table(_Block):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
                 )
+        if self.tint_by is not None:
+            badge_keys = {column.key for column in self.columns if column.kind == "badge"}
+            if self.tint_by not in badge_keys:
+                raise ValueError(f"tint_by '{self.tint_by}' must be a badge column")
         self._reconcile()
         return self
 

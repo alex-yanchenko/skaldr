@@ -5,7 +5,7 @@ import re
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import load_report, package_path, parse_report
+from skaldr.models import Report, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -2200,6 +2200,71 @@ def test_table_without_rollup_renders_no_strip() -> None:
     report = parse_report(make_report(blocks=[table]))
 
     assert 'class="rollup"' not in render_html(report)
+
+
+def _tint_report(rows: list[dict[str, object]]) -> Report:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=rows,
+        tint_by="status",
+    )
+    return parse_report(
+        make_report(
+            blocks=[table],
+            badges={
+                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
+                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
+            },
+        )
+    )
+
+
+def test_table_tint_by_tints_each_row_by_its_badge_tone() -> None:
+    html = render_html(
+        _tint_report(
+            [{"item": "a", "status": "DONE"}, {"item": "b", "status": "PENDING"}, {"item": "c", "status": ""}]
+        )
+    )
+
+    assert '<tr class="row tint green">' in html  # success → green palette twin
+    assert '<tr class="row tint amber">' in html  # warning → amber
+    assert '<tr class="row">' in html  # blank badge cell → untinted row
+
+
+def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
+    html = render_html(_tint_report([{"item": "a", "status": "DONE", "tone": "danger"}]))
+
+    assert '<tr class="row danger">' in html  # explicit row tone wins
+    assert '<tr class="row tint' not in html  # a toned row never carries a tint class
+
+
+def test_table_tint_by_a_cell_badge_list_uses_the_first_key_tone() -> None:
+    """tint_by may name a placement: cell badge column whose value is a LIST of keys; the row's tint
+    comes from the FIRST key's tone (a single row can't carry two tints)."""
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "tags", "label": "Tags", "kind": "badge", "placement": "cell"},
+        ],
+        rows=[{"item": "a", "tags": ["DONE", "PENDING"]}],
+        tint_by="tags",
+    )
+    report = parse_report(
+        make_report(
+            blocks=[table],
+            badges={
+                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
+                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    assert '<tr class="row tint green">' in html  # first key DONE → success → green drives the tint
 
 
 def test_image_max_width_renders_style() -> None:

@@ -3333,6 +3333,19 @@
           ],
           "default": null,
           "description": "Opt-in summary strip below the table: counts the rows by a badge column and shows one '<chip> <count>' per value, derived from the rows so it can never drift from them."
+        },
+        "tint_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opt-in row heatmap: faintly tint each row by the tone of the badge in this column (named by its key), so a long table's state reads as bands of colour. A row left blank in that column stays untinted; an explicit row `tone` (muted/danger) wins over the tint. Must name a `badge` column (the same one may still render its chip).",
+          "title": "Tint By"
         }
       },
       "required": [
