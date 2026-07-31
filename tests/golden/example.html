@@ -111,6 +111,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
+	   heading's own weight/size so it reads as a subtitle, not part of the title. */
+	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;
+		letter-spacing:0; line-height:1.4}
 
 	.text{margin-block:var(--s3)}
 	.text.muted{color:var(--muted)}
@@ -446,6 +450,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
+		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone. The tr sets --tb (inherited
+		   by its td); the tint holds through hover so the band stays legible. An explicit row tone
+		   (muted/danger) wins in the template — a toned row never carries a tint class. */
+		& tbody tr.row.tint td{background:var(--tb)}
+		& tbody tr.row.tint:hover td{background:var(--tb)}
+		& tbody tr.row.tint.slate{--tb:var(--neutral-bg)} & tbody tr.row.tint.blue{--tb:var(--info-bg)}
+		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
+		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
+		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}
@@ -635,8 +648,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .red{--gc:var(--danger-fg); --gt:var(--danger-bg)} & .violet{--gc:var(--accent-fg); --gt:var(--accent-bg)}
 		& .teal{--gc:var(--teal-fg); --gt:var(--teal-bg)} & .sky{--gc:var(--sky-fg); --gt:var(--sky-bg)}}
 
-	/* references — numbered sources. An inline `[^key]` marker resolves to the source's number and
-	   links down here; the number in the list links back up to its marker (bidirectional). */
+	/* references — numbered sources. An inline footnote marker (a caret followed by the source key)
+	   resolves to the source's number and links down here; the number in the list links back up to
+	   its marker (bidirectional). */
 	sup.fn{font-size:0.72em; line-height:0; vertical-align:super; white-space:nowrap;
 		& a{color:var(--accent-fg); text-decoration:none; font-weight:600; scroll-margin-block-start:var(--s8)}
 		& a:hover{text-decoration:underline}}
@@ -800,7 +814,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
 <nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
-<h2 id="overview">Overview</h2>
+<h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>
 
 <dl class="kv"><dt>Count date</dt><dd>2026-07-09 14:22 UTC</dd><dt>Units expected</dt><dd>10,000</dd><dt>Method</dt><dd><code>full cycle count</code></dd><dt>Mode</dt><dd>strict</dd></dl>
 
@@ -855,7 +869,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <thead><tr><th>Discrepancy</th><th class="ind">Risk</th><th class="num">Units</th><th>What the problem is</th><th>Proposed fix</th></tr></thead>
 <tbody>
 <tr class="group"><td colspan="5">Floor — fixable<span class="st">1,100</span></td></tr>
-<tr class="row">
+<tr class="row tint amber">
 <td class="title">Double-counted units
 <div><span class="chip amber">Floor</span></div><table class="subtable"><tbody><tr><td>Skipped, bin &gt; 12</td><td class="sv">260</td></tr><tr><td>Same-window re-scan</td><td class="sv">340</td></tr></tbody></table></td>
 <td class="ind"><span class="dot warning" title="warning"></span></td>
@@ -863,7 +877,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 <td>De-duplicate on the pallet ID (<code>pallet_id</code>) before totalling; keep the most recent scan.</td>
 </tr>
-<tr class="row">
+<tr class="row tint blue">
 <td class="title">Mislabeled bin codes
 <div><span class="chip blue">System</span></div></td>
 <td class="ind"><span class="dot warning" title="warning"></span></td>
