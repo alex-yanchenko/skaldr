@@ -86,6 +86,7 @@ def test_install_brings_the_presentation_skill_alongside_the_primary(tmp_path: P
     skills = tmp_path / ".claude" / "skills"
     assert (skills / "skaldr" / "SKILL.md").is_file()
     assert (skills / "skaldr-presentation" / "SKILL.md").is_file()  # each skill in its own folder
+    assert (skills / "skaldr-reflect" / "SKILL.md").is_file()
 
 
 def test_presentation_skill_covers_the_core_workflow() -> None:
@@ -94,6 +95,14 @@ def test_presentation_skill_covers_the_core_workflow() -> None:
     assert "runbook.yaml" in text  # skaldr's real deliverable — the teleprompter
     assert "template" in text  # the deck goes into the org's real brand template, not skaldr
     assert "--check --strict" in text  # the pre-final placeholder gate
+
+
+def test_reflect_skill_covers_its_workflow() -> None:
+    text = (package_path("skills/skaldr-reflect") / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "skaldr --guide" in text  # check the guide first so it doesn't propose what already exists
+    assert "Proposed fix" in text  # each pain point ends in a concrete, actionable fix
+    assert "Ranked" in text or "rank" in text.lower()  # the output is impact-ranked
 
 
 def test_every_bundled_skill_name_matches_its_install_folder() -> None:
