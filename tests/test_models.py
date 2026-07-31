@@ -207,6 +207,93 @@ def test_card_of_requires_numeric_value() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_normal_card_still_requires_a_value() -> None:
+    block = {"type": "cards", "items": [{"label": "x"}]}
+
+    with pytest.raises(ReportError, match=r"a card needs a `value`"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_normal_card_still_requires_a_label() -> None:
+    block = {"type": "cards", "items": [{"value": 5}]}
+
+    with pytest.raises(ReportError, match=r"a card needs a `label`"):
+        parse_report(make_report(blocks=[block]))
+
+
+def _report_with_derived_card(card: dict[str, object], *, matrix_id: str = "cov") -> dict[str, object]:
+    matrix = {
+        "type": "matrix",
+        "id": matrix_id,
+        "rows": ["A"],
+        "columns": ["X"],
+        "cells": [{"row": "A", "col": "X", "badge": "HAVE"}],
+    }
+    return make_report(
+        blocks=[{"type": "cards", "items": [card]}, matrix],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
+    )
+
+
+def test_derived_card_without_badge_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"needs a `badge` to count"):
+        parse_report(_report_with_derived_card({"of_matrix": "cov"}))
+
+
+def test_derived_card_with_an_authored_value_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"computes its value — don't set `value`"):
+        parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "value": 5}))
+
+
+def test_derived_card_with_an_authored_of_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"computes its percentage — don't set `of`"):
+        parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "of": 10}))
+
+
+def test_card_badge_without_of_matrix_is_rejected() -> None:
+    block = {"type": "cards", "items": [{"label": "x", "value": 1, "badge": "HAVE"}]}
+    report = make_report(blocks=[block], badges={"HAVE": {"label": "H", "tone": "green", "legend": "x"}})
+    with pytest.raises(ReportError, match=r"`badge` on a card requires `of_matrix`"):
+        parse_report(report)
+
+
+def test_derived_card_referencing_an_unknown_matrix_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"card of_matrix 'ghost' names no matrix with that id"):
+        parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "ghost"}))
+
+
+def test_derived_card_with_an_undeclared_badge_is_rejected() -> None:
+    # a derived card's `badge` feeds the report-wide declared-badge check (iter_referenced_badge_keys)
+    matrix = {
+        "type": "matrix",
+        "id": "cov",
+        "rows": ["A"],
+        "columns": ["X"],
+        "cells": [{"row": "A", "col": "X", "label": "x"}],
+    }
+    block = {"type": "cards", "items": [{"badge": "GHOST", "of_matrix": "cov"}]}
+    with pytest.raises(ReportError, match=r"badge key\(s\) not declared in `badges`: \['GHOST'\]"):
+        parse_report(make_report(blocks=[block, matrix]))
+
+
+def test_derived_card_with_extra_badges_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"don't also set `badges`"):
+        parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "badges": ["HAVE"]}))
+
+
+def test_derived_card_with_a_delta_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"a matrix-derived card has no `delta`"):
+        parse_report(
+            _report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "delta": {"label": "+1"}})
+        )
+
+
+def test_duplicate_matrix_ids_are_rejected() -> None:
+    matrix = _matrix([{"row": "r1", "col": "c1", "label": "x"}], id="dup")
+    with pytest.raises(ReportError, match=r"matrix id\(s\) used more than once: \['dup'\]"):
+        parse_report(make_report(blocks=[matrix, {**matrix}]))
+
+
 def test_meter_value_out_of_bounds_is_rejected() -> None:
     block = {"type": "meter", "items": [{"label": "x", "value": 120, "max": 100}]}
 

@@ -172,6 +172,7 @@ def _render(
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references
+    globals_["matrix_tallies"] = compute.matrix_tallies(report)
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,

@@ -306,7 +306,13 @@ blocks:
 
   - type: heading
     text: "Readiness by zone"
+  - type: cards
+    items:
+      - { badge: FLOOR,  of_matrix: readiness }
+      - { badge: SYSTEM, of_matrix: readiness }
+      - { badge: VENDOR, of_matrix: readiness, note: "Awaiting the vendor's corrected ASN." }
   - type: matrix
+    id: readiness
     rows: ["Zone A", "Zone B", "Zone C", "Overflow"]
     columns: ["Scanned", "Reconciled", "Re-labeled", "Signed off"]
     cells:

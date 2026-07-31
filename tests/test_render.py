@@ -5,7 +5,7 @@ import re
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import load_report, package_path, parse_report
+from skaldr.models import Report, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -2081,6 +2081,113 @@ def test_card_string_value_and_tone_render() -> None:
 
     assert '<div class="card accent">' in html
     assert '<div class="n str">HEALTHY</div>' in html
+
+
+def _matrix_with_cards(card_items: list[dict[str, object]]) -> Report:
+    """A page with derived summary cards above a matrix they count (the matrix has 3 HAVE, 1 GAP cells
+    across a 2x2 grid → 4 total)."""
+    cards = {"type": "cards", "items": card_items}
+    matrix = {
+        "type": "matrix",
+        "id": "cov",
+        "rows": ["A", "B"],
+        "columns": ["X", "Y"],
+        "cells": [
+            {"row": "A", "col": "X", "badge": "HAVE"},
+            {"row": "A", "col": "Y", "badge": "HAVE"},
+            {"row": "B", "col": "X", "badge": "HAVE"},
+            {"row": "B", "col": "Y", "badge": "GAP"},
+        ],
+    }
+    return parse_report(
+        make_report(
+            blocks=[cards, matrix],
+            badges={
+                "HAVE": {"label": "Have", "tone": "green", "legend": "covered"},
+                "GAP": {"label": "Gap", "tone": "red", "legend": "missing"},
+                # declared but never placed in the matrix — a derived card counting it must show 0
+                "PENDING": {"label": "Pending", "tone": "blue", "legend": "not started"},
+            },
+        )
+    )
+
+
+def test_derived_card_counts_a_matrix_state_with_chip_on_top() -> None:
+    html = render_html(_matrix_with_cards([{"badge": "HAVE", "of_matrix": "cov"}]))
+
+    # border + chip both take the badge's palette colour; value 3 of 4 = 75.0%, label from the badge
+    assert (
+        '<div class="card green"><span class="chip green cbadge">Have</span>'
+        '<div class="n">3<span class="pct">75.0%</span></div></div>'
+    ) in html
+
+
+def test_derived_card_counts_zero_when_the_state_is_absent_from_the_matrix() -> None:
+    html = render_html(_matrix_with_cards([{"badge": "PENDING", "of_matrix": "cov"}]))
+
+    # PENDING is declared but appears in no cell → count 0 of 4 = 0.0%
+    assert (
+        '<div class="card blue"><span class="chip blue cbadge">Pending</span>'
+        '<div class="n">0<span class="pct">0.0%</span></div></div>'
+    ) in html
+
+
+def test_derived_card_label_override_and_note_render() -> None:
+    html = render_html(
+        _matrix_with_cards([{"badge": "GAP", "of_matrix": "cov", "label": "Blocked", "note": "escalate"}])
+    )
+
+    # GAP appears once (1 of 4 = 25.0%); the label overrides the badge label; the note renders
+    assert (
+        '<div class="card red"><span class="chip red cbadge">Blocked</span>'
+        '<div class="n">1<span class="pct">25.0%</span></div><div class="note">escalate</div></div>'
+    ) in html
+
+
+def test_derived_card_resolves_a_matrix_nested_in_a_section() -> None:
+    """`of_matrix` resolves across the whole block tree — a top-level summary card can count a matrix
+    that lives inside a section (the iter_matrices/iter_cards recursion), and an id-less matrix
+    elsewhere on the page does not interfere with the count."""
+    decoy = {  # id-less, all HAVE — would inflate the count if wrongly tallied
+        "type": "matrix",
+        "rows": ["A"],
+        "columns": ["X", "Y"],
+        "cells": [{"row": "A", "col": "X", "badge": "HAVE"}, {"row": "A", "col": "Y", "badge": "HAVE"}],
+    }
+    section = {
+        "type": "section",
+        "title": "Detail",
+        "blocks": [
+            {
+                "type": "matrix",
+                "id": "cov",
+                "rows": ["A", "B"],
+                "columns": ["X", "Y"],
+                "cells": [
+                    {"row": "A", "col": "X", "badge": "HAVE"},
+                    {"row": "B", "col": "Y", "badge": "GAP"},
+                ],
+            }
+        ],
+    }
+    cards = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": "cov"}]}
+    report = parse_report(
+        make_report(
+            blocks=[cards, decoy, section],
+            badges={
+                "HAVE": {"label": "Have", "tone": "green", "legend": "x"},
+                "GAP": {"label": "Gap", "tone": "red", "legend": "y"},
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    # counts only the id'd "cov" matrix (1 HAVE of 4), NOT the id-less decoy's 2 HAVE
+    assert (
+        '<span class="chip green cbadge">Have</span><div class="n">1<span class="pct">25.0%</span></div>'
+        in html
+    )
 
 
 def test_badge_row_reference_renders_declared_chip() -> None:

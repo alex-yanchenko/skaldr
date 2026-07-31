@@ -29,6 +29,7 @@ from skaldr.models import (
     Table,
     Walkthrough,
     col_sum,
+    iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "first_table_index",
     "fmt",
     "matrix_grid",
+    "matrix_tallies",
     "pct",
     "provenance_footer",
     "reconcile_line",
@@ -607,6 +609,25 @@ def table_rollup(table: Table) -> list[RollupBucket] | None:
         if key:
             counts[key] += 1
     return [{"key": key, "count": count} for key, count in counts.items()]
+
+
+class MatrixTally(TypedDict):
+    counts: dict[str, int]  # badge key -> number of cells in that state
+    total: int  # total grid positions (rows times columns), the percentage denominator
+
+
+def matrix_tallies(report: Report) -> dict[str, MatrixTally]:
+    """`matrix id -> {counts: {badge: n}, total: rows*columns}` for every id'd matrix — the derived
+    source a `cards` item reads via `of_matrix`. The denominator is the full grid (blank cells count as
+    uncovered), so a derived card's percentage is the share of the whole matrix in that state. A matrix
+    with no id contributes nothing (only referenceable matrices are tallied)."""
+    tallies: dict[str, MatrixTally] = {}
+    for matrix in iter_matrices(report.blocks):
+        if matrix.id is None:
+            continue
+        counts: Counter[str] = Counter(cell.badge for cell in matrix.cells if cell.badge is not None)
+        tallies[matrix.id] = {"counts": dict(counts), "total": len(matrix.rows) * len(matrix.columns)}
+    return tallies
 
 
 def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
