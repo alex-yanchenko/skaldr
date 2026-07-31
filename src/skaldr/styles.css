@@ -142,6 +142,13 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.info{--t:var(--info-fg)} &.success{--t:var(--success-fg)} &.warning{--t:var(--warning-fg)}
 		&.danger{--t:var(--danger-fg)} &.accent{--t:var(--accent-fg)} &.neutral{--t:var(--neutral-fg)}
 		&.teal{--t:var(--teal-fg)} &.sky{--t:var(--sky-fg)}
+		/* palette-name aliases so a matrix-derived card can take its border tone straight from the badge
+		   colour (blue/green/…), the same name its chip uses — no palette→semantic translation. */
+		&.slate{--t:var(--neutral-fg)} &.blue{--t:var(--info-fg)} &.green{--t:var(--success-fg)}
+		&.amber{--t:var(--warning-fg)} &.red{--t:var(--danger-fg)} &.violet{--t:var(--accent-fg)}
+		/* derived-card chip sits on top as the card's label; the number `.n` below owns the gap (its
+		   own margin-top), so a derived card spaces its chip→number exactly like a normal label→number. */
+		& .cbadge{display:inline-block}
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}

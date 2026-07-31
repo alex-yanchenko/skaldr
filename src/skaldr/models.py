@@ -348,10 +348,26 @@ class CardDelta(_Frozen):
 
 
 class Card(_Frozen):
-    label: str = Field(description="Card label above the number.")
-    value: Number | str = Field(description="Headline number, or a short status string.")
-    of: Number | None = Field(default=None, description="Denominator; renders a derived percentage.")
-    tone: Tone | None = Field(default=None, description="Optional tone for the top-border accent.")
+    label: str | None = Field(
+        default=None,
+        description="Card label above the number. Required for a normal card; for a matrix-derived card "
+        "(`of_matrix`) it defaults to the badge's label — set it only to override.",
+    )
+    value: Number | str | None = Field(
+        default=None,
+        description="Headline number, or a short status string. Required for a normal card; a "
+        "matrix-derived card (`of_matrix`) computes it instead, so leave it unset there.",
+    )
+    of: Number | None = Field(
+        default=None,
+        description="Denominator; renders a derived percentage. Not for a matrix-derived card (it "
+        "computes its own denominator).",
+    )
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone for the top-border accent. On a matrix-derived card, defaults to the "
+        "badge's tone (driving chip + border together); set it to override.",
+    )
     delta: CardDelta | None = Field(
         default=None, description="Optional trend chip beside the value (a period-over-period change)."
     )
@@ -360,9 +376,40 @@ class Card(_Frozen):
         default_factory=list,
         description="Declared badge keys (from the page `badges`) to chip onto this card.",
     )
+    badge: str | None = Field(
+        default=None,
+        description="For a matrix-derived card: the declared badge key to count. Supplies the card's "
+        "chip, its label (unless `label` overrides), and its top-border tone. Requires `of_matrix`.",
+    )
+    of_matrix: str | None = Field(
+        default=None,
+        description="Derive this card's value by counting the cells in the matrix with this `id` whose "
+        "state is `badge`; the percentage denominator is that matrix's total cell count. When set, "
+        "`value` and `of` are computed — don't author them. Requires `badge`.",
+    )
 
     @model_validator(mode="after")
-    def _of_requires_positive_numeric_value(self) -> "Card":
+    def _shape(self) -> "Card":
+        if self.of_matrix is not None:
+            # Derived card: the count and percentage come from the matrix, so authoring them is a
+            # contradiction. The badge names which state to count and supplies the card's chip/label/tone.
+            if self.badge is None:
+                raise ValueError("a matrix-derived card (`of_matrix`) needs a `badge` to count")
+            if self.value is not None:
+                raise ValueError("a matrix-derived card computes its value — don't set `value`")
+            if self.of is not None:
+                raise ValueError("a matrix-derived card computes its percentage — don't set `of`")
+            if self.badges:
+                raise ValueError("a matrix-derived card shows its own badge chip — don't also set `badges`")
+            if self.delta is not None:
+                raise ValueError("a matrix-derived card has no `delta` — its value is a live count")
+        else:
+            if self.badge is not None:
+                raise ValueError("`badge` on a card requires `of_matrix` (use `badges` for plain chips)")
+            if self.value is None:
+                raise ValueError("a card needs a `value` (or `of_matrix` to derive one)")
+            if self.label is None:
+                raise ValueError("a card needs a `label`")
         if self.of is not None:
             if isinstance(self.value, str):
                 raise ValueError("'of' requires a numeric 'value'")
@@ -1156,6 +1203,13 @@ class Matrix(_Block):
         description="Filled cells, each naming a `row` + `col` from the axes. Omit a cell entirely for a "
         "blank. At most one cell per (row, col).",
     )
+    id: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Optional stable id (ASCII letters, digits, _, -) so a derived `cards` item can "
+        "reference this matrix via `of_matrix`. Unique across the page's matrices.",
+    )
 
     @model_validator(mode="after")
     def _shape(self) -> "Matrix":
@@ -1639,6 +1693,8 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
         elif isinstance(block, Cards):
             for card in block.items:
                 yield from card.badges
+                if card.badge is not None:
+                    yield card.badge
         elif isinstance(block, Timeline):
             for item in block.items:
                 yield from item.badges
@@ -1681,6 +1737,38 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
                 yield from iter_reference_items(step.detail)
 
 
+def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
+    """Every matrix in the block tree (recursing into containers), in document order — for the derived
+    cell tallies and the matrix-id uniqueness / `of_matrix` reference checks."""
+    for block in blocks:
+        if isinstance(block, Matrix):
+            yield block
+        elif isinstance(block, (Section, Panel)):
+            yield from iter_matrices(block.blocks)
+        elif isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                yield from iter_matrices(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_matrices(step.detail)
+
+
+def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
+    """Every card in the block tree (recursing into containers), in document order — for the
+    `of_matrix` reference check and the derived-value computation."""
+    for block in blocks:
+        if isinstance(block, Cards):
+            yield from block.items
+        elif isinstance(block, (Section, Panel)):
+            yield from iter_cards(block.blocks)
+        elif isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                yield from iter_cards(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_cards(step.detail)
+
+
 class Report(_Frozen):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
@@ -1694,6 +1782,17 @@ class Report(_Frozen):
         bad = sorted({key for key in iter_referenced_badge_keys(self.blocks) if key not in self.badges})
         if bad:
             raise ValueError(f"badge key(s) not declared in `badges`: {bad} (add them to the badges map)")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_matrix_references(self) -> "Report":
+        counts = Counter(matrix.id for matrix in iter_matrices(self.blocks) if matrix.id is not None)
+        duplicates = sorted(mid for mid, count in counts.items() if count > 1)
+        if duplicates:
+            raise ValueError(f"matrix id(s) used more than once: {duplicates} — matrix ids must be unique")
+        for card in iter_cards(self.blocks):
+            if card.of_matrix is not None and card.of_matrix not in counts:
+                raise ValueError(f"card of_matrix '{card.of_matrix}' names no matrix with that id")
         return self
 
     @model_validator(mode="after")

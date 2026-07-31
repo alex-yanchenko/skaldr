@@ -255,9 +255,17 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "description": "Card label above the number.",
-          "title": "Label",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Card label above the number. Required for a normal card; for a matrix-derived card (`of_matrix`) it defaults to the badge's label \u2014 set it only to override.",
+          "title": "Label"
         },
         "value": {
           "anyOf": [
@@ -269,9 +277,13 @@
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
-          "description": "Headline number, or a short status string.",
+          "default": null,
+          "description": "Headline number, or a short status string. Required for a normal card; a matrix-derived card (`of_matrix`) computes it instead, so leave it unset there.",
           "title": "Value"
         },
         "of": {
@@ -287,7 +299,7 @@
             }
           ],
           "default": null,
-          "description": "Denominator; renders a derived percentage.",
+          "description": "Denominator; renders a derived percentage. Not for a matrix-derived card (it computes its own denominator).",
           "title": "Of"
         },
         "tone": {
@@ -310,7 +322,7 @@
             }
           ],
           "default": null,
-          "description": "Optional tone for the top-border accent.",
+          "description": "Optional tone for the top-border accent. On a matrix-derived card, defaults to the badge's tone (driving chip + border together); set it to override.",
           "title": "Tone"
         },
         "delta": {
@@ -345,12 +357,34 @@
           },
           "title": "Badges",
           "type": "array"
+        },
+        "badge": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For a matrix-derived card: the declared badge key to count. Supplies the card's chip, its label (unless `label` overrides), and its top-border tone. Requires `of_matrix`.",
+          "title": "Badge"
+        },
+        "of_matrix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Derive this card's value by counting the cells in the matrix with this `id` whose state is `badge`; the percentage denominator is that matrix's total cell count. When set, `value` and `of` are computed \u2014 don't author them. Requires `badge`.",
+          "title": "Of Matrix"
         }
       },
-      "required": [
-        "label",
-        "value"
-      ],
       "title": "Card",
       "type": "object"
     },
@@ -2032,6 +2066,21 @@
           "minItems": 1,
           "title": "Cells",
           "type": "array"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable id (ASCII letters, digits, _, -) so a derived `cards` item can reference this matrix via `of_matrix`. Unique across the page's matrices.",
+          "title": "Id"
         }
       },
       "required": [
