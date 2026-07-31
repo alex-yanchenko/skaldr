@@ -177,6 +177,21 @@
 </div></div>
 {% endmacro %}
 
+{# Matrix: rows × columns, one state per cell — a coverage / RACI / capability grid. The cell IS the
+   state: a badge (its tone fills the cell, its label is the text) or a one-off tone fill, each with
+   optional short text; a blank (unfilled) cell is empty. `matrix_grid` places every cell row-major, so
+   this macro only loops. A cell's fill class is a badge/palette colour name, sharing the chip tokens. #}
+{% macro matrix(b) %}
+{% set grid = matrix_grid(b) %}
+<div class="mx-wrap"><table class="mx">
+<thead><tr><th></th>{% for col in b.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+<tbody>
+{% for row in b.rows %}{% set rowcells = grid[loop.index0] %}<tr><th>{{ row }}</th>{% for cell in rowcells %}{% if cell is none %}<td class="c"><span></span></td>{% else %}{% if cell.badge %}{% set tone = badges[cell.badge].tone %}{% set text = cell.label or badges[cell.badge].label %}{% elif cell.tone %}{% set tone = cell.tone %}{% set text = cell.label or "" %}{% else %}{% set tone = none %}{% set text = cell.label %}{% endif %}<td class="c{% if tone %} {{ tone }}{% endif %}"><span>{{ text }}</span></td>{% endif %}{% endfor %}</tr>
+{% endfor %}
+</tbody>
+</table></div>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {%- if block.span %}<div class="blk span-{{ block.span }}">{% endif -%}
 {% if block.type == "heading" %}
@@ -221,6 +236,8 @@
 {{ chart(block) }}
 {% elif block.type == "comparison" %}
 {{ comparison(block) }}
+{% elif block.type == "matrix" %}
+{{ matrix(block) }}
 {% elif block.type == "swimlane" %}
 {{ swimlane(block) }}
 {% elif block.type == "references" %}

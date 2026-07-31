@@ -18,6 +18,8 @@ from skaldr.models import (
     Grid,
     Heading,
     InnerGrid,
+    Matrix,
+    MatrixCell,
     Panel,
     Report,
     Section,
@@ -36,6 +38,7 @@ __all__ = [
     "col_sum",
     "first_table_index",
     "fmt",
+    "matrix_grid",
     "pct",
     "provenance_footer",
     "reconcile_line",
@@ -604,6 +607,14 @@ def table_rollup(table: Table) -> list[RollupBucket] | None:
         if key:
             counts[key] += 1
     return [{"key": key, "count": count} for key, count in counts.items()]
+
+
+def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
+    """The matrix as a row-major grid: `grid[r][c]` is the cell for row `rows[r]`, column `columns[c]`,
+    or None for a blank (unfilled) cell. The block validator guarantees at most one cell per (row, col),
+    so the lookup is unambiguous; the template only loops and never searches."""
+    lookup = {(cell.row, cell.col): cell for cell in block.cells}
+    return [[lookup.get((row, col)) for col in block.columns] for row in block.rows]
 
 
 def reconcile_line(table: Table) -> str:

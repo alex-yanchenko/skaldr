@@ -1305,6 +1305,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1384,6 +1385,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
               },
               {
                 "$ref": "#/$defs/Swimlane"
@@ -1682,6 +1686,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1761,6 +1766,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
               },
               {
                 "$ref": "#/$defs/Swimlane"
@@ -1960,6 +1968,138 @@
         "text"
       ],
       "title": "ListItem",
+      "type": "object"
+    },
+    "Matrix": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "matrix",
+          "title": "Type",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Row labels, top to bottom (the row axis).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Rows",
+          "type": "array"
+        },
+        "columns": {
+          "description": "Column headers, left to right (the column axis).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "cells": {
+          "description": "Filled cells, each naming a `row` + `col` from the axes. Omit a cell entirely for a blank. At most one cell per (row, col).",
+          "items": {
+            "$ref": "#/$defs/MatrixCell"
+          },
+          "minItems": 1,
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "rows",
+        "columns",
+        "cells"
+      ],
+      "title": "Matrix",
+      "type": "object"
+    },
+    "MatrixCell": {
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "description": "Which row this cell sits in \u2014 one of the block's `rows`.",
+          "minLength": 1,
+          "title": "Row",
+          "type": "string"
+        },
+        "col": {
+          "description": "Which column this cell sits in \u2014 one of the block's `columns`.",
+          "minLength": 1,
+          "title": "Col",
+          "type": "string"
+        },
+        "badge": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A declared badge key: its tone fills the cell and its label is the cell text. Use this OR `tone`, not both.",
+          "title": "Badge"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "slate",
+                "blue",
+                "green",
+                "amber",
+                "red",
+                "violet",
+                "teal",
+                "sky"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A one-off fill colour (palette or semantic name) for a cell with no vocabulary badge \u2014 e.g. a RACI letter or a \u2713. Use this OR `badge`, not both.",
+          "title": "Tone"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Short text shown in the cell. With `badge` it overrides the badge's label; with `tone` it is the cell text; on its own it is plain text on an untinted cell.",
+          "title": "Label"
+        }
+      },
+      "required": [
+        "row",
+        "col"
+      ],
+      "title": "MatrixCell",
       "type": "object"
     },
     "Meta": {
@@ -2238,6 +2378,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -2317,6 +2458,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
               },
               {
                 "$ref": "#/$defs/Swimlane"
@@ -2757,6 +2901,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -2836,6 +2981,9 @@
               },
               {
                 "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
               },
               {
                 "$ref": "#/$defs/Swimlane"
@@ -3619,6 +3767,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -3700,6 +3849,9 @@
                 "$ref": "#/$defs/Comparison"
               },
               {
+                "$ref": "#/$defs/Matrix"
+              },
+              {
                 "$ref": "#/$defs/Swimlane"
               },
               {
@@ -3761,6 +3913,7 @@
             "image": "#/$defs/Image",
             "key_value": "#/$defs/KeyValue",
             "list": "#/$defs/ListBlock",
+            "matrix": "#/$defs/Matrix",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
             "panel": "#/$defs/Panel",
@@ -3843,6 +3996,9 @@
           },
           {
             "$ref": "#/$defs/Comparison"
+          },
+          {
+            "$ref": "#/$defs/Matrix"
           },
           {
             "$ref": "#/$defs/Swimlane"

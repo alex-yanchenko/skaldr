@@ -132,6 +132,7 @@ def _environment() -> Environment:
         col_sum=compute.col_sum,
         reconcile_line=compute.reconcile_line,
         table_rollup=compute.table_rollup,
+        matrix_grid=compute.matrix_grid,
         swimlane_layout=compute.swimlane_layout,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

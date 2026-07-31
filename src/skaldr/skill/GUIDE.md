@@ -168,6 +168,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
+| `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]` |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -388,6 +389,37 @@ present/absent; only the colour flips, and only on bool cells.
     - { feature: "Self-contained", values: [true, true] }
     - { feature: "Validated", values: [false, true] }
     - { feature: "Effort", values: [{ value: "high", tone: danger }, { value: "low", tone: success }] }
+```
+
+## The `matrix`
+
+Rows × columns with **one state per cell** — a coverage map you see the shape of at a glance, instead
+of several stacked tables. `rows` are the row axis (top to bottom), `columns` the header axis (left to
+right); `cells` fill the grid. The **cell is the signal**: its badge (or one-off tone) fills it with
+colour, so the whole grid reads as a heatmap. Reach for it for a coverage grid, a RACI chart, a
+capability / support matrix, or an env-vs-feature grid. (Use `comparison` instead when you're weighing
+named *options* against criteria with a recommend column; use `table` for freeform tabular data.)
+
+Each cell names a `row` + `col` from the axes, plus its fill:
+
+- `badge: KEY` — a declared badge: its tone fills the cell, its label is the text. (These badges join
+  the page legend automatically, like any badge reference.)
+- `tone: <colour>` — a one-off fill with no vocabulary badge; pair with `label` for the cell text (a
+  RACI letter, a ✓).
+- `label: "…"` alone — plain short text on an untinted cell.
+- **omit the cell entirely for a blank.** At most one cell per (row, col); `badge` and `tone` are
+  mutually exclusive.
+
+```yaml
+# HAVE / PARTIAL / GAP declared in the page `badges:` map (see above)
+- type: matrix
+  rows: [Receiving, Putaway, Picking]
+  columns: [Docs, Tests, Alerts, Runbook]
+  cells:
+    - { row: Receiving, col: Docs,   badge: HAVE }
+    - { row: Putaway,   col: Alerts, badge: GAP }
+    - { row: Picking,   col: Docs,   tone: blue, label: "R" }   # one-off, e.g. a RACI letter
+    # Picking / Runbook omitted → a blank cell
 ```
 
 ## The `swimlane`
