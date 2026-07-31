@@ -1107,6 +1107,79 @@ class Comparison(_Block):
         return self
 
 
+class MatrixCell(_Frozen):
+    row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")
+    col: str = Field(
+        min_length=1, description="Which column this cell sits in — one of the block's `columns`."
+    )
+    badge: str | None = Field(
+        default=None,
+        description="A declared badge key: its tone fills the cell and its label is the cell text. Use "
+        "this OR `tone`, not both.",
+    )
+    tone: BadgeColor | None = Field(
+        default=None,
+        description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
+        "badge — e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
+    )
+    label: str | None = Field(
+        default=None,
+        description="Short text shown in the cell. With `badge` it overrides the badge's label; with "
+        "`tone` it is the cell text; on its own it is plain text on an untinted cell.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "MatrixCell":
+        if not self.row.strip():
+            raise ValueError("matrix cell row must not be blank")
+        if not self.col.strip():
+            raise ValueError("matrix cell col must not be blank")
+        if self.badge is not None and not self.badge.strip():
+            raise ValueError("matrix cell badge must not be blank (omit it instead)")
+        if self.badge is not None and self.tone is not None:
+            raise ValueError("a matrix cell takes `badge` or `tone`, not both")
+        if self.badge is None and self.tone is None and self.label is None:
+            raise ValueError(
+                "a matrix cell needs a `badge`, a `tone`, or a `label` (omit it for a blank cell)"
+            )
+        if self.label is not None and not self.label.strip():
+            raise ValueError("matrix cell label must not be blank (omit it instead)")
+        return self
+
+
+class Matrix(_Block):
+    type: Literal["matrix"]
+    rows: list[str] = Field(min_length=1, description="Row labels, top to bottom (the row axis).")
+    columns: list[str] = Field(min_length=1, description="Column headers, left to right (the column axis).")
+    cells: list[MatrixCell] = Field(
+        min_length=1,
+        description="Filled cells, each naming a `row` + `col` from the axes. Omit a cell entirely for a "
+        "blank. At most one cell per (row, col).",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Matrix":
+        for axis, name in ((self.rows, "row"), (self.columns, "column")):
+            stripped = [entry.strip() for entry in axis]
+            if any(not entry for entry in stripped):
+                raise ValueError(f"matrix {name} labels must not be blank")
+            if len(set(stripped)) != len(stripped):
+                raise ValueError(f"matrix {name} labels must be unique")
+        row_set, col_set = set(self.rows), set(self.columns)
+        seen: set[tuple[str, str]] = set()
+        for cell in self.cells:
+            if cell.row not in row_set:
+                raise ValueError(f"matrix cell row '{cell.row}' is not one of the declared rows")
+            if cell.col not in col_set:
+                raise ValueError(f"matrix cell col '{cell.col}' is not one of the declared columns")
+            if (cell.row, cell.col) in seen:
+                raise ValueError(
+                    f"matrix has two cells at ('{cell.row}', '{cell.col}') — at most one per cell"
+                )
+            seen.add((cell.row, cell.col))
+        return self
+
+
 class SwimlaneStep(_Frozen):
     lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
     col: str = Field(
@@ -1398,6 +1471,7 @@ _Leaf = (
     | Fan
     | Chart
     | Comparison
+    | Matrix
     | Swimlane
     | References
 )
@@ -1575,6 +1649,10 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
             yield from block.hub.badges
             for spoke in block.spokes:
                 yield from spoke.badges
+        elif isinstance(block, Matrix):
+            for cell in block.cells:
+                if cell.badge is not None:
+                    yield cell.badge
         elif isinstance(block, Table):
             badge_columns = [column.key for column in block.columns if column.kind == "badge"]
             for row in block.all_rows():

@@ -782,6 +782,82 @@ def test_comparison_negative_polarity_flips_the_check_colour_not_the_glyph() -> 
     assert '<td><span class="ct danger">high</span></td>' in html
 
 
+def test_matrix_fills_cells_by_state_and_leaves_blanks_empty() -> None:
+    block = {
+        "type": "matrix",
+        "rows": ["Receiving", "Picking"],
+        "columns": ["Docs", "Tests"],
+        "cells": [
+            {"row": "Receiving", "col": "Docs", "badge": "HAVE"},  # badge → tone fill + its label
+            {"row": "Picking", "col": "Docs", "tone": "blue", "label": "R"},  # one-off fill + text
+            {"row": "Picking", "col": "Tests", "label": "n/a"},  # label only → no fill
+            # Receiving/Tests omitted → a blank cell
+        ],
+    }
+    report = parse_report(
+        make_report(blocks=[block], badges={"HAVE": {"label": "Have", "tone": "green", "legend": "covered"}})
+    )
+
+    html = render_html(report)
+
+    assert "<thead><tr><th></th><th>Docs</th><th>Tests</th></tr></thead>" in html
+    assert (
+        '<tr><th>Receiving</th><td class="c green"><span>Have</span></td>'
+        '<td class="c"><span></span></td></tr>'
+    ) in html
+    assert (
+        '<tr><th>Picking</th><td class="c blue"><span>R</span></td><td class="c"><span>n/a</span></td></tr>'
+    ) in html
+
+
+def test_matrix_cell_label_overrides_the_badge_label() -> None:
+    block = {
+        "type": "matrix",
+        "rows": ["r"],
+        "columns": ["c"],
+        "cells": [{"row": "r", "col": "c", "badge": "HAVE", "label": "✓"}],
+    }
+    report = parse_report(
+        make_report(blocks=[block], badges={"HAVE": {"label": "Have", "tone": "green", "legend": "covered"}})
+    )
+
+    html = render_html(report)
+
+    assert '<td class="c green"><span>✓</span></td>' in html  # label wins over the badge's own "Have"
+
+
+def test_matrix_tone_only_cell_fills_without_text() -> None:
+    """A cell with a one-off `tone` and no `label` is a pure colour swatch — the fill, an empty span."""
+    block = {
+        "type": "matrix",
+        "rows": ["r"],
+        "columns": ["c"],
+        "cells": [{"row": "r", "col": "c", "tone": "green"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<td class="c green"><span></span></td>' in html
+
+
+def test_matrix_badge_reference_appears_in_the_legend() -> None:
+    """A badge used only by a matrix (no table on the page) still lists in the derived legend, which
+    renders at the top when the page has no table."""
+    block = {
+        "type": "matrix",
+        "rows": ["r"],
+        "columns": ["c"],
+        "cells": [{"row": "r", "col": "c", "badge": "HAVE"}],
+    }
+    report = parse_report(
+        make_report(blocks=[block], badges={"HAVE": {"label": "Have", "tone": "green", "legend": "covered"}})
+    )
+
+    html = render_html(report)
+
+    assert '<span class="chip green">Have</span><span class="meaning">covered</span>' in html
+
+
 def test_swimlane_columns_are_fluid_so_a_few_columns_fill_the_width() -> None:
     """Data columns are a minmax(150px, 1fr) track: they share the width evenly with a 150px floor, so
     a few columns fill the page instead of huddling at a fixed 150px."""

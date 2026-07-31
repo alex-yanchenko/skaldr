@@ -504,6 +504,34 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
 		& .ct.teal{color:var(--teal-fg)} & .ct.sky{color:var(--sky-fg)}}
 
+	/* matrix — rows × columns, one state per cell (a coverage / RACI / capability grid). Unlike
+	   `comparison` (options × features, a recommend column), the CELL is the signal: a badge/tone fills
+	   it (--cb) with a short label (--cf), so the whole grid's shape reads as a heatmap in one look; a
+	   blank cell is empty. The wrap owns the frame + horizontal scroll (short data cells rarely overflow,
+	   but a wide matrix scrolls rather than cramping); the table draws the internal grid. Auto layout so
+	   the row-header column hugs its labels and the data columns share the rest. */
+	.mx-wrap{margin-block:var(--s6); border:1px solid var(--line); border-radius:var(--r-md);
+		overflow-x:auto; background:var(--surface); box-shadow:var(--shadow)}
+	.mx{width:100%; border-collapse:separate; border-spacing:0; font-size:13px;
+		& th,& td{border-block-end:1px solid var(--line); border-inline-end:1px solid var(--line)}
+		& thead th:last-child,& tbody td:last-child{border-inline-end:none}
+		& tbody tr:last-child th,& tbody tr:last-child td{border-block-end:none}
+		& thead th{background:var(--panel); color:var(--muted); font-size:10.5px; font-weight:700;
+			text-transform:uppercase; letter-spacing:0.05em; text-align:center; padding:9px 12px; vertical-align:bottom}
+		& thead th:first-child{text-align:start; border-start-start-radius:var(--r-inner)}
+		& tbody th{background:var(--panel); font-weight:640; font-size:13px; color:var(--ink);
+			text-align:start; padding:0 12px; white-space:nowrap}
+		& tbody td{text-align:center; padding:0; height:44px; vertical-align:middle}
+		/* the cell's fill + centred label; --cb/--cf come from the colour class (or the muted default for
+		   a label-only, untinted cell). The span fills the td so the tint reads as the whole cell. */
+		& td.c > span{display:flex; align-items:center; justify-content:center; height:100%; padding:0 8px;
+			background:var(--cb,transparent); color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
+			text-transform:uppercase; letter-spacing:0.04em}
+		& .c.slate{--cf:var(--neutral-fg); --cb:var(--neutral-bg)} & .c.blue{--cf:var(--info-fg); --cb:var(--info-bg)}
+		& .c.green{--cf:var(--success-fg); --cb:var(--success-bg)} & .c.amber{--cf:var(--warning-fg); --cb:var(--warning-bg)}
+		& .c.red{--cf:var(--danger-fg); --cb:var(--danger-bg)} & .c.violet{--cf:var(--accent-fg); --cb:var(--accent-bg)}
+		& .c.teal{--cf:var(--teal-fg); --cb:var(--teal-bg)} & .c.sky{--cf:var(--sky-fg); --cb:var(--sky-bg)}}
+
 	/* swimlane — a lane×column matrix (rows = lanes, columns = sprints/phases) with an optional group
 	   (milestone) overlay. Everything sits on ONE grid: a lane gutter track + one track per atomic
 	   sub-column (a (column, group) segment). Grey grid lines (--rule) read as a normal table — SOLID
@@ -730,6 +758,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   overflowing and clipping columns past the edge. */
 		.swim-wrap{overflow-x:visible}
 		.swim{width:auto; --swim-col:minmax(0,1fr)}
+		/* Matrix: no scrollbar on paper (fit to the page), repeat the column header per page, keep each
+		   row whole. */
+		.mx-wrap{overflow-x:visible}
+		table.mx thead{display:table-header-group}
+		table.mx tr{break-inside:avoid}
 		/* Long code may span pages (it is NOT in the break-inside list above). Its normal box is kept
 		   unchanged — screen and print match. The default box-decoration-break (slice) draws the box's
 		   top border only at its true top and the bottom only at its true bottom, so a break in the
@@ -772,7 +805,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <body>
 <div class="wrap">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>
 
@@ -932,6 +965,19 @@ ORDER BY n DESC;
 
 <table class="cmp"><thead><tr><th></th><th class="hl">Full cycle</th><th>Sampling</th><th>Continuous</th></tr></thead>
 <tbody><tr><td class="feat">Catches every bin</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk good">✓</span></td></tr><tr><td class="feat">Effort</td><td class="hl"><span class="ct danger">high</span></td><td><span class="ct success">low</span></td><td><span class="ct warning">medium</span></td></tr><tr><td class="feat">Reconciles exactly</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk bad">✗</span></td></tr><tr><td class="feat">Disrupts picking</td><td class="hl"><span class="chk good">✓</span></td><td><span class="chk bad">✗</span></td><td><span class="chk good">✓</span></td></tr></tbody></table>
+
+
+<h2 id="readiness-by-zone">Readiness by zone</h2>
+
+<div class="mx-wrap"><table class="mx">
+<thead><tr><th></th><th>Scanned</th><th>Reconciled</th><th>Re-labeled</th><th>Signed off</th></tr></thead>
+<tbody>
+<tr><th>Zone A</th><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td></tr>
+<tr><th>Zone B</th><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c blue"><span>System</span></td><td class="c"><span></span></td></tr>
+<tr><th>Zone C</th><td class="c amber"><span>Floor</span></td><td class="c blue"><span>System</span></td><td class="c slate"><span>n/a</span></td><td class="c"><span></span></td></tr>
+<tr><th>Overflow</th><td class="c red"><span>Vendor</span></td><td class="c red"><span>Vendor</span></td><td class="c"><span></span></td><td class="c"><span></span></td></tr>
+</tbody>
+</table></div>
 
 
 <h2 id="where-the-count-comes-from">Where the count comes from</h2>

@@ -307,6 +307,25 @@ blocks:
       - { feature: "Disrupts picking", values: [true, false, true] }
 
   - type: heading
+    text: "Readiness by zone"
+  - type: matrix
+    rows: ["Zone A", "Zone B", "Zone C", "Overflow"]
+    columns: ["Scanned", "Reconciled", "Re-labeled", "Signed off"]
+    cells:
+      - { row: "Zone A", col: "Scanned",    badge: FLOOR }
+      - { row: "Zone A", col: "Reconciled", badge: FLOOR }
+      - { row: "Zone A", col: "Re-labeled", badge: FLOOR }
+      - { row: "Zone A", col: "Signed off", badge: FLOOR }
+      - { row: "Zone B", col: "Scanned",    badge: FLOOR }
+      - { row: "Zone B", col: "Reconciled", badge: FLOOR }
+      - { row: "Zone B", col: "Re-labeled", badge: SYSTEM }
+      - { row: "Zone C", col: "Scanned",    badge: FLOOR }
+      - { row: "Zone C", col: "Reconciled", badge: SYSTEM }
+      - { row: "Zone C", col: "Re-labeled", tone: slate, label: "n/a" }
+      - { row: "Overflow", col: "Scanned",    badge: VENDOR }
+      - { row: "Overflow", col: "Reconciled", badge: VENDOR }
+
+  - type: heading
     text: "Where the count comes from"
   - type: fan
     direction: in
