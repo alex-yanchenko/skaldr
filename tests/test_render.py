@@ -5,7 +5,7 @@ import re
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import load_report, package_path, parse_report
+from skaldr.models import Report, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -1805,6 +1805,30 @@ def test_author_id_becomes_the_heading_and_section_anchor() -> None:
     assert '<details class="section" id="raw"' in html
 
 
+def test_heading_sub_renders_a_rich_caption_inside_the_heading() -> None:
+    block = {"type": "heading", "text": "Overview", "sub": "the **10k** count"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<h2 id="overview">Overview<span class="hsub">the <strong>10k</strong> count</span></h2>' in html
+
+
+def test_heading_without_sub_renders_no_caption_span() -> None:
+    html = render_html(parse_report(make_report(blocks=[{"type": "heading", "text": "Overview"}])))
+
+    assert '<h2 id="overview">Overview</h2>' in html
+    assert '<span class="hsub">' not in html  # the class lives in the inlined CSS; the span must not
+
+
+def test_stylesheet_carries_no_footnote_marker_syntax() -> None:
+    """The whole stylesheet is inlined into every rendered page, so a literal `[^…]` footnote marker
+    in a CSS comment surfaces in the output and trips a consumer scanning the render for unresolved
+    markers. Keep the marker syntax out of the sheet — describe it in words instead."""
+    css = package_path("styles.css").read_text(encoding="utf-8")
+
+    assert "[^" not in css
+
+
 def test_richtext_rejects_disallowed_link_scheme() -> None:
     assert str(render_richtext("[x](javascript:alert)")) == "[x](javascript:alert)"
 
@@ -2276,6 +2300,71 @@ def test_table_without_rollup_renders_no_strip() -> None:
     report = parse_report(make_report(blocks=[table]))
 
     assert 'class="rollup"' not in render_html(report)
+
+
+def _tint_report(rows: list[dict[str, object]]) -> Report:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=rows,
+        tint_by="status",
+    )
+    return parse_report(
+        make_report(
+            blocks=[table],
+            badges={
+                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
+                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
+            },
+        )
+    )
+
+
+def test_table_tint_by_tints_each_row_by_its_badge_tone() -> None:
+    html = render_html(
+        _tint_report(
+            [{"item": "a", "status": "DONE"}, {"item": "b", "status": "PENDING"}, {"item": "c", "status": ""}]
+        )
+    )
+
+    assert '<tr class="row tint green">' in html  # success → green palette twin
+    assert '<tr class="row tint amber">' in html  # warning → amber
+    assert '<tr class="row">' in html  # blank badge cell → untinted row
+
+
+def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
+    html = render_html(_tint_report([{"item": "a", "status": "DONE", "tone": "danger"}]))
+
+    assert '<tr class="row danger">' in html  # explicit row tone wins
+    assert '<tr class="row tint' not in html  # a toned row never carries a tint class
+
+
+def test_table_tint_by_a_cell_badge_list_uses_the_first_key_tone() -> None:
+    """tint_by may name a placement: cell badge column whose value is a LIST of keys; the row's tint
+    comes from the FIRST key's tone (a single row can't carry two tints)."""
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "tags", "label": "Tags", "kind": "badge", "placement": "cell"},
+        ],
+        rows=[{"item": "a", "tags": ["DONE", "PENDING"]}],
+        tint_by="tags",
+    )
+    report = parse_report(
+        make_report(
+            blocks=[table],
+            badges={
+                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
+                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    assert '<tr class="row tint green">' in html  # first key DONE → success → green drives the tint
 
 
 def test_image_max_width_renders_style() -> None:

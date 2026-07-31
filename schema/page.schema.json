@@ -1540,6 +1540,19 @@
           "default": null,
           "description": "Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived slug so `[\u2026](#id)` links survive a heading rename. Must be unique across the page.",
           "title": "Id"
+        },
+        "sub": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption line under the heading, styled subordinate \u2014 a real subtitle slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that stays the plain `text`).",
+          "title": "Sub"
         }
       },
       "required": [
@@ -3481,6 +3494,19 @@
           ],
           "default": null,
           "description": "Opt-in summary strip below the table: counts the rows by a badge column and shows one '<chip> <count>' per value, derived from the rows so it can never drift from them."
+        },
+        "tint_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opt-in row heatmap: faintly tint each row by the tone of the badge in this column (named by its key), so a long table's state reads as bands of colour. A row left blank in that column stays untinted; an explicit row `tone` (muted/danger) wins over the tint. Must name a `badge` column (the same one may still render its chip).",
+          "title": "Tint By"
         }
       },
       "required": [

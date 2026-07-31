@@ -619,6 +619,32 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def test_tint_by_a_non_badge_column_is_rejected() -> None:
+    table = make_table(
+        columns=[{"key": "item", "label": "I", "kind": "text"}],
+        rows=[{"item": "a"}],
+        tint_by="item",
+    )
+
+    with pytest.raises(ReportError, match=r"tint_by 'item' must be a badge column"):
+        parse_report(make_report(blocks=[table]))
+
+
+def test_tint_by_an_all_blank_badge_column_is_allowed() -> None:
+    """Unlike `rollup`, `tint_by` tolerates an all-blank column — a blank cell is a valid untinted
+    row, not an error (the whole column being blank just renders every row untinted)."""
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "tag", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "tag": ""}],
+        tint_by="tag",
+    )
+
+    parse_report(make_report(blocks=[table]))  # no raise
+
+
 _POSITIONAL_COLUMNS = [
     {"key": "issue", "label": "Issue", "kind": "text"},
     {"key": "tag", "label": "", "kind": "badge"},
@@ -1019,6 +1045,41 @@ def test_badge_row_declared_key_passes() -> None:
 def test_blank_heading_is_rejected() -> None:
     with pytest.raises(ReportError, match=r"must not be blank"):
         parse_report(make_report(blocks=[{"type": "heading", "text": "   "}]))
+
+
+def test_blank_heading_sub_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"heading sub must not be blank"):
+        parse_report(make_report(blocks=[{"type": "heading", "text": "Overview", "sub": "  "}]))
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        (
+            {
+                "type": "swimlane",
+                "lanes": ["Eng"],
+                "columns": [{"name": "S1", "sub": "  "}],
+                "steps": [{"lane": "Eng", "col": "S1", "n": "1", "label": "Build"}],
+            },
+            "swimlane column sub must not be blank",
+        ),
+        (
+            {
+                "type": "walkthrough",
+                "steps": [{"label": "Step", "sub": "  ", "detail": [{"type": "text", "body": "x"}]}],
+            },
+            "walkthrough step sub must not be blank",
+        ),
+        (
+            {"type": "range", "segments": [{"label": "Q3", "span": 1, "sub": "  "}]},
+            "range segment sub must not be blank",
+        ),
+    ],
+)
+def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[block]))
 
 
 def test_reconcile_without_handled_bucket_passes() -> None:

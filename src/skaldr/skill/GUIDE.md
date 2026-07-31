@@ -146,7 +146,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor) |
+| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -158,7 +158,7 @@ or to keep a small block from stretching across the whole page.
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?` |
+| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?` |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
@@ -594,12 +594,19 @@ link instead.
   that needs `subrows` or `tone` stays a mapping (a list has no slot for them).
 - **`reconcile`** is the trust check: the column sum, plus any `handled` bucket, must equal
   `total` or the build fails naming the delta. With `pct_of_total` on a number column, each cell
-  also shows its share of the reconcile total.
+  also shows its share of the reconcile total. `pct_of_total` is defined **only** against a
+  `reconcile` total — it has no meaning against a plain `totals` sum, so a table that sets
+  `pct_of_total` without a `reconcile` is rejected at build time (add a `reconcile`, or drop the flag).
 - **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
 - **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
   The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
   `by` must name a `badge` column.
+- **`tint_by`** — `<badge-column-key>` — faintly tints each row by the tone of the badge in that
+  column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
+  skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
+  (`muted`/`danger`) wins over the tint. Must name a `badge` column — the same column can still show
+  its chip.
 - A group with an empty `rows: []` renders a "— none —" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 
