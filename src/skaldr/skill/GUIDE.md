@@ -127,8 +127,18 @@ blank as `{{name}}` in any prose field. It renders as a loud `‹name›` chip s
 unnoticed, and there's no separate to-fill list to keep in sync. Fill it by replacing the token with
 the real text.
 
+A placeholder **name is letters, digits, `_` or `-`** (`{{next-round}}` is fine; `{{a.b}}` or
+`{{two words}}` is not). `{{ … }}` is reserved for this — a token whose name breaks the rule is a
+**hard build error** naming it, never silently emitted as prose (that would defeat the whole point).
+To show a literal `{{`, put it in a `` `code` `` span.
+
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains — the gate you run before "final".
+
+> **Self-checking a rendered page?** A full render **embeds its own YAML source** (so `--extract-source`
+> can recover it), which means any `{{…}}` or `[^ref]` in the source also appears in the output. Grepping
+> the HTML for unfilled markers therefore needs `skaldr … --no-source` (or `--embed`, which never carries
+> the source); better yet, run `skaldr --check --strict` and let skaldr do it.
 
 ## Numbers are formatted for you
 

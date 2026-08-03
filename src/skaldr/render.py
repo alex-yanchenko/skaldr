@@ -32,7 +32,13 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _STRIKE = re.compile(r"~~([^~]+)~~")
 _ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
-_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+# `{{ … }}` is skaldr's reserved fill-me-later syntax, so match ANY such token and validate the name in
+# the handler — a `{{…}}` that isn't a clean placeholder is a hard build error, never silently emitted as
+# prose. The capture is `[^{}]` (a name never contains a brace): that bounds the scan so it stays linear
+# on pathological input (many unclosed `{{`) and can't cross into a neighbouring token. A literal `{{`
+# goes in a `code` span (stashed before this runs). A placeholder name is letters, digits, `_` or `-`.
+_PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
+_PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def render_richtext(
@@ -99,7 +105,21 @@ def render_richtext(
     def _placeholder(match: re.Match[str]) -> str:
         # A `{{name}}` fill-me-later blank: always renders as a visible chip so it can't be shipped
         # unnoticed; `placeholders`, when passed, collects the names for the --check --strict gate.
+        # A `{{…}}` whose name isn't letters/digits/`_`/`-` is a typo'd blank — fail the build naming
+        # it, rather than silently emitting it as prose (which would defeat the whole point + the gate).
         name = match.group(1)
+        if "\x00" in name:
+            # the name captured an earlier-stashed inline element (a link / code span / citation), so a
+            # placeholder was wrapped around other markup. Report it without leaking the stash sentinel.
+            raise ReportError(
+                "invalid placeholder: a {{…}} blank is a bare name (letters, digits, '_' or '-'), so it "
+                "can't contain a link, `code` span, or [^citation]"
+            )
+        if not _PLACEHOLDER_NAME.fullmatch(name):
+            raise ReportError(
+                "invalid placeholder '{{" + name + "}}': a placeholder name is letters, digits, '_' or "
+                "'-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)"
+            )
         if placeholders is not None:
             placeholders.add(name)
         return _stash(f'<span class="placeholder">{name}</span>')

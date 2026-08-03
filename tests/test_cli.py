@@ -17,6 +17,16 @@ def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -
     return path
 
 
+def test_check_fails_on_a_malformed_placeholder(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # a `{{a.b}}` blank must not slip past the gate as prose — --check (which runs a render pass) FAILs.
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "threshold {{a.b}}"}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert exit_code == 1
+    assert "invalid placeholder '{{a.b}}'" in capsys.readouterr().err
+
+
 def test_render_embeds_source_and_extract_source_recovers_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
