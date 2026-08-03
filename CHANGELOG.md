@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.0](https://github.com/alex-yanchenko/skaldr/compare/v2.4.0...v2.5.0) (2026-08-03)
+
+
+### Features
+
+* **cards:** of_tables — derive a drift-proof summary count across several rollup tables ([#113](https://github.com/alex-yanchenko/skaldr/issues/113)) ([d667923](https://github.com/alex-yanchenko/skaldr/commit/d66792374ac9095fb03024e475c29e5b6bbfa055))
+* **cli:** add --version (reads the installed package version) ([#110](https://github.com/alex-yanchenko/skaldr/issues/110)) ([95dc1c7](https://github.com/alex-yanchenko/skaldr/commit/95dc1c7a1e5455ae1999f62f27bbde04242a3d4d))
+* **placeholders:** allow - in names; hard-fail a malformed {{token}} instead of silent prose ([#112](https://github.com/alex-yanchenko/skaldr/issues/112)) ([0645841](https://github.com/alex-yanchenko/skaldr/commit/064584168fd0c08e7380106c4f1686e6abaaa6a7))
+* **walkthrough:** default a quiet rail on every step — tone only recolours it ([#111](https://github.com/alex-yanchenko/skaldr/issues/111)) ([a5262e1](https://github.com/alex-yanchenko/skaldr/commit/a5262e1e15950f70433a5133ad4eb3afd490eb9e))
+
 ## [2.4.0](https://github.com/alex-yanchenko/skaldr/compare/v2.3.0...v2.4.0) (2026-07-31)
 
 
