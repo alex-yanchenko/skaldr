@@ -32,6 +32,7 @@ from skaldr.models import (
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
+    iter_tables,
 )
 
 __all__ = [
@@ -47,6 +48,7 @@ __all__ = [
     "reference_numbers",
     "swimlane_layout",
     "table_rollup",
+    "table_tallies",
     "toc_entries",
     "used_badges",
 ]
@@ -75,20 +77,6 @@ def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from _iter_anchored(step.detail)
-
-
-def _iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
-    for block in blocks:
-        if isinstance(block, Table):
-            yield block
-        elif isinstance(block, (Section, Panel)):
-            yield from _iter_tables(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from _iter_tables(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from _iter_tables(step.detail)
 
 
 def reference_numbers(report: Report) -> dict[str, int]:
@@ -566,9 +554,7 @@ def provenance_footer(report: Report) -> str | None:
     parts = [part for part in (report.meta.source, report.meta.date) if part]
     if report.meta.updated:
         parts.append(f"updated {report.meta.updated}")
-    parts.extend(
-        reconcile_line(table) for table in _iter_tables(report.blocks) if table.reconcile is not None
-    )
+    parts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
     return " · ".join(parts) if parts else None
 
 
@@ -597,36 +583,59 @@ class RollupBucket(TypedDict):
     count: int
 
 
+def _rollup_counts(rows: Sequence[dict[str, Any]], by: str) -> Counter[str]:
+    """Count rows by a badge column's value, in first-appearance order (a blank cell counts toward no
+    badge). The one tally rule shared by a table's own `rollup` strip and its `of_tables` contribution,
+    so the two views of the same table can never drift apart."""
+    counts: Counter[str] = Counter()
+    for row in rows:
+        key = row[by].strip()
+        if key:
+            counts[key] += 1
+    return counts
+
+
 def table_rollup(table: Table) -> list[RollupBucket] | None:
     """Count the table's rows by its rollup badge column, in first-appearance order — a summary
     derived from the rows, so it cannot drift from them. None when no rollup is declared. A row left
     blank in that column contributes to no bucket; the table validator guarantees at least one is set."""
     if table.rollup is None:
         return None
-    counts: Counter[str] = Counter()
-    for row in table.all_rows():
-        key = row[table.rollup.by].strip()
-        if key:
-            counts[key] += 1
+    counts = _rollup_counts(table.all_rows(), table.rollup.by)
     return [{"key": key, "count": count} for key, count in counts.items()]
 
 
-class MatrixTally(TypedDict):
-    counts: dict[str, int]  # badge key -> number of cells in that state
-    total: int  # total grid positions (rows times columns), the percentage denominator
+class DerivedTally(TypedDict):
+    counts: dict[str, int]  # badge key -> how many of the source's units are in that state
+    total: int  # the percentage denominator (a matrix's cells, or a table's rows)
 
 
-def matrix_tallies(report: Report) -> dict[str, MatrixTally]:
+def matrix_tallies(report: Report) -> dict[str, DerivedTally]:
     """`matrix id -> {counts: {badge: n}, total: rows*columns}` for every id'd matrix — the derived
     source a `cards` item reads via `of_matrix`. The denominator is the full grid (blank cells count as
     uncovered), so a derived card's percentage is the share of the whole matrix in that state. A matrix
     with no id contributes nothing (only referenceable matrices are tallied)."""
-    tallies: dict[str, MatrixTally] = {}
+    tallies: dict[str, DerivedTally] = {}
     for matrix in iter_matrices(report.blocks):
         if matrix.id is None:
             continue
         counts: Counter[str] = Counter(cell.badge for cell in matrix.cells if cell.badge is not None)
         tallies[matrix.id] = {"counts": dict(counts), "total": len(matrix.rows) * len(matrix.columns)}
+    return tallies
+
+
+def table_tallies(report: Report) -> dict[str, DerivedTally]:
+    """`table id -> {counts: {badge: n}, total: row count}` for every id'd table that declares a `rollup`
+    — the derived source a `cards` item reads via `of_tables`. Rows are counted by the table's own
+    `rollup.by` column (a blank cell counts toward no badge); the denominator is every row, so an
+    `of_tables` card's percentage is the badge's share across the referenced tables. A table with no id
+    or no rollup contributes nothing (the validator requires both on any referenced table)."""
+    tallies: dict[str, DerivedTally] = {}
+    for table in iter_tables(report.blocks):
+        if table.id is None or table.rollup is None:
+            continue
+        rows = table.all_rows()
+        tallies[table.id] = {"counts": dict(_rollup_counts(rows, table.rollup.by)), "total": len(rows)}
     return tallies
 
 

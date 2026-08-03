@@ -350,23 +350,23 @@ class CardDelta(_Frozen):
 class Card(_Frozen):
     label: str | None = Field(
         default=None,
-        description="Card label above the number. Required for a normal card; for a matrix-derived card "
-        "(`of_matrix`) it defaults to the badge's label — set it only to override.",
+        description="Card label above the number. Required for a normal card; for a derived card "
+        "(`of_matrix`/`of_tables`) it defaults to the badge's label — set it only to override.",
     )
     value: Number | str | None = Field(
         default=None,
-        description="Headline number, or a short status string. Required for a normal card; a "
-        "matrix-derived card (`of_matrix`) computes it instead, so leave it unset there.",
+        description="Headline number, or a short status string. Required for a normal card; a derived "
+        "card (`of_matrix`/`of_tables`) computes it instead, so leave it unset there.",
     )
     of: Number | None = Field(
         default=None,
-        description="Denominator; renders a derived percentage. Not for a matrix-derived card (it "
-        "computes its own denominator).",
+        description="Denominator; renders a derived percentage. Not for a derived card (it computes its "
+        "own denominator).",
     )
     tone: Tone | None = Field(
         default=None,
-        description="Optional tone for the top-border accent. On a matrix-derived card, defaults to the "
-        "badge's tone (driving chip + border together); set it to override.",
+        description="Optional tone for the top-border accent. On a derived card, defaults to the badge's "
+        "tone (driving chip + border together); set it to override.",
     )
     delta: CardDelta | None = Field(
         default=None, description="Optional trend chip beside the value (a period-over-period change)."
@@ -378,38 +378,57 @@ class Card(_Frozen):
     )
     badge: str | None = Field(
         default=None,
-        description="For a matrix-derived card: the declared badge key to count. Supplies the card's "
-        "chip, its label (unless `label` overrides), and its top-border tone. Requires `of_matrix`.",
+        description="For a derived card: the declared badge key to count. Supplies the card's chip, its "
+        "label (unless `label` overrides), and its top-border tone. Requires `of_matrix` or `of_tables`.",
     )
     of_matrix: str | None = Field(
         default=None,
         description="Derive this card's value by counting the cells in the matrix with this `id` whose "
         "state is `badge`; the percentage denominator is that matrix's total cell count. When set, "
-        "`value` and `of` are computed — don't author them. Requires `badge`.",
+        "`value` and `of` are computed — don't author them. Requires `badge`; not with `of_tables`.",
+    )
+    of_tables: list[str] | None = Field(
+        default=None,
+        description="Derive this card's value by counting `badge` across the tables with these `id`s — a "
+        "page-level summary over several per-section tables that can't drift. Each named table must "
+        "declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the "
+        "total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with "
+        "`of_matrix`.",
     )
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
-        if self.of_matrix is not None:
-            # Derived card: the count and percentage come from the matrix, so authoring them is a
+        if self.of_matrix is not None and self.of_tables is not None:
+            raise ValueError("a derived card counts a matrix (`of_matrix`) OR tables (`of_tables`), not both")
+        derived = self.of_matrix is not None or self.of_tables is not None
+        if derived:
+            # Derived card: the count and percentage come from the source, so authoring them is a
             # contradiction. The badge names which state to count and supplies the card's chip/label/tone.
             if self.badge is None:
-                raise ValueError("a matrix-derived card (`of_matrix`) needs a `badge` to count")
+                raise ValueError("a derived card (`of_matrix`/`of_tables`) needs a `badge` to count")
             if self.value is not None:
-                raise ValueError("a matrix-derived card computes its value — don't set `value`")
+                raise ValueError("a derived card computes its value — don't set `value`")
             if self.of is not None:
-                raise ValueError("a matrix-derived card computes its percentage — don't set `of`")
+                raise ValueError("a derived card computes its percentage — don't set `of`")
             if self.badges:
-                raise ValueError("a matrix-derived card shows its own badge chip — don't also set `badges`")
+                raise ValueError("a derived card shows its own badge chip — don't also set `badges`")
             if self.delta is not None:
-                raise ValueError("a matrix-derived card has no `delta` — its value is a live count")
+                raise ValueError("a derived card has no `delta` — its value is a live count")
         else:
             if self.badge is not None:
-                raise ValueError("`badge` on a card requires `of_matrix` (use `badges` for plain chips)")
+                raise ValueError(
+                    "`badge` on a card requires `of_matrix` or `of_tables` (use `badges` for plain chips)"
+                )
             if self.value is None:
-                raise ValueError("a card needs a `value` (or `of_matrix` to derive one)")
+                raise ValueError("a card needs a `value` (or `of_matrix`/`of_tables` to derive one)")
             if self.label is None:
                 raise ValueError("a card needs a `label`")
+        if self.of_tables is not None:
+            if not self.of_tables:
+                raise ValueError("`of_tables` must name at least one table")
+            if len(set(self.of_tables)) != len(self.of_tables):
+                # a table listed twice would double-count in both the numerator and the denominator
+                raise ValueError("`of_tables` lists a table id more than once — each table is counted once")
         if self.of is not None:
             if isinstance(self.value, str):
                 raise ValueError("'of' requires a numeric 'value'")
@@ -917,6 +936,14 @@ class Table(_Block):
         "(named by its key), so a long table's state reads as bands of colour. A row left blank in that "
         "column stays untinted; an explicit row `tone` (muted/danger) wins over the tint. Must name a "
         "`badge` column (the same one may still render its chip).",
+    )
+    id: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="Optional stable id (ASCII letters, digits, _, -) so a derived `cards` item can "
+        "count this table via `of_tables` (the table must declare a `rollup`). Unique across the page's "
+        "tables.",
     )
 
     @model_validator(mode="before")
@@ -1753,9 +1780,25 @@ def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
                 yield from iter_matrices(step.detail)
 
 
+def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
+    """Every table in the block tree (recursing into containers), in document order — for the derived
+    row tallies and the table-id uniqueness / `of_tables` reference checks."""
+    for block in blocks:
+        if isinstance(block, Table):
+            yield block
+        elif isinstance(block, (Section, Panel)):
+            yield from iter_tables(block.blocks)
+        elif isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                yield from iter_tables(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_tables(step.detail)
+
+
 def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
     """Every card in the block tree (recursing into containers), in document order — for the
-    `of_matrix` reference check and the derived-value computation."""
+    `of_matrix`/`of_tables` reference checks and the derived-value computation."""
     for block in blocks:
         if isinstance(block, Cards):
             yield from block.items
@@ -1793,6 +1836,31 @@ class Report(_Frozen):
         for card in iter_cards(self.blocks):
             if card.of_matrix is not None and card.of_matrix not in counts:
                 raise ValueError(f"card of_matrix '{card.of_matrix}' names no matrix with that id")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_table_references(self) -> "Report":
+        # A `of_tables` card counts a badge across the named tables' rollup columns, so each referenced
+        # table must both exist (by id, unique) AND declare a `rollup` (which names the column to count).
+        with_rollup: set[str] = set()
+        counts: Counter[str] = Counter()
+        for table in iter_tables(self.blocks):
+            if table.id is not None:
+                counts[table.id] += 1
+                if table.rollup is not None:
+                    with_rollup.add(table.id)
+        duplicates = sorted(tid for tid, count in counts.items() if count > 1)
+        if duplicates:
+            raise ValueError(f"table id(s) used more than once: {duplicates} — table ids must be unique")
+        for card in iter_cards(self.blocks):
+            for tid in card.of_tables or []:
+                if tid not in counts:
+                    raise ValueError(f"card of_tables references '{tid}', which names no table with that id")
+                if tid not in with_rollup:
+                    raise ValueError(
+                        f"card of_tables references table '{tid}', which has no `rollup` — "
+                        "of_tables counts a badge using each table's rollup column, so it must declare one"
+                    )
         return self
 
     @model_validator(mode="after")

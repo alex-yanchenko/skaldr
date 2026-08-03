@@ -282,7 +282,7 @@ def test_derived_card_with_extra_badges_is_rejected() -> None:
 
 
 def test_derived_card_with_a_delta_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"a matrix-derived card has no `delta`"):
+    with pytest.raises(ReportError, match=r"a derived card has no `delta`"):
         parse_report(
             _report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "delta": {"label": "+1"}})
         )
@@ -292,6 +292,90 @@ def test_duplicate_matrix_ids_are_rejected() -> None:
     matrix = _matrix([{"row": "r1", "col": "c1", "label": "x"}], id="dup")
     with pytest.raises(ReportError, match=r"matrix id\(s\) used more than once: \['dup'\]"):
         parse_report(make_report(blocks=[matrix, {**matrix}]))
+
+
+def _rollup_table(tid: str, *, rollup: bool = True) -> dict[str, object]:
+    table: dict[str, object] = {
+        "type": "table",
+        "id": tid,
+        "columns": [
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "st", "label": "", "kind": "badge"},
+        ],
+        "rows": [{"item": "a", "st": "HAVE"}],
+    }
+    if rollup:
+        table["rollup"] = {"by": "st"}
+    return table
+
+
+def _report_with_of_tables_card(
+    card: dict[str, object], tables: list[dict[str, object]]
+) -> dict[str, object]:
+    return make_report(
+        blocks=[{"type": "cards", "items": [card]}, *tables],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
+    )
+
+
+def test_of_tables_referencing_an_unknown_table_is_rejected() -> None:
+    report = _report_with_of_tables_card({"badge": "HAVE", "of_tables": ["ghost"]}, [_rollup_table("tier1")])
+    with pytest.raises(ReportError, match=r"card of_tables references 'ghost', which names no table"):
+        parse_report(report)
+
+
+def test_of_tables_referencing_a_table_without_a_rollup_is_rejected() -> None:
+    report = _report_with_of_tables_card(
+        {"badge": "HAVE", "of_tables": ["tier1"]}, [_rollup_table("tier1", rollup=False)]
+    )
+    with pytest.raises(ReportError, match=r"references table 'tier1', which has no `rollup`"):
+        parse_report(report)
+
+
+def test_of_tables_and_of_matrix_together_are_rejected() -> None:
+    matrix = _matrix([{"row": "r1", "col": "c1", "badge": "HAVE"}], id="cov")
+    report = make_report(
+        blocks=[
+            {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": "cov", "of_tables": ["tier1"]}]},
+            matrix,
+            _rollup_table("tier1"),
+        ],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
+    )
+    with pytest.raises(
+        ReportError, match=r"counts a matrix \(`of_matrix`\) OR tables \(`of_tables`\), not both"
+    ):
+        parse_report(report)
+
+
+def test_of_tables_empty_list_is_rejected() -> None:
+    report = _report_with_of_tables_card({"badge": "HAVE", "of_tables": []}, [_rollup_table("tier1")])
+    with pytest.raises(ReportError, match=r"`of_tables` must name at least one table"):
+        parse_report(report)
+
+
+def test_of_tables_with_a_duplicate_id_is_rejected() -> None:
+    # a table listed twice would double-count in numerator and denominator — reject it outright
+    report = _report_with_of_tables_card(
+        {"badge": "HAVE", "of_tables": ["tier1", "tier1"]}, [_rollup_table("tier1")]
+    )
+    with pytest.raises(ReportError, match=r"`of_tables` lists a table id more than once"):
+        parse_report(report)
+
+
+def test_of_tables_card_without_a_badge_is_rejected() -> None:
+    report = _report_with_of_tables_card({"of_tables": ["tier1"]}, [_rollup_table("tier1")])
+    with pytest.raises(ReportError, match=r"needs a `badge` to count"):
+        parse_report(report)
+
+
+def test_duplicate_table_ids_are_rejected() -> None:
+    report = make_report(
+        blocks=[_rollup_table("dup"), _rollup_table("dup")],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
+    )
+    with pytest.raises(ReportError, match=r"table id\(s\) used more than once: \['dup'\]"):
+        parse_report(report)
 
 
 def test_meter_value_out_of_bounds_is_rejected() -> None:

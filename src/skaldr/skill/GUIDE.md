@@ -152,13 +152,13 @@ or to keep a small block from stretching across the whole page.
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
 | `def_list` | Labelled list — prominent term + rich body (e.g. Action/Expected/Say) | `items: [{term, body}]` |
-| `cards` | Headline numbers (a value may be author-set, or **derived** from a matrix) | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` OR a derived item `{badge, of_matrix, label?, tone?, note?}` |
+| `cards` | Headline numbers (a value may be author-set, or **derived** by counting a matrix / tables) | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` OR a derived item `{badge, of_matrix \| of_tables, label?, tone?, note?}` |
 | `badge_row` | A standalone row of chips, flat or grouped | `label?` + `items: [{key} \| {label, tone}]`, OR `groups: [{label, items[]}]` |
 | `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?` |
+| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
@@ -168,7 +168,7 @@ or to keep a small block from stretching across the whole page.
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
-| `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]` |
+| `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -181,19 +181,23 @@ string (e.g. `HEALTHY`) instead of a number. `delta` adds a trend chip beside th
 `{label, direction?: up|down|flat, tone?}` — where you choose the `tone` (up isn't always
 good: for cost or errors, down is, so skaldr won't infer it) and `direction` sets the glyph.
 
-**Derived cards (from a matrix).** Instead of a hand-typed `value`, a card can *count* a state in a
-`matrix`, so the number can never drift from the grid. Give the matrix an `id`, then write a card as
-`{ badge: KEY, of_matrix: <id> }`: its value is the count of cells in that matrix whose state is
-`KEY`, its percentage is that count over the matrix's total cell count, and its chip / label / border
-tone come from the badge. The card can sit anywhere — a summary strip up top, the matrix further down.
-Don't set `value`/`of` on a derived card (they're computed); add a `note` or override the `label` if
-you like. `badge` on a card *requires* `of_matrix` (for plain chips on a normal card, use `badges`).
+**Derived cards.** Instead of a hand-typed `value`, a card can *count* a state so the number can never
+drift. Two sources, each keyed by a `badge` (which also supplies the card's chip / label / border tone);
+`value`/`of` are computed — don't author them; add a `note` or override `label`/`tone` if you like. A
+`badge` on a card *requires* one of these (for plain chips on a normal card, use `badges`):
+
+- **`of_matrix: <id>`** — count cells in the `matrix` with that `id` whose state is the badge; the
+  denominator is the matrix's total cell count.
+- **`of_tables: [<id>, …]`** — count the badge across several **tables** (a page-level summary over
+  per-section tables). Each named table needs an `id` **and** a `rollup` (its `rollup.by` is the column
+  counted); the denominator is the total rows across those tables. Reach for this when your rows carry
+  one state each (a list, not a grid) and a single `matrix` can't model them.
 
 ```yaml
 - type: cards            # a summary that can't go stale
   items:
-    - { badge: HAVE, of_matrix: readiness }   # e.g. 15 · 42%
-    - { badge: GAP,  of_matrix: readiness }
+    - { badge: HAVE, of_matrix: readiness }               # from one matrix — e.g. 15 · 42%
+    - { badge: GAP,  of_tables: [tier1, tier2, tier3] }   # summed across three tables' rollup columns
 - type: matrix
   id: readiness
   # rows / columns / cells …
