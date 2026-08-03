@@ -1751,12 +1751,46 @@ def test_richtext_placeholder_tolerates_internal_whitespace(token: str) -> None:
     assert seen == {"url"}
 
 
-def test_richtext_malformed_empty_placeholder_stays_literal() -> None:
+@pytest.mark.parametrize("name", ["next-round", "a_b-2", "deployed_url"])
+def test_richtext_placeholder_accepts_letters_digits_underscore_and_hyphen(name: str) -> None:
     seen: set[str] = set()
-    html = str(render_richtext("a {{ }} b", placeholders=seen))
+    html = str(render_richtext(f"retry {{{{{name}}}}} now", placeholders=seen))
 
-    assert html == "a {{ }} b"  # no name → not a placeholder
-    assert seen == set()
+    assert html == f'retry <span class="placeholder">{name}</span> now'
+    assert seen == {name}
+
+
+@pytest.mark.parametrize("token", ["{{a.b}}", "{{two words}}", "{{ }}", "{{}}"])
+def test_richtext_malformed_placeholder_fails_the_build(token: str) -> None:
+    # `{{…}}` is reserved for placeholders — a token whose name isn't letters/digits/_/- is a typo'd
+    # blank and hard-fails, rather than silently shipping as prose past the --strict gate.
+    with pytest.raises(ReportError, match=r"invalid placeholder '"):
+        render_richtext(f"a {token} b")
+
+
+@pytest.mark.parametrize("body", ["wrap {{ `code` }} it", "wrap {{[x](https://y.com)}} it"])
+def test_richtext_placeholder_wrapping_other_markup_fails_without_leaking_the_stash(body: str) -> None:
+    # a `{{…}}` around an already-stashed inline element must not leak the internal NUL sentinel into
+    # the error — it reports the cause (a placeholder is a bare name) instead.
+    with pytest.raises(ReportError, match=r"can't contain a link, `code` span, or") as exc:
+        render_richtext(body)
+
+    assert "\x00" not in str(exc.value)
+
+
+def test_richtext_double_brace_with_an_inner_brace_stays_literal() -> None:
+    # the capture is brace-bounded (keeps the scan linear), so a nested-brace token isn't a placeholder
+    # at all — it stays literal rather than erroring. A deliberate trade for linear-time matching.
+    html = str(render_richtext("a {{b{c}} d"))
+
+    assert html == "a {{b{c}} d"
+
+
+def test_richtext_literal_double_brace_survives_inside_a_code_span() -> None:
+    # the escape hatch: a `code` span is stashed before placeholder parsing, so a literal {{ is safe
+    html = str(render_richtext("use `{{raw}}` verbatim"))
+
+    assert html == "use <code>{{raw}}</code> verbatim"
 
 
 def test_find_placeholders_reaches_table_cells_def_list_and_panel_nested_text() -> None:
