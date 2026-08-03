@@ -322,8 +322,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   step); a toned step instead carries a subtle inline-start accent. `step_span` sets column widths. */
 	.walk{display:grid; column-gap:var(--s8); margin-block:var(--s6)}
 	.walk .wstep,.walk .wdetail{padding:var(--s4) 0; border-block-start:1px solid var(--line)}
+	/* Every step carries a left rail — it is the numbered list's structure, not emphasis — so an
+	   untoned step defaults to a quiet --rule rail; `tone` only ever changes the rail's COLOUR, never
+	   its presence (so a mixed-tone walkthrough never has some steps railless). */
 	.walk .wstep{grid-column:1; display:flex; gap:var(--s3); align-items:flex-start;
-		border-inline-start:3px solid var(--wt,transparent); padding-inline-start:var(--s3)}
+		border-inline-start:3px solid var(--wt,var(--rule)); padding-inline-start:var(--s3)}
 	.walk .wnum{flex:none; font-weight:800; font-size:30px; line-height:1; letter-spacing:-0.03em;
 		color:var(--muted)}
 	.walk .wlabel{font-weight:650; font-size:14.5px; overflow-wrap:anywhere}

@@ -341,8 +341,10 @@ too thin for the explanation each step carries.
 ```
 
 `detail` holds the same blocks you'd put anywhere else (it can be long — that's the point). The
-step numbers are derived (1..n). Use `tone` to mark a key step. Distinct from `flow` (a directional
-pipeline) and `grid` (no row-by-row step alignment).
+step numbers are derived (1..n). Every step always shows its left rail (it is the list's structure);
+`tone` only changes the rail's **colour**, so use it to mark the **key** step — not every step
+(toning all of them just removes the contrast). Distinct from `flow` (a directional pipeline) and
+`grid` (no row-by-row step alignment).
 
 ## The `range`
 

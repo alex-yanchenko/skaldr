@@ -1635,8 +1635,9 @@ class WalkthroughStep(_Frozen):
     )
     tone: Tone | None = Field(
         default=None,
-        description="Optional tone; draws a subtle accent down the step's inline-start edge (the "
-        "numeral itself is always a uniform muted grey, so tone can't leave steps looking mismatched).",
+        description="Optional tone for the step's left rail. Every step always HAS the rail (it is the "
+        "list's structure); tone only changes its colour, so use it to mark a key step — not every "
+        "step. The numeral stays a uniform muted grey regardless, so tones can't leave steps mismatched.",
     )
     detail: list[CellBlock] = Field(
         min_length=1,

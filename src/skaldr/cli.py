@@ -9,6 +9,8 @@ import sys
 import time
 import urllib.request
 from collections.abc import Sequence
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Literal
 
@@ -18,6 +20,16 @@ from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
+
+
+def _skaldr_version() -> str:
+    """The installed package version (for `--version`), so a render's authoring build is knowable.
+    Falls back to 'unknown' when run from a checkout with no installed metadata."""
+    try:
+        return _package_version("skaldr")
+    except PackageNotFoundError:
+        return "unknown"
+
 
 # Markers delimiting skaldr's managed plan-workflow block inside the user's CLAUDE.md. ASCII only —
 # they're matched by `re`/string ops on every re-install, so no fragile non-ASCII in the anchor.
@@ -48,6 +60,12 @@ def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render a skaldr content file to an HTML page.")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"skaldr {_skaldr_version()}",
+        help="print the installed skaldr version and exit",
+    )
     parser.add_argument(
         "data",
         nargs="*",

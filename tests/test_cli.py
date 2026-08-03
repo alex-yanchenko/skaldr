@@ -17,6 +17,17 @@ def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -
     return path
 
 
+def test_version_prints_the_installed_version_and_exits(capsys: pytest.CaptureFixture[str]) -> None:
+    # argparse's version action prints to stdout and exits 0 via SystemExit.
+    from importlib.metadata import version
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"skaldr {version('skaldr')}"
+
+
 def test_check_fails_on_a_malformed_placeholder(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # a `{{a.b}}` blank must not slip past the gate as prose — --check (which runs a render pass) FAILs.
     data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "threshold {{a.b}}"}]))
