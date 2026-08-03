@@ -485,7 +485,7 @@ def test_footnote_reference_inside_a_panel_is_numbered_and_backlinked() -> None:
 
 
 def test_table_inside_a_panel_still_gets_the_badge_legend_before_it() -> None:
-    # proves _iter_tables recurses into a panel (legend placement keys off the first table)
+    # proves iter_tables recurses into a panel (legend placement keys off the first table)
     report = parse_report(
         make_report(
             badges={"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}},
@@ -2249,6 +2249,142 @@ def test_derived_card_resolves_a_matrix_nested_in_a_section() -> None:
         '<span class="chip green cbadge">Have</span><div class="n">1<span class="pct">25.0%</span></div>'
         in html
     )
+
+
+def _tables_with_summary_cards(card_items: list[dict[str, object]]) -> Report:
+    """A page with derived summary cards over two rollup tables — tier1 (2 HAVE, 1 GAP) and tier2
+    (1 HAVE, 1 GAP) → 3 HAVE, 2 GAP across 5 rows total."""
+    cards = {"type": "cards", "items": card_items}
+
+    def _table(tid: str, rows: list[dict[str, str]]) -> dict[str, object]:
+        return {
+            "type": "table",
+            "id": tid,
+            "columns": [
+                {"key": "item", "label": "Item", "kind": "text"},
+                {"key": "st", "label": "", "kind": "badge"},
+            ],
+            "rollup": {"by": "st"},
+            "rows": rows,
+        }
+
+    return parse_report(
+        make_report(
+            blocks=[
+                cards,
+                _table(
+                    "tier1",
+                    [{"item": "a", "st": "HAVE"}, {"item": "b", "st": "HAVE"}, {"item": "c", "st": "GAP"}],
+                ),
+                _table("tier2", [{"item": "d", "st": "HAVE"}, {"item": "e", "st": "GAP"}]),
+            ],
+            badges={
+                "HAVE": {"label": "Have", "tone": "green", "legend": "covered"},
+                "GAP": {"label": "Gap", "tone": "red", "legend": "missing"},
+            },
+        )
+    )
+
+
+def test_of_tables_card_sums_a_badge_across_the_named_tables() -> None:
+    html = render_html(_tables_with_summary_cards([{"badge": "HAVE", "of_tables": ["tier1", "tier2"]}]))
+
+    # 3 HAVE rows (2 in tier1 + 1 in tier2) over 5 rows total = 60.0%; chip/label/border from the badge
+    assert (
+        '<div class="card green"><span class="chip green cbadge">Have</span>'
+        '<div class="n">3<span class="pct">60.0%</span></div></div>'
+    ) in html
+
+
+def test_of_tables_card_counting_one_table_matches_that_tables_rollup() -> None:
+    # a single-table of_tables is the same count as the table's own rollup (1 GAP of 3 rows = 33.3%)
+    html = render_html(_tables_with_summary_cards([{"badge": "GAP", "of_tables": ["tier1"]}]))
+
+    assert (
+        '<div class="card red"><span class="chip red cbadge">Gap</span>'
+        '<div class="n">1<span class="pct">33.3%</span></div></div>'
+    ) in html
+
+
+def _table_block(tid: str | None, rows: list[dict[str, str]], *, rollup: bool = True) -> dict[str, object]:
+    block: dict[str, object] = {
+        "type": "table",
+        "columns": [
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "st", "label": "", "kind": "badge"},
+        ],
+        "rows": rows,
+    }
+    if tid is not None:
+        block["id"] = tid
+    if rollup:
+        block["rollup"] = {"by": "st"}
+    return block
+
+
+def test_of_tables_card_counts_zero_when_the_badge_is_absent_everywhere() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "cards", "items": [{"badge": "PENDING", "of_tables": ["tier1"]}]},
+                _table_block("tier1", [{"item": "a", "st": "HAVE"}, {"item": "b", "st": "GAP"}]),
+            ],
+            badges={
+                "HAVE": {"label": "Have", "tone": "green", "legend": "x"},
+                "GAP": {"label": "Gap", "tone": "red", "legend": "y"},
+                "PENDING": {"label": "Pending", "tone": "blue", "legend": "z"},  # declared, in no row
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    assert (
+        '<div class="card blue"><span class="chip blue cbadge">Pending</span>'
+        '<div class="n">0<span class="pct">0.0%</span></div></div>'
+    ) in html
+
+
+def test_of_tables_resolves_nested_tables_counts_blanks_in_the_denominator_and_ignores_decoys() -> None:
+    """The referenced tables live inside a section (iter_tables recurses); a blank-status row counts
+    toward the denominator but no badge; and neither an id-less table nor an id'd table with no rollup
+    (both unreferenced decoys) contributes to the count."""
+    section = {
+        "type": "section",
+        "title": "Tiers",
+        "blocks": [
+            # tier1: 2 HAVE + 1 blank status → HAVE 2 of 3 rows
+            _table_block(
+                "tier1", [{"item": "a", "st": "HAVE"}, {"item": "b", "st": "HAVE"}, {"item": "c", "st": ""}]
+            ),
+            _table_block("tier2", [{"item": "d", "st": "HAVE"}, {"item": "e", "st": "GAP"}]),  # HAVE 1 of 2
+        ],
+    }
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "cards", "items": [{"badge": "HAVE", "of_tables": ["tier1", "tier2"]}]},
+                section,
+                _table_block(None, [{"item": "x", "st": "HAVE"}]),  # id-less decoy → skipped
+                _table_block(
+                    "norollup", [{"item": "y", "st": "HAVE"}], rollup=False
+                ),  # rollup-less decoy → skipped
+            ],
+            badges={
+                "HAVE": {"label": "Have", "tone": "green", "legend": "x"},
+                "GAP": {"label": "Gap", "tone": "red", "legend": "y"},
+            },
+        )
+    )
+
+    html = render_html(report)
+
+    # HAVE = 3 (2 in tier1 + 1 in tier2) over 5 rows (tier1's blank row is in the denominator) = 60.0%;
+    # the two decoys would push the count higher if wrongly tallied
+    assert (
+        '<div class="card green"><span class="chip green cbadge">Have</span>'
+        '<div class="n">3<span class="pct">60.0%</span></div></div>'
+    ) in html
 
 
 def test_badge_row_reference_renders_declared_chip() -> None:

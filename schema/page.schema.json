@@ -264,7 +264,7 @@
             }
           ],
           "default": null,
-          "description": "Card label above the number. Required for a normal card; for a matrix-derived card (`of_matrix`) it defaults to the badge's label \u2014 set it only to override.",
+          "description": "Card label above the number. Required for a normal card; for a derived card (`of_matrix`/`of_tables`) it defaults to the badge's label \u2014 set it only to override.",
           "title": "Label"
         },
         "value": {
@@ -283,7 +283,7 @@
             }
           ],
           "default": null,
-          "description": "Headline number, or a short status string. Required for a normal card; a matrix-derived card (`of_matrix`) computes it instead, so leave it unset there.",
+          "description": "Headline number, or a short status string. Required for a normal card; a derived card (`of_matrix`/`of_tables`) computes it instead, so leave it unset there.",
           "title": "Value"
         },
         "of": {
@@ -299,7 +299,7 @@
             }
           ],
           "default": null,
-          "description": "Denominator; renders a derived percentage. Not for a matrix-derived card (it computes its own denominator).",
+          "description": "Denominator; renders a derived percentage. Not for a derived card (it computes its own denominator).",
           "title": "Of"
         },
         "tone": {
@@ -322,7 +322,7 @@
             }
           ],
           "default": null,
-          "description": "Optional tone for the top-border accent. On a matrix-derived card, defaults to the badge's tone (driving chip + border together); set it to override.",
+          "description": "Optional tone for the top-border accent. On a derived card, defaults to the badge's tone (driving chip + border together); set it to override.",
           "title": "Tone"
         },
         "delta": {
@@ -368,7 +368,7 @@
             }
           ],
           "default": null,
-          "description": "For a matrix-derived card: the declared badge key to count. Supplies the card's chip, its label (unless `label` overrides), and its top-border tone. Requires `of_matrix`.",
+          "description": "For a derived card: the declared badge key to count. Supplies the card's chip, its label (unless `label` overrides), and its top-border tone. Requires `of_matrix` or `of_tables`.",
           "title": "Badge"
         },
         "of_matrix": {
@@ -381,8 +381,24 @@
             }
           ],
           "default": null,
-          "description": "Derive this card's value by counting the cells in the matrix with this `id` whose state is `badge`; the percentage denominator is that matrix's total cell count. When set, `value` and `of` are computed \u2014 don't author them. Requires `badge`.",
+          "description": "Derive this card's value by counting the cells in the matrix with this `id` whose state is `badge`; the percentage denominator is that matrix's total cell count. When set, `value` and `of` are computed \u2014 don't author them. Requires `badge`; not with `of_tables`.",
           "title": "Of Matrix"
+        },
+        "of_tables": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Derive this card's value by counting `badge` across the tables with these `id`s \u2014 a page-level summary over several per-section tables that can't drift. Each named table must declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with `of_matrix`.",
+          "title": "Of Tables"
         }
       },
       "title": "Card",
@@ -3556,6 +3572,21 @@
           "default": null,
           "description": "Opt-in row heatmap: faintly tint each row by the tone of the badge in this column (named by its key), so a long table's state reads as bands of colour. A row left blank in that column stays untinted; an explicit row `tone` (muted/danger) wins over the tint. Must name a `badge` column (the same one may still render its chip).",
           "title": "Tint By"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional stable id (ASCII letters, digits, _, -) so a derived `cards` item can count this table via `of_tables` (the table must declare a `rollup`). Unique across the page's tables.",
+          "title": "Id"
         }
       },
       "required": [
