@@ -317,7 +317,10 @@ def test_walkthrough_numeral_is_tone_independent_and_tone_drives_the_step_accent
     assert ".walk .wnum{" in html
     assert "color:var(--muted)}" in html
     assert "color:var(--wt" not in html
-    assert "border-inline-start:3px solid var(--wt,transparent)" in html
+    # the rail is always present (defaults to a quiet --rule); tone only changes its colour, so an
+    # untoned step keeps its rail and a mixed-tone walkthrough never has some steps railless.
+    assert "border-inline-start:3px solid var(--wt,var(--rule))" in html
+    assert "var(--wt,transparent)" not in html
 
 
 def test_callout_body_splits_blank_line_paragraphs() -> None:
