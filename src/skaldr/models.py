@@ -130,7 +130,24 @@ BadgeColor = Annotated[
     Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"],
     BeforeValidator(_to_badge_color),
 ]
-CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_tone)]
+_CALLOUT_TONES = ("info", "success", "warning", "danger")
+
+
+def _to_callout_tone(value: Any) -> Any:
+    """Normalise a palette alias to its semantic twin (blue→info), then reject a tone that isn't one of
+    the four callout meanings — naming both what was given and the allowed set, so the fix is obvious in
+    the error itself. A callout is a semantic 'stop and look' note, so teal/sky/accent/neutral (fine on
+    cards/badges) have no callout look and are refused rather than silently mapped."""
+    normalized = _to_tone(value)
+    if isinstance(normalized, str) and normalized not in _CALLOUT_TONES:
+        raise ValueError(
+            f"callout tone must be one of info, success, warning, danger (got '{value}') — a callout is "
+            "semantic; for another palette colour reach for a card, badge_row, or note"
+        )
+    return normalized
+
+
+CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
@@ -489,7 +506,8 @@ class BadgeRow(_Block):
 class Callout(_Block):
     type: Literal["callout"]
     tone: CalloutTone = Field(
-        description="Accent + tint: info/success/warning/danger (blue/green/amber/red alias in)."
+        description="Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A "
+        "callout is semantic, so teal/sky/accent/neutral aren't callout tones — use a card/badge_row/note."
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
     body: str = Field(description="Rich-text body.")

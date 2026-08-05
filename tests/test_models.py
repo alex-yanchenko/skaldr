@@ -955,16 +955,22 @@ def test_tone_and_badge_colour_alias_in_both_directions(palette: str, semantic: 
     assert badged.badges["K"].tone == palette
 
 
-def test_callout_accepts_a_palette_alias_but_rejects_a_non_semantic_tone() -> None:
-    """callout is semantic-only: a palette alias of one of its four tones works (green→success), but
-    accent/neutral/teal/sky are not callout tones."""
+def test_callout_accepts_a_palette_alias_of_a_semantic_tone() -> None:
+    """callout is semantic-only, but a palette alias of one of its four tones works (green→success)."""
     ok = parse_report(make_report(blocks=[{"type": "callout", "tone": "green", "body": "b"}]))
     callout = ok.blocks[0]
     assert isinstance(callout, Callout)
     assert callout.tone == "success"
 
-    with pytest.raises(ReportError, match=r"blocks\.0\.callout\.tone"):
-        parse_report(make_report(blocks=[{"type": "callout", "tone": "teal", "body": "b"}]))
+
+@pytest.mark.parametrize("tone", ["teal", "sky", "accent", "neutral", "violet", "slate"])
+def test_callout_rejects_a_non_semantic_tone_with_a_self_explaining_message(tone: str) -> None:
+    # the error names both the allowed set AND the offending value, so the fix needs no guide lookup
+    with pytest.raises(
+        ReportError,
+        match=rf"callout tone must be one of info, success, warning, danger \(got '{tone}'\)",
+    ):
+        parse_report(make_report(blocks=[{"type": "callout", "tone": tone, "body": "b"}]))
 
 
 def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:

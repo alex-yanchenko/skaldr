@@ -214,7 +214,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Accent + tint: info/success/warning/danger (blue/green/amber/red alias in).",
+          "description": "Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A callout is semantic, so teal/sky/accent/neutral aren't callout tones \u2014 use a card/badge_row/note.",
           "enum": [
             "info",
             "success",
