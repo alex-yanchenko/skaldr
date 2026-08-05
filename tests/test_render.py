@@ -1320,6 +1320,20 @@ def test_badge_colour_accepts_a_semantic_alias() -> None:
     assert '<span class="chip green">OK</span>' in html  # success normalised to the palette name
 
 
+def test_table_column_without_kind_renders_as_a_text_title_column() -> None:
+    # {key, label} with no kind is a text column — it becomes the title cell, no boilerplate needed
+    table = {
+        "type": "table",
+        "columns": [{"key": "flag", "label": "Flag"}, {"key": "n", "label": "N", "kind": "number"}],
+        "rows": [{"flag": "overflow", "n": 4}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert '<thead><tr><th>Flag</th><th class="num">N</th></tr></thead>' in html
+    assert '<td class="title">overflow' in html
+
+
 def test_table_placement_cell_badge_renders_its_own_labelled_column() -> None:
     """A placement:cell badge column gets a header + a chip cell (single or list), a title-placement
     badge still chips under the title, and both keys feed the legend."""

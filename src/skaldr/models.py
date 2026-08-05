@@ -770,9 +770,10 @@ class Column(_Frozen):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
     kind: ColumnKind = Field(
-        description="text/rich (first one becomes the title column), number, badge (a coloured chip — "
-        "see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone "
-        "name)."
+        default="text",
+        description="text (default) / rich (first one becomes the title column), number, badge (a "
+        "coloured chip — see `placement`), or indicator (a colour-only dot in its own column; the cell "
+        "value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
     )
     placement: ColumnPlacement = Field(
         default="title",
