@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.0](https://github.com/alex-yanchenko/skaldr/compare/v2.5.0...v2.6.0) (2026-08-05)
+
+
+### Features
+
+* **callout:** self-explaining tone error naming the allowed set and the offending value ([#116](https://github.com/alex-yanchenko/skaldr/issues/116)) ([5c77a21](https://github.com/alex-yanchenko/skaldr/commit/5c77a21716c5339d43ea8b8dfde71fde3e7c006a))
+* **table:** default column kind to "text" — a plain column is just {key, label} ([#115](https://github.com/alex-yanchenko/skaldr/issues/115)) ([4a5df2c](https://github.com/alex-yanchenko/skaldr/commit/4a5df2cdfae411e1ca9ae45bd17a8b1b1366e09f))
+
 ## [2.5.0](https://github.com/alex-yanchenko/skaldr/compare/v2.4.0...v2.5.0) (2026-08-03)
 
 
