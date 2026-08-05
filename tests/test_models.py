@@ -1009,6 +1009,20 @@ def test_indicator_column_accepts_a_tone_or_blank() -> None:
     assert block.rows == [{"a": "x", "r": "danger"}, {"a": "y", "r": ""}]
 
 
+def test_column_kind_defaults_to_text() -> None:
+    # a plain column is just {key, label} — no `kind` boilerplate; it resolves to a text column
+    table = {
+        "type": "table",
+        "columns": [{"key": "flag", "label": "Flag"}, {"key": "n", "label": "N", "kind": "number"}],
+        "rows": [{"flag": "on", "n": 1}],
+    }
+
+    block = parse_report(make_report(blocks=[table])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.columns[0].kind == "text"
+
+
 def test_table_row_missing_a_column_is_rejected() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "only"}]}])
 

@@ -578,7 +578,7 @@ link instead.
 ```yaml
 - type: table
   columns:
-    - { key: issue,   label: "Discrepancy",   kind: text }    # first text/rich col = the title
+    - { key: issue,   label: "Discrepancy" }                  # kind omitted → text; first text/rich col = the title
     - { key: tag,     label: "",              kind: badge }   # chip shown under the title
     - { key: count,   label: "Units",         kind: number, pct_of_total: true }
     - { key: problem, label: "What happened", kind: rich }
@@ -597,7 +597,9 @@ link instead.
             - { label: "bin > 12", value: 260 }
 ```
 
-- **Columns** need at least one `text`/`rich` column (it hosts the row title and any chips). A
+- **Columns** need at least one `text`/`rich` column (it hosts the row title and any chips). `kind`
+  **defaults to `text`**, so a plain column is just `{key, label}` — only set `kind` for a non-text
+  column (`rich`/`number`/`badge`/`indicator`). A
   `text`/`rich` cell may hold **multiple paragraphs**: separate them with a blank line (like a
   `text` block's `body`) and they stack; a single newline collapses to a space. A
   `badge` column defaults to `placement: title` — its value chips **under the row title** and the

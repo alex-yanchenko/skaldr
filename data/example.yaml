@@ -97,7 +97,7 @@ blocks:
     text: "Discrepancies & fixes"
   - type: table
     columns:
-      - { key: issue, label: "Discrepancy", kind: text }
+      - { key: issue, label: "Discrepancy" }   # kind omitted → defaults to text
       - { key: tag, label: "", kind: badge }
       - { key: risk, label: "Risk", kind: indicator }
       - { key: count, label: "Units", kind: number, pct_of_total: true }

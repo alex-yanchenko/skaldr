@@ -766,7 +766,8 @@
           "type": "string"
         },
         "kind": {
-          "description": "text/rich (first one becomes the title column), number, badge (a coloured chip \u2014 see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone name).",
+          "default": "text",
+          "description": "text (default) / rich (first one becomes the title column), number, badge (a coloured chip \u2014 see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
           "enum": [
             "text",
             "number",
@@ -811,8 +812,7 @@
       },
       "required": [
         "key",
-        "label",
-        "kind"
+        "label"
       ],
       "title": "Column",
       "type": "object"
