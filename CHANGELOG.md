@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/alex-yanchenko/skaldr/compare/v2.6.0...v2.7.0) (2026-08-06)
+
+
+### Features
+
+* **cli:** self-syncing skills — refresh installed skills on run after an upgrade ([#118](https://github.com/alex-yanchenko/skaldr/issues/118)) ([823e965](https://github.com/alex-yanchenko/skaldr/commit/823e965c2e05256c5084dea2d9dcae1b3b26146f))
+
 ## [2.6.0](https://github.com/alex-yanchenko/skaldr/compare/v2.5.0...v2.6.0) (2026-08-05)
 
 
