@@ -1,10 +1,21 @@
+import os
 from pathlib import Path
 
 import pytest
 
-from skaldr.cli import install_plan_rule, install_skill, main
+from skaldr.cli import install_plan_rule, install_skill, main, sync_installed_skills
 from skaldr.models import load_report, package_path
 from skaldr.render import render_html
+
+_BUNDLED_SKALDR_SKILL = (package_path("skill") / "SKILL.md").read_bytes()
+
+
+def _install(home: Path) -> Path:
+    """Install the bundled skills into <home>/.claude and return the skaldr SKILL.md path."""
+    (home / ".claude").mkdir(exist_ok=True)
+    assert install_skill(home=home) == 0
+    return home / ".claude" / "skills" / "skaldr" / "SKILL.md"
+
 
 # The frozen CLAUDE.md managed-block delimiters — a user-facing contract (the block the README tells
 # users to delete). Held as literals so the tests don't reach for module-private names in cli.py.
@@ -133,6 +144,25 @@ def test_install_skill_migrates_an_older_symlinked_install(tmp_path: Path) -> No
     assert rc == 0
     assert not dest_dir.is_symlink()  # migrated to a real dir
     assert (dest_dir / "SKILL.md").read_text(encoding="utf-8") == src.read_text(encoding="utf-8")
+
+
+def test_install_skill_leaves_a_symlinked_skill_file_untouched(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # a real dir with a symlinked SKILL.md (a contributor's live-edit link) — even an explicit install
+    # must not write through the link and clobber the tracked source; it skips that one with a note
+    dest_dir = tmp_path / ".claude" / "skills" / "skaldr"
+    dest_dir.mkdir(parents=True)
+    live_source = tmp_path / "repo-skill.md"
+    live_source.write_text("# live-edit source\n", encoding="utf-8")
+    (dest_dir / "SKILL.md").symlink_to(live_source)
+
+    rc = install_skill(home=tmp_path)
+
+    assert rc == 0
+    assert (dest_dir / "SKILL.md").is_symlink()  # left as a link
+    assert live_source.read_text(encoding="utf-8") == "# live-edit source\n"  # source unclobbered
+    assert "leaving the symlinked skill file" in capsys.readouterr().out
 
 
 def test_install_skill_does_not_touch_claude_md(tmp_path: Path) -> None:
@@ -346,3 +376,181 @@ def test_install_skill_reports_a_filesystem_error(tmp_path: Path, capsys: pytest
 
     assert rc == 1
     assert "could not install the skill" in capsys.readouterr().err
+
+
+# --- on-invoke skill self-sync (refresh already-installed skills after an upgrade) ---
+
+
+def _enable_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    # conftest's autouse fixture disables sync for every test; these tests exercise the sync itself,
+    # so clear the opt-out (they still target a tmp home, never the real ~/.claude).
+    monkeypatch.delenv("SKALDR_SKILL_SYNC", raising=False)
+
+
+def test_sync_refreshes_a_drifted_installed_skill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _enable_sync(monkeypatch)
+    dest = _install(tmp_path)
+    capsys.readouterr()  # drain the install output
+    dest.write_text("# stale — an old shipped version\n", encoding="utf-8")
+
+    sync_installed_skills(home=tmp_path)
+
+    assert dest.read_bytes() == _BUNDLED_SKALDR_SKILL  # refreshed to the packaged copy
+    assert "refreshed the 'skaldr' skill" in capsys.readouterr().err  # announced on stderr
+
+
+def test_sync_is_a_no_op_and_silent_when_already_up_to_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _enable_sync(monkeypatch)
+    dest = _install(tmp_path)  # freshly installed → identical to bundled
+    capsys.readouterr()  # drain the install output
+    os.utime(dest, (1_000_000, 1_000_000))  # pin an old mtime; a rewrite would bump it
+
+    sync_installed_skills(home=tmp_path)
+
+    assert dest.stat().st_mtime == 1_000_000  # no write happened
+    assert capsys.readouterr().err == ""  # silent on a no-op (only prints when it refreshes)
+
+
+def test_sync_skips_a_symlinked_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # a contributor live-edits by symlinking the skill dir into their checkout — sync must never clobber it
+    _enable_sync(monkeypatch)
+    skills = tmp_path / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    live_edit = tmp_path / "repo-skill"
+    live_edit.mkdir()
+    (live_edit / "SKILL.md").write_text("# live-edit source\n", encoding="utf-8")
+    (skills / "skaldr").symlink_to(live_edit, target_is_directory=True)
+
+    sync_installed_skills(home=tmp_path)
+
+    assert (skills / "skaldr").is_symlink()  # link untouched
+    assert (live_edit / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "# live-edit source\n"  # source unclobbered
+
+
+def test_sync_does_not_create_an_uninstalled_skill(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # ~/.claude/skills exists but skaldr isn't installed — a passive run must not auto-create it
+    _enable_sync(monkeypatch)
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    sync_installed_skills(home=tmp_path)
+
+    assert not (tmp_path / ".claude" / "skills" / "skaldr").exists()
+
+
+def test_sync_short_circuits_when_skills_dir_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # no ~/.claude/skills at all → returns cleanly, creates nothing
+    _enable_sync(monkeypatch)
+
+    sync_installed_skills(home=tmp_path)
+
+    assert not (tmp_path / ".claude").exists()
+
+
+def test_sync_never_raises_when_the_claude_dir_is_unsearchable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # a locked-down home: ~/.claude isn't searchable, so even stat-ing skills/ raises PermissionError.
+    # The setup guard must swallow it — reaching the end of this test (no exception) is the assertion.
+    _enable_sync(monkeypatch)
+    claude = tmp_path / ".claude"
+    (claude / "skills").mkdir(parents=True)
+    claude.chmod(0o000)
+
+    try:
+        sync_installed_skills(home=tmp_path)  # must not raise
+    finally:
+        claude.chmod(0o755)  # restore so tmp cleanup can descend
+
+
+def test_sync_never_raises_on_a_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_sync(monkeypatch)
+    dest = _install(tmp_path)
+    dest.write_text("# stale\n", encoding="utf-8")  # drifted → sync will try to rewrite
+    dest.parent.chmod(0o555)  # read-only dir → the atomic write can't create its temp file
+
+    try:
+        sync_installed_skills(home=tmp_path)  # must swallow the PermissionError, not raise
+        assert dest.read_text(encoding="utf-8") == "# stale\n"  # write failed, left as-is
+    finally:
+        dest.parent.chmod(0o755)  # restore so tmp cleanup can remove it
+
+
+def test_sync_skips_a_symlinked_skill_file_in_a_real_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # a subtler live-edit: the skill DIR is real but SKILL.md is symlinked into the checkout — the
+    # atomic write would follow the link and clobber the tracked source, so sync must skip it
+    _enable_sync(monkeypatch)
+    dest_dir = tmp_path / ".claude" / "skills" / "skaldr"
+    dest_dir.mkdir(parents=True)
+    live_source = tmp_path / "repo-skill.md"
+    live_source.write_text("# live-edit source\n", encoding="utf-8")
+    (dest_dir / "SKILL.md").symlink_to(live_source)
+
+    sync_installed_skills(home=tmp_path)
+
+    assert (dest_dir / "SKILL.md").is_symlink()  # link untouched
+    assert live_source.read_text(encoding="utf-8") == "# live-edit source\n"  # source unclobbered
+
+
+def test_sync_isolates_a_failing_skill_from_the_rest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # one skill's write failing must not abort refreshing the others — the loop is per-skill fail-safe
+    _enable_sync(monkeypatch)
+    _install(tmp_path)
+    skaldr_dir = tmp_path / ".claude" / "skills" / "skaldr"  # first in _BUNDLED_SKILLS
+    reflect_file = tmp_path / ".claude" / "skills" / "skaldr-reflect" / "SKILL.md"  # later in the list
+    (skaldr_dir / "SKILL.md").write_text("# stale\n", encoding="utf-8")
+    reflect_file.write_text("# stale\n", encoding="utf-8")
+    skaldr_dir.chmod(0o555)  # skaldr's refresh will fail
+
+    try:
+        sync_installed_skills(home=tmp_path)
+        assert (skaldr_dir / "SKILL.md").read_text(encoding="utf-8") == "# stale\n"  # skaldr failed
+        # …but the later skill still refreshed, proving the failure didn't abort the loop
+        assert reflect_file.read_bytes() == (package_path("skills/skaldr-reflect") / "SKILL.md").read_bytes()
+    finally:
+        skaldr_dir.chmod(0o755)
+
+
+def test_sync_is_disabled_by_the_opt_out_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    dest = _install(tmp_path)
+    dest.write_text("# stale\n", encoding="utf-8")
+    monkeypatch.setenv("SKALDR_SKILL_SYNC", "0")
+
+    sync_installed_skills(home=tmp_path)
+
+    assert dest.read_text(encoding="utf-8") == "# stale\n"  # opt-out → left drifted
+
+
+def test_install_skill_is_update_only_and_does_not_rewrite_a_current_skill(tmp_path: Path) -> None:
+    dest = _install(tmp_path)
+    os.utime(dest, (1_000_000, 1_000_000))
+
+    assert install_skill(home=tmp_path) == 0  # re-run on an up-to-date install
+
+    assert dest.stat().st_mtime == 1_000_000  # clean no-op: no rewrite
+
+
+def test_main_refreshes_a_drifted_skill_on_a_normal_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the wiring: a plain `skaldr report.yaml` run refreshes a drifted installed skill (via main()'s
+    # top-of-run sync) — home is redirected to a tmp dir so the real ~/.claude is never touched.
+    _enable_sync(monkeypatch)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)  # sync's default home → tmp, not real ~/.claude
+    dest = _install(tmp_path)
+    dest.write_text("# stale\n", encoding="utf-8")
+    report = tmp_path / "r.yaml"
+    report.write_text("version: 1\nmeta: {title: T}\nblocks: [{type: text, body: hi}]\n", encoding="utf-8")
+
+    assert main([str(report), "-o", str(tmp_path / "r.html")]) == 0
+
+    assert dest.read_bytes() == _BUNDLED_SKALDR_SKILL  # main()'s sync refreshed it
