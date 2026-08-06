@@ -3,6 +3,7 @@ normalised model (--emit-json), print the guide, export the schema, or install t
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -145,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(argv)
+
+    # Opportunistically refresh already-installed skills that drifted after an upgrade. Fail-safe and
+    # silent unless it writes; `--install-skill` below does its own (create-or-refresh) pass.
+    if not args.install_skill:
+        sync_installed_skills()
 
     if args.install_skill:
         return install_skill()
@@ -357,12 +363,28 @@ _BUNDLED_SKILLS: list[tuple[str, str]] = [
 ]
 
 
+def _skill_up_to_date(src: Path, dest_file: Path) -> bool:
+    """True when the installed SKILL.md exists and is byte-identical to the bundled source — the guard
+    that makes both `--install-skill` and the on-invoke sync a clean no-op when nothing changed."""
+    return dest_file.is_file() and dest_file.read_bytes() == src.read_bytes()
+
+
+def _copy_skill(src: Path, dest_file: Path) -> None:
+    """Install one SKILL.md atomically: copy to a temp sibling, then `replace()` it into place — so a
+    concurrent reader never sees a half-written skill and a failed copy can't truncate the existing one
+    (the same temp-then-swap `_install_plan_rule` uses for CLAUDE.md)."""
+    tmp = dest_file.with_name(dest_file.name + ".skaldr-tmp")
+    shutil.copyfile(src, tmp)
+    tmp.replace(dest_file)
+
+
 def install_skill(home: Path | None = None) -> int:
     """Copy every bundled skill's SKILL.md into its own <home>/.claude/skills/<name>/ (see
     `_BUNDLED_SKILLS`). Copies of stable files — not links into the versioned install — so it runs
     ONCE and survives upgrades; version-specific detail is fetched at author time via `skaldr --guide`
-    / `--write-schema`. Migrates an older symlinked install; advises if ~/.claude is absent. The
-    live-plan-doc CLAUDE.md rule is a separate opt-in — see `install_plan_rule`."""
+    / `--write-schema`. Update-only (a byte-identical skill is left untouched, so re-running is a clean
+    no-op); migrates an older symlinked install; advises if ~/.claude is absent. The live-plan-doc
+    CLAUDE.md rule is a separate opt-in — see `install_plan_rule`."""
     if home is None:
         home = Path.home()
     sources = [(package_path(src_dir) / "SKILL.md", name) for src_dir, name in _BUNDLED_SKILLS]
@@ -382,20 +404,75 @@ def install_skill(home: Path | None = None) -> int:
 
     for src, name in sources:
         dest_dir = skills_dir / name
+        dest_file = dest_dir / "SKILL.md"
         try:
             if dest_dir.is_symlink():
                 print(f"note: migrating an older symlinked install at {dest_dir}")
                 dest_dir.unlink()  # older skaldr symlinked this dir into the versioned install
             dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dest_dir / "SKILL.md")
+            if dest_file.is_symlink():
+                # a live-edit link into a checkout — writing through it would clobber the tracked source
+                print(f"note: leaving the symlinked skill file at {dest_file} as-is")
+                continue
+            if _skill_up_to_date(src, dest_file):
+                print(f"OK  {name} skill already up to date -> {dest_file}")
+                continue
+            _copy_skill(src, dest_file)
         except OSError as err:
             print(f"error: could not install the skill into {dest_dir}: {err}", file=sys.stderr)
             return 1
-        print(f"OK  installed {name} skill -> {dest_dir / 'SKILL.md'}")
+        print(f"OK  installed {name} skill -> {dest_file}")
     print("    Restart Claude Code (or reload skills) to pick them up.")
     print("    (run `skaldr --install-plan-rule` to also have the agent keep its working plans as")
     print("     live skaldr docs)")
     return 0
+
+
+def sync_installed_skills(home: Path | None = None) -> None:
+    """Opportunistic refresh, run at the top of every `skaldr` invocation: for each bundled skill that is
+    ALREADY installed under ~/.claude/skills, rewrite its SKILL.md if it has drifted from the packaged
+    copy — so after `brew upgrade skaldr` the skill refreshes itself on the next run, no manual
+    `--install-skill`, and without the Homebrew formula ever writing into $HOME.
+
+    Deliberately conservative, because a plain `skaldr report.yaml` must never surprise:
+    - never CREATES a skill (an absent one stays absent — installing is a deliberate `--install-skill`);
+    - never touches a SYMLINKED install or SKILL.md (a contributor's live-edit link into the repo —
+      overwriting it would clobber the tracked source);
+    - update-only (byte-identical → no write, no mtime churn) and silent unless it actually refreshes;
+    - never raises (a read-only/odd ~/.claude must not break a render), and short-circuits at once when
+      ~/.claude/skills doesn't exist.
+
+    Set `SKALDR_SKILL_SYNC=0` to disable it (contributors doing live edits, CI)."""
+    if os.environ.get("SKALDR_SKILL_SYNC") == "0":
+        return
+    try:
+        # `Path.home()` raises RuntimeError when $HOME is unresolvable (a minimal container with no
+        # passwd entry); `is_dir()` raises PermissionError on an unsearchable ~/.claude. Neither may
+        # crash a render, so the whole setup is guarded before the per-skill loop takes over.
+        if home is None:
+            home = Path.home()
+        skills_dir = home / ".claude" / "skills"
+        if not skills_dir.is_dir():
+            return
+    except (OSError, RuntimeError):
+        return
+    for src_dir, name in _BUNDLED_SKILLS:
+        dest_dir = skills_dir / name
+        dest_file = dest_dir / "SKILL.md"
+        try:
+            # refresh only an existing, non-symlinked install; skip (never create, never clobber) the
+            # rest. `or` short-circuits, so dest_file.is_symlink() is reached only for a real dir.
+            if dest_dir.is_symlink() or not dest_dir.is_dir() or dest_file.is_symlink():
+                continue
+            src = package_path(src_dir) / "SKILL.md"
+            if not src.is_file() or _skill_up_to_date(src, dest_file):
+                continue
+            _copy_skill(src, dest_file)
+            print(
+                f"skaldr: refreshed the '{name}' skill in {dest_dir} (a newer copy shipped)", file=sys.stderr
+            )
+        except OSError:
+            continue  # one skill's FS error must skip only that skill — never the rest, never the render
 
 
 def install_plan_rule(home: Path | None = None) -> int:

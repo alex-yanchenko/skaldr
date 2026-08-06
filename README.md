@@ -117,6 +117,11 @@ live/recording cues) and drives the audience deck into the org's real brand temp
 **reflection** helper (`skaldr-reflect`) that turns your experience of authoring with skaldr into a
 ranked, actionable pain-points report for the maintainer. Each lands in its own `~/.claude/skills/<name>/`.
 
+**Skills keep themselves current.** After a `brew upgrade skaldr`, an installed skill refreshes itself
+the next time you run `skaldr` — no need to re-run `--install-skill`. It only ever refreshes a skill
+you already installed (never creates one), never touches a symlinked skill (a contributor's live-edit
+link), and never interferes with a render. Set `SKALDR_SKILL_SYNC=0` to turn the auto-refresh off.
+
 `--install-plan-rule` is a separate, optional step: it adds a short, marker-delimited rule to
 `~/.claude/CLAUDE.md` that steers the AI to author its working plans as live skaldr docs (rendered
 with `--watch` so you can follow along). Delete that `skaldr:plan-rule` block to opt out; re-running
