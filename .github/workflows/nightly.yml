@@ -17,4 +17,7 @@ jobs:
       # Runtime deps only (jinja2, pydantic, pyyaml). The dev toolchain (pytest, ruff,
       # pyright) never ships, so its advisories aren't a risk for this CLI.
       - run: uv export --no-dev --no-emit-project --format requirements.txt > requirements-audit.txt
-      - run: uvx pip-audit -r requirements-audit.txt
+      # --no-deps: the exported file is already the fully-resolved, pinned set, so pip-audit has
+      # nothing to resolve. Without it, pip-audit builds an ephemeral venv to resolve deps and its
+      # ensurepip bootstrap fails against the uv-managed standalone CPython that setup-uv provides.
+      - run: uvx pip-audit --no-deps -r requirements-audit.txt
