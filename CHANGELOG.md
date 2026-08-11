@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/alex-yanchenko/skaldr/compare/v2.7.0...v2.8.0) (2026-08-11)
+
+
+### Features
+
+* **swimlane:** replace emphasis state with a 5-state progress axis ([#122](https://github.com/alex-yanchenko/skaldr/issues/122)) ([a77c7c4](https://github.com/alex-yanchenko/skaldr/commit/a77c7c4348316d6ca2baf4493851b657cbf60eb6))
+
+
+### Bug Fixes
+
+* **nightly:** use pip-audit --disable-pip to avoid the ensurepip venv crash ([#120](https://github.com/alex-yanchenko/skaldr/issues/120)) ([ffe1d19](https://github.com/alex-yanchenko/skaldr/commit/ffe1d19c60fa88848edbc83bc3234bb38d883000))
+
 ## [2.7.0](https://github.com/alex-yanchenko/skaldr/compare/v2.6.0...v2.7.0) (2026-08-06)
 
 
