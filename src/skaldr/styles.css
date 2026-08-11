@@ -59,6 +59,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   dragging the rest of the palette with it. */
 		--diff-add-fg:light-dark(#0f7a37,#4ade80); --diff-add-bg:light-dark(#d1fadf,#0f2a1a); --diff-add-bar:light-dark(#16a34a,#22c55e);
 		--diff-del-fg:light-dark(#c11a1a,#f87171); --diff-del-bg:light-dark(#ffd9d6,#2a1416); --diff-del-bar:light-dark(#e5352b,#ef4444);
+		/* Swimlane `todo` and `deferred` are the two neutral progress states; they must not read alike.
+		   `todo` is a COOL filled slate (on deck); `deferred` a WARM hollow chip (parked). The warm/stone
+		   family is unique to this state — no other token is warm — so the two never blur into one grey. */
+		--swim-todo:light-dark(#4f5d78,#8591ad); --swim-todo-tx:light-dark(#ffffff,#12161d);
+		--swim-defer-ink:light-dark(#746a5a,#a2988a); --swim-defer-line:light-dark(#cfc6b6,#4a4438); --swim-defer-bg:light-dark(#f7f5f0,#1e1c17);
 		/* Code panel gets its own shaded background (not white --surface): the print page is forced
 		   white, so a white code body vanished into it. A light grey reads as a code panel on both the
 		   white paper and the tinted on-screen page. Dark is unchanged — it already sits above the page. */
@@ -560,13 +565,29 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .swim-cell{z-index:1; display:flex; flex-direction:column; gap:var(--s2); padding:var(--s3);
 			background:var(--gt,transparent)}
 		& .swim-tkt{display:flex; align-items:stretch; overflow:hidden; font-size:13.5px;
-			border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
-		/* step.state — two de-emphasis levels that must not read alike. `low`: solid, gently faded, so
-		   tail/low-priority work recedes but still looks live. `blocked`: dashed + a greyed (not blue)
-		   number badge, so waiting/on-hold work reads as stopped, not merely quiet. */
-		& .swim-tkt.low{opacity:0.6}
-		& .swim-tkt.blocked{opacity:0.85; border-style:dashed}
-		& .swim-tkt.blocked .swim-n{background:var(--neutral-bg); color:var(--muted); box-shadow:none}
+			border:1px solid var(--line); border-inline-start-width:3px; border-radius:var(--r-sm); background:var(--surface)}
+		/* step.state — five progress states (same progress axis as status_list/timeline, roadmap-tuned).
+		   Colour rides on the number badge + a 3px left edge; label text stays legible at every state —
+		   deferred recedes via a warm hue, not by dimming (its ink still clears the AA contrast floor).
+		   `current` keeps the raised blue badge (you-are-here) + a thin ring. `blocked` stays sharp: amber +
+		   a dashed frame. `todo` is a cool filled slate (on deck); `deferred` a warm hollow chip on a warm
+		   field (parked) — cool/filled vs warm/hollow so the two neutral states never read alike. */
+		& .swim-tkt.done{border-inline-start-color:var(--success-fg)}
+		& .swim-tkt.current{border-inline-start-color:var(--info-fg); box-shadow:inset 0 0 0 1px var(--info-fg)}
+		& .swim-tkt.todo{border-inline-start-color:var(--swim-todo)}
+		& .swim-tkt.blocked{border-style:dashed; border-inline-start-color:var(--warning-fg)}
+		& .swim-tkt.deferred{border-inline-start-color:var(--swim-defer-line); background:var(--swim-defer-bg)}
+		& .swim-tkt.deferred .swim-l, & .swim-tkt.deferred .swim-dep{color:var(--swim-defer-ink)}
+		& .swim-tkt.done .swim-n{color:var(--success-bg);
+			background:light-dark(color-mix(in srgb, var(--success-fg) 78%, white), var(--success-fg))}
+		& .swim-tkt.todo .swim-n{color:var(--swim-todo-tx); background:var(--swim-todo)}
+		& .swim-tkt.blocked .swim-n{color:var(--warning-bg);
+			background:light-dark(color-mix(in srgb, var(--warning-fg) 78%, white), var(--warning-fg))}
+		& .swim-tkt.deferred .swim-n{color:var(--swim-defer-ink); background:var(--swim-defer-bg);
+			border-inline-end-color:var(--swim-defer-line); box-shadow:none}
+		/* the trailing value chip inherits deferred's warm field so it doesn't sit as a cool-grey patch */
+		& .swim-tkt.deferred .swim-tkt-v{background:var(--swim-defer-bg); color:var(--swim-defer-ink);
+			border-inline-start-color:var(--swim-defer-line)}
 		/* the leading number is the step's identifier: a solid blue compartment flush to the ticket's
 		   left edge (theme-safe fill + contrasting text) with an inset bevel — light top, dark bottom —
 		   so it reads as a raised button. When the step carries a `url` it renders as an <a> and is the

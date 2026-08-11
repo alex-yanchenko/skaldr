@@ -3408,12 +3408,14 @@
           "title": "Url"
         },
         "state": {
-          "default": "normal",
-          "description": "Ticket emphasis. `normal` (default) is full-weight active work. `low` fades the ticket (solid, still clearly live) for low-priority / tail work. `blocked` marks it waiting / on-hold \u2014 dashed outline + a greyed number badge, distinct from `low`. The value counts toward the totals in every state.",
+          "default": "todo",
+          "description": "Progress state \u2014 the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress \u2014 the raised blue badge), `todo` (default \u2014 planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold \u2014 amber + dashed), `deferred` (pushed out / post-MVP \u2014 a warm hollow badge that recedes). The value counts toward the totals in every state.",
           "enum": [
-            "normal",
-            "low",
-            "blocked"
+            "done",
+            "current",
+            "todo",
+            "blocked",
+            "deferred"
           ],
           "title": "State",
           "type": "string"

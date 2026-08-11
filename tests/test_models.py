@@ -2215,11 +2215,14 @@ def test_swimlane_step_url_rejects_an_unsafe_scheme() -> None:
         parse_report(make_report(blocks=[block]))
 
 
-def test_swimlane_step_state_rejects_an_unknown_value() -> None:
+@pytest.mark.parametrize("bad_state", ["urgent", "normal", "low"])
+def test_swimlane_step_state_rejects_an_unknown_value(bad_state: str) -> None:
+    """Unknown states are rejected — including `normal` and `low`, the retired pre-progress-axis
+    values, so the breaking vocabulary change can't be silently reverted."""
     block = _swimlane(
         lanes=["A"],
         columns=["C1"],
-        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "state": "urgent"}],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "state": bad_state}],
     )
     with pytest.raises(ReportError, match=r"steps\.0\.state"):
         parse_report(make_report(blocks=[block]))

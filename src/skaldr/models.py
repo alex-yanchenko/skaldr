@@ -155,7 +155,9 @@ ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip render
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
 FanDirection = Literal["in", "out"]
-SwimlaneStepState = Literal["normal", "low", "blocked"]  # ticket emphasis: normal / low-pri / blocked
+SwimlaneStepState = Literal[
+    "done", "current", "todo", "blocked", "deferred"
+]  # progress axis, like status_list/timeline (roadmap-tuned vocabulary: todo, deferred)
 
 
 def _resource(name: str) -> Traversable:
@@ -1311,11 +1313,12 @@ class SwimlaneStep(_Frozen):
         "step's number becomes a link out to it.",
     )
     state: SwimlaneStepState = Field(
-        default="normal",
-        description="Ticket emphasis. `normal` (default) is full-weight active work. `low` fades the "
-        "ticket (solid, still clearly live) for low-priority / tail work. `blocked` marks it waiting / "
-        "on-hold — dashed outline + a greyed number badge, distinct from `low`. The value counts toward "
-        "the totals in every state.",
+        default="todo",
+        description="Progress state — the same progress axis as `status_list`/`timeline`, in roadmap "
+        "terms (`todo` for not-started, plus `deferred`). `done` (green), "
+        "`current` (in progress — the raised blue badge), `todo` (default — planned, not started; a cool "
+        "filled slate badge), `blocked` (waiting / on-hold — amber + dashed), `deferred` (pushed out / "
+        "post-MVP — a warm hollow badge that recedes). The value counts toward the totals in every state.",
     )
     id: str | None = Field(
         default=None,

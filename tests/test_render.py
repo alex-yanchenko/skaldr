@@ -901,11 +901,11 @@ def test_swimlane_plain_renders_gutter_labels_and_stacked_tickets() -> None:
     assert "grid-template-rows:auto auto" in html  # header + one lane, no poke zones
     assert 'class="swim-gut"' in html and ">Eng</div>" in html
     assert 'class="swim-hlabel"' in html and ">S1</div>" in html
-    # both tickets stacked in a single cell, in order
+    # both tickets stacked in a single cell, in order (no `state` → the default `todo` class)
     assert (
-        '<div class="swim-tkt"><span class="swim-n">3a</span>'
+        '<div class="swim-tkt todo"><span class="swim-n">3a</span>'
         '<span class="swim-body"><span class="swim-l">A</span></span></div>'
-        '<div class="swim-tkt"><span class="swim-n">3b</span>'
+        '<div class="swim-tkt todo"><span class="swim-n">3b</span>'
         '<span class="swim-body"><span class="swim-l">B</span></span></div>' in html
     )
     assert 'class="swim-cap' not in html  # no groups → no caps
@@ -1075,35 +1075,39 @@ def test_swimlane_step_value_renders_on_the_ticket() -> None:
 
 
 def test_swimlane_step_url_links_the_number_and_state_styles_the_ticket() -> None:
-    """A step `url` renders the number as a link; `state` adds its emphasis class (`low`/`blocked`);
-    the two compose on one step. A `normal` step keeps a <span> number and no state class."""
+    """A step `url` renders the number as a link; `state` always adds its progress class; the two
+    compose on one step. A step with no `state` defaults to `todo` — the class is always present."""
     block = {
         "type": "swimlane",
         "lanes": ["R"],
-        "columns": ["C1", "C2", "C3"],
+        "columns": ["C1", "C2", "C3", "C4", "C5"],
         "steps": [
             {"lane": "R", "col": "C1", "n": "1", "label": "linked", "url": "https://example.com/PROJ-1"},
-            {"lane": "R", "col": "C2", "n": "2", "label": "low-pri", "state": "low"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "wip", "state": "current"},
+            {"lane": "R", "col": "C3", "n": "3", "label": "parked", "state": "deferred"},
             {
                 "lane": "R",
-                "col": "C3",
-                "n": "3",
+                "col": "C4",
+                "n": "4",
                 "label": "both",
-                "url": "https://example.com/PROJ-3",
+                "url": "https://example.com/PROJ-4",
                 "state": "blocked",
             },
+            {"lane": "R", "col": "C5", "n": "5", "label": "shipped", "state": "done"},
         ],
     }
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
-    assert '<a class="swim-n" href="https://example.com/PROJ-1">1</a>' in html
-    assert '<span class="swim-n">2</span>' in html  # no url → plain span, not a link
-    assert '<div class="swim-tkt low">' in html  # low-priority step carries the `low` class
+    # url → linked number; a step with no `state` defaults to `todo`, and the class is always emitted
+    assert '<div class="swim-tkt todo"><a class="swim-n" href="https://example.com/PROJ-1">1</a>' in html
+    assert '<div class="swim-tkt current"><span class="swim-n">2</span>' in html  # no url → plain span
+    assert '<div class="swim-tkt deferred">' in html
+    assert '<div class="swim-tkt done"><span class="swim-n">5</span>' in html
     # url + blocked compose: a blocked ticket whose number is a link
-    assert '<div class="swim-tkt blocked"><a class="swim-n" href="https://example.com/PROJ-3">3</a>' in html
-    # the normal (state-less) step gets no emphasis class
-    assert '<div class="swim-tkt">' in html
+    assert '<div class="swim-tkt blocked"><a class="swim-n" href="https://example.com/PROJ-4">4</a>' in html
+    # no step ever renders without a state class
+    assert '<div class="swim-tkt">' not in html
 
 
 def test_swimlane_column_sub_renders_and_ids_decouple_reference_from_display() -> None:

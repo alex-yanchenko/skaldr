@@ -219,7 +219,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 3,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "state": "normal", "deps": []}],
+            "steps": [{"n": "1", "label": "a", "value": None, "url": None, "state": "todo", "deps": []}],
         },  # S1/MVP — inferred group
         {
             "tone": "blue",
@@ -235,7 +235,7 @@ def test_swimlane_layout_routes_each_step_to_its_resolved_subcolumn() -> None:
             "line_end": 5,
             "row_start": 3,
             "row_end": 4,
-            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "state": "normal", "deps": []}],
+            "steps": [{"n": "2", "label": "b", "value": None, "url": None, "state": "todo", "deps": []}],
         },  # S2/Beta
     ]
 
@@ -408,7 +408,7 @@ def test_swimlane_layout_totals_partition_by_lane_and_handle_zero_and_fractional
         "line_end": 3,
         "row_start": 2,
         "row_end": 3,
-        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "state": "normal", "deps": []}],
+        "steps": [{"n": "1", "label": "a", "value": 2.5, "url": None, "state": "todo", "deps": []}],
     }
     # footer sums each column across both lanes; fractional preserved, zero included
     assert layout["foot"] == {
@@ -536,7 +536,7 @@ def test_swimlane_layout_resolves_depends_on_ids_to_the_dependency_numbers() -> 
 
     # C2's step carries the dependency's NUMBER (1), not its id ("x")
     assert layout["cells"][1]["steps"] == [
-        {"n": "2", "label": "b", "value": None, "url": None, "state": "normal", "deps": ["1"]}
+        {"n": "2", "label": "b", "value": None, "url": None, "state": "todo", "deps": ["1"]}
     ]
 
 

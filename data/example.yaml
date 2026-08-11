@@ -79,10 +79,10 @@ blocks:
       - { name: "In-house", color: blue, columns: ["Detect", "Investigate", "Resolve"] }
       - { name: "Vendor claim", color: amber, columns: ["Escalate"] }
     steps:
-      - { lane: "Floor", col: "Detect", n: "1", label: "Recount bin" }
-      - { lane: "System", col: "Investigate", n: "2a", label: "Check scan log" }
-      - { lane: "Floor", col: "Investigate", n: "2b", label: "Re-label", state: low }
-      - { lane: "System", col: "Resolve", n: "3", label: "Reconcile" }
+      - { lane: "Floor", col: "Detect", n: "1", label: "Recount bin", state: done }
+      - { lane: "System", col: "Investigate", n: "2a", label: "Check scan log", state: current }
+      - { lane: "Floor", col: "Investigate", n: "2b", label: "Re-label", state: deferred }
+      - { lane: "System", col: "Resolve", n: "3", label: "Reconcile" }   # todo (default)
       - { lane: "Vendor", col: "Escalate", n: "4", label: "Escalate short-ship", state: blocked }
 
   - type: callout
