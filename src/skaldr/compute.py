@@ -163,7 +163,7 @@ class SwimStep(TypedDict):
     label: str
     value: float | None  # the step's own value, shown on the ticket's trailing edge; None → hidden
     url: str | None  # optional link; the number becomes an <a> when set
-    state: SwimlaneStepState  # normal | low (faded, live) | blocked (dashed + greyed badge)
+    state: SwimlaneStepState  # done | current | todo (default) | blocked (dashed) | deferred (warm hollow)
     deps: list[str]  # the numbers (n) of the steps this one depends on, for a compact blocked-by marker
 
 

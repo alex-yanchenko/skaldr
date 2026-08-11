@@ -179,7 +179,7 @@ or to keep a small block from stretching across the whole page.
 | `chart` | Bar / line / donut of quantitative data (see below) | `variant: bar\|line\|donut`, `categories`+`series` or `slices`, `stacked?` |
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
-| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?, id?, depends_on?}]`, `groups?` |
+| `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -494,12 +494,15 @@ counts only the steps resolved into it). Totals appear only when at least one st
 without one counts as 0.
 
 A step may also carry an optional `url` (http/https/mailto — e.g. its Jira/GitHub ticket), which turns
-its number into a link, and a `state` — `normal` (default), `low`, or `blocked` — for emphasis. `low`
-fades the ticket (solid, still clearly live) for tail/low-priority work; `blocked` marks it waiting /
-on-hold with a dashed outline and a greyed number badge, so it reads as *stopped*, not merely quiet.
-The two are deliberately distinct. A step's `value` counts toward the totals in every state. States are
-conveyed by the styling alone — there's no auto-generated legend for them (unlike `badges`), so if your
-audience needs the meaning spelled out, add a short `callout`.
+its number into a link, and a **`state`** — the same progress axis as `status_list` and `timeline`, in
+roadmap terms (`todo` for not-started, plus a `deferred`): `done` (green), `current` (in progress — the
+raised blue badge), `todo` (**default** — planned, not started; a cool filled slate badge), `blocked`
+(waiting / on-hold — amber + a sharp dashed frame), and `deferred` (pushed out / post-MVP — a warm hollow
+badge that recedes). Colour rides on the number badge and the ticket's left edge; the label stays legible
+at every state (`deferred` recedes by hue, not by dimming). Reach for `deferred` for work
+you've consciously parked, `blocked` for work stopped by a dependency (pair it with a `depends_on` marker).
+A step's `value` counts toward the totals in every state. State is conveyed by styling alone — there's no
+auto-generated legend for it (unlike `badges`), so if your audience needs it spelled out, add a `callout`.
 
 To record dependencies, give a step an `id` (a safe slug — letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the
@@ -513,10 +516,10 @@ room; the "needs" marker is the compact, readable form.)
   steps:
     - { lane: "Product", col: "Sprint 1", n: "1", label: "Spec", url: "https://jira/PROJ-1" }
     - { lane: "Eng", col: "Sprint 2", n: "2", label: "Build", value: 5 }
-    - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag" }   # stacks with 3b (same cell)
-    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Test plan", state: low }   # low-priority
-    - { lane: "QA", col: "Sprint 2", n: "2b", label: "Vendor sign-off", state: blocked }   # waiting
-    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }
+    - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag", state: current }   # stacks with 3b
+    - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Perf pass", state: deferred }   # parked / post-MVP
+    - { lane: "QA", col: "Sprint 2", n: "2b", label: "Vendor sign-off", state: blocked }   # waiting on a dep
+    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }   # todo (default)
 ```
 
 ### Optional group (milestone) overlay
