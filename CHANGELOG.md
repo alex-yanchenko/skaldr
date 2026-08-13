@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/alex-yanchenko/skaldr/compare/v2.8.0...v2.9.0) (2026-08-13)
+
+
+### Features
+
+* **swimlane:** auto-render a state legend under the grid ([#123](https://github.com/alex-yanchenko/skaldr/issues/123)) ([87c9fd7](https://github.com/alex-yanchenko/skaldr/commit/87c9fd7a9f476c1fe56c32d1b0a34cd8bac9ce84))
+
 ## [2.8.0](https://github.com/alex-yanchenko/skaldr/compare/v2.7.0...v2.8.0) (2026-08-11)
 
 
