@@ -255,6 +255,10 @@ class SwimLayout(TypedDict):
     foot: SwimFootRow | None  # per-column totals row; None when no step carries a value
     tbl: _SwimBox
     frame_square_right: bool  # square the frame's right corners when a cap owns the right edge
+    state_legend: list[SwimlaneStepState]  # states used, canonical order; [] when <2 distinct → no legend
+
+
+_SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:
@@ -514,8 +518,14 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
             "cells": foot_cells,
         }
 
+    present_states = {step.state for step in block.steps}
+    state_legend: list[SwimlaneStepState] = (
+        [s for s in _SWIM_STATE_ORDER if s in present_states] if len(present_states) >= 2 else []
+    )
+
     return {
         "has_groups": has_groups,
+        "state_legend": state_legend,
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
         "row_template": _swim_row_template(has_groups, nlanes, has_totals),
         "subcols": subcol_out,

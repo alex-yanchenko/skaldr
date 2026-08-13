@@ -64,6 +64,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   family is unique to this state — no other token is warm — so the two never blur into one grey. */
 		--swim-todo:light-dark(#4f5d78,#8591ad); --swim-todo-tx:light-dark(#ffffff,#12161d);
 		--swim-defer-ink:light-dark(#746a5a,#a2988a); --swim-defer-line:light-dark(#cfc6b6,#4a4438); --swim-defer-bg:light-dark(#f7f5f0,#1e1c17);
+		/* the filled-badge fill per state — one token each so the ticket badge and the auto legend swatch
+		   never drift apart. Same theme-safe recipe as the badge family (fg mixed toward white in light). */
+		--swim-done:light-dark(color-mix(in srgb, var(--success-fg) 78%, white), var(--success-fg));
+		--swim-current:light-dark(color-mix(in srgb, var(--info-fg) 78%, white), var(--info-fg));
+		--swim-blocked:light-dark(color-mix(in srgb, var(--warning-fg) 78%, white), var(--warning-fg));
 		/* Code panel gets its own shaded background (not white --surface): the print page is forced
 		   white, so a white code body vanished into it. A light grey reads as a code panel on both the
 		   white paper and the tinted on-screen page. Dark is unchanged — it already sits above the page. */
@@ -542,6 +547,19 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   BEYOND the table: a coloured cap poking above/below + a faint cell tint (--gc accent, --gt tint,
 	   set by a palette class). Lines are on-top overlays because cell tints paint over box borders. */
 	.swim-wrap{overflow-x:auto; margin-block:var(--s6)}
+	/* auto legend — the states this swimlane uses, so the colour code is never a guess. Rendered under
+	   the grid only when ≥2 states appear. It's a sibling of the grid (child of .swim-wrap), NOT a grid
+	   item, so these are top-level rules — nesting them under .swim would never match. Swatches reuse the
+	   state tokens; blocked keeps its dashed edge, deferred is the hollow warm chip. */
+	.swim-legend{display:flex; flex-wrap:wrap; gap:5px 15px; margin-block-start:var(--s3);
+		padding-inline:var(--s2); font-size:11.5px; color:var(--muted)}
+	.swim-leg{display:inline-flex; align-items:center; gap:6px; text-transform:capitalize}
+	.swim-leg-sw{inline-size:20px; block-size:13px; border-radius:4px; flex:none; border:1px solid transparent}
+	.swim-leg-sw.done{background:var(--swim-done)}
+	.swim-leg-sw.current{background:var(--swim-current)}
+	.swim-leg-sw.todo{background:var(--swim-todo)}
+	.swim-leg-sw.blocked{background:var(--swim-blocked); border:1px dashed var(--warning-fg)}
+	.swim-leg-sw.deferred{background:var(--swim-defer-bg); border-color:var(--swim-defer-line)}
 	.swim{display:grid; position:relative; --swim-col:minmax(150px, 1fr); --swim-poke:28px; --swim-pokeb:12px;
 		width:100%;
 		& .swim-tbl{background:var(--surface); border-radius:var(--r-md)}
@@ -578,11 +596,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .swim-tkt.blocked{border-style:dashed; border-inline-start-color:var(--warning-fg)}
 		& .swim-tkt.deferred{border-inline-start-color:var(--swim-defer-line); background:var(--swim-defer-bg)}
 		& .swim-tkt.deferred .swim-l, & .swim-tkt.deferred .swim-dep{color:var(--swim-defer-ink)}
-		& .swim-tkt.done .swim-n{color:var(--success-bg);
-			background:light-dark(color-mix(in srgb, var(--success-fg) 78%, white), var(--success-fg))}
+		& .swim-tkt.done .swim-n{color:var(--success-bg); background:var(--swim-done)}
 		& .swim-tkt.todo .swim-n{color:var(--swim-todo-tx); background:var(--swim-todo)}
-		& .swim-tkt.blocked .swim-n{color:var(--warning-bg);
-			background:light-dark(color-mix(in srgb, var(--warning-fg) 78%, white), var(--warning-fg))}
+		& .swim-tkt.blocked .swim-n{color:var(--warning-bg); background:var(--swim-blocked)}
 		& .swim-tkt.deferred .swim-n{color:var(--swim-defer-ink); background:var(--swim-defer-bg);
 			border-inline-end-color:var(--swim-defer-line); box-shadow:none}
 		/* the trailing value chip inherits deferred's warm field so it doesn't sit as a cool-grey patch */
@@ -595,7 +611,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   a neutral flat chip so the two never read alike. */
 		& .swim-n{flex:none; display:flex; align-items:center; padding:6px 10px; font-family:var(--mono);
 			font-size:12px; font-weight:700; color:var(--info-bg); text-decoration:none;
-			background:light-dark(color-mix(in srgb, var(--info-fg) 78%, white), var(--info-fg));
+			background:var(--swim-current);
 			border-inline-end:1px solid var(--line);
 			box-shadow:inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
 				inset 0 -1px 0 color-mix(in srgb, #000 16%, transparent)}
