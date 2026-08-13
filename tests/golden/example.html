@@ -625,8 +625,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   a neutral flat chip so the two never read alike. */
 		/* every badge sizes to the widest step number in the swimlane (--swim-n-ch, set on .swim) so the
 		   labels line up in a column instead of starting at ragged x. Mono font ⇒ 1ch is one digit; +21px
-		   is the horizontal padding (2×10) + the 1px end border (border-box). Numbers centre in the badge. */
-		& .swim-n{flex:none; display:flex; align-items:center; justify-content:center; padding:6px 10px;
+		   is the horizontal padding (2×10) + the 1px end border (border-box). Numbers sit right (tabular),
+		   so digits align against the label edge down the column. */
+		& .swim-n{flex:none; display:flex; align-items:center; justify-content:flex-end; padding:6px 10px;
 			min-inline-size:calc(var(--swim-n-ch, 1) * 1ch + 21px); font-family:var(--mono);
 			font-size:12px; font-weight:700; color:var(--info-bg); text-decoration:none;
 			background:var(--swim-current);
