@@ -23,6 +23,41 @@ def _swimlane(**overrides: object) -> Swimlane:
     return block
 
 
+def test_swimlane_layout_state_legend_lists_used_states_in_canonical_order() -> None:
+    """The auto legend lists exactly the states used, in canonical progress order (done→…→deferred),
+    de-duplicated, never authoring order, and never a state no step carries (todo/current absent here)."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2", "C3", "C4"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", "state": "deferred"},
+            {"lane": "A", "col": "C2", "n": "2", "label": "b", "state": "done"},
+            {"lane": "A", "col": "C3", "n": "3", "label": "c", "state": "blocked"},
+            {"lane": "A", "col": "C4", "n": "4", "label": "d", "state": "done"},
+        ],
+    )
+
+    assert swimlane_layout(block)["state_legend"] == ["done", "blocked", "deferred"]
+
+
+@pytest.mark.parametrize("only_state", [None, "blocked"])
+def test_swimlane_layout_state_legend_is_empty_for_a_single_state_grid(only_state: str | None) -> None:
+    """A swimlane whose steps are all ONE state needs no key — the legend is suppressed so a one-colour
+    grid doesn't carry a pointless swatch. The gate is state-count, not "is it the default", so an
+    all-`blocked` grid is suppressed exactly like an all-default-`todo` one."""
+    step_state = {"state": only_state} if only_state is not None else {}
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a", **step_state},
+            {"lane": "A", "col": "C2", "n": "2", "label": "b", **step_state},
+        ],
+    )
+
+    assert swimlane_layout(block)["state_legend"] == []
+
+
 def test_swimlane_layout_plain_has_no_poke_rows_caps_or_dashes() -> None:
     """A groupless swimlane: header + lanes only, one sub-column per column, all boundaries solid."""
     block = _swimlane(

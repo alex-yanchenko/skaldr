@@ -501,8 +501,8 @@ raised blue badge), `todo` (**default** — planned, not started; a cool filled 
 badge that recedes). Colour rides on the number badge and the ticket's left edge; the label stays legible
 at every state (`deferred` recedes by hue, not by dimming). Reach for `deferred` for work
 you've consciously parked, `blocked` for work stopped by a dependency (pair it with a `depends_on` marker).
-A step's `value` counts toward the totals in every state. State is conveyed by styling alone — there's no
-auto-generated legend for it (unlike `badges`), so if your audience needs it spelled out, add a `callout`.
+A step's `value` counts toward the totals in every state. skaldr auto-renders a small state legend under
+the grid whenever two or more states appear (a single-state swimlane needs none) — you don't author it.
 
 To record dependencies, give a step an `id` (a safe slug — letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the

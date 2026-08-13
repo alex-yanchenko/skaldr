@@ -1110,6 +1110,43 @@ def test_swimlane_step_url_links_the_number_and_state_styles_the_ticket() -> Non
     assert '<div class="swim-tkt">' not in html
 
 
+def test_swimlane_state_legend_renders_used_states_and_is_suppressed_when_single_state() -> None:
+    """A swimlane with ≥2 states renders an auto legend of swatch+name for each used state (canonical
+    order, used-only); a single-state grid renders no legend at all."""
+    multi = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2", "C3"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a", "state": "blocked"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b", "state": "done"},
+            {"lane": "R", "col": "C3", "n": "3", "label": "c", "state": "current"},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[multi])))
+
+    assert (
+        '<div class="swim-legend">'
+        '<span class="swim-leg"><span class="swim-leg-sw done"></span>done</span>'
+        '<span class="swim-leg"><span class="swim-leg-sw current"></span>current</span>'
+        '<span class="swim-leg"><span class="swim-leg-sw blocked"></span>blocked</span>'
+        "</div>" in html
+    )
+    assert "swim-leg-sw todo" not in html  # todo unused → not listed
+    assert "swim-leg-sw deferred" not in html
+
+    single = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b"},
+        ],
+    }
+    assert 'class="swim-legend"' not in render_html(parse_report(make_report(blocks=[single])))
+
+
 def test_swimlane_column_sub_renders_and_ids_decouple_reference_from_display() -> None:
     """A column `sub` renders as a caption under the header; with ids, steps reference the id while the
     header shows the display name and the gutter shows the lane's display name."""

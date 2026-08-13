@@ -178,7 +178,7 @@
 {% for c in layout.caps %}<div class="swim-cap {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"><span class="swim-dot"></span>{{ c.label }}{% if c.total is not none %}<span class="swim-tot">{{ c.total | fmt }}</span>{% endif %}</div>{% endfor %}
 {% for c in layout.caps_bottom %}<div class="swim-capb {{ c.color }}{% if c.edges %} {{ c.edges }}{% endif %}" style="grid-column:{{ c.line_start }}/{{ c.line_end }};grid-row:{{ c.row_start }}/{{ c.row_end }}"></div>{% endfor %}
 <div class="swim-frame{% if layout.frame_square_right %} sq-right{% endif %}" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
-</div></div>
+</div>{% if layout.state_legend %}<div class="swim-legend">{% for s in layout.state_legend %}<span class="swim-leg"><span class="swim-leg-sw {{ s }}"></span>{{ s }}</span>{% endfor %}</div>{% endif %}</div>
 {% endmacro %}
 
 {# Matrix: rows × columns, one state per cell — a coverage / RACI / capability grid. The cell IS the
