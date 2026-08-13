@@ -256,6 +256,7 @@ class SwimLayout(TypedDict):
     tbl: _SwimBox
     frame_square_right: bool  # square the frame's right corners when a cap owns the right edge
     state_legend: list[SwimlaneStepState]  # states used, canonical order; [] when <2 distinct → no legend
+    n_width: int  # widest step number (char count) → every badge sizes to it so labels line up
 
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
@@ -526,6 +527,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     return {
         "has_groups": has_groups,
         "state_legend": state_legend,
+        "n_width": max(len(step.n) for step in block.steps),
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
         "row_template": _swim_row_template(has_groups, nlanes, has_totals),
         "subcols": subcol_out,

@@ -1147,6 +1147,23 @@ def test_swimlane_state_legend_renders_used_states_and_is_suppressed_when_single
     assert 'class="swim-legend"' not in render_html(parse_report(make_report(blocks=[single])))
 
 
+def test_swimlane_sets_n_width_css_var_so_number_badges_align() -> None:
+    """The widest step number drives a --swim-n-ch var on the grid; every badge sizes to it (mono font)
+    so the labels line up in a column instead of starting at ragged x."""
+    block = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "C2", "n": "113", "label": "b"},
+        ],
+    }
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "--swim-n-ch:3" in html
+
+
 def test_swimlane_column_sub_renders_and_ids_decouple_reference_from_display() -> None:
     """A column `sub` renders as a caption under the header; with ids, steps reference the id while the
     header shows the display name and the gutter shows the lane's display name."""

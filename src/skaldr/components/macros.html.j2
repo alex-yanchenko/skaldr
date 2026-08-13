@@ -165,7 +165,7 @@
    optional footer totals row, and the rounded frame. Columns fill the width, scrolling when narrow. #}
 {% macro swimlane(b) %}
 {% set layout = swimlane_layout(b) %}
-<div class="swim-wrap"><div class="swim" style="grid-template-columns:{{ layout.col_template }};grid-template-rows:{{ layout.row_template }}">
+<div class="swim-wrap"><div class="swim" style="grid-template-columns:{{ layout.col_template }};grid-template-rows:{{ layout.row_template }};--swim-n-ch:{{ layout.n_width }}">
 <div class="swim-tbl" style="grid-column:{{ layout.tbl.line_start }}/{{ layout.tbl.line_end }};grid-row:{{ layout.tbl.row_start }}/{{ layout.tbl.row_end }}"></div>
 {% for h in layout.header_tints %}<div class="swim-hcell{% if h.tone %} {{ h.tone }}{% endif %}" style="grid-column:{{ h.line_start }}/{{ h.line_end }};grid-row:{{ h.row_start }}/{{ h.row_end }}"></div>{% endfor %}
 {% for h in layout.headers %}<div class="swim-hlabel" style="grid-column:{{ h.line_start }}/{{ h.line_end }};grid-row:{{ h.row_start }}/{{ h.row_end }}">{{ h.label }}{% if h.sub %}<span class="swim-hsub">{{ h.sub }}</span>{% endif %}</div>{% endfor %}
