@@ -40,6 +40,22 @@ def test_swimlane_layout_state_legend_lists_used_states_in_canonical_order() -> 
     assert swimlane_layout(block)["state_legend"] == ["done", "blocked", "deferred"]
 
 
+def test_swimlane_layout_n_width_is_the_widest_step_number_char_count() -> None:
+    """Every badge sizes to the widest step number so labels align; n_width is that max CHARACTER count
+    (so '2b' counts as 2 and '618' as 3), never a numeric value."""
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2", "C3"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "A", "col": "C2", "n": "618", "label": "b"},
+            {"lane": "A", "col": "C3", "n": "2b", "label": "c"},
+        ],
+    )
+
+    assert swimlane_layout(block)["n_width"] == 3
+
+
 @pytest.mark.parametrize("only_state", [None, "blocked"])
 def test_swimlane_layout_state_legend_is_empty_for_a_single_state_grid(only_state: str | None) -> None:
     """A swimlane whose steps are all ONE state needs no key — the legend is suppressed so a one-colour
