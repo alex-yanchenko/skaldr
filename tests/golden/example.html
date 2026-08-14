@@ -6,11 +6,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
-     (fetch/XHR/beacon/img/websocket); the two script hashes admit only skaldr's own inline scripts,
+     (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output — if a
-     script changes, that test fails until the hash below is updated. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U='; base-uri 'none'; form-action 'none'">
+     script changes, that test fails until the hash below is updated. The third hash is the --live
+     reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
+     keeping the policy string constant means --live can't weaken it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -777,6 +779,16 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& button.on{background:var(--hdr); color:var(--hdr-fg)}
 		/* Negative offset keeps the focus ring inside the tightly-packed segment instead of clipping. */
 		& button:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}}
+	/* The --live badge. Bottom-left, opposite the settings button, so a self-refreshing page says so
+	   without covering it. Muted until hover: it is a status light, not an action. */
+	.skaldr-live{position:fixed; bottom:var(--s3); left:var(--s3); z-index:50;
+		padding:4px 10px; border:1px solid var(--line); border-radius:var(--r-inner);
+		background:var(--surface); color:var(--muted); box-shadow:var(--shadow);
+		font:inherit; font-size:11px; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer;
+		opacity:0.55;
+		&:hover{opacity:1; color:var(--ink)}
+		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}
+		&:disabled{cursor:default; opacity:0.35}}
 }
 
 @layer print {
@@ -792,7 +804,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   whole page uniformly for a denser, more document-like PDF — this is the print-density knob:
 		   lower = smaller fonts + more content per page (try 0.80–0.90). */
 		.wrap{max-width:none; padding:0; zoom:0.75}
-		.sc{display:none}
+		.sc,.skaldr-live{display:none}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}

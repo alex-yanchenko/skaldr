@@ -763,6 +763,16 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& button.on{background:var(--hdr); color:var(--hdr-fg)}
 		/* Negative offset keeps the focus ring inside the tightly-packed segment instead of clipping. */
 		& button:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}}
+	/* The --live badge. Bottom-left, opposite the settings button, so a self-refreshing page says so
+	   without covering it. Muted until hover: it is a status light, not an action. */
+	.skaldr-live{position:fixed; bottom:var(--s3); left:var(--s3); z-index:50;
+		padding:4px 10px; border:1px solid var(--line); border-radius:var(--r-inner);
+		background:var(--surface); color:var(--muted); box-shadow:var(--shadow);
+		font:inherit; font-size:11px; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer;
+		opacity:0.55;
+		&:hover{opacity:1; color:var(--ink)}
+		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}
+		&:disabled{cursor:default; opacity:0.35}}
 }
 
 @layer print {
@@ -778,7 +788,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   whole page uniformly for a denser, more document-like PDF — this is the print-density knob:
 		   lower = smaller fonts + more content per page (try 0.80–0.90). */
 		.wrap{max-width:none; padding:0; zoom:0.75}
-		.sc{display:none}
+		.sc,.skaldr-live{display:none}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}

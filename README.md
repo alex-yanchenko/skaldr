@@ -30,6 +30,25 @@ skaldr report.yaml --pdf report.pdf  # a ready-to-share PDF (drives a headless C
 open review.html                   # a self-contained file — open it, host it, or share it
 ```
 
+**Live preview without a watcher process.** `--watch` needs a process that stays alive, which an
+agent harness will not give you: Claude Code reaps background jobs between turns, so the watcher
+dies and the HTML goes quietly stale. Two flags cover the same ground with no daemon:
+
+```bash
+skaldr report.yaml -o review.html --live      # the page re-reads itself when you return to the tab
+skaldr report.yaml -o review.html --if-stale  # a no-op when the HTML is already current
+```
+
+Render once with `--live`, open the file, and leave the tab. Re-render after every edit with
+`--if-stale` (free when nothing changed), and the open tab picks it up on focus with your scroll
+position and open sections intact. `--live 2000` also polls every two seconds, for a second monitor
+where the tab never loses focus. A small "live" badge marks a self-refreshing page and turns it off
+when clicked.
+
+The page cannot poll for changes: its own CSP is `default-src 'none'`, which blocks every scripted
+network request, and a `file://` page could not fetch its own source anyway. So `--live` reloads on
+a signal it already has, which is you looking at the tab.
+
 That's the whole tool: point it at a content file, get an HTML page (or a PDF). A few more commands
 help you write the content file and share the result:
 

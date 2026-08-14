@@ -167,6 +167,7 @@ def _render(
     expand: bool = False,
     placeholders: set[str] | None = None,
     source: str | None = None,
+    live: int | None = None,
 ) -> str:
     env = _environment()
     slugs = compute.anchor_slugs(report)
@@ -203,6 +204,7 @@ def _render(
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         source_block=source_block(source) if source else None,
+        live=live,
     )
 
 
@@ -238,12 +240,16 @@ def extract_source(html: str) -> str | None:
     return match.group(1) if match else None
 
 
-def render_html(report: Report, *, expand: bool = False, source: str | None = None) -> str:
+def render_html(
+    report: Report, *, expand: bool = False, source: str | None = None, live: int | None = None
+) -> str:
     """A complete, self-contained HTML document — the default output. `expand` forces every
     collapsible `<details>` open; used for PDF output, where headless print can't run the
     beforeprint script that expands sections on screen. `source`, when given, is embedded as plain
-    text (see `source_block`) so the page carries its own recoverable YAML."""
-    return _render(report, "page.html.j2", expand=expand, source=source)
+    text (see `source_block`) so the page carries its own recoverable YAML. `live`, when given,
+    adds the self-refreshing reloader (see `_live_reload.html.j2`); the integer is a polling
+    interval in milliseconds, and 0 means refresh on focus alone."""
+    return _render(report, "page.html.j2", expand=expand, source=source, live=live)
 
 
 def find_placeholders(report: Report) -> list[str]:
@@ -265,11 +271,20 @@ def render_embed(report: Report, *, source: str | None = None) -> str:
     return _render(report, "embed.html.j2", source=source)
 
 
-def render_report(report: Report, out_path: Path, *, embed: bool = False, source: str | None = None) -> None:
+def render_report(
+    report: Report,
+    out_path: Path,
+    *,
+    embed: bool = False,
+    source: str | None = None,
+    live: int | None = None,
+) -> None:
     """Write an already-loaded report to `out_path` (no re-read of the source file). `source`, when
     given, is embedded — in the full page AND in an `--embed` fragment — so the artifact carries its own
-    recoverable YAML. Pass source=None (or render with --no-source) to suppress it."""
-    html = render_embed(report, source=source) if embed else render_html(report, source=source)
+    recoverable YAML. Pass source=None (or render with --no-source) to suppress it. `live` is ignored
+    for an `--embed` fragment: those get published as Artifacts, and a shared page that reloads itself
+    on someone else's screen is never what the author meant."""
+    html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
 

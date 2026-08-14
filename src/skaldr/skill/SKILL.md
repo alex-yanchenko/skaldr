@@ -2,7 +2,7 @@
 name: skaldr
 description: >-
   Author and render reports and structured documentation with skaldr — one YAML file becomes a
-  polished, self-contained HTML page (live-rendered with `--watch`), so you never hand-write
+  polished, self-contained HTML page, so you never hand-write
   HTML/CSS. Reach for it, without waiting to be asked, whenever you'd produce a report or a document
   with structure: investigations, reviews, audits, post-mortems, proposals, data-quality/ingestion
   writeups, and especially ongoing status pages, plans, and trackers kept updated over time —
@@ -21,7 +21,7 @@ skaldr is a **CLI already on your PATH** — do not look for a source repo, a `u
 HTML page and owns all the design.
 
 It covers visual structure (flows, tables, cards, charts, timelines) plus living-doc support
-(freshness stamps, `!include`, rollups, `--watch`). Run `skaldr --guide` for the full block palette.
+(freshness stamps, `!include`, rollups, `--live`). Run `skaldr --guide` for the full block palette.
 
 **If it turns out not to fit** — the content is really freeform prose, or a diagram skaldr can't
 express, or `skaldr` isn't on PATH — say so in one line and fall back to markdown or hand-authored
@@ -47,8 +47,9 @@ fabrication, so honesty is on you.
    `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
    report.yaml`.
 5. **Surface it, local-first.** A skaldr page needn't be a one-shot deliverable — it can be a live
-   working doc you keep updating (`skaldr --watch report.yaml -o report.html` re-renders on every
-   save). Either way, hand over (or open) the rendered file — private by default. Publish a
+   working doc: render once with `--live`, then `--if-stale` after each edit. (Not `--watch`: it
+   needs a process this harness reaps between turns.) Either way, hand over (or open) the rendered
+   file — private by default. Publish a
    claude.ai Artifact only if the user wants to share it, and only with non-sensitive data — never
    real customer, personal, or privileged content on a surface that leaves the machine. To publish,
    render with `skaldr report.yaml --embed -o report.html` and publish *that*: `--embed` drops the
