@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.10.0](https://github.com/alex-yanchenko/skaldr/compare/v2.9.0...v2.10.0) (2026-08-14)
+
+
+### Features
+
+* **swimlane:** align number badges to a uniform width ([#125](https://github.com/alex-yanchenko/skaldr/issues/125)) ([56bf69e](https://github.com/alex-yanchenko/skaldr/commit/56bf69e6c041a49eca97cc053d2cebd6a145376e))
+
+
+### Bug Fixes
+
+* **swimlane:** right-align the number in the badge (tabular) ([#127](https://github.com/alex-yanchenko/skaldr/issues/127)) ([3e12d8a](https://github.com/alex-yanchenko/skaldr/commit/3e12d8a8bb5bbee256a2c7462594729aad5f1d9d))
+
 ## [2.9.0](https://github.com/alex-yanchenko/skaldr/compare/v2.8.0...v2.9.0) (2026-08-13)
 
 
