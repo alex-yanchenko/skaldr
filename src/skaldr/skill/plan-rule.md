@@ -17,9 +17,9 @@ for the block palette), not a chat dump or a throwaway `.md`, and render it live
 - **The YAML is the single source of truth.** Every plan or status change goes in it and is
   re-rendered. Never scatter status into sidecar `.md` files: that leaves the rendered doc stale and
   makes the reader hunt across files for the current state.
-- **Shape it to the plan:** a `status_list` or `swimlane` of phases/tasks carrying state
-  (done/current/pending/failed/blocked), a `callout` for open questions, a `table` with a `rollup` for
-  done-vs-total, and `section.updated` for per-section freshness.
+- **Shape it to the plan:** a `status_list` (done/current/pending/failed/blocked) or `swimlane`
+  (done/current/todo/blocked/deferred) of phases/tasks, a `callout` for open questions, a `table` with
+  a `rollup` for done-vs-total, and `section.updated` for per-section freshness.
 - **Keep it current:** update `plan.yaml` after each significant implementation step, and refresh it
   **before any context compaction**. A plan older than the working tree is drift.
 
