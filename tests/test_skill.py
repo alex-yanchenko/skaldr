@@ -273,6 +273,57 @@ def test_install_plan_rule_never_builds_on_an_unpaired_marker(tmp_path: Path) ->
     assert claude_md.count(_PLAN_RULE_END) == 1  # exactly one complete managed block
 
 
+_LEGACY_BEGIN = "<!-- skaldr:plan-rule - managed by `skaldr --install-skill`; delete this block to remove -->"
+
+
+def test_install_plan_rule_replaces_a_block_written_with_a_legacy_marker(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text(
+        f"# Header\n\n{_LEGACY_BEGIN}\n# Working plans\n\nold guidance\n{_PLAN_RULE_END}\n",
+        encoding="utf-8",
+    )
+
+    assert install_plan_rule(home=tmp_path) == 0
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert claude_md.count(_PLAN_RULE_END) == 1
+    assert _LEGACY_BEGIN not in claude_md
+    assert "old guidance" not in claude_md
+    assert "# Header" in claude_md
+
+
+def test_install_plan_rule_collapses_blocks_left_by_two_marker_generations(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text(
+        f"# Header\n\n{_LEGACY_BEGIN}\nfirst generation\n{_PLAN_RULE_END}\n\n"
+        f"{_PLAN_RULE_BEGIN}\nsecond generation\n{_PLAN_RULE_END}\n",
+        encoding="utf-8",
+    )
+
+    assert install_plan_rule(home=tmp_path) == 0
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert claude_md.count(_PLAN_RULE_END) == 1
+    assert "first generation" not in claude_md
+    assert "second generation" not in claude_md
+    assert "# Header" in claude_md
+
+
+def test_install_plan_rule_leaves_an_unpaired_legacy_marker_alone(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.write_text(f"# Header\n\n{_LEGACY_BEGIN}\nhalf-written\n\nreal content below\n", encoding="utf-8")
+
+    assert install_plan_rule(home=tmp_path) == 0
+    assert install_plan_rule(home=tmp_path) == 0
+
+    claude_md = md_path.read_text(encoding="utf-8")
+    assert "real content below" in claude_md
+    assert claude_md.count(_PLAN_RULE_END) == 1
+
+
 def test_install_plan_rule_reports_a_claude_md_write_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

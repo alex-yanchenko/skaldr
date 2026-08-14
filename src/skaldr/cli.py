@@ -42,10 +42,11 @@ _PLAN_RULE_END = "<!-- /skaldr:plan-rule -->"
 # Match one COMPLETE block only. The tempered body `(?:(?!BEGIN|END).)*` refuses to span another
 # marker, so a stray unpaired BEGIN can never pair with a later block's END and swallow the user's
 # content between them — the rule body itself never contains a marker, so this stays exact.
+_PLAN_RULE_BEGIN_ANY_VERSION = r"<!-- skaldr:plan-rule\b[^\n]*-->"
 _PLAN_RULE_BLOCK = re.compile(
-    re.escape(_PLAN_RULE_BEGIN)
+    _PLAN_RULE_BEGIN_ANY_VERSION
     + r"(?:(?!"
-    + re.escape(_PLAN_RULE_BEGIN)
+    + _PLAN_RULE_BEGIN_ANY_VERSION
     + r"|"
     + re.escape(_PLAN_RULE_END)
     + r").)*"
