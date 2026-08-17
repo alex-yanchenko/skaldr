@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/alex-yanchenko/skaldr/compare/v2.10.0...v2.11.0) (2026-08-17)
+
+
+### Features
+
+* **cli:** keep a page live without a watcher process (--live, --if-stale) ([#128](https://github.com/alex-yanchenko/skaldr/issues/128)) ([9601c0d](https://github.com/alex-yanchenko/skaldr/commit/9601c0d5906518b7ff7c16ccd918a3ac09dd55d5))
+
 ## [2.10.0](https://github.com/alex-yanchenko/skaldr/compare/v2.9.0...v2.10.0) (2026-08-14)
 
 
