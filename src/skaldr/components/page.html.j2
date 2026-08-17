@@ -6,18 +6,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
-     (fetch/XHR/beacon/img/websocket); the two script hashes admit only skaldr's own inline scripts,
+     (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output — if a
-     script changes, that test fails until the hash below is updated. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U='; base-uri 'none'; form-action 'none'">
+     script changes, that test fails until the hash below is updated. The third hash is the --live
+     reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
+     keeping the policy string constant means --live can't weaken it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>{{ meta.title }}</title>
 {% if source_block %}{{ source_block }}
 {% endif %}<style>{{ styles | safe }}</style>
 {% include "_theme_boot.html.j2" %}
 </head>
-<body>
+<body{% if live is not none %} data-skaldr-live="{{ live }}"{% endif %}>
 {% include "_content.html.j2" %}
 {% include "_controls.html.j2" %}
-</body>
+{% if live is not none %}{% include "_live_reload.html.j2" %}{% endif %}</body>
 </html>

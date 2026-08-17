@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -513,7 +514,14 @@ def test_watch_re_renders_only_when_the_file_changes(
     out_path = tmp_path / "out.html"
     renders: list[Path] = []
 
-    def fake_render(_dp: Path, op: Path, *, embed: bool, no_source: bool = False) -> int:  # noqa: ARG001
+    def fake_render(
+        _dp: Path,
+        op: Path,
+        *,
+        embed: bool,  # noqa: ARG001
+        no_source: bool = False,  # noqa: ARG001
+        live: int | None = None,  # noqa: ARG001
+    ) -> int:
         renders.append(op)
         return 0
 
@@ -564,7 +572,14 @@ def test_watch_exits_cleanly_on_interrupt_during_the_initial_render(
 ) -> None:
     # Ctrl-C landing during the very first render must still exit cleanly (the initial render is inside
     # the interrupt handler, not before it).
-    def interrupt(_dp: Path, _op: Path, *, embed: bool, no_source: bool = False) -> int:  # noqa: ARG001
+    def interrupt(
+        _dp: Path,
+        _op: Path,
+        *,
+        embed: bool,  # noqa: ARG001
+        no_source: bool = False,  # noqa: ARG001
+        live: int | None = None,  # noqa: ARG001
+    ) -> int:
         raise KeyboardInterrupt
 
     monkeypatch.setattr("skaldr.cli._render_once", interrupt)
@@ -596,3 +611,112 @@ def test_watch_survives_a_render_error_that_is_not_a_report_error(
     captured = capsys.readouterr()
     assert rc == 0  # the ValueError was caught; the loop reached the interrupt
     assert "boom" in captured.err
+
+
+def test_live_adds_the_reloader_and_its_default_is_focus_only(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path), "--live"]) == 0
+
+    html = out_path.read_text(encoding="utf-8")
+    assert 'data-skaldr-live="0"' in html
+    assert "visibilitychange" in html
+    assert html.count("<script>") == 3
+
+
+def test_live_with_an_interval_carries_it_as_the_poll_period(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path), "--live", "500"]) == 0
+
+    assert 'data-skaldr-live="500"' in out_path.read_text(encoding="utf-8")
+
+
+def test_a_page_rendered_without_live_carries_no_reloader(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+
+    html = out_path.read_text(encoding="utf-8")
+    assert "data-skaldr-live" not in html
+    assert "skaldr:live:" not in html
+    assert html.count("<script>") == 2
+
+
+def test_live_is_refused_for_an_embed_fragment_which_ships_as_a_shared_artifact(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as exc:
+        main([str(data_path), "-o", str(tmp_path / "o.html"), "--embed", "--live"])
+
+    assert exc.value.code == 2
+    assert "--embed" in capsys.readouterr().err
+
+
+def test_live_is_refused_for_the_validate_only_modes(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    for mode in ("--check", "--emit-json"):
+        with pytest.raises(SystemExit) as exc:
+            main([mode, str(data_path), "--live"])
+        assert exc.value.code == 2
+
+
+def test_live_refuses_a_negative_interval(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as exc:
+        main([str(data_path), "-o", str(tmp_path / "o.html"), "--live", "-5"])
+
+    assert exc.value.code == 2
+
+
+def test_if_stale_skips_a_render_when_the_output_is_current(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    assert out_path.stat().st_mtime_ns == first
+    assert "up to date" in capsys.readouterr().out
+
+
+def test_if_stale_renders_when_the_content_file_is_newer(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    first = out_path.stat().st_mtime_ns
+    stale = out_path.stat().st_mtime - 60
+    os.utime(out_path, (stale, stale))
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    assert out_path.stat().st_mtime_ns != first
+
+
+def test_if_stale_renders_when_the_output_does_not_exist(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    assert out_path.exists()
+
+
+def test_if_stale_is_refused_for_the_validate_only_modes(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    for mode in ("--check", "--emit-json"):
+        with pytest.raises(SystemExit) as exc:
+            main([mode, str(data_path), "--if-stale"])
+        assert exc.value.code == 2

@@ -1,5 +1,6 @@
-"""CLI entry point: render a content file (once or on a --watch loop), validate it (--check), dump its
-normalised model (--emit-json), print the guide, export the schema, or install the skill."""
+"""CLI entry point: render a content file (once, only when stale, or on a --watch loop), validate it
+(--check), dump its normalised model (--emit-json), print the guide, export the schema, or install
+the skill."""
 
 import argparse
 import json
@@ -41,10 +42,11 @@ _PLAN_RULE_END = "<!-- /skaldr:plan-rule -->"
 # Match one COMPLETE block only. The tempered body `(?:(?!BEGIN|END).)*` refuses to span another
 # marker, so a stray unpaired BEGIN can never pair with a later block's END and swallow the user's
 # content between them — the rule body itself never contains a marker, so this stays exact.
+_PLAN_RULE_BEGIN_ANY_VERSION = r"<!-- skaldr:plan-rule\b[^\n]*-->"
 _PLAN_RULE_BLOCK = re.compile(
-    re.escape(_PLAN_RULE_BEGIN)
+    _PLAN_RULE_BEGIN_ANY_VERSION
     + r"(?:(?!"
-    + re.escape(_PLAN_RULE_BEGIN)
+    + _PLAN_RULE_BEGIN_ANY_VERSION
     + r"|"
     + re.escape(_PLAN_RULE_END)
     + r").)*"
@@ -121,7 +123,27 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="re-render to HTML on every save of the content file — a live edit-preview loop; Ctrl-C to "
         "stop. HTML only; can't combine with --check/--emit-json/--pdf. (Watches the file itself, not "
-        "its !include fragments.)",
+        "its !include fragments.) Needs a process that stays alive: under an agent harness that reaps "
+        "background jobs between turns, use --if-stale + --live instead.",
+    )
+    parser.add_argument(
+        "--if-stale",
+        action="store_true",
+        help="render only when the output is missing or older than the content file; otherwise print "
+        "'up to date' and exit 0. Makes an unconditional re-render after every edit free, so no watcher "
+        "process is needed.",
+    )
+    parser.add_argument(
+        "--live",
+        nargs="?",
+        const=0,
+        type=int,
+        metavar="MS",
+        help="add a self-refreshing reloader to the page: it re-reads itself from disk when you return "
+        "to the tab, so a re-render appears without a manual refresh. Scroll position and open sections "
+        "survive. Pass milliseconds to also poll on a timer (for a screen that never loses focus). Full "
+        "pages only — an --embed fragment is published as an Artifact and must not reload on a reader's "
+        "screen.",
     )
     parser.add_argument(
         "--write-schema",
@@ -183,6 +205,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--check/--emit-json only validate — they write no HTML, so -o/--pdf/--embed do nothing")
     if args.watch and (args.check or args.emit_json or args.pdf):
         parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
+    if args.live is not None and (args.check or args.emit_json or args.embed):
+        parser.error(
+            "--live adds a self-refreshing reloader to a full HTML page; it can't combine with "
+            "--check/--emit-json (they write no page) or --embed (an Artifact must not reload itself)"
+        )
+    if args.live is not None and args.live < 0:
+        parser.error("--live takes a poll interval in milliseconds, which cannot be negative")
+    if args.if_stale and (args.check or args.emit_json):
+        parser.error("--if-stale skips a render that would be redundant; --check/--emit-json render nothing")
     if args.strict and not args.check:
         parser.error("--strict only applies to --check (it gates unfilled placeholders during validation)")
 
@@ -199,7 +230,11 @@ def main(argv: list[str] | None = None) -> int:
     data_path = Path(args.data[0]).resolve()
 
     if args.watch:
-        return _watch(data_path, _resolve_out_path(data_path, args.out), embed=args.embed)
+        return _watch(data_path, _resolve_out_path(data_path, args.out), embed=args.embed, live=args.live)
+
+    if args.if_stale and not _is_stale(data_path, _resolve_out_path(data_path, args.out), pdf=args.pdf):
+        print(f"up to date  {_resolve_out_path(data_path, args.out)}")
+        return 0
 
     if args.emit_json:
         try:
@@ -223,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.out or not args.pdf:
             out_path = _resolve_out_path(data_path, args.out)
             source = None if args.no_source else data_path.read_text(encoding="utf-8")
-            render_report(report, out_path, embed=args.embed, source=source)
+            render_report(report, out_path, embed=args.embed, source=source, live=args.live)
             written.append(out_path)
         if args.pdf:
             # PDF prints the full page with every section expanded: the print CSS needs the whole
@@ -242,13 +277,27 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _render_once(data_path: Path, out_path: Path, *, embed: bool, no_source: bool = False) -> int:
+def _is_stale(data_path: Path, out_path: Path, *, pdf: str | None = None) -> bool:
+    """Whether `out_path` needs rebuilding: missing, or older than the content file. A --pdf run is
+    always stale, since the PDF is a second output this comparison doesn't see."""
+    if pdf:
+        return True
+    out_mtime = _mtime(out_path)
+    if out_mtime is None:
+        return True
+    data_mtime = _mtime(data_path)
+    return data_mtime is None or data_mtime > out_mtime
+
+
+def _render_once(
+    data_path: Path, out_path: Path, *, embed: bool, no_source: bool = False, live: int | None = None
+) -> int:
     """Render the content file to HTML once. Returns 0 on success, 1 on a load/render error (printed) —
     it never raises, so the --watch loop survives an invalid mid-edit save."""
     try:
         report = load_report(data_path)
         source = None if no_source else data_path.read_text(encoding="utf-8")
-        render_report(report, out_path, embed=embed, source=source)
+        render_report(report, out_path, embed=embed, source=source, live=live)
     except Exception as exc:
         # Resilience boundary: any render failure prints and keeps the --watch loop alive. Catching
         # Exception (not BaseException) still lets a Ctrl-C KeyboardInterrupt propagate to the loop.
@@ -274,12 +323,13 @@ def _watch(
     embed: bool,
     no_source: bool = False,
     interval: float = _POLL_INTERVAL_SECONDS,
+    live: int | None = None,
 ) -> int:
     """Re-render to HTML whenever the content file changes, until interrupted. Polls the mtime (no
     third-party watcher); a failing render prints its error and the loop keeps going."""
     print(f"watching {data_path} — re-rendering to {out_path} on change (Ctrl-C to stop)")
     try:
-        _render_once(data_path, out_path, embed=embed, no_source=no_source)
+        _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
         last = _mtime(data_path)
         while True:
             time.sleep(interval)
@@ -287,7 +337,7 @@ def _watch(
             if current is not None and current != last:
                 last = current
                 print(f"\n{data_path} changed — re-rendering:")
-                _render_once(data_path, out_path, embed=embed)
+                _render_once(data_path, out_path, embed=embed, live=live)
     except KeyboardInterrupt:
         print("\nstopped watching")
         return 0
