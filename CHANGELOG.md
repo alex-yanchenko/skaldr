@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.1](https://github.com/alex-yanchenko/skaldr/compare/v2.11.0...v2.11.1) (2026-08-20)
+
+
+### Miscellaneous Chores
+
+* **release:** force 2.11.1 so the corrected skill text reaches users ([#132](https://github.com/alex-yanchenko/skaldr/issues/132)) ([cb99904](https://github.com/alex-yanchenko/skaldr/commit/cb99904b810c830da82f285d1c27e059cf276b25))
+
 ## [2.11.0](https://github.com/alex-yanchenko/skaldr/compare/v2.10.0...v2.11.0) (2026-08-17)
 
 
