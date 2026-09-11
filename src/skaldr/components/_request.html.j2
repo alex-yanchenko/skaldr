@@ -1,0 +1,92 @@
+<script>
+(function () {
+	var blocks = document.querySelectorAll(".rq");
+	if (!blocks.length) return;
+
+	function shellSafe(value) {
+		return value.replace(/'/g, "'\\''");
+	}
+
+	function fillSlots(block) {
+		var values = {};
+		block.querySelectorAll("[data-rq-var]").forEach(function (input) {
+			values[input.dataset.rqVar] = input.value.trim();
+		});
+		block.querySelectorAll("[data-rq-slot]").forEach(function (slot) {
+			var name = slot.dataset.rqSlot;
+			var value = values[name];
+			if (!value) {
+				slot.textContent = "‹" + name + "›";
+				slot.removeAttribute("data-rq-filled");
+				return;
+			}
+			slot.textContent = slot.dataset.rqQuote === "shell" ? shellSafe(value) : value;
+			slot.setAttribute("data-rq-filled", "");
+		});
+	}
+
+	function selectText(node) {
+		var range = document.createRange();
+		range.selectNodeContents(node);
+		var selection = window.getSelection();
+		if (!selection) return false;
+		selection.removeAllRanges();
+		selection.addRange(range);
+		return true;
+	}
+
+	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
+	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
+	   command leaves the reader one keystroke away in every case the API refuses. */
+	function copyCommand(button, node) {
+		var text = node.textContent;
+		var settle = function (label) {
+			var original = button.dataset.rqLabel || button.textContent;
+			button.dataset.rqLabel = original;
+			button.textContent = label;
+			setTimeout(function () { button.textContent = button.dataset.rqLabel; }, 1600);
+		};
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(function () { settle("Copied"); }).catch(function () {
+				settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+			});
+			return;
+		}
+		settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+	}
+
+	blocks.forEach(function (block) {
+		fillSlots(block);
+
+		block.addEventListener("input", function (event) {
+			if (event.target.dataset.rqVar) fillSlots(block);
+		});
+
+		block.addEventListener("click", function (event) {
+			var reveal = event.target.closest(".rq-reveal");
+			if (reveal) {
+				var input = reveal.parentNode.querySelector("input");
+				var hidden = input.type === "password";
+				input.type = hidden ? "text" : "password";
+				reveal.textContent = hidden ? "hide" : "show";
+				return;
+			}
+			var copy = event.target.closest(".rq-copy");
+			if (copy) {
+				copyCommand(copy, copy.closest(".rq-pane").querySelector(".rq-cmd"));
+				return;
+			}
+			var tab = event.target.closest("[data-rq-tab]");
+			if (!tab) return;
+			var chosen = tab.dataset.rqTab;
+			block.querySelectorAll("[data-rq-tab]").forEach(function (each) {
+				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
+			});
+			block.querySelectorAll("[data-rq-case]").forEach(function (each) {
+				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
+				else each.setAttribute("data-rq-hidden", "");
+			});
+		});
+	});
+})();
+</script>

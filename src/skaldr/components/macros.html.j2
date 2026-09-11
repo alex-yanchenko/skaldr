@@ -206,6 +206,40 @@
 <div class="card {{ c.tone or b.tone }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
 {% endmacro %}
 
+{% macro variable_slots(text, quoting="none") %}{% for literal, name in variable_parts(text) %}{{ literal }}{% if name %}<span class="rq-slot" data-rq-slot="{{ name }}" data-rq-quote="{{ quoting }}">&lsaquo;{{ name }}&rsaquo;</span>{% endif %}{% endfor %}{% endmacro %}
+
+{% macro request(block) %}
+<section class="rq">
+<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
+{% if block.variables %}
+<div class="rq-vars">
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">This tab only. Never saved, never in the source, never in the PDF.</span></div>
+<div class="rq-fields">
+{% for v in block.variables %}
+<label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">secret</span>{% endif %}</span><span class="rq-inrow"><input type="{% if v.secret %}password{% else %}text{% endif %}" data-rq-var="{{ v.name }}" autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}>{% if v.secret %}<button type="button" class="rq-reveal" aria-label="Show value">show</button>{% endif %}</span></label>
+{% endfor %}
+</div>
+</div>
+{% endif %}
+{% if block.cases | length > 1 %}
+<div class="rq-tabs" role="tablist" aria-label="Recorded cases">{% for case in block.cases %}<button type="button" role="tab" data-rq-tab="{{ loop.index0 }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</button>{% endfor %}</div>
+{% endif %}
+{% for case in block.cases %}
+<div class="rq-case" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} data-rq-hidden{% endif %}>
+<h4 class="rq-case-hd">{{ case.label }}</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(block, case)) }}</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><button type="button" class="rq-copy">Copy command</button></div><pre class="rq-cmd">{{ variable_slots(request_command(block, case), "shell") }}</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status {{ status_tone(case.response) }}">{{ status_line(case.response) }}</span></div>
+{% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
+<pre class="rq-resp">{{ case.response.body }}</pre></div>
+{% if case.verdict %}
+<div class="rq-verdict {{ status_tone(case.response) }}"><span class="rq-vlbl">Verdict</span><span>{{ case.verdict | richtext }}</span></div>
+{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endmacro %}
+
 {% macro render_block(block) %}
 {%- if block.span %}<div class="blk span-{{ block.span }}">{% endif -%}
 {% if block.type == "heading" %}
@@ -258,6 +292,8 @@
 {{ references(block) }}
 {% elif block.type == "table" %}
 {{ table(block) }}
+{% elif block.type == "request" %}
+{{ request(block) }}
 {% elif block.type == "section" %}
 <details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "panel" %}

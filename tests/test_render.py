@@ -42,8 +42,9 @@ UNLAYERED_ESSENTIALS = (
 
 def test_example_render_matches_golden() -> None:
     """Pins the full page. On an intended change, regenerate with:
-    uv run skaldr data/example.yaml -o tests/golden/example.html
-    and review the HTML diff in the PR."""
+    uv run skaldr data/example.yaml -o tests/golden/example.html --no-source
+    and review the HTML diff in the PR. The flag matters: this compares against a render that was
+    given no source, so a golden carrying the embedded source block fails on 390 phantom lines."""
     report = load_report(REPO_ROOT / "data" / "example.yaml")
 
     assert render_html(report) == GOLDEN.read_text(encoding="utf-8")

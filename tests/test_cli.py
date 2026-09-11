@@ -640,7 +640,7 @@ def test_live_adds_the_reloader_and_its_default_is_focus_only(tmp_path: Path) ->
     html = out_path.read_text(encoding="utf-8")
     assert 'data-skaldr-live="0"' in html
     assert "visibilitychange" in html
-    assert html.count("<script>") == 3
+    assert html.count("<script>") == 4
 
 
 def test_live_with_an_interval_carries_it_as_the_poll_period(tmp_path: Path) -> None:
@@ -661,7 +661,7 @@ def test_a_page_rendered_without_live_carries_no_reloader(tmp_path: Path) -> Non
     html = out_path.read_text(encoding="utf-8")
     assert "data-skaldr-live" not in html
     assert "skaldr:live:" not in html
-    assert html.count("<script>") == 2
+    assert html.count("<script>") == 3
 
 
 def test_live_is_refused_for_an_embed_fragment_which_ships_as_a_shared_artifact(

@@ -155,6 +155,11 @@ def _environment() -> Environment:
         table_rollup=compute.table_rollup,
         matrix_grid=compute.matrix_grid,
         swimlane_layout=compute.swimlane_layout,
+        variable_parts=compute.variable_parts,
+        request_wire=compute.request_wire,
+        request_command=compute.request_command,
+        status_line=compute.status_line,
+        status_tone=compute.status_tone,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
     )
