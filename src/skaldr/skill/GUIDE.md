@@ -682,6 +682,11 @@ shared artifact URL — recovers the source **without** wading through the rende
 - `skaldr --extract-source report.html` (or an `http(s)://` URL) prints just the YAML.
 - Reading the top of the file (or a fetch) reaches the source block before the CSS.
 
+Slicing the text between the scissor markers yourself gives the YAML verbatim, with one exception the
+markers announce: a source that itself contains `</script>` would end the block early, so that one is
+written with a backslash in front of every `</script` and its begin marker reads
+`skaldr source (yaml, backslash-escaped)`. Prefer `--extract-source`, which undoes it for you.
+
 A top-of-file comment tells agents this. Pass `--no-source` to omit the embed (e.g. a shared page
 whose authoring notes shouldn't ship). The `--embed` fragment carries it too — that's the artifact
 case, where the page is shared as a URL an agent later has to read back.

@@ -215,42 +215,72 @@ def _render(
 # read it back, so an agent recovers the source without parsing the rendered HTML. A `<script>` is a
 # raw-text element: only the literal `</script>` ends it, so YAML's `<`, `&`, `--`, quotes are all safe.
 _SOURCE_BEGIN = "--8<-- skaldr source (yaml) --8<--"
+_SOURCE_BEGIN_ESCAPED = "--8<-- skaldr source (yaml, backslash-escaped) --8<--"
 _SOURCE_END = "--8<-- end skaldr source --8<--"
-_SOURCE_RE = re.compile(re.escape(_SOURCE_BEGIN) + r"\n(.*?)\n" + re.escape(_SOURCE_END), re.DOTALL)
+_SOURCE_RE = re.compile(
+    "("
+    + re.escape(_SOURCE_BEGIN_ESCAPED)
+    + "|"
+    + re.escape(_SOURCE_BEGIN)
+    + r")\n(.*?)\n"
+    + re.escape(_SOURCE_END),
+    re.DOTALL,
+)
 _SCRIPT_CLOSE = re.compile(r"<(\\*)(/script)", re.IGNORECASE)
 
 
 def hide_script_close(source: str) -> str:
     """`source` with every `</script` made unable to terminate the raw-text element carrying it, by
-    inserting a backslash. Backslashes already sitting there are doubled first, so a run of n becomes
-    2n+1 and `show_script_close` recovers the original exactly."""
+    inserting a backslash. Every way an HTML tokenizer can leave raw text gates on the character after
+    `<` being `/`, so one backslash there closes all of them. Backslashes already in front of the slash
+    are doubled first, taking a run of n to 2n+1, which is what lets `show_script_close` recover the
+    original exactly. A source holding no `</script` comes back unchanged."""
     return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * (2 * len(m.group(1)) + 1) + m.group(2), source)
 
 
 def show_script_close(source: str) -> str:
-    """The inverse of `hide_script_close`: a run of 2n+1 backslashes goes back to n."""
-    return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * ((len(m.group(1)) - 1) // 2) + m.group(2), source)
+    """The inverse of `hide_script_close`: a run of 2n+1 backslashes goes back to n. Apply it only to a
+    block whose marker is `_SOURCE_BEGIN_ESCAPED`, because an even-length run is one `hide_script_close`
+    never wrote, and quietly halving it would invent a source nobody authored."""
+
+    def restore(match: re.Match[str]) -> str:
+        run = len(match.group(1))
+        if run % 2 == 0:
+            raise ReportError(
+                f"embedded source is not in the escaped form its marker promises: {match.group(0)!r}"
+            )
+        return "<" + "\\" * ((run - 1) // 2) + match.group(2)
+
+    return _SCRIPT_CLOSE.sub(restore, source)
 
 
 def source_block(source: str) -> Markup:
     """The inert, self-documenting block carrying the page's own YAML `source` as plain text. Its header
     names the recovery command, so a reader who finds it (or a fetch that returns only it) gets usable
-    YAML and knows where it came from — no decode, no HTML parsing."""
+    YAML and knows where it came from — no decode, no HTML parsing. The one exception is a source that
+    itself contains `</script`, which would end the block early: that one is backslash-escaped and says
+    so in its own begin marker, so a reader slicing the text raw can see that it needs undoing."""
+    hidden = hide_script_close(source)
+    begin = _SOURCE_BEGIN if hidden == source else _SOURCE_BEGIN_ESCAPED
     return Markup(
         '<script type="application/yaml" id="skaldr-source">\n'
         "# skaldr embeds this page's editable YAML source below, so an agent can recover it WITHOUT\n"
         "# reading the rendered HTML/CSS. Recover it with `skaldr --extract-source <file-or-url>`, or\n"
         "# read only the lines between the scissor markers. This block does not affect rendering.\n"
-        f"{_SOURCE_BEGIN}\n{hide_script_close(source)}\n{_SOURCE_END}\n"
+        f"{begin}\n{hidden}\n{_SOURCE_END}\n"
         "</script>"
     )
 
 
 def extract_source(html: str) -> str | None:
     """Recover the plain-text YAML source embedded by `source_block`, or None if the page carries none
-    (an older render, or one written with --no-source). The inverse of what `source_block` writes."""
+    (an older render, or one written with --no-source). The inverse of what `source_block` writes: a
+    block marked escaped is unescaped, and every other block — including one written before escaping
+    existed — is returned exactly as it sits on the page."""
     match = _SOURCE_RE.search(html)
-    return show_script_close(match.group(1)) if match else None
+    if match is None:
+        return None
+    return show_script_close(match.group(2)) if match.group(1) == _SOURCE_BEGIN_ESCAPED else match.group(2)
 
 
 def render_html(
