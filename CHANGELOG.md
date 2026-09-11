@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.2](https://github.com/alex-yanchenko/skaldr/compare/v2.11.1...v2.11.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **render:** stop authored content from ending the embedded source block ([#134](https://github.com/alex-yanchenko/skaldr/issues/134)) ([af26a16](https://github.com/alex-yanchenko/skaldr/commit/af26a169dff1afd06b0df6bc27461d4287758835))
+
 ## [2.11.1](https://github.com/alex-yanchenko/skaldr/compare/v2.11.0...v2.11.1) (2026-08-20)
 
 
