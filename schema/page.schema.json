@@ -2462,6 +2462,7 @@
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
+                "request": "#/$defs/Request",
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
@@ -2545,6 +2546,9 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/Request"
               }
             ]
           },
@@ -2871,6 +2875,290 @@
       "title": "References",
       "type": "object"
     },
+    "Request": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "request",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "description": "What the request is for, shown in the block header.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "description": "The HTTP method.",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "url": {
+          "description": "The full URL. May carry `{{variable}}` tokens.",
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Request headers as a map, in the order they should read. A value may carry `{{variable}}` tokens.",
+          "title": "Headers",
+          "type": "object"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential can sit inside a JSON login payload without ever being written here.",
+          "title": "Body"
+        },
+        "variables": {
+          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
+          "items": {
+            "$ref": "#/$defs/RequestVariable"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "case_variable": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `{{name}}` each case supplies, for cases that differ by one value such as a resource name. Omit when the cases differ by headers instead, or when there is only one.",
+          "title": "Case Variable"
+        },
+        "cases": {
+          "description": "One entry per recorded outcome. Tabs on screen, stacked under their own headings when printed, because a tab must never hide evidence on paper.",
+          "items": {
+            "$ref": "#/$defs/RequestCase"
+          },
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "label",
+        "method",
+        "url",
+        "cases"
+      ],
+      "title": "Request",
+      "type": "object"
+    },
+    "RequestCase": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Tab label, and the case's heading when printed.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What this case supplies for the block's `case_variable`. Defaults to `label`, which is what you want when the cases are resource names.",
+          "title": "Value"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Replace the request's headers for this case alone. Omit to inherit them; give an empty map to send none, which is how you record what happens with the auth header removed.",
+          "title": "Headers"
+        },
+        "response": {
+          "$ref": "#/$defs/RequestResponse",
+          "description": "What came back when you ran it."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rich-text reading of this response: what you expected, what you got, what it means. The one part of the block a reader cannot work out for themselves.",
+          "title": "Verdict"
+        }
+      },
+      "required": [
+        "label",
+        "response"
+      ],
+      "title": "RequestCase",
+      "type": "object"
+    },
+    "RequestResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "ge": 100,
+              "le": 599,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The status you recorded. Omit for a response with no status line, such as a bare token from `curl -s`. The case's tone follows this number, so you never pick one.",
+          "title": "Status"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The reason phrase. Omit and skaldr supplies the standard text for the status, which is what an HTTP/2 response needs since it carries no reason phrase.",
+          "title": "Reason"
+        },
+        "headers": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "description": "Response headers worth keeping, in the order you want them read. Give a list for a header that legitimately repeats, such as `Set-Cookie`.",
+          "title": "Headers",
+          "type": "object"
+        },
+        "body": {
+          "description": "The body, verbatim. JSON is pretty-printed for display.",
+          "title": "Body",
+          "type": "string"
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "title": "RequestResponse",
+      "type": "object"
+    },
+    "RequestVariable": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The token a reader fills, written `{{name}}` in the url, a header value or the body. ASCII letters, digits, _ and -.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Field label above the input. Defaults to `name`.",
+          "title": "Label"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A sample value, prefilled into the input so the request can be run as it stands. On a `secret` it is placeholder text only and is never prefilled, since a prefilled secret would be a secret stored in the YAML.",
+          "title": "Example"
+        },
+        "secret": {
+          "default": false,
+          "description": "Render the input as a password field with a reveal toggle, and never prefill it. What the reader types stays in their browser tab: it reaches neither the page, nor the embedded source, nor the PDF.",
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "RequestVariable",
+      "type": "object"
+    },
     "Rollup": {
       "additionalProperties": false,
       "properties": {
@@ -2985,6 +3273,7 @@
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
+                "request": "#/$defs/Request",
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
@@ -3068,6 +3357,9 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/Request"
               }
             ]
           },
@@ -4028,6 +4320,7 @@
             "quote": "#/$defs/Quote",
             "range": "#/$defs/Range",
             "references": "#/$defs/References",
+            "request": "#/$defs/Request",
             "section": "#/$defs/Section",
             "status_list": "#/$defs/StatusList",
             "swimlane": "#/$defs/Swimlane",
@@ -4113,6 +4406,9 @@
           },
           {
             "$ref": "#/$defs/References"
+          },
+          {
+            "$ref": "#/$defs/Request"
           },
           {
             "$ref": "#/$defs/Section"

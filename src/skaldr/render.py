@@ -24,6 +24,7 @@ from skaldr.models import (
     Section,
     load_report,
     package_text,
+    unresolvable_request_variables,
 )
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -301,7 +302,7 @@ def find_placeholders(report: Report) -> list[str]:
     to refuse a doc that still has blanks."""
     seen: set[str] = set()
     _render(report, "page.html.j2", placeholders=seen)
-    return sorted(seen)
+    return sorted(seen | unresolvable_request_variables(report.blocks))
 
 
 def render_embed(report: Report, *, source: str | None = None) -> str:
