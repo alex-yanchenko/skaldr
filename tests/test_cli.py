@@ -53,6 +53,24 @@ def test_render_embeds_source_and_extract_source_recovers_it(
     assert recovered == data_path.read_text(encoding="utf-8")  # exact round-trip, no HTML/CSS
 
 
+def test_extract_source_recovers_a_source_that_carries_a_closing_script_tag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = tmp_path / "hostile.yaml"
+    data_path.write_text(
+        'version: 1\nmeta: {title: T}\nblocks:\n  - {type: code, content: "</script><img onerror=x>"}\n',
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "report.html"
+
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    capsys.readouterr()
+    assert main(["--extract-source", str(out_path)]) == 0
+
+    assert "</script><img onerror=x>" not in out_path.read_text(encoding="utf-8")
+    assert capsys.readouterr().out == data_path.read_text(encoding="utf-8")
+
+
 def test_no_source_suppresses_the_embed(tmp_path: Path) -> None:
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"

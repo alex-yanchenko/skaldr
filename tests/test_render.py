@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+from collections.abc import Callable
 
 import pytest
 
@@ -9,9 +10,11 @@ from skaldr.models import Report, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
+    hide_script_close,
     render_embed,
     render_html,
     render_richtext,
+    show_script_close,
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
@@ -1693,6 +1696,88 @@ def test_embedded_source_round_trips_through_extract_source_with_specials() -> N
 
     # plain-text embed survives HTML-special chars (`<`, `&`, `--`) with no escaping/decoding
     assert extract_source(html) == _SAMPLE_SOURCE
+
+
+def _source_carrying(payload: str) -> str:
+    return f'version: 1\nmeta: {{title: T}}\nblocks:\n  - {{type: code, content: "{payload}"}}\n'
+
+
+def _embedded_text(html: str) -> str:
+    start = html.index('id="skaldr-source">')
+    return html[start : html.index("--8<-- end skaldr source --8<--", start)]
+
+
+@pytest.mark.parametrize("render", [render_html, render_embed], ids=["page", "embed"])
+def test_a_closing_script_tag_in_the_source_cannot_end_the_source_block(
+    render: Callable[..., str],
+) -> None:
+    hostile = _source_carrying("</script><img onerror=alert(1)>")
+
+    html = render(parse_report(make_report()), source=hostile)
+
+    assert "</script><img onerror=alert(1)>" not in html
+    assert "<\\/script><img onerror=alert(1)>" in _embedded_text(html)
+    assert extract_source(html) == hostile
+
+
+@pytest.mark.parametrize(
+    ("plain", "hidden"),
+    [
+        ("</script>", "<\\/script>"),
+        ("</SCRIPT >", "<\\/SCRIPT >"),
+        ("<\\/script>", "<\\\\\\/script>"),
+        ("</script</script>", "<\\/script<\\/script>"),
+        ("nothing to hide", "nothing to hide"),
+        ("", ""),
+    ],
+    ids=["bare", "upper-with-space", "already-escaped", "adjacent", "no-match", "empty"],
+)
+def test_hiding_a_script_close_is_exactly_reversible(plain: str, hidden: str) -> None:
+    assert hide_script_close(plain) == hidden
+    assert show_script_close(hidden) == plain
+
+
+def test_hiding_leaves_no_sequence_that_can_end_a_raw_text_element() -> None:
+    for payload in ("</script>", "</SCRIPT/", "</script\t", "</script</script></script>", "<\\/script>"):
+        assert "</script" not in hide_script_close(payload).lower()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ["</script>", "</SCRIPT >", "a <\\/script> b", "</script</script></script>", "plain text"],
+    ids=["bare", "upper-with-space", "already-escaped", "adjacent", "no-match"],
+)
+def test_an_embedded_source_round_trips_whether_or_not_it_needed_escaping(payload: str) -> None:
+    source = _source_carrying(payload)
+
+    html = render_html(parse_report(make_report()), source=source)
+
+    assert "</script" not in _embedded_text(html).lower()
+    assert extract_source(html) == source
+
+
+def test_a_source_needing_no_escaping_keeps_the_plain_marker() -> None:
+    source = _source_carrying("nothing dangerous here")
+
+    html = render_html(parse_report(make_report()), source=source)
+
+    assert "backslash-escaped" not in html
+
+
+def test_a_page_written_before_escaping_existed_is_read_back_untouched() -> None:
+    legacy = (
+        '<script type="application/yaml" id="skaldr-source">\n'
+        "--8<-- skaldr source (yaml) --8<--\n"
+        "body: a <\\/script> written by hand\n"
+        "--8<-- end skaldr source --8<--\n"
+    )
+
+    assert extract_source(legacy) == "body: a <\\/script> written by hand"
+
+
+def test_unescaping_a_block_that_was_never_escaped_raises() -> None:
+    with pytest.raises(ReportError, match="not in the escaped form"):
+        show_script_close("a <\\\\/script> b")
 
 
 def test_render_without_source_embeds_no_block() -> None:
