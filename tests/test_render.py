@@ -1695,6 +1695,45 @@ def test_embedded_source_round_trips_through_extract_source_with_specials() -> N
     assert extract_source(html) == _SAMPLE_SOURCE
 
 
+def test_a_closing_script_tag_in_the_source_cannot_end_the_source_block() -> None:
+    payload = "</script><script>alert(1)</script>"
+    hostile = f'version: 1\nmeta: {{title: T}}\nblocks:\n  - {{type: code, content: "{payload}"}}\n'
+
+    html = render_html(parse_report(make_report()), source=hostile)
+
+    assert "<script>alert(1)</script>" not in html
+    assert "<\\/script><script>alert(1)<\\/script>" in html
+    assert extract_source(html) == hostile
+
+
+def test_a_closing_script_tag_in_the_embed_source_cannot_end_the_source_block() -> None:
+    hostile = 'version: 1\nmeta: {title: T}\nblocks:\n  - {type: code, content: "</script><img onerror=x>"}\n'
+
+    html = render_embed(parse_report(make_report()), source=hostile)
+
+    assert "<script>alert(1)</script>" not in html
+    assert extract_source(html) == hostile
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "</script>",
+        "</SCRIPT >",
+        "a <\\/script> b",
+        "a <\\\\/script> b",
+        "</script</script></script>",
+        "no closing tag here at all",
+    ],
+)
+def test_script_close_hiding_round_trips_exactly(payload: str) -> None:
+    source = f'version: 1\nmeta: {{title: T}}\nblocks:\n  - {{type: code, content: "{payload}"}}\n'
+
+    html = render_html(parse_report(make_report()), source=source)
+
+    assert extract_source(html) == source
+
+
 def test_render_without_source_embeds_no_block() -> None:
     html = render_html(parse_report(make_report()))
 

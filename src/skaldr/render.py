@@ -217,6 +217,19 @@ def _render(
 _SOURCE_BEGIN = "--8<-- skaldr source (yaml) --8<--"
 _SOURCE_END = "--8<-- end skaldr source --8<--"
 _SOURCE_RE = re.compile(re.escape(_SOURCE_BEGIN) + r"\n(.*?)\n" + re.escape(_SOURCE_END), re.DOTALL)
+_SCRIPT_CLOSE = re.compile(r"<(\\*)(/script)", re.IGNORECASE)
+
+
+def hide_script_close(source: str) -> str:
+    """`source` with every `</script` made unable to terminate the raw-text element carrying it, by
+    inserting a backslash. Backslashes already sitting there are doubled first, so a run of n becomes
+    2n+1 and `show_script_close` recovers the original exactly."""
+    return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * (2 * len(m.group(1)) + 1) + m.group(2), source)
+
+
+def show_script_close(source: str) -> str:
+    """The inverse of `hide_script_close`: a run of 2n+1 backslashes goes back to n."""
+    return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * ((len(m.group(1)) - 1) // 2) + m.group(2), source)
 
 
 def source_block(source: str) -> Markup:
@@ -228,7 +241,7 @@ def source_block(source: str) -> Markup:
         "# skaldr embeds this page's editable YAML source below, so an agent can recover it WITHOUT\n"
         "# reading the rendered HTML/CSS. Recover it with `skaldr --extract-source <file-or-url>`, or\n"
         "# read only the lines between the scissor markers. This block does not affect rendering.\n"
-        f"{_SOURCE_BEGIN}\n{source}\n{_SOURCE_END}\n"
+        f"{_SOURCE_BEGIN}\n{hide_script_close(source)}\n{_SOURCE_END}\n"
         "</script>"
     )
 
@@ -237,7 +250,7 @@ def extract_source(html: str) -> str | None:
     """Recover the plain-text YAML source embedded by `source_block`, or None if the page carries none
     (an older render, or one written with --no-source). The inverse of what `source_block` writes."""
     match = _SOURCE_RE.search(html)
-    return match.group(1) if match else None
+    return show_script_close(match.group(1)) if match else None
 
 
 def render_html(
