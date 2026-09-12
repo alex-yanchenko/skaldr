@@ -958,7 +958,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <body>
 <div class="wrap">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>
 
@@ -1152,6 +1152,72 @@ assert sum(counted) == expected
 </pre></div>
 </div><div class="wstep warning"><span class="wnum">3</span><span class="wlabel">Escalate anything that still won&#39;t balance</span></div><div class="wdetail"><div class="callout warning"><div>A residual gap is a vendor short-ship, not a miscount — open a ticket, don&#39;t force the numbers.</div></div>
 </div></div>
+
+<h2 id="pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</h2>
+
+<p class="text">The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. Nothing you type here is saved to this page.</p>
+<section class="rq">
+<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Read one bin&#39;s expected quantity</span></div>
+<div class="rq-vars">
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">This tab only. Never saved, never in the source, never in the PDF.</span></div>
+<div class="rq-fields">
+<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
+<label class="rq-field"><span class="rq-fname">bin</span><input type="text" data-rq-var="bin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A-17-3" value="A-17-3"></label>
+<label class="rq-field wide"><span class="rq-fname">API token<span class="rq-lock">not saved</span></span><input type="text" data-rq-var="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste your own"></label>
+</div>
+</div>
+<div class="rq-tabs" role="tablist" aria-label="Recorded cases"><button type="button" role="tab" data-rq-tab="0" aria-selected="true"><span class="rq-dot success"></span>a bin that balances</button><button type="button" role="tab" data-rq-tab="1" aria-selected="false"><span class="rq-dot success"></span>an overflow bin</button><button type="button" role="tab" data-rq-tab="2" aria-selected="false"><span class="rq-dot warning"></span>a bin the token cannot read</button></div>
+<div class="rq-case" data-rq-case="0">
+<h4 class="rq-case-hd">a bin that balances</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-3&#34;, &#34;expected&#34;: 48, &#34;counted&#34;: 48, &#34;lastCount&#34;: &#34;2026-07-14T09:12:00Z&#34; }
+</pre></div>
+<div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Expected and counted agree, so the bin needs no recount.</span></div>
+</div>
+<div class="rq-case" data-rq-case="1" data-rq-hidden>
+<h4 class="rq-case-hd">an overflow bin</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-9&#34;, &#34;expected&#34;: 120, &#34;counted&#34;: 96, &#34;overflow&#34;: true }
+</pre></div>
+<div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A 24-unit gap on a bin flagged <code>overflow: true</code>. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.</span></div>
+</div>
+<div class="rq-case" data-rq-case="2" data-rq-hidden>
+<h4 class="rq-case-hd">a bin the token cannot read</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status warning">401 Unauthorized</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;error&#34;: &#34;missing_credentials&#34;, &#34;message&#34;: &#34;This endpoint requires a bearer token.&#34; }
+</pre></div>
+<div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
+</div>
+</section>
+
 
 <h2 id="sources">Sources</h2>
 
