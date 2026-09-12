@@ -7,13 +7,17 @@ from skaldr.compute import (
     provenance_footer,
     reconcile_line,
     reference_numbers,
+    request_command,
+    single_quoted,
+    status_line,
     swimlane_layout,
     table_rollup,
     toc_entries,
     used_badges,
+    variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import Swimlane, Table, parse_report
+from skaldr.models import Request, Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -946,3 +950,63 @@ def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail
     report = parse_report(make_report(blocks=[{"type": "walkthrough", "steps": [step]}]))
 
     assert reference_numbers(report) == {"a": 1}
+
+
+@pytest.mark.parametrize(
+    ("plain", "quoted"),
+    [
+        ("https://api.example.com/x", "'https://api.example.com/x'"),
+        ("it's", "'it'\\''s'"),
+        ("a;rm -rf ~", "'a;rm -rf ~'"),
+        ("", "''"),
+    ],
+    ids=["plain", "apostrophe", "metacharacters", "empty"],
+)
+def test_single_quoting_survives_a_shell_metacharacter(plain: str, quoted: str) -> None:
+    assert single_quoted(plain) == quoted
+
+
+def test_variable_parts_splits_around_each_token() -> None:
+    assert variable_parts("https://{{host}}/api/{{id}}") == [("https://", "host"), ("/api/", "id"), ("", "")]
+
+
+def test_variable_parts_returns_one_literal_when_there_is_no_token() -> None:
+    assert variable_parts("https://api.example.com") == [("https://api.example.com", "")]
+
+
+def _request_block(**overrides: object) -> Request:
+    defaults: dict[str, object] = {
+        "label": "R",
+        "method": "GET",
+        "url": "https://{{host}}/widgets",
+        "headers": {"Accept": "application/json"},
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "cases": [{"label": "one", "response": {"status": 200, "body": "[]"}}],
+    }
+    block = parse_report(make_report(blocks=[{"type": "request", **defaults, **overrides}])).blocks[0]
+    assert isinstance(block, Request)
+    return block
+
+
+def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
+    block = _request_block(method="POST", body='{"q":"it\'s"}')
+
+    command = request_command(block, block.cases[0])
+
+    assert "-H 'Accept: application/json'" in command
+    assert "--data '{\"q\":\"it'\\''s\"}'" in command
+    assert "'https://{{host}}/widgets'" in command
+
+
+def test_an_omitted_reason_phrase_is_filled_in_from_the_status() -> None:
+    block = _request_block(cases=[{"label": "one", "response": {"status": 503, "body": "{}"}}])
+
+    assert status_line(block.cases[0].response) == "503 Service Unavailable"
+
+
+def test_an_authored_reason_phrase_wins_over_the_standard_text() -> None:
+    block = _request_block(
+        cases=[{"label": "one", "response": {"status": 200, "reason": "Grand", "body": "{}"}}]
+    )
+
+    assert status_line(block.cases[0].response) == "200 Grand"

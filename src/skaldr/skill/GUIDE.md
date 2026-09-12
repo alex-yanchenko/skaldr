@@ -180,6 +180,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
+| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, response, verdict?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -555,6 +556,56 @@ a group that spans past a column cannot also share that column with another grou
 layout). Columns share the width evenly with a 150px floor, so a few columns fill the page rather than
 huddling at the left; once that floor would overflow, the block scrolls horizontally, staying a grid
 rather than reflowing (and fits the page when printed).
+
+## The `request`
+
+A call you made, what came back, and what it meant — shared so a reader can reproduce it with their
+own credentials. The page builds a `curl` they copy and run; it never makes a request itself, which is
+also all a self-contained page with a locked-down CSP could ever do.
+
+```yaml
+- type: request
+  label: "Read an endpoint on the demo API"
+  method: GET
+  url: "https://{{host}}/{{resource}}?limit={{limit}}"
+  headers:                                 # a map, in the order it should read
+    Accept: "application/json"
+  variables:                               # the fields the reader fills
+    - { name: host,  example: "api.example.com" }
+    - { name: limit, example: "2" }
+    - { name: token, secret: true }        # never prefilled, so it cannot live in this file
+  case_variable: resource                  # what each case below supplies
+  cases:
+    - label: widgets
+      response:
+        status: 200
+        headers: { content-type: "application/json" }
+        body: |
+          { "widgets": [], "total": 0 }
+      verdict: "Open data, no credential needed."
+    - label: admin
+      headers: {}                          # this case sends none, recording the no-auth result
+      response: { status: 401, body: '{ "message": "Access Token is required" }' }
+```
+
+**`{{name}}` is a runtime blank, not a fill-me-later one.** A name declared in `variables` (or supplied
+by `case_variable`) is a field the reader fills when they open the page, so `--check --strict` leaves it
+alone. A name you never declared is still an unfilled placeholder and still fails strict, which is what
+catches `{{tokne}}`.
+
+**Cases are the outcomes, not the requests.** They tab on screen and **stack under their own headings
+when printed**, because a tab must not hide evidence on paper. Give each a `verdict`: what you expected,
+what you got, what it means. That is the one part a reader cannot work out for themselves. A case
+usually varies one value through `case_variable`; set `headers` on it to replace the request's headers
+instead, which is how you record what happens with the auth header removed.
+
+`status` drives the tone, so you never pick a colour. Omit `reason` and the standard text for the code
+fills in, which is what an HTTP/2 response needs since it carries none. Omit `status` entirely for a
+response with no status line, such as a bare token from `curl -s`. A header that legitimately repeats
+takes a list: `set-cookie: ["a=1", "b=2"]`.
+
+A `request` is full width. It may sit at the top level or inside a `section` or `panel`, but not in a
+grid cell, where the form and the response pane have no room.
 
 ## The `references`
 

@@ -216,7 +216,7 @@
 <div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">This tab only. Never saved, never in the source, never in the PDF.</span></div>
 <div class="rq-fields">
 {% for v in block.variables %}
-<label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">secret</span>{% endif %}</span><span class="rq-inrow"><input type="{% if v.secret %}password{% else %}text{% endif %}" data-rq-var="{{ v.name }}" autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}>{% if v.secret %}<button type="button" class="rq-reveal" aria-label="Show value">show</button>{% endif %}</span></label>
+<label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">not saved</span>{% endif %}</span><input type="text" data-rq-var="{{ v.name }}" autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}></label>
 {% endfor %}
 </div>
 </div>
@@ -228,7 +228,10 @@
 <div class="rq-case" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} data-rq-hidden{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(block, case)) }}</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><button type="button" class="rq-copy">Copy command</button></div><pre class="rq-cmd">{{ variable_slots(request_command(block, case), "shell") }}</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(request_command(block, case), "shell") }}<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status {{ status_tone(case.response) }}">{{ status_line(case.response) }}</span></div>
 {% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
 <pre class="rq-resp">{{ case.response.body }}</pre></div>

@@ -1571,9 +1571,10 @@ class RequestVariable(_Frozen):
     )
     secret: bool = Field(
         default=False,
-        description="Render the input as a password field with a reveal toggle, and never prefill it. "
-        "What the reader types stays in their browser tab: it reaches neither the page, nor the "
-        "embedded source, nor the PDF.",
+        description="Never prefill this field from `example`, and mark it in the form as a value that "
+        "is not saved. What the reader types stays in their browser tab: it reaches neither the page, "
+        "nor the embedded source, nor the PDF. The input is not masked, because the value it holds is "
+        "shown in full in the command right below it.",
     )
 
     @model_validator(mode="after")

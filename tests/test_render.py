@@ -1781,6 +1781,111 @@ def test_unescaping_a_block_that_was_never_escaped_raises() -> None:
         show_script_close("a <\\\\/script> b")
 
 
+def _request_report(**overrides: object) -> dict[str, object]:
+    block: dict[str, object] = {
+        "type": "request",
+        "label": "Read an endpoint",
+        "method": "GET",
+        "url": "https://{{host}}/{{resource}}",
+        "headers": {"Authorization": "Bearer {{token}}", "Accept": "application/json"},
+        "variables": [{"name": "host", "example": "api.example.com"}, {"name": "token", "secret": True}],
+        "case_variable": "resource",
+        "cases": [
+            {"label": "widgets", "response": {"status": 200, "body": "[]"}, "verdict": "Open data."},
+            {"label": "admin", "headers": {}, "response": {"status": 401, "body": "{}"}},
+        ],
+    }
+    block.update(overrides)
+    return make_report(blocks=[block])
+
+
+def test_a_request_renders_a_slot_per_variable_and_an_input_to_fill_it() -> None:
+    html = render_html(parse_report(_request_report()))
+
+    assert 'data-rq-var="host"' in html
+    assert 'data-rq-slot="host"' in html
+    assert 'value="api.example.com"' in html
+
+
+def test_a_secret_variable_offers_its_example_as_a_hint_but_never_as_a_value() -> None:
+    variables = [
+        {"name": "host", "example": "api.example.com"},
+        {"name": "token", "secret": True, "example": "paste your own"},
+    ]
+
+    html = render_html(parse_report(_request_report(variables=variables)))
+    field = html.split('data-rq-var="token"')[1].split(">")[0]
+
+    assert 'placeholder="paste your own"' in field
+    assert "value=" not in field
+
+
+def test_the_case_axis_resolves_at_build_time_and_reader_tokens_stay_open() -> None:
+    html = render_html(parse_report(_request_report()))
+
+    assert 'data-rq-slot="resource"' not in html
+    assert "/widgets" in html
+    assert 'data-rq-slot="host"' in html
+
+
+def test_a_case_may_replace_the_requests_headers() -> None:
+    html = render_html(parse_report(_request_report()))
+    cases = html.split('data-rq-case="')
+
+    assert "Authorization" in cases[1]
+    assert "Authorization" not in cases[2]
+
+
+def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
+    html = render_html(parse_report(_request_report()))
+
+    assert html.count('data-rq-case="') == 2
+    assert 'data-rq-case="1" data-rq-hidden' in html
+    assert 'data-rq-case="0" data-rq-hidden' not in html
+
+
+def test_an_omitted_reason_phrase_falls_back_to_the_standard_text() -> None:
+    report = _request_report(
+        cases=[{"label": "one", "response": {"status": 404, "body": "{}"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    html = render_html(parse_report(report))
+
+    assert "404 Not Found" in html
+
+
+def test_a_response_with_no_status_line_says_so_rather_than_rendering_a_blank_pill() -> None:
+    report = _request_report(
+        cases=[{"label": "one", "response": {"body": "a-bare-token"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    html = render_html(parse_report(report))
+
+    assert "no status line" in html
+
+
+def test_a_declared_request_variable_is_not_an_unfilled_placeholder() -> None:
+    assert find_placeholders(parse_report(_request_report())) == []
+
+
+def test_a_mistyped_request_variable_is_still_caught_by_strict() -> None:
+    report = _request_report(url="https://{{host}}/{{resource}}/{{tokne}}")
+
+    assert find_placeholders(parse_report(report)) == ["tokne"]
+
+
+def test_a_declared_request_variable_does_not_exempt_the_same_name_elsewhere() -> None:
+    request = _request_report()["blocks"]
+    assert isinstance(request, list)
+    report = make_report(blocks=[*request, {"type": "text", "body": "still {{host}} to fill"}])
+
+    assert find_placeholders(parse_report(report)) == ["host"]
+
+
 def test_render_without_source_embeds_no_block() -> None:
     html = render_html(parse_report(make_report()))
 
