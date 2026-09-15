@@ -22,8 +22,10 @@ from skaldr.models import (
     Heading,
     Report,
     Section,
+    iter_requests,
     load_report,
     package_text,
+    unresolvable_request_variables,
 )
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -154,6 +156,11 @@ def _environment() -> Environment:
         table_rollup=compute.table_rollup,
         matrix_grid=compute.matrix_grid,
         swimlane_layout=compute.swimlane_layout,
+        variable_parts=compute.variable_parts,
+        request_wire=compute.request_wire,
+        request_command=compute.request_command,
+        status_line=compute.status_line,
+        status_tone=compute.status_tone,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
     )
@@ -203,6 +210,7 @@ def _render(
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
+        has_requests=any(iter_requests(report.blocks)),
         source_block=source_block(source) if source else None,
         live=live,
     )
@@ -296,12 +304,14 @@ def render_html(
 
 
 def find_placeholders(report: Report) -> list[str]:
-    """Names of every `{{placeholder}}` fill-me-later blank in the report, sorted and de-duplicated.
-    Renders once into a throwaway to reuse the rich-text traversal; the --check --strict gate uses it
-    to refuse a doc that still has blanks."""
+    """Names of every unfilled blank in the report, sorted and de-duplicated, from two sources: a
+    `{{placeholder}}` in rich text, and a `{{name}}` a `request` interpolates but cannot fill from its
+    own declarations. A request variable the author did declare is a runtime blank its reader fills, so
+    it is deliberately absent. Renders once into a throwaway to reuse the rich-text traversal; the
+    --check --strict gate uses this to refuse a doc that still has blanks."""
     seen: set[str] = set()
     _render(report, "page.html.j2", placeholders=seen)
-    return sorted(seen)
+    return sorted(seen | unresolvable_request_variables(report.blocks))
 
 
 def render_embed(report: Report, *, source: str | None = None) -> str:

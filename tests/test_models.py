@@ -23,6 +23,7 @@ from skaldr.models import (
     Note,
     Panel,
     Report,
+    Request,
     Section,
     Swimlane,
     Table,
@@ -2632,3 +2633,99 @@ def test_references_rejects_url_with_a_disallowed_scheme() -> None:
 def test_references_requires_at_least_one_item() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.references\.items.*at least 1"):
         parse_report(make_report(blocks=[{"type": "references", "items": []}]))
+
+
+def _request(**overrides: Any) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": "request",
+        "label": "Read an endpoint",
+        "method": "GET",
+        "url": "https://{{host}}/{{resource}}",
+        "headers": {"Accept": "application/json"},
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "case_variable": "resource",
+        "cases": [{"label": "widgets", "response": {"status": 200, "body": "[]"}}],
+    }
+    block.update(overrides)
+    return block
+
+
+def test_a_request_declaring_a_variable_twice_is_rejected() -> None:
+    variables = [{"name": "host", "example": "a"}, {"name": "host", "example": "b"}]
+    with pytest.raises(ReportError, match=r"declares a variable twice: host"):
+        parse_report(make_report(blocks=[_request(variables=variables)]))
+
+
+def test_a_case_variable_that_is_also_a_declared_variable_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"both the case_variable and a declared variable"):
+        parse_report(make_report(blocks=[_request(case_variable="host", url="https://x/{{host}}")]))
+
+
+def test_a_request_repeating_a_case_label_is_rejected() -> None:
+    cases = [
+        {"label": "widgets", "response": {"body": "[]"}},
+        {"label": "widgets", "response": {"body": "[]"}},
+    ]
+    with pytest.raises(ReportError, match=r"repeats a case label: widgets"):
+        parse_report(make_report(blocks=[_request(cases=cases)]))
+
+
+def test_a_case_value_without_a_case_variable_is_rejected() -> None:
+    block = _request(
+        url="https://{{host}}/widgets", cases=[{"label": "a", "value": "b", "response": {"body": "{}"}}]
+    )
+    del block["case_variable"]
+    with pytest.raises(ReportError, match=r"sets a value but the request declares no case_variable"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_a_variable_that_is_never_interpolated_is_rejected() -> None:
+    variables = [{"name": "host", "example": "a"}, {"name": "unused", "example": "b"}]
+    with pytest.raises(ReportError, match=r"declares unused but never uses it"):
+        parse_report(make_report(blocks=[_request(variables=variables)]))
+
+
+def test_a_boolean_status_is_rejected_rather_than_coerced_to_one() -> None:
+    with pytest.raises(ReportError, match=r"must be a number, not a boolean"):
+        parse_report(
+            make_report(blocks=[_request(cases=[{"label": "a", "response": {"status": True, "body": "{}"}}])])
+        )
+
+
+def test_a_response_header_may_repeat() -> None:
+    case = {
+        "label": "widgets",
+        "response": {"status": 200, "headers": {"set-cookie": ["a=1", "b=2"]}, "body": "[]"},
+    }
+
+    block = parse_report(make_report(blocks=[_request(cases=[case])])).blocks[0]
+    assert isinstance(block, Request)
+
+    assert block.cases[0].response.headers == {"set-cookie": ["a=1", "b=2"]}
+
+
+def test_a_request_is_refused_inside_a_grid_cell_because_the_column_is_too_narrow() -> None:
+    grid = {"type": "grid", "cells": [{"span": 2, "blocks": [_request()]}]}
+
+    with pytest.raises(ReportError, match=r"blocks\.0"):
+        parse_report(make_report(blocks=[grid]))
+
+
+def test_a_request_is_accepted_inside_a_section() -> None:
+    section = {"type": "section", "title": "Evidence", "blocks": [_request()]}
+
+    report = parse_report(make_report(blocks=[section]))
+    outer = report.blocks[0]
+    assert isinstance(outer, Section)
+
+    assert isinstance(outer.blocks[0], Request)
+
+
+def test_a_request_is_accepted_inside_a_panel() -> None:
+    panel = {"type": "panel", "title": "Evidence", "blocks": [_request()]}
+
+    report = parse_report(make_report(blocks=[panel]))
+    outer = report.blocks[0]
+    assert isinstance(outer, Panel)
+
+    assert isinstance(outer.blocks[0], Request)

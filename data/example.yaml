@@ -373,6 +373,53 @@ blocks:
             body: "A residual gap is a vendor short-ship, not a miscount — open a ticket, don't force the numbers."
 
   - type: heading
+    text: "Pulling a bin from the WMS yourself"
+  - type: text
+    body: >-
+      The counts above come from the export, but a disputed bin is quicker to settle against the live
+      API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in
+      your browser tab and is never written back into this page.
+  - type: request
+    label: "Read one bin's expected quantity"
+    method: GET
+    url: "https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}"
+    headers:
+      Authorization: "Bearer {{token}}"
+      Accept: "application/json"
+    variables:
+      - { name: warehouse, label: "warehouse code", example: "NW-04" }
+      - { name: bin, example: "A-17-3" }
+      - { name: token, label: "API token", secret: true, example: "paste your own" }
+    cases:
+      - label: "a bin that balances"
+        response:
+          status: 200
+          headers: { content-type: "application/json" }
+          body: |
+            { "bin": "A-17-3", "expected": 48, "counted": 48, "lastCount": "2026-07-14T09:12:00Z" }
+        verdict: "Expected and counted agree, so the bin needs no recount."
+      - label: "an overflow bin"
+        response:
+          status: 200
+          headers: { content-type: "application/json" }
+          body: |
+            { "bin": "A-17-9", "expected": 120, "counted": 96, "overflow": true }
+        verdict: >-
+          A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a
+          rescan, because the fixed readers cannot see past bin 12.
+      - label: "a bin the token cannot read"
+        headers:
+          Accept: "application/json"
+        response:
+          status: 401
+          headers: { content-type: "application/json" }
+          body: |
+            { "error": "missing_credentials", "message": "This endpoint requires a bearer token." }
+        verdict: >-
+          The same call with the authorization header removed, recorded so the shape of a refusal is
+          recognisable when it turns up unexpectedly.
+
+  - type: heading
     text: "Sources"
   - type: text
     body: "Method definitions follow the warehouse counting SOP [^sop]; the discrepancy thresholds come from the Q2 reconciliation audit [^audit]."

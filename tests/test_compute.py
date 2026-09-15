@@ -1,19 +1,29 @@
+import re
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from skaldr.compute import (
+    HTTP_REASONS,
     anchor_slugs,
     first_table_index,
     fmt,
     provenance_footer,
     reconcile_line,
     reference_numbers,
+    request_command,
+    request_wire,
+    single_quoted,
+    status_line,
     swimlane_layout,
     table_rollup,
     toc_entries,
     used_badges,
+    variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import Swimlane, Table, parse_report
+from skaldr.models import Request, Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -946,3 +956,137 @@ def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail
     report = parse_report(make_report(blocks=[{"type": "walkthrough", "steps": [step]}]))
 
     assert reference_numbers(report) == {"a": 1}
+
+
+@pytest.mark.parametrize(
+    ("plain", "quoted"),
+    [
+        ("https://api.example.com/x", "'https://api.example.com/x'"),
+        ("it's", "'it'\\''s'"),
+        ("a;rm -rf ~", "'a;rm -rf ~'"),
+        ("", "''"),
+        ("'", "''\\'''"),
+        ("'lead", "''\\''lead'"),
+        ("trail'", "'trail'\\'''"),
+        ("a''b", "'a'\\'''\\''b'"),
+    ],
+    ids=["plain", "apostrophe", "metacharacters", "empty", "only", "leading", "trailing", "adjacent"],
+)
+def test_single_quoting_survives_a_shell_metacharacter(plain: str, quoted: str) -> None:
+    assert single_quoted(plain) == quoted
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ["'", "'lead", "trail'", "a''b", "x'; echo owned; '", "$(id)", "`id`", "a\nb"],
+    ids=["only", "leading", "trailing", "adjacent", "injection", "subshell", "backtick", "newline"],
+)
+def test_a_single_quoted_word_is_one_shell_word_carrying_its_payload(payload: str) -> None:
+    """The quoted form must survive a real shell: one argument out, byte-identical to what went in."""
+    quoted = single_quoted(payload)
+
+    assert (
+        subprocess.run(["bash", "-c", f"printf %s {quoted}"], capture_output=True, text=True).stdout
+        == payload
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "parts"),
+    [
+        ("https://{{host}}/api/{{id}}", [("https://", "host"), ("/api/", "id"), ("", "")]),
+        ("https://api.example.com", [("https://api.example.com", "")]),
+        ("{{a}}{{b}}", [("", "a"), ("", "b"), ("", "")]),
+        ("{{a}}rest", [("", "a"), ("rest", "")]),
+        ("", [("", "")]),
+    ],
+    ids=["two-tokens", "no-token", "adjacent", "leading", "empty"],
+)
+def test_variable_parts_splits_around_each_token(text: str, parts: list[tuple[str, str]]) -> None:
+    assert variable_parts(text) == parts
+
+
+def _request_block(**overrides: object) -> Request:
+    defaults: dict[str, object] = {
+        "label": "R",
+        "method": "GET",
+        "url": "https://{{host}}/widgets",
+        "headers": {"Accept": "application/json"},
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "cases": [{"label": "one", "response": {"status": 200, "body": "[]"}}],
+    }
+    block = parse_report(make_report(blocks=[{"type": "request", **defaults, **overrides}])).blocks[0]
+    assert isinstance(block, Request)
+    return block
+
+
+def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
+    block = _request_block(method="POST", body='{"q":"it\'s"}')
+
+    command = request_command(block, block.cases[0])
+
+    assert "-H 'Accept: application/json'" in command
+    assert "--data '{\"q\":\"it'\\''s\"}'" in command
+    assert "'https://{{host}}/widgets'" in command
+
+
+def test_an_omitted_reason_phrase_is_filled_in_from_the_status() -> None:
+    block = _request_block(cases=[{"label": "one", "response": {"status": 503, "body": "{}"}}])
+
+    assert status_line(block.cases[0].response) == "503 Service Unavailable"
+
+
+def test_an_authored_reason_phrase_wins_over_the_standard_text() -> None:
+    block = _request_block(
+        cases=[{"label": "one", "response": {"status": 200, "reason": "Grand", "body": "{}"}}]
+    )
+
+    assert status_line(block.cases[0].response) == "200 Grand"
+
+
+def test_a_case_label_carrying_a_quote_cannot_break_out_of_the_command() -> None:
+    """The case axis resolves into each word before that word is quoted. Resolving afterwards drops the
+    label inside an already-open quote, and a label is ordinary authored text."""
+    block = _request_block(
+        url="https://api.example.com/{{resource}}",
+        headers={},
+        variables=[],
+        case_variable="resource",
+        cases=[{"label": "x'; echo owned; '", "response": {"status": 200, "body": "{}"}}],
+    )
+
+    word = request_command(block, block.cases[0]).splitlines()[-1].strip()
+    shell = subprocess.run(
+        ["bash", "-c", f'set -- {word}; printf "%s|%s" "$#" "$1"'], capture_output=True, text=True
+    )
+
+    assert shell.stdout == "1|https://api.example.com/x'; echo owned; '"
+
+
+def test_a_body_carries_its_tokens_through_to_the_command_unresolved() -> None:
+    block = _request_block(
+        method="POST",
+        body='{"user":"{{user}}","secret":"{{token}}"}',
+        variables=[
+            {"name": "host", "example": "a"},
+            {"name": "user", "example": "sam"},
+            {"name": "token", "secret": True},
+        ],
+    )
+
+    command = request_command(block, block.cases[0])
+
+    assert '--data \'{"user":"{{user}}","secret":"{{token}}"}\'' in command
+    assert "{{user}}" in request_wire(block, block.cases[0])
+
+
+def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:
+    """status_line fills a missing reason when the page is built; the pasted-response parser fills one
+    in the browser. Two tables that drift make the recorded pill and the live pill disagree."""
+    script = Path("src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
+    literal = re.search(r"var REASONS = \{(.*?)\};", script, re.DOTALL)
+    assert literal is not None
+
+    in_browser = {int(code): text for code, text in re.findall(r'(\d{3}):\s*"([^"]+)"', literal.group(1))}
+
+    assert in_browser == HTTP_REASONS

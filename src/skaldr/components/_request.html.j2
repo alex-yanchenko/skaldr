@@ -1,0 +1,201 @@
+<script>
+(function () {
+	var blocks = document.querySelectorAll(".rq");
+	if (!blocks.length) return;
+
+	function shellSafe(value) {
+		return value.replace(/'/g, "'\\''");
+	}
+
+	/* The reader's own machine decides which clipboard command the capture pipe names, so a page
+	   shared across a mixed team hands each person something that runs where they are. */
+	function clipboardTool() {
+		var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+		if (/mac/i.test(platform)) return "pbcopy";
+		if (/win/i.test(platform)) return "clip.exe";
+		return "xclip -selection clipboard";
+	}
+
+	function fillSlots(block) {
+		var values = {};
+		block.querySelectorAll("[data-rq-var]").forEach(function (input) {
+			values[input.dataset.rqVar] = input.value.trim();
+		});
+		block.querySelectorAll("[data-rq-slot]").forEach(function (slot) {
+			var name = slot.dataset.rqSlot;
+			var value = values[name];
+			if (!value) {
+				slot.textContent = "‹" + name + "›";
+				slot.removeAttribute("data-rq-filled");
+				return;
+			}
+			slot.textContent = slot.dataset.rqQuote === "shell" ? shellSafe(value) : value;
+			slot.setAttribute("data-rq-filled", "");
+		});
+	}
+
+	var REASONS = {
+		200: "OK", 201: "Created", 202: "Accepted", 204: "No Content", 301: "Moved Permanently",
+		302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+		404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 410: "Gone",
+		415: "Unsupported Media Type", 422: "Unprocessable Entity", 429: "Too Many Requests",
+		500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout"
+	};
+
+	/* A curl -i dump is a status line, headers, a blank line, then the body. Anything that does not
+	   start with one is taken as a bare body, which is what `curl -s` returns. HTTP/2 carries no reason
+	   phrase, so an absent one falls back to the standard text for the code. */
+	function parseResponse(text) {
+		var trimmed = text.replace(/^\s+/, "");
+		if (!trimmed) return null;
+		if (!/^HTTP\/\d/.test(trimmed)) return { status: null, reason: "no status line", headers: [], body: trimmed.trim() };
+		var split = trimmed.split(/\r?\n\r?\n/);
+		var head = split.shift().split(/\r?\n/);
+		var match = head.shift().match(/^HTTP\/[\d.]+\s+(\d{3})\s*(.*)$/);
+		var status = match ? Number(match[1]) : null;
+		var headers = [];
+		head.forEach(function (line) {
+			var at = line.indexOf(":");
+			if (at > 0) headers.push([line.slice(0, at).trim(), line.slice(at + 1).trim()]);
+		});
+		return {
+			status: status,
+			reason: (match && match[2]) || REASONS[status] || "",
+			headers: headers,
+			body: split.join("\n\n").trim()
+		};
+	}
+
+	function toneOf(status) {
+		if (!status) return "";
+		return { 2: "success", 3: "info", 4: "warning", 5: "danger" }[Math.floor(status / 100)] || "";
+	}
+
+	function prettyBody(body) {
+		try { return JSON.stringify(JSON.parse(body), null, 2); } catch (err) { return body; }
+	}
+
+	function element(tag, className, text) {
+		var node = document.createElement(tag);
+		if (className) node.className = className;
+		if (text !== undefined) node.textContent = text;
+		return node;
+	}
+
+	/* Everything below is built with textContent. A pasted response is untrusted text, and an embed
+	   fragment carries no CSP of its own, so assigning it as HTML would run what it contains. */
+	function renderLive(host, parsed) {
+		host.textContent = "";
+		if (!parsed) {
+			host.hidden = true;
+			return;
+		}
+		var pane = element("div", "rq-pane");
+		var header = element("div", "rq-pane-hd");
+		header.appendChild(element("span", null, "What you got"));
+		var status = element("span", "rq-status " + toneOf(parsed.status));
+		status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
+		header.appendChild(status);
+		pane.appendChild(header);
+		if (parsed.headers.length) {
+			var list = element("dl", "rq-hdrs");
+			parsed.headers.forEach(function (pair) {
+				list.appendChild(element("dt", null, pair[0]));
+				list.appendChild(element("dd", null, pair[1]));
+			});
+			pane.appendChild(list);
+		}
+		pane.appendChild(element("pre", null, prettyBody(parsed.body)));
+		host.appendChild(pane);
+		host.hidden = false;
+	}
+
+	function selectText(node) {
+		var range = document.createRange();
+		range.selectNodeContents(node);
+		var selection = window.getSelection();
+		if (!selection) return false;
+		selection.removeAllRanges();
+		selection.addRange(range);
+		return true;
+	}
+
+	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
+	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
+	   command leaves the reader one keystroke away in every case the API refuses. */
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
+	function commandText(node, withPipe) {
+		if (withPipe) return node.textContent;
+		var clone = node.cloneNode(true);
+		var pipe = clone.querySelector(".rq-pipe");
+		if (pipe) pipe.remove();
+		return clone.textContent;
+	}
+
+	function copyCommand(button, node, withPipe) {
+		var text = commandText(node, withPipe);
+		var settle = function (label) {
+			var original = button.dataset.rqLabel || button.textContent;
+			button.dataset.rqLabel = original;
+			button.textContent = label;
+			setTimeout(function () { button.textContent = button.dataset.rqLabel; }, 1600);
+		};
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(function () { settle("Copied"); }).catch(function () {
+				settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+			});
+			return;
+		}
+		settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+	}
+
+	var tool = clipboardTool();
+	document.querySelectorAll(".rq-cliptool").forEach(function (node) { node.textContent = tool; });
+
+	blocks.forEach(function (block) {
+		fillSlots(block);
+
+		block.addEventListener("input", function (event) {
+			if (event.target.dataset.rqVar) {
+				fillSlots(block);
+				return;
+			}
+			if (!event.target.classList.contains("rq-in")) return;
+			var area = event.target;
+			var scope = area.closest("[data-rq-case]");
+			renderLive(scope.querySelector(".rq-live"), parseResponse(area.value));
+			scope.querySelector(".rq-clear").hidden = !area.value.trim();
+		});
+
+		block.addEventListener("click", function (event) {
+			var clear = event.target.closest(".rq-clear");
+			if (clear) {
+				var scope = clear.closest("[data-rq-case]");
+				scope.querySelector(".rq-in").value = "";
+				renderLive(scope.querySelector(".rq-live"), null);
+				clear.hidden = true;
+				return;
+			}
+			var copy = event.target.closest(".rq-copy");
+			if (copy) {
+				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
+				var withPipe = copy.classList.contains("rq-catch");
+				command.querySelector(".rq-pipe").hidden = !withPipe;
+				copyCommand(copy, command, withPipe);
+				return;
+			}
+			var tab = event.target.closest("[data-rq-tab]");
+			if (!tab) return;
+			var chosen = tab.dataset.rqTab;
+			block.querySelectorAll("[data-rq-tab]").forEach(function (each) {
+				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
+			});
+			block.querySelectorAll("[data-rq-case]").forEach(function (each) {
+				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
+				else each.setAttribute("data-rq-hidden", "");
+			});
+		});
+	});
+})();
+</script>

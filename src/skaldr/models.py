@@ -10,6 +10,7 @@ state glyphs for status lists and timelines.
 """
 
 import math
+import re
 import sys
 from collections import Counter
 from collections.abc import Iterator, Sequence
@@ -1551,6 +1552,181 @@ class Swimlane(_Block):
         return self
 
 
+HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+VARIABLE_TOKEN = re.compile(rf"\{{\{{\s*({REFERENCE_KEY_PATTERN})\s*\}}\}}")
+
+
+class RequestVariable(_Frozen):
+    name: str = Field(
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="The token a reader fills, written `{{name}}` in the url, a header value or the "
+        "body. ASCII letters, digits, _ and -.",
+    )
+    label: str | None = Field(default=None, description="Field label above the input. Defaults to `name`.")
+    example: str | None = Field(
+        default=None,
+        description="A sample value, prefilled into the input so the request can be run as it stands. "
+        "On a `secret` it is placeholder text only and is never prefilled, since a prefilled secret "
+        "would be a secret stored in the YAML.",
+    )
+    secret: bool = Field(
+        default=False,
+        description="Never prefill this field from `example`, and mark it in the form as a value that "
+        "is not saved. What the reader types stays in their browser tab: it reaches neither the page's "
+        "embedded source nor a `--pdf` render, which loads the file fresh with the form empty. Printing "
+        "from a tab they have filled in does capture it, in the form and in the command. The input is "
+        "not masked, because the same value is shown in full in the command right below it.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestVariable":
+        if self.label is not None and not self.label.strip():
+            raise ValueError("request variable label must not be blank (omit it instead)")
+        if self.example is not None and not self.example.strip():
+            raise ValueError("request variable example must not be blank (omit it instead)")
+        return self
+
+
+class RequestResponse(_Frozen):
+    status: Count | None = Field(
+        default=None,
+        ge=100,
+        le=599,
+        description="The status you recorded. Omit for a response with no status line, such as a bare "
+        "token from `curl -s`. The case's tone follows this number, so you never pick one.",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="The reason phrase. Omit and skaldr supplies the standard text for the status, "
+        "which is what an HTTP/2 response needs since it carries no reason phrase.",
+    )
+    headers: dict[str, str | list[str]] = Field(
+        default_factory=dict,
+        description="Response headers worth keeping, in the order you want them read. Give a list for "
+        "a header that legitimately repeats, such as `Set-Cookie`.",
+    )
+    body: str = Field(description="The body, verbatim. JSON is pretty-printed for display.")
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestResponse":
+        for name in self.headers:
+            if not name.strip():
+                raise ValueError("response header name must not be blank")
+        return self
+
+
+class RequestCase(_Frozen):
+    label: str = Field(min_length=1, description="Tab label, and the case's heading when printed.")
+    value: str | None = Field(
+        default=None,
+        description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
+        "which is what you want when the cases are resource names.",
+    )
+    headers: dict[str, str] | None = Field(
+        default=None,
+        description="Replace the request's headers for this case alone. Omit to inherit them; give an "
+        "empty map to send none, which is how you record what happens with the auth header removed.",
+    )
+    response: RequestResponse = Field(description="What came back when you ran it.")
+    verdict: str | None = Field(
+        default=None,
+        description="Rich-text reading of this response: what you expected, what you got, what it "
+        "means. The one part of the block a reader cannot work out for themselves.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestCase":
+        if not self.label.strip():
+            raise ValueError("request case label must not be blank")
+        if self.value is not None and not self.value.strip():
+            raise ValueError("request case value must not be blank (omit it to use the label)")
+        if self.verdict is not None and not self.verdict.strip():
+            raise ValueError("request case verdict must not be blank (omit it instead)")
+        return self
+
+
+class Request(_Block):
+    type: Literal["request"]
+    label: str = Field(min_length=1, description="What the request is for, shown in the block header.")
+    method: HttpMethod = Field(description="The HTTP method.")
+    url: str = Field(min_length=1, description="The full URL. May carry `{{variable}}` tokens.")
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Request headers as a map, in the order they should read. A value may carry "
+        "`{{variable}}` tokens.",
+    )
+    body: str | None = Field(
+        default=None,
+        description="Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential "
+        "can sit inside a JSON login payload without ever being written here.",
+    )
+    variables: list[RequestVariable] = Field(
+        default_factory=list[RequestVariable],
+        description="The values a reader supplies. A `{{name}}` declared here is a runtime blank the "
+        "reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled "
+        "placeholder and still fails strict, which is what catches a mistyped name.",
+    )
+    case_variable: str | None = Field(
+        default=None,
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="The `{{name}}` each case supplies, for cases that differ by one value such as a "
+        "resource name. Omit when the cases differ by headers instead, or when there is only one.",
+    )
+    cases: list[RequestCase] = Field(
+        min_length=1,
+        description="One entry per recorded outcome. Tabs on screen, stacked under their own headings "
+        "when printed, because a tab must never hide evidence on paper.",
+    )
+
+    def referenced_variables(self) -> set[str]:
+        """Every `{{name}}` the request interpolates, across the url, the header values and the body."""
+        scan = " ".join((self.url, *self.headers.values(), self.body or ""))
+        scan += " ".join(value for case in self.cases for value in (case.headers or {}).values())
+        return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
+
+    def resolvable_variables(self) -> set[str]:
+        """Every name the block can fill by itself: the reader's fields plus the case axis."""
+        names = {variable.name for variable in self.variables}
+        return names | ({self.case_variable} if self.case_variable else set())
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Request":
+        declared = [variable.name for variable in self.variables]
+        repeated = {name for name in declared if declared.count(name) > 1}
+        if repeated:
+            raise ValueError(f"request declares a variable twice: {', '.join(sorted(repeated))}")
+        if self.case_variable is not None and self.case_variable in declared:
+            raise ValueError(
+                f"`{self.case_variable}` is both the case_variable and a declared variable — each case "
+                "supplies it, so it must not also be a field the reader fills"
+            )
+        labels = [case.label for case in self.cases]
+        duplicated = {label for label in labels if labels.count(label) > 1}
+        if duplicated:
+            raise ValueError(f"request repeats a case label: {', '.join(sorted(duplicated))}")
+        if self.case_variable is None:
+            for case in self.cases:
+                if case.value is not None:
+                    raise ValueError(
+                        f"case '{case.label}' sets a value but the request declares no case_variable, "
+                        "so there is nothing for it to fill"
+                    )
+        if self.body is not None and not self.body.strip():
+            raise ValueError("request body must not be blank (omit it instead)")
+        for name, value in self.headers.items():
+            if not name.strip():
+                raise ValueError("request header name must not be blank")
+            if not value.strip():
+                raise ValueError(f"request header `{name}` must not have a blank value")
+        unused = self.resolvable_variables() - self.referenced_variables()
+        if unused:
+            raise ValueError(
+                f"request declares {', '.join(sorted(unused))} but never uses "
+                f"{'them' if len(unused) > 1 else 'it'} — every variable needs a `{{{{name}}}}` to fill"
+            )
+        return self
+
+
 _Leaf = (
     Heading
     | Text
@@ -1579,6 +1755,7 @@ _Leaf = (
     | References
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
+FullWidthBlock = Annotated[_Leaf | Request, Field(discriminator="type")]
 
 
 class Section(_Block):
@@ -1600,7 +1777,7 @@ class Section(_Block):
         description="When this section was last revised; shown as a muted stamp in its header. A "
         "free-form label like the report date (author it — never auto-now).",
     )
-    blocks: list[InnerBlock] = Field(
+    blocks: list[FullWidthBlock] = Field(
         min_length=1,
         description="Blocks in the section — any block except another section, grid, or walkthrough.",
     )
@@ -1609,9 +1786,10 @@ class Section(_Block):
 class Panel(_Block):
     type: Literal["panel"]
     title: str = Field(min_length=1, description="Panel title, shown in the header band.")
-    blocks: list[InnerBlock] = Field(
+    blocks: list[FullWidthBlock] = Field(
         min_length=1,
-        description="Blocks inside the panel (leaf blocks). Unlike a `section`, a panel is always open — "
+        description="Blocks inside the panel — any block except another panel, section, grid, or "
+        "walkthrough. Unlike a `section`, a panel is always open — "
         "a titled framed card, one per 'slide' in a deck-style doc.",
     )
 
@@ -1717,9 +1895,29 @@ class Walkthrough(_Block):
     )
 
 
-Block = Annotated[_Leaf | Section | Grid | Walkthrough | Panel, Field(discriminator="type")]
+Block = Annotated[_Leaf | Request | Section | Grid | Walkthrough | Panel, Field(discriminator="type")]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Section | Panel | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Request | Section | Panel | Grid | InnerGrid | Walkthrough
+
+
+def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request]:
+    """Every `request` block on the page, including ones nested in a section or a panel."""
+    for block in blocks:
+        if isinstance(block, Request):
+            yield block
+        elif isinstance(block, (Section, Panel)):
+            yield from iter_requests(block.blocks)
+
+
+def unresolvable_request_variables(blocks: Sequence[AnyBlock]) -> set[str]:
+    """Names a `request` interpolates but cannot fill: neither a reader's field nor the case axis. A
+    declared name is a runtime blank the reader supplies, so it is not an unfilled placeholder; an
+    undeclared one is a typo the strict gate should still catch."""
+    return {
+        name
+        for request in iter_requests(blocks)
+        for name in request.referenced_variables() - request.resolvable_variables()
+    }
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:

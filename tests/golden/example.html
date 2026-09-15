@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-8X06SrZf1YPIkScEvKndSgFTE80FtbuecXqQ3bUBEXw=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -789,6 +789,86 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&:hover{opacity:1; color:var(--ink)}
 		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}
 		&:disabled{cursor:default; opacity:0.35}}
+
+	.rq{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4);
+		background:var(--surface); box-shadow:var(--shadow); overflow:hidden;
+		& .rq-hd{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;
+			padding:9px var(--s4); background:var(--hdr); color:var(--hdr-fg)}
+		& .rq-kind{font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase;
+			border:1px solid rgba(255,255,255,0.35); border-radius:var(--r-xs); padding:1px 5px; opacity:0.75}
+		& .rq-title{font-weight:650; font-size:13.5px}
+		& .rq-vars{margin:var(--s3) var(--s4) 0; border:1px solid var(--line); border-radius:var(--r-inner);
+			background:var(--panel)}
+		& .rq-vars-hd{display:flex; gap:var(--s3); justify-content:space-between; flex-wrap:wrap;
+			align-items:baseline; padding:7px var(--s3); border-bottom:1px solid var(--line);
+			font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted)}
+		& .rq-note{font-weight:400; letter-spacing:0; text-transform:none; font-size:11.5px}
+		& .rq-fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:var(--s3);
+			padding:var(--s3)}
+		& .rq-field{display:flex; flex-direction:column; gap:4px; min-width:0}
+		& .rq-field.wide{grid-column:1 / -1}
+		& .rq-fname{display:flex; gap:6px; align-items:center; font-size:11px; font-weight:700;
+			letter-spacing:0.05em; text-transform:uppercase; color:var(--muted)}
+		& .rq-lock{font-size:9.5px; padding:1px 5px; border-radius:var(--r-xs);
+			background:var(--warning-bg); color:var(--warning-fg)}
+		& input{min-width:0; font-family:var(--mono); font-size:12.5px; padding:6px 9px;
+			border:1px solid var(--rule); border-radius:var(--r-sm); background:var(--surface); color:var(--ink)}
+		& .rq-tabs{display:flex; gap:2px; flex-wrap:wrap; margin:var(--s3) var(--s4) 0;
+			border-bottom:1px solid var(--line)}
+		& .rq-tabs button{background:none; border:0; border-bottom:2px solid transparent; cursor:pointer;
+			font:inherit; font-family:var(--mono); font-size:12px; color:var(--muted); padding:5px 10px 6px}
+		& .rq-tabs button:hover{color:var(--ink)}
+		& .rq-tabs button[aria-selected="true"]{color:var(--ink); font-weight:700; border-bottom-color:var(--info-fg)}
+		& .rq-dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-inline-end:6px;
+			background:var(--neutral-fg)}
+		& .rq-dot.success{background:var(--success-fg)} & .rq-dot.warning{background:var(--warning-fg)}
+		& .rq-dot.danger{background:var(--danger-fg)} & .rq-dot.info{background:var(--info-fg)}
+		& .rq-case{display:flex; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4) var(--s4)}
+		& .rq-case[data-rq-hidden]{display:none}
+		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}
+		& .rq-pane{border:1px solid var(--line); border-radius:var(--r-inner); overflow:hidden; break-inside:avoid}
+		& .rq-pane-hd{display:flex; gap:var(--s3); justify-content:space-between; align-items:center;
+			flex-wrap:wrap; padding:6px var(--s3); background:var(--panel); border-bottom:1px solid var(--line);
+			font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted)}
+		& .rq-btns{display:flex; gap:var(--s2); flex-wrap:wrap}
+		& .rq-copy{background:var(--info-bg); color:var(--info-fg); border:0; border-radius:var(--r-sm);
+			font:inherit; font-size:11.5px; font-weight:650; padding:4px 11px; cursor:pointer;
+			box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 22%, transparent)}
+		& .rq-copy:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 45%, transparent)}
+		& .rq-catch{background:var(--surface); color:var(--muted);
+			box-shadow:inset 0 0 0 1px var(--line)}
+		& .rq-catch:hover{color:var(--ink); box-shadow:inset 0 0 0 1px var(--rule)}
+		& .rq-pipe{color:var(--muted)}
+		& pre{font-family:var(--mono); font-size:12px; line-height:1.6; padding:var(--s3); margin:0;
+			white-space:pre-wrap; overflow-wrap:anywhere}
+		& .rq-slot{font-family:var(--mono); font-weight:650; border-radius:var(--r-xs); padding:0 3px;
+			background:var(--info-bg); color:var(--info-fg)}
+		& .rq-slot[data-rq-filled]{background:var(--success-bg); color:var(--success-fg)}
+		& .rq-in{display:block; width:100%; box-sizing:border-box; resize:vertical; min-height:52px;
+			border:0; padding:var(--s3); font-family:var(--mono); font-size:12px; line-height:1.6;
+			background:var(--surface); color:var(--ink);
+			border-end-start-radius:var(--r-inner); border-end-end-radius:var(--r-inner)}
+		& .rq-in::placeholder{color:var(--muted)}
+		& .rq-in:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}
+		& button:focus-visible,& input:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}
+		& .rq-clear{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sm);
+			font:inherit; font-size:11.5px; padding:3px 9px; cursor:pointer; color:var(--muted)}
+		& .rq-clear:hover{color:var(--ink); border-color:var(--rule)}
+		& .rq-live .rq-pane{border-color:var(--success-fg)}
+		& .rq-status{font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 8px;
+			border-radius:var(--r-pill); background:var(--neutral-bg); color:var(--neutral-fg)}
+		& .rq-status.success{background:var(--success-bg); color:var(--success-fg)}
+		& .rq-status.warning{background:var(--warning-bg); color:var(--warning-fg)}
+		& .rq-status.danger{background:var(--danger-bg); color:var(--danger-fg)}
+		& .rq-status.info{background:var(--info-bg); color:var(--info-fg)}
+		& .rq-hdrs{display:grid; grid-template-columns:max-content 1fr; gap:2px var(--s3); margin:0;
+			padding:var(--s3); border-bottom:1px solid var(--line); font-family:var(--mono); font-size:12px}
+		& .rq-hdrs dt{color:var(--muted)} & .rq-hdrs dd{margin:0; overflow-wrap:anywhere; white-space:pre-line}
+		& .rq-verdict{display:flex; gap:var(--s3); padding:var(--s3); border-radius:var(--r-inner);
+			background:var(--neutral-bg); break-inside:avoid}
+		& .rq-verdict.success{background:var(--success-bg)} & .rq-verdict.warning{background:var(--warning-bg)}
+		& .rq-verdict.danger{background:var(--danger-bg)} & .rq-verdict.info{background:var(--info-bg)}
+		& .rq-vlbl{flex:none; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase}}
 }
 
 @layer print {
@@ -805,6 +885,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   lower = smaller fonts + more content per page (try 0.80–0.90). */
 		.wrap{max-width:none; padding:0; zoom:0.75}
 		.sc,.skaldr-live{display:none}
+		/* A tab hides a case on screen only: on paper every recorded case prints, each under its own
+		   heading, because a tab must not hide evidence. The form and the copy button are interactive
+		   and drop out; the command stays, since that is what a reader reproduces the call from. */
+		.rq .rq-case[data-rq-hidden]{display:flex}
+		.rq .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); break-after:avoid}
+		.rq .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}
+		.rq .rq-vars input{border:0; padding-inline:0}
+		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
+		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}
@@ -869,7 +958,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <body>
 <div class="wrap">
 <header class="hero"><h1>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience — ops reads the impact, the floor team reads the fix.</p></header>
-<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
+<nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix — discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>
 
@@ -1064,6 +1153,72 @@ assert sum(counted) == expected
 </div><div class="wstep warning"><span class="wnum">3</span><span class="wlabel">Escalate anything that still won&#39;t balance</span></div><div class="wdetail"><div class="callout warning"><div>A residual gap is a vendor short-ship, not a miscount — open a ticket, don&#39;t force the numbers.</div></div>
 </div></div>
 
+<h2 id="pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</h2>
+
+<p class="text">The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in your browser tab and is never written back into this page.</p>
+<section class="rq">
+<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Read one bin&#39;s expected quantity</span></div>
+<div class="rq-vars">
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
+<div class="rq-fields">
+<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
+<label class="rq-field"><span class="rq-fname">bin</span><input type="text" data-rq-var="bin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A-17-3" value="A-17-3"></label>
+<label class="rq-field wide"><span class="rq-fname">API token<span class="rq-lock">not saved</span></span><input type="text" data-rq-var="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste your own"></label>
+</div>
+</div>
+<div class="rq-tabs" role="tablist" aria-label="Recorded cases"><button type="button" role="tab" data-rq-tab="0" aria-selected="true"><span class="rq-dot success"></span>a bin that balances</button><button type="button" role="tab" data-rq-tab="1" aria-selected="false"><span class="rq-dot success"></span>an overflow bin</button><button type="button" role="tab" data-rq-tab="2" aria-selected="false"><span class="rq-dot warning"></span>a bin the token cannot read</button></div>
+<div class="rq-case" data-rq-case="0">
+<h4 class="rq-case-hd">a bin that balances</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-3&#34;, &#34;expected&#34;: 48, &#34;counted&#34;: 48, &#34;lastCount&#34;: &#34;2026-07-14T09:12:00Z&#34; }
+</pre></div>
+<div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Expected and counted agree, so the bin needs no recount.</span></div>
+</div>
+<div class="rq-case" data-rq-case="1" data-rq-hidden>
+<h4 class="rq-case-hd">an overflow bin</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-9&#34;, &#34;expected&#34;: 120, &#34;counted&#34;: 96, &#34;overflow&#34;: true }
+</pre></div>
+<div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A 24-unit gap on a bin flagged <code>overflow: true</code>. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.</span></div>
+</div>
+<div class="rq-case" data-rq-case="2" data-rq-hidden>
+<h4 class="rq-case-hd">a bin the token cannot read</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
+Accept: application/json</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status warning">401 Unauthorized</span></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;error&#34;: &#34;missing_credentials&#34;, &#34;message&#34;: &#34;This endpoint requires a bearer token.&#34; }
+</pre></div>
+<div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
+</div>
+</section>
+
+
 <h2 id="sources">Sources</h2>
 
 <p class="text">Method definitions follow the warehouse counting SOP <sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>; the discrepancy thresholds come from the Q2 reconciliation audit <sup class="fn"><a id="fnref-audit" href="#ref-audit">[2]</a></sup>.</p>
@@ -1141,6 +1296,206 @@ assert sum(counted) == expected
 	});
 	window.addEventListener("afterprint", function () {
 		document.querySelectorAll("details").forEach(function (item) { item.open = item.dataset.printOpen === "1"; });
+	});
+})();
+</script><script>
+(function () {
+	var blocks = document.querySelectorAll(".rq");
+	if (!blocks.length) return;
+
+	function shellSafe(value) {
+		return value.replace(/'/g, "'\\''");
+	}
+
+	/* The reader's own machine decides which clipboard command the capture pipe names, so a page
+	   shared across a mixed team hands each person something that runs where they are. */
+	function clipboardTool() {
+		var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+		if (/mac/i.test(platform)) return "pbcopy";
+		if (/win/i.test(platform)) return "clip.exe";
+		return "xclip -selection clipboard";
+	}
+
+	function fillSlots(block) {
+		var values = {};
+		block.querySelectorAll("[data-rq-var]").forEach(function (input) {
+			values[input.dataset.rqVar] = input.value.trim();
+		});
+		block.querySelectorAll("[data-rq-slot]").forEach(function (slot) {
+			var name = slot.dataset.rqSlot;
+			var value = values[name];
+			if (!value) {
+				slot.textContent = "‹" + name + "›";
+				slot.removeAttribute("data-rq-filled");
+				return;
+			}
+			slot.textContent = slot.dataset.rqQuote === "shell" ? shellSafe(value) : value;
+			slot.setAttribute("data-rq-filled", "");
+		});
+	}
+
+	var REASONS = {
+		200: "OK", 201: "Created", 202: "Accepted", 204: "No Content", 301: "Moved Permanently",
+		302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+		404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 410: "Gone",
+		415: "Unsupported Media Type", 422: "Unprocessable Entity", 429: "Too Many Requests",
+		500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout"
+	};
+
+	/* A curl -i dump is a status line, headers, a blank line, then the body. Anything that does not
+	   start with one is taken as a bare body, which is what `curl -s` returns. HTTP/2 carries no reason
+	   phrase, so an absent one falls back to the standard text for the code. */
+	function parseResponse(text) {
+		var trimmed = text.replace(/^\s+/, "");
+		if (!trimmed) return null;
+		if (!/^HTTP\/\d/.test(trimmed)) return { status: null, reason: "no status line", headers: [], body: trimmed.trim() };
+		var split = trimmed.split(/\r?\n\r?\n/);
+		var head = split.shift().split(/\r?\n/);
+		var match = head.shift().match(/^HTTP\/[\d.]+\s+(\d{3})\s*(.*)$/);
+		var status = match ? Number(match[1]) : null;
+		var headers = [];
+		head.forEach(function (line) {
+			var at = line.indexOf(":");
+			if (at > 0) headers.push([line.slice(0, at).trim(), line.slice(at + 1).trim()]);
+		});
+		return {
+			status: status,
+			reason: (match && match[2]) || REASONS[status] || "",
+			headers: headers,
+			body: split.join("\n\n").trim()
+		};
+	}
+
+	function toneOf(status) {
+		if (!status) return "";
+		return { 2: "success", 3: "info", 4: "warning", 5: "danger" }[Math.floor(status / 100)] || "";
+	}
+
+	function prettyBody(body) {
+		try { return JSON.stringify(JSON.parse(body), null, 2); } catch (err) { return body; }
+	}
+
+	function element(tag, className, text) {
+		var node = document.createElement(tag);
+		if (className) node.className = className;
+		if (text !== undefined) node.textContent = text;
+		return node;
+	}
+
+	/* Everything below is built with textContent. A pasted response is untrusted text, and an embed
+	   fragment carries no CSP of its own, so assigning it as HTML would run what it contains. */
+	function renderLive(host, parsed) {
+		host.textContent = "";
+		if (!parsed) {
+			host.hidden = true;
+			return;
+		}
+		var pane = element("div", "rq-pane");
+		var header = element("div", "rq-pane-hd");
+		header.appendChild(element("span", null, "What you got"));
+		var status = element("span", "rq-status " + toneOf(parsed.status));
+		status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
+		header.appendChild(status);
+		pane.appendChild(header);
+		if (parsed.headers.length) {
+			var list = element("dl", "rq-hdrs");
+			parsed.headers.forEach(function (pair) {
+				list.appendChild(element("dt", null, pair[0]));
+				list.appendChild(element("dd", null, pair[1]));
+			});
+			pane.appendChild(list);
+		}
+		pane.appendChild(element("pre", null, prettyBody(parsed.body)));
+		host.appendChild(pane);
+		host.hidden = false;
+	}
+
+	function selectText(node) {
+		var range = document.createRange();
+		range.selectNodeContents(node);
+		var selection = window.getSelection();
+		if (!selection) return false;
+		selection.removeAllRanges();
+		selection.addRange(range);
+		return true;
+	}
+
+	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
+	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
+	   command leaves the reader one keystroke away in every case the API refuses. */
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
+	function commandText(node, withPipe) {
+		if (withPipe) return node.textContent;
+		var clone = node.cloneNode(true);
+		var pipe = clone.querySelector(".rq-pipe");
+		if (pipe) pipe.remove();
+		return clone.textContent;
+	}
+
+	function copyCommand(button, node, withPipe) {
+		var text = commandText(node, withPipe);
+		var settle = function (label) {
+			var original = button.dataset.rqLabel || button.textContent;
+			button.dataset.rqLabel = original;
+			button.textContent = label;
+			setTimeout(function () { button.textContent = button.dataset.rqLabel; }, 1600);
+		};
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(function () { settle("Copied"); }).catch(function () {
+				settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+			});
+			return;
+		}
+		settle(selectText(node) ? "Press ⌘C" : "Copy failed");
+	}
+
+	var tool = clipboardTool();
+	document.querySelectorAll(".rq-cliptool").forEach(function (node) { node.textContent = tool; });
+
+	blocks.forEach(function (block) {
+		fillSlots(block);
+
+		block.addEventListener("input", function (event) {
+			if (event.target.dataset.rqVar) {
+				fillSlots(block);
+				return;
+			}
+			if (!event.target.classList.contains("rq-in")) return;
+			var area = event.target;
+			var scope = area.closest("[data-rq-case]");
+			renderLive(scope.querySelector(".rq-live"), parseResponse(area.value));
+			scope.querySelector(".rq-clear").hidden = !area.value.trim();
+		});
+
+		block.addEventListener("click", function (event) {
+			var clear = event.target.closest(".rq-clear");
+			if (clear) {
+				var scope = clear.closest("[data-rq-case]");
+				scope.querySelector(".rq-in").value = "";
+				renderLive(scope.querySelector(".rq-live"), null);
+				clear.hidden = true;
+				return;
+			}
+			var copy = event.target.closest(".rq-copy");
+			if (copy) {
+				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
+				var withPipe = copy.classList.contains("rq-catch");
+				command.querySelector(".rq-pipe").hidden = !withPipe;
+				copyCommand(copy, command, withPipe);
+				return;
+			}
+			var tab = event.target.closest("[data-rq-tab]");
+			if (!tab) return;
+			var chosen = tab.dataset.rqTab;
+			block.querySelectorAll("[data-rq-tab]").forEach(function (each) {
+				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
+			});
+			block.querySelectorAll("[data-rq-case]").forEach(function (each) {
+				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
+				else each.setAttribute("data-rq-hidden", "");
+			});
+		});
 	});
 })();
 </script></body>

@@ -1,6 +1,7 @@
 """Derived, never-authored values: TOC, the used-badge legend, the provenance footer, the
-number/percent formatting helpers, and the swimlane grid layout — everything the templates need
-computed from the data so it can't drift from it.
+number/percent formatting helpers, the swimlane grid layout, and a `request` block's wire form,
+curl command and status text — everything the templates need computed from the data so it can't
+drift from it.
 
 `col_sum` is re-exported from `models` (it lives there because `Table._reconcile` validates against
 it, and models must not import compute) so templates can reach it through this one module.
@@ -13,6 +14,7 @@ from typing import Any, TypedDict
 
 from skaldr.errors import ReportError
 from skaldr.models import (
+    VARIABLE_TOKEN,
     AnyBlock,
     Badge,
     Grid,
@@ -22,6 +24,9 @@ from skaldr.models import (
     MatrixCell,
     Panel,
     Report,
+    Request,
+    RequestCase,
+    RequestResponse,
     Section,
     Swimlane,
     SwimlaneStep,
@@ -657,6 +662,109 @@ def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
     so the lookup is unambiguous; the template only loops and never searches."""
     lookup = {(cell.row, cell.col): cell for cell in block.cells}
     return [[lookup.get((row, col)) for col in block.columns] for row in block.rows]
+
+
+HTTP_REASONS = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    204: "No Content",
+    301: "Moved Permanently",
+    302: "Found",
+    304: "Not Modified",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    405: "Method Not Allowed",
+    409: "Conflict",
+    410: "Gone",
+    415: "Unsupported Media Type",
+    422: "Unprocessable Entity",
+    429: "Too Many Requests",
+    500: "Internal Server Error",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+    504: "Gateway Timeout",
+}
+
+
+def status_line(response: RequestResponse) -> str:
+    """What the status pill reads. An HTTP/2 response carries no reason phrase, so an omitted one
+    falls back to the standard text for the code rather than rendering a bare number."""
+    if response.status is None:
+        return "no status line"
+    return f"{response.status} {response.reason or HTTP_REASONS.get(response.status, '')}".strip()
+
+
+def status_tone(response: RequestResponse) -> str:
+    """The tone a status class carries, so a case never authors its own colour."""
+    if response.status is None:
+        return "neutral"
+    return {2: "success", 3: "info", 4: "warning", 5: "danger"}.get(response.status // 100, "neutral")
+
+
+def case_value(block: Request, case: RequestCase) -> str | None:
+    """What this case supplies for the block's case axis, defaulting to its label."""
+    return None if block.case_variable is None else (case.value or case.label)
+
+
+def resolve_case(text: str, block: Request, case: RequestCase) -> str:
+    """`text` with the case axis filled in. The case variable is known when the page is built, so it
+    is substituted here; every other `{{name}}` stays for the reader to supply at read time."""
+    value = case_value(block, case)
+    if value is None:
+        return text
+    return VARIABLE_TOKEN.sub(
+        lambda match: value if match.group(1) == block.case_variable else match.group(0), text
+    )
+
+
+def variable_parts(text: str) -> list[tuple[str, str]]:
+    """`text` split around its `{{name}}` tokens as (literal, name) pairs, the name empty on the
+    trailing literal. The template renders each name as a slot the reader's input writes into."""
+    pieces = VARIABLE_TOKEN.split(text)
+    return [
+        (pieces[index], pieces[index + 1] if index + 1 < len(pieces) else "")
+        for index in range(0, len(pieces), 2)
+    ]
+
+
+def request_headers(block: Request, case: RequestCase) -> dict[str, str]:
+    """The headers this case sends: its own override when it has one, else the request's."""
+    return block.headers if case.headers is None else case.headers
+
+
+def request_wire(block: Request, case: RequestCase) -> str:
+    """The request as it goes on the wire, with `{{name}}` tokens intact for the reader's slots."""
+    lines = [f"{block.method} {block.url}"]
+    lines += [f"{name}: {value}" for name, value in request_headers(block, case).items()]
+    if block.body:
+        lines += ["", block.body]
+    return resolve_case("\n".join(lines), block, case)
+
+
+def single_quoted(text: str) -> str:
+    """`text` as one single-quoted shell word. A single quote inside it closes the string, escapes
+    itself and reopens, which is the only way a POSIX shell takes a quote inside single quotes."""
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def request_command(block: Request, case: RequestCase) -> str:
+    """The curl the reader copies, with `{{name}}` tokens intact. Every interpolated word is single
+    quoted, so a shell metacharacter in a url, a header, a body or a case label is sent rather than
+    run. The case axis resolves into each word before that word is quoted, so its value is escaped by
+    the same pass as everything else."""
+
+    def word(text: str) -> str:
+        return single_quoted(resolve_case(text, block, case))
+
+    parts = [f"curl -i -X {block.method}"]
+    parts += [f"  -H {word(f'{name}: {value}')}" for name, value in request_headers(block, case).items()]
+    if block.body:
+        parts.append(f"  --data {word(block.body)}")
+    parts.append(f"  {word(block.url)}")
+    return " \\\n".join(parts)
 
 
 def reconcile_line(table: Table) -> str:
