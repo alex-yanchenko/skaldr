@@ -208,27 +208,29 @@
 
 {% macro variable_slots(text, quoting="none") %}{% for literal, name in variable_parts(text) %}{{ literal }}{% if name %}<span class="rq-slot" data-rq-slot="{{ name }}" data-rq-quote="{{ quoting }}">&lsaquo;{{ name }}&rsaquo;</span>{% endif %}{% endfor %}{% endmacro %}
 
-{% macro request(block) %}
-<section class="rq">
-<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
-{% if block.variables %}
+{% macro variables_form(variables, produced) %}
 <div class="rq-vars">
 <div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
 <div class="rq-fields">
-{% for v in block.variables %}
+{% for v in variables %}
 <label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">not saved</span>{% endif %}</span><input type="text" data-rq-var="{{ v.name }}" autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}></label>
+{% endfor %}
+{% for capture, step_number in produced %}
+<label class="rq-field wide"><span class="rq-fname">{{ capture.name }}<span class="rq-from">from step {{ step_number }}</span></span><input type="text" readonly data-rq-produced="{{ capture.name }}"{% if capture.secret %} data-rq-secret{% endif %} placeholder="appears once you paste step {{ step_number }}&rsquo;s response"></label>
 {% endfor %}
 </div>
 </div>
+{% endmacro %}
+
+{% macro request_cases(core, captured) %}
+{% if core.cases | length > 1 %}
+<div class="rq-tabs" role="tablist" aria-label="Recorded cases">{% for case in core.cases %}<button type="button" role="tab" data-rq-tab="{{ loop.index0 }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</button>{% endfor %}</div>
 {% endif %}
-{% if block.cases | length > 1 %}
-<div class="rq-tabs" role="tablist" aria-label="Recorded cases">{% for case in block.cases %}<button type="button" role="tab" data-rq-tab="{{ loop.index0 }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</button>{% endfor %}</div>
-{% endif %}
-{% for case in block.cases %}
+{% for case in core.cases %}
 <div class="rq-case" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} data-rq-hidden{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(block, case)) }}</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(request_command(block, case), "shell") }}<span class="rq-pipe" hidden> \
+<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(step_command(core, case, captured), "shell") }}<span class="rq-pipe" hidden> \
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
@@ -239,6 +241,28 @@
 <div class="rq-verdict {{ status_tone(case.response) }}"><span class="rq-vlbl">Verdict</span><span>{{ case.verdict | richtext }}</span></div>
 {% endif %}
 </div>
+{% endfor %}
+{% endmacro %}
+
+{% macro request(block) %}
+<section class="rq">
+<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
+{% if block.variables %}{{ variables_form(block.variables, []) }}{% endif %}
+{{ request_cases(block, []) }}
+</section>
+{% endmacro %}
+
+{% macro request_flow(block) %}
+<section class="rq rq-flow">
+<div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
+{{ variables_form(block.variables, produced_names(block)) }}
+<div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">{{ variable_slots(flow_script(block), "shell") }}</pre></div>
+{% for step in block.steps %}
+{% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
+<section class="rq-step">
+<div class="rq-step-hd"><span class="rq-step-n">step {{ loop.index }} of {{ block.steps | length }}</span><span class="rq-step-t">{{ step.label }}</span>{% for capture in step.captures %}<span class="rq-cap" data-rq-capture="{{ capture.name }}"{% if capture.json_path %} data-rq-json="{{ capture.json_path }}"{% endif %}{% if capture.secret %} data-rq-secret{% endif %}>captures {{ capture.name }}</span>{% endfor %}</div>
+<div class="rq-step-body">{{ request_cases(step, produced_before(block, loop.index0)) }}</div>
+</section>
 {% endfor %}
 </section>
 {% endmacro %}
@@ -297,6 +321,8 @@
 {{ table(block) }}
 {% elif block.type == "request" %}
 {{ request(block) }}
+{% elif block.type == "request_flow" %}
+{{ request_flow(block) }}
 {% elif block.type == "section" %}
 <details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "panel" %}

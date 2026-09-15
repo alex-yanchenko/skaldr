@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-8X06SrZf1YPIkScEvKndSgFTE80FtbuecXqQ3bUBEXw=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-Z6DcppYTXFe+fwqBaAfIZfwaGBAa5bmje15saKNaSg0=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -868,7 +868,26 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--neutral-bg); break-inside:avoid}
 		& .rq-verdict.success{background:var(--success-bg)} & .rq-verdict.warning{background:var(--warning-bg)}
 		& .rq-verdict.danger{background:var(--danger-bg)} & .rq-verdict.info{background:var(--info-bg)}
-		& .rq-vlbl{flex:none; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase}}
+		& .rq-vlbl{flex:none; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase}
+		& .rq-from{font-size:9.5px; padding:1px 5px; border-radius:var(--r-xs);
+			background:var(--info-bg); color:var(--info-fg)}
+		& .rq-script{margin-inline-start:auto}
+		& .rq-scriptpane{margin:var(--s3) var(--s4) 0}
+		& .rq-step{margin:var(--s3) var(--s4) 0; border:1px solid var(--rule); border-radius:var(--r-inner);
+			background:var(--panel); overflow:hidden}
+		& .rq-step-hd{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;
+			padding:7px var(--s3); background:var(--surface); border-bottom:1px solid var(--line); break-after:avoid}
+		& .rq-step-n{font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:0.06em;
+			text-transform:uppercase; color:var(--muted)}
+		& .rq-step-t{font-size:13px; font-weight:650}
+		& .rq-step-body{padding:0 var(--s3) var(--s3)}
+		& .rq-step-body .rq-case{padding-inline:0}
+		& .rq-cap{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 6px;
+			border-radius:var(--r-xs); background:var(--info-bg); color:var(--info-fg)}
+		& .rq-cap[data-rq-got]{background:var(--success-bg); color:var(--success-fg)}
+		& .rq-handoff{display:flex; gap:var(--s2); align-items:center; justify-content:center;
+			padding:var(--s2) 0; font-family:var(--mono); font-size:11px; color:var(--muted)}
+		& .rq-bar{width:1px; height:12px; background:var(--rule)}}
 }
 
 @layer print {
@@ -1216,6 +1235,7 @@ Accept: application/json</pre></div>
 </pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
 </div>
+
 </section>
 
 
@@ -1321,6 +1341,9 @@ Accept: application/json</pre></div>
 		block.querySelectorAll("[data-rq-var]").forEach(function (input) {
 			values[input.dataset.rqVar] = input.value.trim();
 		});
+		block.querySelectorAll("[data-rq-produced]").forEach(function (input) {
+			values[input.dataset.rqProduced] = input.dataset.rqValue || "";
+		});
 		block.querySelectorAll("[data-rq-slot]").forEach(function (slot) {
 			var name = slot.dataset.rqSlot;
 			var value = values[name];
@@ -1410,6 +1433,38 @@ Accept: application/json</pre></div>
 		host.hidden = false;
 	}
 
+	function readJsonPath(body, path) {
+		var node = JSON.parse(body);
+		path.replace(/^\$\.?/, "").split(".").forEach(function (key) {
+			node = node === undefined || node === null ? node : node[key];
+		});
+		return node === undefined || node === null ? "" : String(node);
+	}
+
+	/* A step's captures come off the response the reader pasted into that step, and feed the slots of
+	   every later step. A failed extraction clears the value rather than leaving a stale one standing. */
+	function applyCaptures(block, step, parsed) {
+		if (!step) return;
+		step.querySelectorAll("[data-rq-capture]").forEach(function (chip) {
+			var name = chip.dataset.rqCapture;
+			var value = "";
+			if (parsed) {
+				try {
+					value = chip.dataset.rqJson ? readJsonPath(parsed.body, chip.dataset.rqJson) : parsed.body.trim();
+				} catch (err) {
+					value = "";
+				}
+			}
+			var field = block.querySelector('[data-rq-produced="' + name + '"]');
+			if (field) {
+				field.dataset.rqValue = value;
+				field.value = !value ? "" : field.hasAttribute("data-rq-secret") ? "captured, " + value.length + " characters" : value;
+			}
+			chip.toggleAttribute("data-rq-got", Boolean(value));
+		});
+		fillSlots(block);
+	}
+
 	function selectText(node) {
 		var range = document.createRange();
 		range.selectNodeContents(node);
@@ -1464,8 +1519,10 @@ Accept: application/json</pre></div>
 			if (!event.target.classList.contains("rq-in")) return;
 			var area = event.target;
 			var scope = area.closest("[data-rq-case]");
-			renderLive(scope.querySelector(".rq-live"), parseResponse(area.value));
+			var parsed = parseResponse(area.value);
+			renderLive(scope.querySelector(".rq-live"), parsed);
 			scope.querySelector(".rq-clear").hidden = !area.value.trim();
+			applyCaptures(block, area.closest(".rq-step"), parsed);
 		});
 
 		block.addEventListener("click", function (event) {
@@ -1475,6 +1532,12 @@ Accept: application/json</pre></div>
 				scope.querySelector(".rq-in").value = "";
 				renderLive(scope.querySelector(".rq-live"), null);
 				clear.hidden = true;
+				applyCaptures(block, clear.closest(".rq-step"), null);
+				return;
+			}
+			var script = event.target.closest(".rq-script");
+			if (script) {
+				copyCommand(script, block.querySelector(".rq-flowscript"), false);
 				return;
 			}
 			var copy = event.target.closest(".rq-copy");

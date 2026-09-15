@@ -21,6 +21,9 @@
 		block.querySelectorAll("[data-rq-var]").forEach(function (input) {
 			values[input.dataset.rqVar] = input.value.trim();
 		});
+		block.querySelectorAll("[data-rq-produced]").forEach(function (input) {
+			values[input.dataset.rqProduced] = input.dataset.rqValue || "";
+		});
 		block.querySelectorAll("[data-rq-slot]").forEach(function (slot) {
 			var name = slot.dataset.rqSlot;
 			var value = values[name];
@@ -110,6 +113,38 @@
 		host.hidden = false;
 	}
 
+	function readJsonPath(body, path) {
+		var node = JSON.parse(body);
+		path.replace(/^\$\.?/, "").split(".").forEach(function (key) {
+			node = node === undefined || node === null ? node : node[key];
+		});
+		return node === undefined || node === null ? "" : String(node);
+	}
+
+	/* A step's captures come off the response the reader pasted into that step, and feed the slots of
+	   every later step. A failed extraction clears the value rather than leaving a stale one standing. */
+	function applyCaptures(block, step, parsed) {
+		if (!step) return;
+		step.querySelectorAll("[data-rq-capture]").forEach(function (chip) {
+			var name = chip.dataset.rqCapture;
+			var value = "";
+			if (parsed) {
+				try {
+					value = chip.dataset.rqJson ? readJsonPath(parsed.body, chip.dataset.rqJson) : parsed.body.trim();
+				} catch (err) {
+					value = "";
+				}
+			}
+			var field = block.querySelector('[data-rq-produced="' + name + '"]');
+			if (field) {
+				field.dataset.rqValue = value;
+				field.value = !value ? "" : field.hasAttribute("data-rq-secret") ? "captured, " + value.length + " characters" : value;
+			}
+			chip.toggleAttribute("data-rq-got", Boolean(value));
+		});
+		fillSlots(block);
+	}
+
 	function selectText(node) {
 		var range = document.createRange();
 		range.selectNodeContents(node);
@@ -164,8 +199,10 @@
 			if (!event.target.classList.contains("rq-in")) return;
 			var area = event.target;
 			var scope = area.closest("[data-rq-case]");
-			renderLive(scope.querySelector(".rq-live"), parseResponse(area.value));
+			var parsed = parseResponse(area.value);
+			renderLive(scope.querySelector(".rq-live"), parsed);
 			scope.querySelector(".rq-clear").hidden = !area.value.trim();
+			applyCaptures(block, area.closest(".rq-step"), parsed);
 		});
 
 		block.addEventListener("click", function (event) {
@@ -175,6 +212,12 @@
 				scope.querySelector(".rq-in").value = "";
 				renderLive(scope.querySelector(".rq-live"), null);
 				clear.hidden = true;
+				applyCaptures(block, clear.closest(".rq-step"), null);
+				return;
+			}
+			var script = event.target.closest(".rq-script");
+			if (script) {
+				copyCommand(script, block.querySelector(".rq-flowscript"), false);
 				return;
 			}
 			var copy = event.target.closest(".rq-copy");

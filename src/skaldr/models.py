@@ -1645,9 +1645,11 @@ class RequestCase(_Frozen):
         return self
 
 
-class Request(_Block):
-    type: Literal["request"]
-    label: str = Field(min_length=1, description="What the request is for, shown in the block header.")
+class _RequestCore(_Frozen):
+    """One HTTP call and the outcomes it produced. Shared by a standalone `request` and by a step of a
+    `request_flow`, which differ only in where their variables come from."""
+
+    label: str = Field(min_length=1, description="What the call is for, shown in the header.")
     method: HttpMethod = Field(description="The HTTP method.")
     url: str = Field(min_length=1, description="The full URL. May carry `{{variable}}` tokens.")
     headers: dict[str, str] = Field(
@@ -1659,12 +1661,6 @@ class Request(_Block):
         default=None,
         description="Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential "
         "can sit inside a JSON login payload without ever being written here.",
-    )
-    variables: list[RequestVariable] = Field(
-        default_factory=list[RequestVariable],
-        description="The values a reader supplies. A `{{name}}` declared here is a runtime blank the "
-        "reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled "
-        "placeholder and still fails strict, which is what catches a mistyped name.",
     )
     case_variable: str | None = Field(
         default=None,
@@ -1679,27 +1675,17 @@ class Request(_Block):
     )
 
     def referenced_variables(self) -> set[str]:
-        """Every `{{name}}` the request interpolates, across the url, the header values and the body."""
+        """Every `{{name}}` this call interpolates, across the url, the header values and the body."""
         scan = " ".join((self.url, *self.headers.values(), self.body or ""))
         scan += " ".join(value for case in self.cases for value in (case.headers or {}).values())
         return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
 
-    def resolvable_variables(self) -> set[str]:
-        """Every name the block can fill by itself: the reader's fields plus the case axis."""
-        names = {variable.name for variable in self.variables}
-        return names | ({self.case_variable} if self.case_variable else set())
+    def case_axis(self) -> set[str]:
+        """The case variable as a set, empty when the call declares none."""
+        return {self.case_variable} if self.case_variable else set()
 
     @model_validator(mode="after")
-    def _shape(self) -> "Request":
-        declared = [variable.name for variable in self.variables]
-        repeated = {name for name in declared if declared.count(name) > 1}
-        if repeated:
-            raise ValueError(f"request declares a variable twice: {', '.join(sorted(repeated))}")
-        if self.case_variable is not None and self.case_variable in declared:
-            raise ValueError(
-                f"`{self.case_variable}` is both the case_variable and a declared variable — each case "
-                "supplies it, so it must not also be a field the reader fills"
-            )
+    def _core_shape(self) -> "_RequestCore":
         labels = [case.label for case in self.cases]
         duplicated = {label for label in labels if labels.count(label) > 1}
         if duplicated:
@@ -1718,11 +1704,157 @@ class Request(_Block):
                 raise ValueError("request header name must not be blank")
             if not value.strip():
                 raise ValueError(f"request header `{name}` must not have a blank value")
+        return self
+
+
+class Request(_RequestCore, _Block):
+    type: Literal["request"]
+    variables: list[RequestVariable] = Field(
+        default_factory=list[RequestVariable],
+        description="The values a reader supplies. A `{{name}}` declared here is a runtime blank the "
+        "reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled "
+        "placeholder and still fails strict, which is what catches a mistyped name.",
+    )
+
+    def resolvable_variables(self) -> set[str]:
+        """Every name the block can fill by itself: the reader's fields plus the case axis."""
+        return {variable.name for variable in self.variables} | self.case_axis()
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Request":
+        declared = [variable.name for variable in self.variables]
+        repeated = {name for name in declared if declared.count(name) > 1}
+        if repeated:
+            raise ValueError(f"request declares a variable twice: {', '.join(sorted(repeated))}")
+        if self.case_variable is not None and self.case_variable in declared:
+            raise ValueError(
+                f"`{self.case_variable}` is both the case_variable and a declared variable — each case "
+                "supplies it, so it must not also be a field the reader fills"
+            )
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
                 f"request declares {', '.join(sorted(unused))} but never uses "
                 f"{'them' if len(unused) > 1 else 'it'} — every variable needs a `{{{{name}}}}` to fill"
+            )
+        return self
+
+
+class RequestCapture(_Frozen):
+    name: str = Field(
+        pattern=rf"^{REFERENCE_KEY_PATTERN}$",
+        description="The name this step produces. A later step writes it as `{{name}}` and the reader "
+        "never types it.",
+    )
+    source: Literal["body"] | None = Field(
+        default=None,
+        description="Take the whole response body, trimmed. For an endpoint that answers with a bare "
+        "token and no JSON, which is why the shell form of such a flow needs no jq. Use this or "
+        "`json_path`, not both.",
+    )
+    json_path: str | None = Field(
+        default=None,
+        min_length=2,
+        pattern=r"^\$\.[A-Za-z0-9_.\[\]-]+$",
+        description="A dotted path into a JSON response body, written `$.access_token`. Use this or "
+        "`source`, not both.",
+    )
+    secret: bool = Field(
+        default=False,
+        description="Show the captured value as a count rather than in the field that reports it. The "
+        "value still appears in the command of any step that interpolates it.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestCapture":
+        if (self.source is None) == (self.json_path is None):
+            raise ValueError(
+                f"capture `{self.name}` takes `source: body` or a `json_path`, exactly one of the two"
+            )
+        return self
+
+
+class RequestStep(_RequestCore):
+    captures: list[RequestCapture] = Field(
+        default_factory=list[RequestCapture],
+        description="Values this step's response produces for later steps to interpolate.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestStep":
+        names = [capture.name for capture in self.captures]
+        repeated = {name for name in names if names.count(name) > 1}
+        if repeated:
+            raise ValueError(f"step captures the same name twice: {', '.join(sorted(repeated))}")
+        return self
+
+
+class RequestFlow(_Block):
+    type: Literal["request_flow"]
+    label: str = Field(min_length=1, description="What the flow is for, shown in the block header.")
+    variables: list[RequestVariable] = Field(
+        default_factory=list[RequestVariable],
+        description="The values a reader supplies, shared by every step. A name a step captures is not "
+        "declared here: the flow produces it rather than asking for it.",
+    )
+    steps: list[RequestStep] = Field(
+        min_length=2,
+        description="The calls in the order they run. A flow of one step is a `request`, so use that.",
+    )
+
+    def produced_by(self, index: int) -> set[str]:
+        """Names captured by the steps before `index`, which is what that step may interpolate."""
+        return {capture.name for step in self.steps[:index] for capture in step.captures}
+
+    def resolvable_variables(self) -> set[str]:
+        """Every name the block fills by itself: the reader's fields, each step's case axis, and every
+        captured name."""
+        names = {variable.name for variable in self.variables}
+        for step in self.steps:
+            names |= step.case_axis() | {capture.name for capture in step.captures}
+        return names
+
+    def unresolved_variables(self) -> set[str]:
+        """Names a step interpolates that nothing can fill by the time that step runs. A capture from a
+        later step does not count: the value does not exist yet when the reader reaches this one."""
+        declared = {variable.name for variable in self.variables}
+        missing: set[str] = set()
+        for index, step in enumerate(self.steps):
+            available = declared | step.case_axis() | self.produced_by(index)
+            missing |= step.referenced_variables() - available
+        return missing
+
+    @model_validator(mode="after")
+    def _shape(self) -> "RequestFlow":
+        declared = [variable.name for variable in self.variables]
+        repeated = {name for name in declared if declared.count(name) > 1}
+        if repeated:
+            raise ValueError(f"flow declares a variable twice: {', '.join(sorted(repeated))}")
+        captured = [capture.name for step in self.steps for capture in step.captures]
+        clashing = {name for name in captured if name in declared}
+        if clashing:
+            raise ValueError(
+                f"{', '.join(sorted(clashing))} is both captured and declared — a step produces it, so "
+                "it must not also be a field the reader fills"
+            )
+        duplicated = {name for name in captured if captured.count(name) > 1}
+        if duplicated:
+            raise ValueError(f"two steps capture the same name: {', '.join(sorted(duplicated))}")
+        for index, step in enumerate(self.steps):
+            late = step.referenced_variables() & (set(captured) - self.produced_by(index))
+            late -= {capture.name for capture in step.captures}
+            if late:
+                raise ValueError(
+                    f"step {index + 1} uses {', '.join(sorted(late))} before the step that captures "
+                    f"{'them' if len(late) > 1 else 'it'} has run"
+                )
+        unused = self.resolvable_variables() - {
+            name for step in self.steps for name in step.referenced_variables()
+        }
+        if unused:
+            raise ValueError(
+                f"flow declares or captures {', '.join(sorted(unused))} but no step uses "
+                f"{'them' if len(unused) > 1 else 'it'}"
             )
         return self
 
@@ -1755,7 +1887,7 @@ _Leaf = (
     | References
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
-FullWidthBlock = Annotated[_Leaf | Request, Field(discriminator="type")]
+FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
 
 
 class Section(_Block):
@@ -1895,29 +2027,34 @@ class Walkthrough(_Block):
     )
 
 
-Block = Annotated[_Leaf | Request | Section | Grid | Walkthrough | Panel, Field(discriminator="type")]
+Block = Annotated[
+    _Leaf | Request | RequestFlow | Section | Grid | Walkthrough | Panel, Field(discriminator="type")
+]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Request | Section | Panel | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
-def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request]:
-    """Every `request` block on the page, including ones nested in a section or a panel."""
+def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
+    """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
     for block in blocks:
-        if isinstance(block, Request):
+        if isinstance(block, (Request, RequestFlow)):
             yield block
         elif isinstance(block, (Section, Panel)):
             yield from iter_requests(block.blocks)
 
 
 def unresolvable_request_variables(blocks: Sequence[AnyBlock]) -> set[str]:
-    """Names a `request` interpolates but cannot fill: neither a reader's field nor the case axis. A
-    declared name is a runtime blank the reader supplies, so it is not an unfilled placeholder; an
-    undeclared one is a typo the strict gate should still catch."""
-    return {
-        name
-        for request in iter_requests(blocks)
-        for name in request.referenced_variables() - request.resolvable_variables()
-    }
+    """Names a `request` or `request_flow` interpolates but cannot fill: neither a reader's field, nor
+    a case axis, nor a value an earlier step captured. A declared name is a runtime blank the reader
+    supplies, so it is not an unfilled placeholder; an undeclared one is a typo the strict gate should
+    still catch."""
+    names: set[str] = set()
+    for block in iter_requests(blocks):
+        if isinstance(block, RequestFlow):
+            names |= block.unresolved_variables()
+        else:
+            names |= block.referenced_variables() - block.resolvable_variables()
+    return names
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
