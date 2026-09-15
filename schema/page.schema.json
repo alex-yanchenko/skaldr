@@ -2897,6 +2897,24 @@
           "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
           "title": "Span"
         },
+        "variables": {
+          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
+          "items": {
+            "$ref": "#/$defs/RequestVariable"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "secret_style": {
+          "default": "inline",
+          "description": "How a `secret` variable reaches the copied command. `inline` writes the value the reader typed, which runs as it stands and lands in their shell history. `shell` writes `\"$NAME\"` instead, so the reader exports it first and the credential never enters the command line.",
+          "enum": [
+            "inline",
+            "shell"
+          ],
+          "title": "Secret Style",
+          "type": "string"
+        },
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
@@ -2971,14 +2989,6 @@
           "const": "request",
           "title": "Type",
           "type": "string"
-        },
-        "variables": {
-          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
-          "items": {
-            "$ref": "#/$defs/RequestVariable"
-          },
-          "title": "Variables",
-          "type": "array"
         }
       },
       "required": [
@@ -3122,6 +3132,24 @@
           "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
           "title": "Span"
         },
+        "variables": {
+          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
+          "items": {
+            "$ref": "#/$defs/RequestVariable"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "secret_style": {
+          "default": "inline",
+          "description": "How a `secret` variable reaches the copied command. `inline` writes the value the reader typed, which runs as it stands and lands in their shell history. `shell` writes `\"$NAME\"` instead, so the reader exports it first and the credential never enters the command line.",
+          "enum": [
+            "inline",
+            "shell"
+          ],
+          "title": "Secret Style",
+          "type": "string"
+        },
         "type": {
           "const": "request_flow",
           "title": "Type",
@@ -3132,14 +3160,6 @@
           "minLength": 1,
           "title": "Label",
           "type": "string"
-        },
-        "variables": {
-          "description": "The values a reader supplies, shared by every step. A name a step captures is not declared here: the flow produces it rather than asking for it.",
-          "items": {
-            "$ref": "#/$defs/RequestVariable"
-          },
-          "title": "Variables",
-          "type": "array"
         },
         "steps": {
           "description": "The calls in the order they run. A flow of one step is a `request`, so use that.",

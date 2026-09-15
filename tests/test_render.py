@@ -1836,6 +1836,36 @@ def test_a_case_may_replace_the_requests_headers() -> None:
     assert "Authorization" not in cases[2]
 
 
+def test_a_shell_style_secret_never_reaches_the_command_line() -> None:
+    """`inline` puts the typed value in the command, which runs as it stands and lands in shell
+    history. `shell` names the variable instead, so the reader exports it once."""
+    variables = [
+        {"name": "host", "example": "api.example.com"},
+        {"name": "token", "secret": True},
+    ]
+
+    inline = render_html(parse_report(_request_report(variables=variables)))
+    shelled = render_html(parse_report(_request_report(variables=variables, secret_style="shell")))
+    command = shelled.split('class="rq-cmd"')[1].split("</pre>")[0]
+
+    assert 'data-rq-slot="token"' in inline
+    assert 'data-rq-slot="token"' not in command
+    assert "&#34;$TOKEN&#34;" in command
+
+
+def test_only_a_field_that_is_not_secret_is_kept_across_a_reload() -> None:
+    """sessionStorage dies with the tab and never reaches disk, and a secret field carries no key at
+    all, so nothing a reader treats as a credential is written even there."""
+    variables = [
+        {"name": "host", "example": "api.example.com"},
+        {"name": "token", "secret": True},
+    ]
+
+    html = render_html(parse_report(_request_report(variables=variables)))
+
+    assert re.findall(r'data-rq-keep="([^"]+)"', html) == ["Read an endpoint:host"]
+
+
 def test_a_response_header_that_repeats_renders_every_value() -> None:
     case = {
         "label": "widgets",

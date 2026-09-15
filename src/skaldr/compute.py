@@ -35,6 +35,7 @@ from skaldr.models import (
     SwimlaneStep,
     SwimlaneStepState,
     Table,
+    VariableOwner,
     Walkthrough,
     col_sum,
     iter_matrices,
@@ -787,6 +788,13 @@ def step_command(
         parts.append(f"  --data {shell_word(resolve_case(step.body, step, case), captured)}")
     parts.append(f"  {shell_word(resolve_case(step.url, step, case), captured)}")
     return " \\\n".join(parts)
+
+
+def command_for(owner: VariableOwner, core: RequestLike, case: RequestCase) -> str:
+    """The curl shown under one call. A shell-style secret is named rather than written out, which is
+    the same splice a captured value gets, so the reader exports it once instead of pasting it into
+    every command."""
+    return step_command(core, case, owner.shell_secret_names())
 
 
 def request_command(block: RequestLike, case: RequestCase) -> str:

@@ -1707,14 +1707,32 @@ class _RequestCore(_Frozen):
         return self
 
 
-class Request(_RequestCore, _Block):
-    type: Literal["request"]
+class _VariableOwner(_Frozen):
+    """The block a reader's fields belong to, and how a secret among them reaches the command."""
+
     variables: list[RequestVariable] = Field(
         default_factory=list[RequestVariable],
         description="The values a reader supplies. A `{{name}}` declared here is a runtime blank the "
         "reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled "
         "placeholder and still fails strict, which is what catches a mistyped name.",
     )
+    secret_style: Literal["inline", "shell"] = Field(
+        default="inline",
+        description="How a `secret` variable reaches the copied command. `inline` writes the value the "
+        "reader typed, which runs as it stands and lands in their shell history. `shell` writes "
+        '`"$NAME"` instead, so the reader exports it first and the credential never enters the '
+        "command line.",
+    )
+
+    def shell_secret_names(self) -> set[str]:
+        """Secret names the command names as shell variables rather than writing out."""
+        if self.secret_style == "inline":
+            return set()
+        return {variable.name for variable in self.variables if variable.secret}
+
+
+class Request(_RequestCore, _VariableOwner, _Block):
+    type: Literal["request"]
 
     def resolvable_variables(self) -> set[str]:
         """Every name the block can fill by itself: the reader's fields plus the case axis."""
@@ -1810,14 +1828,9 @@ class RequestStep(_RequestCore):
         return self
 
 
-class RequestFlow(_Block):
+class RequestFlow(_VariableOwner, _Block):
     type: Literal["request_flow"]
     label: str = Field(min_length=1, description="What the flow is for, shown in the block header.")
-    variables: list[RequestVariable] = Field(
-        default_factory=list[RequestVariable],
-        description="The values a reader supplies, shared by every step. A name a step captures is not "
-        "declared here: the flow produces it rather than asking for it.",
-    )
     steps: list[RequestStep] = Field(
         min_length=2,
         description="The calls in the order they run. A flow of one step is a `request`, so use that.",
@@ -1916,6 +1929,7 @@ _Leaf = (
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
 RequestLike = Request | RequestStep
+VariableOwner = Request | RequestFlow
 
 
 class Section(_Block):

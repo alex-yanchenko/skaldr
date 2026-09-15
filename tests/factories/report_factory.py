@@ -25,6 +25,48 @@ def make_table(columns: list[dict[str, Any]], **overrides: Any) -> dict[str, Any
     return {"type": "table", "columns": columns, **overrides}
 
 
+def make_request(**overrides: Any) -> dict[str, Any]:
+    """A minimal valid `request`: one reader field the url uses, and one recorded case."""
+    block: dict[str, Any] = {
+        "type": "request",
+        "label": "Read an endpoint",
+        "method": "GET",
+        "url": "https://{{host}}/widgets",
+        "headers": {"Accept": "application/json"},
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "cases": [{"label": "one", "response": {"status": 200, "body": "[]"}}],
+    }
+    block.update(overrides)
+    return block
+
+
+def make_step(**overrides: Any) -> dict[str, Any]:
+    """A minimal valid `request_flow` step. Captures nothing unless a caller asks for it."""
+    step: dict[str, Any] = {
+        "label": "A step",
+        "method": "GET",
+        "url": "https://{{host}}/a",
+        "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
+    }
+    step.update(overrides)
+    return step
+
+
+def make_flow(**overrides: Any) -> dict[str, Any]:
+    """A minimal valid `request_flow`: step one captures a token, step two spends it."""
+    block: dict[str, Any] = {
+        "type": "request_flow",
+        "label": "Token, then read",
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "steps": [
+            make_step(captures=[{"name": "token", "source": "body"}]),
+            make_step(url="https://{{host}}/b", headers={"Authorization": "Bearer {{token}}"}),
+        ],
+    }
+    block.update(overrides)
+    return block
+
+
 def make_reconciled_table(**overrides: Any) -> dict[str, Any]:
     table: dict[str, Any] = {
         "type": "table",
