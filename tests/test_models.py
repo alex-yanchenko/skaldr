@@ -677,7 +677,7 @@ def test_walkthrough_parses_to_whole_model_with_default_step_span() -> None:
     )
 
 
-def test_walkthrough_requires_at_least_onemake_step() -> None:
+def test_walkthrough_requires_at_least_one_step() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.walkthrough\.steps.*at least 1"):
         parse_report(make_report(blocks=[{"type": "walkthrough", "steps": []}]))
 
@@ -743,7 +743,7 @@ def test_container_badge_nested_in_a_section_is_still_validated() -> None:
         parse_report(make_report(blocks=[section]))
 
 
-def test_declared_container_badges_pass_on_card_timeline_andmake_flow() -> None:
+def test_declared_container_badges_pass_on_card_timeline_and_flow() -> None:
     badges = {"OK": {"label": "OK", "tone": "green", "legend": "fine"}}
     blocks = [
         {"type": "cards", "items": [{"label": "A", "value": 1, "badges": ["OK"]}]},
@@ -2939,6 +2939,69 @@ def test_a_flow_carries_the_same_secret_style_option() -> None:
     assert isinstance(block, RequestFlow)
 
     assert block.shell_secret_names() == {"key"}
+
+
+def test_two_request_blocks_sharing_a_label_are_rejected() -> None:
+    """The label keys what a reader's fields are remembered under. Two blocks sharing it would share
+    the values, so typing a host into one restores it into the other."""
+    with pytest.raises(ReportError, match=r"request block label\(s\) used more than once"):
+        parse_report(make_report(blocks=[_request(), _request()]))
+
+
+def test_an_id_separates_two_request_blocks_that_share_a_label() -> None:
+    report = parse_report(make_report(blocks=[_request(), _request(id="staging")]))
+    second = report.blocks[1]
+    assert isinstance(second, Request)
+
+    assert second.id == "staging"
+
+
+def test_a_request_and_a_flow_sharing_a_label_are_rejected() -> None:
+    flow = make_flow(label="Read an endpoint")
+    with pytest.raises(ReportError, match=r"request block label\(s\) used more than once"):
+        parse_report(make_report(blocks=[_request(), flow]))
+
+
+@pytest.mark.parametrize("name", ["path", "HOME"], ids=["path", "home"])
+def test_a_shell_style_secret_named_after_a_shell_variable_is_rejected(name: str) -> None:
+    """The reader is told to export the name. Exporting PATH breaks every later command they run."""
+    block = _request(
+        secret_style="shell",
+        headers={"Authorization": "Bearer {{" + name + "}}"},
+        variables=[{"name": "host", "example": "a"}, {"name": name, "secret": True}],
+    )
+    with pytest.raises(ReportError, match=r"which the shell relies on"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_two_shell_style_secrets_that_become_one_variable_are_rejected() -> None:
+    block = _request(
+        secret_style="shell",
+        headers={"A": "{{api-key}}", "B": "{{API_KEY}}"},
+        variables=[
+            {"name": "host", "example": "a"},
+            {"name": "api-key", "secret": True},
+            {"name": "API_KEY", "secret": True},
+        ],
+    )
+    with pytest.raises(ReportError, match=r"become the same shell variable"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_a_shell_style_secret_may_not_collide_with_a_captured_name() -> None:
+    flow = make_flow(
+        secret_style="shell",
+        variables=[{"name": "host", "example": "a"}, {"name": "access-token", "secret": True}],
+        steps=[
+            make_step(
+                headers={"Authorization": "Bearer {{access-token}}"},
+                captures=[{"name": "ACCESS_TOKEN", "source": "body"}],
+            ),
+            make_step(url="https://{{host}}/b?t={{ACCESS_TOKEN}}"),
+        ],
+    )
+    with pytest.raises(ReportError, match=r"become the same shell variable"):
+        parse_report(make_report(blocks=[flow]))
 
 
 def test_a_request_is_accepted_inside_a_panel() -> None:

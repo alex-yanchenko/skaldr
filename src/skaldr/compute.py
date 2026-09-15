@@ -797,11 +797,6 @@ def command_for(owner: VariableOwner, core: RequestLike, case: RequestCase) -> s
     return step_command(core, case, owner.shell_secret_names())
 
 
-def request_command(block: RequestLike, case: RequestCase) -> str:
-    """The curl a standalone `request` copies: a step command with nothing captured before it."""
-    return step_command(block, case, set())
-
-
 def _capture_lines(step: RequestStep, command: str, response_var: str) -> list[str]:
     """The assignments that take a step's captures out of its response. One capture reads the command
     directly; several read a saved response, so the call runs once rather than once per value."""
@@ -835,7 +830,8 @@ def flow_script(flow: RequestFlow) -> str:
     the later steps read, so the chain runs without the reader copying a value between them."""
     lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
     for index, step in enumerate(flow.steps):
-        command = step_command(step, step.cases[0], flow.produced_by(index), show_headers=not step.captures)
+        named = flow.produced_by(index) | flow.shell_secret_names()
+        command = step_command(step, step.cases[0], named, show_headers=not step.captures)
         lines.append(f"# {index + 1}. {step.label}")
         if step.captures:
             lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")

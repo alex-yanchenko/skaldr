@@ -1716,6 +1716,13 @@ class _VariableOwner(_Frozen):
         "reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled "
         "placeholder and still fails strict, which is what catches a mistyped name.",
     )
+    id: str | None = Field(
+        default=None,
+        pattern=rf"^{ANCHOR_ID_PATTERN}$",
+        description="Optional stable id, unique across the page's request blocks. It keys what a "
+        "reader's non-secret fields are remembered under while their tab is open, so set one when two "
+        "blocks share a label, and keep it fixed if you want those values to survive a rename.",
+    )
     secret_style: Literal["inline", "shell"] = Field(
         default="inline",
         description="How a `secret` variable reaches the copied command. `inline` writes the value the "
@@ -1729,6 +1736,28 @@ class _VariableOwner(_Frozen):
         if self.secret_style == "inline":
             return set()
         return {variable.name for variable in self.variables if variable.secret}
+
+    @model_validator(mode="after")
+    def _owner_shape(self) -> "_VariableOwner":
+        reserved = sorted(
+            name for name in self.shell_secret_names() if shell_variable_name(name) in RESERVED_SHELL_NAMES
+        )
+        if reserved:
+            raise ValueError(
+                f"secret {', '.join(reserved)} becomes "
+                f"${shell_variable_name(reserved[0])} in the copied command under `secret_style: shell`, "
+                "which the shell relies on — name it something else"
+            )
+        named = [shell_variable_name(name) for name in self.shell_secret_names()]
+        collapsed = sorted(
+            name for name in self.shell_secret_names() if named.count(shell_variable_name(name)) > 1
+        )
+        if collapsed:
+            raise ValueError(
+                f"secrets {', '.join(collapsed)} become the same shell variable under "
+                "`secret_style: shell`, so one would overwrite the other"
+            )
+        return self
 
 
 class Request(_RequestCore, _VariableOwner, _Block):
@@ -1874,12 +1903,13 @@ class RequestFlow(_VariableOwner, _Block):
         duplicated = {name for name in captured if captured.count(name) > 1}
         if duplicated:
             raise ValueError(f"two steps capture the same name: {', '.join(sorted(duplicated))}")
-        shell_names = [shell_variable_name(name) for name in captured]
-        collapsed = {name for name in captured if shell_names.count(shell_variable_name(name)) > 1}
+        spliced = captured + sorted(self.shell_secret_names())
+        shell_names = [shell_variable_name(name) for name in spliced]
+        collapsed = {name for name in spliced if shell_names.count(shell_variable_name(name)) > 1}
         if collapsed:
             raise ValueError(
                 f"{', '.join(sorted(collapsed))} become the same shell variable in the flow script, so "
-                "one would overwrite the other — capture names must differ by more than case or a hyphen"
+                "one would overwrite the other — names must differ by more than case or a hyphen"
             )
         for index, step in enumerate(self.steps):
             late = step.referenced_variables() & (set(captured) - self.produced_by(index))
@@ -2261,6 +2291,18 @@ class Report(_Frozen):
                         f"card of_tables references table '{tid}', which has no `rollup` — "
                         "of_tables counts a badge using each table's rollup column, so it must declare one"
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_request_storage_keys_unique(self) -> "Report":
+        counts = Counter(block.id or block.label for block in iter_requests(self.blocks))
+        duplicates = sorted(key for key, count in counts.items() if count > 1)
+        if duplicates:
+            raise ValueError(
+                f"request block label(s) used more than once: {duplicates} — a label keys what a "
+                "reader's fields are remembered under while their tab is open, so two blocks sharing "
+                "one would share those values; give one of them an `id`"
+            )
         return self
 
     @model_validator(mode="after")

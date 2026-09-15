@@ -210,7 +210,7 @@
 
 {% macro variables_form(owner_key, variables, produced) %}
 <div class="rq-vars">
-<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Kept while this tab is open, never written into the page&rsquo;s source. A secret is not kept at all.</span></div>
 <div class="rq-fields">
 {% for v in variables %}
 <label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">not saved</span>{% endif %}</span><input type="text" data-rq-var="{{ v.name }}"{% if not v.secret %} data-rq-keep="{{ owner_key }}:{{ v.name }}"{% endif %} autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}></label>
@@ -247,7 +247,7 @@
 {% macro request(block) %}
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
-{% if block.variables %}{{ variables_form(block.label, block.variables, []) }}{% endif %}
+{% if block.variables %}{{ variables_form(block.id or block.label, block.variables, []) }}{% endif %}
 {{ request_cases(block, block) }}
 </section>
 {% endmacro %}
@@ -255,7 +255,7 @@
 {% macro request_flow(block) %}
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
-{{ variables_form(block.label, block.variables, produced_names(block)) }}
+{{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
 <div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">{{ variable_slots(flow_script(block), "shell") }}</pre></div>
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
