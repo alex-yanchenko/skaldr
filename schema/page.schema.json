@@ -2463,6 +2463,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "request": "#/$defs/Request",
+                "request_flow": "#/$defs/RequestFlow",
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
@@ -2549,6 +2550,9 @@
               },
               {
                 "$ref": "#/$defs/Request"
+              },
+              {
+                "$ref": "#/$defs/RequestFlow"
               }
             ]
           },
@@ -2893,13 +2897,8 @@
           "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
           "title": "Span"
         },
-        "type": {
-          "const": "request",
-          "title": "Type",
-          "type": "string"
-        },
         "label": {
-          "description": "What the request is for, shown in the block header.",
+          "description": "What the call is for, shown in the header.",
           "minLength": 1,
           "title": "Label",
           "type": "string"
@@ -2945,14 +2944,6 @@
           "description": "Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential can sit inside a JSON login payload without ever being written here.",
           "title": "Body"
         },
-        "variables": {
-          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
-          "items": {
-            "$ref": "#/$defs/RequestVariable"
-          },
-          "title": "Variables",
-          "type": "array"
-        },
         "case_variable": {
           "anyOf": [
             {
@@ -2975,16 +2966,79 @@
           "minItems": 1,
           "title": "Cases",
           "type": "array"
+        },
+        "type": {
+          "const": "request",
+          "title": "Type",
+          "type": "string"
+        },
+        "variables": {
+          "description": "The values a reader supplies. A `{{name}}` declared here is a runtime blank the reader fills, so `--check --strict` leaves it alone; an undeclared one is still an unfilled placeholder and still fails strict, which is what catches a mistyped name.",
+          "items": {
+            "$ref": "#/$defs/RequestVariable"
+          },
+          "title": "Variables",
+          "type": "array"
         }
       },
       "required": [
-        "type",
         "label",
         "method",
         "url",
-        "cases"
+        "cases",
+        "type"
       ],
       "title": "Request",
+      "type": "object"
+    },
+    "RequestCapture": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The name this step produces. A later step writes it as `{{name}}` and the reader never types it. It also names the shell variable the whole-flow script assigns, upper-cased with hyphens turned to underscores, so it may not collide with a variable the shell relies on.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "const": "body",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Take the whole response body, trimmed. For an endpoint that answers with a bare token and no JSON, which is why the shell form of such a flow needs no jq. Use this or `json_path`, not both.",
+          "title": "Source"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "pattern": "^\\$\\.[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A dotted path into a JSON response body, written `$.access_token` or `$.data.token`. Object keys only, since that is what the page resolves; an array index is not part of the path language. Use this or `source`, not both.",
+          "title": "Json Path"
+        },
+        "secret": {
+          "default": false,
+          "description": "Show the captured value as a count rather than in the field that reports it. The value still appears in the command of any step that interpolates it.",
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "RequestCapture",
       "type": "object"
     },
     "RequestCase": {
@@ -3050,6 +3104,61 @@
       "title": "RequestCase",
       "type": "object"
     },
+    "RequestFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "request_flow",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "description": "What the flow is for, shown in the block header.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "variables": {
+          "description": "The values a reader supplies, shared by every step. A name a step captures is not declared here: the flow produces it rather than asking for it.",
+          "items": {
+            "$ref": "#/$defs/RequestVariable"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "steps": {
+          "description": "The calls in the order they run. A flow of one step is a `request`, so use that.",
+          "items": {
+            "$ref": "#/$defs/RequestStep"
+          },
+          "minItems": 2,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "label",
+        "steps"
+      ],
+      "title": "RequestFlow",
+      "type": "object"
+    },
     "RequestResponse": {
       "additionalProperties": false,
       "properties": {
@@ -3109,6 +3218,97 @@
         "body"
       ],
       "title": "RequestResponse",
+      "type": "object"
+    },
+    "RequestStep": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "What the call is for, shown in the header.",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "description": "The HTTP method.",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "url": {
+          "description": "The full URL. May carry `{{variable}}` tokens.",
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Request headers as a map, in the order they should read. A value may carry `{{variable}}` tokens.",
+          "title": "Headers",
+          "type": "object"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential can sit inside a JSON login payload without ever being written here.",
+          "title": "Body"
+        },
+        "case_variable": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `{{name}}` each case supplies, for cases that differ by one value such as a resource name. Omit when the cases differ by headers instead, or when there is only one.",
+          "title": "Case Variable"
+        },
+        "cases": {
+          "description": "One entry per recorded outcome. Tabs on screen, stacked under their own headings when printed, because a tab must never hide evidence on paper.",
+          "items": {
+            "$ref": "#/$defs/RequestCase"
+          },
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "captures": {
+          "description": "Values this step's response produces for later steps to interpolate.",
+          "items": {
+            "$ref": "#/$defs/RequestCapture"
+          },
+          "title": "Captures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "method",
+        "url",
+        "cases"
+      ],
+      "title": "RequestStep",
       "type": "object"
     },
     "RequestVariable": {
@@ -3274,6 +3474,7 @@
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
                 "request": "#/$defs/Request",
+                "request_flow": "#/$defs/RequestFlow",
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
@@ -3360,6 +3561,9 @@
               },
               {
                 "$ref": "#/$defs/Request"
+              },
+              {
+                "$ref": "#/$defs/RequestFlow"
               }
             ]
           },
@@ -4321,6 +4525,7 @@
             "range": "#/$defs/Range",
             "references": "#/$defs/References",
             "request": "#/$defs/Request",
+            "request_flow": "#/$defs/RequestFlow",
             "section": "#/$defs/Section",
             "status_list": "#/$defs/StatusList",
             "swimlane": "#/$defs/Swimlane",
@@ -4409,6 +4614,9 @@
           },
           {
             "$ref": "#/$defs/Request"
+          },
+          {
+            "$ref": "#/$defs/RequestFlow"
           },
           {
             "$ref": "#/$defs/Section"

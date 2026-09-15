@@ -24,9 +24,12 @@ from skaldr.models import (
     MatrixCell,
     Panel,
     Report,
-    Request,
+    RequestCapture,
     RequestCase,
+    RequestFlow,
+    RequestLike,
     RequestResponse,
+    RequestStep,
     Section,
     Swimlane,
     SwimlaneStep,
@@ -38,6 +41,7 @@ from skaldr.models import (
     iter_reference_items,
     iter_referenced_badge_keys,
     iter_tables,
+    shell_variable_name,
 )
 
 __all__ = [
@@ -704,12 +708,12 @@ def status_tone(response: RequestResponse) -> str:
     return {2: "success", 3: "info", 4: "warning", 5: "danger"}.get(response.status // 100, "neutral")
 
 
-def case_value(block: Request, case: RequestCase) -> str | None:
+def case_value(block: RequestLike, case: RequestCase) -> str | None:
     """What this case supplies for the block's case axis, defaulting to its label."""
     return None if block.case_variable is None else (case.value or case.label)
 
 
-def resolve_case(text: str, block: Request, case: RequestCase) -> str:
+def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
     """`text` with the case axis filled in. The case variable is known when the page is built, so it
     is substituted here; every other `{{name}}` stays for the reader to supply at read time."""
     value = case_value(block, case)
@@ -730,12 +734,12 @@ def variable_parts(text: str) -> list[tuple[str, str]]:
     ]
 
 
-def request_headers(block: Request, case: RequestCase) -> dict[str, str]:
+def request_headers(block: RequestLike, case: RequestCase) -> dict[str, str]:
     """The headers this case sends: its own override when it has one, else the request's."""
     return block.headers if case.headers is None else case.headers
 
 
-def request_wire(block: Request, case: RequestCase) -> str:
+def request_wire(block: RequestLike, case: RequestCase) -> str:
     """The request as it goes on the wire, with `{{name}}` tokens intact for the reader's slots."""
     lines = [f"{block.method} {block.url}"]
     lines += [f"{name}: {value}" for name, value in request_headers(block, case).items()]
@@ -750,21 +754,87 @@ def single_quoted(text: str) -> str:
     return "'" + text.replace("'", "'\\''") + "'"
 
 
-def request_command(block: Request, case: RequestCase) -> str:
-    """The curl the reader copies, with `{{name}}` tokens intact. Every interpolated word is single
-    quoted, so a shell metacharacter in a url, a header, a body or a case label is sent rather than
-    run. The case axis resolves into each word before that word is quoted, so its value is escaped by
-    the same pass as everything else."""
+def shell_word(text: str, captured: set[str]) -> str:
+    """`text` as one shell word, with each captured name expanded from its variable. A single-quoted
+    run cannot expand anything, so the literal runs are single quoted and each variable is spliced in
+    double quoted; adjacent quoted runs concatenate into one word. Reader tokens stay inside the
+    single-quoted runs, where the page substitutes them."""
+    parts: list[str] = []
+    cut = 0
+    for match in VARIABLE_TOKEN.finditer(text):
+        if match.group(1) not in captured:
+            continue
+        if match.start() > cut:
+            parts.append(single_quoted(text[cut : match.start()]))
+        parts.append(f'"${shell_variable_name(match.group(1))}"')
+        cut = match.end()
+    if cut < len(text) or not parts:
+        parts.append(single_quoted(text[cut:]))
+    return "".join(parts)
 
-    def word(text: str) -> str:
-        return single_quoted(resolve_case(text, block, case))
 
-    parts = [f"curl -i -X {block.method}"]
-    parts += [f"  -H {word(f'{name}: {value}')}" for name, value in request_headers(block, case).items()]
-    if block.body:
-        parts.append(f"  --data {word(block.body)}")
-    parts.append(f"  {word(block.url)}")
+def step_command(
+    step: RequestLike, case: RequestCase, captured: set[str], *, show_headers: bool = True
+) -> str:
+    """One step's curl, with every earlier step's captured value read from its shell variable. A step
+    whose response is captured asks for the body alone, since the headers would be captured with it."""
+    parts = [f"curl {'-i' if show_headers else '-s'} -X {step.method}"]
+    parts += [
+        f"  -H {shell_word(resolve_case(f'{name}: {value}', step, case), captured)}"
+        for name, value in request_headers(step, case).items()
+    ]
+    if step.body:
+        parts.append(f"  --data {shell_word(resolve_case(step.body, step, case), captured)}")
+    parts.append(f"  {shell_word(resolve_case(step.url, step, case), captured)}")
     return " \\\n".join(parts)
+
+
+def request_command(block: RequestLike, case: RequestCase) -> str:
+    """The curl a standalone `request` copies: a step command with nothing captured before it."""
+    return step_command(block, case, set())
+
+
+def _capture_lines(step: RequestStep, command: str, response_var: str) -> list[str]:
+    """The assignments that take a step's captures out of its response. One capture reads the command
+    directly; several read a saved response, so the call runs once rather than once per value."""
+    if len(step.captures) == 1:
+        capture = step.captures[0]
+        if capture.json_path is None:
+            return [f"{shell_variable_name(capture.name)}=$({command})"]
+        path = capture.json_path.replace("$.", ".", 1)
+        return [f"{shell_variable_name(capture.name)}=$({command} \\\n  | jq -r {single_quoted(path)})"]
+
+    lines = [f"{response_var}=$({command})"]
+    for capture in step.captures:
+        if capture.json_path is None:
+            lines.append(f'{shell_variable_name(capture.name)}="${response_var}"')
+        else:
+            path = capture.json_path.replace("$.", ".", 1)
+            lines.append(
+                f'{shell_variable_name(capture.name)}=$(printf %s "${response_var}" '
+                f"| jq -r {single_quoted(path)})"
+            )
+    return lines
+
+
+def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
+    """Each capture with the 1-based number of the step that produces it, for the reader's field list."""
+    return [(capture, index + 1) for index, step in enumerate(flow.steps) for capture in step.captures]
+
+
+def flow_script(flow: RequestFlow) -> str:
+    """Every step as one runnable script. A step that captures assigns its response to a shell variable
+    the later steps read, so the chain runs without the reader copying a value between them."""
+    lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
+    for index, step in enumerate(flow.steps):
+        command = step_command(step, step.cases[0], flow.produced_by(index), show_headers=not step.captures)
+        lines.append(f"# {index + 1}. {step.label}")
+        if step.captures:
+            lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")
+        else:
+            lines.append(command)
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def reconcile_line(table: Table) -> str:

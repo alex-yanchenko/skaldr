@@ -181,6 +181,7 @@ or to keep a small block from stretching across the whole page.
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
 | `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, value?, headers?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, captures?, cases}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -611,6 +612,64 @@ grid cell, where the form and the response pane have no room.
 and it never reaches the embedded source block. `--pdf` loads the file fresh with the form empty, so it
 never reaches that either. It is not masked on screen, and a reader printing from a tab they have
 filled in does capture what they typed, in the form and in the command.
+
+## The `request_flow`
+
+Calls that depend on each other: get a token, then use it. A step says what its response produces, and
+a later step writes that name the way it writes a reader's field, so the reader supplies the credential
+once and never copies a value between two boxes.
+
+```yaml
+- type: request_flow
+  label: "Token, then profile"
+  variables:
+    - { name: host, example: "api.example.com" }
+    - { name: password, secret: true }
+  steps:
+    - label: "Exchange the credentials for a token"
+      method: POST
+      url: "https://{{host}}/auth/login"
+      body: '{"user":"ada","password":"{{password}}"}'
+      captures:
+        - { name: access_token, json_path: "$.accessToken", secret: true }
+      cases:
+        - label: "200"
+          response: { status: 200, body: '{ "accessToken": "eyJ…" }' }
+
+    - label: "Read the profile it belongs to"
+      method: GET
+      url: "https://{{host}}/auth/me"
+      headers:
+        Authorization: "Bearer {{access_token}}"
+      cases:
+        - label: "with the token"
+          response: { status: 200, body: '{ "user": "ada" }' }
+          verdict: "The token from step 1 is the only thing that makes this a 200."
+        - label: "without it"
+          headers: {}
+          response: { status: 401, body: '{ "message": "Access Token is required" }' }
+```
+
+**A capture takes `source: body`** for an endpoint that answers with a bare token, **or a `json_path`**
+like `$.accessToken` for one that answers with JSON. Object keys separated by dots, which is what the
+page resolves; an array index is not part of the path. Mark it `secret: true` and the field reports a
+length rather than the value.
+
+**Order is enforced.** A step may only write a name an earlier step captured. Writing one from a later
+step, or from itself, fails the build rather than producing a script that reads a value which does not
+exist yet. A capture name may not also be a declared variable, and two captures may not collapse to the
+same shell variable, which upper-cases the name and turns a hyphen into an underscore.
+
+**A step that captures records one case.** The combined script builds one path through the flow, so a
+capturing step with several recorded outcomes would leave the script and the tab a reader is looking at
+disagreeing. A step that captures nothing may record as many as it likes.
+
+**Copy the whole script** takes every step as one runnable file: `set -euo pipefail`, each capture
+assigned to a shell variable the later steps read, and `jq -r` only where the capture is a JSON path. A
+step's own Copy still gives that one call on its own, with the captured value filled in rather than
+named, so it runs by itself.
+
+A flow needs at least two steps. One step is a `request`.
 
 ## The `references`
 

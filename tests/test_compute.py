@@ -8,7 +8,9 @@ from skaldr.compute import (
     HTTP_REASONS,
     anchor_slugs,
     first_table_index,
+    flow_script,
     fmt,
+    produced_names,
     provenance_footer,
     reconcile_line,
     reference_numbers,
@@ -23,7 +25,7 @@ from skaldr.compute import (
     variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import Request, Swimlane, Table, parse_report
+from skaldr.models import Request, RequestFlow, Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -1078,6 +1080,132 @@ def test_a_body_carries_its_tokens_through_to_the_command_unresolved() -> None:
 
     assert '--data \'{"user":"{{user}}","secret":"{{token}}"}\'' in command
     assert "{{user}}" in request_wire(block, block.cases[0])
+
+
+def _flow(**overrides: object) -> RequestFlow:
+    defaults: dict[str, object] = {
+        "label": "Token, then read",
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "steps": [
+            {
+                "label": "Get a token",
+                "method": "POST",
+                "url": "https://{{host}}/auth",
+                "captures": [{"name": "token", "json_path": "$.accessToken"}],
+                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+            },
+            {
+                "label": "Use it",
+                "method": "GET",
+                "url": "https://{{host}}/me",
+                "headers": {"Authorization": "Bearer {{token}}"},
+                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+            },
+        ],
+    }
+    block = parse_report(make_report(blocks=[{"type": "request_flow", **defaults, **overrides}])).blocks[0]
+    assert isinstance(block, RequestFlow)
+    return block
+
+
+def test_a_flow_script_assigns_each_capture_and_reads_it_back() -> None:
+    script = flow_script(_flow())
+
+    assert "TOKEN=$(curl -s -X POST \\\n  'https://{{host}}/auth' \\\n  | jq -r '.accessToken')" in script
+    assert "-H 'Authorization: Bearer '\"$TOKEN\"" in script
+    assert script.startswith("#!/usr/bin/env bash\nset -euo pipefail")
+
+
+def test_a_step_with_several_captures_runs_once_and_assigns_every_one() -> None:
+    """One assignment per capture off a single saved response. Threading only the first would leave a
+    later step reading an unset variable, which `set -u` turns into an abort at run time."""
+    steps = [
+        {
+            "label": "Get two",
+            "method": "POST",
+            "url": "https://{{host}}/auth",
+            "captures": [
+                {"name": "token", "json_path": "$.accessToken"},
+                {"name": "refresh", "json_path": "$.refreshToken"},
+            ],
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+        {
+            "label": "Use both",
+            "method": "GET",
+            "url": "https://{{host}}/me",
+            "headers": {"Authorization": "Bearer {{token}}", "X-Refresh": "{{refresh}}"},
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+    ]
+
+    script = flow_script(_flow(steps=steps))
+
+    assert "STEP1_RESPONSE=$(curl -s -X POST" in script
+    assert "TOKEN=$(printf %s \"$STEP1_RESPONSE\" | jq -r '.accessToken')" in script
+    assert "REFRESH=$(printf %s \"$STEP1_RESPONSE\" | jq -r '.refreshToken')" in script
+    assert script.count("curl -s") == 1
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://{{host}}/a", "https://{{host}}/it's", "https://{{host}}/a;rm -rf ~", "https://{{host}}/$(id)"],
+    ids=["plain", "apostrophe", "metacharacters", "subshell"],
+)
+def test_a_flow_script_is_valid_shell_whatever_the_author_wrote(url: str) -> None:
+    script = flow_script(_flow()).replace("{{host}}", "api.example.com")
+    steps = [
+        {
+            "label": "One",
+            "method": "GET",
+            "url": url,
+            "captures": [{"name": "token", "source": "body"}],
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+        {
+            "label": "Two",
+            "method": "GET",
+            "url": "https://{{host}}/b",
+            "headers": {"Authorization": "Bearer {{token}}"},
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+    ]
+    script = flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
+
+    assert subprocess.run(["bash", "-n", "-c", script], capture_output=True, text=True).returncode == 0
+
+
+def test_a_captured_value_reaches_the_next_step_when_the_script_runs() -> None:
+    """The chain end to end: run the emitted script with curl stubbed, and read what step 2 received."""
+    steps = [
+        {
+            "label": "One",
+            "method": "GET",
+            "url": "https://{{host}}/auth",
+            "captures": [{"name": "token", "source": "body"}],
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+        {
+            "label": "Two",
+            "method": "GET",
+            "url": "https://{{host}}/me",
+            "headers": {"Authorization": "Bearer {{token}}"},
+            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+        },
+    ]
+    script = flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
+    stub = 'curl() { if [ "$1" = "-s" ]; then printf "%s" "it\'s-me"; else printf "%s\\n" "$@"; fi; }'
+
+    result = subprocess.run(["bash", "-c", stub + "\n" + script], capture_output=True, text=True)
+
+    assert result.returncode == 0
+    assert "Authorization: Bearer it's-me" in result.stdout
+
+
+def test_produced_names_pairs_each_capture_with_the_step_that_makes_it() -> None:
+    flow = _flow()
+
+    assert produced_names(flow) == [(flow.steps[0].captures[0], 1)]
 
 
 def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:
