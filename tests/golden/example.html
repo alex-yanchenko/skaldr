@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-Z6DcppYTXFe+fwqBaAfIZfwaGBAa5bmje15saKNaSg0=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-z148vKlo6zJyXBLLLz0qeWPXmcLHhxnuvG+9ZYaJhp8=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1178,10 +1178,10 @@ assert sum(counted) == expected
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Read one bin&#39;s expected quantity</span></div>
 <div class="rq-vars">
-<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Kept while this tab is open, never written into the page&rsquo;s source. A secret is not kept at all.</span></div>
 <div class="rq-fields">
-<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
-<label class="rq-field"><span class="rq-fname">bin</span><input type="text" data-rq-var="bin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A-17-3" value="A-17-3"></label>
+<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" data-rq-keep="Read one bin&#39;s expected quantity:warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
+<label class="rq-field"><span class="rq-fname">bin</span><input type="text" data-rq-var="bin" data-rq-keep="Read one bin&#39;s expected quantity:bin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A-17-3" value="A-17-3"></label>
 <label class="rq-field wide"><span class="rq-fname">API token<span class="rq-lock">not saved</span></span><input type="text" data-rq-var="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste your own"></label>
 </div>
 </div>
@@ -1245,9 +1245,9 @@ Accept: application/json</pre></div>
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">Session token, then a bin lookup</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
 <div class="rq-vars">
-<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Kept while this tab is open, never written into the page&rsquo;s source. A secret is not kept at all.</span></div>
 <div class="rq-fields">
-<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
+<label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" data-rq-keep="Session token, then a bin lookup:warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
 <label class="rq-field wide"><span class="rq-fname">API key<span class="rq-lock">not saved</span></span><input type="text" data-rq-var="api_key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste your own"></label>
 <label class="rq-field wide"><span class="rq-fname">session_token<span class="rq-from">from step 1</span></span><input type="text" readonly data-rq-produced="session_token" data-rq-secret placeholder="appears once you paste step 1&rsquo;s response"></label>
 </div>
@@ -1603,14 +1603,35 @@ Accept: application/json</pre></div>
 		settle(selectText(node) ? "Press ⌘C" : "Copy failed");
 	}
 
+	/* A non-secret field is restored for the length of the tab so a reload does not cost the reader
+	   their host and their ids again. sessionStorage dies with the tab and never reaches disk, and a
+	   secret field carries no key at all, so nothing a reader treats as a credential is ever written.
+	   Any of these calls throws in a private window, where the page simply starts empty. */
+	function remember(input) {
+		try {
+			window.sessionStorage.setItem("skaldr:" + input.dataset.rqKeep, input.value);
+		} catch (err) {}
+	}
+
+	function restore(block) {
+		block.querySelectorAll("[data-rq-keep]").forEach(function (input) {
+			try {
+				var saved = window.sessionStorage.getItem("skaldr:" + input.dataset.rqKeep);
+				if (saved !== null) input.value = saved;
+			} catch (err) {}
+		});
+	}
+
 	var tool = clipboardTool();
 	document.querySelectorAll(".rq-cliptool").forEach(function (node) { node.textContent = tool; });
 
 	blocks.forEach(function (block) {
+		restore(block);
 		fillSlots(block);
 
 		block.addEventListener("input", function (event) {
 			if (event.target.dataset.rqVar) {
+				if (event.target.dataset.rqKeep) remember(event.target);
 				fillSlots(block);
 				return;
 			}

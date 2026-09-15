@@ -7,6 +7,7 @@ import pytest
 from skaldr.compute import (
     HTTP_REASONS,
     anchor_slugs,
+    command_for,
     first_table_index,
     flow_script,
     fmt,
@@ -14,7 +15,6 @@ from skaldr.compute import (
     provenance_footer,
     reconcile_line,
     reference_numbers,
-    request_command,
     request_wire,
     single_quoted,
     status_line,
@@ -1025,7 +1025,7 @@ def _request_block(**overrides: object) -> Request:
 def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
     block = _request_block(method="POST", body='{"q":"it\'s"}')
 
-    command = request_command(block, block.cases[0])
+    command = command_for(block, block, block.cases[0])
 
     assert "-H 'Accept: application/json'" in command
     assert "--data '{\"q\":\"it'\\''s\"}'" in command
@@ -1057,7 +1057,7 @@ def test_a_case_label_carrying_a_quote_cannot_break_out_of_the_command() -> None
         cases=[{"label": "x'; echo owned; '", "response": {"status": 200, "body": "{}"}}],
     )
 
-    word = request_command(block, block.cases[0]).splitlines()[-1].strip()
+    word = command_for(block, block, block.cases[0]).splitlines()[-1].strip()
     shell = subprocess.run(
         ["bash", "-c", f'set -- {word}; printf "%s|%s" "$#" "$1"'], capture_output=True, text=True
     )
@@ -1076,7 +1076,7 @@ def test_a_body_carries_its_tokens_through_to_the_command_unresolved() -> None:
         ],
     )
 
-    command = request_command(block, block.cases[0])
+    command = command_for(block, block, block.cases[0])
 
     assert '--data \'{"user":"{{user}}","secret":"{{token}}"}\'' in command
     assert "{{user}}" in request_wire(block, block.cases[0])
@@ -1206,6 +1206,37 @@ def test_produced_names_pairs_each_capture_with_the_step_that_makes_it() -> None
     flow = _flow()
 
     assert produced_names(flow) == [(flow.steps[0].captures[0], 1)]
+
+
+def test_the_whole_flow_script_names_a_shell_style_secret_too() -> None:
+    """The per-step pane and the combined script both honour secret_style, so the shell-history
+    protection does not depend on which copy button the reader presses."""
+    flow = _flow(
+        secret_style="shell",
+        variables=[{"name": "host", "example": "a"}, {"name": "key", "secret": True}],
+        steps=[
+            {
+                "label": "One",
+                "method": "GET",
+                "url": "https://{{host}}/auth",
+                "headers": {"Authorization": "Bearer {{key}}"},
+                "captures": [{"name": "token", "source": "body"}],
+                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+            },
+            {
+                "label": "Two",
+                "method": "GET",
+                "url": "https://{{host}}/me",
+                "headers": {"Authorization": "Bearer {{token}}"},
+                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
+            },
+        ],
+    )
+
+    script = flow_script(flow)
+
+    assert "'Authorization: Bearer '\"$KEY\"" in script
+    assert "{{key}}" not in script
 
 
 def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:

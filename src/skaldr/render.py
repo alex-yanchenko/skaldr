@@ -158,7 +158,7 @@ def _environment() -> Environment:
         swimlane_layout=compute.swimlane_layout,
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
-        request_command=compute.request_command,
+        command_for=compute.command_for,
         flow_script=compute.flow_script,
         produced_names=compute.produced_names,
         status_line=compute.status_line,

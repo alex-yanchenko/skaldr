@@ -185,14 +185,35 @@
 		settle(selectText(node) ? "Press ⌘C" : "Copy failed");
 	}
 
+	/* A non-secret field is restored for the length of the tab so a reload does not cost the reader
+	   their host and their ids again. sessionStorage dies with the tab and never reaches disk, and a
+	   secret field carries no key at all, so nothing a reader treats as a credential is ever written.
+	   Any of these calls throws in a private window, where the page simply starts empty. */
+	function remember(input) {
+		try {
+			window.sessionStorage.setItem("skaldr:" + input.dataset.rqKeep, input.value);
+		} catch (err) {}
+	}
+
+	function restore(block) {
+		block.querySelectorAll("[data-rq-keep]").forEach(function (input) {
+			try {
+				var saved = window.sessionStorage.getItem("skaldr:" + input.dataset.rqKeep);
+				if (saved !== null) input.value = saved;
+			} catch (err) {}
+		});
+	}
+
 	var tool = clipboardTool();
 	document.querySelectorAll(".rq-cliptool").forEach(function (node) { node.textContent = tool; });
 
 	blocks.forEach(function (block) {
+		restore(block);
 		fillSlots(block);
 
 		block.addEventListener("input", function (event) {
 			if (event.target.dataset.rqVar) {
+				if (event.target.dataset.rqKeep) remember(event.target);
 				fillSlots(block);
 				return;
 			}

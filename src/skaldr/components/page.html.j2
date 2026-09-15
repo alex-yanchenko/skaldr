@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-Z6DcppYTXFe+fwqBaAfIZfwaGBAa5bmje15saKNaSg0=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-z148vKlo6zJyXBLLLz0qeWPXmcLHhxnuvG+9ZYaJhp8=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>{{ meta.title }}</title>
 {% if source_block %}{{ source_block }}
 {% endif %}<style>{{ styles | safe }}</style>

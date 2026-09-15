@@ -35,6 +35,7 @@ from skaldr.models import (
     SwimlaneStep,
     SwimlaneStepState,
     Table,
+    VariableOwner,
     Walkthrough,
     col_sum,
     iter_matrices,
@@ -789,9 +790,11 @@ def step_command(
     return " \\\n".join(parts)
 
 
-def request_command(block: RequestLike, case: RequestCase) -> str:
-    """The curl a standalone `request` copies: a step command with nothing captured before it."""
-    return step_command(block, case, set())
+def command_for(owner: VariableOwner, core: RequestLike, case: RequestCase) -> str:
+    """The curl shown under one call. A shell-style secret is named rather than written out, which is
+    the same splice a captured value gets, so the reader exports it once instead of pasting it into
+    every command."""
+    return step_command(core, case, owner.shell_secret_names())
 
 
 def _capture_lines(step: RequestStep, command: str, response_var: str) -> list[str]:
@@ -827,7 +830,8 @@ def flow_script(flow: RequestFlow) -> str:
     the later steps read, so the chain runs without the reader copying a value between them."""
     lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
     for index, step in enumerate(flow.steps):
-        command = step_command(step, step.cases[0], flow.produced_by(index), show_headers=not step.captures)
+        named = flow.produced_by(index) | flow.shell_secret_names()
+        command = step_command(step, step.cases[0], named, show_headers=not step.captures)
         lines.append(f"# {index + 1}. {step.label}")
         if step.captures:
             lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")

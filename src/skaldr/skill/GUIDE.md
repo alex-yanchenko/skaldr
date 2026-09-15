@@ -180,7 +180,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, value?, headers?, response, verdict?}]` |
+| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `secret_style?`, `case_variable?`, `cases: [{label, value?, headers?, response, verdict?}]` |
 | `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, captures?, cases}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -613,6 +613,24 @@ and it never reaches the embedded source block. `--pdf` loads the file fresh wit
 never reaches that either. It is not masked on screen, and a reader printing from a tab they have
 filled in does capture what they typed, in the form and in the command.
 
+**`secret_style` decides how a secret reaches the command.** The default, `inline`, writes the typed
+value, so the command runs exactly as copied and the credential lands in the reader's shell history.
+`secret_style: shell` writes `"$TOKEN"` instead, so the reader exports it once and the value never
+enters a command line. Set it per block; it applies to every secret that block declares.
+
+**A field that is not secret is kept for the length of the tab.** A reload restores `host` and an id
+rather than asking for them again. It lives in `sessionStorage`, so it dies with the tab and never
+reaches disk, and a `secret` field is never written there at all.
+
+That store is keyed by the block's `id`, or by its `label` when it sets none, which is why no two
+request blocks on a page may share one: they would share the reader's values. Give one an `id` when
+two blocks legitimately carry the same label, and keep that `id` fixed if you want the values to
+survive a rename.
+
+A `secret` under `secret_style: shell` names a shell variable, so it is refused for the same reasons a
+capture is: not `path` or another name the shell relies on, and not a name that collapses onto another
+secret's or a capture's variable.
+
 ## The `request_flow`
 
 Calls that depend on each other: get a token, then use it. A step says what its response produces, and
@@ -654,6 +672,9 @@ once and never copies a value between two boxes.
 like `$.accessToken` for one that answers with JSON. Object keys separated by dots, which is what the
 page resolves; an array index is not part of the path. Mark it `secret: true` and the field reports a
 length rather than the value.
+
+**`variables` belongs to the flow, not to a step**, and every step draws on the same set. A name a step
+captures is never declared there: the flow produces it rather than asking a reader for it.
 
 **Order is enforced.** A step may only write a name an earlier step captured. Writing one from a later
 step, or from itself, fails the build rather than producing a script that reads a value which does not
