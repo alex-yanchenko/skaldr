@@ -22,6 +22,7 @@ from skaldr.models import (
     Heading,
     Report,
     Section,
+    iter_requests,
     load_report,
     package_text,
     unresolvable_request_variables,
@@ -209,6 +210,7 @@ def _render(
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
+        has_requests=any(iter_requests(report.blocks)),
         source_block=source_block(source) if source else None,
         live=live,
     )
@@ -302,9 +304,11 @@ def render_html(
 
 
 def find_placeholders(report: Report) -> list[str]:
-    """Names of every `{{placeholder}}` fill-me-later blank in the report, sorted and de-duplicated.
-    Renders once into a throwaway to reuse the rich-text traversal; the --check --strict gate uses it
-    to refuse a doc that still has blanks."""
+    """Names of every unfilled blank in the report, sorted and de-duplicated, from two sources: a
+    `{{placeholder}}` in rich text, and a `{{name}}` a `request` interpolates but cannot fill from its
+    own declarations. A request variable the author did declare is a runtime blank its reader fills, so
+    it is deliberately absent. Renders once into a throwaway to reuse the rich-text traversal; the
+    --check --strict gate uses this to refuse a doc that still has blanks."""
     seen: set[str] = set()
     _render(report, "page.html.j2", placeholders=seen)
     return sorted(seen | unresolvable_request_variables(report.blocks))

@@ -377,8 +377,8 @@ blocks:
   - type: text
     body: >-
       The counts above come from the export, but a disputed bin is quicker to settle against the live
-      API. Fill in your own warehouse and token, copy the command, and run it. Nothing you type here is
-      saved to this page.
+      API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in
+      your browser tab and is never written back into this page.
   - type: request
     label: "Read one bin's expected quantity"
     method: GET

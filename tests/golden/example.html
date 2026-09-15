@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-PHmHZGsWF/whIaPjEFJWUr9XaKjnGfEr7/brTOhh+Yo=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-8X06SrZf1YPIkScEvKndSgFTE80FtbuecXqQ3bUBEXw=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1155,11 +1155,11 @@ assert sum(counted) == expected
 
 <h2 id="pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</h2>
 
-<p class="text">The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. Nothing you type here is saved to this page.</p>
+<p class="text">The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in your browser tab and is never written back into this page.</p>
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Read one bin&#39;s expected quantity</span></div>
 <div class="rq-vars">
-<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">This tab only. Never saved, never in the source, never in the PDF.</span></div>
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
 <div class="rq-fields">
 <label class="rq-field"><span class="rq-fname">warehouse code</span><input type="text" data-rq-var="warehouse" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="NW-04" value="NW-04"></label>
 <label class="rq-field"><span class="rq-fname">bin</span><input type="text" data-rq-var="bin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="A-17-3" value="A-17-3"></label>
@@ -1423,8 +1423,18 @@ Accept: application/json</pre></div>
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	function copyCommand(button, node) {
-		var text = node.textContent;
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
+	function commandText(node, withPipe) {
+		if (withPipe) return node.textContent;
+		var clone = node.cloneNode(true);
+		var pipe = clone.querySelector(".rq-pipe");
+		if (pipe) pipe.remove();
+		return clone.textContent;
+	}
+
+	function copyCommand(button, node, withPipe) {
+		var text = commandText(node, withPipe);
 		var settle = function (label) {
 			var original = button.dataset.rqLabel || button.textContent;
 			button.dataset.rqLabel = original;
@@ -1470,8 +1480,9 @@ Accept: application/json</pre></div>
 			var copy = event.target.closest(".rq-copy");
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
-				command.querySelector(".rq-pipe").hidden = !copy.classList.contains("rq-catch");
-				copyCommand(copy, command);
+				var withPipe = copy.classList.contains("rq-catch");
+				command.querySelector(".rq-pipe").hidden = !withPipe;
+				copyCommand(copy, command, withPipe);
 				return;
 			}
 			var tab = event.target.closest("[data-rq-tab]");

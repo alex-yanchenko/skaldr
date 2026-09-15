@@ -213,7 +213,7 @@
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
 {% if block.variables %}
 <div class="rq-vars">
-<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">This tab only. Never saved, never in the source, never in the PDF.</span></div>
+<div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Stays in this tab. Never saved, and never written into this page&rsquo;s source.</span></div>
 <div class="rq-fields">
 {% for v in block.variables %}
 <label class="rq-field{% if v.secret %} wide{% endif %}"><span class="rq-fname">{{ v.label or v.name }}{% if v.secret %}<span class="rq-lock">not saved</span>{% endif %}</span><input type="text" data-rq-var="{{ v.name }}" autocomplete="off" autocapitalize="off" spellcheck="false"{% if v.example %} placeholder="{{ v.example }}"{% endif %}{% if v.example and not v.secret %} value="{{ v.example }}"{% endif %}></label>

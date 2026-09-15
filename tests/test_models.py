@@ -2719,3 +2719,13 @@ def test_a_request_is_accepted_inside_a_section() -> None:
     assert isinstance(outer, Section)
 
     assert isinstance(outer.blocks[0], Request)
+
+
+def test_a_request_is_accepted_inside_a_panel() -> None:
+    panel = {"type": "panel", "title": "Evidence", "blocks": [_request()]}
+
+    report = parse_report(make_report(blocks=[panel]))
+    outer = report.blocks[0]
+    assert isinstance(outer, Panel)
+
+    assert isinstance(outer.blocks[0], Request)

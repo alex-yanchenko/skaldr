@@ -1553,7 +1553,7 @@ class Swimlane(_Block):
 
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-VARIABLE_TOKEN = re.compile(r"\{\{\s*([A-Za-z0-9_-]+)\s*\}\}")
+VARIABLE_TOKEN = re.compile(rf"\{{\{{\s*({REFERENCE_KEY_PATTERN})\s*\}}\}}")
 
 
 class RequestVariable(_Frozen):
@@ -1572,9 +1572,10 @@ class RequestVariable(_Frozen):
     secret: bool = Field(
         default=False,
         description="Never prefill this field from `example`, and mark it in the form as a value that "
-        "is not saved. What the reader types stays in their browser tab: it reaches neither the page, "
-        "nor the embedded source, nor the PDF. The input is not masked, because the value it holds is "
-        "shown in full in the command right below it.",
+        "is not saved. What the reader types stays in their browser tab: it reaches neither the page's "
+        "embedded source nor a `--pdf` render, which loads the file fresh with the form empty. Printing "
+        "from a tab they have filled in does capture it, in the form and in the command. The input is "
+        "not masked, because the same value is shown in full in the command right below it.",
     )
 
     @model_validator(mode="after")
@@ -1787,7 +1788,8 @@ class Panel(_Block):
     title: str = Field(min_length=1, description="Panel title, shown in the header band.")
     blocks: list[FullWidthBlock] = Field(
         min_length=1,
-        description="Blocks inside the panel (leaf blocks). Unlike a `section`, a panel is always open — "
+        description="Blocks inside the panel — any block except another panel, section, grid, or "
+        "walkthrough. Unlike a `section`, a panel is always open — "
         "a titled framed card, one per 'slide' in a deck-style doc.",
     )
 

@@ -123,8 +123,18 @@
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	function copyCommand(button, node) {
-		var text = node.textContent;
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
+	function commandText(node, withPipe) {
+		if (withPipe) return node.textContent;
+		var clone = node.cloneNode(true);
+		var pipe = clone.querySelector(".rq-pipe");
+		if (pipe) pipe.remove();
+		return clone.textContent;
+	}
+
+	function copyCommand(button, node, withPipe) {
+		var text = commandText(node, withPipe);
 		var settle = function (label) {
 			var original = button.dataset.rqLabel || button.textContent;
 			button.dataset.rqLabel = original;
@@ -170,8 +180,9 @@
 			var copy = event.target.closest(".rq-copy");
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
-				command.querySelector(".rq-pipe").hidden = !copy.classList.contains("rq-catch");
-				copyCommand(copy, command);
+				var withPipe = copy.classList.contains("rq-catch");
+				command.querySelector(".rq-pipe").hidden = !withPipe;
+				copyCommand(copy, command, withPipe);
 				return;
 			}
 			var tab = event.target.closest("[data-rq-tab]");

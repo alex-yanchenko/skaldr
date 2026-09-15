@@ -1,6 +1,7 @@
 """Derived, never-authored values: TOC, the used-badge legend, the provenance footer, the
-number/percent formatting helpers, and the swimlane grid layout — everything the templates need
-computed from the data so it can't drift from it.
+number/percent formatting helpers, the swimlane grid layout, and a `request` block's wire form,
+curl command and status text — everything the templates need computed from the data so it can't
+drift from it.
 
 `col_sum` is re-exported from `models` (it lives there because `Table._reconcile` validates against
 it, and models must not import compute) so templates can reach it through this one module.
@@ -751,15 +752,19 @@ def single_quoted(text: str) -> str:
 
 def request_command(block: Request, case: RequestCase) -> str:
     """The curl the reader copies, with `{{name}}` tokens intact. Every interpolated word is single
-    quoted, so a shell metacharacter in a url, a header or a body is sent rather than run."""
+    quoted, so a shell metacharacter in a url, a header, a body or a case label is sent rather than
+    run. The case axis resolves into each word before that word is quoted, so its value is escaped by
+    the same pass as everything else."""
+
+    def word(text: str) -> str:
+        return single_quoted(resolve_case(text, block, case))
+
     parts = [f"curl -i -X {block.method}"]
-    parts += [
-        f"  -H {single_quoted(f'{name}: {value}')}" for name, value in request_headers(block, case).items()
-    ]
+    parts += [f"  -H {word(f'{name}: {value}')}" for name, value in request_headers(block, case).items()]
     if block.body:
-        parts.append(f"  --data {single_quoted(block.body)}")
-    parts.append(f"  {single_quoted(block.url)}")
-    return resolve_case(" \\\n".join(parts), block, case)
+        parts.append(f"  --data {word(block.body)}")
+    parts.append(f"  {word(block.url)}")
+    return " \\\n".join(parts)
 
 
 def reconcile_line(table: Table) -> str:

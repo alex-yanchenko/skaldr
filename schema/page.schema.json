@@ -2438,7 +2438,7 @@
           "type": "string"
         },
         "blocks": {
-          "description": "Blocks inside the panel (leaf blocks). Unlike a `section`, a panel is always open \u2014 a titled framed card, one per 'slide' in a deck-style doc.",
+          "description": "Blocks inside the panel \u2014 any block except another panel, section, grid, or walkthrough. Unlike a `section`, a panel is always open \u2014 a titled framed card, one per 'slide' in a deck-style doc.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3148,7 +3148,7 @@
         },
         "secret": {
           "default": false,
-          "description": "Never prefill this field from `example`, and mark it in the form as a value that is not saved. What the reader types stays in their browser tab: it reaches neither the page, nor the embedded source, nor the PDF. The input is not masked, because the value it holds is shown in full in the command right below it.",
+          "description": "Never prefill this field from `example`, and mark it in the form as a value that is not saved. What the reader types stays in their browser tab: it reaches neither the page's embedded source nor a `--pdf` render, which loads the file fresh with the form empty. Printing from a tab they have filled in does capture it, in the form and in the command. The input is not masked, because the same value is shown in full in the command right below it.",
           "title": "Secret",
           "type": "boolean"
         }

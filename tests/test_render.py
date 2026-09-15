@@ -1836,6 +1836,19 @@ def test_a_case_may_replace_the_requests_headers() -> None:
     assert "Authorization" not in cases[2]
 
 
+def test_a_response_header_that_repeats_renders_every_value() -> None:
+    case = {
+        "label": "widgets",
+        "response": {"status": 200, "headers": {"set-cookie": ["a=1", "b=2"]}, "body": "[]"},
+    }
+
+    html = render_html(
+        parse_report(_request_report(cases=[case], case_variable=None, url="https://{{host}}/x"))
+    )
+
+    assert "a=1\nb=2" in html
+
+
 def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     html = render_html(parse_report(_request_report()))
 
@@ -1878,12 +1891,58 @@ def test_a_mistyped_request_variable_is_still_caught_by_strict() -> None:
     assert find_placeholders(parse_report(report)) == ["tokne"]
 
 
-def test_a_declared_request_variable_does_not_exempt_the_same_name_elsewhere() -> None:
+def test_one_request_declaring_a_name_does_not_exempt_another_request_using_it() -> None:
+    """The exemption is computed per block from that block's own declarations. A single shared set of
+    declared names would let the first block's `host` silence the second block's undeclared one."""
+    declares_host = {
+        "type": "request",
+        "label": "A",
+        "method": "GET",
+        "url": "https://{{host}}/a",
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "cases": [{"label": "one", "response": {"body": "{}"}}],
+    }
+    borrows_host = {
+        "type": "request",
+        "label": "B",
+        "method": "GET",
+        "url": "https://{{host}}/b",
+        "cases": [{"label": "one", "response": {"body": "{}"}}],
+    }
+
+    report = parse_report(make_report(blocks=[declares_host, borrows_host]))
+
+    assert find_placeholders(report) == ["host"]
+
+
+def test_a_declared_request_variable_does_not_exempt_the_same_name_in_prose() -> None:
     request = _request_report()["blocks"]
     assert isinstance(request, list)
     report = make_report(blocks=[*request, {"type": "text", "body": "still {{host}} to fill"}])
 
     assert find_placeholders(parse_report(report)) == ["host"]
+
+
+def test_the_runtime_script_ships_only_for_a_page_that_carries_a_request() -> None:
+    assert "data-rq-slot" not in render_html(parse_report(make_report()))
+    assert "data-rq-slot" in render_html(parse_report(_request_report()))
+
+
+def test_every_inline_script_on_a_request_page_is_pinned_by_the_csp() -> None:
+    """The script is included only for a page that carries a request, so the fixture the other CSP test
+    renders never contains it. Without this, a stale pin would refuse the script in the browser and
+    leave the suite green."""
+    html = render_html(parse_report(_request_report()))
+    csp = re.search(r'content="(default-src [^"]+)"', html)
+    assert csp is not None
+    script_src = csp.group(1).split("script-src ", 1)[1].split(";", 1)[0]
+
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+
+    assert any("data-rq-slot" in body for body in scripts)
+    for body in scripts:
+        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+        assert f"'sha256-{digest}'" in script_src
 
 
 def test_render_without_source_embeds_no_block() -> None:

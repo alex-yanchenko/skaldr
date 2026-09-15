@@ -180,7 +180,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, response, verdict?}]` |
+| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, value?, headers?, response, verdict?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -606,6 +606,11 @@ takes a list: `set-cookie: ["a=1", "b=2"]`.
 
 A `request` is full width. It may sit at the top level or inside a `section` or `panel`, but not in a
 grid cell, where the form and the response pane have no room.
+
+**What a `secret` guarantees, exactly.** It is never prefilled, so it cannot be written into the YAML,
+and it never reaches the embedded source block. `--pdf` loads the file fresh with the form empty, so it
+never reaches that either. It is not masked on screen, and a reader printing from a tab they have
+filled in does capture what they typed, in the form and in the command.
 
 ## The `references`
 
