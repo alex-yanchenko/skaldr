@@ -420,6 +420,66 @@ blocks:
           recognisable when it turns up unexpectedly.
 
   - type: heading
+    text: "Reconciling a bin against the live system"
+  - type: text
+    body: >-
+      The bin lookup above assumes you already hold a token. Getting one is its own call, so the two
+      together are the shape worth recording: exchange the key for a session token, then spend it.
+  - type: request_flow
+    label: "Session token, then a bin lookup"
+    variables:
+      - { name: warehouse, label: "warehouse code", example: "NW-04" }
+      - { name: api_key, label: "API key", secret: true, example: "paste your own" }
+    steps:
+      - label: "Exchange the API key for a session token"
+        method: POST
+        url: "https://wms.example.com/v2/sessions"
+        headers:
+          Content-Type: "application/json"
+        body: '{"key":"{{api_key}}","scope":"inventory.read"}'
+        captures:
+          - { name: session_token, json_path: "$.token", secret: true }
+        cases:
+          - label: "200"
+            response:
+              status: 200
+              headers: { content-type: "application/json" }
+              body: |
+                { "token": "sess_8f21c4…", "expiresIn": 900 }
+            verdict: "Tokens last fifteen minutes, so a long recount needs this step again partway through."
+
+      - label: "Read the bins that did not balance"
+        method: GET
+        url: "https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance"
+        headers:
+          Authorization: "Bearer {{session_token}}"
+          Accept: "application/json"
+        cases:
+          - label: "with the token"
+            response:
+              status: 200
+              headers: { content-type: "application/json", x-total-count: "3" }
+              body: |
+                {
+                  "bins": [
+                    { "bin": "A-17-9", "expected": 120, "counted": 96, "overflow": true },
+                    { "bin": "C-02-1", "expected": 30, "counted": 28 }
+                  ]
+                }
+            verdict: >-
+              The same three bins the discrepancy table above accounts for, read straight from the
+              system rather than from the export.
+          - label: "once the token has expired"
+            response:
+              status: 401
+              headers: { content-type: "application/json" }
+              body: |
+                { "error": "token_expired", "message": "Start a new session." }
+            verdict: >-
+              Fifteen minutes after step 1. Worth recording beside the success, because a recount that
+              runs long hits this rather than a data problem.
+
+  - type: heading
     text: "Sources"
   - type: text
     body: "Method definitions follow the warehouse counting SOP [^sop]; the discrepancy thresholds come from the Q2 reconciliation audit [^audit]."

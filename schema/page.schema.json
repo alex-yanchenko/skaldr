@@ -2995,7 +2995,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "description": "The name this step produces. A later step writes it as `{{name}}` and the reader never types it.",
+          "description": "The name this step produces. A later step writes it as `{{name}}` and the reader never types it. It also names the shell variable the whole-flow script assigns, upper-cased with hyphens turned to underscores, so it may not collide with a variable the shell relies on.",
           "pattern": "^[A-Za-z0-9_-]+$",
           "title": "Name",
           "type": "string"
@@ -3017,8 +3017,7 @@
         "json_path": {
           "anyOf": [
             {
-              "minLength": 2,
-              "pattern": "^\\$\\.[A-Za-z0-9_.\\[\\]-]+$",
+              "pattern": "^\\$\\.[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$",
               "type": "string"
             },
             {
@@ -3026,7 +3025,7 @@
             }
           ],
           "default": null,
-          "description": "A dotted path into a JSON response body, written `$.access_token`. Use this or `source`, not both.",
+          "description": "A dotted path into a JSON response body, written `$.access_token` or `$.data.token`. Object keys only, since that is what the page resolves; an array index is not part of the path language. Use this or `source`, not both.",
           "title": "Json Path"
         },
         "secret": {

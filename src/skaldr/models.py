@@ -1740,11 +1740,22 @@ class Request(_RequestCore, _Block):
         return self
 
 
+RESERVED_SHELL_NAMES = frozenset(
+    {"PATH", "HOME", "IFS", "SHELL", "PWD", "OLDPWD", "USER", "LANG", "TERM", "PS1", "BASH_ENV"}
+)
+
+
+def shell_variable_name(name: str) -> str:
+    """A captured name as the shell variable the flow script assigns it to."""
+    return name.upper().replace("-", "_")
+
+
 class RequestCapture(_Frozen):
     name: str = Field(
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="The name this step produces. A later step writes it as `{{name}}` and the reader "
-        "never types it.",
+        "never types it. It also names the shell variable the whole-flow script assigns, upper-cased "
+        "with hyphens turned to underscores, so it may not collide with a variable the shell relies on.",
     )
     source: Literal["body"] | None = Field(
         default=None,
@@ -1754,10 +1765,10 @@ class RequestCapture(_Frozen):
     )
     json_path: str | None = Field(
         default=None,
-        min_length=2,
-        pattern=r"^\$\.[A-Za-z0-9_.\[\]-]+$",
-        description="A dotted path into a JSON response body, written `$.access_token`. Use this or "
-        "`source`, not both.",
+        pattern=r"^\$\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$",
+        description="A dotted path into a JSON response body, written `$.access_token` or "
+        "`$.data.token`. Object keys only, since that is what the page resolves; an array index is "
+        "not part of the path language. Use this or `source`, not both.",
     )
     secret: bool = Field(
         default=False,
@@ -1770,6 +1781,11 @@ class RequestCapture(_Frozen):
         if (self.source is None) == (self.json_path is None):
             raise ValueError(
                 f"capture `{self.name}` takes `source: body` or a `json_path`, exactly one of the two"
+            )
+        if shell_variable_name(self.name) in RESERVED_SHELL_NAMES:
+            raise ValueError(
+                f"capture `{self.name}` becomes ${shell_variable_name(self.name)} in the flow script, "
+                "which the shell relies on — name it something else"
             )
         return self
 
@@ -1786,6 +1802,11 @@ class RequestStep(_RequestCore):
         repeated = {name for name in names if names.count(name) > 1}
         if repeated:
             raise ValueError(f"step captures the same name twice: {', '.join(sorted(repeated))}")
+        if self.captures and len(self.cases) > 1:
+            raise ValueError(
+                f"step '{self.label}' captures a value and records {len(self.cases)} cases — a capture "
+                "reads one definite response, so a step that produces a value keeps a single case"
+            )
         return self
 
 
@@ -1840,9 +1861,15 @@ class RequestFlow(_Block):
         duplicated = {name for name in captured if captured.count(name) > 1}
         if duplicated:
             raise ValueError(f"two steps capture the same name: {', '.join(sorted(duplicated))}")
+        shell_names = [shell_variable_name(name) for name in captured]
+        collapsed = {name for name in captured if shell_names.count(shell_variable_name(name)) > 1}
+        if collapsed:
+            raise ValueError(
+                f"{', '.join(sorted(collapsed))} become the same shell variable in the flow script, so "
+                "one would overwrite the other — capture names must differ by more than case or a hyphen"
+            )
         for index, step in enumerate(self.steps):
             late = step.referenced_variables() & (set(captured) - self.produced_by(index))
-            late -= {capture.name for capture in step.captures}
             if late:
                 raise ValueError(
                     f"step {index + 1} uses {', '.join(sorted(late))} before the step that captures "
@@ -1888,6 +1915,7 @@ _Leaf = (
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
+RequestLike = Request | RequestStep
 
 
 class Section(_Block):

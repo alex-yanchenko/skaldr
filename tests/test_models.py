@@ -24,6 +24,7 @@ from skaldr.models import (
     Panel,
     Report,
     Request,
+    RequestFlow,
     Section,
     Swimlane,
     Table,
@@ -2719,6 +2720,180 @@ def test_a_request_is_accepted_inside_a_section() -> None:
     assert isinstance(outer, Section)
 
     assert isinstance(outer.blocks[0], Request)
+
+
+def _step(**overrides: Any) -> dict[str, Any]:
+    step: dict[str, Any] = {
+        "label": "A step",
+        "method": "GET",
+        "url": "https://{{host}}/a",
+        "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
+    }
+    step.update(overrides)
+    return step
+
+
+def _flow(**overrides: Any) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": "request_flow",
+        "label": "Token, then read",
+        "variables": [{"name": "host", "example": "api.example.com"}],
+        "steps": [
+            _step(captures=[{"name": "token", "source": "body"}]),
+            _step(url="https://{{host}}/b", headers={"Authorization": "Bearer {{token}}"}),
+        ],
+    }
+    block.update(overrides)
+    return block
+
+
+def test_a_valid_flow_parses() -> None:
+    block = parse_report(make_report(blocks=[_flow()])).blocks[0]
+
+    assert isinstance(block, RequestFlow)
+    assert block.produced_by(0) == set()
+    assert block.produced_by(1) == {"token"}
+
+
+def test_a_flow_declaring_a_variable_twice_is_rejected() -> None:
+    variables = [{"name": "host", "example": "a"}, {"name": "host", "example": "b"}]
+    with pytest.raises(ReportError, match=r"flow declares a variable twice: host"):
+        parse_report(make_report(blocks=[_flow(variables=variables)]))
+
+
+def test_a_captured_name_that_is_also_a_declared_variable_is_rejected() -> None:
+    variables = [{"name": "host", "example": "a"}, {"name": "token", "example": "b"}]
+    with pytest.raises(ReportError, match=r"token is both captured and declared"):
+        parse_report(make_report(blocks=[_flow(variables=variables)]))
+
+
+def test_two_steps_capturing_the_same_name_are_rejected() -> None:
+    steps = [
+        _step(captures=[{"name": "token", "source": "body"}]),
+        _step(url="https://{{host}}/b?t={{token}}", captures=[{"name": "token", "source": "body"}]),
+    ]
+    with pytest.raises(ReportError, match=r"two steps capture the same name: token"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_a_step_using_a_capture_before_it_is_produced_is_rejected() -> None:
+    """The ordering rule the whole block rests on. Without it a flow validates while a step reads a
+    value that does not exist when the reader reaches it, and the script aborts under `set -u`."""
+    steps = [
+        _step(url="https://{{host}}/a?t={{token}}"),
+        _step(url="https://{{host}}/b", captures=[{"name": "token", "source": "body"}]),
+    ]
+    with pytest.raises(ReportError, match=r"step 1 uses token before the step that captures it has run"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_a_step_may_not_use_the_name_it_captures_itself() -> None:
+    steps = [
+        _step(url="https://{{host}}/a?t={{token}}", captures=[{"name": "token", "source": "body"}]),
+        _step(url="https://{{host}}/b"),
+    ]
+    with pytest.raises(ReportError, match=r"step 1 uses token before the step that captures it has run"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_a_flow_name_no_step_uses_is_rejected() -> None:
+    variables = [{"name": "host", "example": "a"}, {"name": "spare", "example": "b"}]
+    with pytest.raises(ReportError, match=r"flow declares or captures spare but no step uses it"):
+        parse_report(make_report(blocks=[_flow(variables=variables)]))
+
+
+def test_one_step_capturing_the_same_name_twice_is_rejected() -> None:
+    captures = [{"name": "token", "source": "body"}, {"name": "token", "json_path": "$.t"}]
+    steps = [_step(captures=captures), _step(url="https://{{host}}/b?t={{token}}")]
+    with pytest.raises(ReportError, match=r"step captures the same name twice: token"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+@pytest.mark.parametrize(
+    "capture",
+    [{"name": "token"}, {"name": "token", "source": "body", "json_path": "$.t"}],
+    ids=["neither", "both"],
+)
+def test_a_capture_takes_exactly_one_of_source_or_json_path(capture: dict[str, Any]) -> None:
+    steps = [_step(captures=[capture]), _step(url="https://{{host}}/b?t={{token}}")]
+    with pytest.raises(ReportError, match=r"takes `source: body` or a `json_path`, exactly one"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_two_capture_names_that_become_one_shell_variable_are_rejected() -> None:
+    """`shell_variable_name` upper-cases and turns a hyphen into an underscore, so two names that
+    differ only that way would assign the same variable and one would overwrite the other."""
+    steps = [
+        _step(captures=[{"name": "access-token", "source": "body"}]),
+        _step(
+            url="https://{{host}}/b?a={{access-token}}&b={{ACCESS_TOKEN}}",
+            captures=[{"name": "ACCESS_TOKEN", "json_path": "$.t"}],
+        ),
+    ]
+    with pytest.raises(ReportError, match=r"become the same shell variable"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+@pytest.mark.parametrize("name", ["path", "HOME", "ifs"], ids=["path", "home", "ifs"])
+def test_a_capture_named_after_a_shell_variable_is_rejected(name: str) -> None:
+    """A capture becomes an assignment in the flow script. Assigning PATH breaks every later command
+    in it, and the failure surfaces as `command not found` rather than naming the capture."""
+    steps = [
+        _step(captures=[{"name": name, "source": "body"}]),
+        _step(url="https://{{host}}/b?x={{" + name + "}}"),
+    ]
+    with pytest.raises(ReportError, match=r"which the shell relies on"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_a_step_that_captures_may_record_only_one_case() -> None:
+    """The combined script builds from one case per step. A capturing step with two cases would let a
+    reader read one tab while the script they copy was built from the other."""
+    cases = [
+        {"label": "ok", "response": {"status": 200, "body": "{}"}},
+        {"label": "denied", "response": {"status": 401, "body": "{}"}},
+    ]
+    steps = [
+        _step(captures=[{"name": "token", "source": "body"}], cases=cases),
+        _step(url="https://{{host}}/b?t={{token}}"),
+    ]
+    with pytest.raises(ReportError, match=r"captures a value and records 2 cases"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+@pytest.mark.parametrize(
+    "path", ["$.items[0].id", "$.", "$token", "$.a..b"], ids=["array-index", "bare", "no-dot", "double-dot"]
+)
+def test_a_json_path_the_page_cannot_resolve_is_rejected(path: str) -> None:
+    """The browser resolver splits on dots and looks up object keys. A path it cannot walk would fill
+    the field with nothing and never say why, so the build refuses it instead."""
+    steps = [
+        _step(captures=[{"name": "token", "json_path": path}]),
+        _step(url="https://{{host}}/b?t={{token}}"),
+    ]
+    with pytest.raises(ReportError, match=r"json_path"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
+
+
+def test_a_flow_of_one_step_is_rejected_because_that_is_a_request() -> None:
+    with pytest.raises(ReportError, match=r"steps.*at least 2"):
+        parse_report(make_report(blocks=[_flow(steps=[_step()])]))
+
+
+def test_a_flow_step_is_validated_by_the_core_every_request_shares() -> None:
+    """`RequestStep` reaches `_core_shape` through the extracted base rather than its own validator, so
+    a step's cases are checked exactly as a standalone request's are."""
+    duplicated = [
+        {"label": "same", "response": {"status": 200, "body": "{}"}},
+        {"label": "same", "response": {"status": 404, "body": "{}"}},
+    ]
+    steps = [
+        _step(captures=[{"name": "token", "source": "body"}], cases=duplicated),
+        _step(url="https://{{host}}/b?t={{token}}"),
+    ]
+
+    with pytest.raises(ReportError, match=r"request repeats a case label: same"):
+        parse_report(make_report(blocks=[_flow(steps=steps)]))
 
 
 def test_a_request_is_accepted_inside_a_panel() -> None:
