@@ -5,12 +5,10 @@ from pathlib import Path
 import pytest
 
 from skaldr.compute import (
-    FLOW_SCRIPT_HEADER,
     HTTP_REASONS,
     anchor_slugs,
     command_for,
     first_table_index,
-    flow_script_fragments,
     fmt,
     produced_names,
     provenance_footer,
@@ -1026,7 +1024,7 @@ def _request_block(**overrides: object) -> Request:
 def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
     block = _request_block(method="POST", body='{"q":"it\'s"}')
 
-    command = command_for(block, block, block.cases[0])
+    command = command_for(block, block.cases[0])
 
     assert "-H 'Accept: application/json'" in command
     assert "--data '{\"q\":\"it'\\''s\"}'" in command
@@ -1058,7 +1056,7 @@ def test_a_case_label_carrying_a_quote_cannot_break_out_of_the_command() -> None
         cases=[{"label": "x'; echo owned; '", "response": {"status": 200, "body": "{}"}}],
     )
 
-    word = command_for(block, block, block.cases[0]).splitlines()[-1].strip()
+    word = command_for(block, block.cases[0]).splitlines()[-1].strip()
     shell = subprocess.run(
         ["bash", "-c", f'set -- {word}; printf "%s|%s" "$#" "$1"'], capture_output=True, text=True
     )
@@ -1077,7 +1075,7 @@ def test_a_body_carries_its_tokens_through_to_the_command_unresolved() -> None:
         ],
     )
 
-    command = command_for(block, block, block.cases[0])
+    command = command_for(block, block.cases[0])
 
     assert '--data \'{"user":"{{user}}","secret":"{{token}}"}\'' in command
     assert "{{user}}" in request_wire(block, block.cases[0])
@@ -1109,143 +1107,10 @@ def _flow(**overrides: object) -> RequestFlow:
     return block
 
 
-def _flow_script(flow: RequestFlow) -> str:
-    """The page's own assembly, down the path a reader sees before touching a tab: the header, then
-    each step's first fragment. The page holds every fragment and hides the rest, so this is the text
-    of the pane on load and what its Copy button yields."""
-    first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
-    return (FLOW_SCRIPT_HEADER + first).rstrip()
-
-
-def test_a_flow_script_assigns_each_capture_and_reads_it_back() -> None:
-    script = _flow_script(_flow())
-
-    assert "TOKEN=$(curl -s -X POST \\\n  'https://{{host}}/auth' \\\n  | jq -r '.accessToken')" in script
-    assert "-H 'Authorization: Bearer '\"$TOKEN\"" in script
-    assert script.startswith("#!/usr/bin/env bash\nset -euo pipefail")
-
-
-def test_a_step_with_several_captures_runs_once_and_assigns_every_one() -> None:
-    """One assignment per capture off a single saved response. Threading only the first would leave a
-    later step reading an unset variable, which `set -u` turns into an abort at run time."""
-    steps = [
-        {
-            "label": "Get two",
-            "method": "POST",
-            "url": "https://{{host}}/auth",
-            "captures": [
-                {"name": "token", "json_path": "$.accessToken"},
-                {"name": "refresh", "json_path": "$.refreshToken"},
-            ],
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-        {
-            "label": "Use both",
-            "method": "GET",
-            "url": "https://{{host}}/me",
-            "headers": {"Authorization": "Bearer {{token}}", "X-Refresh": "{{refresh}}"},
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-    ]
-
-    script = _flow_script(_flow(steps=steps))
-
-    assert "STEP1_RESPONSE=$(curl -s -X POST" in script
-    assert "TOKEN=$(printf %s \"$STEP1_RESPONSE\" | jq -r '.accessToken')" in script
-    assert "REFRESH=$(printf %s \"$STEP1_RESPONSE\" | jq -r '.refreshToken')" in script
-    assert script.count("curl -s") == 1
-
-
-@pytest.mark.parametrize(
-    "url",
-    ["https://{{host}}/a", "https://{{host}}/it's", "https://{{host}}/a;rm -rf ~", "https://{{host}}/$(id)"],
-    ids=["plain", "apostrophe", "metacharacters", "subshell"],
-)
-def test_a_flow_script_is_valid_shell_whatever_the_author_wrote(url: str) -> None:
-    script = _flow_script(_flow()).replace("{{host}}", "api.example.com")
-    steps = [
-        {
-            "label": "One",
-            "method": "GET",
-            "url": url,
-            "captures": [{"name": "token", "source": "body"}],
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-        {
-            "label": "Two",
-            "method": "GET",
-            "url": "https://{{host}}/b",
-            "headers": {"Authorization": "Bearer {{token}}"},
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-    ]
-    script = _flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
-
-    assert subprocess.run(["bash", "-n", "-c", script], capture_output=True, text=True).returncode == 0
-
-
-def test_a_captured_value_reaches_the_next_step_when_the_script_runs() -> None:
-    """The chain end to end: run the emitted script with curl stubbed, and read what step 2 received."""
-    steps = [
-        {
-            "label": "One",
-            "method": "GET",
-            "url": "https://{{host}}/auth",
-            "captures": [{"name": "token", "source": "body"}],
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-        {
-            "label": "Two",
-            "method": "GET",
-            "url": "https://{{host}}/me",
-            "headers": {"Authorization": "Bearer {{token}}"},
-            "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-        },
-    ]
-    script = _flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
-    stub = 'curl() { if [ "$1" = "-s" ]; then printf "%s" "it\'s-me"; else printf "%s\\n" "$@"; fi; }'
-
-    result = subprocess.run(["bash", "-c", stub + "\n" + script], capture_output=True, text=True)
-
-    assert result.returncode == 0
-    assert "Authorization: Bearer it's-me" in result.stdout
-
-
 def test_produced_names_pairs_each_capture_with_the_step_that_makes_it() -> None:
     flow = _flow()
 
     assert produced_names(flow) == [(flow.steps[0].captures[0], 1)]
-
-
-def test_the_whole_flow_script_names_a_shell_style_secret_too() -> None:
-    """The per-step pane and the combined script both honour secret_style, so the shell-history
-    protection does not depend on which copy button the reader presses."""
-    flow = _flow(
-        secret_style="shell",
-        variables=[{"name": "host", "example": "a"}, {"name": "key", "secret": True}],
-        steps=[
-            {
-                "label": "One",
-                "method": "GET",
-                "url": "https://{{host}}/auth",
-                "headers": {"Authorization": "Bearer {{key}}"},
-                "captures": [{"name": "token", "source": "body"}],
-                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-            },
-            {
-                "label": "Two",
-                "method": "GET",
-                "url": "https://{{host}}/me",
-                "headers": {"Authorization": "Bearer {{token}}"},
-                "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
-            },
-        ],
-    )
-
-    script = _flow_script(flow)
-
-    assert "'Authorization: Bearer '\"$KEY\"" in script
-    assert "{{key}}" not in script
 
 
 def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:

@@ -182,7 +182,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `secret_style?`, `case_variable?`, `cases: [{label, value?, headers?, headers_add?, response, verdict?}]` |
+| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, value?, headers?, headers_add?, response, verdict?}]` |
 | `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, case_variable?, cases, captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -622,10 +622,10 @@ and it never reaches the embedded source block. `--pdf` loads the file fresh wit
 never reaches that either. It is not masked on screen, and a reader printing from a tab they have
 filled in does capture what they typed, in the form and in the command.
 
-**`secret_style` decides how a secret reaches the command.** The default, `inline`, writes the typed
-value, so the command runs exactly as copied and the credential lands in the reader's shell history.
-`secret_style: shell` writes `"$TOKEN"` instead, so the reader exports it once and the value never
-enters a command line. Set it per block; it applies to every secret that block declares.
+**A secret reaches the command as the value the reader typed**, like every other field, so the command
+runs exactly as it is copied: one click, one paste, one return. That value is in the reader's shell
+history afterwards, which is a property of pasting a credential into a terminal rather than of this
+page. A reader who minds can set their shell to skip a space-prefixed line.
 
 **A field that is not secret is kept for the length of the tab.** A reload restores `host` and an id
 rather than asking for them again. It lives in `sessionStorage`, so it dies with the tab and never
@@ -635,10 +635,6 @@ That store is keyed by the block's `id`, or by its `label` when it sets none, wh
 request blocks on a page may share one: they would share the reader's values. Give one an `id` when
 two blocks legitimately carry the same label, and keep that `id` fixed if you want the values to
 survive a rename.
-
-A `secret` under `secret_style: shell` names a shell variable, so it is refused for the same reasons a
-capture is: not `path` or another name the shell relies on, and not a name that collapses onto another
-secret's or a capture's variable.
 
 ## The `request_flow`
 
@@ -691,20 +687,17 @@ length rather than the value.
 captures is never declared there: the flow produces it rather than asking a reader for it.
 
 **Order is enforced.** A step may only write a name an earlier step captured. Writing one from a later
-step, or from itself, fails the build rather than producing a script that reads a value which does not
-exist yet. A capture name may not also be a declared variable, and two captures may not collapse to the
-same shell variable, which upper-cases the name and turns a hyphen into an underscore.
+step, or from itself, fails the build rather than leaving a reader a command with a blank in it. A
+capture name may not also be a declared variable, since the flow produces it.
 
-**A step that captures records one case**, because the value it assigns has to be the one the later
+**A step that captures records one case**, because the value it produces has to be the one the later
 steps read. A step that captures nothing may record as many as it likes, and takes `case_variable` like
 a `request` does: one step authenticates, the next tabs through every resource that token reaches, and
 the reader supplies the credential once rather than to two separate blocks.
 
-**Copy the whole script** takes every step as one runnable file: `set -euo pipefail`, each capture
-assigned to a shell variable the later steps read, and `jq -r` only where the capture is a JSON path. It
-follows the tabs, so the script is always the path the reader is looking at. A step's own Copy still
-gives that one call on its own, with the captured value filled in rather than named, so it runs by
-itself.
+**Each step's Copy gives that one call**, with every value written out — the reader's fields and any
+value an earlier step captured alike — so it runs exactly as it is pasted. The reader works down the
+steps in order, pasting each response back to fill the next.
 
 A flow needs at least two steps. One step is a `request`.
 

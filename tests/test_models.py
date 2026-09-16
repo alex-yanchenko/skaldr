@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import (
     Callout,
@@ -2860,35 +2861,9 @@ def test_a_capture_takes_exactly_one_of_source_or_json_path(capture: dict[str, A
         parse_report(make_report(blocks=[make_flow(steps=steps)]))
 
 
-def test_two_capture_names_that_become_one_shell_variable_are_rejected() -> None:
-    """`shell_variable_name` upper-cases and turns a hyphen into an underscore, so two names that
-    differ only that way would assign the same variable and one would overwrite the other."""
-    steps = [
-        make_step(captures=[{"name": "access-token", "source": "body"}]),
-        make_step(
-            url="https://{{host}}/b?a={{access-token}}&b={{ACCESS_TOKEN}}",
-            captures=[{"name": "ACCESS_TOKEN", "json_path": "$.t"}],
-        ),
-    ]
-    with pytest.raises(ReportError, match=r"become the same shell variable"):
-        parse_report(make_report(blocks=[make_flow(steps=steps)]))
-
-
-@pytest.mark.parametrize("name", ["path", "HOME", "ifs"], ids=["path", "home", "ifs"])
-def test_a_capture_named_after_a_shell_variable_is_rejected(name: str) -> None:
-    """A capture becomes an assignment in the flow script. Assigning PATH breaks every later command
-    in it, and the failure surfaces as `command not found` rather than naming the capture."""
-    steps = [
-        make_step(captures=[{"name": name, "source": "body"}]),
-        make_step(url="https://{{host}}/b?x={{" + name + "}}"),
-    ]
-    with pytest.raises(ReportError, match=r"which the shell relies on"):
-        parse_report(make_report(blocks=[make_flow(steps=steps)]))
-
-
 def test_a_step_that_captures_may_record_only_one_case() -> None:
-    """The combined script builds from one case per step. A capturing step with two cases would let a
-    reader read one tab while the script they copy was built from the other."""
+    """A capture is the value later steps read, so the step that produces it records the one call that
+    produced it. Two cases would leave which of them the reader's captured value came from unsaid."""
     cases = [
         {"label": "ok", "response": {"status": 200, "body": "{}"}},
         {"label": "denied", "response": {"status": 401, "body": "{}"}},
@@ -2936,27 +2911,9 @@ def test_a_flow_step_is_validated_by_the_core_every_request_shares() -> None:
         parse_report(make_report(blocks=[make_flow(steps=steps)]))
 
 
-def test_a_shell_style_secret_is_named_in_the_command_rather_than_written_out() -> None:
-    block = parse_report(
-        make_report(
-            blocks=[
-                _request(
-                    secret_style="shell",
-                    headers={"Authorization": "Bearer {{key}}"},
-                    variables=[
-                        {"name": "host", "example": "api.example.com"},
-                        {"name": "key", "secret": True},
-                    ],
-                )
-            ]
-        )
-    ).blocks[0]
-    assert isinstance(block, Request)
-
-    assert block.shell_secret_names() == {"key"}
-
-
-def test_an_inline_secret_names_nothing_so_the_reader_pastes_the_value() -> None:
+def test_a_secret_is_written_into_the_command_so_it_runs_as_copied() -> None:
+    """A secret is a reader's field like any other once typed: the command carries the value, so one
+    copy and one paste runs it."""
     block = parse_report(
         make_report(
             blocks=[
@@ -2972,34 +2929,8 @@ def test_an_inline_secret_names_nothing_so_the_reader_pastes_the_value() -> None
     ).blocks[0]
     assert isinstance(block, Request)
 
-    assert block.secret_style == "inline"
-    assert block.shell_secret_names() == set()
-
-
-def test_a_flow_carries_the_same_secret_style_option() -> None:
-    block = parse_report(
-        make_report(
-            blocks=[
-                make_flow(
-                    secret_style="shell",
-                    variables=[
-                        {"name": "host", "example": "api.example.com"},
-                        {"name": "key", "secret": True},
-                    ],
-                    steps=[
-                        make_step(
-                            headers={"Authorization": "Bearer {{key}}"},
-                            captures=[{"name": "token", "source": "body"}],
-                        ),
-                        make_step(url="https://{{host}}/b?t={{token}}"),
-                    ],
-                )
-            ]
-        )
-    ).blocks[0]
-    assert isinstance(block, RequestFlow)
-
-    assert block.shell_secret_names() == {"key"}
+    assert "{{key}}" in compute.command_for(block, block.cases[0])
+    assert "$KEY" not in compute.command_for(block, block.cases[0])
 
 
 def test_two_request_blocks_sharing_a_label_are_rejected() -> None:
@@ -3023,46 +2954,27 @@ def test_a_request_and_a_flow_sharing_a_label_are_rejected() -> None:
         parse_report(make_report(blocks=[_request(), flow]))
 
 
-@pytest.mark.parametrize("name", ["path", "HOME"], ids=["path", "home"])
-def test_a_shell_style_secret_named_after_a_shell_variable_is_rejected(name: str) -> None:
-    """The reader is told to export the name. Exporting PATH breaks every later command they run."""
-    block = _request(
-        secret_style="shell",
-        headers={"Authorization": "Bearer {{" + name + "}}"},
-        variables=[{"name": "host", "example": "a"}, {"name": name, "secret": True}],
-    )
-    with pytest.raises(ReportError, match=r"which the shell relies on"):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_two_shell_style_secrets_that_become_one_variable_are_rejected() -> None:
-    block = _request(
-        secret_style="shell",
-        headers={"A": "{{api-key}}", "B": "{{API_KEY}}"},
-        variables=[
-            {"name": "host", "example": "a"},
-            {"name": "api-key", "secret": True},
-            {"name": "API_KEY", "secret": True},
-        ],
-    )
-    with pytest.raises(ReportError, match=r"become the same shell variable"):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_a_shell_style_secret_may_not_collide_with_a_captured_name() -> None:
+def test_a_capture_name_differing_only_in_case_is_its_own_name() -> None:
+    """A captured name is a form field and a `{{token}}` the page substitutes, nothing more, so two
+    names a shell would have flattened together stay distinct."""
     flow = make_flow(
-        secret_style="shell",
-        variables=[{"name": "host", "example": "a"}, {"name": "access-token", "secret": True}],
+        variables=[{"name": "host", "example": "a"}],
         steps=[
+            make_step(captures=[{"name": "access-token", "source": "body"}]),
             make_step(
-                headers={"Authorization": "Bearer {{access-token}}"},
-                captures=[{"name": "ACCESS_TOKEN", "source": "body"}],
+                url="https://{{host}}/b?a={{access-token}}",
+                captures=[{"name": "ACCESS_TOKEN", "json_path": "$.t"}],
             ),
-            make_step(url="https://{{host}}/b?t={{ACCESS_TOKEN}}"),
+            make_step(url="https://{{host}}/c?x={{ACCESS_TOKEN}}"),
         ],
     )
-    with pytest.raises(ReportError, match=r"become the same shell variable"):
-        parse_report(make_report(blocks=[flow]))
+    block = parse_report(make_report(blocks=[flow])).blocks[0]
+    assert isinstance(block, RequestFlow)
+
+    assert [capture.name for step in block.steps for capture in step.captures] == [
+        "access-token",
+        "ACCESS_TOKEN",
+    ]
 
 
 def test_a_request_is_accepted_inside_a_panel() -> None:

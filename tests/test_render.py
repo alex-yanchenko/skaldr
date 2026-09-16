@@ -7,7 +7,14 @@ import pytest
 
 from skaldr import compute
 from skaldr.errors import ReportError
-from skaldr.models import Report, Request, load_report, package_path, parse_report
+from skaldr.models import (
+    MAX_REQUEST_CASES,
+    Report,
+    Request,
+    load_report,
+    package_path,
+    parse_report,
+)
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -1845,21 +1852,17 @@ def test_a_case_may_replace_the_requests_headers() -> None:
     assert "Authorization" not in cases[2]
 
 
-def test_a_shell_style_secret_never_reaches_the_command_line() -> None:
-    """`inline` puts the typed value in the command, which runs as it stands and lands in shell
-    history. `shell` names the variable instead, so the reader exports it once."""
+def test_a_secret_fills_the_command_like_any_other_field() -> None:
+    """A secret is a slot the page substitutes, so the command a reader copies runs as it stands."""
     variables = [
         {"name": "host", "example": "api.example.com"},
         {"name": "token", "secret": True},
     ]
+    html = render_html(parse_report(_request_report(variables=variables)))
+    command = html.split('class="rq-cmd"')[1].split("</pre>")[0]
 
-    inline = render_html(parse_report(_request_report(variables=variables)))
-    shelled = render_html(parse_report(_request_report(variables=variables, secret_style="shell")))
-    command = shelled.split('class="rq-cmd"')[1].split("</pre>")[0]
-
-    assert 'data-rq-slot="token"' in inline
-    assert 'data-rq-slot="token"' not in command
-    assert "&#34;$TOKEN&#34;" in command
+    assert 'data-rq-slot="token"' in command
+    assert "$TOKEN" not in command
 
 
 def test_only_a_field_that_is_not_secret_is_kept_across_a_reload() -> None:
@@ -1889,66 +1892,32 @@ def test_a_response_header_that_repeats_renders_every_value() -> None:
 
 
 def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
+    """Selection hides a case with `display`, never by leaving it out, so print can show them all."""
     html = render_html(parse_report(_request_report()))
 
     assert html.count('data-rq-case="') == 2
-    assert 'data-rq-case="1" data-rq-hidden' in html
-    assert 'data-rq-case="0" data-rq-hidden' not in html
+    assert html.count('type="radio" class="rq-pick"') == 2
+    assert html.count(" checked>") == 1
 
 
 def _request_runtime_script(html: str) -> str:
     """The inline script that drives a request block, picked out of the page's several."""
     scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-    return next(script for script in scripts if "data-rq-tab" in script)
+    return next(script for script in scripts if "data-rq-slot" in script)
 
 
 def _cases(count: int) -> list[dict[str, object]]:
     return [{"label": f"case-{number}", "response": {"status": 200, "body": "[]"}} for number in range(count)]
 
 
-@pytest.mark.parametrize(("count", "chips"), [(2, False), (6, False), (7, True), (15, True)])
-def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> None:
-    """A tab strip is only honest while it fits one row: the selected tab's underline and the
-    container's rule form the single line that points at the panel below. On wrap the container's
-    border can only sit under the last row, so a selection in an earlier row points at nothing. Past
-    the threshold the strip stops claiming to be tabs and the selection becomes a filled chip."""
+@pytest.mark.parametrize("count", [2, 6, 7, 15])
+def test_every_case_carries_a_label_whatever_the_count(count: int) -> None:
+    """One treatment at every size: the strip holds every case and the container query decides whether
+    it sits on a line or stacks, so the count never changes what is rendered."""
     html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
 
-    assert ('class="rq-tabs rq-chips"' in html) == chips
-    assert html.count('role="tab"') == count
-
-
-def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
-    """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
-    `data-rq-case="0"` occurs once per step. The chooser therefore resolves its scope from the step
-    that owns the clicked tab; a query across the block would empty every other step that has no case
-    at the chosen index.
-
-    Asserted against the script source rather than a click: the suite runs no DOM."""
-    steps = [
-        make_step(captures=[{"name": "token", "source": "body"}]),
-        make_step(
-            url="https://{{host}}/{{resource}}",
-            headers={"Authorization": "Bearer {{token}}"},
-            case_variable="resource",
-            cases=[
-                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
-                {"label": "admin", "response": {"status": 401, "body": "{}"}},
-            ],
-        ),
-    ]
-    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
-
-    assert html.count('class="rq-case" data-rq-case="0"') == 2
-
-    script = _request_runtime_script(html)
-    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
-
-    assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
-    assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
-    assert 'var owner = tab.closest(".rq-step") || block' in chooser
-    assert 'owner.querySelectorAll("[data-rq-case]")' in chooser
-    assert 'owner.querySelectorAll("[data-rq-tab]")' in chooser
+    assert html.count("<label for=") == count
+    assert html.count('class="rq-tabs"') == 1
 
 
 def _tabbed_flow() -> dict[str, object]:
@@ -2142,42 +2111,174 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
     assert compute.request_headers(block, block.cases[0]) == {}
 
 
-def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
-    """Every case's fragment ships in the document and the chooser shows the one whose tab is open, so
-    the script a reader copies is always the call they are looking at."""
-    html = render_html(parse_report(_tabbed_flow()))
-    pane = html.split('class="rq-cmd rq-flowscript"', 1)[1].split("</pre>", 1)[0]
+@pytest.mark.parametrize(
+    ("labels", "width"),
+    [
+        pytest.param(["ok"], 87, id="one-short"),
+        pytest.param(["ok", "no"], 142, id="two-short"),
+        pytest.param(["a" * 20], 229, id="one-long"),
+    ],
+)
+def test_the_width_a_strip_asks_for_is_read_off_its_labels(labels: list[str], width: int) -> None:
+    """The threshold a block switches at, pinned to the value rather than its direction. Every part of
+    it moves the answer: the per-character advance, the room a dot and the padding take, the slack for
+    a wider fallback face, and the container's own padding."""
+    report = _request_report(
+        cases=[{"label": label, "response": {"status": 200, "body": "[]"}} for label in labels],
+        case_variable="resource",
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
 
-    fragments = re.findall(r'<span class="rq-frag"([^>]*)>', pane)
-
-    assert len(fragments) == 4
-    assert fragments[0] == ' data-rq-step="0" data-rq-case="0"'
-    assert fragments[1] == ' data-rq-step="1" data-rq-case="0"'
-    assert fragments[2] == ' data-rq-step="1" data-rq-case="1" hidden'
-    assert fragments[3] == ' data-rq-step="1" data-rq-case="2" hidden'
-
-    assert "widgets" in pane
-    assert "gadgets" in pane
-    assert "sprockets" in pane
+    assert compute.case_strip_width(block) == width
 
 
-def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
-    """Asserted against the script source rather than a click: the suite runs no DOM. Naming `.rq-frag`
-    alone would pass on a handler that hid every fragment or ignored the step, so pin the selector to
-    the step that owns the tab and the toggle to the case that was chosen."""
-    html = render_html(parse_report(_tabbed_flow()))
+def test_the_case_cap_matches_the_selectors_the_stylesheet_writes() -> None:
+    """Highlighting the chosen label is the one thing needing a positional selector, and the stylesheet
+    writes a fixed number of them. A cap above that count renders a case whose label never lights up
+    and which the strip cannot select; a cap below it refuses a case the stylesheet would have served."""
+    css = package_path("styles.css").read_text(encoding="utf-8")
+
+    assert css.count(".rq-pick:nth-of-type(") == MAX_REQUEST_CASES
+    assert f":nth-of-type({MAX_REQUEST_CASES}):checked" in css
+    assert f":nth-of-type({MAX_REQUEST_CASES + 1}):checked" not in css
+
+
+def test_the_case_cap_is_refused_one_past_its_edge() -> None:
+    at_cap = _request_report(cases=_cases(MAX_REQUEST_CASES), case_variable="resource")
+    over = _request_report(cases=_cases(MAX_REQUEST_CASES + 1), case_variable="resource")
+
+    assert parse_report(at_cap) is not None
+    with pytest.raises(ReportError, match=rf"records at most {MAX_REQUEST_CASES} cases"):
+        parse_report(over)
+
+
+def test_a_strip_too_wide_for_its_container_becomes_a_rail() -> None:
+    """Whether a strip fits is a question about rendered width, and the count of cases is only a proxy
+    for it. The labels are monospace, so their width is predictable at build time: each block carries
+    a container query at the width its own labels need, and below that the strip stacks into a rail."""
+    html = render_html(parse_report(_request_report(cases=_cases(12), case_variable="resource")))
+    rules = re.findall(r"@container \(width < (\d+)px\)", html)
+
+    assert len(rules) == 1
+    assert int(rules[0]) > 400
+    assert ".rq0 .rq-tabs{flex-direction:column" in html
+
+
+def test_each_block_gets_the_breakpoint_its_own_labels_need() -> None:
+    """One threshold for the page would switch a short strip at a width it still fits, or leave a long
+    one wrapping past the width it stopped fitting."""
+
+    def block(count: int, label: str) -> dict[str, object]:
+        return {
+            "type": "request",
+            "label": label,
+            "method": "GET",
+            "url": "https://api.example.com/{{resource}}",
+            "case_variable": "resource",
+            "cases": _cases(count),
+        }
+
+    html = render_html(parse_report(make_report(blocks=[block(3, "Short"), block(14, "Long")])))
+    widths = [int(w) for w in re.findall(r"@container \(width < (\d+)px\)", html)]
+
+    assert len(widths) == 2
+    assert widths[0] < widths[1]
+
+
+def test_a_single_case_needs_no_breakpoint_at_all() -> None:
+    report = _request_report(
+        cases=[{"label": "only", "response": {"status": 200, "body": "[]"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    assert "@container" not in render_html(parse_report(report))
+
+
+def test_choosing_a_case_needs_no_script() -> None:
+    """A radio per case, its label in the strip, and the pane immediately after it, so `:checked +`
+    shows one without an index to keep in step. The strip floats above the panes on flex order."""
+    html = render_html(parse_report(_request_report()))
     script = _request_runtime_script(html)
-    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
 
-    assert "'.rq-frag[data-rq-step=\"' + step + '\"]'" in chooser
-    assert "each.hidden = each.dataset.rqCase !== chosen" in chooser
-    assert "if (step === undefined) return;" in chooser
+    assert html.count('type="radio" class="rq-pick"') == 2
+    assert 'class="rq-pick" name=' in html
+    assert "data-rq-tab" not in html
+    assert "data-rq-tab" not in script
+    assert "aria-selected" not in script
 
 
-def test_copying_leaves_out_every_hidden_fragment() -> None:
-    """textContent walks hidden descendants, so a copy that did not drop them would paste all three
-    resources at once. One rule covers the pipe span and the script fragments alike: hidden is not
-    copied."""
+def test_one_case_needs_no_strip_but_still_renders() -> None:
+    report = _request_report(
+        cases=[{"label": "only", "response": {"status": 200, "body": "[]"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+    html = render_html(parse_report(report))
+
+    assert 'class="rq-tabs' not in html
+    assert html.count('type="radio" class="rq-pick"') == 1
+    assert "checked" in html
+
+
+def test_every_case_is_named_by_its_own_radio_group() -> None:
+    """Two blocks on one page share the document's radio namespace, so a name repeated across them
+    would make choosing a case in one clear the other."""
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "gadgets", "response": {"status": 200, "body": "[]"}},
+            ],
+        ),
+    ]
+    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
+    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+
+    assert len(set(groups)) == 2
+    assert len(groups) == 3
+
+
+def test_two_blocks_on_one_page_never_share_a_radio_group() -> None:
+    """The same hazard between whole blocks rather than between a flow's steps: a shared name would
+    make choosing a case in one block clear the selection in the other."""
+
+    def block(label: str) -> dict[str, object]:
+        return {
+            "type": "request",
+            "label": label,
+            "method": "GET",
+            "url": "https://api.example.com/{{resource}}",
+            "case_variable": "resource",
+            "cases": _cases(2),
+        }
+
+    html = render_html(parse_report(make_report(blocks=[block("One"), block("Two")])))
+    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+
+    assert len(groups) == 4
+    assert len(set(groups)) == 2
+
+
+def test_a_flow_shows_its_steps_and_nothing_above_them() -> None:
+    """A flow's steps carry the calls; a second rendering of the same two commands above them is the
+    same content twice, and a reader working down the page meets it before the walkthrough."""
+    html = render_html(parse_report(_tabbed_flow()))
+
+    assert "rq-flowscript" not in html
+    assert "Every step as one script" not in html
+    assert "Copy the whole script" not in html
+    assert html.count('class="rq-step"') == 2
+
+
+def test_copying_leaves_out_every_hidden_node() -> None:
+    """textContent walks hidden descendants, so a plain copy would carry the capture pipe the reader
+    did not ask for. One rule covers it: hidden is not copied."""
     html = render_html(parse_report(_tabbed_flow()))
     script = _request_runtime_script(html)
     reader = script.split("function commandText", 1)[1].split("function copyCommand", 1)[0]

@@ -7,6 +7,7 @@ drift from it.
 it, and models must not import compute) so templates can reach it through this one module.
 """
 
+import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
@@ -29,20 +30,18 @@ from skaldr.models import (
     RequestFlow,
     RequestLike,
     RequestResponse,
-    RequestStep,
     Section,
     Swimlane,
     SwimlaneStep,
     SwimlaneStepState,
     Table,
-    VariableOwner,
     Walkthrough,
     col_sum,
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
+    iter_requests,
     iter_tables,
-    shell_variable_name,
 )
 
 __all__ = [
@@ -770,102 +769,91 @@ def single_quoted(text: str) -> str:
     return "'" + text.replace("'", "'\\''") + "'"
 
 
-def shell_word(text: str, captured: set[str]) -> str:
-    """`text` as one shell word, with each captured name expanded from its variable. A single-quoted
-    run cannot expand anything, so the literal runs are single quoted and each variable is spliced in
-    double quoted; adjacent quoted runs concatenate into one word. Reader tokens stay inside the
-    single-quoted runs, where the page substitutes them."""
-    parts: list[str] = []
-    cut = 0
-    for match in VARIABLE_TOKEN.finditer(text):
-        if match.group(1) not in captured:
-            continue
-        if match.start() > cut:
-            parts.append(single_quoted(text[cut : match.start()]))
-        parts.append(f'"${shell_variable_name(match.group(1))}"')
-        cut = match.end()
-    if cut < len(text) or not parts:
-        parts.append(single_quoted(text[cut:]))
-    return "".join(parts)
-
-
-def step_command(
-    step: RequestLike, case: RequestCase, captured: set[str], *, show_headers: bool = True
-) -> str:
-    """One step's curl, with every earlier step's captured value read from its shell variable. A step
-    whose response is captured asks for the body alone, since the headers would be captured with it."""
-    parts = [f"curl {'-i' if show_headers else '-s'} -X {step.method}"]
+def command_for(core: RequestLike, case: RequestCase) -> str:
+    """The curl shown under one call, every value written out, so it runs exactly as it is copied."""
+    parts = [f"curl -i -X {core.method}"]
     parts += [
-        f"  -H {shell_word(resolve_case(f'{name}: {value}', step, case), captured)}"
-        for name, value in request_headers(step, case).items()
+        f"  -H {single_quoted(resolve_case(f'{name}: {value}', core, case))}"
+        for name, value in request_headers(core, case).items()
     ]
-    if step.body:
-        parts.append(f"  --data {shell_word(resolve_case(step.body, step, case), captured)}")
-    parts.append(f"  {shell_word(resolve_case(step.url, step, case), captured)}")
+    if core.body:
+        parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
+    parts.append(f"  {single_quoted(resolve_case(core.url, core, case))}")
     return " \\\n".join(parts)
 
 
-def command_for(owner: VariableOwner, core: RequestLike, case: RequestCase) -> str:
-    """The curl shown under one call. A shell-style secret is named rather than written out, which is
-    the same splice a captured value gets, so the reader exports it once instead of pasting it into
-    every command."""
-    return step_command(core, case, owner.shell_secret_names())
+def request_groups(report: Report) -> dict[int, str]:
+    """`id(request or step) -> the radio group name that selects its cases`.
+
+    One name per set of cases, numbered in document order rather than derived from a label, because
+    it has to be unique across the page and safe in an `id` attribute, and a label is neither."""
+    groups: dict[int, str] = {}
+    for core in iter_request_cores(report):
+        groups[id(core)] = f"rq{len(groups)}"
+    return groups
 
 
-def _capture_lines(step: RequestStep, command: str, response_var: str) -> list[str]:
-    """The assignments that take a step's captures out of its response. One capture reads the command
-    directly; several read a saved response, so the call runs once rather than once per value."""
-    if len(step.captures) == 1:
-        capture = step.captures[0]
-        if capture.json_path is None:
-            return [f"{shell_variable_name(capture.name)}=$({command})"]
-        path = capture.json_path.replace("$.", ".", 1)
-        return [f"{shell_variable_name(capture.name)}=$({command} \\\n  | jq -r {single_quoted(path)})"]
-
-    lines = [f"{response_var}=$({command})"]
-    for capture in step.captures:
-        if capture.json_path is None:
-            lines.append(f'{shell_variable_name(capture.name)}="${response_var}"')
+def iter_request_cores(report: Report) -> Iterator[RequestLike]:
+    """Every call on the page that records cases, in document order. A flow holds no cases itself, so
+    it contributes its steps rather than itself."""
+    for block in iter_requests(report.blocks):
+        if isinstance(block, RequestFlow):
+            yield from block.steps
         else:
-            path = capture.json_path.replace("$.", ".", 1)
-            lines.append(
-                f'{shell_variable_name(capture.name)}=$(printf %s "${response_var}" '
-                f"| jq -r {single_quoted(path)})"
-            )
-    return lines
+            yield block
+
+
+CASE_LABEL_CHAR = 7.3
+"""Advance width of one monospace character at the strip's 12px, in px. The labels are the only thing
+whose width has to be known before the page renders, and a monospace face makes that a count."""
+
+CASE_LABEL_CHROME = 36
+"""A label's dot, its margin, and the padding either side of it."""
+
+CASE_STRIP_SLACK = 1.08
+"""Margin for a fallback monospace face whose characters run wider than the one measured."""
+
+
+def case_strip_width(core: RequestLike) -> int:
+    """The width this call's label strip needs to sit on one line, rounded up to a whole px.
+
+    A strip is honest only while it fits that line: its selected label and the rule beneath form one
+    mark pointing at the pane. Wrapped, the rule can only sit under the last row, so a selection in an
+    earlier row points at nothing. Below this width the strip becomes a rail instead, which has no row
+    to wrap out of."""
+    labels = sum(len(case.label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for case in core.cases)
+    return math.ceil(labels * CASE_STRIP_SLACK) + 32
+
+
+def case_strip_rules(report: Report, groups: dict[int, str]) -> str:
+    """A container query per call that records more than one case, at the width its own labels need.
+
+    A query condition takes a literal rather than a custom property, so the threshold cannot ride on
+    the element as a variable and each call contributes its own rule. `groups` is the same map the
+    markup names its radios from, so a rule and the strip it shapes cannot drift apart."""
+    rules: list[str] = []
+    for core in iter_request_cores(report):
+        if len(core.cases) < 2:
+            continue
+        name = groups[id(core)]
+        rules.append(
+            f"@container (width < {case_strip_width(core)}px){{"
+            f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+            f"gap:0 var(--s3)}}"
+            f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+            f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
+            f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
+            f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+            f"white-space:normal; overflow:visible; text-overflow:clip}}"
+            f".{name} .rq-case{{grid-row:1; grid-column:2}}"
+            "}"
+        )
+    return "\n".join(rules)
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
     """Each capture with the 1-based number of the step that produces it, for the reader's field list."""
     return [(capture, index + 1) for index, step in enumerate(flow.steps) for capture in step.captures]
-
-
-FLOW_SCRIPT_HEADER = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
-
-
-def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
-    """Every step as one runnable script, split into the pieces a step contributes and carrying one
-    piece per recorded case. A step that captures assigns its response to a shell variable the later
-    steps read, so the chain runs without the reader copying a value between them; it also records a
-    single case, so only a step that captures nothing offers a choice here.
-
-    The page holds every piece and shows the one whose tab is open, which is what keeps the script and
-    the case a reader is looking at agreeing."""
-    fragments_by_step: list[list[str]] = []
-    for index, step in enumerate(flow.steps):
-        named = flow.produced_by(index) | flow.shell_secret_names()
-        tail = "" if index == len(flow.steps) - 1 else "\n\n"
-        fragments: list[str] = []
-        for case in step.cases:
-            command = step_command(step, case, named, show_headers=not step.captures)
-            lines = [f"# {index + 1}. {step.label}"]
-            if step.captures:
-                lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")
-            else:
-                lines.append(command)
-            fragments.append("\n".join(lines) + tail)
-        fragments_by_step.append(fragments)
-    return fragments_by_step
 
 
 def reconcile_line(table: Table) -> str:

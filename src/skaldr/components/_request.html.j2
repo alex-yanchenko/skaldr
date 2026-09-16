@@ -158,9 +158,9 @@
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	/* textContent walks the whole subtree, hidden descendants included, so neither the pipe span nor an
-	   unchosen script fragment can be excluded by toggling `hidden`. Read it off a clone with every
-	   hidden node removed: the pipe is un-hidden before a capture copy, so one rule serves both. */
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with every hidden node removed, which the
+	   pipe joins only when the reader asked for a plain copy. */
 	function commandText(node) {
 		var clone = node.cloneNode(true);
 		clone.querySelectorAll("[hidden]").forEach(function (each) { each.remove(); });
@@ -235,11 +235,6 @@
 				applyCaptures(block, clear.closest(".rq-step"), null);
 				return;
 			}
-			var script = event.target.closest(".rq-script");
-			if (script) {
-				copyCommand(script, block.querySelector(".rq-flowscript"));
-				return;
-			}
 			var copy = event.target.closest(".rq-copy");
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
@@ -248,22 +243,6 @@
 				copyCommand(copy, command);
 				return;
 			}
-			var tab = event.target.closest("[data-rq-tab]");
-			if (!tab) return;
-			var chosen = tab.dataset.rqTab;
-			var owner = tab.closest(".rq-step") || block;
-			owner.querySelectorAll("[data-rq-tab]").forEach(function (each) {
-				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
-			});
-			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
-				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
-				else each.setAttribute("data-rq-hidden", "");
-			});
-			var step = owner.dataset.rqStep;
-			if (step === undefined) return;
-			block.querySelectorAll('.rq-frag[data-rq-step="' + step + '"]').forEach(function (each) {
-				each.hidden = each.dataset.rqCase !== chosen;
-			});
 		});
 	});
 })();

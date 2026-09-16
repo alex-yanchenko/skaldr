@@ -21,6 +21,7 @@ from skaldr.models import (
     REFERENCE_KEY_PATTERN,
     Heading,
     Report,
+    RequestLike,
     Section,
     iter_requests,
     load_report,
@@ -159,8 +160,6 @@ def _environment() -> Environment:
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
         command_for=compute.command_for,
-        flow_script_header=compute.FLOW_SCRIPT_HEADER,
-        flow_script_fragments=compute.flow_script_fragments,
         produced_names=compute.produced_names,
         status_line=compute.status_line,
         status_tone=compute.status_tone,
@@ -185,6 +184,11 @@ def _render(
     def anchor_id(block: Heading | Section) -> str:
         return slugs[id(block)]
 
+    groups = compute.request_groups(report)
+
+    def case_group(core: RequestLike) -> str:
+        return groups[id(core)]
+
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
@@ -200,6 +204,7 @@ def _render(
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
+    globals_["case_group"] = case_group
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references
@@ -208,7 +213,7 @@ def _render(
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
-        styles=package_text("styles.css"),
+        styles=package_text("styles.css") + "\n" + compute.case_strip_rules(report, groups),
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
