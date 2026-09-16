@@ -39,6 +39,7 @@ from skaldr.models import (
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
+    iter_requests,
     iter_tables,
 )
 
@@ -778,6 +779,20 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
         parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
     parts.append(f"  {single_quoted(resolve_case(core.url, core, case))}")
     return " \\\n".join(parts)
+
+
+def request_groups(report: Report) -> dict[int, str]:
+    """`id(request or step) -> the radio group name that selects its cases`.
+
+    One name per set of cases, numbered in document order rather than derived from a label, because
+    it has to be unique across the page and safe in an `id` attribute, and a label is neither."""
+    groups: dict[int, str] = {}
+    for block in iter_requests(report.blocks):
+        groups[id(block)] = f"rq{len(groups)}"
+        if isinstance(block, RequestFlow):
+            for step in block.steps:
+                groups[id(step)] = f"rq{len(groups)}"
+    return groups
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:

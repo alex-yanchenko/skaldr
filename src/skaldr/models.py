@@ -1676,6 +1676,11 @@ class RequestCase(_Frozen):
         return self
 
 
+MAX_REQUEST_CASES = 24
+"""How many cases one call may record. The stylesheet pairs a radio with its label by position, and
+writes that many pairs, so a case past this one would render without its label ever lighting up."""
+
+
 class _RequestCore(_Frozen):
     """One HTTP call and the outcomes it produced. Shared by a standalone `request` and by a step of a
     `request_flow`, which differ only in where their variables come from."""
@@ -1729,6 +1734,11 @@ class _RequestCore(_Frozen):
         duplicated = {label for label in labels if labels.count(label) > 1}
         if duplicated:
             raise ValueError(f"request repeats a case label: {', '.join(sorted(duplicated))}")
+        if len(self.cases) > MAX_REQUEST_CASES:
+            raise ValueError(
+                f"a request records at most {MAX_REQUEST_CASES} cases, and this one has "
+                f"{len(self.cases)} — split it into blocks a reader can take in"
+            )
         if self.case_variable is None:
             for case in self.cases:
                 if case.value is not None:

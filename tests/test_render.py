@@ -1885,17 +1885,18 @@ def test_a_response_header_that_repeats_renders_every_value() -> None:
 
 
 def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
+    """Selection hides a case with `display`, never by leaving it out, so print can show them all."""
     html = render_html(parse_report(_request_report()))
 
     assert html.count('data-rq-case="') == 2
-    assert 'data-rq-case="1" data-rq-hidden' in html
-    assert 'data-rq-case="0" data-rq-hidden' not in html
+    assert html.count('type="radio" class="rq-pick"') == 2
+    assert html.count(" checked>") == 1
 
 
 def _request_runtime_script(html: str) -> str:
     """The inline script that drives a request block, picked out of the page's several."""
     scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-    return next(script for script in scripts if "data-rq-tab" in script)
+    return next(script for script in scripts if "data-rq-slot" in script)
 
 
 def _cases(count: int) -> list[dict[str, object]]:
@@ -1911,40 +1912,7 @@ def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> No
     html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
 
     assert ('class="rq-tabs rq-chips"' in html) == chips
-    assert html.count('role="tab"') == count
-
-
-def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
-    """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
-    `data-rq-case="0"` occurs once per step. The chooser therefore resolves its scope from the step
-    that owns the clicked tab; a query across the block would empty every other step that has no case
-    at the chosen index.
-
-    Asserted against the script source rather than a click: the suite runs no DOM."""
-    steps = [
-        make_step(captures=[{"name": "token", "source": "body"}]),
-        make_step(
-            url="https://{{host}}/{{resource}}",
-            headers={"Authorization": "Bearer {{token}}"},
-            case_variable="resource",
-            cases=[
-                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
-                {"label": "admin", "response": {"status": 401, "body": "{}"}},
-            ],
-        ),
-    ]
-    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
-
-    assert html.count('class="rq-case" data-rq-case="0"') == 2
-
-    script = _request_runtime_script(html)
-    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
-
-    assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
-    assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
-    assert 'var owner = tab.closest(".rq-step") || block' in chooser
-    assert 'owner.querySelectorAll("[data-rq-case]")' in chooser
-    assert 'owner.querySelectorAll("[data-rq-tab]")' in chooser
+    assert html.count("<label for=") == count
 
 
 def _tabbed_flow() -> dict[str, object]:
@@ -2138,6 +2106,54 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
     assert compute.request_headers(block, block.cases[0]) == {}
 
 
+def test_choosing_a_case_needs_no_script() -> None:
+    """A radio per case, its label in the strip, and the pane immediately after it, so `:checked +`
+    shows one without an index to keep in step. The strip floats above the panes on flex order."""
+    html = render_html(parse_report(_request_report()))
+    script = _request_runtime_script(html)
+
+    assert html.count('type="radio" class="rq-pick"') == 2
+    assert 'class="rq-pick" name=' in html
+    assert "data-rq-tab" not in html
+    assert "data-rq-tab" not in script
+    assert "aria-selected" not in script
+
+
+def test_one_case_needs_no_strip_but_still_renders() -> None:
+    report = _request_report(
+        cases=[{"label": "only", "response": {"status": 200, "body": "[]"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+    html = render_html(parse_report(report))
+
+    assert 'class="rq-tabs' not in html
+    assert html.count('type="radio" class="rq-pick"') == 1
+    assert "checked" in html
+
+
+def test_every_case_is_named_by_its_own_radio_group() -> None:
+    """Two blocks on one page share the document's radio namespace, so a name repeated across them
+    would make choosing a case in one clear the other."""
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "gadgets", "response": {"status": 200, "body": "[]"}},
+            ],
+        ),
+    ]
+    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
+    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+
+    assert len(set(groups)) == 2
+    assert len(groups) == 3
+
+
 def test_a_flow_shows_its_steps_and_nothing_above_them() -> None:
     """A flow's steps carry the calls; a second rendering of the same two commands above them is the
     same content twice, and a reader working down the page meets it before the walkthrough."""
@@ -2149,10 +2165,9 @@ def test_a_flow_shows_its_steps_and_nothing_above_them() -> None:
     assert html.count('class="rq-step"') == 2
 
 
-def test_copying_leaves_out_every_hidden_fragment() -> None:
-    """textContent walks hidden descendants, so a copy that did not drop them would paste all three
-    resources at once. One rule covers the pipe span and the script fragments alike: hidden is not
-    copied."""
+def test_copying_leaves_out_every_hidden_node() -> None:
+    """textContent walks hidden descendants, so a plain copy would carry the capture pipe the reader
+    did not ask for. One rule covers it: hidden is not copied."""
     html = render_html(parse_report(_tabbed_flow()))
     script = _request_runtime_script(html)
     reader = script.split("function commandText", 1)[1].split("function copyCommand", 1)[0]

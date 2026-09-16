@@ -243,17 +243,6 @@
 				copyCommand(copy, command);
 				return;
 			}
-			var tab = event.target.closest("[data-rq-tab]");
-			if (!tab) return;
-			var chosen = tab.dataset.rqTab;
-			var owner = tab.closest(".rq-step") || block;
-			owner.querySelectorAll("[data-rq-tab]").forEach(function (each) {
-				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
-			});
-			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
-				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
-				else each.setAttribute("data-rq-hidden", "");
-			});
 		});
 	});
 })();

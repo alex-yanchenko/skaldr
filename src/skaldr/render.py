@@ -183,6 +183,11 @@ def _render(
     def anchor_id(block: Heading | Section) -> str:
         return slugs[id(block)]
 
+    groups = compute.request_groups(report)
+
+    def case_group(core: object) -> str:
+        return groups[id(core)]
+
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
@@ -198,6 +203,7 @@ def _render(
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
+    globals_["case_group"] = case_group
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references
