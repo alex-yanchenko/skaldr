@@ -223,7 +223,7 @@
 {% endmacro %}
 
 {% macro request_cases(owner, core, group) %}
-<div class="rq-cases">
+<div class="rq-cases {{ group }}">
 {% for case in core.cases %}
 <input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}-{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
 <section class="rq-case" data-rq-case="{{ loop.index0 }}">
@@ -242,7 +242,7 @@
 </section>
 {% endfor %}
 {% if core.cases | length > 1 %}
-<div class="rq-tabs{% if core.cases | length > 6 %} rq-chips{% endif %}">{% for case in core.cases %}<label for="{{ group }}-{{ loop.index0 }}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</label>{% endfor %}</div>
+<div class="rq-tabs">{% for case in core.cases %}<label for="{{ group }}-{{ loop.index0 }}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</label>{% endfor %}</div>
 {% endif %}
 </div>
 {% endmacro %}

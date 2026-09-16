@@ -212,7 +212,7 @@ def _render(
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
-        styles=package_text("styles.css"),
+        styles=package_text("styles.css") + "\n" + compute.case_strip_rules(report),
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),

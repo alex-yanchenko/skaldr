@@ -1903,16 +1903,14 @@ def _cases(count: int) -> list[dict[str, object]]:
     return [{"label": f"case-{number}", "response": {"status": 200, "body": "[]"}} for number in range(count)]
 
 
-@pytest.mark.parametrize(("count", "chips"), [(2, False), (6, False), (7, True), (15, True)])
-def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> None:
-    """A tab strip is only honest while it fits one row: the selected tab's underline and the
-    container's rule form the single line that points at the panel below. On wrap the container's
-    border can only sit under the last row, so a selection in an earlier row points at nothing. Past
-    the threshold the strip stops claiming to be tabs and the selection becomes a filled chip."""
+@pytest.mark.parametrize("count", [2, 6, 7, 15])
+def test_every_case_carries_a_label_whatever_the_count(count: int) -> None:
+    """One treatment at every size: the strip holds every case and the container query decides whether
+    it sits on a line or stacks, so the count never changes what is rendered."""
     html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
 
-    assert ('class="rq-tabs rq-chips"' in html) == chips
     assert html.count("<label for=") == count
+    assert html.count('class="rq-tabs"') == 1
 
 
 def _tabbed_flow() -> dict[str, object]:
@@ -2104,6 +2102,49 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
     assert isinstance(block, Request)
 
     assert compute.request_headers(block, block.cases[0]) == {}
+
+
+def test_a_strip_too_wide_for_its_container_becomes_a_rail() -> None:
+    """Whether a strip fits is a question about rendered width, and the count of cases is only a proxy
+    for it. The labels are monospace, so their width is predictable at build time: each block carries
+    a container query at the width its own labels need, and below that the strip stacks into a rail."""
+    html = render_html(parse_report(_request_report(cases=_cases(12), case_variable="resource")))
+    rules = re.findall(r"@container \(width < (\d+)px\)", html)
+
+    assert len(rules) == 1
+    assert int(rules[0]) > 400
+    assert ".rq0 .rq-tabs{flex-direction:column" in html
+
+
+def test_each_block_gets_the_breakpoint_its_own_labels_need() -> None:
+    """One threshold for the page would switch a short strip at a width it still fits, or leave a long
+    one wrapping past the width it stopped fitting."""
+
+    def block(count: int, label: str) -> dict[str, object]:
+        return {
+            "type": "request",
+            "label": label,
+            "method": "GET",
+            "url": "https://api.example.com/{{resource}}",
+            "case_variable": "resource",
+            "cases": _cases(count),
+        }
+
+    html = render_html(parse_report(make_report(blocks=[block(3, "Short"), block(14, "Long")])))
+    widths = [int(w) for w in re.findall(r"@container \(width < (\d+)px\)", html)]
+
+    assert len(widths) == 2
+    assert widths[0] < widths[1]
+
+
+def test_a_single_case_needs_no_breakpoint_at_all() -> None:
+    report = _request_report(
+        cases=[{"label": "only", "response": {"status": 200, "body": "[]"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    assert "@container" not in render_html(parse_report(report))
 
 
 def test_choosing_a_case_needs_no_script() -> None:

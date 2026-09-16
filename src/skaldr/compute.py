@@ -7,10 +7,11 @@ drift from it.
 it, and models must not import compute) so templates can reach it through this one module.
 """
 
+import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from skaldr.errors import ReportError
 from skaldr.models import (
@@ -793,6 +794,58 @@ def request_groups(report: Report) -> dict[int, str]:
             for step in block.steps:
                 groups[id(step)] = f"rq{len(groups)}"
     return groups
+
+
+CASE_LABEL_CHAR = 7.3
+"""Advance width of one monospace character at the strip's 12px, in px. The labels are the only thing
+whose width has to be known before the page renders, and a monospace face makes that a count."""
+
+CASE_LABEL_CHROME = 36
+"""A label's dot, its margin, and the padding either side of it."""
+
+CASE_STRIP_SLACK = 1.08
+"""Margin for a fallback monospace face whose characters run wider than the one measured."""
+
+
+def case_strip_width(core: RequestLike) -> int:
+    """The width this call's label strip needs to sit on one line, rounded up to a whole px.
+
+    A strip is honest only while it fits that line: its selected label and the rule beneath form one
+    mark pointing at the pane. Wrapped, the rule can only sit under the last row, so a selection in an
+    earlier row points at nothing. Below this width the strip becomes a rail instead, which has no row
+    to wrap out of."""
+    labels = sum(len(case.label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for case in core.cases)
+    return math.ceil(labels * CASE_STRIP_SLACK) + 32
+
+
+def case_strip_rules(report: Report) -> str:
+    """A container query per call that records more than one case, at the width its own labels need.
+
+    A query condition takes a literal rather than a custom property, so the threshold cannot ride on
+    the element as a variable and each call contributes its own rule."""
+    groups = request_groups(report)
+    rules: list[str] = []
+    for block in iter_requests(report.blocks):
+        cores: list[RequestLike] = (
+            list(block.steps) if isinstance(block, RequestFlow) else [cast("RequestLike", block)]
+        )
+        for core in cores:
+            if len(core.cases) < 2:
+                continue
+            name = groups[id(core)]
+            rules.append(
+                f"@container (width < {case_strip_width(core)}px){{"
+                f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+                f"gap:0 var(--s3)}}"
+                f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+                f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
+                f"max-height:18rem; overflow-y:auto; grid-row:1 / span {len(core.cases)}}}"
+                f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+                f"white-space:normal; overflow:visible; text-overflow:clip}}"
+                f".{name} .rq-case{{grid-column:2}}"
+                "}"
+            )
+    return "\n".join(rules)
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
