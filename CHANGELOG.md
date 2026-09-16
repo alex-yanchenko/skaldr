@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/alex-yanchenko/skaldr/compare/v2.12.1...v3.0.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **request_flow:** request_flow no longer renders a combined script or a "Copy the whole script" button, and secret_style is no longer a field on request or request_flow. A document setting it fails to parse.
+
+### Features
+
+* **request_flow:** drop the combined script and secret_style, and choose a case with CSS ([#142](https://github.com/alex-yanchenko/skaldr/issues/142)) ([33218f1](https://github.com/alex-yanchenko/skaldr/commit/33218f1a0f50d743f5a67ad9d0257790a8365c57))
+
 ## [2.12.1](https://github.com/alex-yanchenko/skaldr/compare/v2.12.0...v2.12.1) (2026-09-16)
 
 

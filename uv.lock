@@ -427,7 +427,7 @@ wheels = [
 
 [[package]]
 name = "skaldr"
-version = "2.12.1"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
