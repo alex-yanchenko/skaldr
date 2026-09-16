@@ -312,6 +312,59 @@ def test_checking_a_set_while_asking_for_one_render_is_refused_before_any_work(
     assert "OK" not in captured.out
 
 
+@pytest.mark.parametrize(
+    "argv_tail",
+    [["--pdf", "r.pdf", "--embed"], ["--live"], ["--if-stale"]],
+)
+def test_a_flag_shape_conflict_is_settled_before_a_file_is_read(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str]
+) -> None:
+    """Every argument-shape conflict is refused up front, so a check never prints a passing OK line
+    for content that is valid and then exits non-zero for a reason that has nothing to do with it.
+    A script reading the exit code would take that as invalid content."""
+    data_path = _write(tmp_path, make_report())
+    tail = [str(tmp_path / part) if part.endswith(".pdf") else part for part in argv_tail]
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--check", str(data_path), *tail])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "OK" not in captured.out
+
+
+def test_check_gates_a_pdf_render_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--pdf without -o writes no HTML at all, so it reaches the render by its own branch."""
+    calls: list[Path] = []
+
+    def record(_html: str, path: Path) -> None:
+        calls.append(path)
+
+    monkeypatch.setattr("skaldr.cli.html_to_pdf", record)
+    data_path = _write(tmp_path, make_report())
+    pdf_out = tmp_path / "report.pdf"
+
+    exit_code = main(["--check", str(data_path), "--pdf", str(pdf_out)])
+
+    assert exit_code == 0
+    assert calls == [pdf_out.resolve()]
+
+
+def test_a_failed_check_writes_no_pdf_either(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Path] = []
+
+    def record(_html: str, path: Path) -> None:
+        calls.append(path)
+
+    monkeypatch.setattr("skaldr.cli.html_to_pdf", record)
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
+
+    exit_code = main(["--check", str(data_path), "--pdf", str(tmp_path / "report.pdf")])
+
+    assert exit_code == 1
+    assert calls == []
+
+
 def test_a_failed_check_writes_nothing_even_with_an_output_flag(tmp_path: Path) -> None:
     """The check is a gate, not a preamble: a page that fails it must not reach disk, or the loop
     would hand the author a rendered page and a FAIL line at the same time."""
@@ -489,13 +542,12 @@ def test_emit_json_rejects_an_output_flag(
 ) -> None:
     data_path = _write(tmp_path, make_report())
     argv_tail = [flag, str(tmp_path / "out.html")] if flag == "-o" else [flag]
-    expected = "-o/--pdf/--embed do nothing"
 
     with pytest.raises(SystemExit) as excinfo:
         main(["--emit-json", str(data_path), *argv_tail])
 
     assert excinfo.value.code == 2
-    assert expected in capsys.readouterr().err
+    assert "-o/--pdf/--embed do nothing" in capsys.readouterr().err
 
 
 def test_check_and_emit_json_are_mutually_exclusive(

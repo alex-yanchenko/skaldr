@@ -1896,8 +1896,14 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert 'data-rq-case="0" data-rq-hidden' not in html
 
 
+def _request_runtime_script(html: str) -> str:
+    """The inline script that drives a request block, picked out of the page's several."""
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+    return next(script for script in scripts if "data-rq-tab" in script)
+
+
 def _cases(count: int) -> list[dict[str, object]]:
-    return [{"label": f"case-{n}", "response": {"status": 200, "body": "[]"}} for n in range(count)]
+    return [{"label": f"case-{number}", "response": {"status": 200, "body": "[]"}} for number in range(count)]
 
 
 @pytest.mark.parametrize(("count", "chips"), [(2, False), (6, False), (7, True), (15, True)])
@@ -1935,7 +1941,7 @@ def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
 
     assert html.count('class="rq-case" data-rq-case="0"') == 2
 
-    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    script = _request_runtime_script(html)
     chooser = script.split('closest("[data-rq-tab]")', 1)[1]
 
     assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
@@ -1963,9 +1969,8 @@ def _tabbed_flow() -> dict[str, object]:
 
 
 def test_a_variable_used_only_in_headers_add_counts_as_used() -> None:
-    """The scan behind every variable check reads the url, the headers, the body and a case's
-    `headers` replacement. A value layered through `headers_add` is interpolated exactly the same way,
-    so leaving it out of the scan called a declared variable unused and refused a valid document."""
+    """The scan behind every variable check reads the url, the headers, the body, a case's `headers`
+    replacement and its `headers_add` layer alike, because all of them are interpolated the same way."""
     report = _request_report(
         url="https://api.example.com/x",
         headers={"Authorization": "Bearer {{token}}"},
@@ -1987,8 +1992,8 @@ def test_a_variable_used_only_in_headers_add_counts_as_used() -> None:
 
 
 def test_an_undeclared_variable_in_headers_add_still_fails_strict() -> None:
-    """The other direction of the same scan: a typo that lives only in `headers_add` reached the page
-    as a literal `{{tokne}}` and passed the finalize gate clean."""
+    """The other direction of the same scan: a name that lives only in `headers_add` and matches no
+    declared variable is an unfilled placeholder, which is what the finalize gate exists to catch."""
     report = _request_report(
         url="https://api.example.com/x",
         headers={"Authorization": "Bearer {{token}}"},
@@ -2054,8 +2059,8 @@ def test_headers_add_refuses_to_share_a_case_with_headers() -> None:
 
 
 def test_an_emptied_headers_map_still_sends_none() -> None:
-    """The recording of what happens with the auth header removed. Layering rather than replacing would
-    have turned this case's 401 into a lie, which is why `headers` keeps replace semantics."""
+    """An empty `headers` map sends no headers at all, which is how a case records the result with the
+    auth header removed. `headers` replaces; only `headers_add` layers."""
     report = _request_report(
         cases=[{"label": "no auth", "headers": {}, "response": {"status": 401, "body": "{}"}}],
         case_variable=None,
@@ -2091,11 +2096,12 @@ def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
     alone would pass on a handler that hid every fragment or ignored the step, so pin the selector to
     the step that owns the tab and the toggle to the case that was chosen."""
     html = render_html(parse_report(_tabbed_flow()))
-    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    script = _request_runtime_script(html)
     chooser = script.split('closest("[data-rq-tab]")', 1)[1]
 
     assert "'.rq-frag[data-rq-step=\"' + step + '\"]'" in chooser
     assert "each.hidden = each.dataset.rqCase !== chosen" in chooser
+    assert "if (step === undefined) return;" in chooser
 
 
 def test_copying_leaves_out_every_hidden_fragment() -> None:
@@ -2103,7 +2109,7 @@ def test_copying_leaves_out_every_hidden_fragment() -> None:
     resources at once. One rule covers the pipe span and the script fragments alike: hidden is not
     copied."""
     html = render_html(parse_report(_tabbed_flow()))
-    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    script = _request_runtime_script(html)
     reader = script.split("function commandText", 1)[1].split("function copyCommand", 1)[0]
 
     assert 'querySelectorAll("[hidden]")' in reader

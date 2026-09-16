@@ -216,10 +216,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--if-stale skips a render that would be redundant; --emit-json renders nothing")
     if args.strict and not args.check:
         parser.error("--strict only applies to --check (it gates unfilled placeholders during validation)")
+    if args.embed and args.pdf and not args.out:
+        parser.error(
+            "--embed has no effect with --pdf alone (no HTML is written); add -o to also "
+            "write the embed fragment, or drop --embed"
+        )
     if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed):
         parser.error(
             "an output flag renders one file — pass a single path, or drop -o/--pdf/--embed to "
             "validate the whole set"
+        )
+    if args.check and not (args.out or args.pdf or args.embed) and (args.live is not None or args.if_stale):
+        parser.error(
+            "--live and --if-stale shape a render; --check alone writes nothing, so add "
+            "-o/--pdf/--embed or drop them"
         )
 
     if args.check:
@@ -251,12 +261,6 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
-    # --embed only shapes HTML output; with --pdf and no -o no HTML is written, so it would be inert.
-    if args.embed and args.pdf and not args.out:
-        parser.error(
-            "--embed has no effect with --pdf alone (no HTML is written); add -o to also "
-            "write the embed fragment, or drop --embed"
-        )
     written: list[Path] = []
     try:
         report = load_report(data_path)

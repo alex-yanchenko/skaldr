@@ -2690,6 +2690,36 @@ def test_a_variable_that_is_never_interpolated_is_rejected() -> None:
         parse_report(make_report(blocks=[_request(variables=variables)]))
 
 
+@pytest.mark.parametrize("field", ["headers", "headers_add"])
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        ({"": "x"}, r"request case header name must not be blank"),
+        ({"X-Trace": "   "}, r"request case header `X-Trace` must not have a blank value"),
+    ],
+)
+def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
+    field: str, headers: dict[str, str], message: str
+) -> None:
+    """A case names its headers either way it sets them, and both reach the command a reader copies.
+    A blank name renders a `: value` line the server rejects."""
+    case = {"label": "one", field: headers, "response": {"status": 200, "body": "[]"}}
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[_request(cases=[case], case_variable=None)]))
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        ({"": "x"}, r"request header name must not be blank"),
+        ({"Accept": " "}, r"request header `Accept` must not have a blank value"),
+    ],
+)
+def test_a_request_header_must_carry_a_name_and_a_value(headers: dict[str, str], message: str) -> None:
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[_request(headers=headers)]))
+
+
 def test_a_boolean_status_is_rejected_rather_than_coerced_to_one() -> None:
     with pytest.raises(ReportError, match=r"must be a number, not a boolean"):
         parse_report(
@@ -2768,8 +2798,7 @@ def test_a_step_using_a_capture_before_it_is_produced_is_rejected() -> None:
 
 def test_a_step_reaching_forward_through_headers_add_is_rejected_too() -> None:
     """A case's `headers_add` is interpolated exactly like every other header, so the ordering rule
-    reaches it. Scanning only `headers` let a step send a literal `{{token}}` to the server while the
-    flow validated clean."""
+    reaches it: a step may only name a value some earlier step has already captured."""
     steps = [
         make_step(
             cases=[

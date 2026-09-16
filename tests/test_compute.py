@@ -5,11 +5,12 @@ from pathlib import Path
 import pytest
 
 from skaldr.compute import (
+    FLOW_SCRIPT_HEADER,
     HTTP_REASONS,
     anchor_slugs,
     command_for,
     first_table_index,
-    flow_script,
+    flow_script_fragments,
     fmt,
     produced_names,
     provenance_footer,
@@ -1106,6 +1107,14 @@ def _flow(**overrides: object) -> RequestFlow:
     block = parse_report(make_report(blocks=[{"type": "request_flow", **defaults, **overrides}])).blocks[0]
     assert isinstance(block, RequestFlow)
     return block
+
+
+def flow_script(flow: RequestFlow) -> str:
+    """The page's own assembly, down the path a reader sees before touching a tab: the header, then
+    each step's first fragment. The page holds every fragment and hides the rest, so this is the text
+    of the pane on load and what its Copy button yields."""
+    first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
+    return (FLOW_SCRIPT_HEADER + first).rstrip()
 
 
 def test_a_flow_script_assigns_each_capture_and_reads_it_back() -> None:

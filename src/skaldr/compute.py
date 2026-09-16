@@ -858,14 +858,6 @@ def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
     return steps
 
 
-def flow_script(flow: RequestFlow) -> str:
-    """The whole script down its first recorded path, which is what the page shows before a reader
-    changes a tab. The page assembles its own from the same fragments, so this is where the assembled
-    script is exercised as one runnable file."""
-    first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
-    return (FLOW_SCRIPT_HEADER + first).rstrip()
-
-
 def reconcile_line(table: Table) -> str:
     if table.reconcile is None:
         return ""

@@ -1653,6 +1653,12 @@ class RequestCase(_Frozen):
                 "a request case sets headers and headers_add together: headers replaces and "
                 "headers_add layers, so state the headers you want once, under headers"
             )
+        for source in (self.headers, self.headers_add):
+            for name, value in (source or {}).items():
+                if not name.strip():
+                    raise ValueError("request case header name must not be blank")
+                if not value.strip():
+                    raise ValueError(f"request case header `{name}` must not have a blank value")
         return self
 
 
