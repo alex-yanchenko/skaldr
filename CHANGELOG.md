@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.12.0](https://github.com/alex-yanchenko/skaldr/compare/v2.11.2...v2.12.0) (2026-09-15)
+
+
+### Features
+
+* **request_flow:** chain several calls, passing a captured value between them ([#138](https://github.com/alex-yanchenko/skaldr/issues/138)) ([8b289d2](https://github.com/alex-yanchenko/skaldr/commit/8b289d245506a497708f92b85fa98a4750e2d4c6))
+* **request:** a request block that records an HTTP call the reader can re-run ([#136](https://github.com/alex-yanchenko/skaldr/issues/136)) ([abe6cdf](https://github.com/alex-yanchenko/skaldr/commit/abe6cdf95f90fd99d5e56f394429c075902a0f53))
+* **request:** keep a reader's non-secret fields, and offer to name a secret ([#139](https://github.com/alex-yanchenko/skaldr/issues/139)) ([9aaf877](https://github.com/alex-yanchenko/skaldr/commit/9aaf877cbec04594acc7341bb7c7429c04469eb3))
+
 ## [2.11.2](https://github.com/alex-yanchenko/skaldr/compare/v2.11.1...v2.11.2) (2026-09-11)
 
 
