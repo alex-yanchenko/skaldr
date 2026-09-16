@@ -19,7 +19,9 @@ is a mapping with a `type` discriminator. **Validation is strict:** an unknown b
 field that doesn't belong to that block, an unknown top-level key, or a value of the wrong shape
 each fails the build with a precise path — e.g. `error: invalid content data: blocks.3.items.2.value:
 number column needs a numeric value`. Run `skaldr --check <file>` to validate without rendering; read
-the path, fix, re-run.
+the path, fix, re-run. Add an output flag and the check becomes a gate on that render: `skaldr --check
+--strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
+at all if the check fails.
 
 ## `meta`
 

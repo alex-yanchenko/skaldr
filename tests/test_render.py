@@ -7,7 +7,7 @@ import pytest
 
 from skaldr import compute
 from skaldr.errors import ReportError
-from skaldr.models import Report, load_report, package_path, parse_report
+from skaldr.models import Report, Request, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -1896,6 +1896,22 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert 'data-rq-case="0" data-rq-hidden' not in html
 
 
+def _cases(count: int) -> list[dict[str, object]]:
+    return [{"label": f"case-{n}", "response": {"status": 200, "body": "[]"}} for n in range(count)]
+
+
+@pytest.mark.parametrize(("count", "chips"), [(2, False), (6, False), (7, True), (15, True)])
+def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> None:
+    """A tab strip is only honest while it fits one row: the selected tab's underline and the
+    container's rule form the single line that points at the panel below. On wrap the container's
+    border can only sit under the last row, so a selection in an earlier row points at nothing. Past
+    the threshold the strip stops claiming to be tabs and the selection becomes a filled chip."""
+    html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
+
+    assert ('class="rq-tabs rq-chips"' in html) == chips
+    assert html.count('role="tab"') == count
+
+
 def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
     """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
     `data-rq-case="0"` occurs once per step. Hiding every case in the block that is not the chosen
@@ -1959,6 +1975,7 @@ def test_headers_add_layers_over_the_requests_headers() -> None:
         ],
     )
     block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
 
     assert compute.request_headers(block, block.cases[0]) == {
         "Authorization": "Bearer {{token}}",
@@ -1999,6 +2016,7 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
         url="https://{{host}}/x",
     )
     block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
 
     assert compute.request_headers(block, block.cases[0]) == {}
 

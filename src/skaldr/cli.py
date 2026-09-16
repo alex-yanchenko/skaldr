@@ -198,29 +198,30 @@ def main(argv: list[str] | None = None) -> int:
     if args.extract_source:
         return _extract_source(args.extract_source)
 
-    # --check and --emit-json are validate-only: they never write, so an output flag is a silent no-op.
     if args.check and args.emit_json:
         parser.error("--check and --emit-json are mutually exclusive (each is a distinct validate-only mode)")
-    if (args.check or args.emit_json) and (args.out or args.pdf or args.embed):
-        parser.error("--check/--emit-json only validate — they write no HTML, so -o/--pdf/--embed do nothing")
+    if args.emit_json and (args.out or args.pdf or args.embed):
+        parser.error("--emit-json only validates — it writes no HTML, so -o/--pdf/--embed do nothing")
     if args.watch and (args.check or args.emit_json or args.pdf):
         parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
-    if args.live is not None and (args.check or args.emit_json or args.embed):
+    if args.live is not None and (args.emit_json or args.embed):
         parser.error(
             "--live adds a self-refreshing reloader to a full HTML page; it can't combine with "
-            "--check/--emit-json (they write no page) or --embed (an Artifact must not reload itself)"
+            "--emit-json (it writes no page) or --embed (an Artifact must not reload itself)"
         )
     if args.live is not None and args.live < 0:
         parser.error("--live takes a poll interval in milliseconds, which cannot be negative")
-    if args.if_stale and (args.check or args.emit_json):
-        parser.error("--if-stale skips a render that would be redundant; --check/--emit-json render nothing")
+    if args.if_stale and args.emit_json:
+        parser.error("--if-stale skips a render that would be redundant; --emit-json renders nothing")
     if args.strict and not args.check:
         parser.error("--strict only applies to --check (it gates unfilled placeholders during validation)")
 
     if args.check:
         if not args.data:
             parser.error("--check needs at least one content file")
-        return _check_files(args.data, strict=args.strict)
+        failed = _check_files(args.data, strict=args.strict)
+        if failed or not (args.out or args.pdf or args.embed):
+            return failed
 
     if not args.data:
         parser.error("a content file is required (or use --write-schema)")

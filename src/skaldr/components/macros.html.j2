@@ -224,7 +224,7 @@
 
 {% macro request_cases(owner, core) %}
 {% if core.cases | length > 1 %}
-<div class="rq-tabs" role="tablist" aria-label="Recorded cases">{% for case in core.cases %}<button type="button" role="tab" data-rq-tab="{{ loop.index0 }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</button>{% endfor %}</div>
+<div class="rq-tabs{% if core.cases | length > 6 %} rq-chips{% endif %}" role="tablist" aria-label="Recorded cases">{% for case in core.cases %}<button type="button" role="tab" data-rq-tab="{{ loop.index0 }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</button>{% endfor %}</div>
 {% endif %}
 {% for case in core.cases %}
 <div class="rq-case" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} data-rq-hidden{% endif %}>

@@ -269,6 +269,41 @@ def test_check_valid_file_exits_0_without_rendering(
     assert not out_path.exists()  # --check never writes
 
 
+def test_check_with_an_output_flag_renders_after_it_passes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A validate-then-render loop took two invocations because -o was refused outright."""
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--check", "--strict", str(data_path), "-o", str(out_path)])
+
+    assert exit_code == 0
+    assert f"OK    {data_path}" in capsys.readouterr().out
+    assert out_path.is_file()
+
+
+def test_a_failed_check_writes_nothing_even_with_an_output_flag(tmp_path: Path) -> None:
+    """The check is a gate, not a preamble: a page that fails it must not reach disk, or the loop
+    would hand the author a rendered page and a FAIL line at the same time."""
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--check", str(data_path), "-o", str(out_path)])
+
+    assert exit_code == 1
+    assert not out_path.exists()
+
+
+def test_emit_json_still_refuses_an_output_flag(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit):
+        main(["--emit-json", str(data_path), "-o", str(tmp_path / "report.html")])
+
+    assert "--emit-json only validates" in capsys.readouterr().err
+
+
 def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
 
@@ -421,21 +456,32 @@ def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFix
 @pytest.mark.parametrize(
     ("argv_tail", "expected"),
     [
-        (["--emit-json"], "mutually exclusive"),
         (["-o", "out.html"], "-o/--pdf/--embed do nothing"),
         (["--embed"], "-o/--pdf/--embed do nothing"),
     ],
 )
-def test_check_rejects_conflicting_output_flags(
+def test_emit_json_rejects_an_output_flag(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str], expected: str
 ) -> None:
     data_path = _write(tmp_path, make_report())
 
     with pytest.raises(SystemExit) as excinfo:
-        main(["--check", str(data_path), *argv_tail])
+        main(["--emit-json", str(data_path), *argv_tail])
 
     assert excinfo.value.code == 2
     assert expected in capsys.readouterr().err
+
+
+def test_check_and_emit_json_are_mutually_exclusive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--check", str(data_path), "--emit-json"])
+
+    assert excinfo.value.code == 2
+    assert "mutually exclusive" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -676,13 +722,25 @@ def test_live_is_refused_for_an_embed_fragment_which_ships_as_a_shared_artifact(
     assert "--embed" in capsys.readouterr().err
 
 
-def test_live_is_refused_for_the_validate_only_modes(tmp_path: Path) -> None:
+def test_live_is_refused_for_emit_json_which_writes_no_page(tmp_path: Path) -> None:
     data_path = _write(tmp_path, make_report())
 
-    for mode in ("--check", "--emit-json"):
-        with pytest.raises(SystemExit) as exc:
-            main([mode, str(data_path), "--live"])
-        assert exc.value.code == 2
+    with pytest.raises(SystemExit) as exc:
+        main(["--emit-json", str(data_path), "--live"])
+
+    assert exc.value.code == 2
+
+
+def test_check_renders_a_live_page_once_it_passes(tmp_path: Path) -> None:
+    """--check is a gate on a render now, not a mode instead of one, so every flag that shapes the
+    page it writes still applies."""
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--check", str(data_path), "-o", str(out_path), "--live"])
+
+    assert exit_code == 0
+    assert "skaldr-live" in out_path.read_text(encoding="utf-8")
 
 
 def test_live_refuses_a_negative_interval(tmp_path: Path) -> None:
@@ -731,10 +789,22 @@ def test_if_stale_renders_when_the_output_does_not_exist(tmp_path: Path) -> None
     assert out_path.exists()
 
 
-def test_if_stale_is_refused_for_the_validate_only_modes(tmp_path: Path) -> None:
+def test_if_stale_is_refused_for_emit_json_which_renders_nothing(tmp_path: Path) -> None:
     data_path = _write(tmp_path, make_report())
 
-    for mode in ("--check", "--emit-json"):
-        with pytest.raises(SystemExit) as exc:
-            main([mode, str(data_path), "--if-stale"])
-        assert exc.value.code == 2
+    with pytest.raises(SystemExit) as exc:
+        main(["--emit-json", str(data_path), "--if-stale"])
+
+    assert exc.value.code == 2
+
+
+def test_check_and_if_stale_are_the_plan_loop(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Validate, then re-render only if the page is behind the source: one invocation."""
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    assert main(["--check", str(data_path), "-o", str(out_path)]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    assert main(["--check", str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+    assert out_path.stat().st_mtime_ns == first
