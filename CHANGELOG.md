@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.1](https://github.com/alex-yanchenko/skaldr/compare/v2.12.0...v2.12.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **request:** tab scoping, script sync, header name rules, and a check that gates a render ([#140](https://github.com/alex-yanchenko/skaldr/issues/140)) ([9142465](https://github.com/alex-yanchenko/skaldr/commit/91424652d5e742be94614f5c3f455d16a286d349))
+
 ## [2.12.0](https://github.com/alex-yanchenko/skaldr/compare/v2.11.2...v2.12.0) (2026-09-15)
 
 
