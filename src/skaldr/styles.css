@@ -807,7 +807,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--neutral-fg)}
 		& .rq-dot.success{background:var(--success-fg)} & .rq-dot.warning{background:var(--warning-fg)}
 		& .rq-dot.danger{background:var(--danger-fg)} & .rq-dot.info{background:var(--info-fg)}
-		& .rq-case{display:flex; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4) var(--s4)}
+		& .rq-case{display:flex; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4)}
 		& .rq-case[data-rq-hidden]{display:none}
 		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}
 		& .rq-pane{border:1px solid var(--line); border-radius:var(--r-inner); overflow:hidden; break-inside:avoid}
@@ -865,7 +865,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			text-transform:uppercase; color:var(--muted)}
 		& .rq-step-t{font-size:13px; font-weight:650}
 		& .rq-step-body{padding:0 var(--s3) var(--s3)}
-		& .rq-step-body .rq-case{padding-inline:0}
+		& .rq-step-body .rq-case{padding-inline:0; padding-bottom:0}
 		& .rq-cap{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 6px;
 			border-radius:var(--r-xs); background:var(--info-bg); color:var(--info-fg)}
 		& .rq-cap[data-rq-got]{background:var(--success-bg); color:var(--success-fg)}
