@@ -17,7 +17,15 @@ from skaldr.render import (
     show_script_close,
 )
 from tests.conftest import REPO_ROOT
-from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
+from tests.factories import (
+    make_cell,
+    make_flow,
+    make_grid,
+    make_reconciled_table,
+    make_report,
+    make_step,
+    make_table,
+)
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
 
@@ -1885,6 +1893,37 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert html.count('data-rq-case="') == 2
     assert 'data-rq-case="1" data-rq-hidden' in html
     assert 'data-rq-case="0" data-rq-hidden' not in html
+
+
+def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
+    """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
+    `data-rq-case="0"` occurs once per step. Hiding every case in the block that is not the chosen
+    index therefore emptied a one-case step whenever a later step's second tab was picked. The
+    chooser resolves its scope from the step that owns the clicked tab.
+
+    Asserted against the script source rather than a click: the suite runs no DOM."""
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "admin", "response": {"status": 401, "body": "{}"}},
+            ],
+        ),
+    ]
+    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
+
+    assert html.count('data-rq-case="0"') == 2
+
+    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
+
+    assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
+    assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
+    assert 'closest(".rq-step")' in chooser
 
 
 def test_an_omitted_reason_phrase_falls_back_to_the_standard_text() -> None:

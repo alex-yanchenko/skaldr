@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-z148vKlo6zJyXBLLLz0qeWPXmcLHhxnuvG+9ZYaJhp8=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-ALXcw6/GbuHXDE71xQ8ppXqojhxE552ZIG/oM5UHLAs=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1670,10 +1670,11 @@ Accept: application/json</pre></div>
 			var tab = event.target.closest("[data-rq-tab]");
 			if (!tab) return;
 			var chosen = tab.dataset.rqTab;
-			block.querySelectorAll("[data-rq-tab]").forEach(function (each) {
+			var owner = tab.closest(".rq-step") || block;
+			owner.querySelectorAll("[data-rq-tab]").forEach(function (each) {
 				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
 			});
-			block.querySelectorAll("[data-rq-case]").forEach(function (each) {
+			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
 				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
 				else each.setAttribute("data-rq-hidden", "");
 			});
