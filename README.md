@@ -58,6 +58,7 @@ skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML la
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
 skaldr --check reports/*.yaml      # validate a whole set at once — for a pre-commit hook or CI
+skaldr --check report.yaml -o report.html   # gate the render on the check: nothing reaches disk unless it passes
 skaldr --emit-json report.yaml     # print the normalised model as JSON on stdout (for tooling/agents)
 skaldr --extract-source report.html  # recover the YAML source embedded in a render (a file or an http(s) URL)
 ```

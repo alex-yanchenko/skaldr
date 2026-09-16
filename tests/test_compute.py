@@ -5,11 +5,12 @@ from pathlib import Path
 import pytest
 
 from skaldr.compute import (
+    FLOW_SCRIPT_HEADER,
     HTTP_REASONS,
     anchor_slugs,
     command_for,
     first_table_index,
-    flow_script,
+    flow_script_fragments,
     fmt,
     produced_names,
     provenance_footer,
@@ -1108,8 +1109,16 @@ def _flow(**overrides: object) -> RequestFlow:
     return block
 
 
+def _flow_script(flow: RequestFlow) -> str:
+    """The page's own assembly, down the path a reader sees before touching a tab: the header, then
+    each step's first fragment. The page holds every fragment and hides the rest, so this is the text
+    of the pane on load and what its Copy button yields."""
+    first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
+    return (FLOW_SCRIPT_HEADER + first).rstrip()
+
+
 def test_a_flow_script_assigns_each_capture_and_reads_it_back() -> None:
-    script = flow_script(_flow())
+    script = _flow_script(_flow())
 
     assert "TOKEN=$(curl -s -X POST \\\n  'https://{{host}}/auth' \\\n  | jq -r '.accessToken')" in script
     assert "-H 'Authorization: Bearer '\"$TOKEN\"" in script
@@ -1139,7 +1148,7 @@ def test_a_step_with_several_captures_runs_once_and_assigns_every_one() -> None:
         },
     ]
 
-    script = flow_script(_flow(steps=steps))
+    script = _flow_script(_flow(steps=steps))
 
     assert "STEP1_RESPONSE=$(curl -s -X POST" in script
     assert "TOKEN=$(printf %s \"$STEP1_RESPONSE\" | jq -r '.accessToken')" in script
@@ -1153,7 +1162,7 @@ def test_a_step_with_several_captures_runs_once_and_assigns_every_one() -> None:
     ids=["plain", "apostrophe", "metacharacters", "subshell"],
 )
 def test_a_flow_script_is_valid_shell_whatever_the_author_wrote(url: str) -> None:
-    script = flow_script(_flow()).replace("{{host}}", "api.example.com")
+    script = _flow_script(_flow()).replace("{{host}}", "api.example.com")
     steps = [
         {
             "label": "One",
@@ -1170,7 +1179,7 @@ def test_a_flow_script_is_valid_shell_whatever_the_author_wrote(url: str) -> Non
             "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
         },
     ]
-    script = flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
+    script = _flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
 
     assert subprocess.run(["bash", "-n", "-c", script], capture_output=True, text=True).returncode == 0
 
@@ -1193,7 +1202,7 @@ def test_a_captured_value_reaches_the_next_step_when_the_script_runs() -> None:
             "cases": [{"label": "ok", "response": {"status": 200, "body": "{}"}}],
         },
     ]
-    script = flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
+    script = _flow_script(_flow(steps=steps)).replace("{{host}}", "api.example.com")
     stub = 'curl() { if [ "$1" = "-s" ]; then printf "%s" "it\'s-me"; else printf "%s\\n" "$@"; fi; }'
 
     result = subprocess.run(["bash", "-c", stub + "\n" + script], capture_output=True, text=True)
@@ -1233,7 +1242,7 @@ def test_the_whole_flow_script_names_a_shell_style_secret_too() -> None:
         ],
     )
 
-    script = flow_script(flow)
+    script = _flow_script(flow)
 
     assert "'Authorization: Bearer '\"$KEY\"" in script
     assert "{{key}}" not in script

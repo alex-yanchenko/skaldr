@@ -5,8 +5,9 @@ from collections.abc import Callable
 
 import pytest
 
+from skaldr import compute
 from skaldr.errors import ReportError
-from skaldr.models import Report, load_report, package_path, parse_report
+from skaldr.models import Report, Request, load_report, package_path, parse_report
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -17,7 +18,15 @@ from skaldr.render import (
     show_script_close,
 )
 from tests.conftest import REPO_ROOT
-from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
+from tests.factories import (
+    make_cell,
+    make_flow,
+    make_grid,
+    make_reconciled_table,
+    make_report,
+    make_step,
+    make_table,
+)
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
 
@@ -1885,6 +1894,296 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert html.count('data-rq-case="') == 2
     assert 'data-rq-case="1" data-rq-hidden' in html
     assert 'data-rq-case="0" data-rq-hidden' not in html
+
+
+def _request_runtime_script(html: str) -> str:
+    """The inline script that drives a request block, picked out of the page's several."""
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+    return next(script for script in scripts if "data-rq-tab" in script)
+
+
+def _cases(count: int) -> list[dict[str, object]]:
+    return [{"label": f"case-{number}", "response": {"status": 200, "body": "[]"}} for number in range(count)]
+
+
+@pytest.mark.parametrize(("count", "chips"), [(2, False), (6, False), (7, True), (15, True)])
+def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> None:
+    """A tab strip is only honest while it fits one row: the selected tab's underline and the
+    container's rule form the single line that points at the panel below. On wrap the container's
+    border can only sit under the last row, so a selection in an earlier row points at nothing. Past
+    the threshold the strip stops claiming to be tabs and the selection becomes a filled chip."""
+    html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
+
+    assert ('class="rq-tabs rq-chips"' in html) == chips
+    assert html.count('role="tab"') == count
+
+
+def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
+    """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
+    `data-rq-case="0"` occurs once per step. The chooser therefore resolves its scope from the step
+    that owns the clicked tab; a query across the block would empty every other step that has no case
+    at the chosen index.
+
+    Asserted against the script source rather than a click: the suite runs no DOM."""
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "admin", "response": {"status": 401, "body": "{}"}},
+            ],
+        ),
+    ]
+    html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
+
+    assert html.count('class="rq-case" data-rq-case="0"') == 2
+
+    script = _request_runtime_script(html)
+    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
+
+    assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
+    assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
+    assert 'var owner = tab.closest(".rq-step") || block' in chooser
+    assert 'owner.querySelectorAll("[data-rq-case]")' in chooser
+    assert 'owner.querySelectorAll("[data-rq-tab]")' in chooser
+
+
+def _tabbed_flow() -> dict[str, object]:
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "gadgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "sprockets", "response": {"status": 403, "body": "{}"}},
+            ],
+        ),
+    ]
+    return make_report(blocks=[make_flow(steps=steps)])
+
+
+def test_a_variable_used_only_in_headers_add_counts_as_used() -> None:
+    """The scan behind every variable check reads the url, the headers, the body, a case's `headers`
+    replacement and its `headers_add` layer alike, because all of them are interpolated the same way."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Authorization": "Bearer {{token}}"},
+        variables=[{"name": "token", "secret": True}, {"name": "trace", "example": "abc"}],
+        case_variable=None,
+        cases=[
+            {
+                "label": "traced",
+                "headers_add": {"X-Trace": "{{trace}}"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert block.referenced_variables() == {"token", "trace"}
+
+
+def test_an_undeclared_variable_in_headers_add_still_fails_strict() -> None:
+    """The other direction of the same scan: a name that lives only in `headers_add` and matches no
+    declared variable is an unfilled placeholder, which is what the finalize gate exists to catch."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Authorization": "Bearer {{token}}"},
+        variables=[{"name": "token", "secret": True}],
+        case_variable=None,
+        cases=[
+            {
+                "label": "typo",
+                "headers_add": {"X-Trace": "{{tokne}}"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+
+    assert find_placeholders(parse_report(report)) == ["tokne"]
+
+
+def test_headers_add_replaces_a_name_whatever_case_it_is_written_in() -> None:
+    """Header names are case-insensitive on the wire, so `content-type` names the same header as
+    `Content-Type`. Matching them by exact string would send both, and a reader pasting that command
+    gets two conflicting values rather than the one the case states. The request's own spelling is
+    what renders, so the case reads as an override of it."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+        cases=[
+            {
+                "label": "plain",
+                "headers_add": {"content-type": "text/plain"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert compute.request_headers(block, block.cases[0]) == {
+        "Content-Type": "text/plain",
+        "Accept": "application/json",
+    }
+
+
+def test_the_headers_a_case_sends_are_its_own_to_hold() -> None:
+    """`block.headers` is shared by every case that sets none of its own, so handing a caller the
+    model's dict would let one case's reader mutate what the next one sends."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    first = compute.request_headers(block, block.cases[0])
+    first["X-Injected"] = "1"
+
+    assert compute.request_headers(block, block.cases[0]) == {"Accept": "application/json"}
+
+
+def test_headers_add_appends_a_name_the_request_does_not_set() -> None:
+    """A name the request has no spelling of is added after the ones it does, so the request's own
+    header order survives and the case's additions read as additions."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+        cases=[
+            {
+                "label": "traced",
+                "headers_add": {"accept": "text/plain", "X-Trace": "1"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert list(compute.request_headers(block, block.cases[0]).items()) == [
+        ("Accept", "text/plain"),
+        ("X-Trace", "1"),
+    ]
+
+
+def test_headers_add_layers_over_the_requests_headers() -> None:
+    """Cases that share an auth header and differ in one other name write the shared one once, on the
+    request, and only the difference per case."""
+    report = _request_report(
+        headers={"Authorization": "Bearer {{token}}", "Accept": "application/json"},
+        cases=[
+            {
+                "label": "v1",
+                "headers_add": {"Accept": "application/vnd.example.v1+json"},
+                "response": {"status": 200, "body": "[]"},
+            },
+            {"label": "plain", "response": {"status": 200, "body": "[]"}},
+        ],
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert compute.request_headers(block, block.cases[0]) == {
+        "Authorization": "Bearer {{token}}",
+        "Accept": "application/vnd.example.v1+json",
+    }
+    assert compute.request_headers(block, block.cases[1]) == {
+        "Authorization": "Bearer {{token}}",
+        "Accept": "application/json",
+    }
+
+
+def test_headers_add_refuses_to_share_a_case_with_headers() -> None:
+    """`headers` replaces and `headers_add` layers, so a case setting both states its headers twice and
+    leaves a reader guessing which wins. Whatever it meant is already expressible with `headers` alone."""
+    report = _request_report(
+        cases=[
+            {
+                "label": "both",
+                "headers": {"Accept": "application/json"},
+                "headers_add": {"X-Trace": "1"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    with pytest.raises(ReportError, match="headers replaces and headers_add layers"):
+        parse_report(report)
+
+
+def test_an_emptied_headers_map_still_sends_none() -> None:
+    """An empty `headers` map sends no headers at all, which is how a case records the result with the
+    auth header removed. `headers` replaces; only `headers_add` layers."""
+    report = _request_report(
+        cases=[{"label": "no auth", "headers": {}, "response": {"status": 401, "body": "{}"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert compute.request_headers(block, block.cases[0]) == {}
+
+
+def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
+    """Every case's fragment ships in the document and the chooser shows the one whose tab is open, so
+    the script a reader copies is always the call they are looking at."""
+    html = render_html(parse_report(_tabbed_flow()))
+    pane = html.split('class="rq-cmd rq-flowscript"', 1)[1].split("</pre>", 1)[0]
+
+    fragments = re.findall(r'<span class="rq-frag"([^>]*)>', pane)
+
+    assert len(fragments) == 4
+    assert fragments[0] == ' data-rq-step="0" data-rq-case="0"'
+    assert fragments[1] == ' data-rq-step="1" data-rq-case="0"'
+    assert fragments[2] == ' data-rq-step="1" data-rq-case="1" hidden'
+    assert fragments[3] == ' data-rq-step="1" data-rq-case="2" hidden'
+
+    assert "widgets" in pane
+    assert "gadgets" in pane
+    assert "sprockets" in pane
+
+
+def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
+    """Asserted against the script source rather than a click: the suite runs no DOM. Naming `.rq-frag`
+    alone would pass on a handler that hid every fragment or ignored the step, so pin the selector to
+    the step that owns the tab and the toggle to the case that was chosen."""
+    html = render_html(parse_report(_tabbed_flow()))
+    script = _request_runtime_script(html)
+    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
+
+    assert "'.rq-frag[data-rq-step=\"' + step + '\"]'" in chooser
+    assert "each.hidden = each.dataset.rqCase !== chosen" in chooser
+    assert "if (step === undefined) return;" in chooser
+
+
+def test_copying_leaves_out_every_hidden_fragment() -> None:
+    """textContent walks hidden descendants, so a copy that did not drop them would paste all three
+    resources at once. One rule covers the pipe span and the script fragments alike: hidden is not
+    copied."""
+    html = render_html(parse_report(_tabbed_flow()))
+    script = _request_runtime_script(html)
+    reader = script.split("function commandText", 1)[1].split("function copyCommand", 1)[0]
+
+    assert 'querySelectorAll("[hidden]")' in reader
+    assert "cloneNode(true)" in reader
 
 
 def test_an_omitted_reason_phrase_falls_back_to_the_standard_text() -> None:

@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-z148vKlo6zJyXBLLLz0qeWPXmcLHhxnuvG+9ZYaJhp8=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-V++pV2U5YZj6q1XdX0KPMiyM7yl42VnFHiG4fk+OKaY=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -819,11 +819,16 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			font:inherit; font-family:var(--mono); font-size:12px; color:var(--muted); padding:5px 10px 6px}
 		& .rq-tabs button:hover{color:var(--ink)}
 		& .rq-tabs button[aria-selected="true"]{color:var(--ink); font-weight:700; border-bottom-color:var(--info-fg)}
+		& .rq-chips{border-bottom:0; gap:6px}
+		& .rq-chips button{border:1px solid var(--line); border-radius:var(--r-pill); padding:3px 10px;
+			background:var(--surface)}
+		& .rq-chips button[aria-selected="true"]{background:var(--info-bg); color:var(--info-fg);
+			border-color:color-mix(in srgb, var(--info-fg) 35%, transparent)}
 		& .rq-dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-inline-end:6px;
 			background:var(--neutral-fg)}
 		& .rq-dot.success{background:var(--success-fg)} & .rq-dot.warning{background:var(--warning-fg)}
 		& .rq-dot.danger{background:var(--danger-fg)} & .rq-dot.info{background:var(--info-fg)}
-		& .rq-case{display:flex; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4) var(--s4)}
+		& .rq-case{display:flex; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4)}
 		& .rq-case[data-rq-hidden]{display:none}
 		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}
 		& .rq-pane{border:1px solid var(--line); border-radius:var(--r-inner); overflow:hidden; break-inside:avoid}
@@ -881,7 +886,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			text-transform:uppercase; color:var(--muted)}
 		& .rq-step-t{font-size:13px; font-weight:650}
 		& .rq-step-body{padding:0 var(--s3) var(--s3)}
-		& .rq-step-body .rq-case{padding-inline:0}
+		& .rq-step-body .rq-case{padding-inline:0; padding-bottom:0}
 		& .rq-cap{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 6px;
 			border-radius:var(--r-xs); background:var(--info-bg); color:var(--info-fg)}
 		& .rq-cap[data-rq-got]{background:var(--success-bg); color:var(--success-fg)}
@@ -1256,19 +1261,23 @@ Accept: application/json</pre></div>
 <div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">#!/usr/bin/env bash
 set -euo pipefail
 
-# 1. Exchange the API key for a session token
+<span class="rq-frag" data-rq-step="0" data-rq-case="0"># 1. Exchange the API key for a session token
 SESSION_TOKEN=$(curl -s -X POST \
   -H &#39;Content-Type: application/json&#39; \
   --data &#39;{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="shell">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}&#39; \
   &#39;https://wms.example.com/v2/sessions&#39; \
   | jq -r &#39;.token&#39;)
 
-# 2. Read the bins that did not balance
+</span><span class="rq-frag" data-rq-step="1" data-rq-case="0"># 2. Read the bins that did not balance
 curl -i -X GET \
   -H &#39;Authorization: Bearer &#39;&#34;$SESSION_TOKEN&#34; \
   -H &#39;Accept: application/json&#39; \
-  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;</pre></div>
-<section class="rq-step">
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;</span><span class="rq-frag" data-rq-step="1" data-rq-case="1" hidden># 2. Read the bins that did not balance
+curl -i -X GET \
+  -H &#39;Authorization: Bearer &#39;&#34;$SESSION_TOKEN&#34; \
+  -H &#39;Accept: application/json&#39; \
+  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;</span></pre></div>
+<section class="rq-step" data-rq-step="0">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
 <div class="rq-step-body"><div class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">200</h4>
@@ -1290,7 +1299,7 @@ Content-Type: application/json
 </div>
 </div>
 </section>
-<div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step">
+<div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step" data-rq-step="1">
 <div class="rq-step-hd"><span class="rq-step-n">step 2 of 2</span><span class="rq-step-t">Read the bins that did not balance</span></div>
 <div class="rq-step-body"><div class="rq-tabs" role="tablist" aria-label="Recorded cases"><button type="button" role="tab" data-rq-tab="0" aria-selected="true"><span class="rq-dot success"></span>with the token</button><button type="button" role="tab" data-rq-tab="1" aria-selected="false"><span class="rq-dot warning"></span>once the token has expired</button></div>
 <div class="rq-case" data-rq-case="0">
@@ -1576,18 +1585,17 @@ Accept: application/json</pre></div>
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
-	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
-	function commandText(node, withPipe) {
-		if (withPipe) return node.textContent;
+	/* textContent walks the whole subtree, hidden descendants included, so neither the pipe span nor an
+	   unchosen script fragment can be excluded by toggling `hidden`. Read it off a clone with every
+	   hidden node removed: the pipe is un-hidden before a capture copy, so one rule serves both. */
+	function commandText(node) {
 		var clone = node.cloneNode(true);
-		var pipe = clone.querySelector(".rq-pipe");
-		if (pipe) pipe.remove();
+		clone.querySelectorAll("[hidden]").forEach(function (each) { each.remove(); });
 		return clone.textContent;
 	}
 
-	function copyCommand(button, node, withPipe) {
-		var text = commandText(node, withPipe);
+	function copyCommand(button, node) {
+		var text = commandText(node);
 		var settle = function (label) {
 			var original = button.dataset.rqLabel || button.textContent;
 			button.dataset.rqLabel = original;
@@ -1656,7 +1664,7 @@ Accept: application/json</pre></div>
 			}
 			var script = event.target.closest(".rq-script");
 			if (script) {
-				copyCommand(script, block.querySelector(".rq-flowscript"), false);
+				copyCommand(script, block.querySelector(".rq-flowscript"));
 				return;
 			}
 			var copy = event.target.closest(".rq-copy");
@@ -1664,18 +1672,24 @@ Accept: application/json</pre></div>
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
 				var withPipe = copy.classList.contains("rq-catch");
 				command.querySelector(".rq-pipe").hidden = !withPipe;
-				copyCommand(copy, command, withPipe);
+				copyCommand(copy, command);
 				return;
 			}
 			var tab = event.target.closest("[data-rq-tab]");
 			if (!tab) return;
 			var chosen = tab.dataset.rqTab;
-			block.querySelectorAll("[data-rq-tab]").forEach(function (each) {
+			var owner = tab.closest(".rq-step") || block;
+			owner.querySelectorAll("[data-rq-tab]").forEach(function (each) {
 				each.setAttribute("aria-selected", each.dataset.rqTab === chosen ? "true" : "false");
 			});
-			block.querySelectorAll("[data-rq-case]").forEach(function (each) {
+			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
 				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
 				else each.setAttribute("data-rq-hidden", "");
+			});
+			var step = owner.dataset.rqStep;
+			if (step === undefined) return;
+			block.querySelectorAll('.rq-frag[data-rq-step="' + step + '"]').forEach(function (each) {
+				each.hidden = each.dataset.rqCase !== chosen;
 			});
 		});
 	});

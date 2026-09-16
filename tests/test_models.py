@@ -2690,6 +2690,48 @@ def test_a_variable_that_is_never_interpolated_is_rejected() -> None:
         parse_report(make_report(blocks=[_request(variables=variables)]))
 
 
+@pytest.mark.parametrize("field", ["headers", "headers_add"])
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        pytest.param({"": "x"}, r"request case header name must not be blank", id="blank-name"),
+        pytest.param(
+            {"X-Trace": "   "},
+            r"request case header `X-Trace` must not have a blank value",
+            id="blank-value",
+        ),
+        pytest.param(
+            {"X-Trace": "a", "x-trace": "b"},
+            r"differ only in case",
+            id="case-variant-names",
+        ),
+    ],
+)
+def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
+    field: str, headers: dict[str, str], message: str
+) -> None:
+    """A case names its headers either way it sets them, and both reach the command a reader copies.
+    A blank name renders a `: value` line the server rejects."""
+    case = {"label": "one", field: headers, "response": {"status": 200, "body": "[]"}}
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[_request(cases=[case], case_variable=None)]))
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        pytest.param({"": "x"}, r"request header name must not be blank", id="blank-name"),
+        pytest.param(
+            {"Accept": " "}, r"request header `Accept` must not have a blank value", id="blank-value"
+        ),
+        pytest.param({"Accept": "a", "accept": "b"}, r"differ only in case", id="case-variant-names"),
+    ],
+)
+def test_a_request_header_must_carry_a_name_and_a_value(headers: dict[str, str], message: str) -> None:
+    with pytest.raises(ReportError, match=message):
+        parse_report(make_report(blocks=[_request(headers=headers)]))
+
+
 def test_a_boolean_status_is_rejected_rather_than_coerced_to_one() -> None:
     with pytest.raises(ReportError, match=r"must be a number, not a boolean"):
         parse_report(
@@ -2760,6 +2802,25 @@ def test_a_step_using_a_capture_before_it_is_produced_is_rejected() -> None:
     value that does not exist when the reader reaches it, and the script aborts under `set -u`."""
     steps = [
         make_step(url="https://{{host}}/a?t={{token}}"),
+        make_step(url="https://{{host}}/b", captures=[{"name": "token", "source": "body"}]),
+    ]
+    with pytest.raises(ReportError, match=r"step 1 uses token before the step that captures it has run"):
+        parse_report(make_report(blocks=[make_flow(steps=steps)]))
+
+
+def test_a_step_reaching_forward_through_headers_add_is_rejected_too() -> None:
+    """A case's `headers_add` is interpolated exactly like every other header, so the ordering rule
+    reaches it: a step may only name a value some earlier step has already captured."""
+    steps = [
+        make_step(
+            cases=[
+                {
+                    "label": "one",
+                    "headers_add": {"X-Later": "{{token}}"},
+                    "response": {"status": 200, "body": "{}"},
+                }
+            ]
+        ),
         make_step(url="https://{{host}}/b", captures=[{"name": "token", "source": "body"}]),
     ]
     with pytest.raises(ReportError, match=r"step 1 uses token before the step that captures it has run"):

@@ -19,7 +19,9 @@ is a mapping with a `type` discriminator. **Validation is strict:** an unknown b
 field that doesn't belong to that block, an unknown top-level key, or a value of the wrong shape
 each fails the build with a precise path — e.g. `error: invalid content data: blocks.3.items.2.value:
 number column needs a numeric value`. Run `skaldr --check <file>` to validate without rendering; read
-the path, fix, re-run.
+the path, fix, re-run. Add an output flag and the check becomes a gate on that render: `skaldr --check
+--strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
+at all if the check fails.
 
 ## `meta`
 
@@ -180,8 +182,8 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `secret_style?`, `case_variable?`, `cases: [{label, value?, headers?, response, verdict?}]` |
-| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, captures?, cases}]` |
+| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `secret_style?`, `case_variable?`, `cases: [{label, value?, headers?, headers_add?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, case_variable?, cases, captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -570,6 +572,7 @@ also all a self-contained page with a locked-down CSP could ever do.
   method: GET
   url: "https://{{host}}/{{resource}}?limit={{limit}}"
   headers:                                 # a map, in the order it should read
+    Authorization: "Bearer {{token}}"
     Accept: "application/json"
   variables:                               # the fields the reader fills
     - { name: host,  example: "api.example.com" }
@@ -599,6 +602,12 @@ when printed**, because a tab must not hide evidence on paper. Give each a `verd
 what you got, what it means. That is the one part a reader cannot work out for themselves. A case
 usually varies one value through `case_variable`; set `headers` on it to replace the request's headers
 instead, which is how you record what happens with the auth header removed.
+
+**`headers` replaces, `headers_add` layers.** Cases that share a credential and differ in one header
+write the shared one once on the request and the difference under `headers_add`, which replaces the
+names it lists and leaves the rest. `headers` stays a replacement, because `headers: {}` is what records
+a call with the auth header removed and layering would quietly turn that case's 401 into a lie. A case
+may set one or the other, never both.
 
 `status` drives the tone, so you never pick a colour. Omit `reason` and the standard text for the code
 fills in, which is what an HTTP/2 response needs since it carries none. Omit `status` entirely for a
@@ -654,16 +663,21 @@ once and never copies a value between two boxes.
         - label: "200"
           response: { status: 200, body: '{ "accessToken": "eyJ…" }' }
 
-    - label: "Read the profile it belongs to"
+    - label: "Read what the token reaches"
       method: GET
-      url: "https://{{host}}/auth/me"
+      url: "https://{{host}}/{{resource}}"
       headers:
         Authorization: "Bearer {{access_token}}"
+      case_variable: resource        # this step tabs, like a request does
       cases:
-        - label: "with the token"
+        - label: "auth/me"
           response: { status: 200, body: '{ "user": "ada" }' }
           verdict: "The token from step 1 is the only thing that makes this a 200."
-        - label: "without it"
+        - label: "auth/sessions"
+          headers_add: { Accept: "application/vnd.example.v2+json" }
+          response: { status: 200, body: "[]" }
+        - label: "auth/me without the token"
+          value: "auth/me"
           headers: {}
           response: { status: 401, body: '{ "message": "Access Token is required" }' }
 ```
@@ -681,14 +695,16 @@ step, or from itself, fails the build rather than producing a script that reads 
 exist yet. A capture name may not also be a declared variable, and two captures may not collapse to the
 same shell variable, which upper-cases the name and turns a hyphen into an underscore.
 
-**A step that captures records one case.** The combined script builds one path through the flow, so a
-capturing step with several recorded outcomes would leave the script and the tab a reader is looking at
-disagreeing. A step that captures nothing may record as many as it likes.
+**A step that captures records one case**, because the value it assigns has to be the one the later
+steps read. A step that captures nothing may record as many as it likes, and takes `case_variable` like
+a `request` does: one step authenticates, the next tabs through every resource that token reaches, and
+the reader supplies the credential once rather than to two separate blocks.
 
 **Copy the whole script** takes every step as one runnable file: `set -euo pipefail`, each capture
-assigned to a shell variable the later steps read, and `jq -r` only where the capture is a JSON path. A
-step's own Copy still gives that one call on its own, with the captured value filled in rather than
-named, so it runs by itself.
+assigned to a shell variable the later steps read, and `jq -r` only where the capture is a JSON path. It
+follows the tabs, so the script is always the path the reader is looking at. A step's own Copy still
+gives that one call on its own, with the captured value filled in rather than named, so it runs by
+itself.
 
 A flow needs at least two steps. One step is a `request`.
 
