@@ -825,20 +825,42 @@ def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
     return [(capture, index + 1) for index, step in enumerate(flow.steps) for capture in step.captures]
 
 
-def flow_script(flow: RequestFlow) -> str:
-    """Every step as one runnable script. A step that captures assigns its response to a shell variable
-    the later steps read, so the chain runs without the reader copying a value between them."""
-    lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
+FLOW_SCRIPT_HEADER = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+
+
+def flow_script_header() -> str:
+    return FLOW_SCRIPT_HEADER
+
+
+def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
+    """Every step as one runnable script, split into the pieces a step contributes and carrying one
+    piece per recorded case. A step that captures assigns its response to a shell variable the later
+    steps read, so the chain runs without the reader copying a value between them; it also records a
+    single case, so only a step that captures nothing offers a choice here.
+
+    The page holds every piece and shows the one whose tab is open, which is what keeps the script and
+    the case a reader is looking at agreeing."""
+    steps: list[list[str]] = []
     for index, step in enumerate(flow.steps):
         named = flow.produced_by(index) | flow.shell_secret_names()
-        command = step_command(step, step.cases[0], named, show_headers=not step.captures)
-        lines.append(f"# {index + 1}. {step.label}")
-        if step.captures:
-            lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")
-        else:
-            lines.append(command)
-        lines.append("")
-    return "\n".join(lines).rstrip()
+        tail = "" if index == len(flow.steps) - 1 else "\n\n"
+        fragments: list[str] = []
+        for case in step.cases:
+            command = step_command(step, case, named, show_headers=not step.captures)
+            lines = [f"# {index + 1}. {step.label}"]
+            if step.captures:
+                lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")
+            else:
+                lines.append(command)
+            fragments.append("\n".join(lines) + tail)
+        steps.append(fragments)
+    return steps
+
+
+def flow_script(flow: RequestFlow) -> str:
+    """The whole script down its first recorded path, which is what a reader who changes no tab sees."""
+    first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
+    return (flow_script_header() + first).rstrip()
 
 
 def reconcile_line(table: Table) -> str:

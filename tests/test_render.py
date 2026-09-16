@@ -1916,7 +1916,7 @@ def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
     ]
     html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
 
-    assert html.count('data-rq-case="0"') == 2
+    assert html.count('class="rq-case" data-rq-case="0"') == 2
 
     script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
     chooser = script.split('closest("[data-rq-tab]")', 1)[1]
@@ -1924,6 +1924,64 @@ def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
     assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
     assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
     assert 'closest(".rq-step")' in chooser
+
+
+def _tabbed_flow() -> dict[str, object]:
+    steps = [
+        make_step(captures=[{"name": "token", "source": "body"}]),
+        make_step(
+            url="https://{{host}}/{{resource}}",
+            headers={"Authorization": "Bearer {{token}}"},
+            case_variable="resource",
+            cases=[
+                {"label": "widgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "gadgets", "response": {"status": 200, "body": "[]"}},
+                {"label": "sprockets", "response": {"status": 403, "body": "{}"}},
+            ],
+        ),
+    ]
+    return make_report(blocks=[make_flow(steps=steps)])
+
+
+def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
+    """The script was rendered once, pinned to each step's first case, so choosing any other tab left
+    the reader copying a command for a resource they were not looking at. Every case's fragment is in
+    the document, and the chooser shows the one whose tab is open."""
+    html = render_html(parse_report(_tabbed_flow()))
+    pane = html.split('class="rq-cmd rq-flowscript"', 1)[1].split("</pre>", 1)[0]
+
+    fragments = re.findall(r'<span class="rq-frag"([^>]*)>', pane)
+
+    assert len(fragments) == 4
+    assert fragments[0] == ' data-rq-step="0" data-rq-case="0"'
+    assert fragments[1] == ' data-rq-step="1" data-rq-case="0"'
+    assert fragments[2] == ' data-rq-step="1" data-rq-case="1" hidden'
+    assert fragments[3] == ' data-rq-step="1" data-rq-case="2" hidden'
+
+    assert "widgets" in pane
+    assert "gadgets" in pane
+    assert "sprockets" in pane
+
+
+def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
+    """Asserted against the script source rather than a click: the suite runs no DOM."""
+    html = render_html(parse_report(_tabbed_flow()))
+    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
+
+    assert ".rq-frag" in chooser
+
+
+def test_copying_leaves_out_every_hidden_fragment() -> None:
+    """textContent walks hidden descendants, so a copy that did not drop them would paste all three
+    resources at once. One rule covers the pipe span and the script fragments alike: hidden is not
+    copied."""
+    html = render_html(parse_report(_tabbed_flow()))
+    script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
+    reader = script.split("function commandText", 1)[1].split("function copyCommand", 1)[0]
+
+    assert 'querySelectorAll("[hidden]")' in reader
+    assert "cloneNode(true)" in reader
 
 
 def test_an_omitted_reason_phrase_falls_back_to_the_standard_text() -> None:

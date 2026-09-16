@@ -158,18 +158,17 @@
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
-	   excluded by toggling `hidden`. Read it off a clone with that span removed instead. */
-	function commandText(node, withPipe) {
-		if (withPipe) return node.textContent;
+	/* textContent walks the whole subtree, hidden descendants included, so neither the pipe span nor an
+	   unchosen script fragment can be excluded by toggling `hidden`. Read it off a clone with every
+	   hidden node removed: the pipe is un-hidden before a capture copy, so one rule serves both. */
+	function commandText(node) {
 		var clone = node.cloneNode(true);
-		var pipe = clone.querySelector(".rq-pipe");
-		if (pipe) pipe.remove();
+		clone.querySelectorAll("[hidden]").forEach(function (each) { each.remove(); });
 		return clone.textContent;
 	}
 
-	function copyCommand(button, node, withPipe) {
-		var text = commandText(node, withPipe);
+	function copyCommand(button, node) {
+		var text = commandText(node);
 		var settle = function (label) {
 			var original = button.dataset.rqLabel || button.textContent;
 			button.dataset.rqLabel = original;
@@ -238,7 +237,7 @@
 			}
 			var script = event.target.closest(".rq-script");
 			if (script) {
-				copyCommand(script, block.querySelector(".rq-flowscript"), false);
+				copyCommand(script, block.querySelector(".rq-flowscript"));
 				return;
 			}
 			var copy = event.target.closest(".rq-copy");
@@ -246,7 +245,7 @@
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
 				var withPipe = copy.classList.contains("rq-catch");
 				command.querySelector(".rq-pipe").hidden = !withPipe;
-				copyCommand(copy, command, withPipe);
+				copyCommand(copy, command);
 				return;
 			}
 			var tab = event.target.closest("[data-rq-tab]");
@@ -259,6 +258,11 @@
 			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
 				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
 				else each.setAttribute("data-rq-hidden", "");
+			});
+			var step = owner.dataset.rqStep;
+			if (step === undefined) return;
+			block.querySelectorAll('.rq-frag[data-rq-step="' + step + '"]').forEach(function (each) {
+				each.hidden = each.dataset.rqCase !== chosen;
 			});
 		});
 	});
