@@ -7,7 +7,14 @@ import pytest
 
 from skaldr import compute
 from skaldr.errors import ReportError
-from skaldr.models import Report, Request, load_report, package_path, parse_report
+from skaldr.models import (
+    MAX_REQUEST_CASES,
+    Report,
+    Request,
+    load_report,
+    package_path,
+    parse_report,
+)
 from skaldr.render import (
     extract_source,
     find_placeholders,
@@ -2104,6 +2111,48 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
     assert compute.request_headers(block, block.cases[0]) == {}
 
 
+@pytest.mark.parametrize(
+    ("labels", "width"),
+    [
+        pytest.param(["ok"], 87, id="one-short"),
+        pytest.param(["ok", "no"], 142, id="two-short"),
+        pytest.param(["a" * 20], 229, id="one-long"),
+    ],
+)
+def test_the_width_a_strip_asks_for_is_read_off_its_labels(labels: list[str], width: int) -> None:
+    """The threshold a block switches at, pinned to the value rather than its direction. Every part of
+    it moves the answer: the per-character advance, the room a dot and the padding take, the slack for
+    a wider fallback face, and the container's own padding."""
+    report = _request_report(
+        cases=[{"label": label, "response": {"status": 200, "body": "[]"}} for label in labels],
+        case_variable="resource",
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert compute.case_strip_width(block) == width
+
+
+def test_the_case_cap_matches_the_selectors_the_stylesheet_writes() -> None:
+    """Highlighting the chosen label is the one thing needing a positional selector, and the stylesheet
+    writes a fixed number of them. A cap above that count renders a case whose label never lights up
+    and which the strip cannot select; a cap below it refuses a case the stylesheet would have served."""
+    css = package_path("styles.css").read_text(encoding="utf-8")
+
+    assert css.count(".rq-pick:nth-of-type(") == MAX_REQUEST_CASES
+    assert f":nth-of-type({MAX_REQUEST_CASES}):checked" in css
+    assert f":nth-of-type({MAX_REQUEST_CASES + 1}):checked" not in css
+
+
+def test_the_case_cap_is_refused_one_past_its_edge() -> None:
+    at_cap = _request_report(cases=_cases(MAX_REQUEST_CASES), case_variable="resource")
+    over = _request_report(cases=_cases(MAX_REQUEST_CASES + 1), case_variable="resource")
+
+    assert parse_report(at_cap) is not None
+    with pytest.raises(ReportError, match=rf"records at most {MAX_REQUEST_CASES} cases"):
+        parse_report(over)
+
+
 def test_a_strip_too_wide_for_its_container_becomes_a_rail() -> None:
     """Whether a strip fits is a question about rendered width, and the count of cases is only a proxy
     for it. The labels are monospace, so their width is predictable at build time: each block carries
@@ -2193,6 +2242,27 @@ def test_every_case_is_named_by_its_own_radio_group() -> None:
 
     assert len(set(groups)) == 2
     assert len(groups) == 3
+
+
+def test_two_blocks_on_one_page_never_share_a_radio_group() -> None:
+    """The same hazard between whole blocks rather than between a flow's steps: a shared name would
+    make choosing a case in one block clear the selection in the other."""
+
+    def block(label: str) -> dict[str, object]:
+        return {
+            "type": "request",
+            "label": label,
+            "method": "GET",
+            "url": "https://api.example.com/{{resource}}",
+            "case_variable": "resource",
+            "cases": _cases(2),
+        }
+
+    html = render_html(parse_report(make_report(blocks=[block("One"), block("Two")])))
+    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+
+    assert len(groups) == 4
+    assert len(set(groups)) == 2
 
 
 def test_a_flow_shows_its_steps_and_nothing_above_them() -> None:

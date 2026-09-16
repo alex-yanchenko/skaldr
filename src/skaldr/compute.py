@@ -11,7 +11,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from skaldr.errors import ReportError
 from skaldr.models import (
@@ -788,12 +788,19 @@ def request_groups(report: Report) -> dict[int, str]:
     One name per set of cases, numbered in document order rather than derived from a label, because
     it has to be unique across the page and safe in an `id` attribute, and a label is neither."""
     groups: dict[int, str] = {}
-    for block in iter_requests(report.blocks):
-        groups[id(block)] = f"rq{len(groups)}"
-        if isinstance(block, RequestFlow):
-            for step in block.steps:
-                groups[id(step)] = f"rq{len(groups)}"
+    for core in iter_request_cores(report):
+        groups[id(core)] = f"rq{len(groups)}"
     return groups
+
+
+def iter_request_cores(report: Report) -> Iterator[RequestLike]:
+    """Every call on the page that records cases, in document order. A flow holds no cases itself, so
+    it contributes its steps rather than itself."""
+    for block in iter_requests(report.blocks):
+        if isinstance(block, RequestFlow):
+            yield from block.steps
+        else:
+            yield block
 
 
 CASE_LABEL_CHAR = 7.3
@@ -818,33 +825,29 @@ def case_strip_width(core: RequestLike) -> int:
     return math.ceil(labels * CASE_STRIP_SLACK) + 32
 
 
-def case_strip_rules(report: Report) -> str:
+def case_strip_rules(report: Report, groups: dict[int, str]) -> str:
     """A container query per call that records more than one case, at the width its own labels need.
 
     A query condition takes a literal rather than a custom property, so the threshold cannot ride on
-    the element as a variable and each call contributes its own rule."""
-    groups = request_groups(report)
+    the element as a variable and each call contributes its own rule. `groups` is the same map the
+    markup names its radios from, so a rule and the strip it shapes cannot drift apart."""
     rules: list[str] = []
-    for block in iter_requests(report.blocks):
-        cores: list[RequestLike] = (
-            list(block.steps) if isinstance(block, RequestFlow) else [cast("RequestLike", block)]
+    for core in iter_request_cores(report):
+        if len(core.cases) < 2:
+            continue
+        name = groups[id(core)]
+        rules.append(
+            f"@container (width < {case_strip_width(core)}px){{"
+            f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+            f"gap:0 var(--s3)}}"
+            f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+            f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
+            f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
+            f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+            f"white-space:normal; overflow:visible; text-overflow:clip}}"
+            f".{name} .rq-case{{grid-row:1; grid-column:2}}"
+            "}"
         )
-        for core in cores:
-            if len(core.cases) < 2:
-                continue
-            name = groups[id(core)]
-            rules.append(
-                f"@container (width < {case_strip_width(core)}px){{"
-                f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
-                f"gap:0 var(--s3)}}"
-                f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
-                f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
-                f"max-height:18rem; overflow-y:auto; grid-row:1 / span {len(core.cases)}}}"
-                f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
-                f"white-space:normal; overflow:visible; text-overflow:clip}}"
-                f".{name} .rq-case{{grid-column:2}}"
-                "}"
-            )
     return "\n".join(rules)
 
 

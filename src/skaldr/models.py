@@ -1615,7 +1615,9 @@ class RequestResponse(_Frozen):
         return self
 
 
-def check_header_map(headers: Mapping[str, str] | None, what: str) -> None:
+def check_header_map(
+    headers: Mapping[str, str] | None, what: Literal["request header", "request case header"]
+) -> None:
     """Every rule a set of headers on one call obeys, wherever it is written.
 
     A name is case-insensitive on the wire, so two spellings of one name are that header written
@@ -1753,7 +1755,7 @@ class _RequestCore(_Frozen):
 
 
 class _VariableOwner(_Frozen):
-    """The block a reader's fields belong to, and how a secret among them reaches the command."""
+    """The block a reader's fields belong to."""
 
     variables: list[RequestVariable] = Field(
         default_factory=list[RequestVariable],
@@ -1944,7 +1946,6 @@ _Leaf = (
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
 RequestLike = Request | RequestStep
-VariableOwner = Request | RequestFlow
 
 
 class Section(_Block):

@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-zlAycHfIxr5woxxf1gZW2oICokmaUz5+rwuhBIb2yBk=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-okAoZsQCsAIVz8P5NiBHGJaCW4DiGRVMROF6Ao5RRuk=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1008,8 +1008,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	}
 }
 
-@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1 / span 3}.rq0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 .rq-case{grid-column:2}}
-@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1 / span 2}.rq3 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 .rq-case{grid-column:2}}</style>
+@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 .rq-case{grid-row:1; grid-column:2}}
+@container (width < 426px){.rq2{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq2 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq2 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq2 .rq-case{grid-row:1; grid-column:2}}</style>
 <script>
 /* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
    persisted — it is a per-view reader control that resets to the default cap on reload. */
@@ -1231,7 +1231,7 @@ assert sum(counted) == expected
 <label class="rq-field wide"><span class="rq-fname">API token<span class="rq-lock">not saved</span></span><input type="text" data-rq-var="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste your own"></label>
 </div>
 </div>
-<div class="rq-cases rq0">
+<div class="rq-cases rq0" role="group" aria-label="Recorded cases">
 <input type="radio" class="rq-pick" name="rq0" id="rq0-0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">a bin that balances</h4>
@@ -1304,10 +1304,10 @@ Accept: application/json</pre></div>
 </div>
 </div>
 
-<section class="rq-step" data-rq-step="0">
+<section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
-<div class="rq-step-body"><div class="rq-cases rq2">
-<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
+<div class="rq-step-body"><div class="rq-cases rq1">
+<input type="radio" class="rq-pick" name="rq1" id="rq1-0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">200</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">POST https://wms.example.com/v2/sessions
@@ -1329,10 +1329,10 @@ Content-Type: application/json
 </div>
 </div>
 </section>
-<div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step" data-rq-step="1">
+<div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 2 of 2</span><span class="rq-step-t">Read the bins that did not balance</span></div>
-<div class="rq-step-body"><div class="rq-cases rq3">
-<input type="radio" class="rq-pick" name="rq3" id="rq3-0" checked>
+<div class="rq-step-body"><div class="rq-cases rq2" role="group" aria-label="Recorded cases">
+<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">with the token</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1355,7 +1355,7 @@ Accept: application/json</pre></div>
 </pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq3" id="rq3-1">
+<input type="radio" class="rq-pick" name="rq2" id="rq2-1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">once the token has expired</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1373,7 +1373,7 @@ Accept: application/json</pre></div>
 </pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq3-0"><span class="rq-dot success"></span>with the token</label><label for="rq3-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
+<div class="rq-tabs"><label for="rq2-0"><span class="rq-dot success"></span>with the token</label><label for="rq2-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
 </div>
 </div>
 </section>
@@ -1619,9 +1619,9 @@ Accept: application/json</pre></div>
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	/* textContent walks the whole subtree, hidden descendants included, so neither the pipe span nor an
-	   unchosen script fragment can be excluded by toggling `hidden`. Read it off a clone with every
-	   hidden node removed: the pipe is un-hidden before a capture copy, so one rule serves both. */
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with every hidden node removed, which the
+	   pipe joins only when the reader asked for a plain copy. */
 	function commandText(node) {
 		var clone = node.cloneNode(true);
 		clone.querySelectorAll("[hidden]").forEach(function (each) { each.remove(); });

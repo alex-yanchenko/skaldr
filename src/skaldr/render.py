@@ -21,6 +21,7 @@ from skaldr.models import (
     REFERENCE_KEY_PATTERN,
     Heading,
     Report,
+    RequestLike,
     Section,
     iter_requests,
     load_report,
@@ -185,7 +186,7 @@ def _render(
 
     groups = compute.request_groups(report)
 
-    def case_group(core: object) -> str:
+    def case_group(core: RequestLike) -> str:
         return groups[id(core)]
 
     ref_numbers = compute.reference_numbers(report)
@@ -212,7 +213,7 @@ def _render(
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
-        styles=package_text("styles.css") + "\n" + compute.case_strip_rules(report),
+        styles=package_text("styles.css") + "\n" + compute.case_strip_rules(report, groups),
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),

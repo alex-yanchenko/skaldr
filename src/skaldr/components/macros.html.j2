@@ -222,8 +222,8 @@
 </div>
 {% endmacro %}
 
-{% macro request_cases(owner, core, group) %}
-<div class="rq-cases {{ group }}">
+{% macro request_cases(core, group) %}
+<div class="rq-cases {{ group }}"{% if core.cases | length > 1 %} role="group" aria-label="Recorded cases"{% endif %}>
 {% for case in core.cases %}
 <input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}-{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
 <section class="rq-case" data-rq-case="{{ loop.index0 }}">
@@ -251,7 +251,7 @@
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
 {% if block.variables %}{{ variables_form(block.id or block.label, block.variables, []) }}{% endif %}
-{{ request_cases(block, block, case_group(block)) }}
+{{ request_cases(block, case_group(block)) }}
 </section>
 {% endmacro %}
 
@@ -261,9 +261,9 @@
 {{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
-<section class="rq-step" data-rq-step="{{ loop.index0 }}">
+<section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step {{ loop.index }} of {{ block.steps | length }}</span><span class="rq-step-t">{{ step.label }}</span>{% for capture in step.captures %}<span class="rq-cap" data-rq-capture="{{ capture.name }}"{% if capture.json_path %} data-rq-json="{{ capture.json_path }}"{% endif %}{% if capture.secret %} data-rq-secret{% endif %}>captures {{ capture.name }}</span>{% endfor %}</div>
-<div class="rq-step-body">{{ request_cases(block, step, case_group(step)) }}</div>
+<div class="rq-step-body">{{ request_cases(step, case_group(step)) }}</div>
 </section>
 {% endfor %}
 </section>

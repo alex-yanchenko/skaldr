@@ -158,9 +158,9 @@
 	/* A published artifact runs this inside a sandboxed cross-origin frame, where the async clipboard
 	   write rejects when clipboard-write is absent from the frame's permissions policy. Selecting the
 	   command leaves the reader one keystroke away in every case the API refuses. */
-	/* textContent walks the whole subtree, hidden descendants included, so neither the pipe span nor an
-	   unchosen script fragment can be excluded by toggling `hidden`. Read it off a clone with every
-	   hidden node removed: the pipe is un-hidden before a capture copy, so one rule serves both. */
+	/* textContent walks the whole subtree, hidden descendants included, so the pipe span cannot be
+	   excluded by toggling `hidden`. Read it off a clone with every hidden node removed, which the
+	   pipe joins only when the reader asked for a plain copy. */
 	function commandText(node) {
 		var clone = node.cloneNode(true);
 		clone.querySelectorAll("[hidden]").forEach(function (each) { each.remove(); });

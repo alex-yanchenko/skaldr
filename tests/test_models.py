@@ -2862,8 +2862,8 @@ def test_a_capture_takes_exactly_one_of_source_or_json_path(capture: dict[str, A
 
 
 def test_a_step_that_captures_may_record_only_one_case() -> None:
-    """The combined script builds from one case per step. A capturing step with two cases would let a
-    reader read one tab while the script they copy was built from the other."""
+    """A capture is the value later steps read, so the step that produces it records the one call that
+    produced it. Two cases would leave which of them the reader's captured value came from unsaid."""
     cases = [
         {"label": "ok", "response": {"status": 200, "body": "{}"}},
         {"label": "denied", "response": {"status": 401, "body": "{}"}},
