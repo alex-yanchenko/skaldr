@@ -2038,6 +2038,24 @@ def test_headers_add_replaces_a_name_whatever_case_it_is_written_in() -> None:
     }
 
 
+def test_the_headers_a_case_sends_are_its_own_to_hold() -> None:
+    """`block.headers` is shared by every case that sets none of its own, so handing a caller the
+    model's dict would let one case's reader mutate what the next one sends."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    first = compute.request_headers(block, block.cases[0])
+    first["X-Injected"] = "1"
+
+    assert compute.request_headers(block, block.cases[0]) == {"Accept": "application/json"}
+
+
 def test_headers_add_appends_a_name_the_request_does_not_set() -> None:
     """A name the request has no spelling of is added after the ones it does, so the request's own
     header order survives and the case's additions read as additions."""

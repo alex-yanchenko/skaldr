@@ -2700,6 +2700,11 @@ def test_a_variable_that_is_never_interpolated_is_rejected() -> None:
             r"request case header `X-Trace` must not have a blank value",
             id="blank-value",
         ),
+        pytest.param(
+            {"X-Trace": "a", "x-trace": "b"},
+            r"differ only in case",
+            id="case-variant-names",
+        ),
     ],
 )
 def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
@@ -2719,6 +2724,7 @@ def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
         pytest.param(
             {"Accept": " "}, r"request header `Accept` must not have a blank value", id="blank-value"
         ),
+        pytest.param({"Accept": "a", "accept": "b"}, r"differ only in case", id="case-variant-names"),
     ],
 )
 def test_a_request_header_must_carry_a_name_and_a_value(headers: dict[str, str], message: str) -> None:

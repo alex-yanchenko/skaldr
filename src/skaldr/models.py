@@ -13,7 +13,7 @@ import math
 import re
 import sys
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast, get_args
@@ -1615,6 +1615,24 @@ class RequestResponse(_Frozen):
         return self
 
 
+def check_header_map(headers: Mapping[str, str] | None, what: str) -> None:
+    """Every rule a set of headers on one call obeys, wherever it is written.
+
+    A name is case-insensitive on the wire, so two spellings of one name are that header written
+    twice: the command a reader pastes would carry both, and which one the server honours is not
+    ours to decide."""
+    spellings: dict[str, str] = {}
+    for name, value in (headers or {}).items():
+        if not name.strip():
+            raise ValueError(f"{what} name must not be blank")
+        if not value.strip():
+            raise ValueError(f"{what} `{name}` must not have a blank value")
+        seen = spellings.get(name.lower())
+        if seen is not None:
+            raise ValueError(f"{what}s `{seen}` and `{name}` differ only in case, so they name one header")
+        spellings[name.lower()] = name
+
+
 class RequestCase(_Frozen):
     label: str = Field(min_length=1, description="Tab label, and the case's heading when printed.")
     value: str | None = Field(
@@ -1654,11 +1672,7 @@ class RequestCase(_Frozen):
                 "headers_add layers, so state the headers you want once, under headers"
             )
         for source in (self.headers, self.headers_add):
-            for name, value in (source or {}).items():
-                if not name.strip():
-                    raise ValueError("request case header name must not be blank")
-                if not value.strip():
-                    raise ValueError(f"request case header `{name}` must not have a blank value")
+            check_header_map(source, "request case header")
         return self
 
 
@@ -1724,11 +1738,7 @@ class _RequestCore(_Frozen):
                     )
         if self.body is not None and not self.body.strip():
             raise ValueError("request body must not be blank (omit it instead)")
-        for name, value in self.headers.items():
-            if not name.strip():
-                raise ValueError("request header name must not be blank")
-            if not value.strip():
-                raise ValueError(f"request header `{name}` must not have a blank value")
+        check_header_map(self.headers, "request header")
         return self
 
 

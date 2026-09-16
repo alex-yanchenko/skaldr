@@ -743,14 +743,15 @@ def request_headers(block: RequestLike, case: RequestCase) -> dict[str, str]:
     the one that renders. Matching by exact string would send `Content-Type` and `content-type` both,
     which is two conflicting values in the command a reader pastes."""
     if case.headers is not None:
-        return case.headers
+        return dict(case.headers)
     if case.headers_add is None:
-        return block.headers
-    layered = {name.lower(): value for name, value in case.headers_add.items()}
-    merged = {name: layered.pop(name.lower(), value) for name, value in block.headers.items()}
-    for name, value in case.headers_add.items():
-        if name.lower() in layered:
-            merged[name] = value
+        return dict(block.headers)
+    layered = dict(case.headers_add)
+    merged: dict[str, str] = {}
+    for name, value in block.headers.items():
+        override = next((key for key in layered if key.lower() == name.lower()), None)
+        merged[name] = layered.pop(override) if override is not None else value
+    merged.update(layered)
     return merged
 
 
