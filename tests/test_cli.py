@@ -272,7 +272,7 @@ def test_check_valid_file_exits_0_without_rendering(
 def test_check_with_an_output_flag_renders_after_it_passes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A validate-then-render loop took two invocations because -o was refused outright."""
+    """An output flag renders the file once the check passes, in one invocation."""
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"
 
@@ -281,6 +281,35 @@ def test_check_with_an_output_flag_renders_after_it_passes(
     assert exit_code == 0
     assert f"OK    {data_path}" in capsys.readouterr().out
     assert out_path.is_file()
+
+
+def test_check_gates_an_embed_fragment_too(tmp_path: Path) -> None:
+    """The fallthrough reads `out or pdf or embed`, so every writing flag takes the same gate."""
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "fragment.html"
+
+    exit_code = main(["--check", str(data_path), "-o", str(out_path), "--embed"])
+
+    assert exit_code == 0
+    assert "<!doctype html>" not in out_path.read_text(encoding="utf-8").lower()
+
+
+def test_checking_a_set_while_asking_for_one_render_is_refused_before_any_work(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--check takes many files and an output flag renders one, so the combination has no meaning and
+    is refused before any file is read. Reaching the single-file guard instead would print an OK line
+    per file and then advise passing --check, which the reader already did."""
+    first = _write(tmp_path, make_report(), name="a.yaml")
+    second = _write(tmp_path, make_report(), name="b.yaml")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--check", str(first), str(second), "-o", str(tmp_path / "out.html")])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "an output flag renders one file" in captured.err
+    assert "OK" not in captured.out
 
 
 def test_a_failed_check_writes_nothing_even_with_an_output_flag(tmp_path: Path) -> None:
@@ -298,9 +327,10 @@ def test_a_failed_check_writes_nothing_even_with_an_output_flag(tmp_path: Path) 
 def test_emit_json_still_refuses_an_output_flag(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report())
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         main(["--emit-json", str(data_path), "-o", str(tmp_path / "report.html")])
 
+    assert excinfo.value.code == 2
     assert "--emit-json only validates" in capsys.readouterr().err
 
 
@@ -728,8 +758,7 @@ def test_live_is_refused_for_emit_json_which_writes_no_page(tmp_path: Path) -> N
 
 
 def test_check_renders_a_live_page_once_it_passes(tmp_path: Path) -> None:
-    """--check is a gate on a render now, not a mode instead of one, so every flag that shapes the
-    page it writes still applies."""
+    """--check gates the render rather than replacing it, so every flag shaping the page still applies."""
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"
 

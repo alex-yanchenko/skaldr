@@ -2766,6 +2766,26 @@ def test_a_step_using_a_capture_before_it_is_produced_is_rejected() -> None:
         parse_report(make_report(blocks=[make_flow(steps=steps)]))
 
 
+def test_a_step_reaching_forward_through_headers_add_is_rejected_too() -> None:
+    """A case's `headers_add` is interpolated exactly like every other header, so the ordering rule
+    reaches it. Scanning only `headers` let a step send a literal `{{token}}` to the server while the
+    flow validated clean."""
+    steps = [
+        make_step(
+            cases=[
+                {
+                    "label": "one",
+                    "headers_add": {"X-Later": "{{token}}"},
+                    "response": {"status": 200, "body": "{}"},
+                }
+            ]
+        ),
+        make_step(url="https://{{host}}/b", captures=[{"name": "token", "source": "body"}]),
+    ]
+    with pytest.raises(ReportError, match=r"step 1 uses token before the step that captures it has run"):
+        parse_report(make_report(blocks=[make_flow(steps=steps)]))
+
+
 def test_a_step_may_not_use_the_name_it_captures_itself() -> None:
     steps = [
         make_step(url="https://{{host}}/a?t={{token}}", captures=[{"name": "token", "source": "body"}]),

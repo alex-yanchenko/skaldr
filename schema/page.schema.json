@@ -3116,7 +3116,7 @@
             }
           ],
           "default": null,
-          "description": "Add to the request's headers for this case, replacing a name it already sets and leaving the rest. Use it when cases share a credential and differ in one header, so the shared one is written once.",
+          "description": "Add to the request's headers for this case, replacing a name it already sets and leaving the rest. Use it when cases share a credential and differ in one header, so the shared one is written once. Cannot be combined with `headers`, which replaces them outright.",
           "title": "Headers Add"
         },
         "response": {

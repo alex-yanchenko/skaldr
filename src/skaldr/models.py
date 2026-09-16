@@ -1631,7 +1631,7 @@ class RequestCase(_Frozen):
         default=None,
         description="Add to the request's headers for this case, replacing a name it already sets and "
         "leaving the rest. Use it when cases share a credential and differ in one header, so the shared "
-        "one is written once.",
+        "one is written once. Cannot be combined with `headers`, which replaces them outright.",
     )
     response: RequestResponse = Field(description="What came back when you ran it.")
     verdict: str | None = Field(
@@ -1686,9 +1686,17 @@ class _RequestCore(_Frozen):
     )
 
     def referenced_variables(self) -> set[str]:
-        """Every `{{name}}` this call interpolates, across the url, the header values and the body."""
-        scan = " ".join((self.url, *self.headers.values(), self.body or ""))
-        scan += " ".join(value for case in self.cases for value in (case.headers or {}).values())
+        """Every `{{name}}` this call interpolates, across the url, the header values and the body.
+
+        A case's headers count whichever way it sets them: `headers` replaces the request's and
+        `headers_add` layers over them, and both are interpolated the same way at render time."""
+        case_headers = (
+            value
+            for case in self.cases
+            for source in (case.headers, case.headers_add)
+            for value in (source or {}).values()
+        )
+        scan = " ".join((self.url, *self.headers.values(), self.body or "", *case_headers))
         return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
 
     def case_axis(self) -> set[str]:

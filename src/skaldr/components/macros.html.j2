@@ -256,7 +256,7 @@
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
 {{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
-<div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">{{ variable_slots(flow_script_header(), "shell") }}{% for fragments in flow_script_fragments(block) %}{% set step_index = loop.index0 %}{% for fragment in fragments %}<span class="rq-frag" data-rq-step="{{ step_index }}" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>{{ variable_slots(fragment, "shell") }}</span>{% endfor %}{% endfor %}</pre></div>
+<div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">{{ variable_slots(flow_script_header, "shell") }}{% for fragments in flow_script_fragments(block) %}{% set step_index = loop.index0 %}{% for fragment in fragments %}<span class="rq-frag" data-rq-step="{{ step_index }}" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>{{ variable_slots(fragment, "shell") }}</span>{% endfor %}{% endfor %}</pre></div>
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
 <section class="rq-step" data-rq-step="{{ loop.index0 }}">

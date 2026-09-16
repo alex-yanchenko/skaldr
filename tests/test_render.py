@@ -1914,9 +1914,9 @@ def test_a_strip_that_would_wrap_renders_as_chips(count: int, chips: bool) -> No
 
 def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
     """A flow renders every step's cases into the same `.rq` block, each numbered from zero, so
-    `data-rq-case="0"` occurs once per step. Hiding every case in the block that is not the chosen
-    index therefore emptied a one-case step whenever a later step's second tab was picked. The
-    chooser resolves its scope from the step that owns the clicked tab.
+    `data-rq-case="0"` occurs once per step. The chooser therefore resolves its scope from the step
+    that owns the clicked tab; a query across the block would empty every other step that has no case
+    at the chosen index.
 
     Asserted against the script source rather than a click: the suite runs no DOM."""
     steps = [
@@ -1940,7 +1940,9 @@ def test_choosing_a_case_in_one_step_leaves_the_other_steps_showing() -> None:
 
     assert 'block.querySelectorAll("[data-rq-case]")' not in chooser
     assert 'block.querySelectorAll("[data-rq-tab]")' not in chooser
-    assert 'closest(".rq-step")' in chooser
+    assert 'var owner = tab.closest(".rq-step") || block' in chooser
+    assert 'owner.querySelectorAll("[data-rq-case]")' in chooser
+    assert 'owner.querySelectorAll("[data-rq-tab]")' in chooser
 
 
 def _tabbed_flow() -> dict[str, object]:
@@ -1960,9 +1962,53 @@ def _tabbed_flow() -> dict[str, object]:
     return make_report(blocks=[make_flow(steps=steps)])
 
 
+def test_a_variable_used_only_in_headers_add_counts_as_used() -> None:
+    """The scan behind every variable check reads the url, the headers, the body and a case's
+    `headers` replacement. A value layered through `headers_add` is interpolated exactly the same way,
+    so leaving it out of the scan called a declared variable unused and refused a valid document."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Authorization": "Bearer {{token}}"},
+        variables=[{"name": "token", "secret": True}, {"name": "trace", "example": "abc"}],
+        case_variable=None,
+        cases=[
+            {
+                "label": "traced",
+                "headers_add": {"X-Trace": "{{trace}}"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert block.referenced_variables() == {"token", "trace"}
+
+
+def test_an_undeclared_variable_in_headers_add_still_fails_strict() -> None:
+    """The other direction of the same scan: a typo that lives only in `headers_add` reached the page
+    as a literal `{{tokne}}` and passed the finalize gate clean."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Authorization": "Bearer {{token}}"},
+        variables=[{"name": "token", "secret": True}],
+        case_variable=None,
+        cases=[
+            {
+                "label": "typo",
+                "headers_add": {"X-Trace": "{{tokne}}"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+
+    assert find_placeholders(parse_report(report)) == ["tokne"]
+
+
 def test_headers_add_layers_over_the_requests_headers() -> None:
-    """Cases that share an auth header and differ in one other had to repeat the shared one, which on
-    a fifteen-case step was thirty lines of the same credential."""
+    """Cases that share an auth header and differ in one other name the shared one once, on the
+    request, and only the difference per case."""
     report = _request_report(
         headers={"Authorization": "Bearer {{token}}", "Accept": "application/json"},
         cases=[
@@ -2022,9 +2068,8 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
 
 
 def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
-    """The script was rendered once, pinned to each step's first case, so choosing any other tab left
-    the reader copying a command for a resource they were not looking at. Every case's fragment is in
-    the document, and the chooser shows the one whose tab is open."""
+    """Every case's fragment ships in the document and the chooser shows the one whose tab is open, so
+    the script a reader copies is always the call they are looking at."""
     html = render_html(parse_report(_tabbed_flow()))
     pane = html.split('class="rq-cmd rq-flowscript"', 1)[1].split("</pre>", 1)[0]
 
@@ -2042,12 +2087,15 @@ def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
 
 
 def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
-    """Asserted against the script source rather than a click: the suite runs no DOM."""
+    """Asserted against the script source rather than a click: the suite runs no DOM. Naming `.rq-frag`
+    alone would pass on a handler that hid every fragment or ignored the step, so pin the selector to
+    the step that owns the tab and the toggle to the case that was chosen."""
     html = render_html(parse_report(_tabbed_flow()))
     script = next(b for b in re.findall(r"<script>(.*?)</script>", html, re.DOTALL) if "data-rq-tab" in b)
     chooser = script.split('closest("[data-rq-tab]")', 1)[1]
 
-    assert ".rq-frag" in chooser
+    assert "'.rq-frag[data-rq-step=\"' + step + '\"]'" in chooser
+    assert "each.hidden = each.dataset.rqCase !== chosen" in chooser
 
 
 def test_copying_leaves_out_every_hidden_fragment() -> None:

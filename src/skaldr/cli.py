@@ -78,8 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="validate the content file(s) against the schema and exit — no HTML written. Pass several "
-        "(e.g. a glob) to validate a whole set; exits non-zero if any file is invalid.",
+        help="validate the content file(s) against the schema; exits non-zero if any file is invalid. "
+        "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed to one file to "
+        "render it once it passes — a file that fails is never written.",
     )
     parser.add_argument(
         "--strict",
@@ -215,6 +216,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--if-stale skips a render that would be redundant; --emit-json renders nothing")
     if args.strict and not args.check:
         parser.error("--strict only applies to --check (it gates unfilled placeholders during validation)")
+    if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed):
+        parser.error(
+            "an output flag renders one file — pass a single path, or drop -o/--pdf/--embed to "
+            "validate the whole set"
+        )
 
     if args.check:
         if not args.data:

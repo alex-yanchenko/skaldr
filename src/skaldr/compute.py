@@ -833,10 +833,6 @@ def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
 FLOW_SCRIPT_HEADER = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
 
 
-def flow_script_header() -> str:
-    return FLOW_SCRIPT_HEADER
-
-
 def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
     """Every step as one runnable script, split into the pieces a step contributes and carrying one
     piece per recorded case. A step that captures assigns its response to a shell variable the later
@@ -863,9 +859,11 @@ def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
 
 
 def flow_script(flow: RequestFlow) -> str:
-    """The whole script down its first recorded path, which is what a reader who changes no tab sees."""
+    """The whole script down its first recorded path, which is what the page shows before a reader
+    changes a tab. The page assembles its own from the same fragments, so this is where the assembled
+    script is exercised as one runnable file."""
     first = "".join(fragments[0] for fragments in flow_script_fragments(flow))
-    return (flow_script_header() + first).rstrip()
+    return (FLOW_SCRIPT_HEADER + first).rstrip()
 
 
 def reconcile_line(table: Table) -> str:
