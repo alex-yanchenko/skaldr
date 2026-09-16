@@ -1627,6 +1627,12 @@ class RequestCase(_Frozen):
         description="Replace the request's headers for this case alone. Omit to inherit them; give an "
         "empty map to send none, which is how you record what happens with the auth header removed.",
     )
+    headers_add: dict[str, str] | None = Field(
+        default=None,
+        description="Add to the request's headers for this case, replacing a name it already sets and "
+        "leaving the rest. Use it when cases share a credential and differ in one header, so the shared "
+        "one is written once.",
+    )
     response: RequestResponse = Field(description="What came back when you ran it.")
     verdict: str | None = Field(
         default=None,
@@ -1642,6 +1648,11 @@ class RequestCase(_Frozen):
             raise ValueError("request case value must not be blank (omit it to use the label)")
         if self.verdict is not None and not self.verdict.strip():
             raise ValueError("request case verdict must not be blank (omit it instead)")
+        if self.headers is not None and self.headers_add is not None:
+            raise ValueError(
+                "a request case sets headers and headers_add together: headers replaces and "
+                "headers_add layers, so state the headers you want once, under headers"
+            )
         return self
 
 

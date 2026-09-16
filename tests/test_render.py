@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import pytest
 
+from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, parse_report
 from skaldr.render import (
@@ -1941,6 +1942,65 @@ def _tabbed_flow() -> dict[str, object]:
         ),
     ]
     return make_report(blocks=[make_flow(steps=steps)])
+
+
+def test_headers_add_layers_over_the_requests_headers() -> None:
+    """Cases that share an auth header and differ in one other had to repeat the shared one, which on
+    a fifteen-case step was thirty lines of the same credential."""
+    report = _request_report(
+        headers={"Authorization": "Bearer {{token}}", "Accept": "application/json"},
+        cases=[
+            {
+                "label": "v1",
+                "headers_add": {"Accept": "application/vnd.example.v1+json"},
+                "response": {"status": 200, "body": "[]"},
+            },
+            {"label": "plain", "response": {"status": 200, "body": "[]"}},
+        ],
+    )
+    block = parse_report(report).blocks[0]
+
+    assert compute.request_headers(block, block.cases[0]) == {
+        "Authorization": "Bearer {{token}}",
+        "Accept": "application/vnd.example.v1+json",
+    }
+    assert compute.request_headers(block, block.cases[1]) == {
+        "Authorization": "Bearer {{token}}",
+        "Accept": "application/json",
+    }
+
+
+def test_headers_add_refuses_to_share_a_case_with_headers() -> None:
+    """`headers` replaces and `headers_add` layers, so a case setting both states its headers twice and
+    leaves a reader guessing which wins. Whatever it meant is already expressible with `headers` alone."""
+    report = _request_report(
+        cases=[
+            {
+                "label": "both",
+                "headers": {"Accept": "application/json"},
+                "headers_add": {"X-Trace": "1"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+
+    with pytest.raises(ReportError, match="headers replaces and headers_add layers"):
+        parse_report(report)
+
+
+def test_an_emptied_headers_map_still_sends_none() -> None:
+    """The recording of what happens with the auth header removed. Layering rather than replacing would
+    have turned this case's 401 into a lie, which is why `headers` keeps replace semantics."""
+    report = _request_report(
+        cases=[{"label": "no auth", "headers": {}, "response": {"status": 401, "body": "{}"}}],
+        case_variable=None,
+        url="https://{{host}}/x",
+    )
+    block = parse_report(report).blocks[0]
+
+    assert compute.request_headers(block, block.cases[0]) == {}
 
 
 def test_the_combined_script_carries_a_fragment_for_every_case() -> None:

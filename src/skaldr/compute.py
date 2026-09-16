@@ -736,8 +736,13 @@ def variable_parts(text: str) -> list[tuple[str, str]]:
 
 
 def request_headers(block: RequestLike, case: RequestCase) -> dict[str, str]:
-    """The headers this case sends: its own override when it has one, else the request's."""
-    return block.headers if case.headers is None else case.headers
+    """The headers this case sends: its own replacement when it has one, else the request's with any
+    `headers_add` layered over the top."""
+    if case.headers is not None:
+        return case.headers
+    if case.headers_add is None:
+        return block.headers
+    return {**block.headers, **case.headers_add}
 
 
 def request_wire(block: RequestLike, case: RequestCase) -> str:
