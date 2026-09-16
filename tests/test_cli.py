@@ -453,17 +453,13 @@ def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFix
     assert "only one content file can be processed at a time" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    ("argv_tail", "expected"),
-    [
-        (["-o", "out.html"], "-o/--pdf/--embed do nothing"),
-        (["--embed"], "-o/--pdf/--embed do nothing"),
-    ],
-)
+@pytest.mark.parametrize("flag", ["-o", "--embed"])
 def test_emit_json_rejects_an_output_flag(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str], expected: str
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flag: str
 ) -> None:
     data_path = _write(tmp_path, make_report())
+    argv_tail = [flag, str(tmp_path / "out.html")] if flag == "-o" else [flag]
+    expected = "-o/--pdf/--embed do nothing"
 
     with pytest.raises(SystemExit) as excinfo:
         main(["--emit-json", str(data_path), *argv_tail])
