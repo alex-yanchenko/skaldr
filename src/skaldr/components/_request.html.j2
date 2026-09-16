@@ -235,11 +235,6 @@
 				applyCaptures(block, clear.closest(".rq-step"), null);
 				return;
 			}
-			var script = event.target.closest(".rq-script");
-			if (script) {
-				copyCommand(script, block.querySelector(".rq-flowscript"));
-				return;
-			}
 			var copy = event.target.closest(".rq-copy");
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
@@ -258,11 +253,6 @@
 			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
 				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
 				else each.setAttribute("data-rq-hidden", "");
-			});
-			var step = owner.dataset.rqStep;
-			if (step === undefined) return;
-			block.querySelectorAll('.rq-frag[data-rq-step="' + step + '"]').forEach(function (each) {
-				each.hidden = each.dataset.rqCase !== chosen;
 			});
 		});
 	});

@@ -1758,41 +1758,6 @@ class _VariableOwner(_Frozen):
         "reader's non-secret fields are remembered under while their tab is open, so set one when two "
         "blocks share a label, and keep it fixed if you want those values to survive a rename.",
     )
-    secret_style: Literal["inline", "shell"] = Field(
-        default="inline",
-        description="How a `secret` variable reaches the copied command. `inline` writes the value the "
-        "reader typed, which runs as it stands and lands in their shell history. `shell` writes "
-        '`"$NAME"` instead, so the reader exports it first and the credential never enters the '
-        "command line.",
-    )
-
-    def shell_secret_names(self) -> set[str]:
-        """Secret names the command names as shell variables rather than writing out."""
-        if self.secret_style == "inline":
-            return set()
-        return {variable.name for variable in self.variables if variable.secret}
-
-    @model_validator(mode="after")
-    def _owner_shape(self) -> "_VariableOwner":
-        reserved = sorted(
-            name for name in self.shell_secret_names() if shell_variable_name(name) in RESERVED_SHELL_NAMES
-        )
-        if reserved:
-            raise ValueError(
-                f"secret {', '.join(reserved)} becomes "
-                f"${shell_variable_name(reserved[0])} in the copied command under `secret_style: shell`, "
-                "which the shell relies on — name it something else"
-            )
-        named = [shell_variable_name(name) for name in self.shell_secret_names()]
-        collapsed = sorted(
-            name for name in self.shell_secret_names() if named.count(shell_variable_name(name)) > 1
-        )
-        if collapsed:
-            raise ValueError(
-                f"secrets {', '.join(collapsed)} become the same shell variable under "
-                "`secret_style: shell`, so one would overwrite the other"
-            )
-        return self
 
 
 class Request(_RequestCore, _VariableOwner, _Block):
@@ -1822,28 +1787,16 @@ class Request(_RequestCore, _VariableOwner, _Block):
         return self
 
 
-RESERVED_SHELL_NAMES = frozenset(
-    {"PATH", "HOME", "IFS", "SHELL", "PWD", "OLDPWD", "USER", "LANG", "TERM", "PS1", "BASH_ENV"}
-)
-
-
-def shell_variable_name(name: str) -> str:
-    """A captured name as the shell variable the flow script assigns it to."""
-    return name.upper().replace("-", "_")
-
-
 class RequestCapture(_Frozen):
     name: str = Field(
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="The name this step produces. A later step writes it as `{{name}}` and the reader "
-        "never types it. It also names the shell variable the whole-flow script assigns, upper-cased "
-        "with hyphens turned to underscores, so it may not collide with a variable the shell relies on.",
+        "never types it.",
     )
     source: Literal["body"] | None = Field(
         default=None,
         description="Take the whole response body, trimmed. For an endpoint that answers with a bare "
-        "token and no JSON, which is why the shell form of such a flow needs no jq. Use this or "
-        "`json_path`, not both.",
+        "token and no JSON wrapper. Use this or `json_path`, not both.",
     )
     json_path: str | None = Field(
         default=None,
@@ -1863,11 +1816,6 @@ class RequestCapture(_Frozen):
         if (self.source is None) == (self.json_path is None):
             raise ValueError(
                 f"capture `{self.name}` takes `source: body` or a `json_path`, exactly one of the two"
-            )
-        if shell_variable_name(self.name) in RESERVED_SHELL_NAMES:
-            raise ValueError(
-                f"capture `{self.name}` becomes ${shell_variable_name(self.name)} in the flow script, "
-                "which the shell relies on — name it something else"
             )
         return self
 
@@ -1938,14 +1886,6 @@ class RequestFlow(_VariableOwner, _Block):
         duplicated = {name for name in captured if captured.count(name) > 1}
         if duplicated:
             raise ValueError(f"two steps capture the same name: {', '.join(sorted(duplicated))}")
-        spliced = captured + sorted(self.shell_secret_names())
-        shell_names = [shell_variable_name(name) for name in spliced]
-        collapsed = {name for name in spliced if shell_names.count(shell_variable_name(name)) > 1}
-        if collapsed:
-            raise ValueError(
-                f"{', '.join(sorted(collapsed))} become the same shell variable in the flow script, so "
-                "one would overwrite the other — names must differ by more than case or a hyphen"
-            )
         for index, step in enumerate(self.steps):
             late = step.referenced_variables() & (set(captured) - self.produced_by(index))
             if late:

@@ -2919,16 +2919,6 @@
           "description": "Optional stable id, unique across the page's request blocks. It keys what a reader's non-secret fields are remembered under while their tab is open, so set one when two blocks share a label, and keep it fixed if you want those values to survive a rename.",
           "title": "Id"
         },
-        "secret_style": {
-          "default": "inline",
-          "description": "How a `secret` variable reaches the copied command. `inline` writes the value the reader typed, which runs as it stands and lands in their shell history. `shell` writes `\"$NAME\"` instead, so the reader exports it first and the credential never enters the command line.",
-          "enum": [
-            "inline",
-            "shell"
-          ],
-          "title": "Secret Style",
-          "type": "string"
-        },
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
@@ -3019,7 +3009,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "description": "The name this step produces. A later step writes it as `{{name}}` and the reader never types it. It also names the shell variable the whole-flow script assigns, upper-cased with hyphens turned to underscores, so it may not collide with a variable the shell relies on.",
+          "description": "The name this step produces. A later step writes it as `{{name}}` and the reader never types it.",
           "pattern": "^[A-Za-z0-9_-]+$",
           "title": "Name",
           "type": "string"
@@ -3035,7 +3025,7 @@
             }
           ],
           "default": null,
-          "description": "Take the whole response body, trimmed. For an endpoint that answers with a bare token and no JSON, which is why the shell form of such a flow needs no jq. Use this or `json_path`, not both.",
+          "description": "Take the whole response body, trimmed. For an endpoint that answers with a bare token and no JSON wrapper. Use this or `json_path`, not both.",
           "title": "Source"
         },
         "json_path": {
@@ -3183,16 +3173,6 @@
           "default": null,
           "description": "Optional stable id, unique across the page's request blocks. It keys what a reader's non-secret fields are remembered under while their tab is open, so set one when two blocks share a label, and keep it fixed if you want those values to survive a rename.",
           "title": "Id"
-        },
-        "secret_style": {
-          "default": "inline",
-          "description": "How a `secret` variable reaches the copied command. `inline` writes the value the reader typed, which runs as it stands and lands in their shell history. `shell` writes `\"$NAME\"` instead, so the reader exports it first and the credential never enters the command line.",
-          "enum": [
-            "inline",
-            "shell"
-          ],
-          "title": "Secret Style",
-          "type": "string"
         },
         "type": {
           "const": "request_flow",

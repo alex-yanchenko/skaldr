@@ -230,7 +230,7 @@
 <div class="rq-case" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} data-rq-hidden{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(command_for(owner, core, case), "shell") }}<span class="rq-pipe" hidden> \
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(command_for(core, case), "shell") }}<span class="rq-pipe" hidden> \
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
@@ -254,9 +254,8 @@
 
 {% macro request_flow(block) %}
 <section class="rq rq-flow">
-<div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
+<div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span></div>
 {{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
-<div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">{{ variable_slots(flow_script_header, "shell") }}{% for fragments in flow_script_fragments(block) %}{% set step_index = loop.index0 %}{% for fragment in fragments %}<span class="rq-frag" data-rq-step="{{ step_index }}" data-rq-case="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>{{ variable_slots(fragment, "shell") }}</span>{% endfor %}{% endfor %}</pre></div>
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
 <section class="rq-step" data-rq-step="{{ loop.index0 }}">

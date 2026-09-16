@@ -1845,21 +1845,17 @@ def test_a_case_may_replace_the_requests_headers() -> None:
     assert "Authorization" not in cases[2]
 
 
-def test_a_shell_style_secret_never_reaches_the_command_line() -> None:
-    """`inline` puts the typed value in the command, which runs as it stands and lands in shell
-    history. `shell` names the variable instead, so the reader exports it once."""
+def test_a_secret_fills_the_command_like_any_other_field() -> None:
+    """A secret is a slot the page substitutes, so the command a reader copies runs as it stands."""
     variables = [
         {"name": "host", "example": "api.example.com"},
         {"name": "token", "secret": True},
     ]
+    html = render_html(parse_report(_request_report(variables=variables)))
+    command = html.split('class="rq-cmd"')[1].split("</pre>")[0]
 
-    inline = render_html(parse_report(_request_report(variables=variables)))
-    shelled = render_html(parse_report(_request_report(variables=variables, secret_style="shell")))
-    command = shelled.split('class="rq-cmd"')[1].split("</pre>")[0]
-
-    assert 'data-rq-slot="token"' in inline
-    assert 'data-rq-slot="token"' not in command
-    assert "&#34;$TOKEN&#34;" in command
+    assert 'data-rq-slot="token"' in command
+    assert "$TOKEN" not in command
 
 
 def test_only_a_field_that_is_not_secret_is_kept_across_a_reload() -> None:
@@ -2142,36 +2138,15 @@ def test_an_emptied_headers_map_still_sends_none() -> None:
     assert compute.request_headers(block, block.cases[0]) == {}
 
 
-def test_the_combined_script_carries_a_fragment_for_every_case() -> None:
-    """Every case's fragment ships in the document and the chooser shows the one whose tab is open, so
-    the script a reader copies is always the call they are looking at."""
+def test_a_flow_shows_its_steps_and_nothing_above_them() -> None:
+    """A flow's steps carry the calls; a second rendering of the same two commands above them is the
+    same content twice, and a reader working down the page meets it before the walkthrough."""
     html = render_html(parse_report(_tabbed_flow()))
-    pane = html.split('class="rq-cmd rq-flowscript"', 1)[1].split("</pre>", 1)[0]
 
-    fragments = re.findall(r'<span class="rq-frag"([^>]*)>', pane)
-
-    assert len(fragments) == 4
-    assert fragments[0] == ' data-rq-step="0" data-rq-case="0"'
-    assert fragments[1] == ' data-rq-step="1" data-rq-case="0"'
-    assert fragments[2] == ' data-rq-step="1" data-rq-case="1" hidden'
-    assert fragments[3] == ' data-rq-step="1" data-rq-case="2" hidden'
-
-    assert "widgets" in pane
-    assert "gadgets" in pane
-    assert "sprockets" in pane
-
-
-def test_the_visible_script_fragment_follows_the_chosen_tab() -> None:
-    """Asserted against the script source rather than a click: the suite runs no DOM. Naming `.rq-frag`
-    alone would pass on a handler that hid every fragment or ignored the step, so pin the selector to
-    the step that owns the tab and the toggle to the case that was chosen."""
-    html = render_html(parse_report(_tabbed_flow()))
-    script = _request_runtime_script(html)
-    chooser = script.split('closest("[data-rq-tab]")', 1)[1]
-
-    assert "'.rq-frag[data-rq-step=\"' + step + '\"]'" in chooser
-    assert "each.hidden = each.dataset.rqCase !== chosen" in chooser
-    assert "if (step === undefined) return;" in chooser
+    assert "rq-flowscript" not in html
+    assert "Every step as one script" not in html
+    assert "Copy the whole script" not in html
+    assert html.count('class="rq-step"') == 2
 
 
 def test_copying_leaves_out_every_hidden_fragment() -> None:

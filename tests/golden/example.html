@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-V++pV2U5YZj6q1XdX0KPMiyM7yl42VnFHiG4fk+OKaY=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-9iRcgsKjp11momxKy1mkKtRPStdqgH/G7C9A13cfx8Y=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -876,8 +876,6 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rq-vlbl{flex:none; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase}
 		& .rq-from{font-size:9.5px; padding:1px 5px; border-radius:var(--r-xs);
 			background:var(--info-bg); color:var(--info-fg)}
-		& .rq-script{margin-inline-start:auto}
-		& .rq-scriptpane{margin:var(--s3) var(--s4) 0}
 		& .rq-step{margin:var(--s3) var(--s4) 0; border:1px solid var(--rule); border-radius:var(--r-inner);
 			background:var(--panel); overflow:hidden}
 		& .rq-step-hd{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;
@@ -1248,7 +1246,7 @@ Accept: application/json</pre></div>
 
 <p class="text">The bin lookup above assumes you already hold a token. Getting one is its own call, so the two together are the shape worth recording: exchange the key for a session token, then spend it.</p>
 <section class="rq rq-flow">
-<div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">Session token, then a bin lookup</span><button type="button" class="rq-copy rq-script">Copy the whole script</button></div>
+<div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">Session token, then a bin lookup</span></div>
 <div class="rq-vars">
 <div class="rq-vars-hd"><span>Values you supply</span><span class="rq-note">Kept while this tab is open, never written into the page&rsquo;s source. A secret is not kept at all.</span></div>
 <div class="rq-fields">
@@ -1258,25 +1256,6 @@ Accept: application/json</pre></div>
 </div>
 </div>
 
-<div class="rq-pane rq-scriptpane"><div class="rq-pane-hd"><span>Every step as one script</span></div><pre class="rq-cmd rq-flowscript">#!/usr/bin/env bash
-set -euo pipefail
-
-<span class="rq-frag" data-rq-step="0" data-rq-case="0"># 1. Exchange the API key for a session token
-SESSION_TOKEN=$(curl -s -X POST \
-  -H &#39;Content-Type: application/json&#39; \
-  --data &#39;{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="shell">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}&#39; \
-  &#39;https://wms.example.com/v2/sessions&#39; \
-  | jq -r &#39;.token&#39;)
-
-</span><span class="rq-frag" data-rq-step="1" data-rq-case="0"># 2. Read the bins that did not balance
-curl -i -X GET \
-  -H &#39;Authorization: Bearer &#39;&#34;$SESSION_TOKEN&#34; \
-  -H &#39;Accept: application/json&#39; \
-  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;</span><span class="rq-frag" data-rq-step="1" data-rq-case="1" hidden># 2. Read the bins that did not balance
-curl -i -X GET \
-  -H &#39;Authorization: Bearer &#39;&#34;$SESSION_TOKEN&#34; \
-  -H &#39;Accept: application/json&#39; \
-  &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;</span></pre></div>
 <section class="rq-step" data-rq-step="0">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
 <div class="rq-step-body"><div class="rq-case" data-rq-case="0">
@@ -1662,11 +1641,6 @@ Accept: application/json</pre></div>
 				applyCaptures(block, clear.closest(".rq-step"), null);
 				return;
 			}
-			var script = event.target.closest(".rq-script");
-			if (script) {
-				copyCommand(script, block.querySelector(".rq-flowscript"));
-				return;
-			}
 			var copy = event.target.closest(".rq-copy");
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
@@ -1685,11 +1659,6 @@ Accept: application/json</pre></div>
 			owner.querySelectorAll("[data-rq-case]").forEach(function (each) {
 				if (each.dataset.rqCase === chosen) each.removeAttribute("data-rq-hidden");
 				else each.setAttribute("data-rq-hidden", "");
-			});
-			var step = owner.dataset.rqStep;
-			if (step === undefined) return;
-			block.querySelectorAll('.rq-frag[data-rq-step="' + step + '"]').forEach(function (each) {
-				each.hidden = each.dataset.rqCase !== chosen;
 			});
 		});
 	});

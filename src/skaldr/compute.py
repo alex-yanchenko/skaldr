@@ -29,20 +29,17 @@ from skaldr.models import (
     RequestFlow,
     RequestLike,
     RequestResponse,
-    RequestStep,
     Section,
     Swimlane,
     SwimlaneStep,
     SwimlaneStepState,
     Table,
-    VariableOwner,
     Walkthrough,
     col_sum,
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
     iter_tables,
-    shell_variable_name,
 )
 
 __all__ = [
@@ -770,102 +767,22 @@ def single_quoted(text: str) -> str:
     return "'" + text.replace("'", "'\\''") + "'"
 
 
-def shell_word(text: str, captured: set[str]) -> str:
-    """`text` as one shell word, with each captured name expanded from its variable. A single-quoted
-    run cannot expand anything, so the literal runs are single quoted and each variable is spliced in
-    double quoted; adjacent quoted runs concatenate into one word. Reader tokens stay inside the
-    single-quoted runs, where the page substitutes them."""
-    parts: list[str] = []
-    cut = 0
-    for match in VARIABLE_TOKEN.finditer(text):
-        if match.group(1) not in captured:
-            continue
-        if match.start() > cut:
-            parts.append(single_quoted(text[cut : match.start()]))
-        parts.append(f'"${shell_variable_name(match.group(1))}"')
-        cut = match.end()
-    if cut < len(text) or not parts:
-        parts.append(single_quoted(text[cut:]))
-    return "".join(parts)
-
-
-def step_command(
-    step: RequestLike, case: RequestCase, captured: set[str], *, show_headers: bool = True
-) -> str:
-    """One step's curl, with every earlier step's captured value read from its shell variable. A step
-    whose response is captured asks for the body alone, since the headers would be captured with it."""
-    parts = [f"curl {'-i' if show_headers else '-s'} -X {step.method}"]
+def command_for(core: RequestLike, case: RequestCase) -> str:
+    """The curl shown under one call, every value written out, so it runs exactly as it is copied."""
+    parts = [f"curl -i -X {core.method}"]
     parts += [
-        f"  -H {shell_word(resolve_case(f'{name}: {value}', step, case), captured)}"
-        for name, value in request_headers(step, case).items()
+        f"  -H {single_quoted(resolve_case(f'{name}: {value}', core, case))}"
+        for name, value in request_headers(core, case).items()
     ]
-    if step.body:
-        parts.append(f"  --data {shell_word(resolve_case(step.body, step, case), captured)}")
-    parts.append(f"  {shell_word(resolve_case(step.url, step, case), captured)}")
+    if core.body:
+        parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
+    parts.append(f"  {single_quoted(resolve_case(core.url, core, case))}")
     return " \\\n".join(parts)
-
-
-def command_for(owner: VariableOwner, core: RequestLike, case: RequestCase) -> str:
-    """The curl shown under one call. A shell-style secret is named rather than written out, which is
-    the same splice a captured value gets, so the reader exports it once instead of pasting it into
-    every command."""
-    return step_command(core, case, owner.shell_secret_names())
-
-
-def _capture_lines(step: RequestStep, command: str, response_var: str) -> list[str]:
-    """The assignments that take a step's captures out of its response. One capture reads the command
-    directly; several read a saved response, so the call runs once rather than once per value."""
-    if len(step.captures) == 1:
-        capture = step.captures[0]
-        if capture.json_path is None:
-            return [f"{shell_variable_name(capture.name)}=$({command})"]
-        path = capture.json_path.replace("$.", ".", 1)
-        return [f"{shell_variable_name(capture.name)}=$({command} \\\n  | jq -r {single_quoted(path)})"]
-
-    lines = [f"{response_var}=$({command})"]
-    for capture in step.captures:
-        if capture.json_path is None:
-            lines.append(f'{shell_variable_name(capture.name)}="${response_var}"')
-        else:
-            path = capture.json_path.replace("$.", ".", 1)
-            lines.append(
-                f'{shell_variable_name(capture.name)}=$(printf %s "${response_var}" '
-                f"| jq -r {single_quoted(path)})"
-            )
-    return lines
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
     """Each capture with the 1-based number of the step that produces it, for the reader's field list."""
     return [(capture, index + 1) for index, step in enumerate(flow.steps) for capture in step.captures]
-
-
-FLOW_SCRIPT_HEADER = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
-
-
-def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
-    """Every step as one runnable script, split into the pieces a step contributes and carrying one
-    piece per recorded case. A step that captures assigns its response to a shell variable the later
-    steps read, so the chain runs without the reader copying a value between them; it also records a
-    single case, so only a step that captures nothing offers a choice here.
-
-    The page holds every piece and shows the one whose tab is open, which is what keeps the script and
-    the case a reader is looking at agreeing."""
-    fragments_by_step: list[list[str]] = []
-    for index, step in enumerate(flow.steps):
-        named = flow.produced_by(index) | flow.shell_secret_names()
-        tail = "" if index == len(flow.steps) - 1 else "\n\n"
-        fragments: list[str] = []
-        for case in step.cases:
-            command = step_command(step, case, named, show_headers=not step.captures)
-            lines = [f"# {index + 1}. {step.label}"]
-            if step.captures:
-                lines += _capture_lines(step, command, f"STEP{index + 1}_RESPONSE")
-            else:
-                lines.append(command)
-            fragments.append("\n".join(lines) + tail)
-        fragments_by_step.append(fragments)
-    return fragments_by_step
 
 
 def reconcile_line(table: Table) -> str:

@@ -860,8 +860,6 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rq-vlbl{flex:none; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase}
 		& .rq-from{font-size:9.5px; padding:1px 5px; border-radius:var(--r-xs);
 			background:var(--info-bg); color:var(--info-fg)}
-		& .rq-script{margin-inline-start:auto}
-		& .rq-scriptpane{margin:var(--s3) var(--s4) 0}
 		& .rq-step{margin:var(--s3) var(--s4) 0; border:1px solid var(--rule); border-radius:var(--r-inner);
 			background:var(--panel); overflow:hidden}
 		& .rq-step-hd{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;

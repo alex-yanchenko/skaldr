@@ -159,8 +159,6 @@ def _environment() -> Environment:
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
         command_for=compute.command_for,
-        flow_script_header=compute.FLOW_SCRIPT_HEADER,
-        flow_script_fragments=compute.flow_script_fragments,
         produced_names=compute.produced_names,
         status_line=compute.status_line,
         status_tone=compute.status_tone,
