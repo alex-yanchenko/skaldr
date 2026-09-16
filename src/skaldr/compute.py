@@ -737,12 +737,21 @@ def variable_parts(text: str) -> list[tuple[str, str]]:
 
 def request_headers(block: RequestLike, case: RequestCase) -> dict[str, str]:
     """The headers this case sends: its own replacement when it has one, else the request's with any
-    `headers_add` layered over the top."""
+    `headers_add` layered over the top.
+
+    A name matches case-insensitively, the way it does on the wire, and the request's own spelling is
+    the one that renders. Matching by exact string would send `Content-Type` and `content-type` both,
+    which is two conflicting values in the command a reader pastes."""
     if case.headers is not None:
         return case.headers
     if case.headers_add is None:
         return block.headers
-    return {**block.headers, **case.headers_add}
+    layered = {name.lower(): value for name, value in case.headers_add.items()}
+    merged = {name: layered.pop(name.lower(), value) for name, value in block.headers.items()}
+    for name, value in case.headers_add.items():
+        if name.lower() in layered:
+            merged[name] = value
+    return merged
 
 
 def request_wire(block: RequestLike, case: RequestCase) -> str:
@@ -841,7 +850,7 @@ def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
 
     The page holds every piece and shows the one whose tab is open, which is what keeps the script and
     the case a reader is looking at agreeing."""
-    steps: list[list[str]] = []
+    fragments_by_step: list[list[str]] = []
     for index, step in enumerate(flow.steps):
         named = flow.produced_by(index) | flow.shell_secret_names()
         tail = "" if index == len(flow.steps) - 1 else "\n\n"
@@ -854,8 +863,8 @@ def flow_script_fragments(flow: RequestFlow) -> list[list[str]]:
             else:
                 lines.append(command)
             fragments.append("\n".join(lines) + tail)
-        steps.append(fragments)
-    return steps
+        fragments_by_step.append(fragments)
+    return fragments_by_step
 
 
 def reconcile_line(table: Table) -> str:

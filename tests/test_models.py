@@ -2694,8 +2694,12 @@ def test_a_variable_that_is_never_interpolated_is_rejected() -> None:
 @pytest.mark.parametrize(
     ("headers", "message"),
     [
-        ({"": "x"}, r"request case header name must not be blank"),
-        ({"X-Trace": "   "}, r"request case header `X-Trace` must not have a blank value"),
+        pytest.param({"": "x"}, r"request case header name must not be blank", id="blank-name"),
+        pytest.param(
+            {"X-Trace": "   "},
+            r"request case header `X-Trace` must not have a blank value",
+            id="blank-value",
+        ),
     ],
 )
 def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
@@ -2711,8 +2715,10 @@ def test_a_case_header_is_held_to_the_same_shape_as_the_requests(
 @pytest.mark.parametrize(
     ("headers", "message"),
     [
-        ({"": "x"}, r"request header name must not be blank"),
-        ({"Accept": " "}, r"request header `Accept` must not have a blank value"),
+        pytest.param({"": "x"}, r"request header name must not be blank", id="blank-name"),
+        pytest.param(
+            {"Accept": " "}, r"request header `Accept` must not have a blank value", id="blank-value"
+        ),
     ],
 )
 def test_a_request_header_must_carry_a_name_and_a_value(headers: dict[str, str], message: str) -> None:

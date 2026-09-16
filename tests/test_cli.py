@@ -313,15 +313,20 @@ def test_checking_a_set_while_asking_for_one_render_is_refused_before_any_work(
 
 
 @pytest.mark.parametrize(
-    "argv_tail",
-    [["--pdf", "r.pdf", "--embed"], ["--live"], ["--if-stale"]],
+    ("argv_tail", "expected"),
+    [
+        (["--pdf", "r.pdf", "--embed"], "--embed has no effect with --pdf alone"),
+        (["--live"], "shape a render"),
+        (["--if-stale"], "shape a render"),
+    ],
 )
 def test_a_flag_shape_conflict_is_settled_before_a_file_is_read(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str], expected: str
 ) -> None:
     """Every argument-shape conflict is refused up front, so a check never prints a passing OK line
     for content that is valid and then exits non-zero for a reason that has nothing to do with it.
-    A script reading the exit code would take that as invalid content."""
+    A script reading the exit code would take that as invalid content. Each case names the guard it
+    expects, since these reach two different ones and the exit code alone cannot tell them apart."""
     data_path = _write(tmp_path, make_report())
     tail = [str(tmp_path / part) if part.endswith(".pdf") else part for part in argv_tail]
 
@@ -330,7 +335,36 @@ def test_a_flag_shape_conflict_is_settled_before_a_file_is_read(
 
     captured = capsys.readouterr()
     assert excinfo.value.code == 2
+    assert expected in captured.err
     assert "OK" not in captured.out
+
+
+def test_check_gates_an_embed_written_to_the_default_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--embed alone is the third of the gate's three writing flags, and it renders to the default
+    path rather than one the reader named."""
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+
+    exit_code = main(["--check", str(data_path), "--embed"])
+
+    written = tmp_path / "out" / f"{data_path.stem}.html"
+    assert exit_code == 0
+    assert "<!doctype html>" not in written.read_text(encoding="utf-8").lower()
+
+
+def test_a_strict_failure_gates_the_render_like_an_invalid_one(tmp_path: Path) -> None:
+    """A page whose placeholders are unfilled fails the check by a different path inside _check_files
+    than a schema-invalid one, and the gate holds for both."""
+    block = {"type": "text", "body": "hello {{name}}"}
+    data_path = _write(tmp_path, make_report(blocks=[block]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main(["--check", "--strict", str(data_path), "-o", str(out_path)])
+
+    assert exit_code == 1
+    assert not out_path.exists()
 
 
 def test_check_gates_a_pdf_render_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -798,6 +832,20 @@ def test_live_is_refused_for_an_embed_fragment_which_ships_as_a_shared_artifact(
 
     assert exc.value.code == 2
     assert "--embed" in capsys.readouterr().err
+
+
+def test_live_is_refused_with_pdf_alone_because_no_page_is_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--pdf` without `-o` writes no HTML, and the reloader lives in the HTML. Accepting the pair
+    renders the PDF and drops `--live` without saying so."""
+    data_path = _write(tmp_path, make_report())
+
+    with pytest.raises(SystemExit) as exc:
+        main([str(data_path), "--pdf", str(tmp_path / "r.pdf"), "--live"])
+
+    assert exc.value.code == 2
+    assert "--live" in capsys.readouterr().err
 
 
 def test_live_is_refused_for_emit_json_which_writes_no_page(tmp_path: Path) -> None:

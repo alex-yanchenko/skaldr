@@ -210,6 +210,11 @@ def main(argv: list[str] | None = None) -> int:
             "--live adds a self-refreshing reloader to a full HTML page; it can't combine with "
             "--emit-json (it writes no page) or --embed (an Artifact must not reload itself)"
         )
+    if args.live is not None and args.pdf and not args.out:
+        parser.error(
+            "--live lives in the HTML, and --pdf alone writes none; add -o to also write the page, "
+            "or drop --live"
+        )
     if args.live is not None and args.live < 0:
         parser.error("--live takes a poll interval in milliseconds, which cannot be negative")
     if args.if_stale and args.emit_json:
@@ -223,8 +228,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed):
         parser.error(
-            "an output flag renders one file — pass a single path, or drop -o/--pdf/--embed to "
-            "validate the whole set"
+            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed "
+            "to validate the whole set"
         )
     if args.check and not (args.out or args.pdf or args.embed) and (args.live is not None or args.if_stale):
         parser.error(

@@ -2011,8 +2011,60 @@ def test_an_undeclared_variable_in_headers_add_still_fails_strict() -> None:
     assert find_placeholders(parse_report(report)) == ["tokne"]
 
 
+def test_headers_add_replaces_a_name_whatever_case_it_is_written_in() -> None:
+    """Header names are case-insensitive on the wire, so `content-type` names the same header as
+    `Content-Type`. Matching them by exact string would send both, and a reader pasting that command
+    gets two conflicting values rather than the one the case states. The request's own spelling is
+    what renders, so the case reads as an override of it."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+        cases=[
+            {
+                "label": "plain",
+                "headers_add": {"content-type": "text/plain"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert compute.request_headers(block, block.cases[0]) == {
+        "Content-Type": "text/plain",
+        "Accept": "application/json",
+    }
+
+
+def test_headers_add_appends_a_name_the_request_does_not_set() -> None:
+    """A name the request has no spelling of is added after the ones it does, so the request's own
+    header order survives and the case's additions read as additions."""
+    report = _request_report(
+        url="https://api.example.com/x",
+        headers={"Accept": "application/json"},
+        variables=[],
+        case_variable=None,
+        cases=[
+            {
+                "label": "traced",
+                "headers_add": {"accept": "text/plain", "X-Trace": "1"},
+                "response": {"status": 200, "body": "[]"},
+            }
+        ],
+    )
+    block = parse_report(report).blocks[0]
+    assert isinstance(block, Request)
+
+    assert list(compute.request_headers(block, block.cases[0]).items()) == [
+        ("Accept", "text/plain"),
+        ("X-Trace", "1"),
+    ]
+
+
 def test_headers_add_layers_over_the_requests_headers() -> None:
-    """Cases that share an auth header and differ in one other name the shared one once, on the
+    """Cases that share an auth header and differ in one other name write the shared one once, on the
     request, and only the difference per case."""
     report = _request_report(
         headers={"Authorization": "Bearer {{token}}", "Accept": "application/json"},
