@@ -96,9 +96,11 @@
 		var pane = element("div", "rq-pane");
 		var header = element("div", "rq-pane-hd");
 		header.appendChild(element("span", null, "What you got"));
-		var status = element("span", "rq-status " + toneOf(parsed.status));
-		status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
-		header.appendChild(status);
+		if (parsed.status || !host.closest("[data-rq-command]")) {
+			var status = element("span", "rq-status " + toneOf(parsed.status));
+			status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
+			header.appendChild(status);
+		}
 		pane.appendChild(header);
 		if (parsed.headers.length) {
 			var list = element("dl", "rq-hdrs");
@@ -239,7 +241,7 @@
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
 				var withPipe = copy.classList.contains("rq-catch");
-				command.querySelector(".rq-pipe").hidden = !withPipe;
+				command.querySelectorAll(".rq-pipe").forEach(function (pipe) { pipe.hidden = !withPipe; });
 				copyCommand(copy, command);
 				return;
 			}

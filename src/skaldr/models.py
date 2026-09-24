@@ -16,7 +16,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -26,6 +26,7 @@ else:
 
 import yaml
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -1554,6 +1555,22 @@ class Swimlane(_Block):
 
 HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 VARIABLE_TOKEN = re.compile(rf"\{{\{{\s*({REFERENCE_KEY_PATTERN})\s*\}}\}}")
+CaseTone = Literal["neutral", "info", "success", "warning", "danger"]
+
+
+def _command_without_block_scalar_trailing_newline(text: str) -> str:
+    trimmed = text.rstrip("\n")
+    if not trimmed.strip():
+        raise ValueError("command must not be blank (omit it instead)")
+    return trimmed
+
+
+CommandText = Annotated[str, AfterValidator(_command_without_block_scalar_trailing_newline)]
+
+
+class ComposedCall(NamedTuple):
+    method: HttpMethod
+    url: str
 
 
 class RequestVariable(_Frozen):
@@ -1605,7 +1622,10 @@ class RequestResponse(_Frozen):
         description="Response headers worth keeping, in the order you want them read. Give a list for "
         "a header that legitimately repeats, such as `Set-Cookie`.",
     )
-    body: str = Field(description="The body, verbatim. JSON is pretty-printed for display.")
+    body: str = Field(
+        description="The body, verbatim. A one-line JSON object or array, as `curl -s` or `jq -c` "
+        "prints it, is pretty-printed for display; a body you laid out across lines is shown as written."
+    )
 
     @model_validator(mode="after")
     def _shape(self) -> "RequestResponse":
@@ -1653,6 +1673,17 @@ class RequestCase(_Frozen):
         "leaving the rest. Use it when cases share a credential and differ in one header, so the shared "
         "one is written once. Cannot be combined with `headers`, which replaces them outright.",
     )
+    command: CommandText | None = Field(
+        default=None,
+        description="Replace the request's `command` for this case alone, for a control that differs "
+        "from the finding by more than one value. Only on a request that runs a `command`.",
+    )
+    tone: CaseTone | None = Field(
+        default=None,
+        description="Colour this case's tab and verdict when its response carries no `status`, such as "
+        "the output of a `curl -s | jq` command: `warning` for a finding, `success` for a control that "
+        "passes. A recorded status decides the tone by itself, so the two are never set together.",
+    )
     response: RequestResponse = Field(description="What came back when you ran it.")
     verdict: str | None = Field(
         default=None,
@@ -1675,6 +1706,11 @@ class RequestCase(_Frozen):
             )
         for source in (self.headers, self.headers_add):
             check_header_map(source, "request case header")
+        if self.tone is not None and self.response.status is not None:
+            raise ValueError(
+                f"case '{self.label}' sets a tone and records status {self.response.status}: the status "
+                "already decides the tone, so drop `tone`"
+            )
         return self
 
 
@@ -1688,8 +1724,28 @@ class _RequestCore(_Frozen):
     `request_flow`, which differ only in where their variables come from."""
 
     label: str = Field(min_length=1, description="What the call is for, shown in the header.")
-    method: HttpMethod = Field(description="The HTTP method.")
-    url: str = Field(min_length=1, description="The full URL. May carry `{{variable}}` tokens.")
+    method: HttpMethod | None = Field(
+        default=None, description="The HTTP method. Required unless the call runs a `command`."
+    )
+    url: str | None = Field(
+        default=None,
+        min_length=1,
+        description="The full URL. May carry `{{variable}}` tokens. Required unless the call runs a "
+        "`command`.",
+    )
+    command: CommandText | None = Field(
+        default=None,
+        description="A shell command the reader copies and runs exactly as written, in place of the "
+        "curl skaldr would build from `method`, `url`, `headers` and `body`. Use it when the call needs "
+        "what those fields cannot say: a secret manager supplying the credential, a proxy, a `| jq` "
+        "that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them "
+        "with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
+    )
+    command_note: str | None = Field(
+        default=None,
+        description="Rich-text line under the command explaining why it is shaped the way it is, such "
+        "as what a `jq` filter makes visible. The verdict stays about what came back.",
+    )
     headers: dict[str, str] = Field(
         default_factory=dict,
         description="Request headers as a map, in the order they should read. A value may carry "
@@ -1723,8 +1779,23 @@ class _RequestCore(_Frozen):
             for source in (case.headers, case.headers_add)
             for value in (source or {}).values()
         )
-        scan = " ".join((self.url, *self.headers.values(), self.body or "", *case_headers))
+        case_commands = (case.command or "" for case in self.cases)
+        scan = " ".join(
+            (
+                self.url or "",
+                self.command or "",
+                *self.headers.values(),
+                self.body or "",
+                *case_headers,
+                *case_commands,
+            )
+        )
         return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
+
+    def composed_call(self) -> ComposedCall:
+        if self.method is None or self.url is None:
+            raise ReportError(f"request '{self.label}' runs a command, so skaldr composes no call for it")
+        return ComposedCall(self.method, self.url)
 
     def case_axis(self) -> set[str]:
         """The case variable as a set, empty when the call declares none."""
@@ -1750,8 +1821,52 @@ class _RequestCore(_Frozen):
                     )
         if self.body is not None and not self.body.strip():
             raise ValueError("request body must not be blank (omit it instead)")
+        if self.command_note is not None and not self.command_note.strip():
+            raise ValueError("request command_note must not be blank (omit it instead)")
         check_header_map(self.headers, "request header")
+        if self.command is None:
+            self._check_composed_call()
+        else:
+            self._check_command_call()
         return self
+
+    def _check_composed_call(self) -> None:
+        if self.method is None or self.url is None:
+            raise ValueError(
+                f"request '{self.label}' needs `method` and `url` to build a curl, or a `command` to run "
+                "as written"
+            )
+        for case in self.cases:
+            if case.command is not None:
+                raise ValueError(
+                    f"case '{case.label}' sets a command but the request builds a curl from `method` and "
+                    "`url`: set `command` on the request to run its cases as written"
+                )
+        if self.command_note is not None:
+            raise ValueError(
+                f"request '{self.label}' sets a command_note but runs no command: put the note in a verdict"
+            )
+
+    def _check_command_call(self) -> None:
+        composed_fields = {
+            "method": self.method,
+            "url": self.url,
+            "headers": self.headers or None,
+            "body": self.body,
+        }
+        for name, value in composed_fields.items():
+            if value is not None:
+                raise ValueError(
+                    f"request '{self.label}' sets `command` and `{name}`: a command runs exactly as "
+                    f"written, so skaldr builds no curl and `{name}` would never reach it"
+                )
+        for case in self.cases:
+            for name, value in (("headers", case.headers), ("headers_add", case.headers_add)):
+                if value is not None:
+                    raise ValueError(
+                        f"case '{case.label}' sets {name} on a request that runs a command, which sends "
+                        "no headers of its own: write them into the command"
+                    )
 
 
 class _VariableOwner(_Frozen):

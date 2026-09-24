@@ -182,8 +182,8 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell — a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded HTTP call the reader can re-run (see below) | `method`, `url`, `headers?`, `body?`, `variables?`, `case_variable?`, `cases: [{label, value?, headers?, headers_add?, response, verdict?}]` |
-| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method, url, headers?, body?, case_variable?, cases, captures?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases, captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -612,7 +612,59 @@ may set one or the other, never both.
 `status` drives the tone, so you never pick a colour. Omit `reason` and the standard text for the code
 fills in, which is what an HTTP/2 response needs since it carries none. Omit `status` entirely for a
 response with no status line, such as a bare token from `curl -s`. A header that legitimately repeats
-takes a list: `set-cookie: ["a=1", "b=2"]`.
+takes a list: `set-cookie: ["a=1", "b=2"]`. A one-line JSON body, the way `curl -s` prints it, is
+pretty-printed on the page; a body you laid out across lines keeps your layout.
+
+### Running an exact command: `command`
+
+Give `command` instead of `method`/`url`/`headers`/`body` when the call needs something those fields
+cannot say: a secret manager that supplies the credential so the reader never handles one, a proxy, a
+`| jq` that makes the evidence visible. The Copy button hands over the command exactly as you wrote it,
+every line and every quote, so one copy, one paste, one run reproduces what you saw.
+
+```yaml
+- type: request
+  label: "Tier mappings on the partner API"
+  command: |
+    cd ~/code/example-service && vault-run --env prod -- sh -c 'curl -s --proxy "$EGRESS_PROXY" -u "$PARTNER_USER:$PARTNER_PASS" "https://api.partner.example/v1/mappings?label=TIER"' | jq 'map({code, mappedValue})'
+  command_note: "The API omits `mappedValue` when it is empty, so the `jq` names the field to make the gap print as `null`."
+  cases:
+    - label: "TIER, the finding"
+      tone: warning                        # no HTTP status to colour it, so you say what it is
+      response:
+        body: '[{"code":"STANDARD","mappedValue":null},{"code":"PREMIUM","mappedValue":null}]'
+      verdict: "Rows exist, and none carries a mapped value, so the import resolves zero tiers."
+    - label: "REGION, the control"
+      command: |                           # a case may run its own command
+        cd ~/code/example-service && vault-run --env prod -- sh -c 'curl -s --proxy "$EGRESS_PROXY" -u "$PARTNER_USER:$PARTNER_PASS" "https://api.partner.example/v1/mappings?label=REGION"' | jq 'map({code, mappedValue})'
+      tone: success
+      response:
+        body: '[{"code":"EU","mappedValue":"eu-west-1"}]'
+      verdict: "Same endpoint, same credentials, and the value comes back. Access is not the explanation."
+```
+
+- **Pick `command` when a copied curl would fail or mislead.** If the reader would run skaldr's curl
+  and get a 403 because the credential, proxy or filter is missing, the button is manufacturing
+  counter-evidence. Write the command you ran.
+- **A `{{name}}` still works** inside `command`, from `variables` or `case_variable`, and is written in
+  exactly as the reader types it, with no shell quoting added. You own the quoting, so put the token
+  where the shell will read it the way you mean.
+- **`command` excludes `method`, `url`, `headers` and `body`**, and a case of a command request cannot
+  set `headers` or `headers_add`: those fields build a curl, and nothing would ever build it. Setting
+  both is a build error that names the field.
+- **`tone` colours a case with no `status`**: `warning` or `danger` for a finding, `success` for a
+  control that passes, `info` or `neutral` otherwise. A recorded `status` decides the tone by itself,
+  so a case never sets both.
+- **`command_note`** says why the command is shaped the way it is. The `verdict` stays about what came
+  back.
+- **"Copy + capture"** pipes the output to the clipboard. A multi-line command is wrapped in `{ … }`
+  first, so the capture takes all of it. Plain Copy is always the command byte for byte.
+
+**A verification document** (numbered claims a reader re-runs to check them for themselves) is a page
+of these blocks. Put each claim in its own `request`, with the finding as the first case and each
+control that rules out another explanation as a case after it. Give each case a `tone` and a verdict
+that says what it proves. Cases stack under their own headings in print, so the paper copy keeps every
+control.
 
 A `request` is full width. It may sit at the top level or inside a `section` or `panel`, but not in a
 grid cell, where the form and the response pane have no room.
@@ -700,6 +752,9 @@ value an earlier step captured alike — so it runs exactly as it is pasted. The
 steps in order, pasting each response back to fill the next.
 
 A flow needs at least two steps. One step is a `request`.
+
+A step may run an exact `command` on the same terms as a `request`, and its captures read from the
+output the reader pastes back, so `vault-run -- mint-token` can hand its token to the next step.
 
 ## The `references`
 

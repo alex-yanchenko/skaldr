@@ -163,6 +163,8 @@ def _environment() -> Environment:
         produced_names=compute.produced_names,
         status_line=compute.status_line,
         status_tone=compute.status_tone,
+        case_tone=compute.case_tone,
+        recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
     )

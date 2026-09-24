@@ -7,6 +7,7 @@ drift from it.
 it, and models must not import compute) so templates can reach it through this one module.
 """
 
+import json
 import math
 import re
 from collections import Counter
@@ -708,6 +709,22 @@ def status_tone(response: RequestResponse) -> str:
     return {2: "success", 3: "info", 4: "warning", 5: "danger"}.get(response.status // 100, "neutral")
 
 
+def case_tone(case: RequestCase) -> str:
+    return case.tone or status_tone(case.response)
+
+
+def recorded_body(body: str) -> str:
+    if "\n" in body.strip():
+        return body
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return body
+    if not isinstance(parsed, (dict, list)):
+        return body
+    return json.dumps(parsed, indent=2, ensure_ascii=False)
+
+
 def case_value(block: RequestLike, case: RequestCase) -> str | None:
     """What this case supplies for the block's case axis, defaulting to its label."""
     return None if block.case_variable is None else (case.value or case.label)
@@ -756,7 +773,8 @@ def request_headers(block: RequestLike, case: RequestCase) -> dict[str, str]:
 
 def request_wire(block: RequestLike, case: RequestCase) -> str:
     """The request as it goes on the wire, with `{{name}}` tokens intact for the reader's slots."""
-    lines = [f"{block.method} {block.url}"]
+    call = block.composed_call()
+    lines = [f"{call.method} {call.url}"]
     lines += [f"{name}: {value}" for name, value in request_headers(block, case).items()]
     if block.body:
         lines += ["", block.body]
@@ -770,15 +788,20 @@ def single_quoted(text: str) -> str:
 
 
 def command_for(core: RequestLike, case: RequestCase) -> str:
-    """The curl shown under one call, every value written out, so it runs exactly as it is copied."""
-    parts = [f"curl -i -X {core.method}"]
+    """The command shown under one call, every value written out, so it runs exactly as it is copied:
+    the author's own `command` when there is one, else the curl built from the call's fields."""
+    verbatim = case.command or core.command
+    if verbatim is not None:
+        return resolve_case(verbatim, core, case)
+    call = core.composed_call()
+    parts = [f"curl -i -X {call.method}"]
     parts += [
         f"  -H {single_quoted(resolve_case(f'{name}: {value}', core, case))}"
         for name, value in request_headers(core, case).items()
     ]
     if core.body:
         parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
-    parts.append(f"  {single_quoted(resolve_case(core.url, core, case))}")
+    parts.append(f"  {single_quoted(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
 
 

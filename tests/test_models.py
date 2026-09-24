@@ -39,6 +39,7 @@ from skaldr.models import (
 )
 from tests.factories import (
     make_cell,
+    make_command_request,
     make_flow,
     make_grid,
     make_reconciled_table,
@@ -2985,3 +2986,140 @@ def test_a_request_is_accepted_inside_a_panel() -> None:
     assert isinstance(outer, Panel)
 
     assert isinstance(outer.blocks[0], Request)
+
+
+def _parsed_request(block: dict[str, Any]) -> Request:
+    parsed = parse_report(make_report(blocks=[block])).blocks[0]
+    assert isinstance(parsed, Request)
+    return parsed
+
+
+def test_a_command_request_needs_no_method_url_or_reader_field() -> None:
+    block = _parsed_request(make_command_request())
+
+    assert (block.method, block.url, block.variables, block.command) == (
+        None,
+        None,
+        [],
+        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
+    )
+
+
+def test_a_command_keeps_its_inner_lines_and_drops_the_trailing_newline_a_block_scalar_adds() -> None:
+    block = _parsed_request(make_command_request(command="cd /srv\nrun --all\n"))
+
+    assert block.command == "cd /srv\nrun --all"
+
+
+@pytest.mark.parametrize(
+    "composed",
+    [
+        {"method": "GET"},
+        {"url": "https://api.example.com/a"},
+        {"headers": {"Accept": "application/json"}},
+        {"body": "{}"},
+    ],
+    ids=["method", "url", "headers", "body"],
+)
+def test_a_command_refuses_the_fields_a_composed_curl_is_built_from(composed: dict[str, Any]) -> None:
+    field = next(iter(composed))
+    with pytest.raises(ReportError, match=rf"sets `command` and `{field}`"):
+        parse_report(make_report(blocks=[make_command_request(**composed)]))
+
+
+@pytest.mark.parametrize("missing", ["method", "url"])
+def test_a_request_without_a_command_still_needs_a_method_and_a_url(missing: str) -> None:
+    block = make_request()
+    del block[missing]
+    with pytest.raises(ReportError, match=r"needs `method` and `url` to build a curl, or a `command`"):
+        parse_report(make_report(blocks=[block]))
+
+
+def test_a_blank_command_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"command must not be blank"):
+        parse_report(make_report(blocks=[make_command_request(command="  \n")]))
+
+
+def test_a_case_command_replaces_the_requests_for_that_case_alone() -> None:
+    cases = [
+        {"label": "finding", "response": {"body": "[]"}},
+        {
+            "label": "control",
+            "command": "vault-run -- curl -s https://api.partner.example/v1/regions",
+            "response": {"body": "[]"},
+        },
+    ]
+    block = _parsed_request(make_command_request(cases=cases))
+
+    assert [compute.command_for(block, case) for case in block.cases] == [
+        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
+        "vault-run -- curl -s https://api.partner.example/v1/regions",
+    ]
+
+
+def test_a_case_command_needs_a_request_that_runs_a_command() -> None:
+    cases = [{"label": "one", "command": "echo hi", "response": {"body": "hi"}}]
+    with pytest.raises(ReportError, match=r"case 'one' sets a command but the request builds a curl"):
+        parse_report(make_report(blocks=[make_request(cases=cases)]))
+
+
+@pytest.mark.parametrize("field", ["headers", "headers_add"])
+def test_a_case_of_a_command_request_cannot_set_headers(field: str) -> None:
+    cases = [{"label": "one", field: {"Accept": "text/plain"}, "response": {"body": "x"}}]
+    with pytest.raises(ReportError, match=rf"case 'one' sets {field} on a request that runs a command"):
+        parse_report(make_report(blocks=[make_command_request(cases=cases)]))
+
+
+def test_a_command_fills_the_case_axis_and_counts_its_tokens_as_used() -> None:
+    block = _parsed_request(
+        make_command_request(
+            command="vault-run -- curl -s 'https://{{host}}/v1/mappings?label={{label}}'",
+            variables=[{"name": "host", "example": "api.partner.example"}],
+            case_variable="label",
+            cases=[{"label": "TIER", "response": {"body": "[]"}}],
+        )
+    )
+
+    assert compute.command_for(block, block.cases[0]) == (
+        "vault-run -- curl -s 'https://{{host}}/v1/mappings?label=TIER'"
+    )
+
+
+def test_a_variable_used_only_in_a_case_command_counts_as_used() -> None:
+    cases = [{"label": "one", "command": "vault-run -- fetch {{region}}", "response": {"body": "x"}}]
+    block = _parsed_request(
+        make_command_request(variables=[{"name": "region", "example": "eu"}], cases=cases)
+    )
+
+    assert block.referenced_variables() == {"region"}
+
+
+def test_a_case_tone_colours_a_case_that_recorded_no_status() -> None:
+    cases = [{"label": "finding", "tone": "warning", "response": {"body": "[]"}}]
+    block = _parsed_request(make_command_request(cases=cases))
+
+    assert compute.case_tone(block.cases[0]) == "warning"
+
+
+def test_a_case_tone_is_refused_beside_a_status_that_already_decides_it() -> None:
+    cases = [{"label": "one", "tone": "success", "response": {"status": 500, "body": "{}"}}]
+    with pytest.raises(ReportError, match=r"case 'one' sets a tone and records status 500"):
+        parse_report(make_report(blocks=[make_command_request(cases=cases)]))
+
+
+def test_a_flow_step_may_run_a_command_and_capture_from_its_output() -> None:
+    minting = {
+        "label": "Mint a token",
+        "command": "vault-run -- mint-token --audience partner",
+        "captures": [{"name": "token", "source": "body"}],
+        "cases": [{"label": "one", "response": {"body": "abc123"}}],
+    }
+    steps = [minting, make_step(url="https://{{host}}/b", headers={"Authorization": "Bearer {{token}}"})]
+
+    flow = parse_report(make_report(blocks=[make_flow(steps=steps)])).blocks[0]
+    assert isinstance(flow, RequestFlow)
+
+    assert (
+        compute.command_for(flow.steps[0], flow.steps[0].cases[0])
+        == "vault-run -- mint-token --audience partner"
+    )

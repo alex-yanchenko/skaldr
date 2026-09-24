@@ -2926,24 +2926,66 @@
           "type": "string"
         },
         "method": {
-          "description": "The HTTP method.",
-          "enum": [
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "HEAD",
-            "OPTIONS"
+          "anyOf": [
+            {
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "HEAD",
+                "OPTIONS"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Method",
-          "type": "string"
+          "default": null,
+          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "title": "Method"
         },
         "url": {
-          "description": "The full URL. May carry `{{variable}}` tokens.",
-          "minLength": 1,
-          "title": "Url",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "title": "Url"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A shell command the reader copies and runs exactly as written, in place of the curl skaldr would build from `method`, `url`, `headers` and `body`. Use it when the call needs what those fields cannot say: a secret manager supplying the credential, a proxy, a `| jq` that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
+          "title": "Command"
+        },
+        "command_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
+          "title": "Command Note"
         },
         "headers": {
           "additionalProperties": {
@@ -2997,8 +3039,6 @@
       },
       "required": [
         "label",
-        "method",
-        "url",
         "cases",
         "type"
       ],
@@ -3108,6 +3148,39 @@
           "default": null,
           "description": "Add to the request's headers for this case, replacing a name it already sets and leaving the rest. Use it when cases share a credential and differ in one header, so the shared one is written once. Cannot be combined with `headers`, which replaces them outright.",
           "title": "Headers Add"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Replace the request's `command` for this case alone, for a control that differs from the finding by more than one value. Only on a request that runs a `command`.",
+          "title": "Command"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Colour this case's tab and verdict when its response carries no `status`, such as the output of a `curl -s | jq` command: `warning` for a finding, `success` for a control that passes. A recorded status decides the tone by itself, so the two are never set together.",
+          "title": "Tone"
         },
         "response": {
           "$ref": "#/$defs/RequestResponse",
@@ -3253,7 +3326,7 @@
           "type": "object"
         },
         "body": {
-          "description": "The body, verbatim. JSON is pretty-printed for display.",
+          "description": "The body, verbatim. A one-line JSON object or array, as `curl -s` or `jq -c` prints it, is pretty-printed for display; a body you laid out across lines is shown as written.",
           "title": "Body",
           "type": "string"
         }
@@ -3274,24 +3347,66 @@
           "type": "string"
         },
         "method": {
-          "description": "The HTTP method.",
-          "enum": [
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "HEAD",
-            "OPTIONS"
+          "anyOf": [
+            {
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "HEAD",
+                "OPTIONS"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Method",
-          "type": "string"
+          "default": null,
+          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "title": "Method"
         },
         "url": {
-          "description": "The full URL. May carry `{{variable}}` tokens.",
-          "minLength": 1,
-          "title": "Url",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "title": "Url"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A shell command the reader copies and runs exactly as written, in place of the curl skaldr would build from `method`, `url`, `headers` and `body`. Use it when the call needs what those fields cannot say: a secret manager supplying the credential, a proxy, a `| jq` that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
+          "title": "Command"
+        },
+        "command_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
+          "title": "Command Note"
         },
         "headers": {
           "additionalProperties": {
@@ -3348,8 +3463,6 @@
       },
       "required": [
         "label",
-        "method",
-        "url",
         "cases"
       ],
       "title": "RequestStep",

@@ -1,5 +1,6 @@
 from tests.factories.report_factory import (
     make_cell,
+    make_command_request,
     make_flow,
     make_grid,
     make_reconciled_table,
@@ -11,6 +12,7 @@ from tests.factories.report_factory import (
 
 __all__ = [
     "make_cell",
+    "make_command_request",
     "make_flow",
     "make_grid",
     "make_reconciled_table",
