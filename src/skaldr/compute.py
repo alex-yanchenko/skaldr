@@ -1,7 +1,7 @@
 """Derived, never-authored values: TOC, the used-badge legend, the provenance footer, the
 number/percent formatting helpers, the swimlane grid layout, and a `request` block's wire form,
-curl command and status text — everything the templates need computed from the data so it can't
-drift from it.
+the command a reader copies, each case's tone and the recorded body as shown — everything the
+templates need computed from the data so it can't drift from it.
 
 `col_sum` is re-exported from `models` (it lives there because `Table._reconcile` validates against
 it, and models must not import compute) so templates can reach it through this one module.
@@ -19,6 +19,7 @@ from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
     Badge,
+    CaseTone,
     Grid,
     Heading,
     InnerGrid,
@@ -702,14 +703,15 @@ def status_line(response: RequestResponse) -> str:
     return f"{response.status} {response.reason or HTTP_REASONS.get(response.status, '')}".strip()
 
 
-def status_tone(response: RequestResponse) -> str:
-    """The tone a status class carries, so a case never authors its own colour."""
+def status_tone(response: RequestResponse) -> CaseTone:
+    """The tone a status class carries, so a case with a status never authors its own colour."""
     if response.status is None:
         return "neutral"
-    return {2: "success", 3: "info", 4: "warning", 5: "danger"}.get(response.status // 100, "neutral")
+    tones: dict[int, CaseTone] = {2: "success", 3: "info", 4: "warning", 5: "danger"}
+    return tones.get(response.status // 100, "neutral")
 
 
-def case_tone(case: RequestCase) -> str:
+def case_tone(case: RequestCase) -> CaseTone:
     return case.tone or status_tone(case.response)
 
 

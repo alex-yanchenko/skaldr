@@ -3783,6 +3783,16 @@ def test_a_multi_line_command_is_grouped_so_capture_takes_the_whole_output() -> 
         "{ cd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
     ]
     assert html.count('class="rq-pipe" hidden') == 2
+    assert 'command.querySelectorAll(".rq-pipe")' in _request_runtime_script(html)
+
+
+def test_only_a_command_case_is_marked_so_the_live_pane_drops_its_status_chip() -> None:
+    command_html = _command_page()
+    composed_html = render_html(parse_report(_request_report()))
+
+    assert '<section class="rq-case" data-rq-case="0" data-rq-command>' in command_html
+    assert 'host.closest("[data-rq-command]")' in _request_runtime_script(command_html)
+    assert "data-rq-command>" not in composed_html
 
 
 def test_a_reader_value_in_a_command_is_written_as_typed_with_no_shell_quoting() -> None:

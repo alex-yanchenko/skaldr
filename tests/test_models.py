@@ -3036,8 +3036,45 @@ def test_a_request_without_a_command_still_needs_a_method_and_a_url(missing: str
 
 
 def test_a_blank_command_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"command must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.request\.command: .*command must not be blank"):
         parse_report(make_report(blocks=[make_command_request(command="  \n")]))
+
+
+def test_a_blank_case_command_is_rejected_at_the_case_it_sits_on() -> None:
+    cases = [
+        {"label": "finding", "response": {"body": "[]"}},
+        {"label": "control", "command": "  \n", "response": {"body": "[]"}},
+    ]
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.request\.cases\.1\.command: .*command must not be blank"
+    ):
+        parse_report(make_report(blocks=[make_command_request(cases=cases)]))
+
+
+def test_a_command_note_on_a_request_that_builds_a_curl_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"sets a command_note but runs no command"):
+        parse_report(make_report(blocks=[make_request(command_note="Why the jq.")]))
+
+
+def test_a_blank_command_note_is_rejected() -> None:
+    with pytest.raises(ReportError, match=r"command_note must not be blank"):
+        parse_report(make_report(blocks=[make_command_request(command_note="   ")]))
+
+
+def test_a_flow_step_is_held_to_the_same_command_rules_as_a_request() -> None:
+    steps = [
+        make_step(command="vault-run -- mint-token", captures=[{"name": "token", "source": "body"}]),
+        make_step(url="https://{{host}}/b", headers={"Authorization": "Bearer {{token}}"}),
+    ]
+    with pytest.raises(ReportError, match=r"sets `command` and `method`"):
+        parse_report(make_report(blocks=[make_flow(steps=steps)]))
+
+
+def test_asking_a_command_request_for_its_composed_call_raises() -> None:
+    block = _parsed_request(make_command_request())
+
+    with pytest.raises(ReportError, match=r"runs a command, so skaldr composes no call for it"):
+        block.composed_call()
 
 
 def test_a_case_command_replaces_the_requests_for_that_case_alone() -> None:
@@ -3066,7 +3103,7 @@ def test_a_case_command_needs_a_request_that_runs_a_command() -> None:
 @pytest.mark.parametrize("field", ["headers", "headers_add"])
 def test_a_case_of_a_command_request_cannot_set_headers(field: str) -> None:
     cases = [{"label": "one", field: {"Accept": "text/plain"}, "response": {"body": "x"}}]
-    with pytest.raises(ReportError, match=rf"case 'one' sets {field} on a request that runs a command"):
+    with pytest.raises(ReportError, match=rf"case 'one' sets `{field}` on a request that runs a command"):
         parse_report(make_report(blocks=[make_command_request(cases=cases)]))
 
 

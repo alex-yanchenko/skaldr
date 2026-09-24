@@ -650,8 +650,9 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
   exactly as the reader types it, with no shell quoting added. You own the quoting, so put the token
   where the shell will read it the way you mean.
 - **`command` excludes `method`, `url`, `headers` and `body`**, and a case of a command request cannot
-  set `headers` or `headers_add`: those fields build a curl, and nothing would ever build it. Setting
-  both is a build error that names the field.
+  set `headers` or `headers_add`. Those fields exist to build a curl, and a request with a `command`
+  builds none, so they would never reach what the reader runs. A request that sets `command` together
+  with any of them fails the build with a message naming that field.
 - **`tone` colours a case with no `status`**: `warning` or `danger` for a finding, `success` for a
   control that passes, `info` or `neutral` otherwise. A recorded `status` decides the tone by itself,
   so a case never sets both.

@@ -1720,8 +1720,9 @@ writes that many pairs, so a case past this one would render without its label e
 
 
 class _RequestCore(_Frozen):
-    """One HTTP call and the outcomes it produced. Shared by a standalone `request` and by a step of a
-    `request_flow`, which differ only in where their variables come from."""
+    """One recorded call, composed from its HTTP fields or given as an exact command, and the outcomes
+    it produced. Shared by a standalone `request` and by a step of a `request_flow`, which differ only
+    in where their variables come from."""
 
     label: str = Field(min_length=1, description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
@@ -1769,7 +1770,8 @@ class _RequestCore(_Frozen):
     )
 
     def referenced_variables(self) -> set[str]:
-        """Every `{{name}}` this call interpolates, across the url, the header values and the body.
+        """Every `{{name}}` this call interpolates, across the url, the command, the header values, the
+        body and each case's own command.
 
         A case's headers count whichever way it sets them: `headers` replaces the request's and
         `headers_add` layers over them, and both are interpolated the same way at render time."""
@@ -1864,7 +1866,7 @@ class _RequestCore(_Frozen):
             for name, value in (("headers", case.headers), ("headers_add", case.headers_add)):
                 if value is not None:
                     raise ValueError(
-                        f"case '{case.label}' sets {name} on a request that runs a command, which sends "
+                        f"case '{case.label}' sets `{name}` on a request that runs a command, which sends "
                         "no headers of its own: write them into the command"
                     )
 
