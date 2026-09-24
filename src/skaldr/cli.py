@@ -104,8 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-source",
         action="store_true",
-        help="don't embed the YAML source in the rendered page (by default a full page carries its own "
-        "source so `skaldr --extract-source` can recover it; --embed fragments never carry it)",
+        help="don't embed the YAML source in the rendered page (by default a full page and an --embed "
+        "fragment both carry their own source so `skaldr --extract-source` can recover it)",
     )
     parser.add_argument(
         "--extract-source",
@@ -252,7 +252,13 @@ def main(argv: list[str] | None = None) -> int:
     data_path = Path(args.data[0]).resolve()
 
     if args.watch:
-        return _watch(data_path, _resolve_out_path(data_path, args.out), embed=args.embed, live=args.live)
+        return _watch(
+            data_path,
+            _resolve_out_path(data_path, args.out),
+            embed=args.embed,
+            no_source=args.no_source,
+            live=args.live,
+        )
 
     if args.if_stale and not _is_stale(data_path, _resolve_out_path(data_path, args.out), pdf=args.pdf):
         print(f"up to date  {_resolve_out_path(data_path, args.out)}")
@@ -353,7 +359,7 @@ def _watch(
             if current is not None and current != last:
                 last = current
                 print(f"\n{data_path} changed — re-rendering:")
-                _render_once(data_path, out_path, embed=embed, live=live)
+                _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
     except KeyboardInterrupt:
         print("\nstopped watching")
         return 0
