@@ -137,10 +137,10 @@ To show a literal `{{`, put it in a `` `code` `` span.
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains — the gate you run before "final".
 
-> **Self-checking a rendered page?** A full render **embeds its own YAML source** (so `--extract-source`
-> can recover it), which means any `{{…}}` or `[^ref]` in the source also appears in the output. Grepping
-> the HTML for unfilled markers therefore needs `skaldr … --no-source` (or `--embed`, which never carries
-> the source); better yet, run `skaldr --check --strict` and let skaldr do it.
+> **Self-checking a rendered page?** Every render, full page and `--embed` fragment alike, **embeds its
+> own YAML source** (so `--extract-source` can recover it), which means any `{{…}}` or `[^ref]` in the
+> source also appears in the output. Grepping the HTML for unfilled markers therefore needs
+> `skaldr … --no-source`; better yet, run `skaldr --check --strict` and let skaldr do it.
 
 ## Numbers are formatted for you
 

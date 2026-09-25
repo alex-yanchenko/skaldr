@@ -71,13 +71,40 @@ def test_extract_source_recovers_a_source_that_carries_a_closing_script_tag(
     assert capsys.readouterr().out == data_path.read_text(encoding="utf-8")
 
 
-def test_no_source_suppresses_the_embed(tmp_path: Path) -> None:
+def test_embed_fragment_carries_the_source_so_extract_source_recovers_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "fragment.html"
+
+    assert main([str(data_path), "--embed", "-o", str(out_path)]) == 0
+    capsys.readouterr()
+    assert main(["--extract-source", str(out_path)]) == 0
+
+    assert capsys.readouterr().out == data_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("mode", [[], ["--embed"]], ids=["full-page", "embed-fragment"])
+def test_no_source_suppresses_the_embed(tmp_path: Path, mode: list[str]) -> None:
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"
 
-    assert main([str(data_path), "-o", str(out_path), "--no-source"]) == 0
+    assert main([str(data_path), "-o", str(out_path), "--no-source", *mode]) == 0
 
     assert "skaldr-source" not in out_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("mode", [[], ["--embed"]], ids=["full-page", "embed-fragment"])
+def test_a_no_source_render_can_be_grepped_for_unfilled_placeholders(tmp_path: Path, mode: list[str]) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "owner {{owner}}"}]))
+    with_source = tmp_path / "with.html"
+    without_source = tmp_path / "without.html"
+
+    assert main([str(data_path), "-o", str(with_source), *mode]) == 0
+    assert main([str(data_path), "-o", str(without_source), "--no-source", *mode]) == 0
+
+    assert with_source.read_text(encoding="utf-8").count("{{owner}}") == 1
+    assert "{{owner}}" not in without_source.read_text(encoding="utf-8")
 
 
 def test_extract_source_reports_when_no_source_is_embedded(
@@ -725,6 +752,44 @@ def test_watch_re_renders_only_when_the_file_changes(
     # initial render + exactly one on-change render (the unchanged and missing polls did NOT render)
     assert len(renders) == 2
     assert "stopped watching" in capsys.readouterr().out
+
+
+def test_watch_honours_no_source_on_the_start_render_and_every_re_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    no_source_per_render: list[bool] = []
+
+    def fake_render(
+        _dp: Path,
+        _op: Path,
+        *,
+        embed: bool,  # noqa: ARG001
+        no_source: bool = False,
+        live: int | None = None,  # noqa: ARG001
+    ) -> int:
+        no_source_per_render.append(no_source)
+        return 0
+
+    monkeypatch.setattr("skaldr.cli._render_once", fake_render)
+    mtimes = iter([1.0, 2.0])
+
+    def fake_mtime(_p: Path) -> float | None:
+        return next(mtimes)
+
+    monkeypatch.setattr("skaldr.cli._mtime", fake_mtime)
+    sleeps = {"n": 0}
+
+    def fake_sleep(_seconds: float) -> None:
+        sleeps["n"] += 1
+        if sleeps["n"] >= 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("time.sleep", fake_sleep)
+
+    assert main(["--watch", str(data_path), "-o", str(tmp_path / "out.html"), "--no-source"]) == 0
+
+    assert no_source_per_render == [True, True]
 
 
 def test_watch_uses_the_default_out_path_when_no_output_given(
