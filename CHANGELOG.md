@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/alex-yanchenko/skaldr/compare/v3.0.0...v3.0.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **cli:** keep --no-source under --watch, and say an --embed fragment carries its source ([#145](https://github.com/alex-yanchenko/skaldr/issues/145)) ([ec48b37](https://github.com/alex-yanchenko/skaldr/commit/ec48b3752253fc107bfa8498f7a78592ef25d209))
+
 ## [3.0.0](https://github.com/alex-yanchenko/skaldr/compare/v2.12.1...v3.0.0) (2026-09-16)
 
 
