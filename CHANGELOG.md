@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/alex-yanchenko/skaldr/compare/v3.0.1...v3.1.0) (2026-09-25)
+
+
+### Features
+
+* **request:** run an exact command in place of the composed curl ([#144](https://github.com/alex-yanchenko/skaldr/issues/144)) ([1b02500](https://github.com/alex-yanchenko/skaldr/commit/1b025006d067f9e486bb0b07aff75f90dded3a2c))
+
 ## [3.0.1](https://github.com/alex-yanchenko/skaldr/compare/v3.0.0...v3.0.1) (2026-09-25)
 
 
