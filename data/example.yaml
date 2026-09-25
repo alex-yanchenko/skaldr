@@ -418,6 +418,29 @@ blocks:
         verdict: >-
           The same call with the authorization header removed, recorded so the shape of a refusal is
           recognisable when it turns up unexpectedly.
+  - type: text
+    body: >-
+      Overflow bins are the one place the export and the WMS disagree by design. The command below pulls
+      every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token,
+      so there is nothing to fill in: copy it, run it, compare.
+  - type: request
+    label: "Every overflow bin in one warehouse"
+    command: |
+      vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
+    command_note: "The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number."
+    cases:
+      - label: "NW-04, the finding"
+        tone: warning
+        response:
+          body: '[{"bin":"A-17-9","gap":24},{"bin":"C-02-1","gap":2}]'
+        verdict: "Two overflow bins short, 26 units between them, matching the manual-path queue."
+      - label: "NW-02, the control"
+        command: |
+          vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
+        tone: success
+        response:
+          body: '[{"bin":"B-11-4","gap":0}]'
+        verdict: "A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export."
 
   - type: heading
     text: "Reconciling a bin against the live system"

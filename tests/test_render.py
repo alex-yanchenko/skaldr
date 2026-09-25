@@ -2,6 +2,7 @@ import base64
 import hashlib
 import re
 from collections.abc import Callable
+from html import unescape
 
 import pytest
 
@@ -27,6 +28,7 @@ from skaldr.render import (
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     make_cell,
+    make_command_request,
     make_flow,
     make_grid,
     make_reconciled_table,
@@ -3750,3 +3752,131 @@ def test_chart_escapes_author_category_labels() -> None:
     html = render_html(parse_report(make_report(blocks=[block])))
 
     assert "&lt;x&gt;" in html  # the label is escaped inside the SVG <text>, never raw markup
+
+
+def _command_page(**overrides: object) -> str:
+    return render_html(parse_report(make_report(blocks=[make_command_request(**overrides)])))
+
+
+def _pane_text(html: str, css_class: str) -> list[str]:
+    """The reader-visible text of every `<pre class=css_class>`, tags stripped and entities decoded,
+    hidden spans included, so a test sees exactly what the copy button reads before it prunes."""
+    panes = re.findall(rf'<pre class="{css_class}">(.*?)</pre>', html, re.DOTALL)
+    return [unescape(re.sub(r"<[^>]+>", "", pane)) for pane in panes]
+
+
+def test_a_command_request_shows_the_command_verbatim_and_no_composed_request() -> None:
+    html = _command_page()
+
+    assert _pane_text(html, "rq-cmd") == [
+        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
+        " | tee /dev/tty | pbcopy"
+    ]
+    assert 'class="rq-wire"' not in html
+    assert "curl -i -X" not in html
+
+
+def test_a_multi_line_command_is_grouped_so_capture_takes_the_whole_output() -> None:
+    html = _command_page(command="cd /srv/partner\nvault-run -- fetch-tiers\n")
+
+    assert _pane_text(html, "rq-cmd") == [
+        "{ cd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
+    ]
+    assert html.count('class="rq-pipe" hidden') == 2
+    assert 'command.querySelectorAll(".rq-pipe")' in _request_runtime_script(html)
+
+
+def test_only_a_command_case_is_marked_so_the_live_pane_drops_its_status_chip() -> None:
+    command_html = _command_page()
+    composed_html = render_html(parse_report(_request_report()))
+
+    assert '<section class="rq-case" data-rq-case="0" data-rq-command>' in command_html
+    assert 'host.closest("[data-rq-command]")' in _request_runtime_script(command_html)
+    assert "data-rq-command>" not in composed_html
+
+
+def test_a_reader_value_in_a_command_is_written_as_typed_with_no_shell_quoting() -> None:
+    html = _command_page(
+        command='vault-run -- curl -s "https://{{host}}/v1/tiers"',
+        variables=[{"name": "host", "example": "api.partner.example"}],
+    )
+
+    assert '<span class="rq-slot" data-rq-slot="host" data-rq-quote="none">' in html
+
+
+def test_each_case_of_a_command_request_shows_its_own_command() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {
+            "label": "control",
+            "tone": "success",
+            "command": "vault-run -- fetch-regions",
+            "response": {"body": "[]"},
+        },
+    ]
+    html = _command_page(cases=cases)
+
+    assert [text.split(" | tee")[0] for text in _pane_text(html, "rq-cmd")] == [
+        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
+        "vault-run -- fetch-regions",
+    ]
+
+
+def test_a_case_tone_colours_its_tab_and_verdict_when_no_status_was_recorded() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}, "verdict": "No value mapped."},
+        {"label": "control", "tone": "success", "response": {"body": "[1]"}, "verdict": "Mapped."},
+    ]
+    html = _command_page(cases=cases)
+
+    assert re.findall(r'<span class="rq-dot (\w+)">', html) == ["warning", "success"]
+    assert re.findall(r'<div class="rq-verdict (\w+)">', html) == ["warning", "success"]
+
+
+def test_a_command_case_without_a_status_shows_output_and_no_status_chip() -> None:
+    html = _command_page()
+
+    assert "<span>Recorded output</span>" in html
+    assert '<span class="rq-status' not in html
+    assert "Recorded response" not in html
+
+
+def test_a_composed_request_still_labels_a_missing_status() -> None:
+    html = render_html(
+        parse_report(_request_report(cases=[{"label": "widgets", "response": {"body": "abc"}}]))
+    )
+
+    assert "<span>Recorded response</span>" in html
+    assert '<span class="rq-status neutral">no status line</span>' in html
+
+
+def test_a_command_note_renders_under_the_command_as_rich_text() -> None:
+    html = _command_page(command_note="The API omits `mapped` when empty, so `jq` names it to force a null.")
+
+    assert '<p class="rq-cnote">The API omits <code>mapped</code> when empty' in html
+
+
+@pytest.mark.parametrize(
+    ("body", "shown"),
+    [
+        pytest.param(
+            '[{"code": "STANDARD", "mapped": null}]',
+            '[\n  {\n    "code": "STANDARD",\n    "mapped": null\n  }\n]',
+            id="json-array",
+        ),
+        pytest.param('{"total":0}', '{\n  "total": 0\n}', id="json-object"),
+        pytest.param("eyJhbGciOi.token", "eyJhbGciOi.token", id="bare-token"),
+        pytest.param("42", "42", id="json-scalar-left-alone"),
+        pytest.param(
+            '[\n  {"code": "STANDARD", "mapped": null},\n  {"code": "PREMIUM", "mapped": null}\n]',
+            '[\n  {"code": "STANDARD", "mapped": null},\n  {"code": "PREMIUM", "mapped": null}\n]',
+            id="author-laid-out-json-kept",
+        ),
+    ],
+)
+def test_a_recorded_one_line_json_body_is_pretty_printed_and_anything_else_is_verbatim(
+    body: str, shown: str
+) -> None:
+    html = _command_page(cases=[{"label": "one", "response": {"body": body}}])
+
+    assert _pane_text(html, "rq-resp") == [shown]

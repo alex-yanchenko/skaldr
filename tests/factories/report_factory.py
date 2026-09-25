@@ -40,6 +40,18 @@ def make_request(**overrides: Any) -> dict[str, Any]:
     return block
 
 
+def make_command_request(**overrides: Any) -> dict[str, Any]:
+    """A minimal valid `request` that carries a verbatim command, with no reader field at all."""
+    block: dict[str, Any] = {
+        "type": "request",
+        "label": "Tier mappings on the partner API",
+        "command": "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
+        "cases": [{"label": "all tiers", "response": {"body": '[{"code": "STANDARD", "mapped": null}]'}}],
+    }
+    block.update(overrides)
+    return block
+
+
 def make_step(**overrides: Any) -> dict[str, Any]:
     """A minimal valid `request_flow` step. Captures nothing unless a caller asks for it."""
     step: dict[str, Any] = {

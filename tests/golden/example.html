@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-okAoZsQCsAIVz8P5NiBHGJaCW4DiGRVMROF6Ao5RRuk=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -885,6 +885,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			box-shadow:inset 0 0 0 1px var(--line)}
 		& .rq-catch:hover{color:var(--ink); box-shadow:inset 0 0 0 1px var(--rule)}
 		& .rq-pipe{color:var(--muted)}
+		& .rq-cnote{margin:0; padding:var(--s2) var(--s3); border-top:1px solid var(--line);
+			font-size:12.5px; color:var(--muted)}
 		& pre{font-family:var(--mono); font-size:12px; line-height:1.6; padding:var(--s3); margin:0;
 			white-space:pre-wrap; overflow-wrap:anywhere}
 		& .rq-slot{font-family:var(--mono); font-weight:650; border-radius:var(--r-xs); padding:0 3px;
@@ -1009,7 +1011,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 }
 
 @container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 426px){.rq2{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq2 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq2 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq2 .rq-case{grid-row:1; grid-column:2}}</style>
+@container (width < 394px){.rq1{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq1 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq1 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq1 .rq-case{grid-row:1; grid-column:2}}
+@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 .rq-case{grid-row:1; grid-column:2}}</style>
 <script>
 /* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
    persisted — it is a per-view reader control that resets to the default cap on reload. */
@@ -1237,8 +1240,7 @@ assert sum(counted) == expected
 <h4 class="rq-case-hd">a bin that balances</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
 Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
-Accept: application/json</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
   -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
   -H &#39;Accept: application/json&#39; \
   &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
@@ -1246,8 +1248,12 @@ Accept: application/json</pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
-<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-3&#34;, &#34;expected&#34;: 48, &#34;counted&#34;: 48, &#34;lastCount&#34;: &#34;2026-07-14T09:12:00Z&#34; }
-</pre></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{
+  &#34;bin&#34;: &#34;A-17-3&#34;,
+  &#34;expected&#34;: 48,
+  &#34;counted&#34;: 48,
+  &#34;lastCount&#34;: &#34;2026-07-14T09:12:00Z&#34;
+}</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Expected and counted agree, so the bin needs no recount.</span></div>
 </section>
 <input type="radio" class="rq-pick" name="rq0" id="rq0-1">
@@ -1255,8 +1261,7 @@ Accept: application/json</pre></div>
 <h4 class="rq-case-hd">an overflow bin</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
 Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="none">&lsaquo;token&rsaquo;</span>
-Accept: application/json</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
   -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="token" data-rq-quote="shell">&lsaquo;token&rsaquo;</span>&#39; \
   -H &#39;Accept: application/json&#39; \
   &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
@@ -1264,27 +1269,76 @@ Accept: application/json</pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
-<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;bin&#34;: &#34;A-17-9&#34;, &#34;expected&#34;: 120, &#34;counted&#34;: 96, &#34;overflow&#34;: true }
-</pre></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{
+  &#34;bin&#34;: &#34;A-17-9&#34;,
+  &#34;expected&#34;: 120,
+  &#34;counted&#34;: 96,
+  &#34;overflow&#34;: true
+}</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A 24-unit gap on a bin flagged <code>overflow: true</code>. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.</span></div>
 </section>
 <input type="radio" class="rq-pick" name="rq0" id="rq0-2">
 <section class="rq-case" data-rq-case="2">
 <h4 class="rq-case-hd">a bin the token cannot read</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
-Accept: application/json</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
   -H &#39;Accept: application/json&#39; \
   &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="shell">&lsaquo;bin&rsaquo;</span>&#39;<span class="rq-pipe" hidden> \
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status warning">401 Unauthorized</span></div>
-<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;error&#34;: &#34;missing_credentials&#34;, &#34;message&#34;: &#34;This endpoint requires a bearer token.&#34; }
-</pre></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{
+  &#34;error&#34;: &#34;missing_credentials&#34;,
+  &#34;message&#34;: &#34;This endpoint requires a bearer token.&#34;
+}</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
 </section>
 <div class="rq-tabs"><label for="rq0-0"><span class="rq-dot success"></span>a bin that balances</label><label for="rq0-1"><span class="rq-dot success"></span>an overflow bin</label><label for="rq0-2"><span class="rq-dot warning"></span>a bin the token cannot read</label></div>
+</div>
+
+</section>
+
+
+<p class="text">Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team&#39;s secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare.</p>
+<section class="rq">
+<div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Every overflow bin in one warehouse</span></div>
+<div class="rq-cases rq1" role="group" aria-label="Recorded cases">
+<input type="radio" class="rq-pick" name="rq1" id="rq1-0" checked>
+<section class="rq-case" data-rq-case="0" data-rq-command>
+<h4 class="rq-case-hd">NW-04, the finding</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its output here."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded output</span></div>
+<pre class="rq-resp">[
+  {
+    &#34;bin&#34;: &#34;A-17-9&#34;,
+    &#34;gap&#34;: 24
+  },
+  {
+    &#34;bin&#34;: &#34;C-02-1&#34;,
+    &#34;gap&#34;: 2
+  }
+]</pre></div>
+<div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Two overflow bins short, 26 units between them, matching the manual-path queue.</span></div>
+</section>
+<input type="radio" class="rq-pick" name="rq1" id="rq1-1">
+<section class="rq-case" data-rq-case="1" data-rq-command>
+<h4 class="rq-case-hd">NW-02, the control</h4>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its output here."></textarea></div></div>
+<div class="rq-live" hidden></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded output</span></div>
+<pre class="rq-resp">[
+  {
+    &#34;bin&#34;: &#34;B-11-4&#34;,
+    &#34;gap&#34;: 0
+  }
+]</pre></div>
+<div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.</span></div>
+</section>
+<div class="rq-tabs"><label for="rq1-0"><span class="rq-dot warning"></span>NW-04, the finding</label><label for="rq1-1"><span class="rq-dot success"></span>NW-02, the control</label></div>
 </div>
 
 </section>
@@ -1306,15 +1360,14 @@ Accept: application/json</pre></div>
 
 <section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
-<div class="rq-step-body"><div class="rq-cases rq1">
-<input type="radio" class="rq-pick" name="rq1" id="rq1-0" checked>
+<div class="rq-step-body"><div class="rq-cases rq2">
+<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">200</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">POST https://wms.example.com/v2/sessions
 Content-Type: application/json
 
-{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="none">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X POST \
+{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="none">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X POST \
   -H &#39;Content-Type: application/json&#39; \
   --data &#39;{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="shell">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}&#39; \
   &#39;https://wms.example.com/v2/sessions&#39;<span class="rq-pipe" hidden> \
@@ -1322,8 +1375,10 @@ Content-Type: application/json
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status success">200 OK</span></div>
-<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;token&#34;: &#34;sess_8f21c4…&#34;, &#34;expiresIn&#34;: 900 }
-</pre></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{
+  &#34;token&#34;: &#34;sess_8f21c4…&#34;,
+  &#34;expiresIn&#34;: 900
+}</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Tokens last fifteen minutes, so a long recount needs this step again partway through.</span></div>
 </section>
 </div>
@@ -1331,14 +1386,13 @@ Content-Type: application/json
 </section>
 <div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 2 of 2</span><span class="rq-step-t">Read the bins that did not balance</span></div>
-<div class="rq-step-body"><div class="rq-cases rq2" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
+<div class="rq-step-body"><div class="rq-cases rq3" role="group" aria-label="Recorded cases">
+<input type="radio" class="rq-pick" name="rq3" id="rq3-0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">with the token</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
 Authorization: Bearer <span class="rq-slot" data-rq-slot="session_token" data-rq-quote="none">&lsaquo;session_token&rsaquo;</span>
-Accept: application/json</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
   -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="session_token" data-rq-quote="shell">&lsaquo;session_token&rsaquo;</span>&#39; \
   -H &#39;Accept: application/json&#39; \
   &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;<span class="rq-pipe" hidden> \
@@ -1355,13 +1409,12 @@ Accept: application/json</pre></div>
 </pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq2" id="rq2-1">
+<input type="radio" class="rq-pick" name="rq3" id="rq3-1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">once the token has expired</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
 Authorization: Bearer <span class="rq-slot" data-rq-slot="session_token" data-rq-quote="none">&lsaquo;session_token&rsaquo;</span>
-Accept: application/json</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
+Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X GET \
   -H &#39;Authorization: Bearer <span class="rq-slot" data-rq-slot="session_token" data-rq-quote="shell">&lsaquo;session_token&rsaquo;</span>&#39; \
   -H &#39;Accept: application/json&#39; \
   &#39;https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="shell">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance&#39;<span class="rq-pipe" hidden> \
@@ -1369,11 +1422,13 @@ Accept: application/json</pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status warning">401 Unauthorized</span></div>
-<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{ &#34;error&#34;: &#34;token_expired&#34;, &#34;message&#34;: &#34;Start a new session.&#34; }
-</pre></div>
+<dl class="rq-hdrs"><dt>content-type</dt><dd>application/json</dd></dl><pre class="rq-resp">{
+  &#34;error&#34;: &#34;token_expired&#34;,
+  &#34;message&#34;: &#34;Start a new session.&#34;
+}</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq2-0"><span class="rq-dot success"></span>with the token</label><label for="rq2-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
+<div class="rq-tabs"><label for="rq3-0"><span class="rq-dot success"></span>with the token</label><label for="rq3-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
 </div>
 </div>
 </section>
@@ -1557,9 +1612,11 @@ Accept: application/json</pre></div>
 		var pane = element("div", "rq-pane");
 		var header = element("div", "rq-pane-hd");
 		header.appendChild(element("span", null, "What you got"));
-		var status = element("span", "rq-status " + toneOf(parsed.status));
-		status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
-		header.appendChild(status);
+		if (parsed.status || !host.closest("[data-rq-command]")) {
+			var status = element("span", "rq-status " + toneOf(parsed.status));
+			status.textContent = parsed.status ? (parsed.status + " " + parsed.reason).trim() : parsed.reason;
+			header.appendChild(status);
+		}
 		pane.appendChild(header);
 		if (parsed.headers.length) {
 			var list = element("dl", "rq-hdrs");
@@ -1700,7 +1757,7 @@ Accept: application/json</pre></div>
 			if (copy) {
 				var command = copy.closest(".rq-pane").querySelector(".rq-cmd");
 				var withPipe = copy.classList.contains("rq-catch");
-				command.querySelector(".rq-pipe").hidden = !withPipe;
+				command.querySelectorAll(".rq-pipe").forEach(function (pipe) { pipe.hidden = !withPipe; });
 				copyCommand(copy, command);
 				return;
 			}

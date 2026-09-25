@@ -222,27 +222,31 @@
 </div>
 {% endmacro %}
 
+{% macro verbatim_command(command) %}{% set grouped = "\n" in command %}<pre class="rq-cmd">{% if grouped %}<span class="rq-pipe" hidden>{ </span>{% endif %}{{ variable_slots(command) }}<span class="rq-pipe" hidden>{% if grouped %}{{ "\n}" }}{% endif %} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endmacro %}
+
 {% macro request_cases(core, group) %}
 <div class="rq-cases {{ group }}"{% if core.cases | length > 1 %} role="group" aria-label="Recorded cases"{% endif %}>
 {% for case in core.cases %}
 <input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}-{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
-<section class="rq-case" data-rq-case="{{ loop.index0 }}">
+<section class="rq-case" data-rq-case="{{ loop.index0 }}"{% if core.command is not none %} data-rq-command{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the response lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">{{ variable_slots(command_for(core, case), "shell") }}<span class="rq-pipe" hidden> \
-  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
-<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
+{% set runs_command = core.command is not none %}
+{% set command = command_for(core, case) %}
+{% if not runs_command %}<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>{% endif %}
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div>{% if runs_command %}{{ verbatim_command(command) }}{% else %}<pre class="rq-cmd">{{ variable_slots(command, "shell") }}<span class="rq-pipe" hidden> \
+  | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endif %}{% if core.command_note %}<p class="rq-cnote">{{ core.command_note | richtext }}</p>{% endif %}</div>
+<div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="{% if runs_command %}Run the command, then paste its output here.{% else %}Run the command, then paste its whole output here. Include the headers if you kept -i.{% endif %}"></textarea></div></div>
 <div class="rq-live" hidden></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded response</span><span class="rq-status {{ status_tone(case.response) }}">{{ status_line(case.response) }}</span></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>{% if runs_command %}Recorded output{% else %}Recorded response{% endif %}</span>{% if not runs_command or case.response.status is not none %}<span class="rq-status {{ case_tone(case) }}">{{ status_line(case.response) }}</span>{% endif %}</div>
 {% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
-<pre class="rq-resp">{{ case.response.body }}</pre></div>
+<pre class="rq-resp">{{ recorded_body(case.response.body) }}</pre></div>
 {% if case.verdict %}
-<div class="rq-verdict {{ status_tone(case.response) }}"><span class="rq-vlbl">Verdict</span><span>{{ case.verdict | richtext }}</span></div>
+<div class="rq-verdict {{ case_tone(case) }}"><span class="rq-vlbl">Verdict</span><span>{{ case.verdict | richtext }}</span></div>
 {% endif %}
 </section>
 {% endfor %}
 {% if core.cases | length > 1 %}
-<div class="rq-tabs">{% for case in core.cases %}<label for="{{ group }}-{{ loop.index0 }}"><span class="rq-dot {{ status_tone(case.response) }}"></span>{{ case.label }}</label>{% endfor %}</div>
+<div class="rq-tabs">{% for case in core.cases %}<label for="{{ group }}-{{ loop.index0 }}"><span class="rq-dot {{ case_tone(case) }}"></span>{{ case.label }}</label>{% endfor %}</div>
 {% endif %}
 </div>
 {% endmacro %}
