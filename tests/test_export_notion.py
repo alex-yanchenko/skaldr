@@ -75,7 +75,8 @@ def test_rich_text_parses_into_the_runs_the_html_renders() -> None:
     )
 
     runs = parse_rich(
-        "a **bold `x`** and ~~old **new**~~ see [the method](#method), [docs](https://example.com/d) [^sop] {{owner}}",
+        "a **bold `x`** and ~~old **new**~~ see [the method](#method), "
+        "[docs](https://example.com/d) [^sop] {{owner}}",
         context,
     )
 
@@ -183,11 +184,13 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
 
     text = _notion([make_command_request(cases=cases)])
 
+    lines = text.splitlines()
+    tab_lines = [line for line in lines if line.startswith("\t<tab")]
     assert text.count("<tabs>") == 1
-    assert ['\t<tab icon="⚠️">', "\t\tfinding"] == text.splitlines()[text.splitlines().index("<tabs>") + 1 :][
-        :2
+    assert [(line, lines[lines.index(line) + 1]) for line in tab_lines] == [
+        ('\t<tab icon="⚠️">', "\t\tfinding"),
+        ('\t<tab icon="✅">', "\t\tcontrol"),
     ]
-    assert '\t<tab icon="✅">\n\t\tcontrol' in text
 
 
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:
@@ -217,9 +220,17 @@ def test_a_grid_becomes_columns_and_a_grid_inside_a_cell_stacks() -> None:
         "cells": [{"span": 2, "blocks": [{"type": "text", "body": "a"}]}, {"span": 4, "blocks": [inner]}],
     }
 
-    assert _notion([grid]) == (
-        '<columns>\n\t<column ratio="33">\n\t\ta\n\t</column>\n\t<column ratio="67">\n\t\tb\n\t\tc\n\t</column>\n</columns>\n'
-    )
+    assert _notion([grid]).splitlines() == [
+        "<columns>",
+        '\t<column ratio="33">',
+        "\t\ta",
+        "\t</column>",
+        '\t<column ratio="67">',
+        "\t\tb",
+        "\t\tc",
+        "\t</column>",
+        "</columns>",
+    ]
 
 
 def _sections(count: int, body: str) -> list[dict[str, Any]]:
