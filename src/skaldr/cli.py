@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Literal
 
 from skaldr.errors import ReportError
+from skaldr.export import EXPORT_TARGETS, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -147,6 +148,32 @@ def main(argv: list[str] | None = None) -> int:
         "screen.",
     )
     parser.add_argument(
+        "--export",
+        choices=EXPORT_TARGETS,
+        help="write the document for another service instead of HTML: `notion` writes Notion-flavored "
+        "Markdown plus publish.json, the ordered Notion MCP calls that publish it. skaldr never calls "
+        "the service itself.",
+    )
+    parser.add_argument(
+        "--export-dir",
+        metavar="DIR",
+        help="where --export writes (default: out/<data-stem>.<target>/)",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        metavar="N",
+        help="with --export notion: split the page into files of at most N characters, each starting at "
+        "a top-level heading, so each fits one MCP call. A single section longer than N stays whole.",
+    )
+    parser.add_argument(
+        "--targets",
+        metavar="FILE",
+        help="with --export: a JSON file naming where the document publishes, such as "
+        '{"notion": {"page_id": "…"}}. With a page id the plan replaces that page; without one it '
+        "creates a page and says where to record its id.",
+    )
+    parser.add_argument(
         "--write-schema",
         metavar="PATH",
         help="write the JSON Schema for content files to PATH and exit",
@@ -231,6 +258,18 @@ def main(argv: list[str] | None = None) -> int:
             "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed "
             "to validate the whole set"
         )
+    if args.export and (args.out or args.pdf or args.embed or args.watch or args.emit_json):
+        parser.error(
+            "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
+        )
+    if args.export and (args.live is not None or args.if_stale):
+        parser.error("--live and --if-stale shape an HTML render; --export writes none")
+    if not args.export and (args.export_dir or args.chunk is not None or args.targets):
+        parser.error("--export-dir, --chunk and --targets only apply with --export")
+    if args.chunk is not None and args.chunk < 1:
+        parser.error("--chunk takes a positive character count")
+    if args.check and args.export and len(args.data) > 1:
+        parser.error("--export writes one document: pass a single content file, or drop --export")
     if args.check and not (args.out or args.pdf or args.embed) and (args.live is not None or args.if_stale):
         parser.error(
             "--live and --if-stale shape a render; --check alone writes nothing, so add "
@@ -241,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.data:
             parser.error("--check needs at least one content file")
         failed = _check_files(args.data, strict=args.strict)
-        if failed or not (args.out or args.pdf or args.embed):
+        if failed or not (args.out or args.pdf or args.embed or args.export):
             return failed
 
     if not args.data:
@@ -272,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
+    if args.export:
+        return _export(data_path, args.export, args.export_dir, args.chunk, args.targets)
     written: list[Path] = []
     try:
         report = load_report(data_path)
@@ -383,6 +424,25 @@ def _extract_source(target: str) -> int:
         print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
         return 1
     print(source, end="")
+    return 0
+
+
+def _export(
+    data_path: Path, target: str, export_dir: str | None, chunk: int | None, targets: str | None
+) -> int:
+    out_dir = Path(export_dir).resolve() if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
+    try:
+        report = load_report(data_path)
+        result = export_notion(
+            report, out_dir, chunk=chunk, targets_file=Path(targets).resolve() if targets else None
+        )
+    except (ReportError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for heading in result.oversized_sections:
+        print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
+    for path in result.files:
+        print(f"OK  {path}")
     return 0
 
 

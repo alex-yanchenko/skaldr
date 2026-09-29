@@ -502,6 +502,16 @@ blocks:
               Fifteen minutes after step 1. Worth recording beside the success, because a recount that
               runs long hits this rather than a data problem.
 
+  - type: panel
+    title: "Before the next count"
+    blocks:
+      - type: list
+        style: check
+        items:
+          - { text: "Confirm the `bin > 12` rule with the site lead", checked: true }
+          - "Re-label the 9-digit bins in aisle C"
+          - "Book the vendor call for the short shipment"
+
   - type: heading
     text: "Sources"
   - type: text

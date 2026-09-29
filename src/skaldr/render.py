@@ -29,19 +29,19 @@ from skaldr.models import (
     unresolvable_request_variables,
 )
 
-_CODE_SPAN = re.compile(r"`([^`]+)`")
-_FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
-_BOLD = re.compile(r"\*\*([^*]+)\*\*")
-_STRIKE = re.compile(r"~~([^~]+)~~")
-_ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
+CODE_SPAN_PATTERN = re.compile(r"`([^`]+)`")
+FOOTNOTE_PATTERN = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
+LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
+STRIKE_PATTERN = re.compile(r"~~([^~]+)~~")
+ITALIC_PATTERN = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
 # `{{ … }}` is skaldr's reserved fill-me-later syntax, so match ANY such token and validate the name in
 # the handler — a `{{…}}` that isn't a clean placeholder is a hard build error, never silently emitted as
 # prose. The capture is `[^{}]` (a name never contains a brace): that bounds the scan so it stays linear
 # on pathological input (many unclosed `{{`) and can't cross into a neighbouring token. A literal `{{`
 # goes in a `code` span (stashed before this runs). A placeholder name is letters, digits, `_` or `-`.
-_PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
-_PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_-]+")
+PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
+PLACEHOLDER_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def render_richtext(
@@ -71,7 +71,7 @@ def render_richtext(
         stash.append(html)
         return f"\x00{len(stash) - 1}\x00"
 
-    result = _CODE_SPAN.sub(lambda match: _stash(f"<code>{match.group(1)}</code>"), escaped)
+    result = CODE_SPAN_PATTERN.sub(lambda match: _stash(f"<code>{match.group(1)}</code>"), escaped)
 
     def _footnote(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -83,7 +83,7 @@ def render_richtext(
         seen.add(key)
         return _stash(f'<sup class="fn"><a{anchor} href="#ref-{key}">[{ref_numbers[key]}]</a></sup>')
 
-    result = _FOOTNOTE.sub(_footnote, result)
+    result = FOOTNOTE_PATTERN.sub(_footnote, result)
 
     def _link(match: re.Match[str]) -> str:
         label, url = match.group(1), match.group(2)
@@ -103,7 +103,7 @@ def render_richtext(
             return _stash(f'<a href="{url}">{label}</a>')
         return match.group(0)
 
-    result = _LINK.sub(_link, result)
+    result = LINK_PATTERN.sub(_link, result)
 
     def _placeholder(match: re.Match[str]) -> str:
         # A `{{name}}` fill-me-later blank: always renders as a visible chip so it can't be shipped
@@ -118,7 +118,7 @@ def render_richtext(
                 "invalid placeholder: a {{…}} blank is a bare name (letters, digits, '_' or '-'), so it "
                 "can't contain a link, `code` span, or [^citation]"
             )
-        if not _PLACEHOLDER_NAME.fullmatch(name):
+        if not PLACEHOLDER_NAME_PATTERN.fullmatch(name):
             raise ReportError(
                 "invalid placeholder '{{" + name + "}}': a placeholder name is letters, digits, '_' or "
                 "'-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)"
@@ -127,10 +127,10 @@ def render_richtext(
             placeholders.add(name)
         return _stash(f'<span class="placeholder">{name}</span>')
 
-    result = _PLACEHOLDER.sub(_placeholder, result)
-    result = _BOLD.sub(r"<strong>\1</strong>", result)
-    result = _STRIKE.sub(r"<del>\1</del>", result)
-    result = _ITALIC.sub(r"<em>\1</em>", result)
+    result = PLACEHOLDER_PATTERN.sub(_placeholder, result)
+    result = BOLD_PATTERN.sub(r"<strong>\1</strong>", result)
+    result = STRIKE_PATTERN.sub(r"<del>\1</del>", result)
+    result = ITALIC_PATTERN.sub(r"<em>\1</em>", result)
     # A stashed link can contain a stashed code span (`[`code`](url)`), so a single pass would
     # leave the inner placeholder unexpanded — resolve repeatedly until no markers remain.
     while "\x00" in result:
