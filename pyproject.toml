@@ -87,3 +87,4 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["error"]

@@ -1,9 +1,11 @@
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 
 import keyring
 import pytest
 
+from skaldr.auth.notion import CALLBACK_THREAD_PREFIX
 from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
 from tests.factories.auth_factory import InMemoryKeyring
 
@@ -19,6 +21,15 @@ def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
     keyring.set_keyring(in_memory)
     yield in_memory
     keyring.set_keyring(previous)
+
+
+@pytest.fixture(autouse=True)
+def no_callback_server_outlives_its_test() -> Iterator[None]:
+    yield
+    serving = [thread for thread in threading.enumerate() if thread.name.startswith(CALLBACK_THREAD_PREFIX)]
+    for thread in serving:
+        thread.join(timeout=2)
+    assert [thread.name for thread in serving if thread.is_alive()] == []
 
 
 @pytest.fixture(autouse=True)

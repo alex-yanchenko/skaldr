@@ -178,15 +178,15 @@ def basic_auth_header(user: str, password: str) -> str:
     return "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
 
 
-def _ipv6_loopback_available() -> bool:
+def _free_on_ipv6_loopback(port: int) -> bool:
     try:
-        with socket.create_server(("::1", 0), family=socket.AF_INET6):
+        with socket.create_server(("::1", port), family=socket.AF_INET6):
             return True
     except OSError:
         return False
 
 
-IPV6_LOOPBACK = _ipv6_loopback_available()
+IPV6_LOOPBACK = _free_on_ipv6_loopback(0)
 needs_ipv6_loopback = pytest.mark.skipif(not IPV6_LOOPBACK, reason="this machine has no IPv6 loopback")
 
 
@@ -197,14 +197,6 @@ def free_port() -> int:
             if not IPV6_LOOPBACK or _free_on_ipv6_loopback(port):
                 return port
     raise OSError("no port is free on both loopback addresses")
-
-
-def _free_on_ipv6_loopback(port: int) -> bool:
-    try:
-        with socket.create_server(("::1", port), family=socket.AF_INET6):
-            return True
-    except OSError:
-        return False
 
 
 def make_notion_credentials(**overrides: str | None) -> NotionCredentials:

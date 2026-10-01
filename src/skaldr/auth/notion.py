@@ -4,8 +4,10 @@ import secrets
 import socket
 import threading
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from types import TracebackType
 from urllib.parse import parse_qs, parse_qsl, urlsplit
 
@@ -25,7 +27,11 @@ DEFAULT_CALLBACK_PORT = 8765
 SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
+CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
+
 _REDIRECT_HOST = "localhost"
+_IPV4_LOOPBACK = "127.0.0.1"
+_IPV6_LOOPBACK = "::1"
 _NO_IPV6_LOOPBACK = frozenset({errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT})
 _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
@@ -140,6 +146,11 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
     try:
         return _NotionToken.model_validate(request())
     except AuthlibBaseError as exc:
+        if exc.error == "invalid_client":
+            raise AuthError(
+                "Notion refused the client ID or secret (invalid_client); copy both from the connection "
+                f"page at {INTEGRATIONS_PAGE} again"
+            ) from exc
         detail = f" ({exc.description})" if exc.description else ""
         raise AuthError(f"Notion refused the sign-in: {exc.error}{detail}") from exc
     except httpx2.HTTPError as exc:
@@ -163,7 +174,18 @@ def _refuse_a_denied_consent(query: str) -> None:
         raise AuthError(f"Notion did not grant access: {error[0]}")
 
 
-class _IPv6HTTPServer(HTTPServer):
+class _LoopbackServer(ThreadingHTTPServer):
+    daemon_threads = True
+    block_on_close = False
+
+    @override
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        self.server_name = _IPV4_LOOPBACK if self.address_family == socket.AF_INET else _IPV6_LOOPBACK
+        self.server_port = self.socket.getsockname()[1]
+
+
+class _IPv6LoopbackServer(_LoopbackServer):
     address_family = socket.AF_INET6
 
 
@@ -172,21 +194,29 @@ class _CallbackListener:
         self._accepted: list[str] = []
         self._answered = threading.Event()
         handler = _callback_handler_class(state, self._accepted, self._answered)
-        ipv4 = _listen(HTTPServer, "127.0.0.1", port, handler)
-        self._servers = [ipv4]
-        try:
-            ipv6 = _listen_on_ipv6_loopback(ipv4.server_port, handler)
-        except AuthError:
-            ipv4.server_close()
-            raise
-        if ipv6 is not None:
-            self._servers.append(ipv6)
-        for server in self._servers:
-            threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True).start()
+        with ExitStack() as cleanup:
+            ipv4 = _bind_ipv4_loopback(port, handler)
+            cleanup.callback(ipv4.server_close)
+            servers = [ipv4]
+            ipv6 = _bind_ipv6_loopback(ipv4.server_port, handler)
+            if ipv6 is not None:
+                cleanup.callback(ipv6.server_close)
+                servers.append(ipv6)
+            for server in servers:
+                family = "ipv4" if server is ipv4 else "ipv6"
+                threading.Thread(
+                    target=server.serve_forever,
+                    kwargs={"poll_interval": 0.1},
+                    name=f"{CALLBACK_THREAD_PREFIX}{family}",
+                    daemon=True,
+                ).start()
+                cleanup.callback(server.shutdown)
+            self._port = ipv4.server_port
+            self._cleanup = cleanup.pop_all()
 
     @property
     def port(self) -> int:
-        return self._servers[0].server_port
+        return self._port
 
     def __enter__(self) -> Self:
         return self
@@ -197,9 +227,7 @@ class _CallbackListener:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        for server in self._servers:
-            server.shutdown()
-            server.server_close()
+        self._cleanup.close()
 
     def wait_for_callback(self, timeout_seconds: float) -> str:
         if not self._answered.wait(timeout_seconds):
@@ -210,26 +238,27 @@ class _CallbackListener:
         return self._accepted[0]
 
 
-def _listen(
-    server_class: type[HTTPServer], address: str, port: int, handler: type[BaseHTTPRequestHandler]
-) -> HTTPServer:
+def _bind_ipv4_loopback(port: int, handler: type[BaseHTTPRequestHandler]) -> _LoopbackServer:
     try:
-        return server_class((address, port), handler)
+        return _LoopbackServer((_IPV4_LOOPBACK, port), handler)
     except OSError as exc:
-        shown = f"[{address}]" if ":" in address else address
-        raise AuthError(
-            f"Cannot listen on {shown}:{port} ({exc.strerror or exc}); free the port, or register a "
-            "redirect URI with another port and pass it with --port"
-        ) from exc
+        raise _cannot_listen(_IPV4_LOOPBACK, port, exc) from exc
 
 
-def _listen_on_ipv6_loopback(port: int, handler: type[BaseHTTPRequestHandler]) -> HTTPServer | None:
+def _bind_ipv6_loopback(port: int, handler: type[BaseHTTPRequestHandler]) -> _LoopbackServer | None:
     try:
-        return _listen(_IPv6HTTPServer, "::1", port, handler)
-    except AuthError as exc:
-        if isinstance(exc.__cause__, OSError) and exc.__cause__.errno in _NO_IPV6_LOOPBACK:
+        return _IPv6LoopbackServer((_IPV6_LOOPBACK, port), handler)
+    except OSError as exc:
+        if exc.errno in _NO_IPV6_LOOPBACK:
             return None
-        raise
+        raise _cannot_listen(f"[{_IPV6_LOOPBACK}]", port, exc) from exc
+
+
+def _cannot_listen(address: str, port: int, exc: OSError) -> AuthError:
+    return AuthError(
+        f"Cannot listen on {address}:{port} ({exc.strerror or exc}); free the port, or register a "
+        "redirect URI with another port and pass it with --port"
+    )
 
 
 def _answers_this_sign_in(query: str, state: str) -> bool:
@@ -246,6 +275,8 @@ def _answers_this_sign_in(query: str, state: str) -> bool:
 def _callback_handler_class(
     state: str, accepted: list[str], answered: threading.Event
 ) -> type[BaseHTTPRequestHandler]:
+    first_answer = threading.Lock()
+
     class CallbackHandler(BaseHTTPRequestHandler):
         timeout = _IDLE_CONNECTION_TIMEOUT_SECONDS
 
@@ -257,7 +288,7 @@ def _callback_handler_class(
             if not _answers_this_sign_in(url.query, state):
                 self.send_error(HTTPStatus.BAD_REQUEST, "This is not the sign-in skaldr started")
                 return
-            if answered.is_set():
+            if not first_answer.acquire(blocking=False):
                 self.send_error(HTTPStatus.CONFLICT, "skaldr already has this sign-in")
                 return
             accepted.append(url.query)

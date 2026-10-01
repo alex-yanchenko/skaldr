@@ -1,10 +1,14 @@
+import errno
+import os
 import re
 import socket
+import time
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import pytest
 
+from skaldr.auth import notion as notion_module
 from skaldr.auth.notion import revoke_notion_token, sign_in_to_notion
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
@@ -35,14 +39,14 @@ def sign_in(
     *,
     token: tuple[int, object] = (200, TOKEN_RESPONSE),
     transport: httpx2.BaseTransport | None = None,
-    port: int = 0,
+    port: int | None = None,
     timeout_seconds: float = 5,
 ) -> NotionCredentials:
     return sign_in_to_notion(
         "client-id",
         "client-secret",
         open_browser=browser,
-        port=port,
+        port=free_port() if port is None else port,
         transport=transport or fake_api({"/v1/oauth/token": token}, [] if seen is None else seen),
         timeout_seconds=timeout_seconds,
     )
@@ -110,6 +114,51 @@ def test_the_callback_arrives_whichever_loopback_address_localhost_resolves_to(a
     assert browser.finished() == [200]
 
 
+def ipv6_bind_failing_with(code: int) -> type:
+    class FailingIPv6Server:
+        def __init__(self, *_args: object) -> None:
+            raise OSError(code, os.strerror(code))
+
+    return FailingIPv6Server
+
+
+@pytest.mark.parametrize("code", [errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT], ids=["no ::1 address", "no ipv6"])
+def test_a_machine_without_an_ipv6_loopback_listens_on_ipv4_alone(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    monkeypatch.setattr(notion_module, "_IPv6LoopbackServer", ipv6_bind_failing_with(code))
+    browser = FakeBrowser(approving, resolves_localhost_to="127.0.0.1")
+
+    credentials = sign_in(browser)
+
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [200]
+
+
+def test_any_other_ipv6_bind_failure_stops_the_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(notion_module, "_IPv6LoopbackServer", ipv6_bind_failing_with(errno.EACCES))
+
+    with pytest.raises(
+        AuthError, match=r"^Cannot listen on \[::1\]:\d+ \(Permission denied\); free the port"
+    ):
+        sign_in(FakeBrowser(), timeout_seconds=0.2)
+
+
+def test_a_second_matching_callback_is_turned_away() -> None:
+    browser = FakeBrowser(approving, approving)
+
+    def answer_after_both_visits(_request: httpx2.Request) -> httpx2.Response:
+        deadline = time.monotonic() + 5
+        while len(browser.statuses) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return httpx2.Response(200, json=TOKEN_RESPONSE)
+
+    credentials = sign_in(browser, transport=httpx2.MockTransport(answer_after_both_visits))
+
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [200, 409]
+
+
 @pytest.mark.parametrize(
     "visit", [forged, answerless, forged_refusal], ids=["forged state", "no code or error", "forged refusal"]
 )
@@ -139,7 +188,11 @@ def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
 @pytest.mark.parametrize(
     ("answer", "message"),
     [
-        ({"error": "invalid_client"}, "Notion refused the sign-in: invalid_client"),
+        (
+            {"error": "invalid_client"},
+            "Notion refused the client ID or secret (invalid_client); copy both from the connection page "
+            "at https://www.notion.so/profile/integrations again",
+        ),
         (
             {"error": "invalid_grant", "error_description": "code expired"},
             "Notion refused the sign-in: invalid_grant (code expired)",
