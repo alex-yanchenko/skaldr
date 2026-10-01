@@ -11,10 +11,17 @@ from skaldr.richtext import (
     Rich,
     RichContext,
     Styled,
+    VisibleText,
     parse_rich,
+    visible_text,
+    write_runs,
 )
 
-FULL_CONTEXT = RichContext(reference_numbers={"sop": 1}, anchor_ids=frozenset({"method"}))
+FULL_CONTEXT = RichContext(
+    reference_numbers={"sop": 1},
+    reference_urls={"sop": "https://example.com/sop"},
+    anchor_ids=frozenset({"method"}),
+)
 
 
 def test_rich_text_parses_into_runs() -> None:
@@ -34,7 +41,7 @@ def test_rich_text_parses_into_runs() -> None:
         Plain(", "),
         Link((Plain("docs"),), "https://example.com/d"),
         Plain(" "),
-        Citation("sop", 1),
+        Citation("sop", 1, "https://example.com/sop"),
         Plain(" "),
         Placeholder("owner"),
     )
@@ -75,7 +82,7 @@ def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
 def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:
     assert parse_rich("[see `x` [^sop]](https://example.com/a)", FULL_CONTEXT) == (
         Link(
-            (Plain("see "), Code("x"), Plain(" "), Citation("sop", 1)),
+            (Plain("see "), Code("x"), Plain(" "), Citation("sop", 1, "https://example.com/sop")),
             "https://example.com/a",
         ),
     )
@@ -123,3 +130,26 @@ def test_an_asterisk_inside_a_url_or_code_span_is_not_emphasis() -> None:
         Plain(" "),
         Code("*y*"),
     )
+
+
+class _BangMarkingText(VisibleText):
+    def bang_before_link(self) -> str:
+        return "<bang>"
+
+
+def test_a_bang_right_before_a_link_goes_through_the_writer_at_every_depth() -> None:
+    runs = parse_rich("wow![a](https://e.com) and **so![b](https://e.com)** but not! here")
+
+    assert write_runs(runs, _BangMarkingText()) == "wow<bang>a and so<bang>b but not! here"
+
+
+def test_visible_text_reads_every_run_as_a_reader_would() -> None:
+    runs: Rich = (
+        Plain("a "),
+        Link((Code("b"),), "https://e.com"),
+        Citation("k", 2),
+        Placeholder("who"),
+        Styled("bold", (Plain("!"),)),
+    )
+
+    assert visible_text(runs) == "a b[2]who!"

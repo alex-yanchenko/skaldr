@@ -1,6 +1,6 @@
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from typing_extensions import assert_never
@@ -37,6 +37,7 @@ class AnchorLink:
 class Citation:
     key: str
     number: int
+    url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ _STYLE_PASSES: tuple[tuple[re.Pattern[str], StyleName], ...] = (
 @dataclass(frozen=True)
 class RichContext:
     reference_numbers: Mapping[str, int] | None = None
+    reference_urls: Mapping[str, str | None] = field(default_factory=dict[str, "str | None"])
     anchor_ids: frozenset[str] | None = None
 
 
@@ -114,7 +116,7 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
         key = match.group(1)
         if rules.reference_numbers is None or key not in rules.reference_numbers:
             return match.group(0)
-        return stash.set_aside(Citation(key, rules.reference_numbers[key]))
+        return stash.set_aside(Citation(key, rules.reference_numbers[key], rules.reference_urls.get(key)))
 
     def link(match: re.Match[str]) -> str:
         label, url = stash.runs_in(match.group(1)), match.group(2)
@@ -158,6 +160,8 @@ def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
 class RunWriter(Protocol):
     def text(self, text: str, /) -> str: ...
 
+    def bang_before_link(self) -> str: ...
+
     def code(self, text: str, /) -> str: ...
 
     def link(self, label: str, url: str, /) -> str: ...
@@ -192,4 +196,41 @@ def write_run(run: Run, writer: RunWriter) -> str:
 
 
 def write_runs(runs: Rich, writer: RunWriter) -> str:
-    return "".join(write_run(run, writer) for run in runs)
+    out: list[str] = []
+    for index, run in enumerate(runs):
+        following = runs[index + 1] if index + 1 < len(runs) else None
+        if isinstance(run, Plain) and run.text.endswith("!") and isinstance(following, Link):
+            out.append(writer.text(run.text[:-1]) + writer.bang_before_link())
+        else:
+            out.append(write_run(run, writer))
+    return "".join(out)
+
+
+class VisibleText:
+    def text(self, text: str, /) -> str:
+        return text
+
+    def bang_before_link(self) -> str:
+        return "!"
+
+    def code(self, text: str, /) -> str:
+        return text
+
+    def link(self, label: str, _url: str, /) -> str:
+        return label
+
+    def anchor_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def citation(self, run: Citation, /) -> str:
+        return f"[{run.number}]"
+
+    def placeholder(self, name: str, /) -> str:
+        return name
+
+    def styled(self, _style: StyleName, inner: str, /) -> str:
+        return inner
+
+
+def visible_text(runs: Rich) -> str:
+    return write_runs(runs, VisibleText())
