@@ -7,6 +7,7 @@ from typing_extensions import assert_never
 from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
+    bang_cannot_open_an_image,
     code_block_lines,
     escape_block_start,
     indent_lines,
@@ -53,12 +54,9 @@ class _NotionRuns(MarkupRuns):
 
     def text(self, text: str, /) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
-        return "".join(
-            self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces)
+        return bang_cannot_open_an_image(
+            "".join(self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces))
         )
-
-    def bang_before_link(self) -> str:
-        return "\\!"
 
     def code(self, text: str, /) -> str:
         return _escape(text) if "`" in text else f"`{text}`"

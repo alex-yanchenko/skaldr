@@ -107,8 +107,15 @@ def _invalid_placeholder(name: str) -> ReportError:
     )
 
 
+def _anchor_holding_markup(url: str) -> ReportError:
+    return ReportError(
+        f"rich text links to the anchor '{url.split(chr(0), 1)[0]}…', whose target holds a `code` span or "
+        "[^citation]; an anchor link targets a heading or section id"
+    )
+
+
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
-    rules = context or RichContext()
+    rules = context if context is not None else RichContext()
     stash = _Stash()
     staged = _CODE_SPAN.sub(lambda match: stash.set_aside(Code(match.group(1))), text.replace("\x00", ""))
 
@@ -118,19 +125,22 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
             return match.group(0)
         return stash.set_aside(Citation(key, rules.reference_numbers[key], rules.reference_urls.get(key)))
 
+    def anchor(match: re.Match[str], label: Rich, url: str) -> str:
+        if rules.anchor_ids is None:
+            return match.group(0)
+        if "\x00" in url:
+            raise _anchor_holding_markup(url)
+        if url[1:] not in rules.anchor_ids:
+            raise ReportError(
+                f"rich text links to unknown anchor '{url}' — no heading or section has that id"
+            )
+        return stash.set_aside(AnchorLink(label, url[1:]))
+
     def link(match: re.Match[str]) -> str:
         label, url = stash.runs_in(match.group(1)), match.group(2)
-        if "\x00" in url:
-            return match.group(0)
         if url.startswith("#"):
-            if rules.anchor_ids is None:
-                return match.group(0)
-            if url[1:] not in rules.anchor_ids:
-                raise ReportError(
-                    f"rich text links to unknown anchor '{url}' — no heading or section has that id"
-                )
-            return stash.set_aside(AnchorLink(label, url[1:]))
-        if url.startswith(ALLOWED_URL_SCHEMES):
+            return anchor(match, label, url)
+        if "\x00" not in url and url.startswith(ALLOWED_URL_SCHEMES):
             return stash.set_aside(Link(label, url))
         return match.group(0)
 
@@ -159,8 +169,6 @@ def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
 
 class RunWriter(Protocol):
     def text(self, text: str, /) -> str: ...
-
-    def bang_before_link(self) -> str: ...
 
     def code(self, text: str, /) -> str: ...
 
@@ -196,22 +204,12 @@ def write_run(run: Run, writer: RunWriter) -> str:
 
 
 def write_runs(runs: Rich, writer: RunWriter) -> str:
-    out: list[str] = []
-    for index, run in enumerate(runs):
-        following = runs[index + 1] if index + 1 < len(runs) else None
-        if isinstance(run, Plain) and run.text.endswith("!") and isinstance(following, Link):
-            out.append(writer.text(run.text[:-1]) + writer.bang_before_link())
-        else:
-            out.append(write_run(run, writer))
-    return "".join(out)
+    return "".join(write_run(run, writer) for run in runs)
 
 
 class VisibleText:
     def text(self, text: str, /) -> str:
         return text
-
-    def bang_before_link(self) -> str:
-        return "!"
 
     def code(self, text: str, /) -> str:
         return text

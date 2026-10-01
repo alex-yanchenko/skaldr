@@ -1,7 +1,7 @@
 from pathlib import PurePosixPath
 
 from skaldr import models
-from skaldr.export.inline import bold, italic, paragraphs, plain
+from skaldr.export.inline import bold, italic, one_line, paragraphs, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced
 from skaldr.export.tree import (
     Callout,
@@ -72,7 +72,7 @@ def code_language(label: str | None) -> str:
 
 
 def lower_code(block: models.Code) -> list[Node]:
-    label: list[Node] = [Paragraph((Code(block.label),))] if block.label else []
+    label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
     language = "diff" if block.mode == "diff" else code_language(block.label)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
@@ -82,9 +82,8 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
     return [Quote(lines, plain(block.cite) if block.cite else ())]
 
 
-def lower_image(block: models.Image, lowering: Lowering) -> list[Node]:
-    caption = lowering.rich(block.caption) if block.caption else plain(block.alt)
-    return [Paragraph(italic(plain("Image: ") + caption), "muted")]
+def lower_image(block: models.Image) -> list[Node]:
+    return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
 
 
 def _reference_entry(item: models.ReferenceItem, lowering: Lowering) -> ListEntry:

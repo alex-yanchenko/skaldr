@@ -56,6 +56,33 @@ def test_a_heading_with_a_line_break_stays_one_heading() -> None:
     )
 
 
+def test_a_heading_sub_is_a_muted_italic_line_under_it() -> None:
+    assert lowered([{"type": "heading", "text": "Count", "sub": "by **aisle**"}]) == (
+        Heading(2, (Plain("Count"),), "count"),
+        Paragraph((Styled("italic", (Plain("by "), Styled("bold", (Plain("aisle"),)))),), "muted"),
+    )
+
+
+def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -> None:
+    section = {
+        "type": "section",
+        "title": "Open",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "text": "Deep", "level": 3}],
+    }
+
+    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
+def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
+    blocks = [{"type": "text", "body": "aside", "muted": True}]
+
+    assert lowered(blocks, meta={"title": "T", "source": "SOP v2", "date": "1 Oct"}) == (
+        Paragraph((Plain("aside"),), "muted"),
+        Paragraph((Plain("SOP v2 · 1 Oct"),), "muted"),
+    )
+
+
 def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     blocks = [
         {"type": "heading", "text": "Overview"},
@@ -73,7 +100,7 @@ def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     )
 
 
-def test_references_are_a_numbered_list_with_their_source_links() -> None:
+def test_references_are_bullets_led_by_their_number_with_a_source_link() -> None:
     references = {
         "type": "references",
         "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
@@ -98,24 +125,51 @@ def test_references_are_a_numbered_list_with_their_source_links() -> None:
     )
 
 
-def test_an_embedded_image_becomes_its_caption() -> None:
-    image = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", "caption": "Fig 1"}
+@pytest.mark.parametrize(
+    ("image", "caption"),
+    [
+        pytest.param(
+            {"caption": "Fig **1** [^x]"}, "Fig **1** [^x]", id="caption-stays-literal-like-the-html"
+        ),
+        pytest.param({}, "chart", id="no-caption-falls-back-to-alt"),
+    ],
+)
+def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: str) -> None:
+    block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
 
-    assert lowered([image]) == (Paragraph(italic((Plain("Image: "), Plain("Fig 1"))), "muted"),)
+    assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
 
 
 @pytest.mark.parametrize(
-    ("code", "language"),
+    ("code", "nodes"),
     [
-        pytest.param({"label": "q.sql", "content": "select 1\n"}, "sql", id="suffix"),
-        pytest.param({"label": "fix.ts", "content": "+a", "mode": "diff"}, "diff", id="diff"),
-        pytest.param({"content": "plain"}, "", id="no-label"),
+        pytest.param(
+            {"label": "q.sql", "content": "select 1\n\n"},
+            (Paragraph((Code("q.sql"),)), CodeBlock("select 1", "sql")),
+            id="suffix",
+        ),
+        pytest.param(
+            {"label": "fix.ts", "content": "+a", "mode": "diff"},
+            (Paragraph((Code("fix.ts"),)), CodeBlock("+a", "diff")),
+            id="diff",
+        ),
+        pytest.param(
+            {"label": "notes.unknown", "content": "x"},
+            (Paragraph((Code("notes.unknown"),)), CodeBlock("x", "")),
+            id="unmapped-suffix",
+        ),
+        pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
+        pytest.param(
+            {"label": "run.sh\n# injected", "content": "x"},
+            (Paragraph((Code("run.sh # injected"),)), CodeBlock("x", "")),
+            id="label-stays-on-one-line",
+        ),
     ],
 )
-def test_a_code_block_language_comes_from_its_label_or_mode(code: dict[str, Any], language: str) -> None:
-    label: tuple[Node, ...] = (Paragraph((Code(code["label"]),)),) if "label" in code else ()
-
-    assert lowered([{"type": "code", **code}]) == (*label, CodeBlock(code["content"].rstrip("\n"), language))
+def test_a_code_block_language_comes_from_its_label_or_mode(
+    code: dict[str, Any], nodes: tuple[Node, ...]
+) -> None:
+    assert lowered([{"type": "code", **code}]) == nodes
 
 
 def test_a_quote_and_a_note_keep_their_text() -> None:
@@ -127,6 +181,15 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
     assert lowered(blocks) == (
         Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
+    )
+
+
+def test_an_untitled_callout_and_note_are_their_body_alone() -> None:
+    blocks = [{"type": "callout", "tone": "warning", "body": "careful"}, {"type": "note", "body": "aside"}]
+
+    assert lowered(blocks) == (
+        Callout("warning", (Paragraph((Plain("careful"),)),)),
+        Callout("neutral", (Paragraph((Plain("aside"),)),)),
     )
 
 
