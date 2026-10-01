@@ -72,21 +72,22 @@ There are no styling flags — everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra, which the Homebrew formula does not include yet:
+`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra, which the Homebrew formula does not include:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
 skaldr auth notion                  # OAuth in your browser, through your own Notion connection
 skaldr auth jira                    # your Atlassian account email and an API token
 skaldr auth status                  # who each service is signed in as, and where the credentials live
-skaldr auth logout notion           # revoke the Notion token and remove it; `logout jira` removes the Jira token
+skaldr auth logout notion           # revoke the Notion token and remove it (removed even if Notion refuses)
+skaldr auth logout jira             # remove the Jira token; revoke it on Atlassian's API tokens page
 ```
 
-**Notion.** A public tool cannot ship a client secret, so you register your own connection once. At https://www.notion.so/profile/integrations create a new connection, choose the public (OAuth) type, and add the redirect URI `http://127.0.0.1:8765/callback`. `skaldr auth notion` asks for its client ID and client secret (the secret is read without echo), or takes them from `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`. It then opens Notion's consent screen, where you choose the pages skaldr may use, and catches the redirect on `127.0.0.1:8765`. Any other request to that address is turned away. If the port is taken, register a different one and pass `--port`. `logout notion` removes the stored token even when Notion cannot revoke it, and says so.
+**Notion.** A public tool cannot ship a client secret, so you register your own connection once. At https://www.notion.so/profile/integrations create a new connection, choose the public (OAuth) type, and add the redirect URI `http://127.0.0.1:8765/callback`. `skaldr auth notion` asks for its client ID and client secret (the secret is read without echo), or takes them from `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`. It then opens Notion's consent screen, where you choose the pages skaldr may use, and catches the redirect on `127.0.0.1:8765`. Any other request to that address is turned away. If the port is taken, register a different one and pass `--port`.
 
 **Jira.** Create an API token at https://id.atlassian.com/manage-profile/security/api-tokens. `skaldr auth jira` asks for your site (`https://<site>.atlassian.net`), your account email and the token, and checks them against Jira's `/rest/api/3/myself` before saving anything. Use a token created without scopes: a scoped token only works against `api.atlassian.com`. Atlassian tokens expire after at most a year, so when Jira starts refusing it, create a new one and sign in again.
 
-Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or the Secret Service on Linux) and never to a file, a log or a command-line argument. For CI or a secrets manager, environment variables take precedence over the keychain: `NOTION_ACCESS_TOKEN` (with optional `NOTION_REFRESH_TOKEN`, `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`), or `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` together.
+Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or the Secret Service on Linux) and never to a file, a log or a command-line argument. For CI or a secrets manager, environment variables take precedence over the keychain: `NOTION_ACCESS_TOKEN` (with optional `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`), or `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` together.
 
 ## The content file
 

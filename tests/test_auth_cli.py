@@ -1,9 +1,12 @@
+import builtins
 import re
 import socket
 import sys
-from typing import NoReturn
+from types import ModuleType
+from typing import Any, NoReturn
 
 import httpx2
+import keyring
 import pytest
 
 from skaldr.auth import cli as auth_cli
@@ -14,6 +17,7 @@ from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
     FakeBrowser,
     InMemoryKeyring,
+    LockedKeyring,
     approving,
     fake_api,
     free_port,
@@ -154,16 +158,66 @@ def test_auth_notion_names_a_workspace_notion_left_unnamed(
     notion_client_in_environment(monkeypatch)
     browser = FakeBrowser(approving)
 
-    auth_cli.main(
+    exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
         transport=fake_api({"/v1/oauth/token": (200, {**TOKEN_RESPONSE, "workspace_name": None})}, []),
         open_browser=browser,
     )
 
-    browser.finished()
+    assert (exit_code, browser.finished()) == (0, [200])
     assert capsys.readouterr().out.endswith(
         "Signed in to Notion workspace (unnamed workspace). Saved to the keychain.\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("variable", "typed", "hidden"),
+    [("NOTION_CLIENT_ID", [], ["client-secret"]), ("NOTION_CLIENT_SECRET", ["client-id"], [])],
+    ids=["client id from the environment", "client secret from the environment"],
+)
+def test_auth_notion_prompts_only_for_what_the_environment_lacks(
+    monkeypatch: pytest.MonkeyPatch, variable: str, typed: list[str], hidden: list[str]
+) -> None:
+    monkeypatch.setenv(variable, "client-id" if variable == "NOTION_CLIENT_ID" else "client-secret")
+    answer_prompts(monkeypatch, typed, hidden)
+    browser = FakeBrowser(approving)
+
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())],
+        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
+        open_browser=browser,
+    )
+
+    assert (exit_code, typed, hidden, browser.finished()) == (0, [], [], [200])
+    assert load_notion() == SignIn(SIGNED_IN_NOTION, "keychain")
+
+
+def test_auth_notion_refuses_a_client_secret_with_characters_outside_ascii(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answer_prompts(monkeypatch, ["client-id"], ["secret\N{RIGHT SINGLE QUOTATION MARK}"])
+
+    assert auth_cli.main(["notion"]) == 1
+    assert capsys.readouterr().err == (
+        "error: The Notion OAuth client secret has characters outside ASCII; copy it from Notion again\n"
+    )
+
+
+def test_auth_notion_reports_a_keychain_it_cannot_save_to(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion_client_in_environment(monkeypatch)
+    keyring.set_keyring(LockedKeyring())
+    browser = FakeBrowser(approving)
+
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())],
+        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
+        open_browser=browser,
+    )
+
+    assert (exit_code, browser.finished()) == (1, [200])
+    assert capsys.readouterr().err == "error: The system keychain is unavailable: locked\n"
 
 
 @pytest.mark.parametrize(
@@ -222,7 +276,7 @@ def test_a_cancelled_prompt_ends_without_a_traceback(
     monkeypatch.setattr("builtins.input", interrupt)
 
     assert auth_cli.main(["jira"]) == 1
-    assert capsys.readouterr().err == "\nerror: sign-in cancelled\n"
+    assert capsys.readouterr().err == "\nerror: cancelled\n"
 
 
 def test_status_with_nobody_signed_in(capsys: pytest.CaptureFixture[str]) -> None:
@@ -234,12 +288,12 @@ def test_status_with_nobody_signed_in(capsys: pytest.CaptureFixture[str]) -> Non
 
 def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureFixture[str]) -> None:
     save_notion(make_notion_credentials(workspace_name=None))
-    save_jira(make_jira_credentials())
+    save_jira(make_jira_credentials(display_name=None))
 
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  signed in to workspace (unnamed workspace) (keychain)\n"
-        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as reader@example.com (keychain)\n"
     )
 
 
@@ -258,7 +312,7 @@ def test_status_names_credentials_from_the_environment(
     )
 
 
-def test_status_reports_each_service_even_when_one_is_broken(
+def test_status_reports_jira_even_when_notion_is_broken(
     keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
 ) -> None:
     keychain.entries[("skaldr", "notion")] = "not json"
@@ -268,6 +322,20 @@ def test_status_reports_each_service_even_when_one_is_broken(
     assert capsys.readouterr().out == (
         "notion  error: The keychain entry for notion is unreadable; run `skaldr auth notion` again\n"
         "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+    )
+
+
+def test_status_reports_notion_even_when_jira_is_broken(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_notion(make_notion_credentials())
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+
+    assert auth_cli.main(["status"]) == 1
+    assert capsys.readouterr().out == (
+        "notion  signed in to workspace Example Workspace (keychain)\n"
+        "jira    error: JIRA_SITE, JIRA_EMAIL, JIRA_API_TOKEN go together; "
+        "missing JIRA_SITE, JIRA_API_TOKEN\n"
     )
 
 
@@ -291,7 +359,7 @@ def test_logout_notion_revokes_the_token_and_forgets_it(
             make_notion_credentials(client_id=None).model_dump_json(),
             "The Notion token cannot be revoked without the client ID and secret",
         ),
-        ("not json", "The keychain entry for notion is unreadable; run `skaldr auth notion` again"),
+        ("not json", "the stored Notion entry is unreadable, so its token was not revoked"),
     ],
     ids=["revoke refused", "no client", "unreadable entry"],
 )
@@ -308,6 +376,15 @@ def test_logout_notion_still_forgets_a_token_it_could_not_revoke(
         "Signed out of Notion: removed from the keychain.\n",
         f"warning: {warning}\n",
     )
+
+
+@pytest.mark.parametrize("service", ["notion", "jira"])
+def test_logout_reports_a_locked_keychain_once(service: Service, capsys: pytest.CaptureFixture[str]) -> None:
+    keyring.set_keyring(LockedKeyring())
+
+    assert auth_cli.main(["logout", service]) == 1
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", "error: The system keychain is unavailable: locked\n")
 
 
 def test_logout_jira_forgets_the_token_and_points_at_revoking_it(
@@ -377,3 +454,28 @@ def test_a_missing_skaldr_module_is_a_bug_and_not_a_missing_extra(monkeypatch: p
 
     with pytest.raises(ModuleNotFoundError, match=r"skaldr\.auth\.store"):
         main(["auth", "status"])
+
+
+def test_an_import_failure_that_names_no_module_is_a_bug_and_not_a_missing_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def failing_import(name: str, *args: Any, **kwargs: Any) -> ModuleType:
+        if name == "skaldr.auth.cli":
+            raise ModuleNotFoundError("broken install")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+
+    with pytest.raises(ModuleNotFoundError, match=r"^broken install$"):
+        main(["auth", "status"])
+
+
+def test_skaldr_help_points_at_the_auth_commands(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["--help"])
+
+    assert (
+        "Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`." in capsys.readouterr().out
+    )

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
+import pytest
 from keyring.backend import KeyringBackend
 from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
@@ -23,12 +24,15 @@ class InMemoryKeyring(KeyringBackend):
         super().__init__()
         self.entries: dict[tuple[str, str], str] = {}
 
+    @override
     def get_password(self, service: str, username: str) -> str | None:
         return self.entries.get((service, username))
 
+    @override
     def set_password(self, service: str, username: str, password: str) -> None:
         self.entries[(service, username)] = password
 
+    @override
     def delete_password(self, service: str, username: str) -> None:
         if self.entries.pop((service, username), None) is None:
             raise PasswordDeleteError(username)
@@ -79,6 +83,14 @@ def refusing(state: str) -> str:
     return f"/callback?error=access_denied&state={state}"
 
 
+def refusing_without_state(_state: str) -> str:
+    return "/callback?error=access_denied"
+
+
+def forged_refusal(_state: str) -> str:
+    return "/callback?error=access_denied&state=forged"
+
+
 def forged(_state: str) -> str:
     return "/callback?code=the-code&state=forged"
 
@@ -119,7 +131,8 @@ class FakeBrowser:
     def finished(self) -> list[int]:
         if self._thread is not None:
             self._thread.join(timeout=5)
-        assert self.failures == []
+        if self.failures:
+            pytest.fail(f"the fake browser could not reach the callback server: {self.failures}")
         return self.statuses
 
     @property
@@ -172,6 +185,7 @@ def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
         "refresh_token": "refresh-token",
         "workspace_name": "Example Workspace",
     }
+    _refuse_unknown_fields(overrides, fields)
     return NotionCredentials.model_validate({**fields, **overrides})
 
 
@@ -182,4 +196,11 @@ def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
         "api_token": "api-token",
         "display_name": "Example Reader",
     }
+    _refuse_unknown_fields(overrides, fields)
     return JiraCredentials.model_validate({**fields, **overrides})
+
+
+def _refuse_unknown_fields(overrides: dict[str, str | None], fields: dict[str, str | None]) -> None:
+    unknown = sorted(set(overrides) - set(fields))
+    if unknown:
+        raise TypeError(f"no such credential fields: {unknown}")

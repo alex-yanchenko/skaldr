@@ -7,6 +7,7 @@ from typing import Generic, Literal, TypeVar
 import keyring
 from keyring.errors import KeyringError, PasswordDeleteError
 from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError, field_validator
+from pydantic_core import PydanticCustomError
 
 from skaldr.errors import AuthError
 
@@ -15,27 +16,12 @@ KEYCHAIN_SERVICE = "skaldr"
 Service = Literal["notion", "jira"]
 Source = Literal["keychain", "environment"]
 
-NOTION_ENVIRONMENT = (
-    "NOTION_ACCESS_TOKEN",
-    "NOTION_REFRESH_TOKEN",
-    "NOTION_CLIENT_ID",
-    "NOTION_CLIENT_SECRET",
-)
+NOTION_ENVIRONMENT = ("NOTION_ACCESS_TOKEN", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET")
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
 
 
-def normalise_site(typed: str) -> str:
-    text = typed.strip()
-    refusal = AuthError(
-        f"The Jira site must be an https URL like https://<site>.atlassian.net, not {typed!r}"
-    )
-    try:
-        url = HttpUrl(text if "://" in text else f"https://{text}")
-    except ValidationError as exc:
-        raise refusal from exc
-    if url.scheme != "https" or not url.host:
-        raise refusal
-    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
+class UnreadableEntryError(AuthError):
+    pass
 
 
 class NotionCredentials(BaseModel):
@@ -59,10 +45,10 @@ class JiraCredentials(BaseModel):
     @field_validator("site")
     @classmethod
     def _site_is_an_https_origin(cls, site: str) -> str:
-        try:
-            return normalise_site(site)
-        except AuthError as exc:
-            raise ValueError(str(exc)) from exc
+        origin = _https_origin(site)
+        if origin is None:
+            raise PydanticCustomError("https_origin", "{refusal}", {"refusal": _site_refusal(site)})
+        return origin
 
 
 CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials)
@@ -72,6 +58,22 @@ CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials)
 class SignIn(Generic[CredentialsT]):
     credentials: CredentialsT
     source: Source
+
+
+def normalise_site(typed: str) -> str:
+    origin = _https_origin(typed)
+    if origin is None:
+        raise AuthError(_site_refusal(typed))
+    return origin
+
+
+def jira_credentials(
+    site: str, email: str, api_token: str, display_name: str | None = None
+) -> JiraCredentials:
+    try:
+        return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
+    except ValidationError as exc:
+        raise AuthError(exc.errors(include_input=False)[0]["msg"]) from exc
 
 
 def save_notion(credentials: NotionCredentials) -> None:
@@ -103,7 +105,8 @@ def stored_notion() -> NotionCredentials | None:
 
 
 def notion_client_from_environment() -> tuple[str | None, str | None]:
-    return _environment("NOTION_CLIENT_ID"), _environment("NOTION_CLIENT_SECRET")
+    _, client_id, client_secret = map(_environment, NOTION_ENVIRONMENT)
+    return client_id, client_secret
 
 
 def forget(service: Service) -> bool:
@@ -115,6 +118,21 @@ def forget(service: Service) -> bool:
     return True
 
 
+def _https_origin(typed: str) -> str | None:
+    text = typed.strip()
+    try:
+        url = HttpUrl(text if "://" in text else f"https://{text}")
+    except ValidationError:
+        return None
+    if url.scheme != "https" or not url.host:
+        return None
+    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
+
+
+def _site_refusal(typed: str) -> str:
+    return f"The Jira site must be an https URL like https://<site>.atlassian.net, not {typed!r}"
+
+
 @contextmanager
 def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
     try:
@@ -123,7 +141,7 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
         raise AuthError(f"The system keychain is unavailable: {exc}") from exc
 
 
-def _save(service: Service, credentials: NotionCredentials | JiraCredentials) -> None:
+def _save(service: Service, credentials: BaseModel) -> None:
     with _keychain_errors_as_auth_errors():
         keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
 
@@ -136,7 +154,7 @@ def _load_from_keychain(service: Service, model: type[CredentialsT]) -> Credenti
     try:
         return model.model_validate_json(stored)
     except ValidationError as exc:
-        raise AuthError(
+        raise UnreadableEntryError(
             f"The keychain entry for {service} is unreadable; run `skaldr auth {service}` again"
         ) from exc
 
@@ -146,27 +164,27 @@ def _environment(name: str) -> str | None:
 
 
 def _notion_from_environment() -> NotionCredentials | None:
-    access_token, refresh_token, client_id, client_secret = map(_environment, NOTION_ENVIRONMENT)
+    access_token, client_id, client_secret = map(_environment, NOTION_ENVIRONMENT)
     if access_token is None:
         return None
     return NotionCredentials(
         client_id=client_id,
         client_secret=client_secret,
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token=None,
         workspace_name=None,
     )
 
 
 def _jira_from_environment() -> JiraCredentials | None:
-    site, email, api_token = map(_environment, JIRA_ENVIRONMENT)
-    if site is None and email is None and api_token is None:
+    values = [_environment(name) for name in JIRA_ENVIRONMENT]
+    missing = [name for name, value in zip(JIRA_ENVIRONMENT, values, strict=True) if value is None]
+    if len(missing) == len(JIRA_ENVIRONMENT):
         return None
+    site, email, api_token = values
     if site is None or email is None or api_token is None:
-        missing = [name for name in JIRA_ENVIRONMENT if _environment(name) is None]
         raise AuthError(f"{', '.join(JIRA_ENVIRONMENT)} go together; missing {', '.join(missing)}")
     try:
-        normalised_site = normalise_site(site)
+        return jira_credentials(site, email, api_token)
     except AuthError as exc:
         raise AuthError(f"JIRA_SITE: {exc}") from exc
-    return JiraCredentials(site=normalised_site, email=email, api_token=api_token, display_name=None)

@@ -18,9 +18,11 @@ from tests.factories.auth_factory import (
     fake_api,
     favicon,
     forged,
+    forged_refusal,
     make_notion_credentials,
     refusing,
     refusing_connections,
+    refusing_without_state,
     summarise,
 )
 
@@ -59,6 +61,7 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
         "/v1/oauth/authorize",
     )
     query = parse_qs(authorize.query)
+    assert len(query["state"][0]) >= 43
     assert query == {
         "response_type": ["code"],
         "client_id": ["client-id"],
@@ -93,20 +96,25 @@ def test_stray_requests_are_turned_away_until_the_real_callback_arrives() -> Non
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize("visit", [forged, answerless], ids=["forged state", "no code or error"])
-def test_a_callback_without_the_state_and_an_answer_never_reaches_the_token_endpoint(visit: Visit) -> None:
+@pytest.mark.parametrize(
+    "visit", [forged, answerless, forged_refusal], ids=["forged state", "no code or error", "forged refusal"]
+)
+def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_endpoint(visit: Visit) -> None:
     seen: list[httpx2.Request] = []
     browser = FakeBrowser(visit)
 
-    with pytest.raises(AuthError, match=r"^Timed out after 0\.5 seconds waiting for Notion"):
-        sign_in(browser, seen, timeout_seconds=0.5)
+    with pytest.raises(AuthError, match=r"^Timed out after 2 seconds waiting for Notion"):
+        sign_in(browser, seen, timeout_seconds=2)
 
     assert (browser.finished(), seen) == ([400], [])
 
 
-def test_a_refused_consent_screen_stops_the_sign_in() -> None:
+@pytest.mark.parametrize(
+    "visit", [refusing, refusing_without_state], ids=["with the state", "without a state"]
+)
+def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
     seen: list[httpx2.Request] = []
-    browser = FakeBrowser(refusing)
+    browser = FakeBrowser(visit)
 
     with pytest.raises(AuthError, match=r"^Notion did not grant access: access_denied$"):
         sign_in(browser, seen)
@@ -114,16 +122,53 @@ def test_a_refused_consent_screen_stops_the_sign_in() -> None:
     assert (browser.finished(), seen) == ([200], [])
 
 
-def test_a_rejected_client_secret_names_the_oauth_error() -> None:
-    with pytest.raises(AuthError, match=r"^Notion refused the sign-in: invalid_client$"):
-        sign_in(FakeBrowser(approving), token=(401, {"error": "invalid_client"}))
-
-
-def test_a_token_answer_without_an_access_token_names_the_field_and_not_the_tokens() -> None:
+@pytest.mark.parametrize(
+    ("answer", "message"),
+    [
+        ({"error": "invalid_client"}, "Notion refused the sign-in: invalid_client"),
+        (
+            {"error": "invalid_grant", "error_description": "code expired"},
+            "Notion refused the sign-in: invalid_grant (code expired)",
+        ),
+    ],
+    ids=["error only", "error with a description"],
+)
+def test_a_refused_token_request_names_the_oauth_error(answer: dict[str, str], message: str) -> None:
     with pytest.raises(AuthError) as raised:
-        sign_in(FakeBrowser(approving), token=(200, {"refresh_token": "secret-refresh-value"}))
+        sign_in(FakeBrowser(approving), token=(400, answer))
 
-    assert str(raised.value) == "Notion's token answer is missing or has invalid fields: access_token"
+    assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (429, {"object": "error", "status": 429, "code": "rate_limited"}),
+        (403, b"<html>proxy</html>"),
+        (503, {"error": "temporarily_unavailable"}),
+    ],
+    ids=["rate limited", "a proxy page", "a server error"],
+)
+def test_a_failed_token_request_without_an_oauth_error_names_the_status(status: int, body: object) -> None:
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), token=(status, body))
+
+    assert str(raised.value) == f"Notion answered HTTP {status} for the token request"
+
+
+@pytest.mark.parametrize(
+    ("answer", "fields"),
+    [
+        ({"refresh_token": "secret-refresh-value"}, "access_token"),
+        (["secret-refresh-value"], "(the whole answer)"),
+    ],
+    ids=["no access token", "not an object"],
+)
+def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: object, fields: str) -> None:
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), token=(200, answer))
+
+    assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:
@@ -132,7 +177,7 @@ def test_a_token_answer_that_is_not_json_is_named() -> None:
 
 
 def test_an_unreachable_token_endpoint_is_named() -> None:
-    with pytest.raises(AuthError, match=r"^The request to Notion failed: connection refused$"):
+    with pytest.raises(AuthError, match=r"^Could not reach Notion: connection refused$"):
         sign_in(FakeBrowser(approving), transport=refusing_connections())
 
 
@@ -181,5 +226,5 @@ def test_a_failed_revoke_names_the_status() -> None:
 
 
 def test_an_unreachable_revoke_endpoint_is_named() -> None:
-    with pytest.raises(AuthError, match=r"^The request to Notion failed: connection refused$"):
+    with pytest.raises(AuthError, match=r"^Could not reach Notion: connection refused$"):
         revoke_notion_token(make_notion_credentials(), transport=refusing_connections())

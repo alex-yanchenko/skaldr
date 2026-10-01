@@ -83,7 +83,7 @@ def revoke_notion_token(
         try:
             response = client.revoke_token(f"{_NOTION_API}/v1/oauth/revoke", token=credentials.access_token)
         except httpx2.HTTPError as exc:
-            raise _request_failed(exc) from exc
+            raise _unreachable(exc) from exc
     if response.status_code != HTTPStatus.OK:
         raise AuthError(f"Notion did not revoke the token: HTTP {response.status_code}")
 
@@ -104,7 +104,25 @@ def _oauth_client(
         timeout=HTTP_TIMEOUT_SECONDS,
     )
     client.register_client_auth_method((_BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
+    client.register_compliance_hook("access_token_response", _refuse_a_failed_token_status)
     return client
+
+
+def _refuse_a_failed_token_status(response: httpx2.Response) -> httpx2.Response:
+    failed = response.status_code >= HTTPStatus.BAD_REQUEST
+    if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
+        failed and not _names_an_oauth_error(response)
+    ):
+        raise AuthError(f"Notion answered HTTP {response.status_code} for the token request")
+    return response
+
+
+def _names_an_oauth_error(response: httpx2.Response) -> bool:
+    try:
+        body: object = response.json()
+    except json.JSONDecodeError:
+        return False
+    return isinstance(body, dict) and "error" in body
 
 
 def _basic_auth_with_json_body(
@@ -122,16 +140,18 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
         detail = f" ({exc.description})" if exc.description else ""
         raise AuthError(f"Notion refused the sign-in: {exc.error}{detail}") from exc
     except httpx2.HTTPError as exc:
-        raise _request_failed(exc) from exc
+        raise _unreachable(exc) from exc
     except ValidationError as exc:
         fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
-        raise AuthError(f"Notion's token answer is missing or has invalid fields: {fields}") from exc
-    except ValueError as exc:
+        raise AuthError(
+            f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
+        ) from exc
+    except json.JSONDecodeError as exc:
         raise AuthError("Notion's token answer is not JSON") from exc
 
 
-def _request_failed(exc: httpx2.HTTPError) -> AuthError:
-    return AuthError(f"The request to Notion failed: {exc}")
+def _unreachable(exc: httpx2.HTTPError) -> AuthError:
+    return AuthError(f"Could not reach Notion: {exc}")
 
 
 def _refuse_a_denied_consent(query: str) -> None:
@@ -147,8 +167,8 @@ class _CallbackListener:
             self._server = HTTPServer((_LOOPBACK_HOST, port), _callback_handler_class(state, self._accepted))
         except OSError as exc:
             raise AuthError(
-                f"Cannot listen on {_LOOPBACK_HOST}:{port} ({exc.strerror}); free the port, or register a "
-                "redirect URI with another port and pass it with --port"
+                f"Cannot listen on {_LOOPBACK_HOST}:{port} ({exc.strerror or exc}); free the port, or "
+                "register a redirect URI with another port and pass it with --port"
             ) from exc
 
     @property
@@ -180,11 +200,15 @@ class _CallbackListener:
         return self._accepted[0]
 
 
-def _carries_the_state_and_an_answer(query: str, state: str) -> bool:
+def _answers_this_sign_in(query: str, state: str) -> bool:
     fields = parse_qs(query)
-    received_state = fields.get("state", [""])[0]
-    answered = "code" in fields or "error" in fields
-    return answered and secrets.compare_digest(received_state.encode(), state.encode())
+    received_state = fields.get("state")
+    state_matches = received_state is not None and secrets.compare_digest(
+        received_state[0].encode(), state.encode()
+    )
+    if "code" in fields:
+        return state_matches
+    return "error" in fields and (state_matches or received_state is None)
 
 
 def _callback_handler_class(state: str, accepted: list[str]) -> type[BaseHTTPRequestHandler]:
@@ -196,7 +220,7 @@ def _callback_handler_class(state: str, accepted: list[str]) -> type[BaseHTTPReq
             if url.path != _CALLBACK_PATH:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            if not _carries_the_state_and_an_answer(url.query, state):
+            if not _answers_this_sign_in(url.query, state):
                 self.send_error(HTTPStatus.BAD_REQUEST, "This is not the sign-in skaldr started")
                 return
             accepted.append(url.query)

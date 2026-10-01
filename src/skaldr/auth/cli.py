@@ -20,6 +20,7 @@ from skaldr.auth.store import (
     NotionCredentials,
     Service,
     SignIn,
+    UnreadableEntryError,
     forget,
     load_jira,
     load_notion,
@@ -48,13 +49,15 @@ def main(
             return _print_status()
         elif args.command == "logout" and args.service == "notion":
             _log_out_of_notion(transport)
-        elif args.command == "logout":
+        elif args.command == "logout" and args.service == "jira":
             _log_out_of_jira()
+        else:
+            raise AssertionError(f"skaldr auth has no handler for {args.command!r}")
     except AuthError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     except (EOFError, KeyboardInterrupt):
-        print("\nerror: sign-in cancelled", file=sys.stderr)
+        print("\nerror: cancelled", file=sys.stderr)
         return 1
     return 0
 
@@ -85,12 +88,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _tcp_port(text: str) -> int:
+    refusal = f"{text!r} is not a TCP port (1 to 65535)"
     try:
         port = int(text)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"{text!r} is not a TCP port (1 to 65535)") from exc
+        raise argparse.ArgumentTypeError(refusal) from exc
     if not 1 <= port <= 65535:
-        raise argparse.ArgumentTypeError(f"{text!r} is not a TCP port (1 to 65535)")
+        raise argparse.ArgumentTypeError(refusal)
     return port
 
 
@@ -101,12 +105,16 @@ def _sign_in_to_notion(
         f"Register a public Notion connection once at {INTEGRATIONS_PAGE}, with redirect URI "
         f"{redirect_uri_for(port)}"
     )
-    client_id, client_secret = notion_client_from_environment()
-    client_id = client_id or _required(
-        input("Notion OAuth client ID: "), "A Notion OAuth client ID is required"
+    from_environment_id, from_environment_secret = notion_client_from_environment()
+    client_id = _ascii(
+        from_environment_id
+        or _required(input("Notion OAuth client ID: "), "A Notion OAuth client ID is required"),
+        "client ID",
     )
-    client_secret = client_secret or _required(
-        getpass("Notion OAuth client secret: "), "A Notion OAuth client secret is required"
+    client_secret = _ascii(
+        from_environment_secret
+        or _required(getpass("Notion OAuth client secret: "), "A Notion OAuth client secret is required"),
+        "client secret",
     )
 
     def announce_then_open(url: str) -> None:
@@ -126,26 +134,26 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
     credentials = verify_jira_token(site, email, api_token, transport=transport)
     save_jira(credentials)
-    print(f"Signed in to Jira at {site} as {credentials.display_name}. Saved to the keychain.")
+    print(f"Signed in to Jira at {site} as {_person(credentials)}. Saved to the keychain.")
 
 
 def _print_status() -> int:
-    notion_line, notion_failed = _status_line(lambda: _describe_notion(load_notion()))
-    jira_line, jira_failed = _status_line(lambda: _describe_jira(load_jira()))
-    print(f"notion  {notion_line}")
-    print(f"jira    {jira_line}")
-    return 1 if notion_failed or jira_failed else 0
-
-
-def _status_line(describe: Callable[[], str]) -> tuple[str, bool]:
-    try:
-        return describe(), False
-    except AuthError as exc:
-        return f"error: {exc}", True
+    exit_code = 0
+    lines = (
+        ("notion", lambda: _describe_notion(load_notion())),
+        ("jira", lambda: _describe_jira(load_jira())),
+    )
+    for service, describe in lines:
+        try:
+            line = describe()
+        except AuthError as exc:
+            line, exit_code = f"error: {exc}", 1
+        print(f"{service:<8}{line}")
+    return exit_code
 
 
 def _log_out_of_notion(transport: httpx2.BaseTransport | None) -> None:
-    revoked = _revoke_the_stored_notion_token(transport)
+    revoked = _notion_token_was_revoked(transport)
     if not forget("notion"):
         print("Not signed in to Notion.")
         return
@@ -153,11 +161,15 @@ def _log_out_of_notion(transport: httpx2.BaseTransport | None) -> None:
     print(f"Signed out of Notion: {outcome}.")
 
 
-def _revoke_the_stored_notion_token(transport: httpx2.BaseTransport | None) -> bool:
+def _notion_token_was_revoked(transport: httpx2.BaseTransport | None) -> bool:
     try:
         stored = stored_notion()
-        if stored is None:
-            return False
+    except UnreadableEntryError:
+        print("warning: the stored Notion entry is unreadable, so its token was not revoked", file=sys.stderr)
+        return False
+    if stored is None:
+        return False
+    try:
         revoke_notion_token(stored, transport=transport)
     except AuthError as exc:
         print(f"warning: {exc}", file=sys.stderr)
@@ -186,11 +198,15 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
     credentials = sign_in.credentials
     if sign_in.source == "environment":
         return f"{credentials.email} at {credentials.site} (environment)"
-    return f"signed in to {credentials.site} as {credentials.display_name} (keychain)"
+    return f"signed in to {credentials.site} as {_person(credentials)} (keychain)"
 
 
 def _workspace(credentials: NotionCredentials) -> str:
     return credentials.workspace_name or "(unnamed workspace)"
+
+
+def _person(credentials: JiraCredentials) -> str:
+    return credentials.display_name or credentials.email
 
 
 def _required(answer: str, refusal: str) -> str:
@@ -198,3 +214,9 @@ def _required(answer: str, refusal: str) -> str:
     if not stripped:
         raise AuthError(refusal)
     return stripped
+
+
+def _ascii(value: str, name: str) -> str:
+    if not value.isascii():
+        raise AuthError(f"The Notion OAuth {name} has characters outside ASCII; copy it from Notion again")
+    return value

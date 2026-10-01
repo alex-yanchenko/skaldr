@@ -9,6 +9,7 @@ from skaldr.auth.store import (
     NotionCredentials,
     SignIn,
     forget,
+    jira_credentials,
     load_jira,
     load_notion,
     normalise_site,
@@ -47,7 +48,6 @@ def test_a_notion_access_token_in_the_environment_wins_over_the_keychain(
 ) -> None:
     save_notion(make_notion_credentials())
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", "env-access")
-    monkeypatch.setenv("NOTION_REFRESH_TOKEN", "env-refresh")
     monkeypatch.setenv("NOTION_CLIENT_ID", "env-client")
     monkeypatch.setenv("NOTION_CLIENT_SECRET", "env-secret")
 
@@ -56,7 +56,7 @@ def test_a_notion_access_token_in_the_environment_wins_over_the_keychain(
             client_id="env-client",
             client_secret="env-secret",
             access_token="env-access",
-            refresh_token="env-refresh",
+            refresh_token=None,
             workspace_name=None,
         ),
         "environment",
@@ -65,7 +65,7 @@ def test_a_notion_access_token_in_the_environment_wins_over_the_keychain(
 
 def test_blank_notion_variables_count_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", " env-access ")
-    monkeypatch.setenv("NOTION_REFRESH_TOKEN", "")
+    monkeypatch.setenv("NOTION_CLIENT_SECRET", "")
     monkeypatch.setenv("NOTION_CLIENT_ID", "   ")
 
     assert load_notion() == SignIn(
@@ -211,3 +211,17 @@ def test_a_site_that_is_not_an_https_origin_is_refused(typed: str) -> None:
 def test_jira_credentials_hold_only_an_https_origin() -> None:
     with pytest.raises(ValidationError, match="The Jira site must be an https URL"):
         make_jira_credentials(site="http://example.atlassian.net")
+
+
+def test_jira_credentials_built_from_typed_values_refuse_a_bad_site_by_name() -> None:
+    with pytest.raises(
+        AuthError,
+        match=r"^The Jira site must be an https URL like https://<site>\.atlassian\.net, not 'ftp://\{x\}'$",
+    ):
+        jira_credentials("ftp://{x}", "reader@example.com", "api-token")
+
+
+def test_jira_credentials_built_from_typed_values_normalise_the_site() -> None:
+    assert jira_credentials("Example.atlassian.net/", "reader@example.com", "api-token") == (
+        make_jira_credentials(display_name=None)
+    )
