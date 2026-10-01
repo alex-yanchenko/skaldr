@@ -71,7 +71,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
         "overrides": {"st2": {"fields": {"priority": "High"}}},
         "on_remote_edit": "overwrite",
     }
-    notion = make_notion_target(split=["st1"], removed="delete")
+    notion = make_notion_target(split=["st1"])
 
     publish = _parse({"doc_id": "onboarding-plan", "targets": [notion, jira]})
 
@@ -85,7 +85,6 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                 "from": None,
                 "split": ["st1"],
                 "overrides": {},
-                "removed": "delete",
                 "on_remote_edit": "refuse",
             },
             {
@@ -99,7 +98,6 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                 "from": ["st1", "st2"],
                 "split": ["st1", "st2"],
                 "overrides": {"st2": {"fields": {"priority": "High"}}},
-                "removed": "archive",
                 "on_remote_edit": "overwrite",
             },
         ],
@@ -200,7 +198,14 @@ def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
     ("target", "message"),
     [
         pytest.param(
-            make_jira_target(removed="delete"), "a jira target cannot use `removed: delete`", id="jira-delete"
+            make_jira_target(removed="archive"),
+            "publish.targets.0.jira.removed: Extra inputs are not permitted",
+            id="jira-removed-is-not-a-key",
+        ),
+        pytest.param(
+            make_notion_target(removed="archive"),
+            "publish.targets.0.notion.removed: Extra inputs are not permitted",
+            id="notion-removed-is-not-a-key",
         ),
         pytest.param(
             make_jira_target(from_sections=["st1"]),

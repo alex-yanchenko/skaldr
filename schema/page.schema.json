@@ -1912,16 +1912,6 @@
           "title": "Overrides",
           "type": "object"
         },
-        "removed": {
-          "default": "archive",
-          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent. A Jira target accepts only `archive`.",
-          "enum": [
-            "archive",
-            "delete"
-          ],
-          "title": "Removed",
-          "type": "string"
-        },
         "on_remote_edit": {
           "default": "refuse",
           "description": "When an item was edited in the service since the last publish: `refuse` stops and shows the change, `overwrite` replaces it.",
@@ -2563,16 +2553,6 @@
           "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
           "title": "Overrides",
           "type": "object"
-        },
-        "removed": {
-          "default": "archive",
-          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent. A Jira target accepts only `archive`.",
-          "enum": [
-            "archive",
-            "delete"
-          ],
-          "title": "Removed",
-          "type": "string"
         },
         "on_remote_edit": {
           "default": "refuse",

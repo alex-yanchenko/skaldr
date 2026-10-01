@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, StringConstraints
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish.target import JsonFields, Location, TargetBase
@@ -33,14 +33,6 @@ class JiraWhere(FrozenModel):
 class JiraTarget(TargetBase):
     to: Literal["jira"] = Field(description="Publish to Jira: `jira`.")
     where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
-
-    @model_validator(mode="after")
-    def _archive_only(self) -> "JiraTarget":
-        if self.removed == "delete":
-            raise ValueError(
-                "a jira target cannot use `removed: delete`: Jira issues are archived, never deleted"
-            )
-        return self
 
     def location_key(self) -> Location:
         return ("jira", self.where.project, self.where.parent or "")

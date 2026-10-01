@@ -876,7 +876,7 @@ pulls in, and the emitted JSON is fully flattened.
 
 ## Where it publishes: `publish`
 
-An optional top-level `publish` block says where the document lives outside skaldr: Notion pages and Jira issues. `where` has a different shape for each service; the other keys mean the same thing everywhere, except that a Jira target accepts only `removed: archive`.
+An optional top-level `publish` block says where the document lives outside skaldr: Notion pages and Jira issues. `where` has a different shape for each service; the other keys mean the same thing everywhere. An item whose content leaves the document is archived, never deleted: a Notion page moves to the trash, where it can be restored, and a Jira issue is closed.
 
 ```yaml
 publish:
@@ -901,7 +901,6 @@ publish:
 | `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
 | `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
 | `overrides` | Per-item `fields`, keyed by a split section id. |
-| `removed` | `archive` (default, recoverable) or `delete` (permanent; Jira only archives). |
 | `on_remote_edit` | `refuse` (default) stops when the item was edited in the service since the last publish; `overwrite` replaces it. |
 
 `skaldr --check` holds the block to these rules and names the target in every message:

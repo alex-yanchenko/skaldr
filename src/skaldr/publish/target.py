@@ -36,11 +36,6 @@ class TargetBase(FrozenModel):
         default_factory=dict[str, TargetOverride],
         description="Per-item field values keyed by a split section id, applied over `where.fields`.",
     )
-    removed: Literal["archive", "delete"] = Field(
-        default="archive",
-        description="What happens to an item whose content left the document: `archive` is recoverable, "
-        "`delete` is permanent. A Jira target accepts only `archive`.",
-    )
     on_remote_edit: Literal["refuse", "overwrite"] = Field(
         default="refuse",
         description="When an item was edited in the service since the last publish: `refuse` stops and "
