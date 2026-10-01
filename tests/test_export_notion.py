@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from typing import Any, get_args
 
@@ -21,7 +20,6 @@ from skaldr.export.inline import (
 )
 from skaldr.export.lower import lower_report
 from skaldr.export.notion import chunk_notion, notion_inline, render_notion
-from skaldr.export.publish import CREATED_PAGE_ID
 from skaldr.models import AnyBlock, Grid, InnerGrid, Panel, Section, Walkthrough, load_report, parse_report
 from tests.conftest import REPO_ROOT
 from tests.factories import make_command_request, make_report
@@ -60,7 +58,7 @@ def test_the_export_fixture_uses_every_block_type() -> None:
 
 
 def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_notion(load_report(EXAMPLE), tmp_path, chunk=None, targets_file=None)
+    export_notion(load_report(EXAMPLE), tmp_path, chunk=None)
 
     assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
         path.name: path.read_text(encoding="utf-8") for path in sorted(NOTION_GOLDEN.iterdir())
@@ -133,9 +131,47 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
     lines = _notion([table]).splitlines()
 
     assert lines[lines.index("\t<tr>", 3) + 1 : lines.index("\t<tr>", 3) + 3] == [
-        "\t\t<td>`flag` \\+ default</td>",
+        "\t\t<td>`flag` \N{FULLWIDTH PLUS SIGN} default</td>",
         "\t\t<td>\\- leading dash</td>",
     ]
+
+
+def test_a_plus_away_from_a_code_span_in_a_table_cell_is_left_alone() -> None:
+    table = {"type": "table", "columns": [{"key": "a", "label": "A"}], "rows": [{"a": "1 + 1 and a+b"}]}
+
+    assert "\t\t<td>1 + 1 and a+b</td>" in _notion([table]).splitlines()
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(
+            {"type": "badge_row", "label": "Affects:", "items": [{"label": "api", "tone": "blue"}]},
+            id="badge-row",
+        ),
+        pytest.param(
+            {
+                "type": "badge_row",
+                "groups": [{"label": "Affects:", "items": [{"label": "api", "tone": "blue"}]}],
+            },
+            id="badge-group",
+        ),
+    ],
+)
+def test_a_label_that_already_ends_in_a_colon_gets_one_colon(block: dict[str, Any]) -> None:
+    assert _notion([block]).removeprefix("- ") == '**Affects**: <span color="blue_bg">api</span>\n'
+
+
+def test_a_rollup_label_that_already_ends_in_a_colon_gets_one_colon() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A"}, {"key": "tag", "label": "", "kind": "badge"}],
+        "rows": [{"a": "x", "tag": "API"}],
+        "rollup": {"by": "tag", "label": "By owner:"},
+    }
+    badges = {"API": {"label": "api", "tone": "blue", "legend": "the API"}}
+
+    assert '**By owner**: <span color="blue_bg">api</span> 1' in _notion([table], badges=badges).splitlines()
 
 
 def test_nested_list_children_are_indented_with_tabs() -> None:
@@ -171,7 +207,7 @@ def test_a_flow_becomes_a_mermaid_diagram() -> None:
         '    s1["Scan"]:::info\n'
         '    s2["Say #quot;hi#quot;<br>then stop"]\n'
         "    s1 --> s2\n"
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8\n"
+        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
         "```\n"
     )
 
@@ -268,81 +304,36 @@ def _write(tmp_path: Path, data: dict[str, Any]) -> Path:
     return path
 
 
-def test_an_export_without_a_page_id_creates_a_draft_and_says_where_to_record_it(tmp_path: Path) -> None:
+def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
     report = parse_report(make_report(blocks=_sections(2, "z = 3\n" * 20)))
-    targets = tmp_path / "targets.json"
-    targets.write_text("{}", encoding="utf-8")
 
-    export_notion(report, tmp_path / "out", chunk=200, targets_file=targets)
-    plan = json.loads((tmp_path / "out" / "publish.json").read_text(encoding="utf-8"))
+    result = export_notion(report, tmp_path, chunk=200)
 
-    first, second = plan["calls"]
-    assert (first["tool"], first["arguments"]["creation_mode"], first["content_file"]) == (
-        "notion-create-pages",
-        "draft",
-        "page.00.md",
-    )
-    assert first["arguments"]["pages"][0]["content"] == (tmp_path / "out" / "page.00.md").read_text(
-        encoding="utf-8"
-    )
-    assert second["arguments"] == {
-        "page_id": CREATED_PAGE_ID,
-        "command": "insert_content",
-        "content": (tmp_path / "out" / "page.01.md").read_text(encoding="utf-8"),
-        "position": {"type": "end"},
-    }
-    assert plan["record"] == {
-        "value": "the id of the page call 1 creates",
-        "replaces": CREATED_PAGE_ID,
-        "targets_file": str(targets),
-        "key": "notion.page_id",
-    }
-
-
-def test_an_export_with_a_page_id_replaces_that_page(tmp_path: Path) -> None:
-    targets = tmp_path / "targets.json"
-    targets.write_text(json.dumps({"notion": {"page_id": "page-123"}}), encoding="utf-8")
-
-    export_notion(parse_report(make_report()), tmp_path / "out", chunk=None, targets_file=targets)
-    plan = json.loads((tmp_path / "out" / "publish.json").read_text(encoding="utf-8"))
-
-    assert [call["arguments"]["command"] for call in plan["calls"]] == ["replace_content"]
-    assert plan["calls"][0]["arguments"]["page_id"] == "page-123"
-    assert "record" not in plan
-
-
-def test_a_new_page_goes_under_the_parent_the_targets_name(tmp_path: Path) -> None:
-    targets = tmp_path / "targets.json"
-    targets.write_text(json.dumps({"notion": {"parent_page_id": "parent-9"}}), encoding="utf-8")
-
-    export_notion(parse_report(make_report()), tmp_path / "out", chunk=None, targets_file=targets)
-    arguments = json.loads((tmp_path / "out" / "publish.json").read_text(encoding="utf-8"))["calls"][0][
-        "arguments"
-    ]
-
-    assert (arguments["parent"], "creation_mode" in arguments) == (
-        {"type": "page_id", "page_id": "parent-9"},
-        False,
+    assert {path.name: path.read_text(encoding="utf-8") for path in result.files} == dict(
+        zip(["page.00.md", "page.01.md"], chunk_notion(lower_report(report), 200).chunks, strict=True)
     )
 
 
-def test_a_targets_file_with_an_unknown_notion_key_is_rejected(tmp_path: Path) -> None:
-    targets = tmp_path / "targets.json"
-    targets.write_text(json.dumps({"notion": {"page": "x"}}), encoding="utf-8")
-
-    with pytest.raises(ReportError, match=r"targets file .* has an unexpected shape"):
-        export_notion(parse_report(make_report()), tmp_path / "out", chunk=None, targets_file=targets)
-
-
-def test_the_cli_exports_and_prints_each_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("target", ["notion", "markdown"])
+def test_the_cli_exports_and_prints_the_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
+) -> None:
     data_path = _write(tmp_path, make_report())
 
-    assert main([str(data_path), "--export", "notion", "--export-dir", str(tmp_path / "n")]) == 0
+    assert main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "n")]) == 0
 
-    assert capsys.readouterr().out.splitlines() == [
-        f"OK  {tmp_path / 'n' / 'page.md'}",
-        f"OK  {tmp_path / 'n' / 'publish.json'}",
-    ]
+    assert capsys.readouterr().out.splitlines() == [f"OK  {tmp_path / 'n' / 'page.md'}"]
+
+
+def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    monkeypatch.chdir(tmp_path)
+
+    assert main([str(data_path), "--export", "markdown"]) == 0
+
+    assert (tmp_path / "out" / "doc.markdown" / "page.md").is_file()
 
 
 def test_the_cli_checks_before_it_exports_and_writes_nothing_for_an_invalid_file(tmp_path: Path) -> None:
@@ -360,6 +351,12 @@ def test_the_cli_checks_before_it_exports_and_writes_nothing_for_an_invalid_file
         pytest.param(["--chunk", "100"], "only apply with --export", id="chunk-alone"),
         pytest.param(["--export", "notion", "--chunk", "0"], "positive character count", id="chunk-zero"),
         pytest.param(["--export", "notion", "--live"], "--export writes none", id="with-live"),
+        pytest.param(
+            ["--export", "markdown", "--chunk", "100"],
+            "only applies with --export notion",
+            id="chunk-markdown",
+        ),
+        pytest.param(["--export", "jira"], "invalid choice: 'jira'", id="unknown-target"),
     ],
 )
 def test_the_cli_rejects_flags_that_do_not_fit_an_export(

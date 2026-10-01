@@ -35,10 +35,10 @@ flowchart LR
     s3 --> s4
     s4 --> s5
     s5 -.-> s1
-    classDef accent fill:#f3e8fd,stroke:#8430ce
-    classDef info fill:#e8f0fe,stroke:#1a73e8
-    classDef success fill:#e6f4ea,stroke:#1e8e3e
-    classDef warning fill:#fef7e0,stroke:#b06000
+    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
+    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
+    classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
+    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
 - **Flag** <span color="blue_bg">System</span>
 ### Discrepancy resolution across teams
@@ -139,14 +139,14 @@ flowchart LR
 		<td></td>
 	</tr>
 </table>
-**Discrepancies by owner:**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
+**Discrepancies by owner**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
 Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 ## Count progress
 - **Zone A**: ██████████ 100.0% (100 of 100)
 - **Zone B**: █████████░ 92.0% (92 of 100)
 - **Zone C**: ████████░░ 85.0% (85 of 100)
 - **Overflow**: ░░░░░░░░░░ 4.0% (4 of 100)
-**Affects:**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
+**Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
 ## Verification
 - ✅ Reconciliation gate passes (10,000 = 10,000).
 - ✅ De-dup validated on a 1,000-pallet sample.
@@ -349,9 +349,9 @@ flowchart LR
     s1 --> hub
     s2 --> hub
     s3 --> hub
-    classDef accent fill:#f3e8fd,stroke:#8430ce
-    classDef info fill:#e8f0fe,stroke:#1a73e8
-    classDef warning fill:#fef7e0,stroke:#b06000
+    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
+    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
+    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
 ## How to run the recount
 1. **Freeze the aisle and pull the expected list** *before any scanning*

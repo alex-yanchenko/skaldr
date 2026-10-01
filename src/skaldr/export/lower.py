@@ -17,6 +17,7 @@ from skaldr.export.inline import (
     Rich,
     bold,
     italic,
+    labelled,
     paragraphs,
     parse_rich,
     plain,
@@ -127,6 +128,7 @@ MERMAID_FILL = {
     "sky": ("#e1f5fe", "#0277bd"),
     "neutral": ("#f1f3f4", "#5f6368"),
 }
+MERMAID_TEXT = "#1f2328"
 CODE_LANGUAGE_BY_SUFFIX = {
     ".ts": "typescript",
     ".tsx": "typescript",
@@ -224,13 +226,10 @@ def lower_block(block: AnyBlock, lowering: _Lowering, depth: int) -> list[Node]:
                 ListNode(block.style, tuple(_list_entry(item, block.style, lowering) for item in block.items))
             ]
         case FactStrip():
-            return [_bullets(ListEntry(bold(fact.label) + plain(f": {fact.value}")) for fact in block.facts)]
+            return [_bullets(ListEntry(labelled(fact.label) + plain(fact.value)) for fact in block.facts)]
         case KeyValue():
             return [
-                _bullets(
-                    ListEntry(bold(pair.label) + plain(": ") + lowering.rich(pair.value))
-                    for pair in block.pairs
-                )
+                _bullets(ListEntry(labelled(pair.label) + lowering.rich(pair.value)) for pair in block.pairs)
             ]
         case DefList():
             return [_bullets(_definition(item.term, item.body, lowering) for item in block.items)]
@@ -320,7 +319,7 @@ def _definition(term: str, body: str, lowering: _Lowering) -> ListEntry:
     parts = paragraphs(body)
     first = lowering.rich(parts[0]) if parts else ()
     rest = tuple(Paragraph(lowering.rich(part)) for part in parts[1:])
-    return ListEntry(bold(term) + plain(": ") + first, children=rest)
+    return ListEntry(labelled(term) + first, children=rest)
 
 
 def _derived_card(card: Card, lowering: _Lowering) -> Rich:
@@ -349,7 +348,7 @@ def _card(card: Card, lowering: _Lowering) -> ListEntry:
         if card.delta:
             mark = f"{DELTA_MARK[card.delta.direction]} " if card.delta.direction else ""
             value += plain(f" {mark}{card.delta.label}")
-        text = (bold(card.label) + plain(": ") + value) if card.label else value
+        text = (labelled(card.label) + value) if card.label else value
         if card.badges:
             text += plain(" ") + lowering.chips(card.badges)
     children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
@@ -369,11 +368,11 @@ def _badge_row(block: BadgeRow, lowering: _Lowering) -> list[Node]:
     if block.groups:
         return [
             _bullets(
-                ListEntry(bold(group.label) + plain(": ") + _badge_items(group.items, lowering))
+                ListEntry(labelled(group.label) + _badge_items(group.items, lowering))
                 for group in block.groups
             )
         ]
-    lead = bold(block.label) + plain(": ") if block.label else ()
+    lead = labelled(block.label) if block.label else ()
     return [Paragraph(lead + _badge_items(block.items, lowering))]
 
 
@@ -385,15 +384,15 @@ def _meter_bar(value: float, maximum: float) -> str:
 def _meter_entry(label: str, value: float, maximum: float) -> ListEntry:
     share = compute.pct(value, maximum)
     reading = f"{_meter_bar(value, maximum)} {share} ({compute.fmt(value)} of {compute.fmt(maximum)})"
-    return ListEntry(bold(label) + plain(f": {reading}"))
+    return ListEntry(labelled(label) + plain(reading))
 
 
 def _range(block: Range, lowering: _Lowering) -> list[Node]:
     total = sum(segment.span for segment in block.segments)
     entries: list[ListEntry] = []
     for segment in block.segments:
-        text = bold(segment.label) + plain(
-            f": {compute.fmt(segment.span)} ({compute.pct(segment.span, total)})"
+        text = labelled(segment.label) + plain(
+            f"{compute.fmt(segment.span)} ({compute.pct(segment.span, total)})"
         )
         if segment.sub:
             text += plain(", ") + lowering.rich(segment.sub)
@@ -430,7 +429,7 @@ def _image(block: ImageBlock, lowering: _Lowering) -> list[Node]:
 def _timeline_entry(item: TimelineItem, lowering: _Lowering) -> ListEntry:
     text: Rich = plain(f"{TIMELINE_MARK[item.state]} ") if item.state else ()
     if item.time:
-        text += bold(item.time) + plain(": ")
+        text += labelled(item.time)
     text += plain(item.title)
     if item.badges:
         text += plain(" ") + lowering.chips(item.badges)
@@ -452,11 +451,12 @@ def _mermaid_node(node_id: str, step: FlowStep, lowering: _Lowering, prefix: str
 
 def _mermaid_classes(steps: Sequence[FlowStep]) -> list[str]:
     tones = sorted({step.tone for step in steps if step.tone})
-    return [
-        f"    classDef {tone} fill:{MERMAID_FILL[tone][0]},stroke:{MERMAID_FILL[tone][1]}"
-        for tone in tones
-        if tone in MERMAID_FILL
-    ]
+    return [_mermaid_class(tone) for tone in tones if tone in MERMAID_FILL]
+
+
+def _mermaid_class(tone: str) -> str:
+    fill, stroke = MERMAID_FILL[tone]
+    return f"    classDef {tone} fill:{fill},stroke:{stroke},color:{MERMAID_TEXT}"
 
 
 def _step_entry(step: FlowStep, lowering: _Lowering) -> ListEntry:
@@ -771,7 +771,7 @@ def _table(block: TableBlock, lowering: _Lowering) -> list[Node]:
     nodes: list[Node] = [Table(_cells(*(column.label for column in block.cell_columns)), tuple(rows))]
     buckets = compute.table_rollup(block)
     if buckets:
-        runs: Rich = bold(block.rollup.label) + plain(": ") if block.rollup and block.rollup.label else ()
+        runs: Rich = labelled(block.rollup.label) if block.rollup and block.rollup.label else ()
         for index, bucket in enumerate(buckets):
             if index:
                 runs += plain(" · ")
@@ -869,7 +869,7 @@ def _section(block: Section, lowering: _Lowering, depth: int) -> list[Node]:
     )
     children += lower_blocks(block.blocks, lowering, depth + 1)
     if block.collapsed:
-        return [Toggle(plain(block.title), level if level <= 3 else None, tuple(children))]
+        return [Toggle(plain(block.title), level, tuple(children))]
     return [Heading(level, plain(block.title)), *children]
 
 

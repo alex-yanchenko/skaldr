@@ -92,6 +92,10 @@ def bold(text: str) -> Rich:
     return (Styled("bold", plain(text)),) if text else ()
 
 
+def labelled(label: str) -> Rich:
+    return bold(label.rstrip().removesuffix(":").rstrip()) + plain(": ")
+
+
 def italic(runs: Rich) -> Rich:
     return (Styled("italic", runs),) if runs else ()
 

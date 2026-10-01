@@ -16,6 +16,7 @@ from skaldr.export.inline import (
     Rich,
     Styled,
 )
+from skaldr.export.markup import CALLOUT_ICON, STYLE_MARKER, TAB_ICON, code_fence, indent_lines, wrap_marker
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -39,6 +40,8 @@ from skaldr.export.tree import (
 NOTION_ESCAPED = frozenset("\\*~`$[]<>{}|^")
 NOTION_WEB_DOMAIN_FILE = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 TABLE_CELL_LIST_MARKER = re.compile(r"^([-+*]|\d+\.)(\s)")
+SPACED_PLUS_AFTER_CODE = re.compile(r"` \+ ")
+FULL_WIDTH_PLUS = "\N{FULLWIDTH PLUS SIGN}"
 BLOCK_COLOR: dict[str, str] = {
     "neutral": "gray",
     "muted": "gray",
@@ -60,18 +63,6 @@ CHIP_COLOR: dict[str, str] = {
     "teal": "green",
     "sky": "blue",
 }
-CALLOUT_ICON: dict[str, str] = {
-    "info": "💡",
-    "success": "✅",
-    "warning": "⚠️",
-    "danger": "🛑",
-    "accent": "📌",
-    "neutral": "📝",
-    "muted": "📝",
-    "teal": "💡",
-    "sky": "💡",
-}
-TAB_ICON: dict[str, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
 
 
 def escape_notion_text(text: str) -> str:
@@ -83,15 +74,6 @@ def _plain_text(text: str) -> str:
     return "".join(
         f"`{piece}`" if index % 2 else escape_notion_text(piece) for index, piece in enumerate(pieces)
     )
-
-
-def _wrap(marker: str, inner: str) -> str:
-    core = inner.strip()
-    if not core:
-        return inner
-    lead = inner[: len(inner) - len(inner.lstrip())]
-    trail = inner[len(inner.rstrip()) :]
-    return f"{lead}{marker}{core}{marker}{trail}"
 
 
 def notion_inline(runs: Rich) -> str:
@@ -116,15 +98,14 @@ def notion_inline(runs: Rich) -> str:
             case Break():
                 out.append("<br>")
             case Styled():
-                marker = {"bold": "**", "italic": "*", "strike": "~~"}[run.style]
-                out.append(_wrap(marker, notion_inline(run.runs)))
+                out.append(wrap_marker(STYLE_MARKER[run.style], notion_inline(run.runs)))
             case _:
                 assert_never(run)
     return "".join(out)
 
 
 def _table_cell_text(cell: TableCell) -> str:
-    text = notion_inline(cell.text).replace("+", "\\+")
+    text = SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", notion_inline(cell.text))
     return TABLE_CELL_LIST_MARKER.sub(lambda match: "\\" + match.group(1) + match.group(2), text)
 
 
@@ -133,12 +114,7 @@ def _color_attribute(tone: ToneName | None, suffix: str = "") -> str:
 
 
 def _indent(lines: Sequence[str], depth: int) -> list[str]:
-    return [("\t" * depth + line) if line else line for line in lines]
-
-
-def _fence(content: str) -> str:
-    longest = max((len(run) for run in re.findall(r"`+", content)), default=0)
-    return "`" * max(3, longest + 1)
+    return indent_lines(lines, "\t" * depth)
 
 
 def _table_lines(table: Table) -> list[str]:
@@ -186,7 +162,7 @@ def notion_lines(node: Node) -> list[str]:
         case Table():
             return _table_lines(node)
         case CodeBlock():
-            fence = _fence(node.content)
+            fence = code_fence(node.content)
             return [f"{fence}{node.language}", *node.content.split("\n"), fence]
         case Callout():
             opening = f'<callout icon="{CALLOUT_ICON[node.tone]}" color="{BLOCK_COLOR[node.tone]}_bg">'

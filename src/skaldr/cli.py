@@ -16,8 +16,10 @@ from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Literal
 
+from typing_extensions import assert_never
+
 from skaldr.errors import ReportError
-from skaldr.export import EXPORT_TARGETS, export_notion
+from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -150,9 +152,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--export",
         choices=EXPORT_TARGETS,
-        help="write the document for another service instead of HTML: `notion` writes Notion-flavored "
-        "Markdown plus publish.json, the ordered Notion MCP calls that publish it. skaldr never calls "
-        "the service itself.",
+        help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
+        "(tabs, callouts, columns, toggles, colored table cells) to paste or send through the Notion MCP; "
+        "`markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
     )
     parser.add_argument(
         "--export-dir",
@@ -165,13 +167,6 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="with --export notion: split the page into files of at most N characters, each starting at "
         "a top-level heading, so each fits one MCP call. A single section longer than N stays whole.",
-    )
-    parser.add_argument(
-        "--targets",
-        metavar="FILE",
-        help="with --export: a JSON file naming where the document publishes, such as "
-        '{"notion": {"page_id": "…"}}. With a page id the plan replaces that page; without one it '
-        "creates a page and says where to record its id.",
     )
     parser.add_argument(
         "--write-schema",
@@ -264,8 +259,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.export and (args.live is not None or args.if_stale):
         parser.error("--live and --if-stale shape an HTML render; --export writes none")
-    if not args.export and (args.export_dir or args.chunk is not None or args.targets):
-        parser.error("--export-dir, --chunk and --targets only apply with --export")
+    if not args.export and (args.export_dir or args.chunk is not None):
+        parser.error("--export-dir and --chunk only apply with --export")
+    if args.chunk is not None and args.export != "notion":
+        parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
     if args.chunk is not None and args.chunk < 1:
         parser.error("--chunk takes a positive character count")
     if args.check and args.export and len(args.data) > 1:
@@ -312,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
     if args.export:
-        return _export(data_path, args.export, args.export_dir, args.chunk, args.targets)
+        return _export(data_path, args.export, args.export_dir, args.chunk)
     written: list[Path] = []
     try:
         report = load_report(data_path)
@@ -427,15 +424,17 @@ def _extract_source(target: str) -> int:
     return 0
 
 
-def _export(
-    data_path: Path, target: str, export_dir: str | None, chunk: int | None, targets: str | None
-) -> int:
+def _export(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
     out_dir = Path(export_dir).resolve() if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
     try:
         report = load_report(data_path)
-        result = export_notion(
-            report, out_dir, chunk=chunk, targets_file=Path(targets).resolve() if targets else None
-        )
+        match target:
+            case "notion":
+                result = export_notion(report, out_dir, chunk=chunk)
+            case "markdown":
+                result = export_markdown(report, out_dir)
+            case _:
+                assert_never(target)
     except (ReportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
