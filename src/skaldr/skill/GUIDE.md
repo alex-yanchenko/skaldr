@@ -892,6 +892,23 @@ A top-of-file comment tells agents this. Pass `--no-source` to omit the embed (e
 whose authoring notes shouldn't ship). The `--embed` fragment carries it too — that's the artifact
 case, where the page is shared as a URL an agent later has to read back.
 
+## Exporting as Markdown
+
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names). Write the YAML the same way for every output; what changes is how some blocks look:
+
+| Block | GitHub-flavored | Notion |
+| --- | --- | --- |
+| `flow`, `fan`, `chart` | a Mermaid diagram, plus a list of any step points or badges it can't show | the same |
+| `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a multi-case `request` | each case under a bold title | native tabs |
+| a collapsed `section` | a heading with its content below | a toggle heading |
+| `grid` | its cells one after another | native columns |
+| badges | bold labels | coloured chips |
+| tones on table cells, meters, cards, ranges, steps | dropped | block and cell colours |
+| `image` | its caption only | its caption only |
+
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so its `page.md` starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at top-level headings into `page.00.md`, `page.01.md`, … of at most N characters each; a re-export removes page files an earlier run left behind.
+
 ## What you never write
 
 Colours, CSS, fonts, pixel sizes, HTML, the legend, the TOC, percentages, subtotals, the
