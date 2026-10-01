@@ -1,8 +1,9 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
+from skaldr.export.runs import Gauge, Mark, MarkScheme
 from skaldr.export.tree import CodeBlock, ToneName
-from skaldr.richtext import StyleName
+from skaldr.richtext import Citation, StyleName
 
 STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: dict[ToneName, str] = {
@@ -17,12 +18,22 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "sky": "💡",
 }
 TAB_ICON: dict[ToneName, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
+MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
+    "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
+    "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
+    "swimlane": {"done": "✅", "current": "🔵", "todo": "⚪", "blocked": "⛔", "deferred": "⏸️"},
+    "indicator": {"success": "🟢", "warning": "🟡", "danger": "🔴", "info": "🔵", "neutral": "⚪"},
+    "delta": {"up": "▲", "down": "▼", "flat": "→"},
+    "check": {"yes": "✓", "no": "✗"},
+}
+GAUGE_CELLS = 10
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+*]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
+URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E"}
 
 
-def wrap_marker(marker: str, inner: str) -> str:
+def _wrap_marker(marker: str, inner: str) -> str:
     core = inner.strip()
     if not core:
         return inner
@@ -32,11 +43,13 @@ def wrap_marker(marker: str, inner: str) -> str:
 
 
 def styled(style: StyleName, inner: str) -> str:
-    return wrap_marker(STYLE_MARKER[style], inner)
+    return _wrap_marker(STYLE_MARKER[style], inner)
 
 
 def bold_once(text: str) -> str:
-    return text if not text or text.startswith(STYLE_MARKER["bold"]) else styled("bold", text)
+    if text.startswith(STYLE_MARKER["bold"]):
+        return text
+    return styled("bold", text)
 
 
 def _longest_backtick_run(text: str) -> int:
@@ -59,5 +72,38 @@ def escape_block_start(text: str) -> str:
     return ORDERED_START_MARKER.sub(lambda match: match.group(1) + "\\" + match.group(2), text)
 
 
+def encode_url(url: str) -> str:
+    return "".join(URL_UNSAFE.get(character, character) for character in url)
+
+
+def gauge_bar(value: float, maximum: float) -> str:
+    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS))) if maximum else 0
+    return "█" * filled + "░" * (GAUGE_CELLS - filled)
+
+
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
+
+
+class MarkupRuns:
+    def __init__(self, escape: Callable[[str], str]) -> None:
+        self.escape = escape
+
+    def link(self, label: str, url: str, /) -> str:
+        return f"[{label}]({encode_url(url)})"
+
+    def citation(self, run: Citation, /) -> str:
+        label = self.escape(f"[{run.number}]")
+        return f"[{label}]({encode_url(run.url)})" if run.url else label
+
+    def line_break(self) -> str:
+        return "<br>"
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        return styled(style, inner)
+
+    def mark(self, run: Mark, /) -> str:
+        return MARK_GLYPH[run.scheme].get(run.state, run.state)
+
+    def gauge(self, run: Gauge, /) -> str:
+        return gauge_bar(run.value, run.maximum)

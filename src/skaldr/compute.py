@@ -11,7 +11,7 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any, TypedDict
 
 from skaldr.errors import ReportError
@@ -19,6 +19,7 @@ from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
     Badge,
+    Card,
     CaseTone,
     Grid,
     Heading,
@@ -672,6 +673,17 @@ def table_tallies(report: Report) -> dict[str, DerivedTally]:
         rows = table.all_rows()
         tallies[table.id] = {"counts": dict(_rollup_counts(rows, table.rollup.by)), "total": len(rows)}
     return tallies
+
+
+def derived_card_tally(
+    card: Card, matrix_tallies: Mapping[str, DerivedTally], table_tallies: Mapping[str, DerivedTally]
+) -> tuple[int, int]:
+    badge = card.badge or ""
+    if card.of_matrix:
+        tally = matrix_tallies[card.of_matrix]
+        return tally["counts"].get(badge, 0), tally["total"]
+    tallies = [table_tallies[table_id] for table_id in card.of_tables or []]
+    return sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
 
 
 def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:

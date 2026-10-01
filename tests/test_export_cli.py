@@ -6,20 +6,28 @@ from skaldr.cli import main
 from skaldr.export import ExportTarget
 from tests.factories import heading_sections, make_report, write_report
 
+EXPORT_CLASH = "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
+HTML_ONLY = "--live, --if-stale and --no-source shape an HTML render; --export writes none"
+DIR_OR_CHUNK_ALONE = "--export-dir and --chunk only apply with --export"
+CHUNK_NOT_POSITIVE = "--chunk takes a positive character count"
 
-@pytest.mark.parametrize("target", ["notion", "markdown"])
+
+@pytest.mark.parametrize(
+    ("target", "page"),
+    [
+        pytest.param("notion", "Hi.\n", id="notion"),
+        pytest.param("markdown", "# Test Report\n\nHi.\n", id="markdown"),
+    ],
+)
 def test_the_cli_exports_the_page_and_prints_its_path(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: ExportTarget
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: ExportTarget, page: str
 ) -> None:
     data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "Hi."}]))
 
     assert main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "n")]) == 0
 
     assert capsys.readouterr().out.splitlines() == [f"OK  {tmp_path / 'n' / 'page.md'}"]
-    assert (tmp_path / "n" / "page.md").read_text(encoding="utf-8") == {
-        "notion": "Hi.\n",
-        "markdown": "# Test Report\n\nHi.\n",
-    }[target]
+    assert (tmp_path / "n" / "page.md").read_text(encoding="utf-8") == page
 
 
 def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
@@ -33,6 +41,30 @@ def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
     assert (tmp_path / "out" / "doc.markdown" / "page.md").read_text(
         encoding="utf-8"
     ) == "# Test Report\n\nHello.\n"
+
+
+def test_the_cli_prints_one_ok_line_per_chunk_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, make_report(blocks=heading_sections(2, "v = 5\n" * 20)))
+
+    assert (
+        main([str(data_path), "--export", "notion", "--chunk", "200", "--export-dir", str(tmp_path / "n")])
+        == 0
+    )
+
+    assert capsys.readouterr().out.splitlines() == [
+        f"OK  {tmp_path / 'n' / 'page.00.md'}",
+        f"OK  {tmp_path / 'n' / 'page.01.md'}",
+    ]
+
+
+def test_check_then_export_of_a_valid_file_writes_the_page(tmp_path: Path) -> None:
+    data_path = write_report(tmp_path, make_report())
+
+    assert main(["--check", str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 0
+
+    assert (tmp_path / "n" / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHello.\n"
 
 
 def test_the_cli_checks_before_it_exports_and_writes_nothing_for_an_invalid_file(tmp_path: Path) -> None:
@@ -66,10 +98,6 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error(
     assert capsys.readouterr().err.startswith("error: ")
 
 
-EXPORT_CLASH = "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
-HTML_ONLY = "--live, --if-stale and --no-source shape an HTML render; --export writes none"
-
-
 @pytest.mark.parametrize(
     ("argv_tail", "message"),
     [
@@ -81,27 +109,15 @@ HTML_ONLY = "--live, --if-stale and --no-source shape an HTML render; --export w
         pytest.param(["--export", "notion", "--live"], HTML_ONLY, id="with-live"),
         pytest.param(["--export", "notion", "--if-stale"], HTML_ONLY, id="with-if-stale"),
         pytest.param(["--export", "notion", "--no-source"], HTML_ONLY, id="with-no-source"),
-        pytest.param(
-            ["--chunk", "100"], "--export-dir and --chunk only apply with --export", id="chunk-alone"
-        ),
-        pytest.param(
-            ["--export-dir", "d"], "--export-dir and --chunk only apply with --export", id="dir-alone"
-        ),
+        pytest.param(["--chunk", "100"], DIR_OR_CHUNK_ALONE, id="chunk-alone"),
+        pytest.param(["--export-dir", "d"], DIR_OR_CHUNK_ALONE, id="dir-alone"),
         pytest.param(
             ["--export", "markdown", "--chunk", "100"],
             "--chunk splits a Notion page for the MCP; it only applies with --export notion",
             id="chunk-markdown",
         ),
-        pytest.param(
-            ["--export", "notion", "--chunk", "0"],
-            "--chunk takes a positive character count",
-            id="chunk-zero",
-        ),
-        pytest.param(
-            ["--export", "notion", "--chunk", "-5"],
-            "--chunk takes a positive character count",
-            id="chunk-negative",
-        ),
+        pytest.param(["--export", "notion", "--chunk", "0"], CHUNK_NOT_POSITIVE, id="chunk-zero"),
+        pytest.param(["--export", "notion", "--chunk", "-5"], CHUNK_NOT_POSITIVE, id="chunk-negative"),
         pytest.param(["--export", "jira"], "invalid choice: 'jira'", id="unknown-target"),
     ],
 )
@@ -129,7 +145,7 @@ def test_the_cli_refuses_to_check_and_export_several_files(
 
     assert raised.value.code == 2
     assert (
-        "--export writes one document: pass a single content file, or drop --export"
+        "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export"
         in capsys.readouterr().err
     )
 
@@ -144,4 +160,8 @@ def test_the_cli_reports_a_section_too_long_for_the_chunk(
         == 0
     )
 
-    assert "warning: section '## Part 0' is longer than --chunk 50 and stays whole" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert (captured.err, captured.out) == (
+        "warning: section '## Part 0' is longer than --chunk 50 and stays whole\n",
+        f"OK  {tmp_path / 'n' / 'page.00.md'}\n",
+    )

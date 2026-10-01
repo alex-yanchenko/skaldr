@@ -907,7 +907,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells, meters, cards, ranges, steps | dropped | block and cell colours |
 | `image` | its caption only | its caption only |
 
-Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so its `page.md` starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at top-level headings into `page.00.md`, `page.01.md`, … of at most N characters each; a re-export removes page files an earlier run left behind.
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, … of at most N characters each. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
 
 ## What you never write
 

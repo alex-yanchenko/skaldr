@@ -3,7 +3,7 @@ from itertools import pairwise
 
 from skaldr import compute
 from skaldr.export.inline import bold, labelled, one_line, plain
-from skaldr.export.lower.context import Lowering, bullets, cells
+from skaldr.export.lower.context import Lowering, bullets, plain_cells
 from skaldr.export.tree import (
     Diagram,
     Graph,
@@ -28,7 +28,7 @@ def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") 
 
 
 def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
-    text = labelled(step.label) + lowering.rich(step.note) if step.note else bold(step.label)
+    text = (labelled(step.label) + lowering.rich(step.note)) if step.note else bold(step.label)
     if step.badges:
         text += plain(" ") + lowering.chips(step.badges)
     children: tuple[Node, ...] = ()
@@ -43,11 +43,11 @@ def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ..
 
 
 def lower_flow(block: Flow, lowering: Lowering) -> list[Node]:
-    keys = [f"s{index}" for index in range(1, len(block.steps) + 1)]
     nodes = tuple(
-        _graph_node(key, step, lowering, f"{index}: " if block.numbered else "")
-        for index, (key, step) in enumerate(zip(keys, block.steps, strict=True), start=1)
+        _graph_node(f"s{index}", step, lowering, f"{index}: " if block.numbered else "")
+        for index, step in enumerate(block.steps, start=1)
     )
+    keys = [node.key for node in nodes]
     edges = [GraphEdge(source, target) for source, target in pairwise(keys)]
     if block.loop:
         edges.append(GraphEdge(keys[-1], keys[0], dashed=True))
@@ -72,8 +72,11 @@ def lower_chart(block: Chart) -> list[Node]:
     if block.variant == "donut":
         return [*title, Diagram(PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices)))]
     table = Table(
-        cells("Series", *block.categories),
-        tuple(TableRow(cells(series.label, *map(compute.fmt, series.values))) for series in block.series),
+        plain_cells("Series", *block.categories),
+        tuple(
+            TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
+            for series in block.series
+        ),
     )
     if block.stacked:
         return [*title, table]
@@ -82,4 +85,4 @@ def lower_chart(block: Chart) -> list[Node]:
         tuple(block.categories),
         tuple(tuple(series.values) for series in block.series),
     )
-    return [*title, Diagram(chart, (table,) if len(block.series) > 1 else ())]
+    return [*title, Diagram(chart, (table,))]

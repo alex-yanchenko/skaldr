@@ -20,6 +20,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export.lower import lower_report
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -83,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="validate the content file(s) against the schema; exits non-zero if any file is invalid. "
         "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
-        "file to render it once it passes — a file that fails is never written.",
+        "file to render it once it passes. A file that fails is never written.",
     )
     parser.add_argument(
         "--strict",
@@ -166,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         metavar="N",
         help="with --export notion: split the page into files of at most N characters, each starting at "
-        "a top-level heading, so each fits one MCP call. A single section longer than N stays whole.",
+        "a level 1 or 2 heading, so each fits one MCP call. A single section longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -248,9 +249,9 @@ def main(argv: list[str] | None = None) -> int:
             "--embed has no effect with --pdf alone (no HTML is written); add -o to also "
             "write the embed fragment, or drop --embed"
         )
-    if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed):
+    if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed or args.export):
         parser.error(
-            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed "
+            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export "
             "to validate the whole set"
         )
     _reject_flags_that_do_not_fit_an_export(parser, args)
@@ -414,24 +415,26 @@ def _extract_source(target: str) -> int:
 def _reject_flags_that_do_not_fit_an_export(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
-    if args.export and (args.out or args.pdf or args.embed or args.watch or args.emit_json):
+    if not args.export:
+        if args.export_dir or args.chunk is not None:
+            parser.error("--export-dir and --chunk only apply with --export")
+        return
+    if args.out or args.pdf or args.embed or args.watch or args.emit_json:
         parser.error(
             "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
         )
-    if args.export and (args.live is not None or args.if_stale or args.no_source):
+    if args.live is not None or args.if_stale or args.no_source:
         parser.error("--live, --if-stale and --no-source shape an HTML render; --export writes none")
-    if not args.export and (args.export_dir or args.chunk is not None):
-        parser.error("--export-dir and --chunk only apply with --export")
     if args.chunk is not None and args.export != "notion":
         parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
     if args.chunk is not None and args.chunk < 1:
         parser.error("--chunk takes a positive character count")
-    if args.check and args.export and len(args.data) > 1:
-        parser.error("--export writes one document: pass a single content file, or drop --export")
 
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
-    out_dir = Path(export_dir).resolve() if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
+    out_dir = (
+        Path(export_dir) if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
+    ).resolve()
     try:
         report = load_report(data_path)
         match target:
@@ -453,9 +456,10 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
 
 def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
     """Validate each content file and print one line per file, returning 1 if any file is invalid — it
-    drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass (no HTML
-    is written), so a render-time error like a dangling `#anchor` link surfaces as FAIL too, not only
-    schema errors. With `strict`, an unfilled `{{placeholder}}` also fails a file (else a noted-OK count)."""
+    drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass and an
+    export pass (nothing is written), so a render-time error like a dangling `#anchor` link surfaces as
+    FAIL too, not only schema errors. With `strict`, an unfilled `{{placeholder}}` also fails a file
+    (else a noted-OK count)."""
     failed = 0
     for raw_path in paths:
         path = Path(raw_path)
@@ -464,6 +468,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
             # Render (discarding output) to collect placeholders AND surface render-time errors (e.g. a
             # dangling anchor) as a clean FAIL — must stay inside the try so nothing escapes as a traceback.
             unfilled = find_placeholders(report)
+            lower_report(report)
         except ReportError as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)

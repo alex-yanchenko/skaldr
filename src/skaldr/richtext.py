@@ -1,12 +1,12 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColor
+from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN
 
 StyleName = Literal["bold", "italic", "strike"]
 
@@ -46,23 +46,12 @@ class Placeholder:
 
 
 @dataclass(frozen=True)
-class Chip:
-    label: str
-    tone: BadgeColor
-
-
-@dataclass(frozen=True)
-class Break:
-    pass
-
-
-@dataclass(frozen=True)
 class Styled:
     style: StyleName
     runs: "Rich"
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Chip | Break | Styled
+Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled
 Rich = tuple[Run, ...]
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -93,7 +82,7 @@ class _Stash:
         self.runs.append(run)
         return f"\x00{len(self.runs) - 1}\x00"
 
-    def resolve(self, fragment: str) -> Rich:
+    def runs_in(self, fragment: str) -> Rich:
         runs: list[Run] = []
         position = 0
         for match in _SENTINEL.finditer(fragment):
@@ -130,7 +119,9 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
         return stash.set_aside(Citation(key, rules.reference_numbers[key], rules.reference_urls.get(key)))
 
     def link(match: re.Match[str]) -> str:
-        label, url = stash.resolve(match.group(1)), match.group(2)
+        label, url = stash.runs_in(match.group(1)), match.group(2)
+        if "\x00" in url:
+            return match.group(0)
         if url.startswith("#"):
             if rules.anchor_ids is None:
                 return match.group(0)
@@ -152,72 +143,85 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     staged = _FOOTNOTE.sub(cite, staged)
     staged = _LINK.sub(link, staged)
     staged = _PLACEHOLDER.sub(blank, staged)
-    return _styled(staged, 0, stash)
+    return _parse_styles(staged, 0, stash)
 
 
-def _styled(fragment: str, pass_index: int, stash: _Stash) -> Rich:
+def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
     if pass_index == len(_STYLE_PASSES):
-        return stash.resolve(fragment)
+        return stash.runs_in(fragment)
     pattern, style = _STYLE_PASSES[pass_index]
 
     def emphasise(match: re.Match[str]) -> str:
-        return stash.set_aside(Styled(style, _styled(match.group(1), pass_index + 1, stash)))
+        return stash.set_aside(Styled(style, _parse_styles(match.group(1), pass_index + 1, stash)))
 
-    return _styled(pattern.sub(emphasise, fragment), pass_index + 1, stash)
+    return _parse_styles(pattern.sub(emphasise, fragment), pass_index + 1, stash)
 
 
 class RunWriter(Protocol):
-    def text(self, text: str) -> str: ...
+    def text(self, text: str, /) -> str: ...
 
-    def code(self, text: str) -> str: ...
+    def bang_before_link(self) -> str: ...
+
+    def code(self, text: str, /) -> str: ...
 
     def link(self, label: str, url: str, /) -> str: ...
 
     def anchor_link(self, label: str, anchor: str, /) -> str: ...
 
-    def citation(self, run: Citation) -> str: ...
+    def citation(self, run: Citation, /) -> str: ...
 
-    def placeholder(self, name: str) -> str: ...
-
-    def chip(self, run: Chip) -> str: ...
-
-    def line_break(self) -> str: ...
+    def placeholder(self, name: str, /) -> str: ...
 
     def styled(self, style: StyleName, inner: str, /) -> str: ...
 
 
-def write_runs(runs: Rich, writer: RunWriter) -> str:
+RunT = TypeVar("RunT")
+WriterT = TypeVar("WriterT", bound=RunWriter)
+
+
+def write_run(run: Run, writer: RunWriter) -> str:
+    match run:
+        case Plain():
+            return writer.text(run.text)
+        case Code():
+            return writer.code(run.text)
+        case Link():
+            return writer.link(write_runs(run.label, writer), run.url)
+        case AnchorLink():
+            return writer.anchor_link(write_runs(run.label, writer), run.anchor)
+        case Citation():
+            return writer.citation(run)
+        case Placeholder():
+            return writer.placeholder(run.name)
+        case Styled():
+            return writer.styled(run.style, write_runs(run.runs, writer))
+        case _:
+            assert_never(run)
+
+
+def write_sequence(runs: Sequence[RunT], writer: WriterT, write_one: Callable[[RunT, WriterT], str]) -> str:
     out: list[str] = []
-    for run in runs:
-        match run:
-            case Plain():
-                out.append(writer.text(run.text))
-            case Code():
-                out.append(writer.code(run.text))
-            case Link():
-                out.append(writer.link(write_runs(run.label, writer), run.url))
-            case AnchorLink():
-                out.append(writer.anchor_link(write_runs(run.label, writer), run.anchor))
-            case Citation():
-                out.append(writer.citation(run))
-            case Placeholder():
-                out.append(writer.placeholder(run.name))
-            case Chip():
-                out.append(writer.chip(run))
-            case Break():
-                out.append(writer.line_break())
-            case Styled():
-                out.append(writer.styled(run.style, write_runs(run.runs, writer)))
-            case _:
-                assert_never(run)
+    for index, run in enumerate(runs):
+        following = runs[index + 1] if index + 1 < len(runs) else None
+        if isinstance(run, Plain) and run.text.endswith("!") and isinstance(following, Link):
+            out.append(writer.text(run.text[:-1]) + writer.bang_before_link())
+        else:
+            out.append(write_one(run, writer))
     return "".join(out)
 
 
-class _VisibleText:
-    def text(self, text: str) -> str:
+def write_runs(runs: Rich, writer: RunWriter) -> str:
+    return write_sequence(runs, writer, write_run)
+
+
+class VisibleText:
+    def text(self, text: str, /) -> str:
         return text
 
-    def code(self, text: str) -> str:
+    def bang_before_link(self) -> str:
+        return "!"
+
+    def code(self, text: str, /) -> str:
         return text
 
     def link(self, label: str, _url: str, /) -> str:
@@ -226,21 +230,15 @@ class _VisibleText:
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
 
-    def citation(self, run: Citation) -> str:
+    def citation(self, run: Citation, /) -> str:
         return f"[{run.number}]"
 
-    def placeholder(self, name: str) -> str:
+    def placeholder(self, name: str, /) -> str:
         return name
-
-    def chip(self, run: Chip) -> str:
-        return run.label
-
-    def line_break(self) -> str:
-        return " "
 
     def styled(self, _style: StyleName, inner: str, /) -> str:
         return inner
 
 
 def visible_text(runs: Rich) -> str:
-    return write_runs(runs, _VisibleText())
+    return write_runs(runs, VisibleText())

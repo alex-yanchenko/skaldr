@@ -99,6 +99,10 @@ _PALETTE_TO_TONE = {
 _TONE_TO_PALETTE = {tone: palette for palette, tone in _PALETTE_TO_TONE.items()}
 
 
+def semantic_tone_name(name: str) -> str:
+    return _PALETTE_TO_TONE.get(name, name)
+
+
 def _to_tone(value: Any) -> Any:
     """Normalise a palette colour name to its semantic tone twin (green → success); pass anything else
     through unchanged (semantic names, teal/sky, non-strings)."""
@@ -1090,6 +1094,16 @@ class Table(_Block):
     def title_badges(self) -> list[Column]:
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
+
+    @property
+    def title_key(self) -> str:
+        return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
+
+    @property
+    def sum_key(self) -> str | None:
+        if self.reconcile:
+            return self.reconcile.column
+        return self.totals.column if self.totals else None
 
     def all_rows(self) -> list[dict[str, Any]]:
         # casts: rows are mappings post-expansion (see `_expand_positional_rows`).

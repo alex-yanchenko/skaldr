@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from skaldr.richtext import Rich
+from skaldr.export.runs import ExportRich
 
 ToneName = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky", "muted"]
 ListKind = Literal["bullet", "number", "check"]
@@ -10,19 +10,19 @@ ListKind = Literal["bullet", "number", "check"]
 @dataclass(frozen=True)
 class Heading:
     level: int
-    text: Rich
+    text: ExportRich
     anchor: str | None = None
 
 
 @dataclass(frozen=True)
 class Paragraph:
-    text: Rich
+    text: ExportRich
     tone: ToneName | None = None
 
 
 @dataclass(frozen=True)
 class ListEntry:
-    text: Rich
+    text: ExportRich
     checked: bool = False
     children: "tuple[Node, ...]" = ()
     tone: ToneName | None = None
@@ -36,7 +36,7 @@ class ListNode:
 
 @dataclass(frozen=True)
 class TableCell:
-    text: Rich
+    text: ExportRich
     tone: ToneName | None = None
 
 
@@ -68,13 +68,13 @@ class Callout:
 
 @dataclass(frozen=True)
 class Quote:
-    lines: tuple[Rich, ...]
-    cite: Rich = ()
+    lines: tuple[ExportRich, ...]
+    cite: ExportRich = ()
 
 
 @dataclass(frozen=True)
 class Toggle:
-    title: Rich
+    title: ExportRich
     heading_level: int | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
@@ -93,7 +93,7 @@ class Columns:
 
 @dataclass(frozen=True)
 class Tab:
-    title: Rich
+    title: ExportRich
     children: "tuple[Node, ...]"
     tone: ToneName | None = None
 
@@ -155,7 +155,7 @@ class Diagram:
 @dataclass(frozen=True)
 class TocEntry:
     anchor: str
-    title: Rich
+    title: ExportRich
 
 
 @dataclass(frozen=True)
@@ -177,6 +177,12 @@ Node = (
     | Diagram
     | TableOfContents
 )
+
+
+@dataclass(frozen=True)
+class LoweredDocument:
+    title: str
+    body: tuple[Node, ...]
 
 
 def nested_nodes(node: Node) -> tuple[Node, ...]:

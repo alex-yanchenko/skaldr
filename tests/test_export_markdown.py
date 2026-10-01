@@ -2,14 +2,26 @@ from pathlib import Path
 
 import pytest
 
-from skaldr.export import export_markdown
-from skaldr.export.markdown import github_heading_slugs, github_slug, markdown_inline, render_markdown
-from skaldr.export.markup import code_span
-from skaldr.export.tree import Callout, Heading, ListNode, Paragraph, Quote, Toggle
+from skaldr.export import ExportResult, export_markdown
+from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
+from skaldr.export.markup import bold_once, code_block_lines, code_span, styled
+from skaldr.export.runs import Break, ExportRich, Gauge, Mark
+from skaldr.export.tree import (
+    Callout,
+    CodeBlock,
+    Heading,
+    ListEntry,
+    ListNode,
+    Paragraph,
+    Quote,
+    Tab,
+    Tabs,
+    Toggle,
+)
 from skaldr.models import load_report, parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Styled, parse_rich
 from tests.conftest import REPO_ROOT
-from tests.factories import make_command_request, make_report, markdown_of
+from tests.factories import API_BADGES, make_command_request, make_report, markdown_of
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
@@ -26,21 +38,23 @@ def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_co
 def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: Path) -> None:
     report = parse_report(make_report(meta={"title": "Q3 *count*"}))
 
-    (page,) = export_markdown(report, tmp_path).files
+    result = export_markdown(report, tmp_path)
 
-    assert page.read_text(encoding="utf-8") == "# Q3 \\*count\\*\n\nHello.\n"
+    assert result == ExportResult("Q3 *count*", (tmp_path / "page.md",))
+    assert (tmp_path / "page.md").read_text(encoding="utf-8") == "# Q3 \\*count\\*\n\nHello.\n"
 
 
 def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:
-    text = r"a *b* c_d [x] <y> ~n c:\d and `a*b [c]` via [x_y](https://example.com/a_b?q=[1])"
+    text = r"a *b* c_d [x] <y> ~n c:\d AT&T &amp; and `a*b [c]` via [x_y](https://example.com/a_b?q=[1])"
 
-    assert markdown_inline(parse_rich(text)) == (
-        r"a *b* c\_d \[x\] \<y\> \~n c:\\d and `a*b [c]` via [x\_y](https://example.com/a_b?q=[1])"
+    assert render_markdown([Paragraph(parse_rich(text))]) == (
+        r"a *b* c\_d \[x\] \<y\> \~n c:\\d AT&T \&amp; and `a*b [c]` via [x\_y](https://example.com/a_b?q=[1])"
+        "\n"
     )
 
 
 def test_inline_runs_become_markdown() -> None:
-    runs = (
+    runs: ExportRich = (
         Citation("a", 1, "https://example.com/a b"),
         Plain(" "),
         Citation("b", 2),
@@ -49,16 +63,23 @@ def test_inline_runs_become_markdown() -> None:
         Plain(" "),
         Styled("strike", (Plain("old"),)),
         Plain(" "),
-        Link((Plain("paren"),), "https://example.com/(x)"),
+        Link((Plain("paren"),), "https://example.com/(x)>"),
         Plain(" "),
         AnchorLink((Plain("method"),), "method"),
         Plain(" "),
         AnchorLink((Plain("gone"),), "nowhere"),
+        Break(),
+        Mark("delta", "up"),
+        Gauge(10, 10),
+        Plain(" see!"),
+        Link((Plain("img"),), "https://e.com/x.png"),
     )
+    nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph(runs)]
 
-    assert markdown_inline(runs, {"method": "how-we-count"}) == (
-        r"[\[1\]](<https://example.com/a b>) \[2\] `{{owner}}` ~~old~~ [paren](<https://example.com/(x)>) "
-        "[method](#how-we-count) gone"
+    assert render_markdown(nodes).split("\n\n")[1] == (
+        r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
+        "[paren](https://example.com/%28x%29%3E) "
+        "[method](#how-we-count) gone<br>▲██████████ see\\![img](https://e.com/x.png)\n"
     )
 
 
@@ -72,6 +93,27 @@ def test_inline_runs_become_markdown() -> None:
 )
 def test_a_code_span_outgrows_the_backticks_it_contains(text: str, span: str) -> None:
     assert code_span(text) == span
+
+
+@pytest.mark.parametrize(
+    ("content", "fence"),
+    [
+        pytest.param("x", "```", id="no-backticks"),
+        pytest.param("```\ny\n```", "````", id="contains-a-fence"),
+        pytest.param("`````", "``````", id="contains-five"),
+    ],
+)
+def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, fence: str) -> None:
+    assert code_block_lines(CodeBlock(content, "md")) == [f"{fence}md", *content.split("\n"), fence]
+
+
+def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
+    assert (styled("bold", " x "), styled("italic", "  "), bold_once("**y**"), bold_once("")) == (
+        " **x** ",
+        "  ",
+        "**y**",
+        "",
+    )
 
 
 @pytest.mark.parametrize(
@@ -97,8 +139,15 @@ def test_quote_lines_escape_a_leading_block_marker() -> None:
     assert markdown_of([quote]) == "> \\# quoted heading\n>\n> \\- quoted bullet\n"
 
 
-def test_a_heading_ending_in_hashes_keeps_them() -> None:
-    assert markdown_of([{"type": "heading", "text": "Issue #"}]) == "## Issue \\#\n"
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [
+        pytest.param("Issue #", "## Issue \\#", id="trailing-hash"),
+        pytest.param("###", "## \\###", id="only-hashes"),
+    ],
+)
+def test_a_heading_ending_in_hashes_keeps_them(text: str, line: str) -> None:
+    assert markdown_of([{"type": "heading", "text": text}]) == f"{line}\n"
 
 
 def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
@@ -152,9 +201,13 @@ def test_block_nodes_become_markdown_blocks() -> None:
         Callout("warning", (Paragraph((Plain("careful"),)),)),
         Quote(((Plain("said"),),)),
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
+        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
+        ListNode("bullet", (ListEntry((Plain("card"),), children=(Paragraph((Plain("note"),)),)),)),
     ]
 
-    assert render_markdown(nodes) == "> 💡\n\n> ⚠️ careful\n\n> said\n\n**Legend**\n\nx\n"
+    assert render_markdown(nodes) == (
+        "> 💡\n\n> ⚠️ careful\n\n> said\n\n**Legend**\n\nx\n\n**plain**\n\nz\n\n- card\n\n  note\n"
+    )
 
 
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
@@ -180,11 +233,10 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
 
 
 def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
-    badges = {"API": {"label": "api", "tone": "blue", "legend": "the API"}}
     row = {"type": "badge_row", "items": [{"key": "API"}]}
 
     assert (
-        markdown_of([row], badges=badges)
+        markdown_of([row], badges=API_BADGES)
         == "**api**\n\n**Legend: badges used on this page**\n\n- **api** the API\n"
     )
 

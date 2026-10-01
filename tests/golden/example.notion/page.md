@@ -236,14 +236,14 @@ xychart-beta
 		<td>**Zone C**</td>
 		<td>**Zone D**</td>
 	</tr>
-	<tr>
+	<tr color="green_bg">
 		<td>Clean</td>
 		<td>2,100</td>
 		<td>1,850</td>
 		<td>2,320</td>
 		<td>2,230</td>
 	</tr>
-	<tr>
+	<tr color="red_bg">
 		<td>Discrepant</td>
 		<td>180</td>
 		<td>340</td>
@@ -257,6 +257,24 @@ xychart-beta
     x-axis ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"]
     line [1500, 1180, 760, 410, 150]
 ```
+<table fit-page-width="true" header-row="true">
+	<tr>
+		<td>**Series**</td>
+		<td>**Day 1**</td>
+		<td>**Day 2**</td>
+		<td>**Day 3**</td>
+		<td>**Day 4**</td>
+		<td>**Day 5**</td>
+	</tr>
+	<tr>
+		<td>Open</td>
+		<td>1,500</td>
+		<td>1,180</td>
+		<td>760</td>
+		<td>410</td>
+		<td>150</td>
+	</tr>
+</table>
 **How discrepancies resolved**
 ```mermaid
 pie

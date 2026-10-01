@@ -26,9 +26,9 @@ from skaldr.models import (
     package_text,
     unresolvable_request_variables,
 )
-from skaldr.richtext import Chip, Citation, RichContext, StyleName, parse_rich, write_runs
+from skaldr.richtext import Citation, RichContext, StyleName, parse_rich, write_runs
 
-HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del"}
+_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del"}
 
 
 class _HtmlRuns:
@@ -36,36 +36,33 @@ class _HtmlRuns:
         self.cited = cited
         self.placeholders = placeholders
 
-    def text(self, text: str) -> str:
+    def text(self, text: str, /) -> str:
         return str(escape(text))
 
-    def code(self, text: str) -> str:
+    def bang_before_link(self) -> str:
+        return "!"
+
+    def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
 
-    def link(self, label: str, url: str) -> str:
+    def link(self, label: str, url: str, /) -> str:
         return f'<a href="{escape(url)}">{label}</a>'
 
-    def anchor_link(self, label: str, anchor: str) -> str:
+    def anchor_link(self, label: str, anchor: str, /) -> str:
         return f'<a href="#{escape(anchor)}">{label}</a>'
 
-    def citation(self, run: Citation) -> str:
+    def citation(self, run: Citation, /) -> str:
         anchor = "" if run.key in self.cited else f' id="fnref-{run.key}"'
         self.cited.add(run.key)
         return f'<sup class="fn"><a{anchor} href="#ref-{run.key}">[{run.number}]</a></sup>'
 
-    def placeholder(self, name: str) -> str:
+    def placeholder(self, name: str, /) -> str:
         if self.placeholders is not None:
             self.placeholders.add(name)
         return f'<span class="placeholder">{name}</span>'
 
-    def chip(self, run: Chip) -> str:
-        return f'<span class="chip {run.tone}">{escape(run.label)}</span>'
-
-    def line_break(self) -> str:
-        return "<br>"
-
-    def styled(self, style: StyleName, inner: str) -> str:
-        tag = HTML_STYLE_TAG[style]
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        tag = _HTML_STYLE_TAG[style]
         return f"<{tag}>{inner}</{tag}>"
 
 
@@ -77,6 +74,9 @@ def render_richtext(
     placeholders: set[str] | None = None,
 ) -> Markup:
     """Rich text as HTML: `parse_rich` reads the inline subset and every other character is escaped.
+    `[^key]` markers resolve to a superscript number only for keys `ref_numbers` declares; an unknown
+    key stays literal text so a typo surfaces. `anchor_ids` is the set of valid same-page `#slug`
+    targets: a `[…](#id)` link to an id outside it fails the build, and None leaves such links literal.
     `cited` records which reference keys have rendered, so only the first citation of a key carries
     the `fnref-` anchor id and the references list knows which keys are cited; pass one shared set
     across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name."""
@@ -110,6 +110,7 @@ def _environment() -> Environment:
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
+        derived_card_tally=compute.derived_card_tally,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

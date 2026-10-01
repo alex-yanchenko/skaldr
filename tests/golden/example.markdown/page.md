@@ -233,6 +233,10 @@ xychart-beta
     line [1500, 1180, 760, 410, 150]
 ```
 
+| Series | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 |
+| --- | --- | --- | --- | --- | --- |
+| Open | 1,500 | 1,180 | 760 | 410 | 150 |
+
 **How discrepancies resolved**
 
 ```mermaid

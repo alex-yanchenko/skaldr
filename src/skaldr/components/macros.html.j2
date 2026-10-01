@@ -61,10 +61,8 @@
    owns the split so template and validation can't drift. #}
 {% set cell_cols = b.cell_columns %}
 {% set title_badges = b.title_badges %}
-{% set text_cols = b.columns | selectattr("kind", "equalto", "text") | map(attribute="key") | list %}
-{% set rich_cols = b.columns | selectattr("kind", "equalto", "rich") | map(attribute="key") | list %}
-{% set title_key = text_cols[0] if text_cols else (rich_cols[0] if rich_cols else cell_cols[0].key) %}
-{% set sum_key = b.reconcile.column if b.reconcile else (b.totals.column if b.totals else none) %}
+{% set title_key = b.title_key %}
+{% set sum_key = b.sum_key %}
 <div class="table-wrap"><table class="rep">
 {% set width_total = cell_cols | selectattr("width") | map(attribute="width") | sum %}
 <colgroup>{% for c in cell_cols %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
@@ -202,7 +200,7 @@
    border read the same palette colour name. #}
 {% macro derived_card(c) %}
 {% set b = badges[c.badge] %}
-{% if c.of_matrix %}{% set mt = matrix_tallies[c.of_matrix] %}{% set count = mt.counts.get(c.badge, 0) %}{% set total = mt.total %}{% else %}{% set agg = namespace(count=0, total=0) %}{% for tid in c.of_tables %}{% set tt = table_tallies[tid] %}{% set agg.count = agg.count + tt.counts.get(c.badge, 0) %}{% set agg.total = agg.total + tt.total %}{% endfor %}{% set count = agg.count %}{% set total = agg.total %}{% endif %}
+{% set count, total = derived_card_tally(c, matrix_tallies, table_tallies) %}
 <div class="card {{ c.tone or b.tone }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
 {% endmacro %}
 

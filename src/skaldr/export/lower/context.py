@@ -1,41 +1,34 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TypeGuard, get_args
 
 from skaldr import compute
 from skaldr.export.inline import paragraphs, plain, rich_line
+from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
-from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items
-from skaldr.richtext import Chip, Plain, Rich, RichContext
+from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items, semantic_tone_name
+from skaldr.richtext import Plain, Rich, RichContext
 
-TONE_BY_NAME: dict[str, ToneName] = {
-    "slate": "neutral",
-    "blue": "info",
-    "green": "success",
-    "amber": "warning",
-    "red": "danger",
-    "violet": "accent",
-    "teal": "teal",
-    "sky": "sky",
-    "neutral": "neutral",
-    "info": "info",
-    "success": "success",
-    "warning": "warning",
-    "danger": "danger",
-    "accent": "accent",
-    "muted": "muted",
-}
+TONE_NAMES: frozenset[str] = frozenset(get_args(ToneName))
 MAX_HEADING_LEVEL = 4
 
 
+def _is_tone(name: str) -> TypeGuard[ToneName]:
+    return name in TONE_NAMES
+
+
 def tone_named(name: str | None) -> ToneName | None:
-    return TONE_BY_NAME.get(name) if name else None
+    if not name:
+        return None
+    tone = semantic_tone_name(name)
+    return tone if _is_tone(tone) else None
 
 
 @dataclass(frozen=True)
 class Lowering:
     report: Report
     rich_context: RichContext
-    anchors: Mapping[int, str]
+    anchors: dict[int, str]
     matrix_tallies: Mapping[str, compute.DerivedTally]
     table_tallies: Mapping[str, compute.DerivedTally]
 
@@ -52,10 +45,10 @@ class Lowering:
         badge = self.report.badges[key]
         return Chip(badge.label, badge.tone)
 
-    def chips(self, keys: Sequence[str]) -> Rich:
+    def chips(self, keys: Sequence[str]) -> ExportRich:
         return spaced(tuple((self.chip(key),) for key in keys))
 
-    def badge_items(self, items: Sequence[BadgeRef | BadgeLiteral]) -> Rich:
+    def badge_items(self, items: Sequence[BadgeRef | BadgeLiteral]) -> ExportRich:
         return spaced(
             tuple(
                 (self.chip(item.key),) if isinstance(item, BadgeRef) else (Chip(item.label, item.tone),)
@@ -79,8 +72,8 @@ def lowering_for(report: Report) -> Lowering:
     )
 
 
-def spaced(parts: Sequence[Rich], separator: str = " ") -> Rich:
-    runs: Rich = ()
+def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
+    runs: ExportRich = ()
     for part in parts:
         if runs:
             runs += (Plain(separator),)
@@ -92,5 +85,5 @@ def bullets(entries: Iterable[ListEntry]) -> ListNode:
     return ListNode("bullet", tuple(entries))
 
 
-def cells(*texts: str) -> tuple[TableCell, ...]:
+def plain_cells(*texts: str) -> tuple[TableCell, ...]:
     return tuple(TableCell(plain(text)) for text in texts)

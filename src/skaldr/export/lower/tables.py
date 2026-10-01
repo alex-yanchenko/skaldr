@@ -1,27 +1,18 @@
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from skaldr import compute
+from skaldr import compute, models
 from skaldr.export.inline import bold, italic, labelled, paragraphs, plain
-from skaldr.export.lower.context import Lowering, cells, tone_named
+from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named
+from skaldr.export.runs import Break, ExportRich, Mark
 from skaldr.export.tree import Node, Paragraph, Table, TableCell, TableRow
-from skaldr.models import Comparison, ComparisonCell, Matrix, Swimlane, SwimlaneStep, SwimlaneStepState
-from skaldr.models import Table as TableBlock
-from skaldr.richtext import Break, Link, Plain, Rich
+from skaldr.richtext import Link, Plain
 
-SWIMLANE_MARK: dict[SwimlaneStepState, str] = {
-    "done": "✅",
-    "current": "🔵",
-    "todo": "⚪",
-    "blocked": "⛔",
-    "deferred": "⏸️",
-}
-INDICATOR_MARK = {"success": "🟢", "warning": "🟡", "danger": "🔴", "info": "🔵", "neutral": "⚪"}
-
-Row = Mapping[str, object]
+Row = Mapping[str, Any]
 
 
-def _after_break(runs: Rich) -> Rich:
+def _after_break(runs: ExportRich) -> ExportRich:
     return (Break(), *runs) if runs else ()
 
 
@@ -29,10 +20,10 @@ def _blank_cells(count: int) -> tuple[TableCell, ...]:
     return tuple(TableCell(()) for _ in range(count))
 
 
-def _cell_text(value: object, lowering: Lowering) -> Rich:
+def _cell_text(value: object, lowering: Lowering) -> ExportRich:
     if value is None or value == "":
         return ()
-    runs: Rich = ()
+    runs: ExportRich = ()
     for part in paragraphs(str(value)):
         runs += _after_break(lowering.rich(part)) if runs else lowering.rich(part)
     return runs
@@ -47,7 +38,7 @@ def _subrows(row: Row) -> list[Row]:
     return cast("list[Row]", row.get("subrows") or [])
 
 
-def _title_cell(block: TableBlock, row: Row, value: object, lowering: Lowering) -> TableCell:
+def _title_cell(block: models.Table, row: Row, value: object, lowering: Lowering) -> TableCell:
     text = _cell_text(value, lowering)
     for badge_column in block.title_badges:
         keys = _badge_keys(row.get(badge_column.key))
@@ -58,24 +49,28 @@ def _title_cell(block: TableBlock, row: Row, value: object, lowering: Lowering) 
     return TableCell(text)
 
 
-def _number_cell(block: TableBlock, column_pct_of_total: bool, value: object) -> TableCell:
+def _number_cell(block: models.Table, column: models.Column, value: object) -> TableCell:
     text = plain(compute.fmt(value)) if value is not None else ()
-    if column_pct_of_total and block.reconcile and isinstance(value, (int, float)):
+    if column.pct_of_total and block.reconcile and isinstance(value, (int, float)):
         text += plain(f" ({compute.pct(value, block.reconcile.total)} of total)")
     return TableCell(text)
 
 
-def _table_row(block: TableBlock, row: Row, title_key: str, lowering: Lowering) -> TableRow:
+def _indicator_cell(value: object) -> TableCell:
+    indicator = str(value or "").strip()
+    return TableCell((Mark("indicator", indicator),) if indicator else (), tone_named(indicator))
+
+
+def _table_row(block: models.Table, row: Row, lowering: Lowering) -> TableRow:
     row_cells: list[TableCell] = []
     for column in block.cell_columns:
         value = row.get(column.key)
-        if column.key == title_key:
+        if column.key == block.title_key:
             row_cells.append(_title_cell(block, row, value, lowering))
         elif column.kind == "number":
-            row_cells.append(_number_cell(block, column.pct_of_total, value))
+            row_cells.append(_number_cell(block, column, value))
         elif column.kind == "indicator":
-            tone = str(value or "").strip()
-            row_cells.append(TableCell(plain(INDICATOR_MARK.get(tone, "")), tone_named(tone)))
+            row_cells.append(_indicator_cell(value))
         elif column.kind == "badge":
             row_cells.append(TableCell(lowering.chips(_badge_keys(value))))
         else:
@@ -89,26 +84,25 @@ def _table_row(block: TableBlock, row: Row, title_key: str, lowering: Lowering) 
     return TableRow(tuple(row_cells), tone)
 
 
-def _table_body(block: TableBlock, title_key: str, lowering: Lowering) -> list[TableRow]:
+def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
     if block.groups is None:
-        return [_table_row(block, row, title_key, lowering) for row in block.all_rows()]
-    sum_key = block.reconcile.column if block.reconcile else block.totals.column if block.totals else None
+        return [_table_row(block, row, lowering) for row in block.all_rows()]
     width = len(block.cell_columns)
     rows: list[TableRow] = []
     for group in block.groups:
         group_rows = cast("list[dict[str, Any]]", group.rows)
         label = bold(group.name)
-        if sum_key:
-            label += plain(f" ({compute.fmt(compute.col_sum(group_rows, sum_key))})")
+        if block.sum_key:
+            label += plain(f" ({compute.fmt(compute.col_sum(group_rows, block.sum_key))})")
         rows.append(TableRow((TableCell(label), *_blank_cells(width - 1)), emphasis="group"))
         if group_rows:
-            rows += [_table_row(block, row, title_key, lowering) for row in group_rows]
+            rows += [_table_row(block, row, lowering) for row in group_rows]
         else:
             rows.append(TableRow((TableCell(italic(plain("none"))), *_blank_cells(width - 1))))
     return rows
 
 
-def _totals_row(block: TableBlock, total_key: str) -> TableRow:
+def _totals_row(block: models.Table, total_key: str) -> TableRow:
     total = compute.fmt(compute.col_sum(block.all_rows(), total_key))
     return TableRow(
         tuple(
@@ -121,42 +115,38 @@ def _totals_row(block: TableBlock, total_key: str) -> TableRow:
     )
 
 
-def _rollup(block: TableBlock, lowering: Lowering) -> list[Node]:
+def _rollup(block: models.Table, lowering: Lowering) -> list[Node]:
     buckets = compute.table_rollup(block)
     if not buckets:
         return []
     lead = labelled(block.rollup.label) if block.rollup and block.rollup.label else ()
     counts = [(lowering.chip(bucket["key"]), *plain(f" {bucket['count']}")) for bucket in buckets]
-    runs: Rich = ()
-    for count in counts:
-        runs += (*plain(" · "), *count) if runs else count
-    return [Paragraph(lead + runs)]
+    return [Paragraph(lead + spaced(counts, " · "))]
 
 
-def lower_table(block: TableBlock, lowering: Lowering) -> list[Node]:
-    text_keys = [column.key for column in block.columns if column.kind == "text"]
-    rich_keys = [column.key for column in block.columns if column.kind == "rich"]
-    title_key = text_keys[0] if text_keys else rich_keys[0] if rich_keys else block.cell_columns[0].key
-    rows = _table_body(block, title_key, lowering)
+def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:
+    rows = _table_body(block, lowering)
     if block.totals:
         rows.append(_totals_row(block, block.totals.column))
-    nodes: list[Node] = [Table(cells(*(column.label for column in block.cell_columns)), tuple(rows))]
+    nodes: list[Node] = [Table(plain_cells(*(column.label for column in block.cell_columns)), tuple(rows))]
     nodes += _rollup(block, lowering)
     if block.reconcile:
         nodes.append(Paragraph(plain(compute.reconcile_line(block)), "muted"))
     return nodes
 
 
-def _comparison_cell(cell: bool | str | ComparisonCell, negative: bool, lowering: Lowering) -> TableCell:
+def _comparison_cell(
+    cell: bool | str | models.ComparisonCell, negative: bool, lowering: Lowering
+) -> TableCell:
     if isinstance(cell, bool):
         good = cell != negative
-        return TableCell(plain("✓" if cell else "✗"), "success" if good else "danger")
+        return TableCell((Mark("check", "yes" if cell else "no"),), "success" if good else "danger")
     if isinstance(cell, str):
         return TableCell(lowering.rich(cell))
     return TableCell(lowering.rich(cell.value), tone_named(cell.tone))
 
 
-def lower_comparison(block: Comparison, lowering: Lowering) -> list[Node]:
+def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]:
     header = (
         TableCell(()),
         *(
@@ -175,8 +165,8 @@ def lower_comparison(block: Comparison, lowering: Lowering) -> list[Node]:
     return [Table(header, tuple(rows), header_column=True)]
 
 
-def lower_matrix(block: Matrix, lowering: Lowering) -> list[Node]:
-    header = (TableCell(()), *cells(*block.columns))
+def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
+    header = (TableCell(()), *plain_cells(*block.columns))
     rows: list[TableRow] = []
     for row_name, grid_row in zip(block.rows, compute.matrix_grid(block), strict=True):
         row_cells = [TableCell(bold(row_name))]
@@ -192,9 +182,9 @@ def lower_matrix(block: Matrix, lowering: Lowering) -> list[Node]:
     return [Table(header, tuple(rows), header_column=True)]
 
 
-def _swim_step(step: SwimlaneStep, number_by_id: Mapping[str, str]) -> Rich:
-    number: Rich = (Link((Plain(step.n),), step.url),) if step.url else bold(step.n)
-    text = plain(f"{SWIMLANE_MARK[step.state]} ") + number + plain(f" {step.label}")
+def _swim_step(step: models.SwimlaneStep, number_by_id: Mapping[str, str]) -> ExportRich:
+    number: ExportRich = (Link((Plain(step.n),), step.url),) if step.url else bold(step.n)
+    text: ExportRich = (Mark("swimlane", step.state), Plain(" "), *number, *plain(f" {step.label}"))
     if step.value is not None:
         text += plain(f" ({compute.fmt(step.value)})")
     if step.depends_on:
@@ -203,50 +193,50 @@ def _swim_step(step: SwimlaneStep, number_by_id: Mapping[str, str]) -> Rich:
     return text
 
 
-def _with_total(text: Rich, totals: Mapping[str, float] | None, key: str) -> Rich:
+def _with_total(text: ExportRich, totals: Mapping[str, float] | None, key: str) -> ExportRich:
     return text + plain(f" ({compute.fmt(totals[key])})") if totals is not None else text
 
 
-def _swimlane_header(block: Swimlane, totals: compute.SwimTotals | None) -> tuple[TableCell, ...]:
-    groups_by_column: dict[str, list[str]] = {}
+def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) -> tuple[TableCell, ...]:
+    groups_by_column: defaultdict[str, list[str]] = defaultdict(list)
     for group in block.groups:
         for column in group.columns:
-            groups_by_column.setdefault(column, []).append(group.name)
+            groups_by_column[column].append(group.name)
     group_totals = totals["groups"] if totals is not None else None
     header = [TableCell(plain("Lane"))]
     for column in block.columns:
-        text: Rich = bold(column.name)
+        text: ExportRich = bold(column.name)
         if column.sub:
             text += _after_break(italic(plain(column.sub)))
-        names = [
-            _with_total(plain(name), group_totals, name) for name in groups_by_column.get(column.key, [])
-        ]
-        for index, name in enumerate(names):
-            text += _after_break(name) if index == 0 else plain(", ") + name
+        names = [_with_total(plain(name), group_totals, name) for name in groups_by_column[column.key]]
+        text += _after_break(spaced(names, ", "))
         header.append(TableCell(text))
     return tuple(header)
 
 
-def _lane_cells(block: Swimlane, lane_key: str, number_by_id: Mapping[str, str]) -> list[TableCell]:
+def _lane_cells(block: models.Swimlane, lane_key: str, number_by_id: Mapping[str, str]) -> list[TableCell]:
     lane_cells: list[TableCell] = []
     for column in block.columns:
-        runs: Rich = ()
-        for step in block.steps:
-            if step.lane == lane_key and step.col == column.key:
-                runs += (
-                    _after_break(_swim_step(step, number_by_id)) if runs else _swim_step(step, number_by_id)
-                )
+        steps = [
+            _swim_step(step, number_by_id)
+            for step in block.steps
+            if step.lane == lane_key and step.col == column.key
+        ]
+        runs: ExportRich = ()
+        for step_runs in steps:
+            runs += _after_break(step_runs) if runs else step_runs
         lane_cells.append(TableCell(runs))
     return lane_cells
 
 
-def _state_legend(states: Sequence[SwimlaneStepState]) -> list[Node]:
+def _state_legend(states: Sequence[models.SwimlaneStepState]) -> list[Node]:
     if not states:
         return []
-    return [Paragraph(plain(" · ".join(f"{SWIMLANE_MARK[state]} {state}" for state in states)), "muted")]
+    entries = [(Mark("swimlane", state), *plain(f" {state}")) for state in states]
+    return [Paragraph(spaced(entries, " · "), "muted")]
 
 
-def lower_swimlane(block: Swimlane) -> list[Node]:
+def lower_swimlane(block: models.Swimlane) -> list[Node]:
     number_by_id = {step.id: step.n for step in block.steps if step.id is not None}
     totals = compute.swimlane_totals(block)
     lane_totals = totals["lanes"] if totals is not None else None

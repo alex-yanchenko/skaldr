@@ -78,9 +78,9 @@ def lower_request(block: Request, lowering: Lowering) -> list[Node]:
 def lower_request_flow(block: RequestFlow, lowering: Lowering) -> list[Node]:
     nodes: list[Node] = [Paragraph(bold(block.label)), *_variables(block.variables)]
     for index, step in enumerate(block.steps, start=1):
-        heading: Rich = bold(f"Step {index} of {len(block.steps)}: {step.label}")
+        step_title: Rich = bold(f"Step {index} of {len(block.steps)}: {step.label}")
         for position, capture in enumerate(step.captures):
-            heading += (*plain(", captures " if position == 0 else ", "), Code(capture.name))
-        nodes.append(Paragraph(heading))
+            step_title += (*plain(", captures " if position == 0 else ", "), Code(capture.name))
+        nodes.append(Paragraph(step_title))
         nodes += _cases(step, lowering)
     return nodes

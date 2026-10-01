@@ -3,7 +3,6 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.richtext import (
     AnchorLink,
-    Chip,
     Citation,
     Code,
     Link,
@@ -12,8 +11,10 @@ from skaldr.richtext import (
     Rich,
     RichContext,
     Styled,
+    VisibleText,
     parse_rich,
     visible_text,
+    write_runs,
 )
 
 FULL_CONTEXT = RichContext(
@@ -44,6 +45,38 @@ def test_rich_text_parses_into_runs() -> None:
         Plain(" "),
         Placeholder("owner"),
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("*a*", (Styled("italic", (Plain("a"),)),), id="italic"),
+        pytest.param(
+            "*a **b** c*",
+            (Styled("italic", (Plain("a "), Styled("bold", (Plain("b"),)), Plain(" c"))),),
+            id="bold-inside-italic",
+        ),
+        pytest.param(
+            "**a *b* c**",
+            (Plain("**a "), Styled("italic", (Plain("b"),)), Plain(" c**")),
+            id="bold-cannot-wrap-an-asterisk-so-only-the-italic-applies",
+        ),
+        pytest.param("**a** b", (Styled("bold", (Plain("a"),)), Plain(" b")), id="bold-is-not-two-italics"),
+        pytest.param("{{ owner }}", (Placeholder("owner"),), id="spaced-placeholder"),
+        pytest.param(
+            "[**x**](https://e.com)",
+            (Link((Plain("**x**"),), "https://e.com"),),
+            id="emphasis-in-a-link-label-stays-literal",
+        ),
+        pytest.param(
+            "[l](https://a.io/`c`)",
+            (Plain("[l](https://a.io/"), Code("c"), Plain(")")),
+            id="code-span-inside-a-url-is-not-a-link",
+        ),
+    ],
+)
+def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
 
 
 def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:
@@ -99,14 +132,24 @@ def test_an_asterisk_inside_a_url_or_code_span_is_not_emphasis() -> None:
     )
 
 
+class _BangMarkingText(VisibleText):
+    def bang_before_link(self) -> str:
+        return "<bang>"
+
+
+def test_a_bang_right_before_a_link_goes_through_the_writer_at_every_depth() -> None:
+    runs = parse_rich("wow![a](https://e.com) and **so![b](https://e.com)** but not! here")
+
+    assert write_runs(runs, _BangMarkingText()) == "wow<bang>a and so<bang>b but not! here"
+
+
 def test_visible_text_reads_every_run_as_a_reader_would() -> None:
     runs: Rich = (
         Plain("a "),
         Link((Code("b"),), "https://e.com"),
         Citation("k", 2),
         Placeholder("who"),
-        Chip("api", "blue"),
         Styled("bold", (Plain("!"),)),
     )
 
-    assert visible_text(runs) == "a b[2]whoapi!"
+    assert visible_text(runs) == "a b[2]who!"
