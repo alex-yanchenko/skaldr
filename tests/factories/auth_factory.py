@@ -104,8 +104,9 @@ def favicon(_state: str) -> str:
 
 
 class FakeBrowser:
-    def __init__(self, *visits: Visit) -> None:
+    def __init__(self, *visits: Visit, resolves_localhost_to: str = "127.0.0.1") -> None:
         self.visits = visits
+        self.resolves_localhost_to = resolves_localhost_to
         self.opened: list[str] = []
         self.statuses: list[int] = []
         self.failures: list[BaseException] = []
@@ -115,7 +116,12 @@ class FakeBrowser:
         self.opened.append(url)
         query = parse_qs(urlsplit(url).query)
         redirect = urlsplit(query["redirect_uri"][0])
-        origin = f"{redirect.scheme}://{redirect.netloc}"
+        host = (
+            f"[{self.resolves_localhost_to}]"
+            if ":" in self.resolves_localhost_to
+            else self.resolves_localhost_to
+        )
+        origin = f"{redirect.scheme}://{host}:{redirect.port}"
         targets = [origin + visit(query["state"][0]) for visit in self.visits]
         self._thread = threading.Thread(target=self._visit_in_order, args=(targets,), daemon=True)
         self._thread.start()
@@ -172,9 +178,33 @@ def basic_auth_header(user: str, password: str) -> str:
     return "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
 
 
+def _ipv6_loopback_available() -> bool:
+    try:
+        with socket.create_server(("::1", 0), family=socket.AF_INET6):
+            return True
+    except OSError:
+        return False
+
+
+IPV6_LOOPBACK = _ipv6_loopback_available()
+needs_ipv6_loopback = pytest.mark.skipif(not IPV6_LOOPBACK, reason="this machine has no IPv6 loopback")
+
+
 def free_port() -> int:
-    with socket.create_server(("127.0.0.1", 0)) as probe:
-        return probe.getsockname()[1]
+    for _ in range(20):
+        with socket.create_server(("127.0.0.1", 0)) as probe:
+            port: int = probe.getsockname()[1]
+            if not IPV6_LOOPBACK or _free_on_ipv6_loopback(port):
+                return port
+    raise OSError("no port is free on both loopback addresses")
+
+
+def _free_on_ipv6_loopback(port: int) -> bool:
+    try:
+        with socket.create_server(("::1", port), family=socket.AF_INET6):
+            return True
+    except OSError:
+        return False
 
 
 def make_notion_credentials(**overrides: str | None) -> NotionCredentials:

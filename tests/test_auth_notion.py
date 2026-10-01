@@ -19,7 +19,9 @@ from tests.factories.auth_factory import (
     favicon,
     forged,
     forged_refusal,
+    free_port,
     make_notion_credentials,
+    needs_ipv6_loopback,
     refusing,
     refusing_connections,
     refusing_without_state,
@@ -69,7 +71,7 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
         "state": query["state"],
         "owner": ["user"],
     }
-    assert re.fullmatch(r"http://127\.0\.0\.1:\d+/callback", browser.redirect_uri)
+    assert re.fullmatch(r"http://localhost:\d+/callback", browser.redirect_uri)
     assert [summarise(request) for request in seen] == [
         {
             "method": "POST",
@@ -94,6 +96,18 @@ def test_stray_requests_are_turned_away_until_the_real_callback_arrives() -> Non
     assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
     assert browser.finished() == [404, 400, 400, 200]
     assert len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    "address", ["127.0.0.1", pytest.param("::1", marks=needs_ipv6_loopback)], ids=["ipv4", "ipv6"]
+)
+def test_the_callback_arrives_whichever_loopback_address_localhost_resolves_to(address: str) -> None:
+    browser = FakeBrowser(approving, resolves_localhost_to=address)
+
+    credentials = sign_in(browser, port=free_port())
+
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [200]
 
 
 @pytest.mark.parametrize(
@@ -186,11 +200,19 @@ def test_sign_in_times_out_when_the_browser_never_comes_back() -> None:
         sign_in(FakeBrowser(), timeout_seconds=0.2)
 
 
-def test_a_busy_callback_port_is_named() -> None:
-    with socket.create_server(("127.0.0.1", 0)) as blocker:
+@pytest.mark.parametrize(
+    ("family", "address", "shown"),
+    [
+        (socket.AF_INET, "127.0.0.1", r"127\.0\.0\.1"),
+        pytest.param(socket.AF_INET6, "::1", r"\[::1\]", marks=needs_ipv6_loopback),
+    ],
+    ids=["ipv4", "ipv6"],
+)
+def test_a_busy_callback_port_is_named(family: socket.AddressFamily, address: str, shown: str) -> None:
+    with socket.create_server((address, free_port()), family=family) as blocker:
         port = blocker.getsockname()[1]
 
-        with pytest.raises(AuthError, match=rf"^Cannot listen on 127\.0\.0\.1:{port} \(.+\); free the port"):
+        with pytest.raises(AuthError, match=rf"^Cannot listen on {shown}:{port} \(.+\); free the port"):
             sign_in(FakeBrowser(), port=port, timeout_seconds=0.2)
 
 

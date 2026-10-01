@@ -129,7 +129,7 @@ def test_auth_notion_prompts_for_the_client_signs_in_and_saves(
     assert load_notion() == SignIn(SIGNED_IN_NOTION, "keychain")
     assert capsys.readouterr().out == (
         "Register a public Notion connection once at https://www.notion.so/profile/integrations, "
-        f"with redirect URI http://127.0.0.1:{port}/callback\n"
+        f"with redirect URI http://localhost:{port}/callback\n"
         f"Opening Notion in your browser. If it does not open, visit:\n  {browser.opened[0]}\n"
         "Signed in to Notion workspace Example Workspace. Saved to the keychain.\n"
     )

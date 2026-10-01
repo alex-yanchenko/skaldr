@@ -1,6 +1,8 @@
+import errno
 import json
 import secrets
-import time
+import socket
+import threading
 from collections.abc import Callable, Mapping
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -23,7 +25,8 @@ DEFAULT_CALLBACK_PORT = 8765
 SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
-_LOOPBACK_HOST = "127.0.0.1"
+_REDIRECT_HOST = "localhost"
+_NO_IPV6_LOOPBACK = frozenset({errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT})
 _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
@@ -36,7 +39,7 @@ class _NotionToken(BaseModel):
 
 
 def redirect_uri_for(port: int) -> str:
-    return f"http://{_LOOPBACK_HOST}:{port}{_CALLBACK_PATH}"
+    return f"http://{_REDIRECT_HOST}:{port}{_CALLBACK_PATH}"
 
 
 def sign_in_to_notion(
@@ -160,20 +163,30 @@ def _refuse_a_denied_consent(query: str) -> None:
         raise AuthError(f"Notion did not grant access: {error[0]}")
 
 
+class _IPv6HTTPServer(HTTPServer):
+    address_family = socket.AF_INET6
+
+
 class _CallbackListener:
     def __init__(self, port: int, state: str) -> None:
         self._accepted: list[str] = []
+        self._answered = threading.Event()
+        handler = _callback_handler_class(state, self._accepted, self._answered)
+        ipv4 = _listen(HTTPServer, "127.0.0.1", port, handler)
+        self._servers = [ipv4]
         try:
-            self._server = HTTPServer((_LOOPBACK_HOST, port), _callback_handler_class(state, self._accepted))
-        except OSError as exc:
-            raise AuthError(
-                f"Cannot listen on {_LOOPBACK_HOST}:{port} ({exc.strerror or exc}); free the port, or "
-                "register a redirect URI with another port and pass it with --port"
-            ) from exc
+            ipv6 = _listen_on_ipv6_loopback(ipv4.server_port, handler)
+        except AuthError:
+            ipv4.server_close()
+            raise
+        if ipv6 is not None:
+            self._servers.append(ipv6)
+        for server in self._servers:
+            threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True).start()
 
     @property
     def port(self) -> int:
-        return self._server.server_port
+        return self._servers[0].server_port
 
     def __enter__(self) -> Self:
         return self
@@ -184,20 +197,39 @@ class _CallbackListener:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        self._server.server_close()
+        for server in self._servers:
+            server.shutdown()
+            server.server_close()
 
     def wait_for_callback(self, timeout_seconds: float) -> str:
-        deadline = time.monotonic() + timeout_seconds
-        while not self._accepted:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise AuthError(
-                    f"Timed out after {timeout_seconds:g} seconds waiting for Notion to redirect back to "
-                    f"{redirect_uri_for(self.port)}; run `skaldr auth notion` again"
-                )
-            self._server.timeout = remaining
-            self._server.handle_request()
+        if not self._answered.wait(timeout_seconds):
+            raise AuthError(
+                f"Timed out after {timeout_seconds:g} seconds waiting for Notion to redirect back to "
+                f"{redirect_uri_for(self.port)}; run `skaldr auth notion` again"
+            )
         return self._accepted[0]
+
+
+def _listen(
+    server_class: type[HTTPServer], address: str, port: int, handler: type[BaseHTTPRequestHandler]
+) -> HTTPServer:
+    try:
+        return server_class((address, port), handler)
+    except OSError as exc:
+        shown = f"[{address}]" if ":" in address else address
+        raise AuthError(
+            f"Cannot listen on {shown}:{port} ({exc.strerror or exc}); free the port, or register a "
+            "redirect URI with another port and pass it with --port"
+        ) from exc
+
+
+def _listen_on_ipv6_loopback(port: int, handler: type[BaseHTTPRequestHandler]) -> HTTPServer | None:
+    try:
+        return _listen(_IPv6HTTPServer, "::1", port, handler)
+    except AuthError as exc:
+        if isinstance(exc.__cause__, OSError) and exc.__cause__.errno in _NO_IPV6_LOOPBACK:
+            return None
+        raise
 
 
 def _answers_this_sign_in(query: str, state: str) -> bool:
@@ -211,7 +243,9 @@ def _answers_this_sign_in(query: str, state: str) -> bool:
     return "error" in fields and (state_matches or received_state is None)
 
 
-def _callback_handler_class(state: str, accepted: list[str]) -> type[BaseHTTPRequestHandler]:
+def _callback_handler_class(
+    state: str, accepted: list[str], answered: threading.Event
+) -> type[BaseHTTPRequestHandler]:
     class CallbackHandler(BaseHTTPRequestHandler):
         timeout = _IDLE_CONNECTION_TIMEOUT_SECONDS
 
@@ -223,7 +257,11 @@ def _callback_handler_class(state: str, accepted: list[str]) -> type[BaseHTTPReq
             if not _answers_this_sign_in(url.query, state):
                 self.send_error(HTTPStatus.BAD_REQUEST, "This is not the sign-in skaldr started")
                 return
+            if answered.is_set():
+                self.send_error(HTTPStatus.CONFLICT, "skaldr already has this sign-in")
+                return
             accepted.append(url.query)
+            answered.set()
             page = b"skaldr has the sign-in. Close this tab and return to the terminal.\n"
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
