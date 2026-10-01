@@ -1,7 +1,7 @@
 import re
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Literal
+from typing import Final, Literal
 
 from typing_extensions import assert_never
 
@@ -33,7 +33,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Citation, Rich, StyleName, visible_text, write_runs
 
-MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
+MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 GITHUB_SLUG_DROPPED = re.compile(r"[^\w\- ]")
@@ -42,8 +42,7 @@ MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash"
 
 
 def _escape(text: str) -> str:
-    escaped = "".join("\\" + character if character in MARKDOWN_ESCAPED else character for character in text)
-    return ENTITY_LOOKALIKE.sub(r"\\&", escaped)
+    return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
 
 def github_slug(text: str) -> str:

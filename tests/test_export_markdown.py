@@ -88,10 +88,35 @@ def test_a_bang_ending_text_is_escaped_even_with_nothing_after_it() -> None:
     assert markdown_of([{"type": "text", "body": "Done!"}]) == "Done\\!\n"
 
 
-def test_a_backslash_in_a_link_target_is_escaped_so_it_stays_in_the_url() -> None:
+def test_a_backslash_in_a_link_target_is_percent_encoded_so_it_stays_in_the_url() -> None:
     assert render_markdown([Paragraph((Link((Plain("x"),), "https://e.com/a\\"),))]) == (
-        "[x](https://e.com/a\\\\)\n"
+        "[x](https://e.com/a%5C)\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("url", "written"),
+    [
+        pytest.param("https://e.com/a?q=1#top", "https://e.com/a?q=1#top", id="plain-url"),
+        pytest.param("https://e.com/a\n\n# Injected", "https://e.com/a%0A%0A#%20Injected", id="line-breaks"),
+        pytest.param("https://e.com/\ta\r<b>", "https://e.com/%09a%0D%3Cb%3E", id="tab-cr-and-angles"),
+    ],
+)
+def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(
+    url: str, written: str
+) -> None:
+    references = {
+        "type": "references",
+        "items": [{"key": "a", "text": "SOP", "url": url}, {"key": "b", "text": "Memo"}],
+    }
+
+    assert markdown_of([{"type": "text", "body": "see [^a] [^b]"}, references]) == (
+        f"see [\\[1\\]]({written}) \\[2\\]\n\n- \\[1\\] SOP [source]({written})\n- \\[2\\] Memo\n"
+    )
+
+
+def test_a_dollar_sign_is_escaped_so_github_does_not_render_math() -> None:
+    assert markdown_of([{"type": "text", "body": "costs $5 and $x$"}]) == "costs \\$5 and \\$x\\$\n"
 
 
 def test_emphasis_at_the_start_of_a_line_keeps_its_markers() -> None:
@@ -106,6 +131,9 @@ def test_emphasis_at_the_start_of_a_line_keeps_its_markers() -> None:
         pytest.param("plain", "`plain`", id="no-backtick"),
         pytest.param("a`b", "``a`b``", id="inner-backtick"),
         pytest.param("`edge", "`` `edge ``", id="leading-backtick"),
+        pytest.param(" a ", "`  a  `", id="a-space-at-both-ends"),
+        pytest.param(" a", "` a`", id="a-space-at-one-end"),
+        pytest.param("  ", "`  `", id="only-spaces"),
     ],
 )
 def test_a_code_span_outgrows_the_backticks_it_contains(text: str, span: str) -> None:
