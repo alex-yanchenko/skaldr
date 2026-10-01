@@ -2,12 +2,13 @@ from typing import Any
 
 from skaldr.compute import (
     derived_card_tally,
+    matrix_cell_display,
     matrix_tallies,
     swimlane_state_legend,
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Cards, Swimlane, Table, parse_report
+from skaldr.models import Cards, MatrixCell, Swimlane, Table, parse_report
 from tests.factories import API_BADGES, make_report
 
 
@@ -119,10 +120,65 @@ def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_c
         },
         {"type": "table", "columns": [{"key": "t", "label": "T"}], "rows": [{"t": "y"}]},
     ]
-    tables = parse_report(make_report(blocks=blocks)).blocks
+    tables = [_table(block) for block in blocks]
 
-    assert [(table.title_key, table.sum_key) for table in tables if isinstance(table, Table)] == [
-        ("r", "n"),
-        ("t", "n"),
-        ("t", None),
+    assert [(table.title_key, table.sum_key) for table in tables] == [("r", "n"), ("t", "n"), ("t", None)]
+
+
+def _table(block: dict[str, Any]) -> Table:
+    table = parse_report(make_report(blocks=[block], badges=API_BADGES)).blocks[0]
+    assert isinstance(table, Table)
+    return table
+
+
+def test_a_row_tints_by_the_first_key_of_its_tint_column_and_a_blank_first_key_tints_nothing() -> None:
+    table = _table(
+        {
+            "type": "table",
+            "columns": [
+                {"key": "a", "label": "A"},
+                {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+            ],
+            "tint_by": "tag",
+            "rows": [{"a": "x", "tag": "API"}],
+        }
+    )
+
+    assert [
+        table.row_tint_key(row) for row in ({"tag": " API "}, {"tag": ["API", ""]}, {"tag": ["", "API"]}, {})
+    ] == [
+        "API",
+        "API",
+        "",
+        "",
+    ]
+
+
+def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> None:
+    swimlane = _swimlane(
+        [
+            {"id": "a", "lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
+            {"id": "b", "lane": "Ops", "col": "Plan", "n": "1", "label": "b"},
+            {"id": "c", "lane": "Ops", "col": "Plan", "n": "2", "label": "c"},
+            {"lane": "Ops", "col": "Plan", "n": "3", "label": "d", "depends_on": ["c", "a", "b"]},
+        ]
+    )
+
+    assert swimlane.dependency_numbers(swimlane.steps[3]) == ["2", "1"]
+
+
+def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() -> None:
+    badges = parse_report(make_report(badges=API_BADGES)).badges
+    cells = [
+        MatrixCell(row="r", col="c", badge="API"),
+        MatrixCell(row="r", col="c", badge="API", label="yes"),
+        MatrixCell(row="r", col="c", tone="amber"),
+        MatrixCell(row="r", col="c", label="n/a"),
+    ]
+
+    assert [matrix_cell_display(cell, badges) for cell in cells] == [
+        ("blue", "api"),
+        ("blue", "yes"),
+        ("amber", ""),
+        (None, "n/a"),
     ]

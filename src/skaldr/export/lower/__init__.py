@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from skaldr import compute, models
 from skaldr.errors import ReportError
-from skaldr.export.inline import bold, italic, plain
+from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for, tone_named
 from skaldr.export.lower.prose import (
     lower_badge_row,
@@ -38,7 +38,6 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.richtext import Plain
 
 SECTION_HEADING_LEVEL = 2
 
@@ -49,8 +48,7 @@ def lower_report(report: models.Report) -> LoweredDocument:
     toc = _table_of_contents(report, lowering)
     if toc.entries:
         nodes.append(toc)
-    nodes += _lower_blocks(report.blocks, lowering, depth=0)
-    nodes += _legend(report)
+    nodes += _blocks_with_the_legend(report, lowering)
     footer = compute.provenance_footer(report)
     if footer:
         nodes.append(Paragraph(plain(footer), "muted"))
@@ -107,7 +105,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.Note():
             return lower_note(block, lowering)
         case models.Image():
-            return lower_image(block, lowering)
+            return lower_image(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
         case models.Comparison():
@@ -150,18 +148,24 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     return [Heading(level, plain(block.title), anchor), *children]
 
 
+def _column_ratios(spans: Sequence[int]) -> list[int]:
+    total = sum(spans)
+    ratios = [round(span / total * 100) for span in spans]
+    return [*ratios[:-1], 100 - sum(ratios[:-1])]
+
+
 def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int) -> list[Node]:
-    total = sum(cell.span for cell in block.cells)
-    columns: list[Column] = []
+    cell_nodes: list[tuple[Node, ...]] = []
     for cell in block.cells:
         children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
         tone = tone_named(cell.tone)
-        if tone:
-            children = (Callout(tone, children),)
-        columns.append(Column(round(cell.span / total * 100), children))
-    if len(columns) == 1 or isinstance(block, models.InnerGrid):
-        return [node for column in columns for node in column.children]
-    return [Columns(tuple(columns))]
+        cell_nodes.append((Callout(tone, children),) if tone else children)
+    if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
+        return [node for children in cell_nodes for node in children]
+    ratios = _column_ratios([cell.span for cell in block.cells])
+    return [
+        Columns(tuple(Column(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True)))
+    ]
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:
@@ -176,6 +180,16 @@ def _legend(report: models.Report) -> list[Node]:
     if not used:
         return []
     entries = tuple(
-        ListEntry((Chip(badge.label, badge.tone), Plain(f" {badge.legend}"))) for _, badge in used
+        ListEntry((Chip(one_line(badge.label), badge.tone), *plain(f" {badge.legend}"))) for _, badge in used
     )
     return [Toggle(plain("Legend: badges used on this page"), None, (ListNode("bullet", entries),))]
+
+
+def _blocks_with_the_legend(report: models.Report, lowering: Lowering) -> list[Node]:
+    legend_at = compute.first_table_index(report)
+    nodes = [] if legend_at is not None else _legend(report)
+    for index, block in enumerate(report.blocks):
+        if index == legend_at:
+            nodes += _legend(report)
+        nodes += _lower_block(block, lowering, depth=0)
+    return nodes

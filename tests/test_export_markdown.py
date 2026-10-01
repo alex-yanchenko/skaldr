@@ -4,8 +4,8 @@ import pytest
 
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import bold_once, code_block_lines, code_span, styled
-from skaldr.export.runs import Break, ExportRich, Gauge, Mark
+from skaldr.export.markup import bold_once, code_block_lines, code_span, gauge_bar, styled
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark, export_visible_text
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -14,10 +14,15 @@ from skaldr.export.tree import (
     ListNode,
     Paragraph,
     Quote,
+    Table,
+    TableCell,
+    TableOfContents,
+    TableRow,
+    TocEntry,
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Styled, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
 from tests.factories import API_BADGES, make_report, markdown_of
 
 
@@ -55,17 +60,50 @@ def test_inline_runs_become_markdown() -> None:
         Plain(" "),
         AnchorLink((Plain("gone"),), "nowhere"),
         Break(),
-        Mark("delta", "up"),
+        Mark("status", "done"),
         Gauge(10, 10),
         Plain(" see!"),
         Link((Plain("img"),), "https://e.com/x.png"),
     )
     nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph(runs)]
 
-    assert render_markdown(nodes).split("\n\n")[1] == (
+    assert render_markdown(nodes) == (
+        "## How we count\n\n"
         r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
         "[paren](https://example.com/%28x%29%3E) "
-        "[method](#how-we-count) gone<br>▲██████████ see\\![img](https://e.com/x.png)\n"
+        "[method](#how-we-count) gone<br>✅██████████ see\\![img](https://e.com/x.png)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "written"),
+    [
+        pytest.param(Link((Plain("x"),), "https://e.com"), "[x](https://e.com)", id="link"),
+        pytest.param(AnchorLink((Plain("x"),), "method"), "[x](#m)", id="anchor-link"),
+        pytest.param(Citation("a", 1, "https://e.com"), r"[\[1\]](https://e.com)", id="citation"),
+    ],
+)
+def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_an_image(
+    target: Run, written: str
+) -> None:
+    nodes = [Heading(2, (Plain("M"),), "method"), Paragraph((Plain("wow!"), target))]
+
+    assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
+
+
+def test_a_bang_ending_text_is_escaped_even_with_nothing_after_it() -> None:
+    assert markdown_of([{"type": "text", "body": "Done!"}]) == "Done\\!\n"
+
+
+def test_a_backslash_in_a_link_target_is_escaped_so_it_stays_in_the_url() -> None:
+    assert render_markdown([Paragraph((Link((Plain("x"),), "https://e.com/a\\"),))]) == (
+        "[x](https://e.com/a\\\\)\n"
+    )
+
+
+def test_emphasis_at_the_start_of_a_line_keeps_its_markers() -> None:
+    assert markdown_of([{"type": "text", "body": "**- not a list** and *+ more*"}]) == (
+        "**- not a list** and *+ more*\n"
     )
 
 
@@ -93,6 +131,26 @@ def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, f
     assert code_block_lines(CodeBlock(content, "md")) == [f"{fence}md", *content.split("\n"), fence]
 
 
+@pytest.mark.parametrize(
+    ("value", "maximum", "bar"),
+    [
+        pytest.param(5, 10, "█████░░░░░", id="half"),
+        pytest.param(0, 10, "░░░░░░░░░░", id="empty"),
+        pytest.param(12, 10, "██████████", id="over-the-maximum-stays-full"),
+        pytest.param(-1, 10, "░░░░░░░░░░", id="below-zero-stays-empty"),
+        pytest.param(3, 0, "░░░░░░░░░░", id="zero-maximum"),
+    ],
+)
+def test_a_gauge_is_ten_cells_filled_in_proportion(value: float, maximum: float, bar: str) -> None:
+    assert gauge_bar(value, maximum) == bar
+
+
+def test_visible_text_of_export_runs_reads_chips_and_states_as_words() -> None:
+    runs: ExportRich = (Chip("api", "blue"), Plain(" "), Mark("status", "done"), Gauge(1, 2))
+
+    assert export_visible_text(runs) == "api done"
+
+
 def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
     assert (styled("bold", " x "), styled("italic", "  "), bold_once("**y**"), bold_once("")) == (
         " **x** ",
@@ -100,6 +158,48 @@ def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
         "**y**",
         "",
     )
+
+
+def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Name"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "rows": [{"a": "a|b and `x|y`", "n": 2}, {"a": "two\n\nlines", "n": 3}],
+        "totals": {"column": "n"},
+    }
+
+    assert markdown_of([table]) == (
+        "| Name | Units |\n"
+        "| --- | --- |\n"
+        "| a\\|b and `x\\|y` | 2 |\n"
+        "| two<br>lines | 3 |\n"
+        "| **Total** | **5** |\n"
+    )
+
+
+def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
+    table = Table(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
+        (
+            TableRow((TableCell((Plain("group"),)),), emphasis="group"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),))), "sky"),
+        ),
+        header_column=True,
+    )
+
+    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| group |  |\n| x | y |\n"
+
+
+def test_a_grid_becomes_its_cells_in_order() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
+            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
+        ],
+    }
+
+    assert markdown_of([grid]) == "a\n\nb\n"
 
 
 @pytest.mark.parametrize(
@@ -136,23 +236,6 @@ def test_a_heading_ending_in_hashes_keeps_them(text: str, line: str) -> None:
     assert markdown_of([{"type": "heading", "text": text}]) == f"{line}\n"
 
 
-def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
-    table = {
-        "type": "table",
-        "columns": [{"key": "a", "label": "Name"}, {"key": "n", "label": "Units", "kind": "number"}],
-        "rows": [{"a": "a|b and `x|y`", "n": 2}, {"a": "two\n\nlines", "n": 3}],
-        "totals": {"column": "n"},
-    }
-
-    assert markdown_of([table]) == (
-        "| Name | Units |\n"
-        "| --- | --- |\n"
-        "| a\\|b and `x\\|y` | 2 |\n"
-        "| two<br>lines | 3 |\n"
-        "| **Total** | **5** |\n"
-    )
-
-
 def test_nested_list_children_indent_to_the_content_column_of_their_marker() -> None:
     block = {
         "type": "list",
@@ -167,6 +250,26 @@ def test_a_check_list_becomes_a_task_list() -> None:
     block = {"type": "list", "style": "check", "items": [{"text": "done", "checked": True}, "open"]}
 
     assert markdown_of([block]) == "- [x] done\n- [ ] open\n"
+
+
+def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
+    block = {"type": "list", "style": "check", "items": [{"text": "parent", "items": ["child"]}]}
+
+    assert markdown_of([block]) == "- [ ] parent\n  - [ ] child\n"
+
+
+def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
+    assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
+
+
+def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:
+    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),))
+
+    assert render_markdown([callout]) == "> 💡\n>\n> - a\n"
+
+
+def test_a_table_of_contents_entry_with_no_heading_is_its_title_alone() -> None:
+    assert render_markdown([TableOfContents((TocEntry("gone", (Plain("Gone"),)),))]) == "- Gone\n"
 
 
 def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None:
@@ -220,20 +323,8 @@ def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
 
     assert (
         markdown_of([row], badges=API_BADGES)
-        == "**api**\n\n**Legend: badges used on this page**\n\n- **api** the API\n"
+        == "**Legend: badges used on this page**\n\n- **api** the API\n\n**api**\n"
     )
-
-
-def test_a_grid_becomes_its_cells_in_order() -> None:
-    grid = {
-        "type": "grid",
-        "cells": [
-            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
-            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
-        ],
-    }
-
-    assert markdown_of([grid]) == "a\n\nb\n"
 
 
 def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
@@ -249,10 +340,22 @@ def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
         pytest.param("Q2: the audit (final)", "q2-the-audit-final", id="punctuation"),
         pytest.param("A & B", "a--b", id="dropped-symbol-keeps-both-spaces"),
         pytest.param("snake_case-name", "snake_case-name", id="underscore-and-hyphen"),
+        pytest.param("Café Ünï", "café-ünï", id="unicode-letters-stay"),
+        pytest.param("Ship it 🚀", "ship-it-", id="emoji-dropped"),
     ],
 )
 def test_a_heading_slug_follows_github(heading: str, slug: str) -> None:
     assert github_slug(heading) == slug
+
+
+def test_a_repeated_heading_skips_a_slug_another_heading_already_took() -> None:
+    nodes = [
+        Heading(2, (Plain("Foo"),), "a"),
+        Heading(2, (Plain("Foo 1"),), "b"),
+        Heading(2, (Plain("Foo"),), "c"),
+    ]
+
+    assert github_heading_slugs(nodes) == {"a": "foo", "b": "foo-1", "c": "foo-2"}
 
 
 def test_github_slugs_number_repeats_in_document_order_across_every_heading() -> None:
