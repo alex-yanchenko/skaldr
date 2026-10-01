@@ -13,6 +13,40 @@ def make_report(**overrides: Any) -> dict[str, Any]:
     return report
 
 
+NOTION_PAGE_URL = "https://www.notion.so/Team-Plans-0123456789abcdef0123456789abcdef"
+NOTION_PAGE_ID = "0123456789abcdef0123456789abcdef"
+
+
+def make_section(section_id: str, **overrides: Any) -> dict[str, Any]:
+    return {
+        "type": "section",
+        "id": section_id,
+        "title": section_id,
+        "blocks": [{"type": "text", "body": "x"}],
+        **overrides,
+    }
+
+
+def make_notion_target(**overrides: Any) -> dict[str, Any]:
+    return {"to": "notion", "where": {"parent_page": NOTION_PAGE_URL}, **overrides}
+
+
+def make_jira_target(**overrides: Any) -> dict[str, Any]:
+    return {"to": "jira", "where": {"project": "PLAN", "issue_type": "Task"}, **overrides}
+
+
+def make_publish_report(
+    publish: dict[str, Any], section_ids: tuple[str, ...] = ("st1", "st2")
+) -> dict[str, Any]:
+    return make_report(
+        publish=publish,
+        blocks=[
+            {"type": "text", "body": "Intro."},
+            *(make_section(section_id) for section_id in section_ids),
+        ],
+    )
+
+
 def make_grid(cells: list[dict[str, Any]]) -> dict[str, Any]:
     return {"type": "grid", "cells": cells}
 

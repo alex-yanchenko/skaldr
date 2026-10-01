@@ -874,6 +874,43 @@ chain — fails the build rather than looping. A missing fragment fails with the
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
 
+## Where it publishes: `publish`
+
+An optional top-level `publish` block says where the document lives outside skaldr: Notion pages and Jira issues. `where` has a different shape for each service; the other keys mean the same thing everywhere. An item whose content leaves the document is archived, never deleted: a Notion page moves to the trash, where it can be restored, and a Jira issue is closed.
+
+```yaml
+publish:
+  doc_id: onboarding-plan            # the document's identity in every target
+  targets:
+    - to: notion
+      where: { parent_page: "https://www.notion.so/Team-Plans-0123456789abcdef0123456789abcdef" }
+      split: [st1, st2]              # each named top-level section becomes its own child page
+    - to: jira
+      where: { project: PLAN, issue_type: Task, parent: PLAN-100, fields: { labels: [onboarding] } }
+      from: [st1, st2]               # build this target from these sections only
+      split: [st1, st2]              # one child issue per section
+      overrides: { st2: { fields: { priority: High } } }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `doc_id` | At least two characters: lowercase letters and digits joined by single hyphens. |
+| `to` | `notion` or `jira`. |
+| `where` (Notion) | Exactly one of `parent_page` (create the document under it) or `page` (write into it), each a Notion page URL or page id, plus `fields` for database properties when the page is a database row. |
+| `where` (Jira) | A `project` key, an `issue_type`, an optional `parent` issue key, and `fields` for labels, priority, components and custom fields. |
+| `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
+| `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
+| `overrides` | Per-item `fields`, keyed by a split section id. |
+
+`skaldr --check` holds the block to these rules and names the target in every message:
+
+- every id in `from` and `split` names exactly one top-level `section` by its `id:` (a heading id or a title does not count), appears once in its list, and no two top-level sections share an id;
+- every `split` id sits inside `from` when `from` is given, and every `overrides` key is a `split` id;
+- a Notion page is a URL on notion.so, notion.site or notion.com, or a page id; a Jira project key is an uppercase letter followed by uppercase letters, digits or `_`, a `parent` is an issue key such as `PLAN-100`, and `issue_type` is not blank;
+- no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
+
+A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+
 ## The render carries its own source
 
 Every rendered page embeds its **editable YAML source** in an inert `<script id="skaldr-source">`
