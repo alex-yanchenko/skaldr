@@ -15,6 +15,7 @@ from skaldr.export.markup import (
     indent_lines,
     styled,
 )
+from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -30,7 +31,6 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
-from skaldr.richtext import Rich, visible_text, write_runs
 
 MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
@@ -70,8 +70,11 @@ class _MarkdownRuns(MarkupRuns):
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
 
+    def chip(self, run: Chip, /) -> str:
+        return styled("bold", _escape(run.label))
 
-def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:
+
+def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:
     for node in nodes:
         if isinstance(node, Heading):
             yield node.anchor, node.text
@@ -84,7 +87,7 @@ def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
     seen: Counter[str] = Counter()
     slugs: dict[str, str] = {}
     for anchor, text in _headings(nodes):
-        base = github_slug(visible_text(text))
+        base = github_slug(export_visible_text(text))
         count = seen[base]
         seen[base] += 1
         if anchor is not None:
@@ -118,13 +121,13 @@ class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.runs = _MarkdownRuns(heading_slugs)
 
-    def inline(self, runs: Rich) -> str:
-        return write_runs(runs, self.runs)
+    def inline(self, runs: ExportRich) -> str:
+        return write_export_runs(runs, self.runs)
 
-    def block_text(self, runs: Rich) -> str:
+    def block_text(self, runs: ExportRich) -> str:
         return escape_block_start(self.inline(runs))
 
-    def heading_line(self, level: int, runs: Rich) -> str:
+    def heading_line(self, level: int, runs: ExportRich) -> str:
         text = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), self.inline(runs))
         return f"{'#' * level} {text}"
 

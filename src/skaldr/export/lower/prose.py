@@ -1,8 +1,10 @@
+from collections.abc import Sequence
 from pathlib import PurePosixPath
 
-from skaldr import models
-from skaldr.export.inline import bold, italic, paragraphs, plain
+from skaldr import compute, models
+from skaldr.export.inline import bold, italic, labelled, paragraphs, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced
+from skaldr.export.runs import ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -14,7 +16,7 @@ from skaldr.export.tree import (
     Quote,
     ToneName,
 )
-from skaldr.richtext import Code, Link, Plain, Rich
+from skaldr.richtext import Code, Link, Plain
 
 CODE_LANGUAGE_BY_SUFFIX: dict[str, str] = {
     ".ts": "typescript",
@@ -39,6 +41,10 @@ CODE_LANGUAGE_BY_SUFFIX: dict[str, str] = {
 }
 
 
+def _marked(mark: Mark, text: ExportRich) -> ExportRich:
+    return (mark, Plain(" "), *text)
+
+
 def lower_list(block: models.ListBlock, lowering: Lowering) -> list[Node]:
     return [ListNode(block.style, tuple(_list_entry(item, block.style, lowering) for item in block.items))]
 
@@ -52,6 +58,58 @@ def _list_entry(item: str | models.ListItem, kind: ListKind, lowering: Lowering)
     return ListEntry(lowering.rich(item.text), item.checked, children)
 
 
+def lower_fact_strip(block: models.FactStrip) -> list[Node]:
+    return [bullets(ListEntry(labelled(fact.label) + plain(fact.value)) for fact in block.facts)]
+
+
+def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:
+    return [bullets(ListEntry(labelled(pair.label) + lowering.rich(pair.value)) for pair in block.pairs)]
+
+
+def lower_def_list(block: models.DefList, lowering: Lowering) -> list[Node]:
+    return [bullets(_definition(item.term, item.body, lowering) for item in block.items)]
+
+
+def _definition(term: str, body: str, lowering: Lowering) -> ListEntry:
+    parts = paragraphs(body)
+    first = lowering.rich(parts[0]) if parts else ()
+    rest = tuple(Paragraph(lowering.rich(part)) for part in parts[1:])
+    return ListEntry(labelled(term) + first, children=rest)
+
+
+def lower_cards(cards: Sequence[models.Card], lowering: Lowering) -> list[Node]:
+    return [bullets(_card(card, lowering) for card in cards)]
+
+
+def _delta(delta: models.CardDelta) -> ExportRich:
+    text = plain(f" {delta.label}")
+    return (Plain(" "), Mark("delta", delta.direction), *text) if delta.direction else text
+
+
+def _card(card: models.Card, lowering: Lowering) -> ListEntry:
+    value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
+    if card.of and isinstance(card.value, (int, float)):
+        value += plain(f" ({compute.pct(card.value, card.of)})")
+    if card.delta:
+        value += _delta(card.delta)
+    text = (labelled(card.label) + value) if card.label else value
+    if card.badges:
+        text += plain(" ") + lowering.chips(card.badges)
+    children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
+    return ListEntry(text, children=children, tone=card.tone)
+
+
+def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
+    if block.groups:
+        return [
+            bullets(
+                ListEntry(labelled(group.label) + lowering.badge_items(group.items)) for group in block.groups
+            )
+        ]
+    lead = labelled(block.label) if block.label else ()
+    return [Paragraph(lead + lowering.badge_items(block.items))]
+
+
 def _titled_callout(tone: ToneName, title: str | None, body: str, lowering: Lowering) -> list[Node]:
     heading: tuple[Node, ...] = (Paragraph(bold(title)),) if title else ()
     return [Callout(tone, heading + lowering.prose(body))]
@@ -63,6 +121,41 @@ def lower_callout(block: models.Callout, lowering: Lowering) -> list[Node]:
 
 def lower_note(block: models.Note, lowering: Lowering) -> list[Node]:
     return _titled_callout("neutral", block.title, block.body, lowering)
+
+
+def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node]:
+    return [
+        bullets(
+            ListEntry(_marked(Mark("status", item.state), lowering.rich(item.text))) for item in block.items
+        )
+    ]
+
+
+def _meter_entry(item: models.MeterItem) -> ListEntry:
+    reading = f" {compute.pct(item.value, item.max)} ({compute.fmt(item.value)} of {compute.fmt(item.max)})"
+    return ListEntry((*labelled(item.label), Gauge(item.value, item.max), *plain(reading)), tone=item.tone)
+
+
+def lower_meter(block: models.Meter) -> list[Node]:
+    return [bullets(_meter_entry(item) for item in block.items)]
+
+
+def lower_range(block: models.Range, lowering: Lowering) -> list[Node]:
+    total = sum(segment.span for segment in block.segments)
+    entries: list[ListEntry] = []
+    for segment in block.segments:
+        text = labelled(segment.label) + plain(
+            f"{compute.fmt(segment.span)} ({compute.pct(segment.span, total)})"
+        )
+        if segment.sub:
+            text += plain(", ") + lowering.rich(segment.sub)
+        entries.append(ListEntry(text, tone=segment.tone))
+    axis_note: list[Node] = []
+    if block.axis and (block.axis.min or block.axis.max):
+        axis_note.append(
+            Paragraph(plain(f"From {block.axis.min or 'start'} to {block.axis.max or 'end'}"), "muted")
+        )
+    return [*axis_note, ListNode("bullet", tuple(entries))]
 
 
 def code_language(label: str | None) -> str:
@@ -87,9 +180,24 @@ def lower_image(block: models.Image, lowering: Lowering) -> list[Node]:
     return [Paragraph(italic(plain("Image: ") + caption), "muted")]
 
 
+def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:
+    text: ExportRich = labelled(item.time) if item.time else ()
+    text += plain(item.title)
+    if item.state:
+        text = _marked(Mark("timeline", item.state), text)
+    if item.badges:
+        text += plain(" ") + lowering.chips(item.badges)
+    children: tuple[Node, ...] = (Paragraph(lowering.rich(item.body)),) if item.body else ()
+    return ListEntry(text, children=children)
+
+
+def lower_timeline(block: models.Timeline, lowering: Lowering) -> list[Node]:
+    return [bullets(_timeline_entry(item, lowering) for item in block.items)]
+
+
 def _reference_entry(item: models.ReferenceItem, lowering: Lowering) -> ListEntry:
     numbers = lowering.rich_context.reference_numbers or {}
-    parts: list[Rich] = [plain(f"[{numbers[item.key]}]"), lowering.rich(item.text)]
+    parts: list[ExportRich] = [plain(f"[{numbers[item.key]}]"), lowering.rich(item.text)]
     if item.url:
         parts.append((Link((Plain("source"),), item.url),))
     return ListEntry(spaced(parts))

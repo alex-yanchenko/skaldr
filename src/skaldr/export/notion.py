@@ -12,6 +12,7 @@ from skaldr.export.markup import (
     indent_lines,
     styled,
 )
+from skaldr.export.runs import Chip, ExportRich, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -24,7 +25,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.richtext import Rich, write_runs
+from skaldr.models import BadgeColor
 
 NOTION_ESCAPED = frozenset("\\*~`$[]<>{}|^")
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
@@ -38,6 +39,16 @@ BLOCK_COLOR: dict[ToneName, str] = {
     "warning": "yellow",
     "danger": "red",
     "accent": "purple",
+    "teal": "green",
+    "sky": "blue",
+}
+CHIP_COLOR: dict[BadgeColor, str] = {
+    "slate": "gray",
+    "blue": "blue",
+    "green": "green",
+    "amber": "yellow",
+    "red": "red",
+    "violet": "purple",
     "teal": "green",
     "sky": "blue",
 }
@@ -69,12 +80,15 @@ class _NotionRuns(MarkupRuns):
     def placeholder(self, name: str, /) -> str:
         return f'<span color="yellow_bg">{_escape("{{" + name + "}}")}</span>'
 
+    def chip(self, run: Chip, /) -> str:
+        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{_escape(run.label)}</span>'
 
-def notion_inline(runs: Rich) -> str:
-    return write_runs(runs, _NotionRuns())
+
+def notion_inline(runs: ExportRich) -> str:
+    return write_export_runs(runs, _NotionRuns())
 
 
-def _block_text(runs: Rich) -> str:
+def _block_text(runs: ExportRich) -> str:
     return escape_block_start(notion_inline(runs))
 
 

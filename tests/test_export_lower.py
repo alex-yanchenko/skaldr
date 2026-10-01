@@ -5,6 +5,7 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
+from skaldr.export.runs import Chip, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -21,7 +22,13 @@ from skaldr.export.tree import (
 )
 from skaldr.models import parse_report
 from skaldr.richtext import Code, Link, Plain, Styled
-from tests.factories import lowered, make_report
+from tests.factories import API_BADGES, lowered, make_report
+
+API_LEGEND = Toggle(
+    (Plain("Legend: badges used on this page"),),
+    None,
+    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" the API"))),)),),
+)
 
 
 def test_a_report_lowers_to_its_title_and_body() -> None:
@@ -73,13 +80,122 @@ def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     )
 
 
-def test_references_are_a_numbered_list_with_their_source_links() -> None:
-    references = {
-        "type": "references",
-        "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
+def test_a_card_shows_its_share_delta_badges_and_note() -> None:
+    card = {
+        "label": "Clean",
+        "value": 9,
+        "of": 10,
+        "tone": "success",
+        "delta": {"label": "+1", "direction": "up"},
+        "badges": ["API"],
+        "note": "since Monday",
     }
 
-    assert lowered([references]) == (
+    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (
+                        *bold("Clean"),
+                        Plain(": "),
+                        Plain("9"),
+                        Plain(" (90.0%)"),
+                        Plain(" "),
+                        Mark("delta", "up"),
+                        Plain(" +1"),
+                        Plain(" "),
+                        Chip("api", "blue"),
+                    ),
+                    children=(Paragraph((Plain("since Monday"),), "muted"),),
+                    tone="success",
+                ),
+            ),
+        ),
+        API_LEGEND,
+    )
+
+
+def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
+    meter = {"type": "meter", "items": [{"label": "Zone", "value": 5, "max": 10, "tone": "warning"}]}
+
+    assert lowered([meter]) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" 50.0% (5 of 10)")), tone="warning"
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_range_shows_its_axis_and_each_segment_share() -> None:
+    block = {
+        "type": "range",
+        "axis": {"min": "Jan"},
+        "segments": [
+            {"label": "Seg", "span": 1, "tone": "danger", "sub": "one"},
+            {"label": "Rest", "span": 3},
+        ],
+    }
+
+    assert lowered([block]) == (
+        Paragraph((Plain("From Jan to end"),), "muted"),
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Seg"), Plain(": "), Plain("1 (25.0%)"), Plain(", "), Plain("one")), tone="danger"
+                ),
+                ListEntry((*bold("Rest"), Plain(": "), Plain("3 (75.0%)"))),
+            ),
+        ),
+    )
+
+
+def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
+    blocks = [
+        {"type": "status_list", "items": [{"state": "blocked", "text": "Vendor"}]},
+        {
+            "type": "timeline",
+            "items": [{"time": "Mon", "title": "Start", "state": "done"}, {"title": "Later"}],
+        },
+    ]
+
+    assert lowered(blocks) == (
+        ListNode("bullet", (ListEntry((Mark("status", "blocked"), Plain(" "), Plain("Vendor"))),)),
+        ListNode(
+            "bullet",
+            (
+                ListEntry((Mark("timeline", "done"), Plain(" "), *bold("Mon"), Plain(": "), Plain("Start"))),
+                ListEntry((Plain("Later"),)),
+            ),
+        ),
+    )
+
+
+def test_definitions_badge_groups_and_references_are_lists() -> None:
+    blocks = [
+        {"type": "def_list", "items": [{"term": "Fix", "body": "first\n\nsecond"}]},
+        {"type": "badge_row", "groups": [{"label": "Owners:", "items": [{"label": "ops", "tone": "teal"}]}]},
+        {
+            "type": "references",
+            "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
+        },
+    ]
+
+    assert lowered(blocks) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Fix"), Plain(": "), Plain("first")), children=(Paragraph((Plain("second"),)),)
+                ),
+            ),
+        ),
+        ListNode("bullet", (ListEntry((*bold("Owners"), Plain(": "), Chip("ops", "teal"))),)),
         ListNode(
             "bullet",
             (

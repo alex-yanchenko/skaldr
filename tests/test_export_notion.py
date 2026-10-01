@@ -5,6 +5,7 @@ import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_notion
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     Heading,
@@ -15,7 +16,7 @@ from skaldr.export.tree import (
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, Rich, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
 from tests.factories import heading_sections, lowered, make_report, notion_of
 
 
@@ -46,21 +47,26 @@ def test_notion_special_characters_are_escaped_in_text_but_not_in_code_or_link_u
 
 
 def test_inline_runs_become_notion_spans() -> None:
-    runs: Rich = (
+    runs: ExportRich = (
         Citation("a", 1, "https://example.com/a (b)"),
         Plain(" "),
         Citation("b", 2),
         Plain(" "),
         Placeholder("owner"),
         Plain(" "),
+        Chip("api", "amber"),
+        Plain(" "),
         AnchorLink((Plain("method"),), "method"),
+        Mark("status", "blocked"),
+        Gauge(3, 10),
         Plain(" wow!"),
         *parse_rich("[img](https://e.com/x.png)"),
     )
 
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
-        '<span color="yellow_bg">\\{\\{owner\\}\\}</span> method wow\\![img](https://e.com/x.png)'
+        '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
+        '<span color="yellow_bg">api</span> method⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 

@@ -1,6 +1,7 @@
 import re
 from collections.abc import Callable, Sequence
 
+from skaldr.export.runs import Gauge, Mark, MarkScheme
 from skaldr.export.tree import CodeBlock, ToneName
 from skaldr.richtext import Citation, StyleName
 
@@ -16,6 +17,15 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "teal": "💡",
     "sky": "💡",
 }
+MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
+    "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
+    "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
+    "swimlane": {"done": "✅", "current": "🔵", "todo": "⚪", "blocked": "⛔", "deferred": "⏸️"},
+    "indicator": {"success": "🟢", "warning": "🟡", "danger": "🔴", "info": "🔵", "neutral": "⚪"},
+    "delta": {"up": "▲", "down": "▼", "flat": "→"},
+    "check": {"yes": "✓", "no": "✗"},
+}
+GAUGE_CELLS = 10
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+*]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
@@ -59,6 +69,11 @@ def encode_url(url: str) -> str:
     return "".join(URL_UNSAFE.get(character, character) for character in url)
 
 
+def gauge_bar(value: float, maximum: float) -> str:
+    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS))) if maximum else 0
+    return "█" * filled + "░" * (GAUGE_CELLS - filled)
+
+
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
@@ -76,3 +91,9 @@ class MarkupRuns:
 
     def styled(self, style: StyleName, inner: str, /) -> str:
         return styled(style, inner)
+
+    def mark(self, run: Mark, /) -> str:
+        return MARK_GLYPH[run.scheme].get(run.state, run.state)
+
+    def gauge(self, run: Gauge, /) -> str:
+        return gauge_bar(run.value, run.maximum)

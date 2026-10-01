@@ -10,6 +10,8 @@ from skaldr.export.tree import Node
 from skaldr.models import parse_report
 from tests.factories.report_factory import make_report
 
+API_BADGES: dict[str, Any] = {"API": {"label": "api", "tone": "blue", "legend": "the API"}}
+
 
 def lowered(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Node, ...]:
     return lower_report(parse_report(make_report(blocks=blocks, **overrides))).body

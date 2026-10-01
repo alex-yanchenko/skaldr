@@ -1,4 +1,11 @@
-from tests.factories.export_factory import heading_sections, lowered, markdown_of, notion_of, write_report
+from tests.factories.export_factory import (
+    API_BADGES,
+    heading_sections,
+    lowered,
+    markdown_of,
+    notion_of,
+    write_report,
+)
 from tests.factories.report_factory import (
     make_cell,
     make_command_request,
@@ -12,6 +19,7 @@ from tests.factories.report_factory import (
 )
 
 __all__ = [
+    "API_BADGES",
     "heading_sections",
     "lowered",
     "make_cell",

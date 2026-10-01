@@ -1,7 +1,7 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 
 from typing_extensions import assert_never
 
@@ -175,6 +175,10 @@ class RunWriter(Protocol):
     def styled(self, style: StyleName, inner: str, /) -> str: ...
 
 
+RunT = TypeVar("RunT")
+WriterT = TypeVar("WriterT", bound=RunWriter)
+
+
 def write_run(run: Run, writer: RunWriter) -> str:
     match run:
         case Plain():
@@ -195,15 +199,19 @@ def write_run(run: Run, writer: RunWriter) -> str:
             assert_never(run)
 
 
-def write_runs(runs: Rich, writer: RunWriter) -> str:
+def write_sequence(runs: Sequence[RunT], writer: WriterT, write_one: Callable[[RunT, WriterT], str]) -> str:
     out: list[str] = []
     for index, run in enumerate(runs):
         following = runs[index + 1] if index + 1 < len(runs) else None
         if isinstance(run, Plain) and run.text.endswith("!") and isinstance(following, Link):
             out.append(writer.text(run.text[:-1]) + writer.bang_before_link())
         else:
-            out.append(write_run(run, writer))
+            out.append(write_one(run, writer))
     return "".join(out)
+
+
+def write_runs(runs: Rich, writer: RunWriter) -> str:
+    return write_sequence(runs, writer, write_run)
 
 
 class VisibleText:

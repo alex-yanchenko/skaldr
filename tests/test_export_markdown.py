@@ -5,6 +5,7 @@ import pytest
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
 from skaldr.export.markup import code_block_lines, code_span, styled
+from skaldr.export.runs import ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -16,8 +17,8 @@ from skaldr.export.tree import (
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Rich, Styled, parse_rich
-from tests.factories import make_report, markdown_of
+from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Styled, parse_rich
+from tests.factories import API_BADGES, make_report, markdown_of
 
 
 def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: Path) -> None:
@@ -39,7 +40,7 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
 
 
 def test_inline_runs_become_markdown() -> None:
-    runs: Rich = (
+    runs: ExportRich = (
         Citation("a", 1, "https://example.com/a b"),
         Plain(" "),
         Citation("b", 2),
@@ -53,6 +54,8 @@ def test_inline_runs_become_markdown() -> None:
         AnchorLink((Plain("method"),), "method"),
         Plain(" "),
         AnchorLink((Plain("gone"),), "nowhere"),
+        Mark("delta", "up"),
+        Gauge(10, 10),
         Plain(" see!"),
         Link((Plain("img"),), "https://e.com/x.png"),
     )
@@ -61,7 +64,7 @@ def test_inline_runs_become_markdown() -> None:
     assert render_markdown(nodes).split("\n\n")[1] == (
         r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
         "[paren](https://example.com/%28x%29%3E) "
-        "[method](#how-we-count) gone see\\![img](https://e.com/x.png)\n"
+        "[method](#how-we-count) gone▲██████████ see\\![img](https://e.com/x.png)\n"
     )
 
 
@@ -189,6 +192,21 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
 
 
+def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
+    row = {"type": "badge_row", "items": [{"key": "API"}]}
+
+    assert (
+        markdown_of([row], badges=API_BADGES)
+        == "**api**\n\n**Legend: badges used on this page**\n\n- **api** the API\n"
+    )
+
+
+def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
+    row = {"type": "badge_row", "label": "Affects:", "items": [{"label": "api", "tone": "blue"}]}
+
+    assert markdown_of([row]) == "**Affects**: **api**\n"
+
+
 @pytest.mark.parametrize(
     ("heading", "slug"),
     [
@@ -231,9 +249,12 @@ def test_the_table_of_contents_and_anchor_links_point_at_github_slugs() -> None:
 
 
 def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
-    blocks = [{"type": "list", "items": ["West"]}, {"type": "heading", "text": "A"}]
+    blocks = [
+        {"type": "fact_strip", "facts": [{"label": "Site", "value": "West"}]},
+        {"type": "heading", "text": "A"},
+    ]
 
-    assert markdown_of(blocks, meta={"title": "T", "toc": True}) == "- [A](#a)\n\n* West\n\n## A\n"
+    assert markdown_of(blocks, meta={"title": "T", "toc": True}) == "- [A](#a)\n\n* **Site**: West\n\n## A\n"
 
 
 def test_a_page_with_no_toc_entries_drops_the_table_of_contents() -> None:

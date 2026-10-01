@@ -6,6 +6,10 @@ from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, RichContext, Ru
 WHITESPACE_RUN = re.compile(r"\s+")
 
 
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
 def plain(text: str) -> Rich:
     collapsed = WHITESPACE_RUN.sub(" ", text)
     return (Plain(collapsed),) if collapsed else ()
@@ -18,6 +22,10 @@ def bold(text: str) -> Rich:
 
 def italic(runs: Rich) -> Rich:
     return (Styled("italic", runs),) if runs else ()
+
+
+def labelled(label: str) -> Rich:
+    return bold(one_line(label).removesuffix(":").rstrip()) + plain(": ")
 
 
 def _on_one_line(run: Run) -> Run:
