@@ -27,9 +27,7 @@ else:
 import yaml
 from pydantic import (
     AfterValidator,
-    BaseModel,
     BeforeValidator,
-    ConfigDict,
     Field,
     StrictBool,
     ValidationError,
@@ -39,6 +37,8 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 from skaldr.errors import ReportError
+from skaldr.frozen_model import FrozenModel
+from skaldr.publish import Publish, section_choice_errors
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
@@ -177,8 +177,7 @@ def package_path(name: str) -> Path:
     return Path(str(_resource(name)))
 
 
-class _Frozen(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+_Frozen = FrozenModel
 
 
 class _Block(_Frozen):
@@ -2345,181 +2344,6 @@ def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
                 yield from iter_cards(step.detail)
 
 
-NOTION_PAGE_ID = re.compile(r"([0-9a-f]{32})$")
-JIRA_PROJECT_KEY_PATTERN = r"^[A-Z][A-Z0-9_]+$"
-JIRA_ISSUE_KEY_PATTERN = r"^[A-Z][A-Z0-9_]+-[1-9][0-9]*$"
-
-
-def notion_page_id(reference: str) -> str | None:
-    last_segment = reference.split("?", 1)[0].split("#", 1)[0].rstrip("/").rsplit("/", 1)[-1]
-    match = NOTION_PAGE_ID.search(last_segment.replace("-", "").lower())
-    return match.group(1) if match else None
-
-
-class NotionWhere(_Frozen):
-    parent_page: str | None = Field(
-        default=None,
-        description="A Notion page URL or page id the document is created under, as a child page.",
-    )
-    page: str | None = Field(
-        default=None,
-        description="A Notion page URL or page id the document is written into, replacing its content.",
-    )
-    fields: dict[str, Any] = Field(
-        default_factory=dict[str, Any],
-        description="Database property values, when the parent page is a database row.",
-    )
-
-    @model_validator(mode="after")
-    def _one_page_reference(self) -> "NotionWhere":
-        references = [reference for reference in (self.parent_page, self.page) if reference is not None]
-        if len(references) != 1:
-            raise ValueError("a notion target names exactly one of `parent_page` or `page`")
-        if notion_page_id(references[0]) is None:
-            raise ValueError(f"'{references[0]}' is not a Notion page URL or a 32-character page id")
-        return self
-
-    @property
-    def page_id(self) -> str:
-        return notion_page_id(self.parent_page or self.page or "") or ""
-
-
-class JiraWhere(_Frozen):
-    project: str = Field(pattern=JIRA_PROJECT_KEY_PATTERN, description="The Jira project key, e.g. PLAN.")
-    issue_type: str = Field(min_length=1, description="The issue type each created issue gets, e.g. Task.")
-    parent: str | None = Field(
-        default=None,
-        pattern=JIRA_ISSUE_KEY_PATTERN,
-        description="An existing issue key the document's issue is created under, e.g. PLAN-100.",
-    )
-    fields: dict[str, Any] = Field(
-        default_factory=dict[str, Any],
-        description="Field values for every created issue: labels, priority, components, custom fields.",
-    )
-
-
-class TargetOverride(_Frozen):
-    fields: dict[str, Any] = Field(
-        default_factory=dict[str, Any],
-        description="Field values for this one item, applied over the target's `where.fields`.",
-    )
-
-
-class _PublishTarget(_Frozen):
-    model_config = ConfigDict(
-        extra="forbid", frozen=True, validate_by_name=True, validate_by_alias=True, serialize_by_alias=True
-    )
-
-    from_sections: list[str] | None = Field(
-        default=None,
-        validation_alias="from",
-        serialization_alias="from",
-        description="Top-level section ids this target is built from. Omitted: the whole document.",
-    )
-    split: list[str] = Field(
-        default_factory=list[str],
-        description="Top-level section ids that each become their own child page or child issue; "
-        "everything else stays on the document's own page or issue. Empty: one item for the document.",
-    )
-    overrides: dict[str, TargetOverride] = Field(
-        default_factory=dict[str, TargetOverride],
-        description="Per-item values keyed by a split section id.",
-    )
-    removed: Literal["archive", "delete"] = Field(
-        default="archive",
-        description="What happens to an item whose content left the document: `archive` is recoverable, "
-        "`delete` is permanent.",
-    )
-    on_remote_edit: Literal["refuse", "overwrite"] = Field(
-        default="refuse",
-        description="When an item was edited in the service since the last publish: `refuse` stops and "
-        "shows the change, `overwrite` replaces it.",
-    )
-
-
-class NotionTarget(_PublishTarget):
-    to: Literal["notion"] = Field(description="Publish to Notion.")
-    where: NotionWhere = Field(description="The Notion page the document goes under or into.")
-
-
-class JiraTarget(_PublishTarget):
-    to: Literal["jira"] = Field(description="Publish to Jira.")
-    where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
-
-    @model_validator(mode="after")
-    def _archive_only(self) -> "JiraTarget":
-        if self.removed == "delete":
-            raise ValueError(
-                "a jira target cannot use `removed: delete`: Jira issues are archived, never deleted"
-            )
-        return self
-
-
-PublishTarget = Annotated[NotionTarget | JiraTarget, Field(discriminator="to")]
-
-
-class Publish(_Frozen):
-    doc_id: str = Field(
-        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$",
-        description="The document's identity in every target, stamped on each page and issue it creates. "
-        "Lowercase letters, digits and hyphens.",
-    )
-    targets: list[PublishTarget] = Field(min_length=1, description="Where the document publishes.")
-
-
-PUBLISH_KEY_LINE = re.compile(r"publish:(\s|$)")
-
-
-def _is_top_level_key(line: str) -> bool:
-    return bool(line.strip()) and line[0] not in " \t#"
-
-
-def without_publish_block(source: str) -> str:
-    lines = source.splitlines(keepends=True)
-    start = next((index for index, line in enumerate(lines) if PUBLISH_KEY_LINE.match(line)), None)
-    if start is None:
-        return source
-    end = next(
-        (index for index in range(start + 1, len(lines)) if _is_top_level_key(lines[index])), len(lines)
-    )
-    comments_above_next_key = end
-    while comments_above_next_key - 1 > start and lines[comments_above_next_key - 1].startswith("#"):
-        comments_above_next_key -= 1
-    return "".join(lines[:start] + lines[comments_above_next_key:])
-
-
-def _section_choice_errors(publish: Publish, section_ids: set[str]) -> list[str]:
-    errors: list[str] = []
-    for number, target in enumerate(publish.targets, start=1):
-        name = f"publish target {number} ({target.to})"
-        for section_id in target.from_sections or []:
-            if section_id not in section_ids:
-                errors.append(
-                    f"{name} is built from '{section_id}', which is not the id of a top-level section"
-                )
-        for section_id, count in Counter(target.split).items():
-            if count > 1:
-                errors.append(f"{name} lists '{section_id}' more than once in `split`")
-            if section_id not in section_ids:
-                errors.append(f"{name} splits on '{section_id}', which is not the id of a top-level section")
-            elif target.from_sections is not None and section_id not in target.from_sections:
-                errors.append(f"{name} splits on '{section_id}', which its `from` list leaves out")
-        errors += [
-            f"{name} overrides '{section_id}', which is not one of its split sections"
-            for section_id in target.overrides
-            if section_id not in target.split
-        ]
-    seen: dict[str, int] = {}
-    for number, target in enumerate(publish.targets, start=1):
-        location = f"{target.to}:{target.where.model_dump_json()}"
-        if location in seen:
-            errors.append(
-                f"publish targets {seen[location]} and {number} both write to the same {target.to} location"
-            )
-        seen.setdefault(location, number)
-    return errors
-
-
 class Report(_Frozen):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
@@ -2534,11 +2358,11 @@ class Report(_Frozen):
     )
 
     @model_validator(mode="after")
-    def _validate_publish_sections(self) -> "Report":
+    def _publish_ids_name_sections(self) -> "Report":
         if self.publish is None:
             return self
-        section_ids = {block.id for block in self.blocks if isinstance(block, Section) and block.id}
-        errors = _section_choice_errors(self.publish, section_ids)
+        section_ids = [block.id for block in self.blocks if isinstance(block, Section) and block.id]
+        errors = section_choice_errors(self.publish, section_ids)
         if errors:
             raise ValueError("; ".join(errors))
         return self

@@ -1885,6 +1885,7 @@
               "items": {
                 "type": "string"
               },
+              "minItems": 1,
               "type": "array"
             },
             {
@@ -1892,11 +1893,11 @@
             }
           ],
           "default": null,
-          "description": "Top-level section ids this target is built from. Omitted: the whole document.",
+          "description": "Top-level section ids this target is built from, kept in document order. Left out: the whole document.",
           "title": "From"
         },
         "split": {
-          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Empty: one item for the document.",
+          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the document.",
           "items": {
             "type": "string"
           },
@@ -1913,7 +1914,7 @@
         },
         "removed": {
           "default": "archive",
-          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent.",
+          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent. A Jira target accepts only `archive`.",
           "enum": [
             "archive",
             "delete"
@@ -1979,7 +1980,9 @@
           "title": "Parent"
         },
         "fields": {
-          "additionalProperties": true,
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
           "description": "Field values for every created issue: labels, priority, components, custom fields.",
           "title": "Fields",
           "type": "object"
@@ -1992,6 +1995,7 @@
       "title": "JiraWhere",
       "type": "object"
     },
+    "JsonValue": {},
     "KVPair": {
       "additionalProperties": false,
       "properties": {
@@ -2533,6 +2537,7 @@
               "items": {
                 "type": "string"
               },
+              "minItems": 1,
               "type": "array"
             },
             {
@@ -2540,11 +2545,11 @@
             }
           ],
           "default": null,
-          "description": "Top-level section ids this target is built from. Omitted: the whole document.",
+          "description": "Top-level section ids this target is built from, kept in document order. Left out: the whole document.",
           "title": "From"
         },
         "split": {
-          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Empty: one item for the document.",
+          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the document.",
           "items": {
             "type": "string"
           },
@@ -2561,7 +2566,7 @@
         },
         "removed": {
           "default": "archive",
-          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent.",
+          "description": "What happens to an item whose content left the document: `archive` is recoverable, `delete` is permanent. A Jira target accepts only `archive`.",
           "enum": [
             "archive",
             "delete"
@@ -2627,8 +2632,10 @@
           "title": "Page"
         },
         "fields": {
-          "additionalProperties": true,
-          "description": "Database property values, when the parent page is a database row.",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Database property values, when the target page is a database row.",
           "title": "Fields",
           "type": "object"
         }
@@ -2801,8 +2808,9 @@
       "additionalProperties": false,
       "properties": {
         "doc_id": {
-          "description": "The document's identity in every target, stamped on each page and issue it creates. Lowercase letters, digits and hyphens.",
-          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+          "description": "The document's identity in every target, stamped on each page and issue it creates: at least two characters, lowercase letters and digits joined by single hyphens.",
+          "minLength": 2,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
           "title": "Doc Id",
           "type": "string"
         },
@@ -4523,7 +4531,9 @@
       "additionalProperties": false,
       "properties": {
         "fields": {
-          "additionalProperties": true,
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
           "description": "Field values for this one item, applied over the target's `where.fields`.",
           "title": "Fields",
           "type": "object"

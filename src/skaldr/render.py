@@ -27,8 +27,8 @@ from skaldr.models import (
     load_report,
     package_text,
     unresolvable_request_variables,
-    without_publish_block,
 )
+from skaldr.publish import without_publish_block
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
 _FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
@@ -213,6 +213,7 @@ def _render(
     globals_["cited_references"] = cited_references
     globals_["matrix_tallies"] = compute.matrix_tallies(report)
     globals_["table_tallies"] = compute.table_tallies(report)
+    embedded_source = without_publish_block(source) if source else None
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
@@ -222,7 +223,7 @@ def _render(
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         has_requests=any(iter_requests(report.blocks)),
-        source_block=source_block(without_publish_block(source)) if source else None,
+        source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
     )
 
