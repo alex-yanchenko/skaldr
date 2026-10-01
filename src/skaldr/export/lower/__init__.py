@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 
+from typing_extensions import assert_never
+
 from skaldr import compute, models
-from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for, tone_named
+from skaldr.export.lower.diagrams import lower_chart, lower_fan, lower_flow
 from skaldr.export.lower.prose import (
     lower_badge_row,
     lower_callout,
@@ -22,6 +24,7 @@ from skaldr.export.lower.prose import (
     lower_status_list,
     lower_timeline,
 )
+from skaldr.export.lower.requests import lower_request, lower_request_flow
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
 from skaldr.export.runs import Chip
 from skaldr.export.tree import (
@@ -110,6 +113,12 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_image(block, lowering)
         case models.Timeline():
             return lower_timeline(block, lowering)
+        case models.Flow():
+            return lower_flow(block, lowering)
+        case models.Fan():
+            return lower_fan(block, lowering)
+        case models.Chart():
+            return lower_chart(block)
         case models.Comparison():
             return lower_comparison(block, lowering)
         case models.Matrix():
@@ -120,6 +129,10 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_references(block, lowering)
         case models.Table():
             return lower_table(block, lowering)
+        case models.Request():
+            return lower_request(block, lowering)
+        case models.RequestFlow():
+            return lower_request_flow(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
         case models.Panel():
@@ -135,7 +148,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
                 ListNode("number", tuple(_walkthrough_entry(step, lowering, depth) for step in block.steps))
             ]
         case _:
-            raise ReportError(f"a `{block.type}` block has no Markdown export yet")
+            assert_never(block)
 
 
 def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node]:

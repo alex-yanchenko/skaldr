@@ -20,6 +20,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export.lower import lower_report
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -455,9 +456,10 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
 
 def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
     """Validate each content file and print one line per file, returning 1 if any file is invalid — it
-    drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass (no HTML
-    is written), so a render-time error like a dangling `#anchor` link surfaces as FAIL too, not only
-    schema errors. With `strict`, an unfilled `{{placeholder}}` also fails a file (else a noted-OK count)."""
+    drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass and an
+    export pass (nothing is written), so a render-time error like a dangling `#anchor` link surfaces as
+    FAIL too, not only schema errors. With `strict`, an unfilled `{{placeholder}}` also fails a file
+    (else a noted-OK count)."""
     failed = 0
     for raw_path in paths:
         path = Path(raw_path)
@@ -466,6 +468,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
             # Render (discarding output) to collect placeholders AND surface render-time errors (e.g. a
             # dangling anchor) as a clean FAIL — must stay inside the try so nothing escapes as a traceback.
             unfilled = find_placeholders(report)
+            lower_report(report)
         except ReportError as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)

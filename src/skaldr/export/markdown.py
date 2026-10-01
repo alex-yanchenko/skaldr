@@ -8,6 +8,7 @@ from typing_extensions import assert_never
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    TAB_ICON,
     MarkupRuns,
     bold_once,
     code_block_lines,
@@ -16,11 +17,13 @@ from skaldr.export.markup import (
     indent_lines,
     styled,
 )
+from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    Diagram,
     Heading,
     ListEntry,
     ListKind,
@@ -32,6 +35,7 @@ from skaldr.export.tree import (
     Table,
     TableCell,
     TableOfContents,
+    Tabs,
     Toggle,
     nested_nodes,
 )
@@ -202,6 +206,14 @@ class _MarkdownWriter:
             parts.append(styled("italic", self.inline(node.cite)))
         return _quoted(_joined([[part] for part in parts]))
 
+    def tabs_lines(self, node: Tabs) -> list[str]:
+        sections: list[list[str]] = []
+        for tab in node.tabs:
+            icon = TAB_ICON.get(tab.tone) if tab.tone else None
+            title = self.inline(tab.title)
+            sections.append(self.titled(styled("bold", f"{icon} {title}" if icon else title), tab.children))
+        return _joined(sections)
+
     def toc_lines(self, node: TableOfContents, use_alternate_markers: bool) -> list[str]:
         dash = "*" if use_alternate_markers else "-"
         entries = [
@@ -232,6 +244,10 @@ class _MarkdownWriter:
                 return self.titled(styled("bold", self.inline(node.title)), node.children)
             case Columns():
                 return self.blocks(nested_nodes(node))
+            case Tabs():
+                return self.tabs_lines(node)
+            case Diagram():
+                return [*mermaid_fence_lines(node.figure), *_spaced(self.blocks(node.supplement))]
             case TableOfContents():
                 return self.toc_lines(node, use_alternate_markers)
             case _:

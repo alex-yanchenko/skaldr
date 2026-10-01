@@ -92,6 +92,67 @@ class Columns:
 
 
 @dataclass(frozen=True)
+class Tab:
+    title: ExportRich
+    children: "tuple[Node, ...]"
+    tone: ToneName | None = None
+
+
+@dataclass(frozen=True)
+class Tabs:
+    tabs: tuple[Tab, ...]
+
+
+@dataclass(frozen=True)
+class GraphNode:
+    key: str
+    label: str
+    note: str = ""
+    tone: ToneName | None = None
+
+
+@dataclass(frozen=True)
+class GraphEdge:
+    source: str
+    target: str
+    dashed: bool = False
+
+
+@dataclass(frozen=True)
+class Graph:
+    direction: Literal["TB", "LR"]
+    nodes: tuple[GraphNode, ...]
+    edges: tuple[GraphEdge, ...]
+
+
+@dataclass(frozen=True)
+class PieSlice:
+    label: str
+    value: float
+
+
+@dataclass(frozen=True)
+class PieChart:
+    slices: tuple[PieSlice, ...]
+
+
+@dataclass(frozen=True)
+class XYChart:
+    mark: Literal["bar", "line"]
+    categories: tuple[str, ...]
+    series: tuple[tuple[float, ...], ...]
+
+
+Figure = Graph | PieChart | XYChart
+
+
+@dataclass(frozen=True)
+class Diagram:
+    figure: Figure
+    supplement: "tuple[Node, ...]" = ()
+
+
+@dataclass(frozen=True)
 class TocEntry:
     anchor: str
     title: ExportRich
@@ -103,7 +164,18 @@ class TableOfContents:
 
 
 Node = (
-    Heading | Paragraph | ListNode | Table | CodeBlock | Callout | Quote | Toggle | Columns | TableOfContents
+    Heading
+    | Paragraph
+    | ListNode
+    | Table
+    | CodeBlock
+    | Callout
+    | Quote
+    | Toggle
+    | Columns
+    | Tabs
+    | Diagram
+    | TableOfContents
 )
 
 
@@ -121,5 +193,9 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return node.children
         case Columns():
             return tuple(child for column in node.columns for child in column.children)
+        case Tabs():
+            return tuple(child for tab in node.tabs for child in tab.children)
+        case Diagram():
+            return node.supplement
         case Heading() | Paragraph() | Table() | CodeBlock() | Quote() | TableOfContents():
             return ()

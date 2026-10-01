@@ -14,11 +14,25 @@ from skaldr.export.tree import (
     ListNode,
     Paragraph,
     Quote,
+    Tab,
+    Tabs,
     Toggle,
 )
-from skaldr.models import parse_report
+from skaldr.models import load_report, parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Styled, parse_rich
-from tests.factories import API_BADGES, make_report, markdown_of
+from tests.conftest import REPO_ROOT
+from tests.factories import API_BADGES, make_command_request, make_report, markdown_of
+
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
+
+
+def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
+    export_markdown(load_report(EXAMPLE), tmp_path)
+
+    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
+        path.name: path.read_text(encoding="utf-8") for path in sorted(MARKDOWN_GOLDEN.iterdir())
+    }
 
 
 def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: Path) -> None:
@@ -187,10 +201,13 @@ def test_block_nodes_become_markdown_blocks() -> None:
         Callout("warning", (Paragraph((Plain("careful"),)),)),
         Quote(((Plain("said"),),)),
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
+        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
         ListNode("bullet", (ListEntry((Plain("card"),), children=(Paragraph((Plain("note"),)),)),)),
     ]
 
-    assert render_markdown(nodes) == "> 💡\n\n> ⚠️ careful\n\n> said\n\n**Legend**\n\nx\n\n- card\n\n  note\n"
+    assert render_markdown(nodes) == (
+        "> 💡\n\n> ⚠️ careful\n\n> said\n\n**Legend**\n\nx\n\n**plain**\n\nz\n\n- card\n\n  note\n"
+    )
 
 
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
@@ -224,6 +241,20 @@ def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
     )
 
 
+def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {"label": "control", "tone": "success", "response": {"body": "none"}},
+    ]
+    request = make_command_request(cases=cases, command="list-tiers")
+
+    assert markdown_of([request]) == (
+        "**Tier mappings on the partner API**\n\n"
+        "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Output**\n\n```json\n[]\n```\n\n"
+        "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Output**\n\n```\nnone\n```\n"
+    )
+
+
 def test_a_grid_becomes_its_cells_in_order() -> None:
     grid = {
         "type": "grid",
@@ -234,6 +265,26 @@ def test_a_grid_becomes_its_cells_in_order() -> None:
     }
 
     assert markdown_of([grid]) == "a\n\nb\n"
+
+
+def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [{"label": "Scan", "points": ["by aisle"]}, {"label": "Fix"}],
+    }
+
+    assert markdown_of([flow]) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan"]\n'
+        '    s2["Fix"]\n'
+        "    s1 --> s2\n"
+        "```\n"
+        "\n"
+        "- **Scan**\n"
+        "  - by aisle\n"
+    )
 
 
 def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:

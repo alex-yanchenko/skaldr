@@ -1,5 +1,7 @@
 import json
+from collections.abc import Sequence
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -8,23 +10,63 @@ from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, rend
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
+    Diagram,
+    Graph,
+    GraphNode,
     Heading,
     ListEntry,
     ListNode,
     Paragraph,
     Quote,
+    Tab,
     Table,
     TableCell,
     TableRow,
+    Tabs,
     Toggle,
 )
-from skaldr.models import parse_report
+from skaldr.models import AnyBlock, Grid, InnerGrid, Panel, Section, Walkthrough, load_report, parse_report
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
-from tests.factories import heading_sections, lowered, make_report, notion_of
+from tests.conftest import REPO_ROOT
+from tests.factories import heading_sections, lowered, make_command_request, make_report, notion_of
+
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
+
+
+def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
+    seen: set[str] = set()
+    for block in blocks:
+        seen.add(block.type)
+        if isinstance(block, (Section, Panel)):
+            seen |= _block_types_in(block.blocks)
+        if isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                seen |= _block_types_in(cell.blocks)
+        if isinstance(block, Walkthrough):
+            for step in block.steps:
+                seen |= _block_types_in(step.detail)
+    return seen
+
+
+def _every_block_type() -> set[str]:
+    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
     return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
+
+
+def test_the_export_fixture_uses_every_block_type() -> None:
+    assert _block_types_in(load_report(EXAMPLE).blocks) == _every_block_type()
+
+
+def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
+    export_notion(load_report(EXAMPLE), tmp_path)
+
+    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
+        path.name: path.read_text(encoding="utf-8") for path in sorted(NOTION_GOLDEN.iterdir())
+    }
 
 
 @pytest.mark.parametrize(
@@ -153,6 +195,8 @@ def test_block_nodes_become_notion_blocks() -> None:
         Quote(((Plain("said"),),)),
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
         Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
+        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
+        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
     ]
 
     assert render_notion(nodes) == (
@@ -164,6 +208,8 @@ def test_block_nodes_become_notion_blocks() -> None:
         "> said\n"
         "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
         '## Shut {toggle="true"}\n\ty\n'
+        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
     )
 
 
@@ -181,6 +227,50 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
     }
 
     assert notion_of([block]) == "- parent\n\t- child\n\t- mid\n\t\t- leaf\n"
+
+
+def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [{"label": "Scan", "tone": "info"}, {"label": 'Say "hi"', "note": "then **stop**"}],
+    }
+
+    assert notion_of([flow]) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan"]:::info\n'
+        '    s2["Say #quot;hi#quot;<br>then stop"]\n'
+        "    s1 --> s2\n"
+        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
+        "```\n"
+    )
+
+
+def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {"label": "control", "tone": "success", "response": {"body": "none"}},
+    ]
+    request = make_command_request(cases=cases, command="list-tiers")
+
+    assert notion_of([request]) == (
+        "**Tier mappings on the partner API**\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n'
+        "\t\tfinding\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Output**\n"
+        "\t\t```json\n\t\t[]\n\t\t```\n"
+        "\t</tab>\n"
+        '\t<tab icon="✅">\n'
+        "\t\tcontrol\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Output**\n"
+        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t</tab>\n"
+        "</tabs>\n"
+    )
 
 
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:

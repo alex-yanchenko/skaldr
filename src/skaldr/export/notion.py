@@ -6,6 +6,7 @@ from typing_extensions import assert_never
 
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    TAB_ICON,
     MarkupRuns,
     bold_once,
     code_block_lines,
@@ -13,11 +14,13 @@ from skaldr.export.markup import (
     indent_lines,
     styled,
 )
+from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    Diagram,
     Heading,
     ListNode,
     Node,
@@ -27,6 +30,7 @@ from skaldr.export.tree import (
     TableCell,
     TableOfContents,
     TableRow,
+    Tabs,
     Toggle,
     ToneName,
 )
@@ -179,6 +183,15 @@ def _columns_lines(node: Columns) -> list[str]:
     return ["<columns>", *_indent(lines), "</columns>"]
 
 
+def _tabs_lines(node: Tabs) -> list[str]:
+    lines: list[str] = []
+    for tab in node.tabs:
+        icon = TAB_ICON.get(tab.tone) if tab.tone else None
+        lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
+        lines += [*_indent([notion_inline(tab.title), *_notion_blocks(tab.children)]), "</tab>"]
+    return ["<tabs>", *_indent(lines), "</tabs>"]
+
+
 def _notion_lines(node: Node) -> list[str]:
     match node:
         case Heading():
@@ -201,6 +214,10 @@ def _notion_lines(node: Node) -> list[str]:
             return _toggle_lines(node)
         case Columns():
             return _columns_lines(node)
+        case Tabs():
+            return _tabs_lines(node)
+        case Diagram():
+            return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement)]
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:

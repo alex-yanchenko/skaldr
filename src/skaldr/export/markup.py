@@ -17,6 +17,7 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "teal": "💡",
     "sky": "💡",
 }
+TAB_ICON: dict[ToneName, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
 MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
     "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
     "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
