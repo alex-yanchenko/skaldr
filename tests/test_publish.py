@@ -443,6 +443,39 @@ def test_a_publish_block_that_cannot_be_cut_out_exactly_stops_the_render(source:
         without_publish_block(source)
 
 
+@pytest.mark.parametrize(
+    ("source", "embedded"),
+    [
+        pytest.param(
+            "notes: |\n  run:\n    make\n  # done\npublish:\n  id: x\nb: 1\n",
+            "notes: |\n  run:\n    make\n  # done\nb: 1\n",
+            id="a-hash-line-closing-the-previous-block-scalar-stays",
+        ),
+        pytest.param(
+            "title: t\n\n# ids for sync: PLAN-7\n\npublish:\n  id: x\n",
+            "title: t\n",
+            id="a-comment-a-blank-line-above-the-block-goes-with-it",
+        ),
+        pytest.param(
+            "title: t\n# kept\nx: 1\n\n# ids: PLAN-7\npublish:\n  id: x\nb: 2\n",
+            "title: t\n# kept\nx: 1\nb: 2\n",
+            id="a-comment-above-another-key-stays",
+        ),
+        pytest.param("a: .nan\npublish: {x: 1}\n", "a: .nan\n", id="a-not-a-number-value-elsewhere"),
+    ],
+)
+def test_the_comments_left_out_are_the_ones_next_to_the_block(source: str, embedded: str) -> None:
+    assert without_publish_block(source) == embedded
+
+
+def test_shared_aliases_are_compared_once_so_an_alias_bomb_stays_fast() -> None:
+    levels = ["l0: &l0 [x, x, x, x, x, x, x, x, x]"]
+    levels += [f"l{depth}: &l{depth} [" + ", ".join([f"*l{depth - 1}"] * 9) + "]" for depth in range(1, 13)]
+    source = "\n".join([*levels, "publish: {id: x}"]) + "\n"
+
+    assert without_publish_block(source) == "\n".join(levels) + "\n"
+
+
 def test_a_source_that_does_not_parse_stops_the_render_naming_why() -> None:
     with pytest.raises(
         ReportError, match=re.escape("the source could not be read to leave its publish block out")

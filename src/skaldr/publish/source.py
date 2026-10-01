@@ -1,7 +1,7 @@
 from typing import Any, cast
 
 import yaml
-from yaml.nodes import MappingNode, Node, ScalarNode
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from skaldr.errors import ReportError
 
@@ -29,9 +29,9 @@ def _unreadable(exc: BaseException) -> ReportError:
     return ReportError(f"the source could not be read to leave its publish block out of the page: {exc}")
 
 
-def _document(source: str) -> Any:
+def _document(source: str) -> object:
     try:
-        return yaml.load(source, Loader=_ComparableLoader)
+        return cast(object, yaml.load(source, Loader=_ComparableLoader))
     except (yaml.YAMLError, RecursionError) as exc:
         raise _unreadable(exc) from exc
 
@@ -48,19 +48,47 @@ def _is_publish_key(key: Node) -> bool:
     return isinstance(key, ScalarNode) and key.value == PUBLISH_KEY
 
 
-def _comment_run_start(lines: list[str], key_line: int) -> int:
+def _is_blank_or_comment(line: str) -> bool:
+    stripped = line.strip()
+    return not stripped or stripped.startswith("#")
+
+
+def _first_line_after(node: Node) -> int:
+    return node.end_mark.line + (1 if node.end_mark.column > 0 else 0)
+
+
+def _first_line_after_content(node: Node) -> int:
+    last_line = 0
+    pending, visited = [node], set[int]()
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        if isinstance(current, ScalarNode):
+            last_line = max(last_line, _first_line_after(current))
+        elif isinstance(current, MappingNode):
+            pending += [child for pair in current.value for child in pair]
+        elif isinstance(current, SequenceNode):
+            pending += current.value
+        last_line = max(last_line, current.start_mark.line + 1)
+    return last_line
+
+
+def _leading_comments_start(lines: list[str], key_line: int, floor: int) -> int:
     start = key_line
-    while start > 0 and lines[start - 1].lstrip().startswith("#"):
+    while start > floor and _is_blank_or_comment(lines[start - 1]):
         start -= 1
     return start
 
 
 def _publish_line_spans(root: MappingNode, lines: list[str]) -> list[range]:
-    keys = [key for key, _ in root.value]
-    end_lines = [key.start_mark.line for key in keys[1:]] + [len(lines)]
+    pairs: list[tuple[Node, Node]] = root.value
+    floors = [0] + [_first_line_after_content(value) for _, value in pairs[:-1]]
+    end_lines = [key.start_mark.line for key, _ in pairs[1:]] + [len(lines)]
     return [
-        range(_comment_run_start(lines, key.start_mark.line), end_line)
-        for key, end_line in zip(keys, end_lines, strict=True)
+        range(_leading_comments_start(lines, key.start_mark.line, floor), end_line)
+        for (key, _), floor, end_line in zip(pairs, floors, end_lines, strict=True)
         if _is_publish_key(key) and end_line > key.start_mark.line
     ]
 
@@ -74,6 +102,29 @@ def _cut(source: str) -> str:
     return "".join(line for number, line in enumerate(lines) if number not in dropped)
 
 
+def _same_values(left: object, right: object, compared: set[tuple[int, int]]) -> bool:
+    pair = (id(left), id(right))
+    if pair in compared:
+        return True
+    if isinstance(left, dict) and isinstance(right, dict):
+        compared.add(pair)
+        left_map, right_map = cast("dict[object, object]", left), cast("dict[object, object]", right)
+        return left_map.keys() == right_map.keys() and all(
+            _same_values(value, right_map[key], compared) for key, value in left_map.items()
+        )
+    if isinstance(left, list) and isinstance(right, list):
+        compared.add(pair)
+        left_items, right_items = cast("list[object]", left), cast("list[object]", right)
+        return len(left_items) == len(right_items) and all(
+            _same_values(a, b, compared) for a, b in zip(left_items, right_items, strict=True)
+        )
+    return _same_scalar(cast(object, left), right)
+
+
+def _same_scalar(left: object, right: object) -> bool:
+    return type(left) is type(right) and (left == right or (left != left and right != right))
+
+
 def without_publish_block(source: str) -> str:
     original = _document(source)
     if not isinstance(original, dict):
@@ -84,7 +135,7 @@ def without_publish_block(source: str) -> str:
     expected = {key: value for key, value in document.items() if key != PUBLISH_KEY}
     stripped = _cut(source)
     try:
-        matches = _document(stripped) == expected
+        matches = _same_values(_document(stripped), expected, set[tuple[int, int]]())
     except (ReportError, RecursionError):
         matches = False
     if not matches:

@@ -911,7 +911,7 @@ publish:
 - a Notion page is a URL on notion.so, notion.site or notion.com, or a page id; a Jira project key is an uppercase letter followed by uppercase letters, digits or `_`, a `parent` is an issue key such as `PLAN-100`, and `issue_type` is not blank;
 - no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
 
-A rendered page embeds its source **without** the `publish` block: the block, the comment lines directly above it and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
 
 ## The render carries its own source
 
