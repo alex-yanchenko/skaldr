@@ -1,8 +1,33 @@
+from collections.abc import Iterator
 from pathlib import Path
 
+import keyring
 import pytest
 
+from tests.factories.auth_factory import InMemoryKeyring
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+CREDENTIAL_ENVIRONMENT = (
+    "NOTION_CLIENT_ID",
+    "NOTION_CLIENT_SECRET",
+    "NOTION_ACCESS_TOKEN",
+    "NOTION_REFRESH_TOKEN",
+    "JIRA_SITE",
+    "JIRA_EMAIL",
+    "JIRA_API_TOKEN",
+)
+
+
+@pytest.fixture(autouse=True)
+def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
+    for name in CREDENTIAL_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+    previous = keyring.get_keyring()
+    in_memory = InMemoryKeyring()
+    keyring.set_keyring(in_memory)
+    yield in_memory
+    keyring.set_keyring(previous)
 
 
 @pytest.fixture(autouse=True)
