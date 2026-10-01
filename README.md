@@ -12,7 +12,7 @@ layout, spacing, colour, light/dark, all decided once, here. No design work, no 
 ## Install
 
 ```bash
-brew install alex-yanchenko/tap/skaldr     # recommended (macOS/Linux)
+brew install alex-yanchenko/tap/skaldr     # recommended (Apple silicon Macs and Linux)
 uv tool install skaldr                     # or, with uv
 pipx install skaldr                        # or, with pipx
 ```
@@ -79,6 +79,25 @@ skaldr report.yaml --export notion --chunk 20000   # page.00.md, page.01.md, …
 Every block has a Markdown form. Flows, fans, pie charts and single-series bar or line charts become Mermaid diagrams, which GitHub and Notion both draw; a chart keeps its data table under the diagram. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and colored table cells. A Notion page takes its title from the page itself, so the Notion export holds the body only, while the GitHub-flavored file starts with the title as its heading. The folder keeps a `.skaldr-export.json` list of the files skaldr wrote there, and a re-export removes only those an earlier run wrote and this one no longer needs. skaldr only writes the files; it never calls Notion.
 
 There are no styling flags — everything is in the content file.
+
+## Sign in to Notion and Jira
+
+`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
+
+```bash
+uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
+skaldr auth notion                  # OAuth in your browser, through your own Notion connection
+skaldr auth jira                    # your Atlassian account email and an API token
+skaldr auth status                  # who each service is signed in as, and where the credentials live
+skaldr auth logout notion           # revoke the Notion token and remove it (removed even if Notion refuses)
+skaldr auth logout jira             # remove the Jira token; revoke it on Atlassian's API tokens page
+```
+
+**Notion.** A public tool cannot ship a client secret, so you register your own connection once. At https://www.notion.so/profile/integrations create a new connection, choose the public (OAuth) type, and add the redirect URI `http://localhost:8765/callback` (Notion does not accept an IP address there). `skaldr auth notion` asks for its client ID and client secret (the secret is read without echo), or takes them from `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`. It then opens Notion's consent screen, where you choose the pages skaldr may use, and catches the redirect on port 8765 of both loopback addresses, `127.0.0.1` and `::1`, so it arrives whichever one your browser resolves `localhost` to. Any other request to that port is turned away. If the port is taken, register a different one and pass `--port`.
+
+**Jira.** Create an API token at https://id.atlassian.com/manage-profile/security/api-tokens. `skaldr auth jira` asks for your site (`https://<site>.atlassian.net`), your account email and the token, and checks them against Jira's `/rest/api/3/myself` before saving anything. Use a token created without scopes: a scoped token only works against `api.atlassian.com`. Atlassian tokens expire after at most a year, so when Jira starts refusing it, create a new one and sign in again.
+
+Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or the Secret Service on Linux) and never to a file, a log or a command-line argument. For CI or a secrets manager, environment variables take precedence over the keychain: `NOTION_ACCESS_TOKEN` (with optional `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`), or `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` together.
 
 ## The content file
 

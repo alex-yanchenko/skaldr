@@ -113,7 +113,7 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error(
         pytest.param(["--export-dir", "d"], DIR_OR_CHUNK_ALONE, id="dir-alone"),
         pytest.param(
             ["--export", "markdown", "--chunk", "100"],
-            "--chunk splits a Notion page for the MCP; it only applies with --export notion",
+            "--chunk splits a Notion page into files; it only applies with --export notion",
             id="chunk-markdown",
         ),
         pytest.param(["--export", "notion", "--chunk", "0"], CHUNK_NOT_POSITIVE, id="chunk-zero"),
