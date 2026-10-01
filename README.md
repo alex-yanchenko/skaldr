@@ -12,7 +12,7 @@ layout, spacing, colour, light/dark, all decided once, here. No design work, no 
 ## Install
 
 ```bash
-brew install alex-yanchenko/tap/skaldr     # recommended (macOS/Linux)
+brew install alex-yanchenko/tap/skaldr     # recommended (Apple silicon Macs and Linux)
 uv tool install skaldr                     # or, with uv
 pipx install skaldr                        # or, with pipx
 ```
@@ -72,7 +72,7 @@ There are no styling flags — everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra, which the Homebrew formula does not include:
+`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
