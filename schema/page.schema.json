@@ -1876,6 +1876,116 @@
       "title": "InnerGridCell",
       "type": "object"
     },
+    "JiraTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Top-level section ids this target is built from, kept in document order. Left out: the whole document.",
+          "title": "From"
+        },
+        "split": {
+          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the document.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Split",
+          "type": "array"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TargetOverride"
+          },
+          "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
+          "title": "Overrides",
+          "type": "object"
+        },
+        "on_remote_edit": {
+          "default": "refuse",
+          "description": "When an item was edited in the service since the last publish: `refuse` stops and shows the change, `overwrite` replaces it.",
+          "enum": [
+            "refuse",
+            "overwrite"
+          ],
+          "title": "On Remote Edit",
+          "type": "string"
+        },
+        "to": {
+          "const": "jira",
+          "description": "Publish to Jira: `jira`.",
+          "title": "To",
+          "type": "string"
+        },
+        "where": {
+          "$ref": "#/$defs/JiraWhere",
+          "description": "The Jira project, issue type and optional parent issue."
+        }
+      },
+      "required": [
+        "to",
+        "where"
+      ],
+      "title": "JiraTarget",
+      "type": "object"
+    },
+    "JiraWhere": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "description": "The Jira project key: an uppercase letter, then uppercase letters, digits or `_`, e.g. PLAN.",
+          "pattern": "^[A-Z][A-Z0-9_]+$",
+          "title": "Project",
+          "type": "string"
+        },
+        "issue_type": {
+          "description": "The issue type each created issue gets, e.g. Task. Not blank.",
+          "minLength": 1,
+          "title": "Issue Type",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]+-[1-9][0-9]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An existing issue key the document's issue is created under, e.g. PLAN-100.",
+          "title": "Parent"
+        },
+        "fields": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Field values for every created issue (labels, priority, components, custom fields); `overrides` changes them for one item.",
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "project",
+        "issue_type"
+      ],
+      "title": "JiraWhere",
+      "type": "object"
+    },
+    "JsonValue": {},
     "KVPair": {
       "additionalProperties": false,
       "properties": {
@@ -2408,6 +2518,111 @@
       "title": "Note",
       "type": "object"
     },
+    "NotionTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Top-level section ids this target is built from, kept in document order. Left out: the whole document.",
+          "title": "From"
+        },
+        "split": {
+          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the document.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Split",
+          "type": "array"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TargetOverride"
+          },
+          "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
+          "title": "Overrides",
+          "type": "object"
+        },
+        "on_remote_edit": {
+          "default": "refuse",
+          "description": "When an item was edited in the service since the last publish: `refuse` stops and shows the change, `overwrite` replaces it.",
+          "enum": [
+            "refuse",
+            "overwrite"
+          ],
+          "title": "On Remote Edit",
+          "type": "string"
+        },
+        "to": {
+          "const": "notion",
+          "description": "Publish to Notion: `notion`.",
+          "title": "To",
+          "type": "string"
+        },
+        "where": {
+          "$ref": "#/$defs/NotionWhere",
+          "description": "The Notion page the document goes under or into."
+        }
+      },
+      "required": [
+        "to",
+        "where"
+      ],
+      "title": "NotionTarget",
+      "type": "object"
+    },
+    "NotionWhere": {
+      "additionalProperties": false,
+      "properties": {
+        "parent_page": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Notion page URL or page id the document is created under, as a child page.",
+          "title": "Parent Page"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Notion page URL or page id the document is written into, replacing its content.",
+          "title": "Page"
+        },
+        "fields": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Database property values when the target page is a database row; `overrides` changes them for one item.",
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "title": "NotionWhere",
+      "type": "object"
+    },
     "Panel": {
       "additionalProperties": false,
       "properties": {
@@ -2567,6 +2782,47 @@
         "blocks"
       ],
       "title": "Panel",
+      "type": "object"
+    },
+    "Publish": {
+      "additionalProperties": false,
+      "properties": {
+        "doc_id": {
+          "description": "The document's identity in every target, stamped on each page and issue it creates: at least two characters, lowercase letters and digits joined by single hyphens.",
+          "minLength": 2,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Doc Id",
+          "type": "string"
+        },
+        "targets": {
+          "description": "One entry per place the document publishes to; each is built from the document on its own.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "jira": "#/$defs/JiraTarget",
+                "notion": "#/$defs/NotionTarget"
+              },
+              "propertyName": "to"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/NotionTarget"
+              },
+              {
+                "$ref": "#/$defs/JiraTarget"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "doc_id",
+        "targets"
+      ],
+      "title": "Publish",
       "type": "object"
     },
     "Quote": {
@@ -4251,6 +4507,21 @@
       "title": "Table",
       "type": "object"
     },
+    "TargetOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "Field values for this one item, applied over the target's `where.fields`.",
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "title": "TargetOverride",
+      "type": "object"
+    },
     "Text": {
       "additionalProperties": false,
       "properties": {
@@ -4792,6 +5063,18 @@
       "minItems": 1,
       "title": "Blocks",
       "type": "array"
+    },
+    "publish": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Publish"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where the document publishes (Notion pages, Jira issues). Omitted from the source embedded in a rendered page."
     }
   },
   "required": [
