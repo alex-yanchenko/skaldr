@@ -1912,16 +1912,6 @@
           "title": "Overrides",
           "type": "object"
         },
-        "on_remote_edit": {
-          "default": "refuse",
-          "description": "When an item was edited in the service since the last publish: `refuse` stops and shows the change, `overwrite` replaces it.",
-          "enum": [
-            "refuse",
-            "overwrite"
-          ],
-          "title": "On Remote Edit",
-          "type": "string"
-        },
         "to": {
           "const": "jira",
           "description": "Publish to Jira: `jira`.",
@@ -2553,16 +2543,6 @@
           "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
           "title": "Overrides",
           "type": "object"
-        },
-        "on_remote_edit": {
-          "default": "refuse",
-          "description": "When an item was edited in the service since the last publish: `refuse` stops and shows the change, `overwrite` replaces it.",
-          "enum": [
-            "refuse",
-            "overwrite"
-          ],
-          "title": "On Remote Edit",
-          "type": "string"
         },
         "to": {
           "const": "notion",

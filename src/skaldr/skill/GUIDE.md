@@ -901,7 +901,6 @@ publish:
 | `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
 | `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
 | `overrides` | Per-item `fields`, keyed by a split section id. |
-| `on_remote_edit` | `refuse` (default) stops when the item was edited in the service since the last publish; `overwrite` replaces it. |
 
 `skaldr --check` holds the block to these rules and names the target in every message:
 
