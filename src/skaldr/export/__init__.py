@@ -1,5 +1,6 @@
 import json
-from collections.abc import Mapping
+import re
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast, get_args
@@ -12,6 +13,7 @@ from skaldr.models import Report
 ExportTarget = Literal["notion", "markdown"]
 EXPORT_TARGETS: tuple[ExportTarget, ...] = get_args(ExportTarget)
 EXPORT_MANIFEST = ".skaldr-export.json"
+EXPORTED_PAGE_NAME = re.compile(r"page(?:\.\d{2,})?\.md")
 
 
 @dataclass(frozen=True)
@@ -24,18 +26,24 @@ class ExportResult:
 def _previously_written(out_dir: Path) -> set[str]:
     try:
         recorded: object = json.loads((out_dir / EXPORT_MANIFEST).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return set()
     files = cast("dict[str, object]", recorded).get("files") if isinstance(recorded, dict) else None
     if not isinstance(files, list):
         return set()
     names = cast("list[object]", files)
-    return {name for name in names if isinstance(name, str) and Path(name).name == name}
+    return {name for name in names if isinstance(name, str) and EXPORTED_PAGE_NAME.fullmatch(name)}
 
 
-def _write_pages(out_dir: Path, pages: Mapping[str, str]) -> tuple[Path, ...]:
+def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
+    manifest = json.dumps({"title": title, "files": sorted(names)}, indent=2, ensure_ascii=False) + "\n"
+    (out_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+
+
+def _write_pages(out_dir: Path, title: str, pages: Mapping[str, str]) -> tuple[Path, ...]:
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _previously_written(out_dir)
+    _write_manifest(out_dir, title, earlier | set(pages))
     written: list[Path] = []
     for name, text in pages.items():
         path = out_dir / name
@@ -45,22 +53,26 @@ def _write_pages(out_dir: Path, pages: Mapping[str, str]) -> tuple[Path, ...]:
         path = out_dir / stale
         if path.is_file():
             path.unlink()
-    manifest = json.dumps({"files": sorted(pages)}, indent=2) + "\n"
-    (out_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+    _write_manifest(out_dir, title, pages)
     return tuple(written)
+
+
+def _chunk_pages(chunks: tuple[str, ...]) -> dict[str, str]:
+    width = max(2, len(str(len(chunks) - 1)))
+    return {f"page.{index:0{width}d}.md": text for index, text in enumerate(chunks)}
 
 
 def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
     document = lower_report(report)
     if chunk is None:
-        return ExportResult(document.title, _write_pages(out_dir, {"page.md": render_notion(document.body)}))
+        pages = {"page.md": render_notion(document.body)}
+        return ExportResult(document.title, _write_pages(out_dir, document.title, pages))
     split = chunk_notion(document.body, chunk)
-    pages = {f"page.{index:02d}.md": text for index, text in enumerate(split.chunks)}
-    return ExportResult(document.title, _write_pages(out_dir, pages), split.oversized_sections)
+    files = _write_pages(out_dir, document.title, _chunk_pages(split.chunks))
+    return ExportResult(document.title, files, split.oversized_sections)
 
 
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:
     document = lower_report(report)
-    return ExportResult(
-        document.title, _write_pages(out_dir, {"page.md": render_markdown_document(document)})
-    )
+    pages = {"page.md": render_markdown_document(document)}
+    return ExportResult(document.title, _write_pages(out_dir, document.title, pages))

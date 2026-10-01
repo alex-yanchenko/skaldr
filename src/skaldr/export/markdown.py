@@ -1,18 +1,19 @@
 import re
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Literal
 
 from typing_extensions import assert_never
 
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    MarkerFamily,
     MarkupRuns,
     code_block_lines,
     code_span,
     escape_block_start,
     indent_lines,
+    list_marker_family,
     styled,
 )
 from skaldr.export.tree import (
@@ -20,7 +21,6 @@ from skaldr.export.tree import (
     CodeBlock,
     Heading,
     ListEntry,
-    ListKind,
     ListNode,
     LoweredDocument,
     Node,
@@ -36,8 +36,6 @@ MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 GITHUB_SLUG_DROPPED = re.compile(r"[^\w\- ]")
-MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
 
 
 def _escape(text: str) -> str:
@@ -90,9 +88,7 @@ def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
 
 
 def _marker_family(node: Node) -> MarkerFamily | None:
-    if isinstance(node, ListNode):
-        return MARKER_FAMILY[node.kind]
-    return "dash" if isinstance(node, TableOfContents) else None
+    return "dash" if isinstance(node, TableOfContents) else list_marker_family(node)
 
 
 def _spaced(lines: Sequence[str]) -> list[str]:

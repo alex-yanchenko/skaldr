@@ -1,8 +1,12 @@
 import re
 from collections.abc import Callable, Sequence
+from typing import Literal
 
-from skaldr.export.tree import CodeBlock, ToneName
+from skaldr.export.tree import CodeBlock, ListKind, ListNode, Node, ToneName
 from skaldr.richtext import Citation, StyleName
+
+MarkerFamily = Literal["dash", "ordinal"]
+MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
 
 STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: dict[ToneName, str] = {
@@ -61,6 +65,10 @@ def bang_cannot_open_an_image(escaped_text: str) -> str:
 
 def encode_url(url: str) -> str:
     return "".join(URL_UNSAFE.get(character, character) for character in url)
+
+
+def list_marker_family(node: Node) -> MarkerFamily | None:
+    return MARKER_FAMILY[node.kind] if isinstance(node, ListNode) else None
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
