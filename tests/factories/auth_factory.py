@@ -1,14 +1,15 @@
 import base64
 import json
+import socket
 import threading
 from collections.abc import Callable
-from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 from keyring.backend import KeyringBackend
 from keyring.compat import properties
-from keyring.errors import PasswordDeleteError
+from keyring.errors import KeyringError, PasswordDeleteError
+from typing_extensions import override
 
 from skaldr.auth.store import JiraCredentials, NotionCredentials
 
@@ -33,7 +34,25 @@ class InMemoryKeyring(KeyringBackend):
             raise PasswordDeleteError(username)
 
 
-TOKEN_RESPONSE = {
+class LockedKeyring(KeyringBackend):
+    @properties.classproperty
+    def priority(cls) -> float:
+        return 0
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        raise KeyringError("locked")
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        raise KeyringError("locked")
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        raise KeyringError("locked")
+
+
+TOKEN_RESPONSE: dict[str, object] = {
     "access_token": "new-access",
     "token_type": "bearer",
     "refresh_token": "new-refresh",
@@ -43,36 +62,87 @@ TOKEN_RESPONSE = {
     "owner": {"type": "user"},
 }
 
+MYSELF: dict[str, object] = {
+    "accountId": "account-id",
+    "displayName": "Example Reader",
+    "emailAddress": "reader@example.com",
+}
+
+Visit = Callable[[str], str]
+
+
+def approving(state: str) -> str:
+    return f"/callback?code=the-code&state={state}"
+
+
+def refusing(state: str) -> str:
+    return f"/callback?error=access_denied&state={state}"
+
+
+def forged(_state: str) -> str:
+    return "/callback?code=the-code&state=forged"
+
+
+def answerless(state: str) -> str:
+    return f"/callback?state={state}"
+
+
+def favicon(_state: str) -> str:
+    return "/favicon.ico"
+
 
 class FakeBrowser:
-    def __init__(self, callback_query: Callable[[str], str] | None) -> None:
-        self.callback_query = callback_query
+    def __init__(self, *visits: Visit) -> None:
+        self.visits = visits
         self.opened: list[str] = []
+        self.statuses: list[int] = []
+        self.failures: list[BaseException] = []
+        self._thread: threading.Thread | None = None
 
     def __call__(self, url: str) -> None:
         self.opened.append(url)
-        if self.callback_query is None:
-            return
         query = parse_qs(urlsplit(url).query)
-        target = f"{query['redirect_uri'][0]}?{self.callback_query(query['state'][0])}"
-        threading.Thread(target=httpx2.get, args=(target,), kwargs={"timeout": 5}).start()
+        redirect = urlsplit(query["redirect_uri"][0])
+        origin = f"{redirect.scheme}://{redirect.netloc}"
+        targets = [origin + visit(query["state"][0]) for visit in self.visits]
+        self._thread = threading.Thread(target=self._visit_in_order, args=(targets,), daemon=True)
+        self._thread.start()
+
+    def _visit_in_order(self, targets: list[str]) -> None:
+        try:
+            with httpx2.Client(trust_env=False, timeout=5) as client:
+                for target in targets:
+                    self.statuses.append(client.get(target).status_code)
+        except httpx2.HTTPError as exc:
+            self.failures.append(exc)
+
+    def finished(self) -> list[int]:
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        assert self.failures == []
+        return self.statuses
 
     @property
     def redirect_uri(self) -> str:
         return parse_qs(urlsplit(self.opened[0]).query)["redirect_uri"][0]
 
 
-def approving(state: str) -> str:
-    return f"code=the-code&state={state}"
-
-
 def fake_api(routes: dict[str, tuple[int, object]], seen: list[httpx2.Request]) -> httpx2.MockTransport:
     def respond(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
         status, body = routes[request.url.path]
+        if isinstance(body, bytes):
+            return httpx2.Response(status, content=body)
         return httpx2.Response(status, json=body)
 
     return httpx2.MockTransport(respond)
+
+
+def refusing_connections() -> httpx2.MockTransport:
+    def refuse(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused", request=request)
+
+    return httpx2.MockTransport(refuse)
 
 
 def summarise(request: httpx2.Request) -> dict[str, object]:
@@ -85,29 +155,31 @@ def summarise(request: httpx2.Request) -> dict[str, object]:
     }
 
 
-def basic(user: str, password: str) -> str:
+def basic_auth_header(user: str, password: str) -> str:
     return "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
 
 
-def make_notion_credentials(**overrides: Any) -> NotionCredentials:
-    fields: dict[str, Any] = {
+def free_port() -> int:
+    with socket.create_server(("127.0.0.1", 0)) as probe:
+        return probe.getsockname()[1]
+
+
+def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
+    fields: dict[str, str | None] = {
         "client_id": "client-id",
         "client_secret": "client-secret",
         "access_token": "access-token",
         "refresh_token": "refresh-token",
         "workspace_name": "Example Workspace",
-        "bot_id": "bot-id",
     }
-    fields.update(overrides)
-    return NotionCredentials.model_validate(fields)
+    return NotionCredentials.model_validate({**fields, **overrides})
 
 
-def make_jira_credentials(**overrides: Any) -> JiraCredentials:
-    fields: dict[str, Any] = {
+def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
+    fields: dict[str, str | None] = {
         "site": "https://example.atlassian.net",
         "email": "reader@example.com",
         "api_token": "api-token",
         "display_name": "Example Reader",
     }
-    fields.update(overrides)
-    return JiraCredentials.model_validate(fields)
+    return JiraCredentials.model_validate({**fields, **overrides})

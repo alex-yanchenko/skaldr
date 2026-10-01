@@ -4,24 +4,15 @@ from pathlib import Path
 import keyring
 import pytest
 
+from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
 from tests.factories.auth_factory import InMemoryKeyring
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-CREDENTIAL_ENVIRONMENT = (
-    "NOTION_CLIENT_ID",
-    "NOTION_CLIENT_SECRET",
-    "NOTION_ACCESS_TOKEN",
-    "NOTION_REFRESH_TOKEN",
-    "JIRA_SITE",
-    "JIRA_EMAIL",
-    "JIRA_API_TOKEN",
-)
-
 
 @pytest.fixture(autouse=True)
 def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
-    for name in CREDENTIAL_ENVIRONMENT:
+    for name in (*NOTION_ENVIRONMENT, *JIRA_ENVIRONMENT):
         monkeypatch.delenv(name, raising=False)
     previous = keyring.get_keyring()
     in_memory = InMemoryKeyring()

@@ -1,4 +1,5 @@
 import json
+import secrets
 import time
 from collections.abc import Callable, Mapping
 from http import HTTPStatus
@@ -11,30 +12,31 @@ from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.httpx_client import OAuth2Client
 from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
-from typing_extensions import override
+from typing_extensions import Self, override
 
+from skaldr.auth import HTTP_TIMEOUT_SECONDS
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 
-NOTION_API = "https://api.notion.com"
 INTEGRATIONS_PAGE = "https://www.notion.so/profile/integrations"
 DEFAULT_CALLBACK_PORT = 8765
-CALLBACK_PATH = "/callback"
 SIGN_IN_TIMEOUT_SECONDS = 300.0
-HTTP_TIMEOUT_SECONDS = 30.0
-IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
-BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
+
+_NOTION_API = "https://api.notion.com"
+_LOOPBACK_HOST = "127.0.0.1"
+_CALLBACK_PATH = "/callback"
+_IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
+_BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
 
 
 class _NotionToken(BaseModel):
     access_token: str
     refresh_token: str | None = None
     workspace_name: str | None = None
-    bot_id: str | None = None
 
 
 def redirect_uri_for(port: int) -> str:
-    return f"http://localhost:{port}{CALLBACK_PATH}"
+    return f"http://{_LOOPBACK_HOST}:{port}{_CALLBACK_PATH}"
 
 
 def sign_in_to_notion(
@@ -46,18 +48,19 @@ def sign_in_to_notion(
     transport: httpx2.BaseTransport | None = None,
     timeout_seconds: float = SIGN_IN_TIMEOUT_SECONDS,
 ) -> NotionCredentials:
-    with _CallbackListener(port) as listener:
+    state = secrets.token_urlsafe(32)
+    with _CallbackListener(port, state) as listener:
         redirect_uri = redirect_uri_for(listener.port)
         with _oauth_client(client_id, client_secret, transport, redirect_uri) as client:
-            authorize_url, state = client.create_authorization_url(
-                f"{NOTION_API}/v1/oauth/authorize", owner="user"
+            authorize_url, _ = client.create_authorization_url(
+                f"{_NOTION_API}/v1/oauth/authorize", state=state, owner="user"
             )
             open_browser(authorize_url)
             query = listener.wait_for_callback(timeout_seconds)
             _refuse_a_denied_consent(query)
             token = _parse_token(
                 lambda: client.fetch_token(
-                    f"{NOTION_API}/v1/oauth/token",
+                    f"{_NOTION_API}/v1/oauth/token",
                     authorization_response=f"{redirect_uri}?{query}",
                     state=state,
                 )
@@ -68,22 +71,6 @@ def sign_in_to_notion(
         access_token=token.access_token,
         refresh_token=token.refresh_token,
         workspace_name=token.workspace_name,
-        bot_id=token.bot_id,
-    )
-
-
-def refresh_notion_token(
-    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
-) -> NotionCredentials:
-    refresh_token = credentials.refresh_token
-    if not (refresh_token and credentials.client_id and credentials.client_secret):
-        raise AuthError("The Notion token cannot be refreshed; run `skaldr auth notion` again")
-    with _oauth_client(credentials.client_id, credentials.client_secret, transport) as client:
-        token = _parse_token(
-            lambda: client.refresh_token(f"{NOTION_API}/v1/oauth/token", refresh_token=refresh_token)
-        )
-    return credentials.model_copy(
-        update={"access_token": token.access_token, "refresh_token": token.refresh_token or refresh_token}
     )
 
 
@@ -94,9 +81,9 @@ def revoke_notion_token(
         raise AuthError("The Notion token cannot be revoked without the client ID and secret")
     with _oauth_client(credentials.client_id, credentials.client_secret, transport) as client:
         try:
-            response = client.revoke_token(f"{NOTION_API}/v1/oauth/revoke", token=credentials.access_token)
+            response = client.revoke_token(f"{_NOTION_API}/v1/oauth/revoke", token=credentials.access_token)
         except httpx2.HTTPError as exc:
-            raise AuthError(f"Could not reach Notion: {exc}") from exc
+            raise _request_failed(exc) from exc
     if response.status_code != HTTPStatus.OK:
         raise AuthError(f"Notion did not revoke the token: HTTP {response.status_code}")
 
@@ -110,13 +97,13 @@ def _oauth_client(
     client = OAuth2Client(
         client_id,
         client_secret,
-        token_endpoint_auth_method=BASIC_AUTH_WITH_JSON_BODY,
-        revocation_endpoint_auth_method=BASIC_AUTH_WITH_JSON_BODY,
+        token_endpoint_auth_method=_BASIC_AUTH_WITH_JSON_BODY,
+        revocation_endpoint_auth_method=_BASIC_AUTH_WITH_JSON_BODY,
         redirect_uri=redirect_uri,
         transport=transport,
         timeout=HTTP_TIMEOUT_SECONDS,
     )
-    client.register_client_auth_method((BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
+    client.register_client_auth_method((_BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
     return client
 
 
@@ -130,16 +117,21 @@ def _basic_auth_with_json_body(
 
 def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
     try:
-        return _NotionToken.model_validate(dict(request()))
+        return _NotionToken.model_validate(request())
     except AuthlibBaseError as exc:
         detail = f" ({exc.description})" if exc.description else ""
         raise AuthError(f"Notion refused the sign-in: {exc.error}{detail}") from exc
     except httpx2.HTTPError as exc:
-        raise AuthError(f"Could not reach Notion: {exc}") from exc
+        raise _request_failed(exc) from exc
     except ValidationError as exc:
-        raise AuthError(f"Notion's token answer has no access token: {exc}") from exc
+        fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
+        raise AuthError(f"Notion's token answer is missing or has invalid fields: {fields}") from exc
     except ValueError as exc:
-        raise AuthError(f"Notion's token answer is not JSON: {exc}") from exc
+        raise AuthError("Notion's token answer is not JSON") from exc
+
+
+def _request_failed(exc: httpx2.HTTPError) -> AuthError:
+    return AuthError(f"The request to Notion failed: {exc}")
 
 
 def _refuse_a_denied_consent(query: str) -> None:
@@ -149,51 +141,65 @@ def _refuse_a_denied_consent(query: str) -> None:
 
 
 class _CallbackListener:
-    def __init__(self, port: int) -> None:
-        self.queries: list[str] = []
+    def __init__(self, port: int, state: str) -> None:
+        self._accepted: list[str] = []
         try:
-            self._server = HTTPServer(("127.0.0.1", port), _handler_recording_into(self.queries))
+            self._server = HTTPServer((_LOOPBACK_HOST, port), _callback_handler_class(state, self._accepted))
         except OSError as exc:
             raise AuthError(
-                f"Port {port} is in use; free it or pass --port with the port in your registered redirect URI"
+                f"Cannot listen on {_LOOPBACK_HOST}:{port} ({exc.strerror}); free the port, or register a "
+                "redirect URI with another port and pass it with --port"
             ) from exc
 
     @property
     def port(self) -> int:
         return self._server.server_port
 
-    def __enter__(self) -> "_CallbackListener":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
-        self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:
         self._server.server_close()
 
     def wait_for_callback(self, timeout_seconds: float) -> str:
         deadline = time.monotonic() + timeout_seconds
-        while not self.queries:
+        while not self._accepted:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise AuthError(
-                    f"Timed out waiting for Notion to redirect back to {redirect_uri_for(self.port)} "
-                    f"after {timeout_seconds:g} seconds"
+                    f"Timed out after {timeout_seconds:g} seconds waiting for Notion to redirect back to "
+                    f"{redirect_uri_for(self.port)}; run `skaldr auth notion` again"
                 )
             self._server.timeout = remaining
             self._server.handle_request()
-        return self.queries[0]
+        return self._accepted[0]
 
 
-def _handler_recording_into(queries: list[str]) -> type[BaseHTTPRequestHandler]:
+def _carries_the_state_and_an_answer(query: str, state: str) -> bool:
+    fields = parse_qs(query)
+    received_state = fields.get("state", [""])[0]
+    answered = "code" in fields or "error" in fields
+    return answered and secrets.compare_digest(received_state.encode(), state.encode())
+
+
+def _callback_handler_class(state: str, accepted: list[str]) -> type[BaseHTTPRequestHandler]:
     class CallbackHandler(BaseHTTPRequestHandler):
-        timeout = IDLE_CONNECTION_TIMEOUT_SECONDS
+        timeout = _IDLE_CONNECTION_TIMEOUT_SECONDS
 
         def do_GET(self) -> None:
             url = urlsplit(self.path)
-            if url.path != CALLBACK_PATH:
+            if url.path != _CALLBACK_PATH:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            queries.append(url.query)
+            if not _carries_the_state_and_an_answer(url.query, state):
+                self.send_error(HTTPStatus.BAD_REQUEST, "This is not the sign-in skaldr started")
+                return
+            accepted.append(url.query)
             page = b"skaldr has the sign-in. Close this tab and return to the terminal.\n"
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/plain; charset=utf-8")

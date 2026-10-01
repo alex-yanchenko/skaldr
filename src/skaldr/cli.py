@@ -61,16 +61,19 @@ def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     return Path(out_arg).resolve() if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
-_PUBLISH_EXTRA_MODULES = frozenset({"authlib", "httpx2", "keyring"})
-
-
 def _run_auth(argv: list[str]) -> int:
     try:
         from skaldr.auth.cli import main as auth_main
     except ModuleNotFoundError as exc:
-        if (exc.name or "").partition(".")[0] not in _PUBLISH_EXTRA_MODULES:
+        missing = (exc.name or "skaldr").partition(".")[0]
+        if missing == "skaldr":
             raise
-        print("error: `skaldr auth` needs the publish extra: pip install 'skaldr[publish]'", file=sys.stderr)
+        print(
+            f"error: `skaldr auth` needs the publish extra ({missing} is not installed). Reinstall with it: "
+            "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
+            "or pip install 'skaldr[publish]'",
+            file=sys.stderr,
+        )
         return 1
     return auth_main(argv)
 

@@ -1,33 +1,46 @@
+import re
 import socket
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import pytest
 
-from skaldr.auth.notion import refresh_notion_token, revoke_notion_token, sign_in_to_notion
+from skaldr.auth.notion import revoke_notion_token, sign_in_to_notion
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
     FakeBrowser,
+    Visit,
+    answerless,
     approving,
-    basic,
+    basic_auth_header,
     fake_api,
+    favicon,
+    forged,
     make_notion_credentials,
+    refusing,
+    refusing_connections,
     summarise,
 )
 
 
 def sign_in(
-    browser: FakeBrowser, seen: list[httpx2.Request], **routes: tuple[int, object]
+    browser: FakeBrowser,
+    seen: list[httpx2.Request] | None = None,
+    *,
+    token: tuple[int, object] = (200, TOKEN_RESPONSE),
+    transport: httpx2.BaseTransport | None = None,
+    port: int = 0,
+    timeout_seconds: float = 5,
 ) -> NotionCredentials:
     return sign_in_to_notion(
         "client-id",
         "client-secret",
         open_browser=browser,
-        port=0,
-        transport=fake_api({"/v1/oauth/token": routes.get("token", (200, TOKEN_RESPONSE))}, seen),
-        timeout_seconds=5,
+        port=port,
+        transport=transport or fake_api({"/v1/oauth/token": token}, [] if seen is None else seen),
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -38,6 +51,7 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
     credentials = sign_in(browser, seen)
 
     assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [200]
     authorize = urlsplit(browser.opened[0])
     assert (authorize.scheme, authorize.netloc, authorize.path) == (
         "https",
@@ -52,13 +66,12 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
         "state": query["state"],
         "owner": ["user"],
     }
-    assert urlsplit(browser.redirect_uri).hostname == "localhost"
-    assert urlsplit(browser.redirect_uri).path == "/callback"
+    assert re.fullmatch(r"http://127\.0\.0\.1:\d+/callback", browser.redirect_uri)
     assert [summarise(request) for request in seen] == [
         {
             "method": "POST",
             "url": "https://api.notion.com/v1/oauth/token",
-            "authorization": basic("client-id", "client-secret"),
+            "authorization": basic_auth_header("client-id", "client-secret"),
             "content_type": "application/json",
             "body": {
                 "grant_type": "authorization_code",
@@ -69,90 +82,71 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
     ]
 
 
-def test_a_callback_with_a_forged_state_never_reaches_the_token_endpoint() -> None:
+def test_stray_requests_are_turned_away_until_the_real_callback_arrives() -> None:
     seen: list[httpx2.Request] = []
+    browser = FakeBrowser(favicon, answerless, forged, approving)
 
-    with pytest.raises(AuthError, match="mismatching_state"):
-        sign_in(FakeBrowser(lambda _state: "code=the-code&state=forged"), seen)
+    credentials = sign_in(browser, seen)
 
-    assert seen == []
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [404, 400, 400, 200]
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize("visit", [forged, answerless], ids=["forged state", "no code or error"])
+def test_a_callback_without_the_state_and_an_answer_never_reaches_the_token_endpoint(visit: Visit) -> None:
+    seen: list[httpx2.Request] = []
+    browser = FakeBrowser(visit)
+
+    with pytest.raises(AuthError, match=r"^Timed out after 0\.5 seconds waiting for Notion"):
+        sign_in(browser, seen, timeout_seconds=0.5)
+
+    assert (browser.finished(), seen) == ([400], [])
 
 
 def test_a_refused_consent_screen_stops_the_sign_in() -> None:
     seen: list[httpx2.Request] = []
+    browser = FakeBrowser(refusing)
 
     with pytest.raises(AuthError, match=r"^Notion did not grant access: access_denied$"):
-        sign_in(FakeBrowser(lambda state: f"error=access_denied&state={state}"), seen)
+        sign_in(browser, seen)
 
-    assert seen == []
+    assert (browser.finished(), seen) == ([200], [])
 
 
 def test_a_rejected_client_secret_names_the_oauth_error() -> None:
-    with pytest.raises(AuthError, match="invalid_client"):
-        sign_in(FakeBrowser(approving), [], token=(401, {"error": "invalid_client"}))
+    with pytest.raises(AuthError, match=r"^Notion refused the sign-in: invalid_client$"):
+        sign_in(FakeBrowser(approving), token=(401, {"error": "invalid_client"}))
+
+
+def test_a_token_answer_without_an_access_token_names_the_field_and_not_the_tokens() -> None:
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), token=(200, {"refresh_token": "secret-refresh-value"}))
+
+    assert str(raised.value) == "Notion's token answer is missing or has invalid fields: access_token"
+
+
+def test_a_token_answer_that_is_not_json_is_named() -> None:
+    with pytest.raises(AuthError, match=r"^Notion's token answer is not JSON$"):
+        sign_in(FakeBrowser(approving), token=(200, b"<html>maintenance</html>"))
+
+
+def test_an_unreachable_token_endpoint_is_named() -> None:
+    with pytest.raises(AuthError, match=r"^The request to Notion failed: connection refused$"):
+        sign_in(FakeBrowser(approving), transport=refusing_connections())
 
 
 def test_sign_in_times_out_when_the_browser_never_comes_back() -> None:
-    with pytest.raises(AuthError, match=r"^Timed out waiting for Notion to redirect back"):
-        sign_in_to_notion(
-            "client-id",
-            "client-secret",
-            open_browser=FakeBrowser(None),
-            port=0,
-            transport=fake_api({}, []),
-            timeout_seconds=0.2,
-        )
+    with pytest.raises(AuthError, match=r"^Timed out after 0\.2 seconds .*; run `skaldr auth notion` again$"):
+        sign_in(FakeBrowser(), timeout_seconds=0.2)
 
 
 def test_a_busy_callback_port_is_named() -> None:
     with socket.create_server(("127.0.0.1", 0)) as blocker:
         port = blocker.getsockname()[1]
-        with pytest.raises(AuthError, match=f"^Port {port} is in use; free it or pass --port"):
-            sign_in_to_notion(
-                "client-id",
-                "client-secret",
-                open_browser=FakeBrowser(None),
-                port=port,
-                transport=fake_api({}, []),
-                timeout_seconds=0.2,
-            )
 
-
-def test_refresh_sends_the_refresh_grant_and_stores_the_rotated_pair() -> None:
-    seen: list[httpx2.Request] = []
-    transport = fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, seen)
-
-    refreshed = refresh_notion_token(make_notion_credentials(), transport=transport)
-
-    assert refreshed == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
-    assert [summarise(request) for request in seen] == [
-        {
-            "method": "POST",
-            "url": "https://api.notion.com/v1/oauth/token",
-            "authorization": basic("client-id", "client-secret"),
-            "content_type": "application/json",
-            "body": {"grant_type": "refresh_token", "refresh_token": "refresh-token"},
-        }
-    ]
-
-
-def test_refresh_keeps_the_refresh_token_when_notion_does_not_rotate_it() -> None:
-    response = {key: value for key, value in TOKEN_RESPONSE.items() if key != "refresh_token"}
-    transport = fake_api({"/v1/oauth/token": (200, response)}, [])
-
-    refreshed = refresh_notion_token(make_notion_credentials(), transport=transport)
-
-    assert refreshed == make_notion_credentials(access_token="new-access")
-
-
-@pytest.mark.parametrize(
-    "missing", [{"refresh_token": None}, {"client_id": None}, {"client_secret": None}], ids=str
-)
-def test_refresh_without_a_refresh_token_or_client_says_to_sign_in_again(missing: dict[str, None]) -> None:
-    with pytest.raises(
-        AuthError, match=r"^The Notion token cannot be refreshed; run `skaldr auth notion` again$"
-    ):
-        refresh_notion_token(make_notion_credentials(**missing), transport=fake_api({}, []))
+        with pytest.raises(AuthError, match=rf"^Cannot listen on 127\.0\.0\.1:{port} \(.+\); free the port"):
+            sign_in(FakeBrowser(), port=port, timeout_seconds=0.2)
 
 
 def test_revoke_sends_the_access_token_with_basic_auth() -> None:
@@ -164,18 +158,19 @@ def test_revoke_sends_the_access_token_with_basic_auth() -> None:
         {
             "method": "POST",
             "url": "https://api.notion.com/v1/oauth/revoke",
-            "authorization": basic("client-id", "client-secret"),
+            "authorization": basic_auth_header("client-id", "client-secret"),
             "content_type": "application/json",
             "body": {"token": "access-token"},
         }
     ]
 
 
-def test_a_token_from_the_environment_without_a_client_cannot_be_revoked() -> None:
+@pytest.mark.parametrize("missing", ["client_id", "client_secret"])
+def test_a_token_without_its_client_cannot_be_revoked(missing: str) -> None:
     with pytest.raises(
         AuthError, match=r"^The Notion token cannot be revoked without the client ID and secret$"
     ):
-        revoke_notion_token(make_notion_credentials(client_id=None), transport=fake_api({}, []))
+        revoke_notion_token(make_notion_credentials(**{missing: None}), transport=fake_api({}, []))
 
 
 def test_a_failed_revoke_names_the_status() -> None:
@@ -183,3 +178,8 @@ def test_a_failed_revoke_names_the_status() -> None:
 
     with pytest.raises(AuthError, match=r"^Notion did not revoke the token: HTTP 400$"):
         revoke_notion_token(make_notion_credentials(), transport=transport)
+
+
+def test_an_unreachable_revoke_endpoint_is_named() -> None:
+    with pytest.raises(AuthError, match=r"^The request to Notion failed: connection refused$"):
+        revoke_notion_token(make_notion_credentials(), transport=refusing_connections())
