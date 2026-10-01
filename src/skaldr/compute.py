@@ -20,6 +20,7 @@ from skaldr.models import (
     AnyBlock,
     Badge,
     CaseTone,
+    DeltaDirection,
     Grid,
     Heading,
     InnerGrid,
@@ -271,6 +272,7 @@ class SwimLayout(TypedDict):
 
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
+DELTA_GLYPHS: dict[DeltaDirection, str] = {"up": "▲", "down": "▼", "flat": "→"}
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from skaldr import compute, models
 from skaldr.errors import ReportError
-from skaldr.export.inline import bold, italic, plain
+from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for
 from skaldr.export.lower.prose import (
     lower_badge_row,
@@ -35,7 +35,6 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.richtext import Plain
 
 SECTION_HEADING_LEVEL = 2
 
@@ -46,8 +45,7 @@ def lower_report(report: models.Report) -> LoweredDocument:
     toc = _table_of_contents(report, lowering)
     if toc.entries:
         nodes.append(toc)
-    nodes += _lower_blocks(report.blocks, lowering, depth=0)
-    nodes += _legend(report)
+    nodes += _blocks_with_the_legend(report, lowering)
     footer = compute.provenance_footer(report)
     if footer:
         nodes.append(Paragraph(plain(footer), "muted"))
@@ -104,7 +102,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.Note():
             return lower_note(block, lowering)
         case models.Image():
-            return lower_image(block, lowering)
+            return lower_image(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
         case models.References():
@@ -149,6 +147,16 @@ def _legend(report: models.Report) -> list[Node]:
     if not used:
         return []
     entries = tuple(
-        ListEntry((Chip(badge.label, badge.tone), Plain(f" {badge.legend}"))) for _, badge in used
+        ListEntry((Chip(one_line(badge.label), badge.tone), *plain(f" {badge.legend}"))) for _, badge in used
     )
     return [Toggle(plain("Legend: badges used on this page"), None, (ListNode("bullet", entries),))]
+
+
+def _blocks_with_the_legend(report: models.Report, lowering: Lowering) -> list[Node]:
+    legend_at = compute.first_table_index(report)
+    nodes = [] if legend_at is not None else _legend(report)
+    for index, block in enumerate(report.blocks):
+        if index == legend_at:
+            nodes += _legend(report)
+        nodes += _lower_block(block, lowering, depth=0)
+    return nodes

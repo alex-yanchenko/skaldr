@@ -1,11 +1,12 @@
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
-from skaldr.export.runs import Chip, Gauge, Mark
+from skaldr.export.markup import MARK_GLYPH
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, MarkScheme
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -20,7 +21,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import parse_report
+from skaldr.models import StatusState, TimelineState, parse_report
 from skaldr.richtext import Code, Link, Plain, Styled
 from tests.factories import API_BADGES, lowered, make_report
 
@@ -63,6 +64,33 @@ def test_a_heading_with_a_line_break_stays_one_heading() -> None:
     )
 
 
+def test_a_heading_sub_is_a_muted_italic_line_under_it() -> None:
+    assert lowered([{"type": "heading", "text": "Count", "sub": "by **aisle**"}]) == (
+        Heading(2, (Plain("Count"),), "count"),
+        Paragraph((Styled("italic", (Plain("by "), Styled("bold", (Plain("aisle"),)))),), "muted"),
+    )
+
+
+def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -> None:
+    section = {
+        "type": "section",
+        "title": "Open",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "text": "Deep", "level": 3}],
+    }
+
+    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
+def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
+    blocks = [{"type": "text", "body": "aside", "muted": True}]
+
+    assert lowered(blocks, meta={"title": "T", "source": "SOP v2", "date": "1 Oct"}) == (
+        Paragraph((Plain("aside"),), "muted"),
+        Paragraph((Plain("SOP v2 · 1 Oct"),), "muted"),
+    )
+
+
 def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     blocks = [
         {"type": "heading", "text": "Overview"},
@@ -80,122 +108,13 @@ def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     )
 
 
-def test_a_card_shows_its_share_delta_badges_and_note() -> None:
-    card = {
-        "label": "Clean",
-        "value": 9,
-        "of": 10,
-        "tone": "success",
-        "delta": {"label": "+1", "direction": "up"},
-        "badges": ["API"],
-        "note": "since Monday",
+def test_references_are_bullets_led_by_their_number_with_a_source_link() -> None:
+    references = {
+        "type": "references",
+        "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
     }
 
-    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (
-                        *bold("Clean"),
-                        Plain(": "),
-                        Plain("9"),
-                        Plain(" (90.0%)"),
-                        Plain(" "),
-                        Mark("delta", "up"),
-                        Plain(" +1"),
-                        Plain(" "),
-                        Chip("api", "blue"),
-                    ),
-                    children=(Paragraph((Plain("since Monday"),), "muted"),),
-                    tone="success",
-                ),
-            ),
-        ),
-        API_LEGEND,
-    )
-
-
-def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
-    meter = {"type": "meter", "items": [{"label": "Zone", "value": 5, "max": 10, "tone": "warning"}]}
-
-    assert lowered([meter]) == (
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" 50.0% (5 of 10)")), tone="warning"
-                ),
-            ),
-        ),
-    )
-
-
-def test_a_range_shows_its_axis_and_each_segment_share() -> None:
-    block = {
-        "type": "range",
-        "axis": {"min": "Jan"},
-        "segments": [
-            {"label": "Seg", "span": 1, "tone": "danger", "sub": "one"},
-            {"label": "Rest", "span": 3},
-        ],
-    }
-
-    assert lowered([block]) == (
-        Paragraph((Plain("From Jan to end"),), "muted"),
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (*bold("Seg"), Plain(": "), Plain("1 (25.0%)"), Plain(", "), Plain("one")), tone="danger"
-                ),
-                ListEntry((*bold("Rest"), Plain(": "), Plain("3 (75.0%)"))),
-            ),
-        ),
-    )
-
-
-def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
-    blocks = [
-        {"type": "status_list", "items": [{"state": "blocked", "text": "Vendor"}]},
-        {
-            "type": "timeline",
-            "items": [{"time": "Mon", "title": "Start", "state": "done"}, {"title": "Later"}],
-        },
-    ]
-
-    assert lowered(blocks) == (
-        ListNode("bullet", (ListEntry((Mark("status", "blocked"), Plain(" "), Plain("Vendor"))),)),
-        ListNode(
-            "bullet",
-            (
-                ListEntry((Mark("timeline", "done"), Plain(" "), *bold("Mon"), Plain(": "), Plain("Start"))),
-                ListEntry((Plain("Later"),)),
-            ),
-        ),
-    )
-
-
-def test_definitions_badge_groups_and_references_are_lists() -> None:
-    blocks = [
-        {"type": "def_list", "items": [{"term": "Fix", "body": "first\n\nsecond"}]},
-        {"type": "badge_row", "groups": [{"label": "Owners:", "items": [{"label": "ops", "tone": "teal"}]}]},
-        {
-            "type": "references",
-            "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
-        },
-    ]
-
-    assert lowered(blocks) == (
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (*bold("Fix"), Plain(": "), Plain("first")), children=(Paragraph((Plain("second"),)),)
-                ),
-            ),
-        ),
-        ListNode("bullet", (ListEntry((*bold("Owners"), Plain(": "), Chip("ops", "teal"))),)),
+    assert lowered([references]) == (
         ListNode(
             "bullet",
             (
@@ -214,24 +133,301 @@ def test_definitions_badge_groups_and_references_are_lists() -> None:
     )
 
 
-def test_an_embedded_image_becomes_its_caption() -> None:
-    image = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", "caption": "Fig 1"}
+def test_the_badge_legend_comes_right_after_the_table_of_contents_when_the_page_has_no_table() -> None:
+    blocks = [{"type": "heading", "text": "A"}, {"type": "badge_row", "items": [{"key": "API"}]}]
 
-    assert lowered([image]) == (Paragraph(italic((Plain("Image: "), Plain("Fig 1"))), "muted"),)
+    assert lowered(blocks, meta={"title": "T", "toc": True}, badges=API_BADGES) == (
+        TableOfContents((TocEntry("a", (Plain("A"),)),)),
+        API_LEGEND,
+        Heading(2, (Plain("A"),), "a"),
+        Paragraph((Chip("api", "blue"),)),
+    )
+
+
+def test_a_card_shows_its_share_delta_badges_and_note() -> None:
+    card = {
+        "label": "Clean",
+        "value": 9,
+        "of": 10,
+        "tone": "success",
+        "delta": {"label": "+1", "direction": "up"},
+        "badges": ["API"],
+        "note": "since Monday",
+    }
+
+    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+        API_LEGEND,
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (
+                        *bold("Clean"),
+                        Plain(": "),
+                        Plain("9"),
+                        Plain(" (90.0%)"),
+                        Plain(" ▲ +1"),
+                        Plain(" "),
+                        Chip("api", "blue"),
+                    ),
+                    children=(Paragraph((Plain("since Monday"),), "muted"),),
+                    tone="success",
+                ),
+            ),
+        ),
+    )
 
 
 @pytest.mark.parametrize(
-    ("code", "language"),
+    ("card", "text"),
     [
-        pytest.param({"label": "q.sql", "content": "select 1\n"}, "sql", id="suffix"),
-        pytest.param({"label": "fix.ts", "content": "+a", "mode": "diff"}, "diff", id="diff"),
-        pytest.param({"content": "plain"}, "", id="no-label"),
+        pytest.param(
+            {"label": "Site", "value": "West"}, (*bold("Site"), Plain(": "), Plain("West")), id="text-value"
+        ),
+        pytest.param(
+            {"label": "Lag", "value": 3, "delta": {"label": "flat"}},
+            (*bold("Lag"), Plain(": "), Plain("3"), Plain(" flat")),
+            id="delta-without-direction",
+        ),
+        pytest.param(
+            {"label": "Cost", "value": 5, "delta": {"label": "-8%", "direction": "down", "tone": "success"}},
+            (*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("▼ -8%", "green")),
+            id="toned-delta-is-a-colored-chip",
+        ),
     ],
 )
-def test_a_code_block_language_comes_from_its_label_or_mode(code: dict[str, Any], language: str) -> None:
-    label: tuple[Node, ...] = (Paragraph((Code(code["label"]),)),) if "label" in code else ()
+def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
+    assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
-    assert lowered([{"type": "code", **code}]) == (*label, CodeBlock(code["content"].rstrip("\n"), language))
+
+def test_a_derived_card_fails_until_its_source_blocks_export() -> None:
+    blocks = [
+        {"type": "cards", "items": [{"badge": "API", "of_matrix": "m"}]},
+        {
+            "type": "matrix",
+            "id": "m",
+            "rows": ["r"],
+            "columns": ["c"],
+            "cells": [{"row": "r", "col": "c", "badge": "API"}],
+        },
+    ]
+
+    with pytest.raises(ReportError, match=r"^a derived `cards` item has no Markdown export yet$"):
+        lowered(blocks, badges=API_BADGES)
+
+
+def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
+    blocks = [
+        {
+            "type": "fact_strip",
+            "facts": [{"label": "Site:", "value": "West  wing"}, {"label": " ", "value": "x"}],
+        },
+        {"type": "key_value", "pairs": [{"label": "Owner", "value": "**ops**"}]},
+    ]
+
+    assert lowered(blocks) == (
+        ListNode(
+            "bullet",
+            (ListEntry((*bold("Site"), Plain(": "), Plain("West wing"))), ListEntry((Plain("x"),))),
+        ),
+        ListNode("bullet", (ListEntry((*bold("Owner"), Plain(": "), Styled("bold", (Plain("ops"),)))),)),
+    )
+
+
+def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
+    meter = {"type": "meter", "items": [{"label": "Zone", "value": 5, "max": 10, "tone": "warning"}]}
+
+    assert lowered([meter]) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" 50.0% (5 of 10)")), tone="warning"
+                ),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("axis", "note"),
+    [
+        pytest.param({"min": "Jan"}, (Paragraph((Plain("From Jan"),), "muted"),), id="start-only"),
+        pytest.param({"max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="end-only"),
+        pytest.param({"min": "Jan", "max": "Dec"}, (Paragraph((Plain("Jan to Dec"),), "muted"),), id="both"),
+        pytest.param(
+            {"min": "  ", "max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="blank-start"
+        ),
+        pytest.param(None, (), id="no-axis"),
+    ],
+)
+def test_a_range_shows_the_axis_ends_it_has_and_each_segment_share(
+    axis: dict[str, str] | None, note: tuple[Node, ...]
+) -> None:
+    block = {
+        "type": "range",
+        "segments": [
+            {"label": "Seg", "span": 1, "tone": "danger", "sub": "one"},
+            {"label": "Rest", "span": 3},
+        ],
+        **({"axis": axis} if axis else {}),
+    }
+
+    assert lowered([block]) == (
+        *note,
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Seg"), Plain(": "), Plain("25.0%"), Plain(", "), Plain("one")), tone="danger"
+                ),
+                ListEntry((*bold("Rest"), Plain(": "), Plain("75.0%"))),
+            ),
+        ),
+    )
+
+
+def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
+    blocks = [
+        {"type": "status_list", "items": [{"state": "blocked", "text": "Vendor"}]},
+        {
+            "type": "timeline",
+            "items": [
+                {"time": "Mon", "title": "Start", "state": "done", "badges": ["API"], "body": "kick-off"},
+                {"title": "Later"},
+            ],
+        },
+    ]
+
+    assert lowered(blocks, badges=API_BADGES) == (
+        API_LEGEND,
+        ListNode("bullet", (ListEntry((Mark("status", "blocked"), Plain(" "), Plain("Vendor"))),)),
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (
+                        Mark("timeline", "done"),
+                        Plain(" "),
+                        *bold("Mon"),
+                        Plain(": "),
+                        Plain("Start"),
+                        Plain(" "),
+                        Chip("api", "blue"),
+                    ),
+                    children=(Paragraph((Plain("kick-off"),)),),
+                ),
+                ListEntry((Plain("Later"),)),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "scheme"),
+    [
+        *(pytest.param(state, "status", id=f"status-{state}") for state in get_args(StatusState)),
+        *(pytest.param(state, "timeline", id=f"timeline-{state}") for state in get_args(TimelineState)),
+    ],
+)
+def test_every_state_a_block_allows_has_a_glyph(state: str, scheme: MarkScheme) -> None:
+    assert MARK_GLYPH[scheme][state]
+
+
+def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_alone() -> None:
+    block = {
+        "type": "def_list",
+        "items": [{"term": "Fix", "body": "first\n\nsecond"}, {"term": "Gap", "body": " "}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (*bold("Fix"), Plain(": "), Plain("first")), children=(Paragraph((Plain("second"),)),)
+                ),
+                ListEntry((*bold("Gap"), Plain(": "))),
+            ),
+        ),
+    )
+
+
+def test_a_badge_row_is_a_labelled_line_and_its_groups_are_labelled_bullets() -> None:
+    blocks = [
+        {
+            "type": "badge_row",
+            "label": "Affects:",
+            "items": [{"key": "API"}, {"label": "two\nlines", "tone": "red"}],
+        },
+        {"type": "badge_row", "groups": [{"label": "Owners:", "items": [{"label": "ops", "tone": "teal"}]}]},
+    ]
+
+    assert lowered(blocks, badges=API_BADGES) == (
+        API_LEGEND,
+        Paragraph((*bold("Affects"), Plain(": "), Chip("api", "blue"), Plain(" "), Chip("two lines", "red"))),
+        ListNode("bullet", (ListEntry((*bold("Owners"), Plain(": "), Chip("ops", "teal"))),)),
+    )
+
+
+def test_a_badge_label_or_legend_with_a_line_break_stays_on_one_line() -> None:
+    badges = {"API": {"label": "a\npi", "tone": "blue", "legend": "the API,\n- folded\n"}}
+
+    assert lowered([{"type": "badge_row", "items": [{"key": "API"}]}], badges=badges) == (
+        Toggle(
+            (Plain("Legend: badges used on this page"),),
+            None,
+            (ListNode("bullet", (ListEntry((Chip("a pi", "blue"), Plain(" the API, - folded "))),)),),
+        ),
+        Paragraph((Chip("a pi", "blue"),)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("image", "caption"),
+    [
+        pytest.param(
+            {"caption": "Fig **1** [^x]"}, "Fig **1** [^x]", id="caption-stays-literal-like-the-html"
+        ),
+        pytest.param({}, "chart", id="no-caption-falls-back-to-alt"),
+    ],
+)
+def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: str) -> None:
+    block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
+
+    assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
+
+
+@pytest.mark.parametrize(
+    ("code", "nodes"),
+    [
+        pytest.param(
+            {"label": "q.sql", "content": "select 1\n\n"},
+            (Paragraph((Code("q.sql"),)), CodeBlock("select 1", "sql")),
+            id="suffix",
+        ),
+        pytest.param(
+            {"label": "fix.ts", "content": "+a", "mode": "diff"},
+            (Paragraph((Code("fix.ts"),)), CodeBlock("+a", "diff")),
+            id="diff",
+        ),
+        pytest.param(
+            {"label": "notes.unknown", "content": "x"},
+            (Paragraph((Code("notes.unknown"),)), CodeBlock("x", "")),
+            id="unmapped-suffix",
+        ),
+        pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
+        pytest.param(
+            {"label": "run.sh\n# injected", "content": "x"},
+            (Paragraph((Code("run.sh # injected"),)), CodeBlock("x", "")),
+            id="label-stays-on-one-line",
+        ),
+    ],
+)
+def test_a_code_block_language_comes_from_its_label_or_mode(
+    code: dict[str, Any], nodes: tuple[Node, ...]
+) -> None:
+    assert lowered([{"type": "code", **code}]) == nodes
 
 
 def test_a_quote_and_a_note_keep_their_text() -> None:
@@ -243,6 +439,15 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
     assert lowered(blocks) == (
         Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
+    )
+
+
+def test_an_untitled_callout_and_note_are_their_body_alone() -> None:
+    blocks = [{"type": "callout", "tone": "warning", "body": "careful"}, {"type": "note", "body": "aside"}]
+
+    assert lowered(blocks) == (
+        Callout("warning", (Paragraph((Plain("careful"),)),)),
+        Callout("neutral", (Paragraph((Plain("aside"),)),)),
     )
 
 

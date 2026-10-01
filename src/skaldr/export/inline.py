@@ -25,7 +25,8 @@ def italic(runs: Rich) -> Rich:
 
 
 def labelled(label: str) -> Rich:
-    return bold(one_line(label).removesuffix(":").rstrip()) + plain(": ")
+    name = one_line(label).removesuffix(":").rstrip()
+    return bold(name) + plain(": ") if name else ()
 
 
 def _on_one_line(run: Run) -> Run:

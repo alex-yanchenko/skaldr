@@ -39,9 +39,6 @@ class _HtmlRuns:
     def text(self, text: str, /) -> str:
         return str(escape(text))
 
-    def bang_before_link(self) -> str:
-        return "!"
-
     def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
 
@@ -110,6 +107,7 @@ def _environment() -> Environment:
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
+        delta_glyphs=compute.DELTA_GLYPHS,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

@@ -165,8 +165,9 @@ def main(argv: list[str] | None = None) -> int:
         "--chunk",
         type=int,
         metavar="N",
-        help="with --export notion: split the page into files of at most N characters, each starting at "
-        "a level 1 or 2 heading, so each fits one MCP call. A single section longer than N stays whole.",
+        help="with --export notion: split the page into files of at most N characters, each after the "
+        "first starting at a level 1 or 2 heading, so each fits one MCP call. A single section longer than "
+        "N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -424,9 +425,11 @@ def _reject_flags_that_do_not_fit_an_export(
         )
     if args.live is not None or args.if_stale or args.no_source:
         parser.error("--live, --if-stale and --no-source shape an HTML render; --export writes none")
-    if args.chunk is not None and args.export != "notion":
+    if args.chunk is None:
+        return
+    if args.export != "notion":
         parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
-    if args.chunk is not None and args.chunk < 1:
+    if args.chunk < 1:
         parser.error("--chunk takes a positive character count")
 
 

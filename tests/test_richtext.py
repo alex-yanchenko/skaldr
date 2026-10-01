@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from skaldr.errors import ReportError
@@ -11,7 +13,7 @@ from skaldr.richtext import (
     Rich,
     RichContext,
     Styled,
-    VisibleText,
+    StyleName,
     parse_rich,
     visible_text,
     write_runs,
@@ -73,6 +75,16 @@ def test_rich_text_parses_into_runs() -> None:
             (Plain("[l](https://a.io/"), Code("c"), Plain(")")),
             id="code-span-inside-a-url-is-not-a-link",
         ),
+        pytest.param(
+            "[l](https://a.io/[^sop])",
+            (Plain("[l](https://a.io/"), Citation("sop", 1, "https://example.com/sop"), Plain(")")),
+            id="citation-inside-a-url-is-not-a-link",
+        ),
+        pytest.param(
+            "~~a *b~~ c*",
+            (Styled("strike", (Plain("a *b"),)), Plain(" c*")),
+            id="emphasis-crossing-a-strike-stays-inside-the-strike",
+        ),
     ],
 )
 def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
@@ -107,9 +119,20 @@ def test_a_link_to_an_unknown_anchor_fails() -> None:
         parse_rich("[x](#nowhere)", FULL_CONTEXT)
 
 
+@pytest.mark.parametrize("text", ["[x](#method`y`)", "[x](#method[^sop])"])
+def test_an_anchor_link_whose_target_holds_a_code_span_or_citation_fails(text: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(text, FULL_CONTEXT)
+
+    assert str(raised.value) == (
+        "rich text links to the anchor '#method…', whose target holds a `code` span or [^citation]; "
+        "an anchor link targets a heading or section id"
+    )
+
+
 @pytest.mark.parametrize("token", ["{{a.b}}", "{{two words}}", "{{}}"])
 def test_a_malformed_placeholder_fails_naming_it(token: str) -> None:
-    with pytest.raises(ReportError, match=r"invalid placeholder '\{\{"):
+    with pytest.raises(ReportError, match=rf"invalid placeholder '{re.escape(token)}'"):
         parse_rich(f"a {token} b")
 
 
@@ -132,17 +155,6 @@ def test_an_asterisk_inside_a_url_or_code_span_is_not_emphasis() -> None:
     )
 
 
-class _BangMarkingText(VisibleText):
-    def bang_before_link(self) -> str:
-        return "<bang>"
-
-
-def test_a_bang_right_before_a_link_goes_through_the_writer_at_every_depth() -> None:
-    runs = parse_rich("wow![a](https://e.com) and **so![b](https://e.com)** but not! here")
-
-    assert write_runs(runs, _BangMarkingText()) == "wow<bang>a and so<bang>b but not! here"
-
-
 def test_visible_text_reads_every_run_as_a_reader_would() -> None:
     runs: Rich = (
         Plain("a "),
@@ -153,3 +165,35 @@ def test_visible_text_reads_every_run_as_a_reader_would() -> None:
     )
 
     assert visible_text(runs) == "a b[2]who!"
+
+
+class _TaggedRuns:
+    def text(self, text: str, /) -> str:
+        return text
+
+    def code(self, text: str, /) -> str:
+        return f"<code:{text}>"
+
+    def link(self, label: str, url: str, /) -> str:
+        return f"<link:{label}|{url}>"
+
+    def anchor_link(self, label: str, anchor: str, /) -> str:
+        return f"<anchor:{label}|{anchor}>"
+
+    def citation(self, run: Citation, /) -> str:
+        return f"<cite:{run.key}={run.number}>"
+
+    def placeholder(self, name: str, /) -> str:
+        return f"<blank:{name}>"
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        return f"<{style}:{inner}>"
+
+
+def test_write_runs_hands_every_run_to_its_writer_method_in_order() -> None:
+    runs = parse_rich("a `c` [see `x` [^sop]](https://e.com) [m](#method) {{who}} ~~*x*~~", FULL_CONTEXT)
+
+    assert write_runs(runs, _TaggedRuns()) == (
+        "a <code:c> <link:see <code:x> <cite:sop=1>|https://e.com> <anchor:m|method> <blank:who> "
+        "<strike:<italic:x>>"
+    )

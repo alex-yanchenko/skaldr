@@ -105,6 +105,10 @@ def _to_tone(value: Any) -> Any:
     return _PALETTE_TO_TONE.get(value, value) if isinstance(value, str) else value
 
 
+def badge_color_of(tone: str) -> "BadgeColor":
+    return cast("BadgeColor", _TONE_TO_PALETTE.get(tone, tone))
+
+
 def _to_badge_color(value: Any) -> Any:
     """Normalise a semantic tone name to its palette colour twin (success → green); pass anything else
     through unchanged (palette names, teal/sky, non-strings)."""
@@ -151,6 +155,7 @@ def _to_callout_tone(value: Any) -> Any:
 
 CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
+DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
 ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
@@ -358,7 +363,7 @@ class DefList(_Block):
 
 class CardDelta(_Frozen):
     label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
-    direction: Literal["up", "down", "flat"] | None = Field(
+    direction: DeltaDirection | None = Field(
         default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
     )
     tone: Tone | None = Field(
