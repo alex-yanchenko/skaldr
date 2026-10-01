@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from skaldr.models import BadgeColor
-from skaldr.richtext import Run, RunWriter, VisibleText, write_run, write_sequence
+from skaldr.richtext import Run, RunWriter, VisibleText, write_run
 
-MarkScheme = Literal["status", "timeline", "swimlane", "indicator", "delta", "check"]
+MarkScheme = Literal["status", "timeline", "swimlane", "indicator", "check"]
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
 
 
 def write_export_runs(runs: ExportRich, writer: ExportRunWriter) -> str:
-    return write_sequence(runs, writer, _write_export_run)
+    return "".join(_write_export_run(run, writer) for run in runs)
 
 
 class _ExportVisibleText(VisibleText):

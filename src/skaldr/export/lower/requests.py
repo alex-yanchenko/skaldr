@@ -3,8 +3,8 @@ from collections.abc import Sequence
 
 from skaldr import compute
 from skaldr.export.inline import bold, italic, labelled, plain
-from skaldr.export.lower.context import Lowering
-from skaldr.export.tree import Callout, CodeBlock, ListEntry, ListNode, Node, Paragraph, Tab, Tabs
+from skaldr.export.lower.context import Lowering, bullets
+from skaldr.export.tree import Callout, CodeBlock, ListEntry, Node, Paragraph, Tab, Tabs
 from skaldr.models import Request, RequestCase, RequestFlow, RequestLike, RequestVariable
 from skaldr.richtext import Code, Rich
 
@@ -68,7 +68,7 @@ def _variable_entry(variable: RequestVariable) -> ListEntry:
 def _variables(variables: Sequence[RequestVariable]) -> list[Node]:
     if not variables:
         return []
-    return [Paragraph(bold("Values you supply")), ListNode("bullet", tuple(map(_variable_entry, variables)))]
+    return [Paragraph(bold("Values you supply")), bullets(map(_variable_entry, variables))]
 
 
 def lower_request(block: Request, lowering: Lowering) -> list[Node]:

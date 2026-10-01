@@ -1,9 +1,13 @@
 import re
 from collections.abc import Callable, Sequence
+from typing import Literal
 
 from skaldr.export.runs import Gauge, Mark, MarkScheme
-from skaldr.export.tree import CodeBlock, ToneName
+from skaldr.export.tree import CodeBlock, ListKind, ListNode, Node, ToneName
 from skaldr.richtext import Citation, StyleName
+
+MarkerFamily = Literal["dash", "ordinal"]
+MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
 
 STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: dict[ToneName, str] = {
@@ -17,20 +21,28 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "teal": "💡",
     "sky": "💡",
 }
-TAB_ICON: dict[ToneName, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
+TAB_TONES: frozenset[ToneName] = frozenset({"success", "info", "warning", "danger"})
 MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
     "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
     "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
     "swimlane": {"done": "✅", "current": "🔵", "todo": "⚪", "blocked": "⛔", "deferred": "⏸️"},
-    "indicator": {"success": "🟢", "warning": "🟡", "danger": "🔴", "info": "🔵", "neutral": "⚪"},
-    "delta": {"up": "▲", "down": "▼", "flat": "→"},
+    "indicator": {
+        "success": "🟢",
+        "warning": "🟡",
+        "danger": "🔴",
+        "info": "🔵",
+        "neutral": "⚪",
+        "accent": "🟣",
+        "teal": "🟢",
+        "sky": "🔵",
+    },
     "check": {"yes": "✓", "no": "✗"},
 }
 GAUGE_CELLS = 10
-BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+*]+|=+|>)(?=\s|$)")
+BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
-URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E"}
+URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E", "\\": "\\\\"}
 
 
 def _wrap_marker(marker: str, inner: str) -> str:
@@ -72,6 +84,10 @@ def escape_block_start(text: str) -> str:
     return ORDERED_START_MARKER.sub(lambda match: match.group(1) + "\\" + match.group(2), text)
 
 
+def bang_cannot_open_an_image(escaped_text: str) -> str:
+    return escaped_text[:-1] + "\\!" if escaped_text.endswith("!") else escaped_text
+
+
 def encode_url(url: str) -> str:
     return "".join(URL_UNSAFE.get(character, character) for character in url)
 
@@ -81,6 +97,14 @@ def gauge_bar(value: float, maximum: float) -> str:
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
 
 
+def tab_icon(tone: ToneName | None) -> str | None:
+    return CALLOUT_ICON[tone] if tone in TAB_TONES else None
+
+
+def list_marker_family(node: Node) -> MarkerFamily | None:
+    return MARKER_FAMILY[node.kind] if isinstance(node, ListNode) else None
+
+
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
@@ -88,6 +112,9 @@ def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
 class MarkupRuns:
     def __init__(self, escape: Callable[[str], str]) -> None:
         self.escape = escape
+
+    def text(self, text: str, /) -> str:
+        return bang_cannot_open_an_image(self.escape(text))
 
     def link(self, label: str, url: str, /) -> str:
         return f"[{label}]({encode_url(url)})"
@@ -103,7 +130,7 @@ class MarkupRuns:
         return styled(style, inner)
 
     def mark(self, run: Mark, /) -> str:
-        return MARK_GLYPH[run.scheme].get(run.state, run.state)
+        return MARK_GLYPH[run.scheme][run.state]
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)

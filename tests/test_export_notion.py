@@ -5,7 +5,8 @@ from typing import get_args
 
 import pytest
 
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_notion
+from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
+from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
@@ -24,49 +25,36 @@ from skaldr.export.tree import (
     TableRow,
     Tabs,
     Toggle,
+    ToneName,
 )
-from skaldr.models import AnyBlock, Grid, InnerGrid, Panel, Section, Walkthrough, load_report, parse_report
+from skaldr.models import (
+    AnyBlock,
+    BadgeColor,
+    Grid,
+    InnerGrid,
+    Panel,
+    Section,
+    Walkthrough,
+    load_report,
+    parse_report,
+)
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
 from tests.conftest import REPO_ROOT
-from tests.factories import heading_sections, lowered, make_command_request, make_report, notion_of
+from tests.factories import (
+    API_BADGES,
+    heading_sections,
+    lowered,
+    make_command_request,
+    make_report,
+    notion_of,
+)
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
 
 
-def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
-    seen: set[str] = set()
-    for block in blocks:
-        seen.add(block.type)
-        if isinstance(block, (Section, Panel)):
-            seen |= _block_types_in(block.blocks)
-        if isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                seen |= _block_types_in(cell.blocks)
-        if isinstance(block, Walkthrough):
-            for step in block.steps:
-                seen |= _block_types_in(step.detail)
-    return seen
-
-
-def _every_block_type() -> set[str]:
-    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
-
-
 def _section_text(title: str, body: str, rows: int) -> str:
     return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
-
-
-def test_the_export_fixture_uses_every_block_type() -> None:
-    assert _block_types_in(load_report(EXAMPLE).blocks) == _every_block_type()
-
-
-def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_notion(load_report(EXAMPLE), tmp_path)
-
-    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
-        path.name: path.read_text(encoding="utf-8") for path in sorted(NOTION_GOLDEN.iterdir())
-    }
 
 
 @pytest.mark.parametrize(
@@ -146,6 +134,142 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
     assert notion_of(blocks) == "- \\# not a heading\n> \\- not a list<br>\\# nor a heading<br>*Ops*\n"
 
 
+@pytest.mark.parametrize(
+    ("tone", "color"),
+    [
+        pytest.param("slate", "gray", id="slate"),
+        pytest.param("blue", "blue", id="blue"),
+        pytest.param("green", "green", id="green"),
+        pytest.param("amber", "yellow", id="amber"),
+        pytest.param("red", "red", id="red"),
+        pytest.param("violet", "purple", id="violet"),
+        pytest.param("teal", "green", id="teal"),
+        pytest.param("sky", "blue", id="sky"),
+    ],
+)
+def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColor, color: str) -> None:
+    assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
+
+
+def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> None:
+    row = {"type": "badge_row", "items": [{"key": "API"}]}
+
+    assert notion_of([row], badges=API_BADGES) == (
+        "<details>\n<summary>Legend: badges used on this page</summary>\n"
+        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
+        '<span color="blue_bg">api</span>\n'
+    )
+
+
+def test_block_nodes_become_notion_blocks() -> None:
+    nodes = [
+        Paragraph((Plain("muted"),), "muted"),
+        ListNode("number", (ListEntry((Plain("one"),), tone="warning"),)),
+        ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),)))),
+        Callout("info", (Paragraph((Plain("tip"),)),)),
+        Quote(((Plain("said"),),)),
+        Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
+        Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
+        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
+        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
+    ]
+
+    assert render_notion(nodes) == (
+        'muted {color="gray"}\n'
+        '1. one {color="yellow"}\n'
+        "- [x] done\n"
+        "- [ ] open\n"
+        '<callout icon="💡" color="blue_bg">\n\ttip\n</callout>\n'
+        "> said\n"
+        "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
+        '## Shut {toggle="true"}\n\ty\n'
+        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
+    )
+
+
+def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
+    seen: set[str] = set()
+    for block in blocks:
+        seen.add(block.type)
+        if isinstance(block, (Section, Panel)):
+            seen |= _block_types_in(block.blocks)
+        if isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                seen |= _block_types_in(cell.blocks)
+        if isinstance(block, Walkthrough):
+            for step in block.steps:
+                seen |= _block_types_in(step.detail)
+    return seen
+
+
+def _every_block_type() -> set[str]:
+    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
+
+
+def test_the_export_fixture_uses_every_block_type() -> None:
+    assert _block_types_in(load_report(EXAMPLE).blocks) == _every_block_type()
+
+
+def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
+    export_notion(load_report(EXAMPLE), tmp_path)
+
+    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
+        path.name: path.read_text(encoding="utf-8") for path in sorted(NOTION_GOLDEN.iterdir())
+    }
+
+
+def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [{"label": "Scan", "tone": "info"}, {"label": 'Say "hi"', "note": "then **stop**"}],
+    }
+
+    assert notion_of([flow]) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan"]:::info\n'
+        '    s2["Say #quot;hi#quot;<br>then stop"]\n'
+        "    s1 --> s2\n"
+        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
+        "```\n"
+    )
+
+
+def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {"label": "control", "tone": "info", "response": {"body": "none"}},
+    ]
+    request = make_command_request(cases=cases, command="list-tiers")
+
+    assert notion_of([request]) == (
+        "**Tier mappings on the partner API**\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n'
+        "\t\tfinding\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Output**\n"
+        "\t\t```json\n\t\t[]\n\t\t```\n"
+        "\t</tab>\n"
+        '\t<tab icon="💡">\n'
+        "\t\tcontrol\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Output**\n"
+        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t</tab>\n"
+        "</tabs>\n"
+    )
+
+
+def test_a_page_with_a_table_of_contents_uses_the_notion_block() -> None:
+    assert (
+        notion_of([{"type": "heading", "text": "A"}], meta={"title": "T", "toc": True})
+        == "<table_of_contents/>\n## A\n"
+    )
+
+
 def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
     table = {
         "type": "table",
@@ -186,107 +310,6 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
     )
 
 
-def test_block_nodes_become_notion_blocks() -> None:
-    nodes = [
-        Paragraph((Plain("muted"),), "muted"),
-        ListNode("number", (ListEntry((Plain("one"),), tone="warning"),)),
-        ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),)))),
-        Callout("info", (Paragraph((Plain("tip"),)),)),
-        Quote(((Plain("said"),),)),
-        Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
-        Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
-        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
-        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
-    ]
-
-    assert render_notion(nodes) == (
-        'muted {color="gray"}\n'
-        '1. one {color="yellow"}\n'
-        "- [x] done\n"
-        "- [ ] open\n"
-        '<callout icon="💡" color="blue_bg">\n\ttip\n</callout>\n'
-        "> said\n"
-        "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
-        '## Shut {toggle="true"}\n\ty\n'
-        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
-        '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
-    )
-
-
-def test_a_page_with_a_table_of_contents_uses_the_notion_block() -> None:
-    assert (
-        notion_of([{"type": "heading", "text": "A"}], meta={"title": "T", "toc": True})
-        == "<table_of_contents/>\n## A\n"
-    )
-
-
-def test_nested_list_children_are_indented_with_tabs() -> None:
-    block = {
-        "type": "list",
-        "items": [{"text": "parent", "items": ["child", {"text": "mid", "items": ["leaf"]}]}],
-    }
-
-    assert notion_of([block]) == "- parent\n\t- child\n\t- mid\n\t\t- leaf\n"
-
-
-def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
-    flow = {
-        "type": "flow",
-        "numbered": False,
-        "steps": [{"label": "Scan", "tone": "info"}, {"label": 'Say "hi"', "note": "then **stop**"}],
-    }
-
-    assert notion_of([flow]) == (
-        "```mermaid\n"
-        "flowchart LR\n"
-        '    s1["Scan"]:::info\n'
-        '    s2["Say #quot;hi#quot;<br>then stop"]\n'
-        "    s1 --> s2\n"
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
-        "```\n"
-    )
-
-
-def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
-    cases = [
-        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
-        {"label": "control", "tone": "success", "response": {"body": "none"}},
-    ]
-    request = make_command_request(cases=cases, command="list-tiers")
-
-    assert notion_of([request]) == (
-        "**Tier mappings on the partner API**\n"
-        "<tabs>\n"
-        '\t<tab icon="⚠️">\n'
-        "\t\tfinding\n"
-        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Output**\n"
-        "\t\t```json\n\t\t[]\n\t\t```\n"
-        "\t</tab>\n"
-        '\t<tab icon="✅">\n'
-        "\t\tcontrol\n"
-        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Output**\n"
-        "\t\t```\n\t\tnone\n\t\t```\n"
-        "\t</tab>\n"
-        "</tabs>\n"
-    )
-
-
-def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:
-    blocks = [
-        {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "raw"}]},
-        {
-            "type": "section",
-            "title": "Status",
-            "collapsed": False,
-            "blocks": [{"type": "text", "body": "now"}],
-        },
-    ]
-
-    assert notion_of(blocks) == '## Appendix {toggle="true"}\n\traw\n## Status\nnow\n'
-
-
 def test_a_grid_becomes_columns_and_a_grid_inside_a_cell_stacks() -> None:
     inner = {
         "type": "grid",
@@ -306,6 +329,29 @@ def test_a_grid_becomes_columns_and_a_grid_inside_a_cell_stacks() -> None:
         '\t<column ratio="67">\n\t\tb\n\t\tc\n\t</column>\n'
         "</columns>\n"
     )
+
+
+def test_nested_list_children_are_indented_with_tabs() -> None:
+    block = {
+        "type": "list",
+        "items": [{"text": "parent", "items": ["child", {"text": "mid", "items": ["leaf"]}]}],
+    }
+
+    assert notion_of([block]) == "- parent\n\t- child\n\t- mid\n\t\t- leaf\n"
+
+
+def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:
+    blocks = [
+        {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "raw"}]},
+        {
+            "type": "section",
+            "title": "Status",
+            "collapsed": False,
+            "blocks": [{"type": "text", "body": "now"}],
+        },
+    ]
+
+    assert notion_of(blocks) == '## Appendix {toggle="true"}\n\traw\n## Status\nnow\n'
 
 
 def test_chunks_split_only_at_a_top_level_heading_and_stay_under_the_limit() -> None:
@@ -346,7 +392,56 @@ def test_a_section_longer_than_the_chunk_stays_whole_and_is_reported_by_its_head
 def test_an_oversized_opening_before_the_first_heading_is_named_as_the_opening_section() -> None:
     nodes = (Paragraph((Plain("x" * 50),)), Heading(2, (Plain("A"),)))
 
-    assert chunk_notion(nodes, 20).oversized_sections == ("the opening section, before the first heading",)
+    assert chunk_notion(nodes, 20) == NotionChunks(
+        ("x" * 50 + "\n", "## A\n"), ("the opening section, before the first level 1 or 2 heading",)
+    )
+
+
+def test_an_oversized_section_is_named_by_its_heading_text_not_its_markup() -> None:
+    nodes = (Toggle((Plain("Q3 [draft]"),), 2, (Paragraph((Plain("y" * 50),)),)),)
+
+    assert chunk_notion(nodes, 20).oversized_sections == ("## Q3 [draft]",)
+
+
+def test_two_sections_that_exactly_fill_the_limit_share_one_chunk() -> None:
+    nodes = (Heading(2, (Plain("A"),)), Heading(2, (Plain("B"),)))
+
+    assert chunk_notion(nodes, len("## A\n## B\n")) == NotionChunks(("## A\n## B\n",), ())
+
+
+def test_an_empty_paragraph_writes_no_line() -> None:
+    assert render_notion([Paragraph(()), Paragraph((Plain("x"),))]) == "x\n"
+
+
+@pytest.mark.parametrize(
+    ("tone", "color"),
+    [
+        pytest.param("neutral", "gray", id="neutral"),
+        pytest.param("muted", "gray", id="muted"),
+        pytest.param("info", "blue", id="info"),
+        pytest.param("success", "green", id="success"),
+        pytest.param("warning", "yellow", id="warning"),
+        pytest.param("danger", "red", id="danger"),
+        pytest.param("accent", "purple", id="accent"),
+        pytest.param("teal", "green", id="teal"),
+        pytest.param("sky", "blue", id="sky"),
+    ],
+)
+def test_every_tone_has_a_notion_block_color(tone: ToneName, color: str) -> None:
+    assert render_notion([Paragraph((Plain("p"),), tone), Callout(tone, ())]) == (
+        f'p {{color="{color}"}}\n<callout icon="{CALLOUT_ICON[tone]}" color="{color}_bg">\n</callout>\n'
+    )
+
+
+def test_back_to_back_lists_of_one_kind_get_an_empty_block_between_them_so_they_stay_two_lists() -> None:
+    blocks = [
+        {"type": "list", "style": "number", "items": ["a"]},
+        {"type": "list", "style": "number", "items": ["b"]},
+        {"type": "list", "style": "check", "items": ["c"]},
+        {"type": "list", "items": ["d"]},
+    ]
+
+    assert notion_of(blocks) == "1. a\n<empty-block/>\n1. b\n- [ ] c\n<empty-block/>\n- d\n"
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
@@ -381,13 +476,73 @@ def test_a_re_export_removes_only_the_pages_its_earlier_run_wrote(
     assert sorted(path.name for path in tmp_path.iterdir()) == sorted(
         [*left, "page.07.md", "page.09.md", EXPORT_MANIFEST]
     )
-    assert json.loads((tmp_path / EXPORT_MANIFEST).read_text(encoding="utf-8")) == {"files": left}
+    assert json.loads((tmp_path / EXPORT_MANIFEST).read_text(encoding="utf-8")) == {
+        "title": "Test Report",
+        "files": left,
+    }
 
 
-def test_an_export_into_a_folder_without_a_manifest_deletes_nothing(tmp_path: Path) -> None:
-    (tmp_path / "page.03.md").write_text("mine", encoding="utf-8")
-    (tmp_path / EXPORT_MANIFEST).write_text("not json", encoding="utf-8")
+def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_one_page(
+    tmp_path: Path,
+) -> None:
+    report = parse_report(make_report(blocks=heading_sections(3, "w = 4\n" * 20)))
+    export_notion(report, tmp_path, chunk=100)
 
-    export_notion(parse_report(make_report()), tmp_path)
+    export_markdown(report, tmp_path)
 
-    assert (tmp_path / "page.03.md").read_text(encoding="utf-8") == "mine"
+    assert sorted(path.name for path in tmp_path.iterdir()) == [EXPORT_MANIFEST, "page.md"]
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        pytest.param("not json", id="not-json"),
+        pytest.param("[" * 100000, id="nested-too-deep-to-parse"),
+        pytest.param('["page.03.md"]', id="not-an-object"),
+        pytest.param('{"files": "page.03.md"}', id="files-not-a-list"),
+        pytest.param('{"files": [3, null]}', id="entries-not-names"),
+        pytest.param('{"files": ["README.md", "notes.txt"]}', id="names-skaldr-never-writes"),
+        pytest.param('{"files": ["../page.03.md", "sub/page.03.md"]}', id="paths-outside-the-folder"),
+    ],
+)
+def test_a_manifest_skaldr_did_not_write_deletes_nothing(tmp_path: Path, manifest: str) -> None:
+    out_dir = tmp_path / "out"
+    (out_dir / "sub").mkdir(parents=True)
+    kept = [out_dir / "page.03.md", out_dir / "README.md", out_dir / "notes.txt", tmp_path / "page.03.md"]
+    kept.append(out_dir / "sub" / "page.03.md")
+    for path in kept:
+        path.write_text("mine", encoding="utf-8")
+    (out_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+
+    export_notion(parse_report(make_report()), out_dir)
+
+    assert [path.read_text(encoding="utf-8") for path in kept] == ["mine"] * len(kept)
+
+
+def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = parse_report(make_report(blocks=heading_sections(4, "w = 4\n" * 20)))
+    write_text = Path.write_text
+
+    def fail_on_the_third_page(path: Path, text: str, encoding: str | None = None) -> int:
+        if path.name == "page.02.md":
+            raise OSError("disk full")
+        return write_text(path, text, encoding=encoding)
+
+    monkeypatch.setattr(Path, "write_text", fail_on_the_third_page)
+    with pytest.raises(OSError, match="disk full"):
+        export_notion(report, tmp_path, chunk=100)
+    monkeypatch.undo()
+
+    export_notion(report, tmp_path)
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == [EXPORT_MANIFEST, "page.md"]
+
+
+def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: Path) -> None:
+    report = parse_report(make_report(blocks=heading_sections(101, "v")))
+
+    result = export_notion(report, tmp_path, chunk=1)
+
+    assert [path.name for path in result.files] == [f"page.{index:03d}.md" for index in range(101)]

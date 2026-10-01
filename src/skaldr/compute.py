@@ -21,6 +21,7 @@ from skaldr.models import (
     Badge,
     Card,
     CaseTone,
+    DeltaDirection,
     Grid,
     Heading,
     InnerGrid,
@@ -272,6 +273,7 @@ class SwimLayout(TypedDict):
 
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
+DELTA_GLYPHS: dict[DeltaDirection, str] = {"up": "▲", "down": "▼", "flat": "→"}
 
 
 class SwimTotals(TypedDict):
@@ -404,9 +406,6 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         for index, lane in enumerate(block.lanes)
     ]
 
-    # a step's `depends_on` holds other steps' ids; show the reader the numbers (n) they recognise.
-    id_to_n = {step.id: step.n for step in block.steps if step.id is not None}
-
     cells: list[SwimCell] = []
     for lane_index, lane in enumerate(block.lanes):
         row_start, row_end = lane_rows[lane_index]
@@ -418,8 +417,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "value": step.value,
                     "url": step.url,
                     "state": step.state,
-                    # dedupe on the displayed number (order-preserving) so repeats never show "needs 1, 1"
-                    "deps": list(dict.fromkeys(id_to_n[dep] for dep in step.depends_on)),
+                    "deps": block.dependency_numbers(step),
                 }
                 for step in block.steps
                 if step.lane == lane.key and step.col == sub["col"] and block.step_group(step) == sub["group"]
@@ -692,6 +690,13 @@ def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
     so the lookup is unambiguous; the template only loops and never searches."""
     lookup = {(cell.row, cell.col): cell for cell in block.cells}
     return [[lookup.get((row, col)) for col in block.columns] for row in block.rows]
+
+
+def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> tuple[str | None, str]:
+    if cell.badge:
+        badge = badges[cell.badge]
+        return badge.tone, cell.label or badge.label
+    return cell.tone, cell.label or ""
 
 
 HTTP_REASONS = {

@@ -1,21 +1,22 @@
 import re
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Literal
 
 from typing_extensions import assert_never
 
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    TAB_ICON,
+    MarkerFamily,
     MarkupRuns,
     bold_once,
     code_block_lines,
     code_span,
     escape_block_start,
     indent_lines,
+    list_marker_family,
     styled,
+    tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
@@ -26,7 +27,6 @@ from skaldr.export.tree import (
     Diagram,
     Heading,
     ListEntry,
-    ListKind,
     ListNode,
     LoweredDocument,
     Node,
@@ -44,8 +44,6 @@ MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 GITHUB_SLUG_DROPPED = re.compile(r"[^\w\- ]")
-MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
 
 
 def _escape(text: str) -> str:
@@ -61,12 +59,6 @@ class _MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         super().__init__(_escape)
         self.heading_slugs = heading_slugs
-
-    def text(self, text: str, /) -> str:
-        return _escape(text)
-
-    def bang_before_link(self) -> str:
-        return "\\!"
 
     def code(self, text: str, /) -> str:
         return code_span(text)
@@ -92,21 +84,22 @@ def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:
 
 
 def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
-    seen: Counter[str] = Counter()
+    repeats: Counter[str] = Counter()
+    taken: set[str] = set()
     slugs: dict[str, str] = {}
     for anchor, text in _headings(nodes):
-        base = github_slug(export_visible_text(text))
-        count = seen[base]
-        seen[base] += 1
+        base = slug = github_slug(export_visible_text(text))
+        while slug in taken:
+            repeats[base] += 1
+            slug = f"{base}-{repeats[base]}"
+        taken.add(slug)
         if anchor is not None:
-            slugs[anchor] = f"{base}-{count}" if count else base
+            slugs[anchor] = slug
     return slugs
 
 
 def _marker_family(node: Node) -> MarkerFamily | None:
-    if isinstance(node, ListNode):
-        return MARKER_FAMILY[node.kind]
-    return "dash" if isinstance(node, TableOfContents) else None
+    return "dash" if isinstance(node, TableOfContents) else list_marker_family(node)
 
 
 def _spaced(lines: Sequence[str]) -> list[str]:
@@ -209,7 +202,7 @@ class _MarkdownWriter:
     def tabs_lines(self, node: Tabs) -> list[str]:
         sections: list[list[str]] = []
         for tab in node.tabs:
-            icon = TAB_ICON.get(tab.tone) if tab.tone else None
+            icon = tab_icon(tab.tone)
             title = self.inline(tab.title)
             sections.append(self.titled(styled("bold", f"{icon} {title}" if icon else title), tab.children))
         return _joined(sections)

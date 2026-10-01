@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import TypeGuard, get_args
 
 from skaldr import compute
-from skaldr.export.inline import paragraphs, plain, rich_line
+from skaldr.export.inline import one_line, paragraphs, plain, rich_line
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
 from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items, semantic_tone_name
@@ -43,7 +43,7 @@ class Lowering:
 
     def chip(self, key: str) -> Chip:
         badge = self.report.badges[key]
-        return Chip(badge.label, badge.tone)
+        return Chip(one_line(badge.label), badge.tone)
 
     def chips(self, keys: Sequence[str]) -> ExportRich:
         return spaced(tuple((self.chip(key),) for key in keys))
@@ -51,7 +51,9 @@ class Lowering:
     def badge_items(self, items: Sequence[BadgeRef | BadgeLiteral]) -> ExportRich:
         return spaced(
             tuple(
-                (self.chip(item.key),) if isinstance(item, BadgeRef) else (Chip(item.label, item.tone),)
+                (self.chip(item.key),)
+                if isinstance(item, BadgeRef)
+                else (Chip(one_line(item.label), item.tone),)
                 for item in items
             )
         )

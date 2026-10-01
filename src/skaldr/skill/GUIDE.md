@@ -898,13 +898,15 @@ case, where the page is shared as a URL an agent later has to read back.
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan`, `chart` | a Mermaid diagram, plus a list of any step points or badges it can't show | the same |
+| `flow`, `fan` | a Mermaid diagram, plus a list of any step points or badges it can't show | the same |
+| `chart` | a Mermaid pie or xy chart over its data table; a stacked or several-series bar chart is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `grid` | its cells one after another | native columns |
 | badges | bold labels | coloured chips |
-| tones on table cells, meters, cards, ranges, steps | dropped | block and cell colours |
+| tones on table cells, meters, cards, ranges, walkthrough steps | dropped | block and cell colours |
+| tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, … of at most N characters each. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.

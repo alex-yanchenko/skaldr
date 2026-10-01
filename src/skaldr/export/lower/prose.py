@@ -2,8 +2,8 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath
 
 from skaldr import compute, models
-from skaldr.export.inline import bold, italic, labelled, paragraphs, plain
-from skaldr.export.lower.context import Lowering, bullets, spaced
+from skaldr.export.inline import bold, italic, labelled, one_line, paragraphs, plain
+from skaldr.export.lower.context import Lowering, bullets, spaced, tone_named
 from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
@@ -85,30 +85,36 @@ def _derived_card(card: models.Card, badge_key: str, lowering: Lowering) -> Expo
     badge = lowering.report.badges[badge_key]
     count, total = compute.derived_card_tally(card, lowering.matrix_tallies, lowering.table_tallies)
     return (
-        Chip(card.label or badge.label, badge.tone),
+        Chip(one_line(card.label or badge.label), badge.tone),
         *plain(f": {compute.fmt(count)} ({compute.pct(count, total)})"),
     )
 
 
 def _delta(delta: models.CardDelta) -> ExportRich:
-    text = plain(f" {delta.label}")
-    return (Plain(" "), Mark("delta", delta.direction), *text) if delta.direction else text
+    text = f"{compute.DELTA_GLYPHS[delta.direction]} {delta.label}" if delta.direction else delta.label
+    if delta.tone:
+        return (Plain(" "), Chip(one_line(text), models.badge_color_of(delta.tone)))
+    return plain(f" {text}")
+
+
+def _card_note(card: models.Card) -> tuple[Node, ...]:
+    return (Paragraph(plain(card.note), "muted"),) if card.note else ()
 
 
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
     if card.badge and (card.of_matrix or card.of_tables):
-        text = _derived_card(card, card.badge, lowering)
-    else:
-        value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
-        if card.of and isinstance(card.value, (int, float)):
-            value += plain(f" ({compute.pct(card.value, card.of)})")
-        if card.delta:
-            value += _delta(card.delta)
-        text = (labelled(card.label) + value) if card.label else value
-        if card.badges:
-            text += plain(" ") + lowering.chips(card.badges)
-    children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
-    return ListEntry(text, children=children, tone=card.tone)
+        badge = lowering.report.badges[card.badge]
+        tone = tone_named(card.tone_with(badge))
+        return ListEntry(_derived_card(card, card.badge, lowering), children=_card_note(card), tone=tone)
+    value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
+    if card.of and isinstance(card.value, (int, float)):
+        value += plain(f" ({compute.pct(card.value, card.of)})")
+    if card.delta:
+        value += _delta(card.delta)
+    text = (labelled(card.label) + value) if card.label else value
+    if card.badges:
+        text += plain(" ") + lowering.chips(card.badges)
+    return ListEntry(text, children=_card_note(card), tone=card.tone)
 
 
 def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
@@ -152,22 +158,30 @@ def lower_meter(block: models.Meter) -> list[Node]:
     return [bullets(_meter_entry(item) for item in block.items)]
 
 
+def _range_segment(segment: models.RangeSegment, total: float, lowering: Lowering) -> ListEntry:
+    text = labelled(segment.label) + plain(compute.pct(segment.span, total))
+    if segment.sub:
+        text += plain(", ") + lowering.rich(segment.sub)
+    return ListEntry(text, tone=segment.tone)
+
+
+def _axis_ends(axis: models.RangeAxis | None) -> list[Node]:
+    start, end = ((axis.min or "").strip(), (axis.max or "").strip()) if axis else ("", "")
+    if start and end:
+        words = f"{start} to {end}"
+    elif start or end:
+        words = f"From {start}" if start else f"To {end}"
+    else:
+        return []
+    return [Paragraph(plain(words), "muted")]
+
+
 def lower_range(block: models.Range, lowering: Lowering) -> list[Node]:
     total = sum(segment.span for segment in block.segments)
-    entries: list[ListEntry] = []
-    for segment in block.segments:
-        text = labelled(segment.label) + plain(
-            f"{compute.fmt(segment.span)} ({compute.pct(segment.span, total)})"
-        )
-        if segment.sub:
-            text += plain(", ") + lowering.rich(segment.sub)
-        entries.append(ListEntry(text, tone=segment.tone))
-    axis_note: list[Node] = []
-    if block.axis and (block.axis.min or block.axis.max):
-        axis_note.append(
-            Paragraph(plain(f"From {block.axis.min or 'start'} to {block.axis.max or 'end'}"), "muted")
-        )
-    return [*axis_note, ListNode("bullet", tuple(entries))]
+    return [
+        *_axis_ends(block.axis),
+        bullets(_range_segment(segment, total, lowering) for segment in block.segments),
+    ]
 
 
 def code_language(label: str | None) -> str:
@@ -177,7 +191,7 @@ def code_language(label: str | None) -> str:
 
 
 def lower_code(block: models.Code) -> list[Node]:
-    label: list[Node] = [Paragraph((Code(block.label),))] if block.label else []
+    label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
     language = "diff" if block.mode == "diff" else code_language(block.label)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
@@ -187,9 +201,8 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
     return [Quote(lines, plain(block.cite) if block.cite else ())]
 
 
-def lower_image(block: models.Image, lowering: Lowering) -> list[Node]:
-    caption = lowering.rich(block.caption) if block.caption else plain(block.alt)
-    return [Paragraph(italic(plain("Image: ") + caption), "muted")]
+def lower_image(block: models.Image) -> list[Node]:
+    return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:

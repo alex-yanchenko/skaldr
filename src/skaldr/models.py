@@ -109,6 +109,10 @@ def _to_tone(value: Any) -> Any:
     return _PALETTE_TO_TONE.get(value, value) if isinstance(value, str) else value
 
 
+def badge_color_of(tone: str) -> "BadgeColor":
+    return cast("BadgeColor", _TONE_TO_PALETTE.get(tone, tone))
+
+
 def _to_badge_color(value: Any) -> Any:
     """Normalise a semantic tone name to its palette colour twin (success → green); pass anything else
     through unchanged (palette names, teal/sky, non-strings)."""
@@ -155,6 +159,7 @@ def _to_callout_tone(value: Any) -> Any:
 
 CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
+DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
 ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
@@ -362,7 +367,7 @@ class DefList(_Block):
 
 class CardDelta(_Frozen):
     label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
-    direction: Literal["up", "down", "flat"] | None = Field(
+    direction: DeltaDirection | None = Field(
         default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
     )
     tone: Tone | None = Field(
@@ -420,6 +425,9 @@ class Card(_Frozen):
         "total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with "
         "`of_matrix`.",
     )
+
+    def tone_with(self, badge: Badge) -> str:
+        return self.tone or badge.tone
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
@@ -1095,6 +1103,11 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
+    def row_tint_key(self, row: dict[str, Any]) -> str:
+        raw: object = row.get(self.tint_by) if self.tint_by else None
+        values = cast("list[object]", raw) if isinstance(raw, list) else [raw]
+        return str(values[0] or "").strip() if values else ""
+
     @property
     def title_key(self) -> str:
         return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
@@ -1454,6 +1467,10 @@ class Swimlane(_Block):
 
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
+
+    def dependency_numbers(self, step: SwimlaneStep) -> list[str]:
+        number_by_id = {other.id: other.n for other in self.steps if other.id is not None}
+        return list(dict.fromkeys(number_by_id[dependency] for dependency in step.depends_on))
 
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,

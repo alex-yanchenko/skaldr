@@ -11,15 +11,17 @@ Mixed audience — ops reads the impact, the floor team reads the fix. {color="g
 - **Units expected**: 10,000
 - **Method**: `full cycle count`
 - **Mode**: strict
-- **Matched cleanly**: 8,500 (85.0%) ▲ +3% {color="green"}
+<empty-block/>
+- **Matched cleanly**: 8,500 (85.0%) <span color="green_bg">▲ +3%</span> {color="green"}
 - **Floor — fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span> {color="yellow"}
 	Miscounts + mislabeled bins we can correct. {color="gray"}
-- **Vendor — escalate**: 400 (4.0%) ▼ −90 <span color="red_bg">Vendor</span> {color="red"}
+- **Vendor — escalate**: 400 (4.0%) <span color="green_bg">▼ −90</span> <span color="red_bg">Vendor</span> {color="red"}
 - **Count status**: HEALTHY {color="purple"}
 - **Total units**: 10,000 {color="gray"}
-- **Matched cleanly**: 85 (85.0%), 8,500 units {color="green"}
-- **Floor-fixable**: 11 (11.0%), 1,100 {color="yellow"}
-- **Vendor**: 4 (4.0%), 400 {color="red"}
+<empty-block/>
+- **Matched cleanly**: 85.0%, 8,500 units {color="green"}
+- **Floor-fixable**: 11.0%, 1,100 {color="yellow"}
+- **Vendor**: 4.0%, 400 {color="red"}
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 ### Count pipeline
@@ -46,8 +48,8 @@ flowchart LR
 	<tr>
 		<td>**Lane**</td>
 		<td>**Detect**<br>In-house</td>
-		<td>**Investigate**<br>In-house</td>
-		<td>**Resolve**<br>In-house</td>
+		<td>**Investigate**</td>
+		<td>**Resolve**</td>
 		<td>**Escalate**<br>Vendor claim</td>
 	</tr>
 	<tr>
@@ -81,6 +83,12 @@ flowchart LR
 	Counts below are per distinct discrepancy class, not per unit.
 </callout>
 ## Discrepancies & fixes
+<details>
+<summary>Legend: badges used on this page</summary>
+	- <span color="yellow_bg">Floor</span> Fixable on the floor before the next count.
+	- <span color="blue_bg">System</span> Defect in the scanning/labeling pipeline.
+	- <span color="red_bg">Vendor</span> Depends on the vendor to resolve.
+</details>
 <table fit-page-width="true" header-row="true">
 	<tr>
 		<td>**Discrepancy**</td>
@@ -160,6 +168,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 	- [ ] Stage on the pilot aisle first.
 	- [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
+<empty-block/>
 - **Owner**: Inventory Ops — **@site-lead** signs off each fix.
 - **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 <callout icon="📝" color="gray_bg">
@@ -209,6 +218,7 @@ function pickWinner(a, b) {
 			The cards on the left summarise; the panels below break down count progress and checks side by side.
 		</callout>
 		- **Zone C**: █████████░ 88.0% (88 of 100) {color="yellow"}
+		<empty-block/>
 		- ✅ Reconciliation gate passes.
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
@@ -222,12 +232,6 @@ function pickWinner(a, b) {
 	Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units. {color="gray"}
 ## Counts at a glance
 **Clean vs discrepant units by zone**
-```mermaid
-xychart-beta
-    x-axis ["Zone A", "Zone B", "Zone C", "Zone D"]
-    bar [2100, 1850, 2320, 2230]
-    bar [180, 340, 90, 210]
-```
 <table fit-page-width="true" header-row="true">
 	<tr>
 		<td>**Series**</td>
@@ -316,9 +320,9 @@ pie
 	</tr>
 </table>
 ## Readiness by zone
-- <span color="yellow_bg">Floor</span>: 7 (43.8%)
-- <span color="blue_bg">System</span>: 2 (12.5%)
-- <span color="red_bg">Vendor</span>: 2 (12.5%)
+- <span color="yellow_bg">Floor</span>: 7 (43.8%) {color="yellow"}
+- <span color="blue_bg">System</span>: 2 (12.5%) {color="blue"}
+- <span color="red_bg">Vendor</span>: 2 (12.5%) {color="red"}
 	Awaiting the vendor's corrected ASN. {color="gray"}
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>
@@ -592,10 +596,4 @@ content-type: application/json
 Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
 - \[1\] *Warehouse Counting SOP*, rev. 7 — §3 Cycle vs sampling.
 - \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
-<details>
-<summary>Legend: badges used on this page</summary>
-	- <span color="yellow_bg">Floor</span> Fixable on the floor before the next count.
-	- <span color="blue_bg">System</span> Defect in the scanning/labeling pipeline.
-	- <span color="red_bg">Vendor</span> Depends on the vendor to resolve.
-</details>
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}

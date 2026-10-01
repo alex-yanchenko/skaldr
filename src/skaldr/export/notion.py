@@ -6,16 +6,19 @@ from typing_extensions import assert_never
 
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    TAB_ICON,
+    MarkerFamily,
     MarkupRuns,
+    bang_cannot_open_an_image,
     bold_once,
     code_block_lines,
     escape_block_start,
     indent_lines,
+    list_marker_family,
     styled,
+    tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import Chip, ExportRich, write_export_runs
+from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -41,7 +44,8 @@ FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(
 SPACED_PLUS_AFTER_CODE = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL = 2
-OPENING_SECTION_LABEL = "the opening section, before the first heading"
+OPENING_SECTION_LABEL = "the opening section, before the first level 1 or 2 heading"
+EMPTY_BLOCK = "<empty-block/>"
 BLOCK_COLOR: dict[ToneName, str] = {
     "neutral": "gray",
     "muted": "gray",
@@ -75,12 +79,9 @@ class _NotionRuns(MarkupRuns):
 
     def text(self, text: str, /) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
-        return "".join(
-            self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces)
+        return bang_cannot_open_an_image(
+            "".join(self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces))
         )
-
-    def bang_before_link(self) -> str:
-        return "\\!"
 
     def code(self, text: str, /) -> str:
         return _escape(text) if "`" in text else f"`{text}`"
@@ -115,8 +116,12 @@ def _indent(lines: Sequence[str], depth: int = 1) -> list[str]:
     return indent_lines(lines, "\t" * depth)
 
 
+def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
+    return SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", text)
+
+
 def _table_cell_text(cell: TableCell) -> str:
-    return escape_block_start(SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", notion_inline(cell.text)))
+    return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(notion_inline(cell.text)))
 
 
 def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName | None) -> list[str]:
@@ -186,7 +191,7 @@ def _columns_lines(node: Columns) -> list[str]:
 def _tabs_lines(node: Tabs) -> list[str]:
     lines: list[str] = []
     for tab in node.tabs:
-        icon = TAB_ICON.get(tab.tone) if tab.tone else None
+        icon = tab_icon(tab.tone)
         lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
         lines += [*_indent([notion_inline(tab.title), *_notion_blocks(tab.children)]), "</tab>"]
     return ["<tabs>", *_indent(lines), "</tabs>"]
@@ -225,7 +230,18 @@ def _notion_lines(node: Node) -> list[str]:
 
 
 def _notion_blocks(nodes: Sequence[Node]) -> list[str]:
-    return [line for node in nodes for line in _notion_lines(node)]
+    lines: list[str] = []
+    previous_family: MarkerFamily | None = None
+    for node in nodes:
+        node_lines = _notion_lines(node)
+        if not node_lines:
+            continue
+        family = list_marker_family(node)
+        if family is not None and family == previous_family:
+            lines.append(EMPTY_BLOCK)
+        lines += node_lines
+        previous_family = family
+    return lines
 
 
 def render_notion(nodes: Sequence[Node]) -> str:
@@ -242,8 +258,14 @@ def _starts_a_chunk(node: Node) -> bool:
     )
 
 
-def _section_label(section: Sequence[Node], text: str) -> str:
-    return text.split("\n", 1)[0] if section and _starts_a_chunk(section[0]) else OPENING_SECTION_LABEL
+def _section_label(section: Sequence[Node]) -> str:
+    match section[0] if section else None:
+        case Heading(level=level, text=title) if level <= CHUNK_BOUNDARY_LEVEL:
+            return f"{'#' * level} {export_visible_text(title)}"
+        case Toggle(heading_level=int(level), title=title) if level <= CHUNK_BOUNDARY_LEVEL:
+            return f"{'#' * level} {export_visible_text(title)}"
+        case _:
+            return OPENING_SECTION_LABEL
 
 
 @dataclass(frozen=True)
@@ -264,7 +286,7 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
     for section in sections:
         text = render_notion(section)
         if len(text) > limit:
-            oversized.append(_section_label(section, text))
+            oversized.append(_section_label(section))
         if current_chunk and len(current_chunk) + len(text) > limit:
             chunks.append(current_chunk)
             current_chunk = ""

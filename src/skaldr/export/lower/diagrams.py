@@ -78,7 +78,7 @@ def lower_chart(block: Chart) -> list[Node]:
             for series in block.series
         ),
     )
-    if block.stacked:
+    if block.stacked or (block.variant == "bar" and len(block.series) > 1):
         return [*title, table]
     chart = XYChart(
         "bar" if block.variant == "bar" else "line",

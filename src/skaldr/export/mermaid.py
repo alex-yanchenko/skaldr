@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import NamedTuple
 
 from typing_extensions import assert_never
@@ -23,18 +24,23 @@ MERMAID_FILL: dict[ToneName, NodeColors] = {
     "muted": NodeColors("#f1f3f4", "#5f6368"),
 }
 MERMAID_TEXT = "#1f2328"
+MERMAID_ENTITY = {"#": "#35;", '"': "#quot;", "%": "#37;", "<": "#lt;", ">": "#gt;", "`": "#96;"}
 
 
-def _node_label(text: str) -> str:
-    return one_line(text).replace('"', "#quot;")
+def _mermaid_text(text: str) -> str:
+    return "".join(MERMAID_ENTITY.get(character, character) for character in one_line(text))
 
 
 def _quoted_string(text: str) -> str:
-    return '"' + one_line(text).replace('"', "'") + '"'
+    return f'"{_mermaid_text(text)}"'
+
+
+def _mermaid_number(value: float) -> str:
+    return format(Decimal(repr(value)), "f")
 
 
 def _node_line(node: GraphNode) -> str:
-    label = _node_label(node.label) + (f"<br>{_node_label(node.note)}" if node.note else "")
+    label = _mermaid_text(node.label) + (f"<br>{_mermaid_text(node.note)}" if node.note else "")
     tone_class = f":::{node.tone}" if node.tone else ""
     return f'    {node.key}["{label}"]{tone_class}'
 
@@ -53,24 +59,28 @@ def _graph_lines(graph: Graph) -> list[str]:
 
 def _xy_lines(chart: XYChart) -> list[str]:
     axis = "    x-axis [" + ", ".join(_quoted_string(category) for category in chart.categories) + "]"
-    marks = [
-        f"    {chart.mark} [" + ", ".join(str(value) for value in values) + "]" for values in chart.series
-    ]
+    marks = [f"    {chart.mark} [" + ", ".join(map(_mermaid_number, values)) + "]" for values in chart.series]
     return ["xychart-beta", axis, *marks]
 
 
-def mermaid_source(figure: Figure) -> str:
+def _mermaid_lines(figure: Figure) -> list[str]:
     match figure:
         case Graph():
-            lines = _graph_lines(figure)
+            return _graph_lines(figure)
         case PieChart():
-            lines = ["pie", *(f"    {_quoted_string(item.label)} : {item.value}" for item in figure.slices)]
+            slices = (
+                f"    {_quoted_string(item.label)} : {_mermaid_number(item.value)}" for item in figure.slices
+            )
+            return ["pie", *slices]
         case XYChart():
-            lines = _xy_lines(figure)
+            return _xy_lines(figure)
         case _:
             assert_never(figure)
-    return "\n".join(lines)
+
+
+def mermaid_source(figure: Figure) -> str:
+    return "\n".join(_mermaid_lines(figure))
 
 
 def mermaid_fence_lines(figure: Figure) -> list[str]:
-    return ["```mermaid", *mermaid_source(figure).split("\n"), "```"]
+    return ["```mermaid", *_mermaid_lines(figure), "```"]

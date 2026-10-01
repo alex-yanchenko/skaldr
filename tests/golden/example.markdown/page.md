@@ -35,17 +35,17 @@ Mixed audience — ops reads the impact, the floor team reads the fix.
 - **Method**: `full cycle count`
 - **Mode**: strict
 
-* **Matched cleanly**: 8,500 (85.0%) ▲ +3%
+* **Matched cleanly**: 8,500 (85.0%) **▲ +3%**
 * **Floor — fixable**: 1,100 (11.0%) **Floor**
 
   Miscounts + mislabeled bins we can correct.
-* **Vendor — escalate**: 400 (4.0%) ▼ −90 **Vendor**
+* **Vendor — escalate**: 400 (4.0%) **▼ −90** **Vendor**
 * **Count status**: HEALTHY
 * **Total units**: 10,000
 
-- **Matched cleanly**: 85 (85.0%), 8,500 units
-- **Floor-fixable**: 11 (11.0%), 1,100
-- **Vendor**: 4 (4.0%), 400
+- **Matched cleanly**: 85.0%, 8,500 units
+- **Floor-fixable**: 11.0%, 1,100
+- **Vendor**: 4.0%, 400
 
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
@@ -75,7 +75,7 @@ flowchart LR
 
 ### Discrepancy resolution across teams
 
-| Lane | **Detect**<br>In-house | **Investigate**<br>In-house | **Resolve**<br>In-house | **Escalate**<br>Vendor claim |
+| Lane | **Detect**<br>In-house | **Investigate** | **Resolve** | **Escalate**<br>Vendor claim |
 | --- | --- | --- | --- | --- |
 | **Floor** | ✅ **1** Recount bin | ⏸️ **2b** Re-label |  |  |
 | **System** |  | 🔵 **2a** Check scan log | ⚪ **3** Reconcile |  |
@@ -90,6 +90,12 @@ flowchart LR
 > 💡 Counts below are per distinct discrepancy class, not per unit.
 
 ## Discrepancies & fixes
+
+**Legend: badges used on this page**
+
+- **Floor** Fixable on the floor before the next count.
+- **System** Defect in the scanning/labeling pipeline.
+- **Vendor** Depends on the vendor to resolve.
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
@@ -212,13 +218,6 @@ Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.
 ## Counts at a glance
 
 **Clean vs discrepant units by zone**
-
-```mermaid
-xychart-beta
-    x-axis ["Zone A", "Zone B", "Zone C", "Zone D"]
-    bar [2100, 1850, 2320, 2230]
-    bar [180, 340, 90, 210]
-```
 
 | Series | Zone A | Zone B | Zone C | Zone D |
 | --- | --- | --- | --- | --- |
@@ -535,11 +534,5 @@ Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thre
 
 - \[1\] *Warehouse Counting SOP*, rev. 7 — §3 Cycle vs sampling.
 - \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
-
-**Legend: badges used on this page**
-
-- **Floor** Fixable on the floor before the next count.
-- **System** Defect in the scanning/labeling pipeline.
-- **Vendor** Depends on the vendor to resolve.
 
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.

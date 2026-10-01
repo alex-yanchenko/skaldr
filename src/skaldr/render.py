@@ -39,9 +39,6 @@ class _HtmlRuns:
     def text(self, text: str, /) -> str:
         return str(escape(text))
 
-    def bang_before_link(self) -> str:
-        return "!"
-
     def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
 
@@ -102,6 +99,7 @@ def _environment() -> Environment:
         reconcile_line=compute.reconcile_line,
         table_rollup=compute.table_rollup,
         matrix_grid=compute.matrix_grid,
+        matrix_cell_display=compute.matrix_cell_display,
         swimlane_layout=compute.swimlane_layout,
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
@@ -111,6 +109,7 @@ def _environment() -> Environment:
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
         derived_card_tally=compute.derived_card_tally,
+        delta_glyphs=compute.DELTA_GLYPHS,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
