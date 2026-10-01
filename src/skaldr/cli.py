@@ -19,7 +19,7 @@ from typing import Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown
+from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -152,13 +152,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--export",
         choices=EXPORT_TARGETS,
-        help="write the document as Markdown instead of HTML: `markdown` writes GitHub-flavored Markdown "
-        "for a README, a PR body or a wiki.",
+        help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
+        "(tabs, callouts, columns, toggles, colored table cells) to paste or send through the Notion MCP; "
+        "`markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
     )
     parser.add_argument(
         "--export-dir",
         metavar="DIR",
         help="where --export writes (default: out/<data-stem>.<target>/)",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        metavar="N",
+        help="with --export notion: split the page into files of at most N characters, each starting at "
+        "a level 1 or 2 heading, so each fits one MCP call. A single section longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -288,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
     if args.export:
-        return _export_document(data_path, args.export, args.export_dir)
+        return _export_document(data_path, args.export, args.export_dir, args.chunk)
     written: list[Path] = []
     try:
         report = load_report(data_path)
@@ -407,8 +415,8 @@ def _reject_flags_that_do_not_fit_an_export(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
     if not args.export:
-        if args.export_dir:
-            parser.error("--export-dir only applies with --export")
+        if args.export_dir or args.chunk is not None:
+            parser.error("--export-dir and --chunk only apply with --export")
         return
     if args.out or args.pdf or args.embed or args.watch or args.emit_json:
         parser.error(
@@ -416,15 +424,21 @@ def _reject_flags_that_do_not_fit_an_export(
         )
     if args.live is not None or args.if_stale or args.no_source:
         parser.error("--live, --if-stale and --no-source shape an HTML render; --export writes none")
+    if args.chunk is not None and args.export != "notion":
+        parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
+    if args.chunk is not None and args.chunk < 1:
+        parser.error("--chunk takes a positive character count")
 
 
-def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None) -> int:
+def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
     out_dir = (
         Path(export_dir) if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
     ).resolve()
     try:
         report = load_report(data_path)
         match target:
+            case "notion":
+                result = export_notion(report, out_dir, chunk=chunk)
             case "markdown":
                 result = export_markdown(report, out_dir)
             case _:
@@ -432,6 +446,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
     except (ReportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    for heading in result.oversized_sections:
+        print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
     for path in result.files:
         print(f"OK  {path}")
     return 0

@@ -8,9 +8,9 @@ from typing_extensions import assert_never
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    MarkupRuns,
     code_block_lines,
     code_span,
-    encode_url,
     escape_block_start,
     indent_lines,
     styled,
@@ -30,7 +30,7 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
-from skaldr.richtext import Citation, Rich, StyleName, visible_text, write_runs
+from skaldr.richtext import Rich, visible_text, write_runs
 
 MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
@@ -49,8 +49,9 @@ def github_slug(text: str) -> str:
     return GITHUB_SLUG_DROPPED.sub("", text.lower()).replace(" ", "-")
 
 
-class _MarkdownRuns:
+class _MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
+        super().__init__(_escape)
         self.heading_slugs = heading_slugs
 
     def text(self, text: str, /) -> str:
@@ -62,22 +63,12 @@ class _MarkdownRuns:
     def code(self, text: str, /) -> str:
         return code_span(text)
 
-    def link(self, label: str, url: str, /) -> str:
-        return f"[{label}]({encode_url(url)})"
-
     def anchor_link(self, label: str, anchor: str, /) -> str:
         slug = self.heading_slugs.get(anchor)
         return f"[{label}](#{slug})" if slug else label
 
-    def citation(self, run: Citation, /) -> str:
-        label = _escape(f"[{run.number}]")
-        return f"[{label}]({encode_url(run.url)})" if run.url else label
-
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
-
-    def styled(self, style: StyleName, inner: str, /) -> str:
-        return styled(style, inner)
 
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:

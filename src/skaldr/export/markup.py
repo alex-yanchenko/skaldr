@@ -1,8 +1,8 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from skaldr.export.tree import CodeBlock, ToneName
-from skaldr.richtext import StyleName
+from skaldr.richtext import Citation, StyleName
 
 STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: dict[ToneName, str] = {
@@ -61,3 +61,18 @@ def encode_url(url: str) -> str:
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
+
+
+class MarkupRuns:
+    def __init__(self, escape: Callable[[str], str]) -> None:
+        self.escape = escape
+
+    def link(self, label: str, url: str, /) -> str:
+        return f"[{label}]({encode_url(url)})"
+
+    def citation(self, run: Citation, /) -> str:
+        label = self.escape(f"[{run.number}]")
+        return f"[{label}]({encode_url(run.url)})" if run.url else label
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        return styled(style, inner)
