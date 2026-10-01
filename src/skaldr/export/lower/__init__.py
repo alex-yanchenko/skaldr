@@ -76,7 +76,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.Note():
             return lower_note(block, lowering)
         case models.Image():
-            return lower_image(block, lowering)
+            return lower_image(block)
         case models.References():
             return lower_references(block, lowering)
         case models.Section():

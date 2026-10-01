@@ -60,6 +60,18 @@ def test_an_export_of_an_invalid_file_without_check_reports_the_error_and_writes
     assert not (tmp_path / "n").exists()
 
 
+def test_an_export_of_a_block_with_no_markdown_form_reports_it_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    flow = {"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}
+    data_path = write_report(tmp_path, make_report(blocks=[flow]))
+
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 1
+
+    assert capsys.readouterr().err == "error: a `flow` block has no Markdown export yet\n"
+    assert not (tmp_path / "n").exists()
+
+
 def test_an_export_dir_that_cannot_be_written_reports_the_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

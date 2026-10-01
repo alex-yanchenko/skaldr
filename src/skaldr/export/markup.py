@@ -16,10 +16,10 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "teal": "💡",
     "sky": "💡",
 }
-BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+*]+|=+|>)(?=\s|$)")
+BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
-URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E"}
+URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E", "\\": "\\\\"}
 
 
 def _wrap_marker(marker: str, inner: str) -> str:
@@ -53,6 +53,10 @@ def code_block_lines(block: CodeBlock) -> list[str]:
 def escape_block_start(text: str) -> str:
     text = BLOCK_START_MARKER.sub(lambda match: "\\" + match.group(1), text)
     return ORDERED_START_MARKER.sub(lambda match: match.group(1) + "\\" + match.group(2), text)
+
+
+def bang_cannot_open_an_image(escaped_text: str) -> str:
+    return escaped_text[:-1] + "\\!" if escaped_text.endswith("!") else escaped_text
 
 
 def encode_url(url: str) -> str:

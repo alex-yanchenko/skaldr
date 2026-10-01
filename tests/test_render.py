@@ -2482,6 +2482,30 @@ def test_richtext_escapes_raw_html() -> None:
     assert str(render_richtext("<script>x & y")) == "&lt;script&gt;x &amp; y"
 
 
+def test_richtext_escapes_a_link_target_inside_its_href() -> None:
+    html = str(render_richtext('[x](https://e.com/?a=1&b="2") [y](#sec)', anchor_ids=frozenset({"sec"})))
+
+    assert html == '<a href="https://e.com/?a=1&amp;b=&#34;2&#34;">x</a> <a href="#sec">y</a>'
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("**a ~~b** c~~", "<strong>a ~~b</strong> c~~", id="bold-crosses-strike"),
+        pytest.param("~~a *b~~ c*", "<del>a *b</del> c*", id="strike-crosses-italic"),
+        pytest.param(
+            "~~a **b ~~ c** d~~",
+            "<del>a <strong>b ~~ c</strong> d</del>",
+            id="strike-holds-a-bold-with-tildes",
+        ),
+    ],
+)
+def test_richtext_crossed_emphasis_nests_inside_the_first_match_instead_of_interleaving_tags(
+    text: str, html: str
+) -> None:
+    assert str(render_richtext(text)) == html
+
+
 def test_richtext_renders_a_placeholder_as_a_chip_and_collects_it() -> None:
     seen: set[str] = set()
     html = str(render_richtext("Open {{deployed_url}} now", placeholders=seen))

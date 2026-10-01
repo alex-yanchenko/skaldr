@@ -13,10 +13,12 @@ from skaldr.export.tree import (
     ListNode,
     Paragraph,
     Quote,
+    TableOfContents,
+    TocEntry,
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Rich, Styled, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Rich, Run, Styled, parse_rich
 from tests.factories import make_report, markdown_of
 
 
@@ -58,10 +60,43 @@ def test_inline_runs_become_markdown() -> None:
     )
     nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph(runs)]
 
-    assert render_markdown(nodes).split("\n\n")[1] == (
+    assert render_markdown(nodes) == (
+        "## How we count\n\n"
         r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
         "[paren](https://example.com/%28x%29%3E) "
         "[method](#how-we-count) gone see\\![img](https://e.com/x.png)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "written"),
+    [
+        pytest.param(Link((Plain("x"),), "https://e.com"), "[x](https://e.com)", id="link"),
+        pytest.param(AnchorLink((Plain("x"),), "method"), "[x](#m)", id="anchor-link"),
+        pytest.param(Citation("a", 1, "https://e.com"), r"[\[1\]](https://e.com)", id="citation"),
+    ],
+)
+def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_an_image(
+    target: Run, written: str
+) -> None:
+    nodes = [Heading(2, (Plain("M"),), "method"), Paragraph((Plain("wow!"), target))]
+
+    assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
+
+
+def test_a_bang_ending_text_is_escaped_even_with_nothing_after_it() -> None:
+    assert markdown_of([{"type": "text", "body": "Done!"}]) == "Done\\!\n"
+
+
+def test_a_backslash_in_a_link_target_is_escaped_so_it_stays_in_the_url() -> None:
+    assert render_markdown([Paragraph((Link((Plain("x"),), "https://e.com/a\\"),))]) == (
+        "[x](https://e.com/a\\\\)\n"
+    )
+
+
+def test_emphasis_at_the_start_of_a_line_keeps_its_markers() -> None:
+    assert markdown_of([{"type": "text", "body": "**- not a list** and *+ more*"}]) == (
+        "**- not a list** and *+ more*\n"
     )
 
 
@@ -143,6 +178,26 @@ def test_a_check_list_becomes_a_task_list() -> None:
     assert markdown_of([block]) == "- [x] done\n- [ ] open\n"
 
 
+def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
+    block = {"type": "list", "style": "check", "items": [{"text": "parent", "items": ["child"]}]}
+
+    assert markdown_of([block]) == "- [ ] parent\n  - [ ] child\n"
+
+
+def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
+    assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
+
+
+def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:
+    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),))
+
+    assert render_markdown([callout]) == "> 💡\n>\n> - a\n"
+
+
+def test_a_table_of_contents_entry_with_no_heading_is_its_title_alone() -> None:
+    assert render_markdown([TableOfContents((TocEntry("gone", (Plain("Gone"),)),))]) == "- Gone\n"
+
+
 def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None:
     blocks = [
         {"type": "list", "items": ["a"]},
@@ -196,10 +251,22 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
         pytest.param("Q2: the audit (final)", "q2-the-audit-final", id="punctuation"),
         pytest.param("A & B", "a--b", id="dropped-symbol-keeps-both-spaces"),
         pytest.param("snake_case-name", "snake_case-name", id="underscore-and-hyphen"),
+        pytest.param("Café Ünï", "café-ünï", id="unicode-letters-stay"),
+        pytest.param("Ship it 🚀", "ship-it-", id="emoji-dropped"),
     ],
 )
 def test_a_heading_slug_follows_github(heading: str, slug: str) -> None:
     assert github_slug(heading) == slug
+
+
+def test_a_repeated_heading_skips_a_slug_another_heading_already_took() -> None:
+    nodes = [
+        Heading(2, (Plain("Foo"),), "a"),
+        Heading(2, (Plain("Foo 1"),), "b"),
+        Heading(2, (Plain("Foo"),), "c"),
+    ]
+
+    assert github_heading_slugs(nodes) == {"a": "foo", "b": "foo-1", "c": "foo-2"}
 
 
 def test_github_slugs_number_repeats_in_document_order_across_every_heading() -> None:

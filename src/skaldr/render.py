@@ -39,9 +39,6 @@ class _HtmlRuns:
     def text(self, text: str, /) -> str:
         return str(escape(text))
 
-    def bang_before_link(self) -> str:
-        return "!"
-
     def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
 

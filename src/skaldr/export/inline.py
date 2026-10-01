@@ -6,6 +6,10 @@ from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, RichContext, Ru
 WHITESPACE_RUN = re.compile(r"\s+")
 
 
+def one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
 def plain(text: str) -> Rich:
     collapsed = WHITESPACE_RUN.sub(" ", text)
     return (Plain(collapsed),) if collapsed else ()

@@ -8,6 +8,7 @@ from typing_extensions import assert_never
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    bang_cannot_open_an_image,
     code_block_lines,
     code_span,
     encode_url,
@@ -54,10 +55,7 @@ class _MarkdownRuns:
         self.heading_slugs = heading_slugs
 
     def text(self, text: str, /) -> str:
-        return _escape(text)
-
-    def bang_before_link(self) -> str:
-        return "\\!"
+        return bang_cannot_open_an_image(_escape(text))
 
     def code(self, text: str, /) -> str:
         return code_span(text)
@@ -90,14 +88,17 @@ def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:
 
 
 def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
-    seen: Counter[str] = Counter()
+    repeats: Counter[str] = Counter()
+    taken: set[str] = set()
     slugs: dict[str, str] = {}
     for anchor, text in _headings(nodes):
-        base = github_slug(visible_text(text))
-        count = seen[base]
-        seen[base] += 1
+        base = slug = github_slug(visible_text(text))
+        while slug in taken:
+            repeats[base] += 1
+            slug = f"{base}-{repeats[base]}"
+        taken.add(slug)
         if anchor is not None:
-            slugs[anchor] = f"{base}-{count}" if count else base
+            slugs[anchor] = slug
     return slugs
 
 
