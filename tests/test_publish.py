@@ -69,7 +69,6 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
         "from": ["st1", "st2"],
         "split": ["st1", "st2"],
         "overrides": {"st2": {"fields": {"priority": "High"}}},
-        "on_remote_edit": "overwrite",
     }
     notion = make_notion_target(split=["st1"])
 
@@ -85,7 +84,6 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                 "from": None,
                 "split": ["st1"],
                 "overrides": {},
-                "on_remote_edit": "refuse",
             },
             {
                 "to": "jira",
@@ -98,7 +96,6 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                 "from": ["st1", "st2"],
                 "split": ["st1", "st2"],
                 "overrides": {"st2": {"fields": {"priority": "High"}}},
-                "on_remote_edit": "overwrite",
             },
         ],
     }
@@ -206,6 +203,16 @@ def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
             make_notion_target(removed="archive"),
             "publish.targets.0.notion.removed: Extra inputs are not permitted",
             id="notion-removed-is-not-a-key",
+        ),
+        pytest.param(
+            make_jira_target(on_remote_edit="overwrite"),
+            "publish.targets.0.jira.on_remote_edit: Extra inputs are not permitted",
+            id="jira-on-remote-edit-is-not-a-key",
+        ),
+        pytest.param(
+            make_notion_target(on_remote_edit="refuse"),
+            "publish.targets.0.notion.on_remote_edit: Extra inputs are not permitted",
+            id="notion-on-remote-edit-is-not-a-key",
         ),
         pytest.param(
             make_jira_target(from_sections=["st1"]),

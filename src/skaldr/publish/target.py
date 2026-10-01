@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Literal
 
 from pydantic import ConfigDict, Field, JsonValue
 
@@ -35,11 +34,6 @@ class TargetBase(FrozenModel):
     overrides: dict[str, TargetOverride] = Field(
         default_factory=dict[str, TargetOverride],
         description="Per-item field values keyed by a split section id, applied over `where.fields`.",
-    )
-    on_remote_edit: Literal["refuse", "overwrite"] = Field(
-        default="refuse",
-        description="When an item was edited in the service since the last publish: `refuse` stops and "
-        "shows the change, `overwrite` replaces it.",
     )
 
     @abstractmethod
