@@ -5,7 +5,7 @@ import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_notion
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     Heading,
@@ -13,6 +13,9 @@ from skaldr.export.tree import (
     ListNode,
     Paragraph,
     Quote,
+    Table,
+    TableCell,
+    TableRow,
     Toggle,
 )
 from skaldr.models import parse_report
@@ -57,6 +60,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Chip("api", "amber"),
         Plain(" "),
         AnchorLink((Plain("method"),), "method"),
+        Break(),
         Mark("status", "blocked"),
         Gauge(3, 10),
         Plain(" wow!"),
@@ -66,7 +70,7 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow_bg">api</span> method⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow_bg">api</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 
@@ -98,6 +102,46 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
     ]
 
     assert notion_of(blocks) == "- \\# not a heading\n> \\- not a list<br>\\# nor a heading<br>*Ops*\n"
+
+
+def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}, {"key": "c", "label": "C"}],
+        "rows": [{"a": "`flag` + default", "b": "- leading dash", "c": "1 + 1 and a+b"}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n"
+        "\t\t<td>`flag` \N{FULLWIDTH PLUS SIGN} default</td>\n"
+        "\t\t<td>\\- leading dash</td>\n"
+        "\t\t<td>1 + 1 and a+b</td>\n"
+        "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
+    table = Table(
+        (TableCell((Plain("Name"),)), TableCell(())),
+        (
+            TableRow((TableCell((Plain("group"),)), TableCell(())), emphasis="group"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal")), "sky"),
+            TableRow((TableCell((Plain("9"),)), TableCell(())), emphasis="total"),
+        ),
+        header_column=True,
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t\t<td></td>\n\t</tr>\n"
+        '\t<tr color="gray_bg">\n\t\t<td>group</td>\n\t\t<td></td>\n\t</tr>\n'
+        '\t<tr color="blue_bg">\n\t\t<td color="red_bg">x</td>\n\t\t<td color="green_bg">y</td>\n\t</tr>\n'
+        "\t<tr>\n\t\t<td>**9**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
 
 
 def test_block_nodes_become_notion_blocks() -> None:
@@ -151,6 +195,27 @@ def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_he
     ]
 
     assert notion_of(blocks) == '## Appendix {toggle="true"}\n\traw\n## Status\nnow\n'
+
+
+def test_a_grid_becomes_columns_and_a_grid_inside_a_cell_stacks() -> None:
+    inner = {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "text", "body": "b"}]},
+            {"span": 3, "blocks": [{"type": "text", "body": "c"}]},
+        ],
+    }
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 2, "blocks": [{"type": "text", "body": "a"}]}, {"span": 4, "blocks": [inner]}],
+    }
+
+    assert notion_of([grid]) == (
+        "<columns>\n"
+        '\t<column ratio="33">\n\t\ta\n\t</column>\n'
+        '\t<column ratio="67">\n\t\tb\n\t\tc\n\t</column>\n'
+        "</columns>\n"
+    )
 
 
 def test_chunks_split_only_at_a_top_level_heading_and_stay_under_the_limit() -> None:

@@ -110,6 +110,7 @@ def _environment() -> Environment:
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
+        derived_card_tally=compute.derived_card_tally,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

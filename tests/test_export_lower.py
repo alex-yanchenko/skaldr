@@ -5,10 +5,12 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
-from skaldr.export.runs import Chip, Gauge, Mark
+from skaldr.export.runs import Break, Chip, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Column,
+    Columns,
     Heading,
     ListEntry,
     ListNode,
@@ -16,7 +18,10 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Table,
+    TableCell,
     TableOfContents,
+    TableRow,
     TocEntry,
     Toggle,
 )
@@ -29,6 +34,10 @@ API_LEGEND = Toggle(
     None,
     (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" the API"))),)),),
 )
+
+
+def _cells(*texts: str) -> tuple[TableCell, ...]:
+    return tuple(TableCell((Plain(text),) if text else ()) for text in texts)
 
 
 def test_a_report_lowers_to_its_title_and_body() -> None:
@@ -45,6 +54,12 @@ def test_a_block_with_no_markdown_form_yet_fails_naming_its_type() -> None:
         lowered([{"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}])
 
 
+def test_a_heading_with_a_line_break_stays_one_heading() -> None:
+    assert lowered([{"type": "heading", "text": "First\n## Injected"}]) == (
+        Heading(2, (Plain("First ## Injected"),), "first-injected"),
+    )
+
+
 def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
     assert lowered([{"type": "text", "body": "run  `a  b`\nnow"}]) == (
         Paragraph((Plain("run "), Code("a  b"), Plain(" now"))),
@@ -54,12 +69,6 @@ def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
 def test_an_author_heading_id_becomes_the_anchor() -> None:
     assert lowered([{"type": "heading", "text": "Count", "id": "tally"}]) == (
         Heading(2, (Plain("Count"),), "tally"),
-    )
-
-
-def test_a_heading_with_a_line_break_stays_one_heading() -> None:
-    assert lowered([{"type": "heading", "text": "First\n## Injected"}]) == (
-        Heading(2, (Plain("First ## Injected"),), "first-injected"),
     )
 
 
@@ -78,6 +87,116 @@ def test_the_table_of_contents_lists_what_the_html_lists() -> None:
         Heading(3, (Plain("Detail"),), "detail"),
         Toggle((Plain("Appendix"),), 2, (Paragraph((Plain("x"),)),), "appendix"),
     )
+
+
+def test_a_comparison_marks_a_true_on_a_negative_row_as_bad() -> None:
+    comparison = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 1,
+        "polarity": ["positive", "negative"],
+        "rows": [
+            {"feature": "Risky", "values": [True, True]},
+            {"feature": "Note", "values": ["plain", {"value": "toned", "tone": "warning"}]},
+        ],
+    }
+
+    assert lowered([comparison]) == (
+        Table(
+            (TableCell(()), TableCell((Plain("A"),)), TableCell(bold("★ B"))),
+            (
+                TableRow(
+                    (
+                        TableCell(bold("Risky")),
+                        TableCell((Mark("check", "yes"),), "success"),
+                        TableCell((Mark("check", "yes"),), "danger"),
+                    )
+                ),
+                TableRow(
+                    (
+                        TableCell(bold("Note")),
+                        TableCell((Plain("plain"),)),
+                        TableCell((Plain("toned"),), "warning"),
+                    )
+                ),
+            ),
+            header_column=True,
+        ),
+    )
+
+
+def test_a_matrix_shows_badge_toned_and_blank_cells() -> None:
+    matrix = {
+        "type": "matrix",
+        "rows": ["r1"],
+        "columns": ["c1", "c2", "c3"],
+        "cells": [
+            {"row": "r1", "col": "c1", "badge": "API"},
+            {"row": "r1", "col": "c2", "label": "n/a", "tone": "neutral"},
+        ],
+    }
+
+    assert lowered([matrix], badges=API_BADGES) == (
+        Table(
+            (TableCell(()), *_cells("c1", "c2", "c3")),
+            (
+                TableRow(
+                    (
+                        TableCell(bold("r1")),
+                        TableCell((Plain("api"),), "info"),
+                        TableCell((Plain("n/a"),), "neutral"),
+                        TableCell(()),
+                    )
+                ),
+            ),
+            header_column=True,
+        ),
+        API_LEGEND,
+    )
+
+
+@pytest.mark.parametrize(
+    ("cards_and_source", "entry"),
+    [
+        pytest.param(
+            [
+                {"type": "cards", "items": [{"badge": "API", "of_matrix": "m"}]},
+                {
+                    "type": "matrix",
+                    "id": "m",
+                    "rows": ["r1", "r2"],
+                    "columns": ["c"],
+                    "cells": [{"row": "r1", "col": "c", "badge": "API"}],
+                },
+            ],
+            ListEntry((Chip("api", "blue"), Plain(": 1 (50.0%)"))),
+            id="of-matrix",
+        ),
+        pytest.param(
+            [
+                {"type": "cards", "items": [{"badge": "API", "of_tables": ["t"], "label": "API rows"}]},
+                {
+                    "type": "table",
+                    "id": "t",
+                    "columns": [{"key": "a", "label": "A"}, {"key": "tag", "label": "", "kind": "badge"}],
+                    "rollup": {"by": "tag"},
+                    "rows": [
+                        {"a": "x", "tag": "API"},
+                        {"a": "y", "tag": ""},
+                        {"a": "z", "tag": ""},
+                        {"a": "w", "tag": ""},
+                    ],
+                },
+            ],
+            ListEntry((Chip("API rows", "blue"), Plain(": 1 (25.0%)"))),
+            id="of-tables",
+        ),
+    ],
+)
+def test_a_derived_card_counts_its_badge_in_its_source(
+    cards_and_source: list[dict[str, Any]], entry: ListEntry
+) -> None:
+    assert lowered(cards_and_source, badges=API_BADGES)[0] == ListNode("bullet", (entry,))
 
 
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:
@@ -214,6 +333,223 @@ def test_definitions_badge_groups_and_references_are_lists() -> None:
     )
 
 
+def test_a_swimlane_with_values_totals_lanes_groups_and_columns_like_the_html() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": ["Plan", "Ship"],
+        "groups": [{"name": "Q1", "color": "blue", "columns": ["Plan", "Ship"]}],
+        "steps": [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "value": 2, "state": "done"},
+            {"lane": "Ops", "col": "Ship", "n": "2", "label": "Send", "value": 3, "state": "blocked"},
+        ],
+    }
+
+    assert lowered([swimlane]) == (
+        Table(
+            (
+                TableCell((Plain("Lane"),)),
+                TableCell((*bold("Plan"), Break(), Plain("Q1"), Plain(" (5)"))),
+                TableCell((*bold("Ship"), Break(), Plain("Q1"), Plain(" (5)"))),
+            ),
+            (
+                TableRow(
+                    (
+                        TableCell((*bold("Ops"), Plain(" (5)"))),
+                        TableCell(
+                            (Mark("swimlane", "done"), Plain(" "), *bold("1"), Plain(" Draft"), Plain(" (2)"))
+                        ),
+                        TableCell(
+                            (
+                                Mark("swimlane", "blocked"),
+                                Plain(" "),
+                                *bold("2"),
+                                Plain(" Send"),
+                                Plain(" (3)"),
+                            )
+                        ),
+                    )
+                ),
+                TableRow((TableCell(bold("Total")), *_cells("2", "3")), emphasis="total"),
+            ),
+            header_column=True,
+        ),
+        Paragraph(
+            (
+                Mark("swimlane", "done"),
+                Plain(" done"),
+                Plain(" · "),
+                Mark("swimlane", "blocked"),
+                Plain(" blocked"),
+            ),
+            "muted",
+        ),
+    )
+
+
+def test_a_swimlane_without_values_names_dependencies_once_and_links_step_numbers() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": ["Plan"],
+        "groups": [
+            {"name": "A", "color": "blue", "columns": ["Plan"]},
+            {"name": "B", "color": "amber", "columns": ["Plan"]},
+        ],
+        "steps": [
+            {"id": "first", "lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "group": "A"},
+            {"id": "again", "lane": "Ops", "col": "Plan", "n": "1", "label": "Redraft", "group": "A"},
+            {
+                "lane": "Ops",
+                "col": "Plan",
+                "n": "2",
+                "label": "Send",
+                "state": "deferred",
+                "group": "B",
+                "url": "https://e.com/2",
+                "depends_on": ["first", "again"],
+            },
+        ],
+    }
+
+    (table, legend) = lowered([swimlane])
+
+    assert (table, legend) == (
+        Table(
+            (
+                TableCell((Plain("Lane"),)),
+                TableCell((*bold("Plan"), Break(), Plain("A"), Plain(", "), Plain("B"))),
+            ),
+            (
+                TableRow(
+                    (
+                        TableCell(bold("Ops")),
+                        TableCell(
+                            (
+                                Mark("swimlane", "todo"),
+                                Plain(" "),
+                                *bold("1"),
+                                Plain(" Draft"),
+                                Break(),
+                                Mark("swimlane", "todo"),
+                                Plain(" "),
+                                *bold("1"),
+                                Plain(" Redraft"),
+                                Break(),
+                                Mark("swimlane", "deferred"),
+                                Plain(" "),
+                                Link((Plain("2"),), "https://e.com/2"),
+                                Plain(" Send"),
+                                *italic(plain(" needs 1")),
+                            )
+                        ),
+                    )
+                ),
+            ),
+            header_column=True,
+        ),
+        Paragraph(
+            (
+                Mark("swimlane", "todo"),
+                Plain(" todo"),
+                Plain(" · "),
+                Mark("swimlane", "deferred"),
+                Plain(" deferred"),
+            ),
+            "muted",
+        ),
+    )
+
+
+def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
+    table: dict[str, Any] = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Issue"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "totals": {"column": "n"},
+        "groups": [
+            {
+                "name": "Ours",
+                "rows": [{"a": "x", "n": 2, "subrows": [{"label": "of which `y`", "value": 1}]}],
+            },
+            {"name": "Theirs", "rows": []},
+        ],
+    }
+
+    assert lowered([table]) == (
+        Table(
+            _cells("Issue", "Units"),
+            (
+                TableRow((TableCell((*bold("Ours"), Plain(" (2)"))), TableCell(())), emphasis="group"),
+                TableRow(
+                    (
+                        TableCell((Plain("x"), Break(), Plain("of which "), Code("y"), Plain(": 1"))),
+                        TableCell((Plain("2"),)),
+                    )
+                ),
+                TableRow((TableCell((*bold("Theirs"), Plain(" (0)"))), TableCell(())), emphasis="group"),
+                TableRow((TableCell(italic(plain("none"))), TableCell(()))),
+                TableRow((TableCell(bold("Total")), TableCell(bold("2"))), emphasis="total"),
+            ),
+        ),
+    )
+
+
+def test_a_reconciled_table_shows_indicators_shares_its_rollup_and_the_reconcile_line() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "a", "label": "Issue"},
+            {"key": "risk", "label": "Risk", "kind": "indicator"},
+            {"key": "n", "label": "Units", "kind": "number", "pct_of_total": True},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+        ],
+        "reconcile": {"total": 10, "column": "n", "handled": {"label": "Clean", "value": 8}},
+        "rollup": {"by": "tag", "label": "Owners:"},
+        "rows": [{"a": "x", "risk": "warning", "n": 2, "tag": "API", "tone": "danger"}],
+        "tint_by": "tag",
+    }
+
+    assert lowered([table], badges=API_BADGES) == (
+        Table(
+            _cells("Issue", "Risk", "Units"),
+            (
+                TableRow(
+                    (
+                        TableCell((Plain("x"), Plain(" "), Chip("api", "blue"))),
+                        TableCell((Mark("indicator", "warning"),), "warning"),
+                        TableCell((Plain("2"), Plain(" (20.0% of total)"))),
+                    ),
+                    "danger",
+                ),
+            ),
+        ),
+        Paragraph((*bold("Owners"), Plain(": "), Chip("api", "blue"), Plain(" 1"))),
+        Paragraph((Plain("Reconciles: 2 + 8 clean = 10."),), "muted"),
+        API_LEGEND,
+        Paragraph((Plain("Reconciles: 2 + 8 clean = 10."),), "muted"),
+    )
+
+
+def test_a_tinted_table_row_takes_its_first_badge_tone_and_a_cell_badge_column_gets_its_own_cell() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "a", "label": "A"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+        ],
+        "tint_by": "tag",
+        "rows": [{"a": "x", "tag": "API"}],
+    }
+
+    assert lowered([table], badges=API_BADGES) == (
+        Table(
+            _cells("A", ""),
+            (TableRow((TableCell((Plain("x"),)), TableCell((Chip("api", "blue"),))), "info"),),
+        ),
+        API_LEGEND,
+    )
+
+
 def test_an_embedded_image_becomes_its_caption() -> None:
     image = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", "caption": "Fig 1"}
 
@@ -261,6 +597,27 @@ def test_a_collapsed_section_is_a_toggle_heading_with_its_updated_line() -> None
             (Paragraph(italic(plain("updated 1 Jan")), "muted"), Paragraph((Plain("x"),))),
             "raw",
         ),
+    )
+
+
+def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens() -> None:
+    two = {
+        "type": "grid",
+        "cells": [
+            {"span": 1, "tone": "info", "blocks": [{"type": "text", "body": "a"}]},
+            {"span": 3, "blocks": [{"type": "text", "body": "b"}]},
+        ],
+    }
+    one = {"type": "grid", "cells": [{"span": 6, "blocks": [{"type": "text", "body": "c"}]}]}
+
+    assert lowered([two, one]) == (
+        Columns(
+            (
+                Column(25, (Callout("info", (Paragraph((Plain("a"),)),)),)),
+                Column(75, (Paragraph((Plain("b"),)),)),
+            )
+        ),
+        Paragraph((Plain("c"),)),
     )
 
 

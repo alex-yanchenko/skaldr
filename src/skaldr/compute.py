@@ -11,7 +11,7 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any, TypedDict
 
 from skaldr.errors import ReportError
@@ -19,6 +19,7 @@ from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
     Badge,
+    Card,
     CaseTone,
     Grid,
     Heading,
@@ -273,6 +274,36 @@ class SwimLayout(TypedDict):
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
 
 
+class SwimTotals(TypedDict):
+    lanes: dict[str, float]
+    columns: dict[str, float]
+    groups: dict[str, float]
+
+
+def swimlane_totals(block: Swimlane) -> SwimTotals | None:
+    if all(step.value is None for step in block.steps):
+        return None
+
+    def sum_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
+        return sum(step.value or 0 for step in block.steps if predicate(step))
+
+    return {
+        "lanes": {lane.key: sum_where(lambda step, key=lane.key: step.lane == key) for lane in block.lanes},
+        "columns": {
+            column.key: sum_where(lambda step, key=column.key: step.col == key) for column in block.columns
+        },
+        "groups": {
+            group.name: sum_where(lambda step, name=group.name: block.step_group(step) == name)
+            for group in block.groups
+        },
+    }
+
+
+def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
+    present = {step.state for step in block.steps}
+    return [state for state in _SWIM_STATE_ORDER if state in present] if len(present) >= 2 else []
+
+
 def swimlane_layout(block: Swimlane) -> SwimLayout:
     """Everything the swimlane macro places on its CSS grid, as absolute 1-based grid line numbers so
     the template only loops and never computes. The grid is a lane gutter (track 1) + one track per
@@ -296,7 +327,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     ncols = len(subcols)
     nlanes = len(block.lanes)
     has_groups = bool(block.groups)
-    has_totals = any(step.value is not None for step in block.steps)
+    totals = swimlane_totals(block)
+    has_totals = totals is not None
     nfoot = int(has_totals)  # 1 when a totals footer row is present
     # group name → its palette colour (an ungrouped segment's None group has no tint).
     color_of = {group.name: group.color for group in block.groups}
@@ -360,19 +392,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
             }
         )
 
-    # value rollups (only surfaced when has_totals). A step with no value counts as 0; a group total
-    # sums the steps resolved into that group, so it composes with the cap overlay.
-    def value_of(step: SwimlaneStep) -> float:
-        return step.value if step.value is not None else 0
-
-    def sum_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
-        return sum(value_of(step) for step in block.steps if predicate(step))
-
-    lane_total = (
-        {lane.key: sum_where(lambda step, key=lane.key: step.lane == key) for lane in block.lanes}
-        if has_totals
-        else {}
-    )
+    lane_total = totals["lanes"] if totals is not None else {}
 
     gutter: list[SwimGutter] = [
         {
@@ -426,9 +446,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
         line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
-        group_total = (
-            sum_where(lambda step, name=group.name: block.step_group(step) == name) if has_totals else None
-        )
+        group_total = totals["groups"][group.name] if totals is not None else None
         caps.append(
             {
                 "label": group.name,
@@ -506,13 +524,13 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
 
     # footer totals row: one cell per column, summing that column's step values across all lanes/groups.
     foot: SwimFootRow | None = None
-    if has_totals:
+    if totals is not None:
         foot_cells: list[SwimFoot] = []
         for col in block.columns:
             line_start, line_end = column_span(col.key)
             foot_cells.append(
                 {
-                    "total": sum_where(lambda step, key=col.key: step.col == key),
+                    "total": totals["columns"][col.key],
                     "line_start": line_start,
                     "line_end": line_end,
                     "row_start": footer_row[0],
@@ -530,14 +548,9 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
             "cells": foot_cells,
         }
 
-    present_states = {step.state for step in block.steps}
-    state_legend: list[SwimlaneStepState] = (
-        [s for s in _SWIM_STATE_ORDER if s in present_states] if len(present_states) >= 2 else []
-    )
-
     return {
         "has_groups": has_groups,
-        "state_legend": state_legend,
+        "state_legend": swimlane_state_legend(block),
         "n_width": max(len(step.n) for step in block.steps),
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
         "row_template": _swim_row_template(has_groups, nlanes, has_totals),
@@ -660,6 +673,17 @@ def table_tallies(report: Report) -> dict[str, DerivedTally]:
         rows = table.all_rows()
         tallies[table.id] = {"counts": dict(_rollup_counts(rows, table.rollup.by)), "total": len(rows)}
     return tallies
+
+
+def derived_card_tally(
+    card: Card, matrix_tallies: Mapping[str, DerivedTally], table_tallies: Mapping[str, DerivedTally]
+) -> tuple[int, int]:
+    badge = card.badge or ""
+    if card.of_matrix:
+        tally = matrix_tallies[card.of_matrix]
+        return tally["counts"].get(badge, 0), tally["total"]
+    tallies = [table_tallies[table_id] for table_id in card.of_tables or []]
+    return sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
 
 
 def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:

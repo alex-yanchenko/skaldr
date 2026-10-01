@@ -7,6 +7,7 @@ from typing_extensions import assert_never
 from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
+    bold_once,
     code_block_lines,
     escape_block_start,
     indent_lines,
@@ -16,12 +17,16 @@ from skaldr.export.runs import Chip, ExportRich, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Columns,
     Heading,
     ListNode,
     Node,
     Paragraph,
     Quote,
+    Table,
+    TableCell,
     TableOfContents,
+    TableRow,
     Toggle,
     ToneName,
 )
@@ -29,6 +34,8 @@ from skaldr.models import BadgeColor
 
 NOTION_ESCAPED = frozenset("\\*~`$[]<>{}|^")
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
+SPACED_PLUS_AFTER_CODE = re.compile(r"` \+ ")
+FULL_WIDTH_PLUS = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL = 2
 OPENING_SECTION_LABEL = "the opening section, before the first heading"
 BLOCK_COLOR: dict[ToneName, str] = {
@@ -104,6 +111,36 @@ def _indent(lines: Sequence[str], depth: int = 1) -> list[str]:
     return indent_lines(lines, "\t" * depth)
 
 
+def _table_cell_text(cell: TableCell) -> str:
+    return escape_block_start(SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", notion_inline(cell.text)))
+
+
+def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName | None) -> list[str]:
+    tagged = [
+        f"<td{_color_attribute(cell.tone, '_bg')}>{text}</td>"
+        for cell, text in zip(cells, texts, strict=True)
+    ]
+    return [f"<tr{_color_attribute(tone, '_bg')}>", *_indent(tagged), "</tr>"]
+
+
+def _body_row_lines(row: TableRow) -> list[str]:
+    texts = [_table_cell_text(cell) for cell in row.cells]
+    if row.emphasis == "total":
+        texts = [bold_once(text) if text else text for text in texts]
+    tone = "neutral" if row.tone is None and row.emphasis == "group" else row.tone
+    return _row_lines(row.cells, texts, tone)
+
+
+def _table_lines(table: Table) -> list[str]:
+    attributes = ' fit-page-width="true" header-row="true"'
+    if table.header_column:
+        attributes += ' header-column="true"'
+    header_texts = [bold_once(_table_cell_text(cell)) if cell.text else "" for cell in table.header]
+    rows = _row_lines(table.header, header_texts, None)
+    rows += [line for row in table.rows for line in _body_row_lines(row)]
+    return [f"<table{attributes}>", *_indent(rows), "</table>"]
+
+
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=1):
@@ -135,6 +172,13 @@ def _toggle_lines(node: Toggle) -> list[str]:
     return ["<details>", f"<summary>{notion_inline(node.title)}</summary>", *children, "</details>"]
 
 
+def _columns_lines(node: Columns) -> list[str]:
+    lines: list[str] = []
+    for column in node.columns:
+        lines += [f'<column ratio="{column.ratio}">', *_indent(_notion_blocks(column.children)), "</column>"]
+    return ["<columns>", *_indent(lines), "</columns>"]
+
+
 def _notion_lines(node: Node) -> list[str]:
     match node:
         case Heading():
@@ -144,6 +188,8 @@ def _notion_lines(node: Node) -> list[str]:
             return [text + _trailing_color(node.tone)] if text else []
         case ListNode():
             return _list_lines(node)
+        case Table():
+            return _table_lines(node)
         case CodeBlock():
             return code_block_lines(node)
         case Callout():
@@ -153,6 +199,8 @@ def _notion_lines(node: Node) -> list[str]:
             return [_quote_line(node)]
         case Toggle():
             return _toggle_lines(node)
+        case Columns():
+            return _columns_lines(node)
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:

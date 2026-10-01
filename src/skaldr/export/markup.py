@@ -45,6 +45,12 @@ def styled(style: StyleName, inner: str) -> str:
     return _wrap_marker(STYLE_MARKER[style], inner)
 
 
+def bold_once(text: str) -> str:
+    if text.startswith(STYLE_MARKER["bold"]):
+        return text
+    return styled("bold", text)
+
+
 def _longest_backtick_run(text: str) -> int:
     return max((len(run) for run in BACKTICK_RUN.findall(text)), default=0)
 
@@ -88,6 +94,9 @@ class MarkupRuns:
     def citation(self, run: Citation, /) -> str:
         label = self.escape(f"[{run.number}]")
         return f"[{label}]({encode_url(run.url)})" if run.url else label
+
+    def line_break(self) -> str:
+        return "<br>"
 
     def styled(self, style: StyleName, inner: str, /) -> str:
         return styled(style, inner)

@@ -4,7 +4,7 @@ from pathlib import PurePosixPath
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, labelled, paragraphs, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced
-from skaldr.export.runs import ExportRich, Gauge, Mark
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -81,20 +81,32 @@ def lower_cards(cards: Sequence[models.Card], lowering: Lowering) -> list[Node]:
     return [bullets(_card(card, lowering) for card in cards)]
 
 
+def _derived_card(card: models.Card, badge_key: str, lowering: Lowering) -> ExportRich:
+    badge = lowering.report.badges[badge_key]
+    count, total = compute.derived_card_tally(card, lowering.matrix_tallies, lowering.table_tallies)
+    return (
+        Chip(card.label or badge.label, badge.tone),
+        *plain(f": {compute.fmt(count)} ({compute.pct(count, total)})"),
+    )
+
+
 def _delta(delta: models.CardDelta) -> ExportRich:
     text = plain(f" {delta.label}")
     return (Plain(" "), Mark("delta", delta.direction), *text) if delta.direction else text
 
 
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
-    value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
-    if card.of and isinstance(card.value, (int, float)):
-        value += plain(f" ({compute.pct(card.value, card.of)})")
-    if card.delta:
-        value += _delta(card.delta)
-    text = (labelled(card.label) + value) if card.label else value
-    if card.badges:
-        text += plain(" ") + lowering.chips(card.badges)
+    if card.badge and (card.of_matrix or card.of_tables):
+        text = _derived_card(card, card.badge, lowering)
+    else:
+        value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
+        if card.of and isinstance(card.value, (int, float)):
+            value += plain(f" ({compute.pct(card.value, card.of)})")
+        if card.delta:
+            value += _delta(card.delta)
+        text = (labelled(card.label) + value) if card.label else value
+        if card.badges:
+            text += plain(" ") + lowering.chips(card.badges)
     children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
     return ListEntry(text, children=children, tone=card.tone)
 

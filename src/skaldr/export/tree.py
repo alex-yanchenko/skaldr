@@ -35,6 +35,26 @@ class ListNode:
 
 
 @dataclass(frozen=True)
+class TableCell:
+    text: ExportRich
+    tone: ToneName | None = None
+
+
+@dataclass(frozen=True)
+class TableRow:
+    cells: tuple[TableCell, ...]
+    tone: ToneName | None = None
+    emphasis: Literal["group", "total"] | None = None
+
+
+@dataclass(frozen=True)
+class Table:
+    header: tuple[TableCell, ...]
+    rows: tuple[TableRow, ...]
+    header_column: bool = False
+
+
+@dataclass(frozen=True)
 class CodeBlock:
     content: str
     language: str = ""
@@ -61,6 +81,17 @@ class Toggle:
 
 
 @dataclass(frozen=True)
+class Column:
+    ratio: int
+    children: "tuple[Node, ...]"
+
+
+@dataclass(frozen=True)
+class Columns:
+    columns: tuple[Column, ...]
+
+
+@dataclass(frozen=True)
 class TocEntry:
     anchor: str
     title: ExportRich
@@ -71,7 +102,9 @@ class TableOfContents:
     entries: tuple[TocEntry, ...]
 
 
-Node = Heading | Paragraph | ListNode | CodeBlock | Callout | Quote | Toggle | TableOfContents
+Node = (
+    Heading | Paragraph | ListNode | Table | CodeBlock | Callout | Quote | Toggle | Columns | TableOfContents
+)
 
 
 @dataclass(frozen=True)
@@ -86,5 +119,7 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return tuple(child for entry in node.entries for child in entry.children)
         case Callout() | Toggle():
             return node.children
-        case Heading() | Paragraph() | CodeBlock() | Quote() | TableOfContents():
+        case Columns():
+            return tuple(child for column in node.columns for child in column.children)
+        case Heading() | Paragraph() | Table() | CodeBlock() | Quote() | TableOfContents():
             return ()

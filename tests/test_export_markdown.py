@@ -4,8 +4,8 @@ import pytest
 
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import code_block_lines, code_span, styled
-from skaldr.export.runs import ExportRich, Gauge, Mark
+from skaldr.export.markup import bold_once, code_block_lines, code_span, styled
+from skaldr.export.runs import Break, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -54,6 +54,7 @@ def test_inline_runs_become_markdown() -> None:
         AnchorLink((Plain("method"),), "method"),
         Plain(" "),
         AnchorLink((Plain("gone"),), "nowhere"),
+        Break(),
         Mark("delta", "up"),
         Gauge(10, 10),
         Plain(" see!"),
@@ -64,7 +65,7 @@ def test_inline_runs_become_markdown() -> None:
     assert render_markdown(nodes).split("\n\n")[1] == (
         r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
         "[paren](https://example.com/%28x%29%3E) "
-        "[method](#how-we-count) gone▲██████████ see\\![img](https://e.com/x.png)\n"
+        "[method](#how-we-count) gone<br>▲██████████ see\\![img](https://e.com/x.png)\n"
     )
 
 
@@ -93,7 +94,12 @@ def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, f
 
 
 def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
-    assert (styled("bold", " x "), styled("italic", "  ")) == (" **x** ", "  ")
+    assert (styled("bold", " x "), styled("italic", "  "), bold_once("**y**"), bold_once("")) == (
+        " **x** ",
+        "  ",
+        "**y**",
+        "",
+    )
 
 
 @pytest.mark.parametrize(
@@ -128,6 +134,23 @@ def test_quote_lines_escape_a_leading_block_marker() -> None:
 )
 def test_a_heading_ending_in_hashes_keeps_them(text: str, line: str) -> None:
     assert markdown_of([{"type": "heading", "text": text}]) == f"{line}\n"
+
+
+def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Name"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "rows": [{"a": "a|b and `x|y`", "n": 2}, {"a": "two\n\nlines", "n": 3}],
+        "totals": {"column": "n"},
+    }
+
+    assert markdown_of([table]) == (
+        "| Name | Units |\n"
+        "| --- | --- |\n"
+        "| a\\|b and `x\\|y` | 2 |\n"
+        "| two<br>lines | 3 |\n"
+        "| **Total** | **5** |\n"
+    )
 
 
 def test_nested_list_children_indent_to_the_content_column_of_their_marker() -> None:
@@ -199,6 +222,18 @@ def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
         markdown_of([row], badges=API_BADGES)
         == "**api**\n\n**Legend: badges used on this page**\n\n- **api** the API\n"
     )
+
+
+def test_a_grid_becomes_its_cells_in_order() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
+            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
+        ],
+    }
+
+    assert markdown_of([grid]) == "a\n\nb\n"
 
 
 def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:

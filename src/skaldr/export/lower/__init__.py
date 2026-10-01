@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from skaldr import compute, models
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for
+from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for, tone_named
 from skaldr.export.lower.prose import (
     lower_badge_row,
     lower_callout,
@@ -22,9 +22,12 @@ from skaldr.export.lower.prose import (
     lower_status_list,
     lower_timeline,
 )
+from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
 from skaldr.export.runs import Chip
 from skaldr.export.tree import (
     Callout,
+    Column,
+    Columns,
     Heading,
     ListEntry,
     ListNode,
@@ -107,8 +110,16 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_image(block, lowering)
         case models.Timeline():
             return lower_timeline(block, lowering)
+        case models.Comparison():
+            return lower_comparison(block, lowering)
+        case models.Matrix():
+            return lower_matrix(block, lowering)
+        case models.Swimlane():
+            return lower_swimlane(block)
         case models.References():
             return lower_references(block, lowering)
+        case models.Table():
+            return lower_table(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
         case models.Panel():
@@ -117,6 +128,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
                     "neutral", (Paragraph(bold(block.title)), *_lower_blocks(block.blocks, lowering, depth))
                 )
             ]
+        case models.Grid() | models.InnerGrid():
+            return _grid(block, lowering, depth)
         case models.Walkthrough():
             return [
                 ListNode("number", tuple(_walkthrough_entry(step, lowering, depth) for step in block.steps))
@@ -135,6 +148,20 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]
     return [Heading(level, plain(block.title), anchor), *children]
+
+
+def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int) -> list[Node]:
+    total = sum(cell.span for cell in block.cells)
+    columns: list[Column] = []
+    for cell in block.cells:
+        children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
+        tone = tone_named(cell.tone)
+        if tone:
+            children = (Callout(tone, children),)
+        columns.append(Column(round(cell.span / total * 100), children))
+    if len(columns) == 1 or isinstance(block, models.InnerGrid):
+        return [node for column in columns for node in column.children]
+    return [Columns(tuple(columns))]
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:

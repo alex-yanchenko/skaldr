@@ -14,6 +14,11 @@ class Chip:
 
 
 @dataclass(frozen=True)
+class Break:
+    pass
+
+
+@dataclass(frozen=True)
 class Mark:
     scheme: MarkScheme
     state: str
@@ -25,12 +30,14 @@ class Gauge:
     maximum: float
 
 
-ExportRun = Run | Chip | Mark | Gauge
+ExportRun = Run | Chip | Break | Mark | Gauge
 ExportRich = tuple[ExportRun, ...]
 
 
 class ExportRunWriter(RunWriter, Protocol):
     def chip(self, run: Chip, /) -> str: ...
+
+    def line_break(self) -> str: ...
 
     def mark(self, run: Mark, /) -> str: ...
 
@@ -41,6 +48,8 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
     match run:
         case Chip():
             return writer.chip(run)
+        case Break():
+            return writer.line_break()
         case Mark():
             return writer.mark(run)
         case Gauge():
@@ -56,6 +65,9 @@ def write_export_runs(runs: ExportRich, writer: ExportRunWriter) -> str:
 class _ExportVisibleText(VisibleText):
     def chip(self, run: Chip, /) -> str:
         return run.label
+
+    def line_break(self) -> str:
+        return " "
 
     def mark(self, run: Mark, /) -> str:
         return run.state
