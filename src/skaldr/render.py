@@ -27,6 +27,7 @@ from skaldr.models import (
     load_report,
     package_text,
     unresolvable_request_variables,
+    without_publish_block,
 )
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -221,7 +222,7 @@ def _render(
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         has_requests=any(iter_requests(report.blocks)),
-        source_block=source_block(source) if source else None,
+        source_block=source_block(without_publish_block(source)) if source else None,
         live=live,
     )
 

@@ -874,6 +874,36 @@ chain — fails the build rather than looping. A missing fragment fails with the
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
 
+## Where it publishes: `publish`
+
+An optional top-level `publish` block says where the document lives outside skaldr: Notion pages and Jira issues. Only `where` differs between services; every other key means the same thing for each.
+
+```yaml
+publish:
+  doc_id: onboarding-plan            # the document's identity in every target: lowercase, digits, hyphens
+  targets:
+    - to: notion
+      where: { parent_page: "https://www.notion.so/Team-Plans-0123456789abcdef0123456789abcdef" }
+      split: [st1, st2]              # each named top-level section becomes its own child page
+    - to: jira
+      where: { project: PLAN, issue_type: Task, parent: PLAN-100, fields: { labels: [onboarding] } }
+      from: [st1, st2]               # build this target from these sections only
+      split: [st1, st2]              # one child issue per section
+      overrides: { st2: { fields: { priority: High } } }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `to` | `notion` or `jira`. |
+| `where` | Notion: exactly one of `parent_page` (create the document under it) or `page` (write into it), each a page URL or id, plus `fields` for database properties. Jira: `project` key, `issue_type`, an optional `parent` issue key, and `fields` for labels, priority, components and custom fields. |
+| `from` | Top-level section ids the target is built from. Left out: the whole document. |
+| `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
+| `overrides` | Per-item `fields`, keyed by a split section id. |
+| `removed` | `archive` (default, recoverable) or `delete` (permanent; Jira only archives). |
+| `on_remote_edit` | `refuse` (default) stops when the item was edited in the service since the last publish; `overwrite` replaces it. |
+
+Every id in `from`, `split` and `overrides` must name a top-level `section` with that `id`, and two targets may not write to the same place; `skaldr --check` fails on either, naming the target and the id. A rendered page embeds its source **without** the `publish` block, so a shared page never shows where the document publishes. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+
 ## The render carries its own source
 
 Every rendered page embeds its **editable YAML source** in an inert `<script id="skaldr-source">`
