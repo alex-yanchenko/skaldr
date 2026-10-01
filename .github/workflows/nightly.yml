@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
-      # Runtime deps only (jinja2, pydantic, pyyaml). The dev toolchain (pytest, ruff,
+      # Runtime deps only, including the optional publish extra. The dev toolchain (pytest, ruff,
       # pyright) never ships, so its advisories aren't a risk for this CLI.
-      - run: uv export --no-dev --no-emit-project --format requirements.txt > requirements-audit.txt
+      - run: uv export --no-dev --all-extras --no-emit-project --format requirements.txt > requirements-audit.txt
       # --disable-pip: the exported file is a fully-resolved, hashed set, so pip-audit can audit it
       # directly. Without this flag pip-audit builds an ephemeral resolver venv, and that venv's
       # ensurepip bootstrap fails against the uv-managed standalone CPython that setup-uv provides.

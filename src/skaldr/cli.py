@@ -61,8 +61,31 @@ def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     return Path(out_arg).resolve() if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
+def _run_auth(argv: list[str]) -> int:
+    try:
+        from skaldr.auth.cli import main as auth_main
+    except ModuleNotFoundError as exc:
+        missing = (exc.name or "skaldr").partition(".")[0]
+        if missing == "skaldr":
+            raise
+        print(
+            f"error: `skaldr auth` needs the publish extra ({missing} is not installed). Reinstall with it: "
+            "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
+            "or pip install 'skaldr[publish]'",
+            file=sys.stderr,
+        )
+        return 1
+    return auth_main(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render a skaldr content file to an HTML page.")
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments[:1] == ["auth"]:
+        return _run_auth(arguments[1:])
+    parser = argparse.ArgumentParser(
+        description="Render a skaldr content file to an HTML page.",
+        epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`.",
+    )
     parser.add_argument(
         "--version",
         action="version",
@@ -168,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         help="add skaldr's live-plan-doc rule to ~/.claude/CLAUDE.md — steers the agent to keep its "
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
 
     # Opportunistically refresh already-installed skills that drifted after an upgrade. Fail-safe and
     # silent unless it writes; `--install-skill` below does its own (create-or-refresh) pass.
