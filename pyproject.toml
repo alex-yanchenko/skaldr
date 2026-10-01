@@ -31,6 +31,14 @@ classifiers = [
 Repository = "https://github.com/alex-yanchenko/skaldr"
 Issues = "https://github.com/alex-yanchenko/skaldr/issues"
 
+[project.optional-dependencies]
+publish = [
+    "authlib>=1.8.0",
+    "httpx2>=2.13.1",
+    "keyring>=25.7.0",
+    "typing-extensions>=4.6",
+]
+
 [project.scripts]
 skaldr = "skaldr.cli:main"
 
@@ -43,6 +51,7 @@ dev = [
     "pyright>=1.1",
     "pytest>=8.0",
     "ruff>=0.14",
+    "skaldr[publish]",
     "types-pyyaml>=6.0",
 ]
 
@@ -67,6 +76,9 @@ select = [
     "RUF", # ruff-specific
 ]
 
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = ["keyring.compat.properties.classproperty"]
+
 [tool.pyright]
 include = ["src", "tests"]
 typeCheckingMode = "strict"
@@ -75,3 +87,4 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["error"]
