@@ -1,7 +1,6 @@
 from collections.abc import Callable, Mapping
 
 import httpx2
-
 from authlib.oauth2.auth import ClientAuth
 
 ClientAuthMethod = Callable[
