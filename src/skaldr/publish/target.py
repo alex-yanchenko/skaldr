@@ -1,21 +1,23 @@
+from abc import abstractmethod
 from typing import Literal
 
 from pydantic import ConfigDict, Field, JsonValue
 
 from skaldr.frozen_model import FrozenModel
 
-Fields = dict[str, JsonValue]
+JsonFields = dict[str, JsonValue]
+Location = tuple[str, ...]
 
 
 class TargetOverride(FrozenModel):
-    fields: Fields = Field(
-        default_factory=dict[str, JsonValue],
+    fields: JsonFields = Field(
+        default_factory=JsonFields,
         description="Field values for this one item, applied over the target's `where.fields`.",
     )
 
 
-class PublishTargetBase(FrozenModel):
-    model_config = ConfigDict(validate_by_alias=True, validate_by_name=False, serialize_by_alias=True)
+class TargetBase(FrozenModel):
+    model_config = ConfigDict(validate_by_name=False, serialize_by_alias=True)
 
     from_sections: list[str] | None = Field(
         default=None,
@@ -32,7 +34,7 @@ class PublishTargetBase(FrozenModel):
     )
     overrides: dict[str, TargetOverride] = Field(
         default_factory=dict[str, TargetOverride],
-        description="Per-item values keyed by a split section id.",
+        description="Per-item field values keyed by a split section id, applied over `where.fields`.",
     )
     removed: Literal["archive", "delete"] = Field(
         default="archive",
@@ -44,3 +46,9 @@ class PublishTargetBase(FrozenModel):
         description="When an item was edited in the service since the last publish: `refuse` stops and "
         "shows the change, `overwrite` replaces it.",
     )
+
+    @abstractmethod
+    def location_key(self) -> Location: ...
+
+    @abstractmethod
+    def location_label(self) -> str: ...

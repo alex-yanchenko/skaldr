@@ -38,6 +38,7 @@ from pydantic_core import PydanticCustomError
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish import Publish, section_choice_errors
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
@@ -60,7 +61,7 @@ REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 # An author-assigned heading/section anchor id: lowercase, hyphen-separated, same shape the auto-slug
 # produces (`_slugify` in compute.py) so a hand-written id and a generated one are indistinguishable
 # as a `#link` target, and no id can introduce a character the auto-slugger never would.
-ANCHOR_ID_PATTERN = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+ANCHOR_ID_PATTERN = SLUG_PATTERN
 
 
 def _reject_bool_and_non_finite(value: Any) -> Any:
@@ -177,10 +178,7 @@ def package_path(name: str) -> Path:
     return Path(str(_resource(name)))
 
 
-_Frozen = FrozenModel
-
-
-class _Block(_Frozen):
+class _Block(FrozenModel):
     """Base for every top-level/section block. Carries the one width primitive: `span`, how many of
     the 6 content columns the block occupies. It is width only; blocks still stack vertically (one per
     row). To place several blocks in a single row, use a `grid` (whose cells carry their own span)."""
@@ -196,7 +194,7 @@ class _Block(_Frozen):
     )
 
 
-class Badge(_Frozen):
+class Badge(FrozenModel):
     label: str = Field(description="Chip text for this tag/status.")
     tone: BadgeColor = Field(
         description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
@@ -207,7 +205,7 @@ class Badge(_Frozen):
     )
 
 
-class Meta(_Frozen):
+class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
     source: str | None = Field(default=None, description="Provenance; feeds the footer.")
@@ -264,7 +262,7 @@ class Text(_Block):
 _MAX_LIST_DEPTH = 4
 
 
-class ListItem(_Frozen):
+class ListItem(FrozenModel):
     text: str = Field(min_length=1, description="The point's rich-text content.")
     checked: bool = Field(
         default=False,
@@ -320,7 +318,7 @@ class ListBlock(_Block):
         return self
 
 
-class Fact(_Frozen):
+class Fact(FrozenModel):
     label: str = Field(description="Fact label (e.g. 'Source').")
     value: str = Field(description="Fact value (e.g. 'prod').")
 
@@ -330,7 +328,7 @@ class FactStrip(_Block):
     facts: list[Fact] = Field(min_length=1, max_length=8, description="1-8 label/value pairs, one line.")
 
 
-class KVPair(_Frozen):
+class KVPair(FrozenModel):
     label: str = Field(description="Row label (muted).")
     value: str = Field(description="Rich-text value.")
 
@@ -340,7 +338,7 @@ class KeyValue(_Block):
     pairs: list[KVPair] = Field(min_length=1, description="Vertical label/value metadata rows.")
 
 
-class DefItem(_Frozen):
+class DefItem(FrozenModel):
     term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
     body: str = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
 
@@ -355,7 +353,7 @@ class DefList(_Block):
     )
 
 
-class CardDelta(_Frozen):
+class CardDelta(FrozenModel):
     label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
     direction: Literal["up", "down", "flat"] | None = Field(
         default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
@@ -367,7 +365,7 @@ class CardDelta(_Frozen):
     )
 
 
-class Card(_Frozen):
+class Card(FrozenModel):
     label: str | None = Field(
         default=None,
         description="Card label above the number. Required for a normal card; for a derived card "
@@ -462,18 +460,18 @@ class Cards(_Block):
     items: list[Card] = Field(min_length=1, description="Headline-number cards, laid out full-width.")
 
 
-class BadgeRef(_Frozen):
+class BadgeRef(FrozenModel):
     key: str = Field(description="A key declared in the page `badges`.")
 
 
-class BadgeLiteral(_Frozen):
+class BadgeLiteral(FrozenModel):
     label: str = Field(description="Chip text for a one-off badge (not from the page vocabulary).")
     tone: BadgeColor = Field(
         description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin."
     )
 
 
-class BadgeGroup(_Frozen):
+class BadgeGroup(FrozenModel):
     label: str = Field(min_length=1, description="Group label, shown in the row's gutter.")
     items: list[BadgeRef | BadgeLiteral] = Field(
         min_length=1, description="Chips in this group: page-vocabulary refs or one-off label+tone pairs."
@@ -516,7 +514,7 @@ class Callout(_Block):
     body: str = Field(description="Rich-text body.")
 
 
-class StatusItem(_Frozen):
+class StatusItem(FrozenModel):
     state: StatusState = Field(
         description="Step state, driving the glyph: done, current (in progress), pending, failed, blocked."
     )
@@ -528,7 +526,7 @@ class StatusList(_Block):
     items: list[StatusItem] = Field(min_length=1, description="Steps/checks with a coloured state glyph.")
 
 
-class MeterItem(_Frozen):
+class MeterItem(FrozenModel):
     label: str = Field(description="Bar label.")
     value: Number = Field(description="Filled amount (0 ≤ value ≤ max).")
     max: Number = Field(description="Bar maximum (> 0); the denominator for the derived percentage.")
@@ -548,7 +546,7 @@ class Meter(_Block):
     items: list[MeterItem] = Field(min_length=1, description="Labelled horizontal bars.")
 
 
-class RangeSegment(_Frozen):
+class RangeSegment(FrozenModel):
     label: str = Field(min_length=1, description="Label shown inside the segment.")
     span: Number = Field(
         description="Relative width (> 0). Spans are normalised across the segments, so only the "
@@ -570,7 +568,7 @@ class RangeSegment(_Frozen):
         return self
 
 
-class RangeAxis(_Frozen):
+class RangeAxis(FrozenModel):
     min: str | None = Field(default=None, description="Label at the left end of the bar (e.g. a start year).")
     max: str | None = Field(default=None, description="Label at the right end of the bar (e.g. an end year).")
 
@@ -629,7 +627,7 @@ class Image(_Block):
         return self
 
 
-class TimelineItem(_Frozen):
+class TimelineItem(FrozenModel):
     time: str | None = Field(default=None, description="Optional timestamp/label for the entry.")
     title: str = Field(description="Entry title.")
     body: str | None = Field(default=None, description="Optional rich-text detail.")
@@ -647,7 +645,7 @@ class Timeline(_Block):
     items: list[TimelineItem] = Field(min_length=1, description="Ordered entries with state-coloured dots.")
 
 
-class FlowStep(_Frozen):
+class FlowStep(FrozenModel):
     label: str = Field(min_length=1, description="Short stage name — the node label.")
     tone: Tone | None = Field(
         default=None, description="Optional tone accent for this node's border + number."
@@ -712,7 +710,7 @@ class Fan(_Block):
     )
 
 
-class ChartSeries(_Frozen):
+class ChartSeries(FrozenModel):
     label: str = Field(min_length=1, description="Series name — shown in the legend.")
     values: list[Number] = Field(
         min_length=1, description="One value per category, in the same order as `categories`."
@@ -720,7 +718,7 @@ class ChartSeries(_Frozen):
     tone: Tone | None = Field(default=None, description="Optional tone for this series' bars/line.")
 
 
-class ChartSlice(_Frozen):
+class ChartSlice(FrozenModel):
     label: str = Field(min_length=1, description="Slice name — shown in the legend.")
     value: Number = Field(description="Slice magnitude (> 0); its share of the whole is derived.")
     tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
@@ -787,7 +785,7 @@ class Chart(_Block):
         return self
 
 
-class Column(_Frozen):
+class Column(FrozenModel):
     key: str = Field(description="Row-dict key this column reads.")
     label: str = Field(description="Column header text.")
     kind: ColumnKind = Field(
@@ -815,22 +813,22 @@ class Column(_Frozen):
     )
 
 
-class Handled(_Frozen):
+class Handled(FrozenModel):
     label: str = Field(description="Label for the non-issue bucket (e.g. 'Imported cleanly').")
     value: Count = Field(description="Count in the bucket; added to the column sum for reconciliation.")
 
 
-class Reconcile(_Frozen):
+class Reconcile(FrozenModel):
     total: Count = Field(gt=0, description="Denominator; the column sum + handled must equal this.")
     column: str = Field(description="Key of the number column that must sum to `total`.")
     handled: Handled | None = Field(default=None, description="A bucket outside the rows.")
 
 
-class Totals(_Frozen):
+class Totals(FrozenModel):
     column: str = Field(description="Key of the number column to sum into a footer row.")
 
 
-class Rollup(_Frozen):
+class Rollup(FrozenModel):
     by: str = Field(description="Key of the badge column whose per-row values are counted.")
     label: str | None = Field(default=None, description="Optional label shown before the counted chips.")
 
@@ -916,7 +914,7 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
 TableRow = dict[str, Any] | list[Any]
 
 
-class Group(_Frozen):
+class Group(FrozenModel):
     name: str = Field(description="Group band label; shows the derived subtotal.")
     rows: list[TableRow] = Field(
         default_factory=list[TableRow],
@@ -1128,7 +1126,7 @@ class Table(_Block):
             )
 
 
-class ReferenceItem(_Frozen):
+class ReferenceItem(FrozenModel):
     key: str = Field(
         min_length=1,
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
@@ -1150,7 +1148,7 @@ class References(_Block):
     )
 
 
-class ComparisonCell(_Frozen):
+class ComparisonCell(FrozenModel):
     value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
     tone: Tone | None = Field(default=None, description="Optional tone for the text.")
 
@@ -1160,7 +1158,7 @@ class ComparisonCell(_Frozen):
 ComparisonValue = StrictBool | str | ComparisonCell
 
 
-class ComparisonRow(_Frozen):
+class ComparisonRow(FrozenModel):
     feature: str = Field(min_length=1, description="Row label — the attribute being compared.")
     values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
 
@@ -1203,7 +1201,7 @@ class Comparison(_Block):
         return self
 
 
-class MatrixCell(_Frozen):
+class MatrixCell(FrozenModel):
     row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")
     col: str = Field(
         min_length=1, description="Which column this cell sits in — one of the block's `columns`."
@@ -1283,7 +1281,7 @@ class Matrix(_Block):
         return self
 
 
-class SwimlaneStep(_Frozen):
+class SwimlaneStep(FrozenModel):
     lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
     col: str = Field(
         min_length=1,
@@ -1349,7 +1347,7 @@ class SwimlaneStep(_Frozen):
         return self
 
 
-class SwimlaneLane(_Frozen):
+class SwimlaneLane(FrozenModel):
     name: str = Field(min_length=1, description="Lane label shown in the row gutter.")
     id: str | None = Field(
         default=None,
@@ -1365,7 +1363,7 @@ class SwimlaneLane(_Frozen):
         return self.id if self.id is not None else self.name
 
 
-class SwimlaneColumn(_Frozen):
+class SwimlaneColumn(FrozenModel):
     name: str = Field(min_length=1, description="Column header label.")
     id: str | None = Field(
         default=None,
@@ -1392,7 +1390,7 @@ class SwimlaneColumn(_Frozen):
         return self.id if self.id is not None else self.name
 
 
-class SwimlaneGroup(_Frozen):
+class SwimlaneGroup(FrozenModel):
     name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
     color: BadgeColor = Field(
         description="Cap colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
@@ -1572,7 +1570,7 @@ class ComposedCall(NamedTuple):
     url: str
 
 
-class RequestVariable(_Frozen):
+class RequestVariable(FrozenModel):
     name: str = Field(
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="The token a reader fills, written `{{name}}` in the url, a header value or the "
@@ -1603,7 +1601,7 @@ class RequestVariable(_Frozen):
         return self
 
 
-class RequestResponse(_Frozen):
+class RequestResponse(FrozenModel):
     status: Count | None = Field(
         default=None,
         ge=100,
@@ -1654,7 +1652,7 @@ def check_header_map(
         spellings[name.lower()] = name
 
 
-class RequestCase(_Frozen):
+class RequestCase(FrozenModel):
     label: str = Field(min_length=1, description="Tab label, and the case's heading when printed.")
     value: str | None = Field(
         default=None,
@@ -1718,7 +1716,7 @@ MAX_REQUEST_CASES = 24
 writes that many pairs, so a case past this one would render without its label ever lighting up."""
 
 
-class _RequestCore(_Frozen):
+class _RequestCore(FrozenModel):
     """One recorded call, composed from its HTTP fields or given as an exact command, and the outcomes
     it produced. Shared by a standalone `request` and by a step of a `request_flow`, which differ only
     in where their variables come from."""
@@ -1870,7 +1868,7 @@ class _RequestCore(_Frozen):
                     )
 
 
-class _VariableOwner(_Frozen):
+class _VariableOwner(FrozenModel):
     """The block a reader's fields belong to."""
 
     variables: list[RequestVariable] = Field(
@@ -1915,7 +1913,7 @@ class Request(_RequestCore, _VariableOwner, _Block):
         return self
 
 
-class RequestCapture(_Frozen):
+class RequestCapture(FrozenModel):
     name: str = Field(
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="The name this step produces. A later step writes it as `{{name}}` and the reader "
@@ -2107,7 +2105,7 @@ class Panel(_Block):
 # A grid nests only within a grid; `section` stays a leaf-only container and the two do not mix.
 
 
-class InnerGridCell(_Frozen):
+class InnerGridCell(FrozenModel):
     span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
     blocks: list[InnerBlock] = Field(min_length=1, description="Leaf blocks stacked in the cell.")
     tone: Tone | None = Field(
@@ -2130,7 +2128,7 @@ class InnerGrid(_Block):
 CellBlock = Annotated[_Leaf | InnerGrid, Field(discriminator="type")]
 
 
-class GridCell(_Frozen):
+class GridCell(FrozenModel):
     span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
     blocks: list[CellBlock] = Field(
         min_length=1, description="Blocks stacked in the cell; may include nested grids (depth 2 max)."
@@ -2158,7 +2156,7 @@ def _check_span_sum(cells: Sequence[GridCell | InnerGridCell]) -> None:
         raise ValueError(f"cell spans sum to {total}; must total at most 6")
 
 
-class WalkthroughStep(_Frozen):
+class WalkthroughStep(FrozenModel):
     label: str = Field(
         min_length=1,
         description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
@@ -2344,7 +2342,7 @@ def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
                 yield from iter_cards(step.detail)
 
 
-class Report(_Frozen):
+class Report(FrozenModel):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
     badges: dict[str, Badge] = Field(
@@ -2353,12 +2351,12 @@ class Report(_Frozen):
     blocks: list[Block] = Field(min_length=1)
     publish: Publish | None = Field(
         default=None,
-        description="Where the document publishes (Notion pages, Jira issues). Left out of the source a "
-        "rendered page embeds.",
+        description="Where the document publishes (Notion pages, Jira issues). Omitted from the source "
+        "embedded in a rendered page.",
     )
 
     @model_validator(mode="after")
-    def _publish_ids_name_sections(self) -> "Report":
+    def _validate_publish_sections(self) -> "Report":
         if self.publish is None:
             return self
         section_ids = [block.id for block in self.blocks if isinstance(block, Section) and block.id]

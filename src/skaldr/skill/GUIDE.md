@@ -906,11 +906,12 @@ publish:
 
 `skaldr --check` holds the block to these rules and names the target in every message:
 
-- every id in `from` and `split` names exactly one top-level `section` by its `id:` (a heading id or a title does not count), and appears once in its list;
+- every id in `from` and `split` names exactly one top-level `section` by its `id:` (a heading id or a title does not count), appears once in its list, and no two top-level sections share an id;
 - every `split` id sits inside `from` when `from` is given, and every `overrides` key is a `split` id;
-- no two targets write to the same place: the same Notion page, however it is written, or the same Jira project and parent.
+- a Notion page is a URL on notion.so, notion.site or notion.com, or a page id; a Jira project key is an uppercase letter followed by uppercase letters, digits or `_`, a `parent` is an issue key such as `PLAN-100`, and `issue_type` is not blank;
+- no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
 
-A rendered page embeds its source **without** the `publish` block, so a shared page never shows where the document publishes; the render stops with an error rather than embed a block it cannot cut out cleanly. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+A rendered page embeds its source **without** the `publish` block: the block, the comment lines directly above it and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
 
 ## The render carries its own source
 

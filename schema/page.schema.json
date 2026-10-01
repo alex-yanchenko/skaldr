@@ -1908,7 +1908,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/TargetOverride"
           },
-          "description": "Per-item values keyed by a split section id.",
+          "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
           "title": "Overrides",
           "type": "object"
         },
@@ -1934,7 +1934,7 @@
         },
         "to": {
           "const": "jira",
-          "description": "Publish to Jira.",
+          "description": "Publish to Jira: `jira`.",
           "title": "To",
           "type": "string"
         },
@@ -1954,13 +1954,13 @@
       "additionalProperties": false,
       "properties": {
         "project": {
-          "description": "The Jira project key, e.g. PLAN.",
+          "description": "The Jira project key: an uppercase letter, then uppercase letters, digits or `_`, e.g. PLAN.",
           "pattern": "^[A-Z][A-Z0-9_]+$",
           "title": "Project",
           "type": "string"
         },
         "issue_type": {
-          "description": "The issue type each created issue gets, e.g. Task.",
+          "description": "The issue type each created issue gets, e.g. Task. Not blank.",
           "minLength": 1,
           "title": "Issue Type",
           "type": "string"
@@ -1983,7 +1983,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/JsonValue"
           },
-          "description": "Field values for every created issue: labels, priority, components, custom fields.",
+          "description": "Field values for every created issue (labels, priority, components, custom fields); `overrides` changes them for one item.",
           "title": "Fields",
           "type": "object"
         }
@@ -2560,7 +2560,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/TargetOverride"
           },
-          "description": "Per-item values keyed by a split section id.",
+          "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
           "title": "Overrides",
           "type": "object"
         },
@@ -2586,7 +2586,7 @@
         },
         "to": {
           "const": "notion",
-          "description": "Publish to Notion.",
+          "description": "Publish to Notion: `notion`.",
           "title": "To",
           "type": "string"
         },
@@ -2635,7 +2635,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/JsonValue"
           },
-          "description": "Database property values, when the target page is a database row.",
+          "description": "Database property values when the target page is a database row; `overrides` changes them for one item.",
           "title": "Fields",
           "type": "object"
         }
@@ -2815,7 +2815,7 @@
           "type": "string"
         },
         "targets": {
-          "description": "Where the document publishes.",
+          "description": "One entry per place the document publishes to; each is built from the document on its own.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -5094,7 +5094,7 @@
         }
       ],
       "default": null,
-      "description": "Where the document publishes (Notion pages, Jira issues). Left out of the source a rendered page embeds."
+      "description": "Where the document publishes (Notion pages, Jira issues). Omitted from the source embedded in a rendered page."
     }
   },
   "required": [
