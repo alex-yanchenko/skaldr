@@ -1,9 +1,11 @@
 import re
 from collections.abc import Sequence
-from typing import Literal
 
-STYLE_MARKER: dict[Literal["bold", "italic", "strike"], str] = {"bold": "**", "italic": "*", "strike": "~~"}
-CALLOUT_ICON: dict[str, str] = {
+from skaldr.export.tree import CodeBlock, ToneName
+from skaldr.richtext import StyleName
+
+STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
+CALLOUT_ICON: dict[ToneName, str] = {
     "info": "💡",
     "success": "✅",
     "warning": "⚠️",
@@ -14,7 +16,10 @@ CALLOUT_ICON: dict[str, str] = {
     "teal": "💡",
     "sky": "💡",
 }
-TAB_ICON: dict[str, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
+TAB_ICON: dict[ToneName, str] = {"success": "✅", "info": "🔵", "warning": "⚠️", "danger": "🛑"}
+BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+*]+|=+|>)(?=\s|$)")
+ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
+BACKTICK_RUN = re.compile(r"`+")
 
 
 def wrap_marker(marker: str, inner: str) -> str:
@@ -26,9 +31,32 @@ def wrap_marker(marker: str, inner: str) -> str:
     return f"{lead}{marker}{core}{marker}{trail}"
 
 
-def code_fence(content: str) -> str:
-    longest = max((len(run) for run in re.findall(r"`+", content)), default=0)
-    return "`" * max(3, longest + 1)
+def styled(style: StyleName, inner: str) -> str:
+    return wrap_marker(STYLE_MARKER[style], inner)
+
+
+def bold_once(text: str) -> str:
+    return text if not text or text.startswith(STYLE_MARKER["bold"]) else styled("bold", text)
+
+
+def _longest_backtick_run(text: str) -> int:
+    return max((len(run) for run in BACKTICK_RUN.findall(text)), default=0)
+
+
+def code_span(text: str) -> str:
+    ticks = "`" * (_longest_backtick_run(text) + 1)
+    padding = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{ticks}{padding}{text}{padding}{ticks}"
+
+
+def code_block_lines(block: CodeBlock) -> list[str]:
+    fence = "`" * max(3, _longest_backtick_run(block.content) + 1)
+    return [f"{fence}{block.language}", *block.content.split("\n"), fence]
+
+
+def escape_block_start(text: str) -> str:
+    text = BLOCK_START_MARKER.sub(lambda match: "\\" + match.group(1), text)
+    return ORDERED_START_MARKER.sub(lambda match: match.group(1) + "\\" + match.group(2), text)
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:

@@ -1,15 +1,17 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
-from skaldr.export.inline import Rich
+from skaldr.richtext import Rich
 
 ToneName = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky", "muted"]
+ListKind = Literal["bullet", "number", "check"]
 
 
 @dataclass(frozen=True)
 class Heading:
     level: int
     text: Rich
+    anchor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -23,11 +25,12 @@ class ListEntry:
     text: Rich
     checked: bool = False
     children: "tuple[Node, ...]" = ()
+    tone: ToneName | None = None
 
 
 @dataclass(frozen=True)
 class ListNode:
-    kind: Literal["bullet", "number", "check"]
+    kind: ListKind
     entries: tuple[ListEntry, ...]
 
 
@@ -70,15 +73,11 @@ class Quote:
 
 
 @dataclass(frozen=True)
-class Divider:
-    pass
-
-
-@dataclass(frozen=True)
 class Toggle:
     title: Rich
     heading_level: int | None
     children: "tuple[Node, ...]"
+    anchor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,21 +104,63 @@ class Tabs:
 
 
 @dataclass(frozen=True)
-class Diagram:
-    mermaid: str
-    fallback: "tuple[Node, ...]"
-    supplement: "tuple[Node, ...]" = field(default=())
+class GraphNode:
+    key: str
+    label: str
+    note: str = ""
+    tone: ToneName | None = None
 
 
 @dataclass(frozen=True)
-class Image:
-    url: str
-    caption: Rich
+class GraphEdge:
+    source: str
+    target: str
+    dashed: bool = False
+
+
+@dataclass(frozen=True)
+class Graph:
+    direction: Literal["TB", "LR"]
+    nodes: tuple[GraphNode, ...]
+    edges: tuple[GraphEdge, ...]
+
+
+@dataclass(frozen=True)
+class PieSlice:
+    label: str
+    value: float
+
+
+@dataclass(frozen=True)
+class PieChart:
+    slices: tuple[PieSlice, ...]
+
+
+@dataclass(frozen=True)
+class XYChart:
+    mark: Literal["bar", "line"]
+    categories: tuple[str, ...]
+    series: tuple[tuple[float, ...], ...]
+
+
+Figure = Graph | PieChart | XYChart
+
+
+@dataclass(frozen=True)
+class Diagram:
+    figure: Figure
+    supplement: "tuple[Node, ...]" = ()
+
+
+@dataclass(frozen=True)
+class TocEntry:
+    anchor: str
+    title: Rich
 
 
 @dataclass(frozen=True)
 class TableOfContents:
-    pass
+    entries: tuple[TocEntry, ...]
 
 
 Node = (
@@ -130,11 +171,25 @@ Node = (
     | CodeBlock
     | Callout
     | Quote
-    | Divider
     | Toggle
     | Columns
     | Tabs
     | Diagram
-    | Image
     | TableOfContents
 )
+
+
+def nested_nodes(node: Node) -> tuple[Node, ...]:
+    match node:
+        case ListNode():
+            return tuple(child for entry in node.entries for child in entry.children)
+        case Callout() | Toggle():
+            return node.children
+        case Columns():
+            return tuple(child for column in node.columns for child in column.children)
+        case Tabs():
+            return tuple(child for tab in node.tabs for child in tab.children)
+        case Diagram():
+            return node.supplement
+        case Heading() | Paragraph() | Table() | CodeBlock() | Quote() | TableOfContents():
+            return ()

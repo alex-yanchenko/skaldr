@@ -76,7 +76,7 @@ skaldr report.yaml --export notion       # Notion-flavored Markdown for a Notion
 skaldr report.yaml --export notion --chunk 20000  # page.00.md, page.01.md, …, each small enough for one Notion MCP call
 ```
 
-Every block has a Markdown form. Flows, fans and charts become Mermaid diagrams, which GitHub and Notion both draw. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and colored table cells. skaldr only writes the files; it never calls Notion.
+Every block has a Markdown form. Flows, fans and charts become Mermaid diagrams, which GitHub and Notion both draw. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and colored table cells. A Notion page takes its title from the page itself, so the Notion `page.md` holds the body only, while the GitHub-flavored file starts with the title as its heading. A re-export removes the `page.md` and `page.NN.md` files an earlier run left in the folder. skaldr only writes the files; it never calls Notion.
 
 There are no styling flags — everything is in the content file.
 

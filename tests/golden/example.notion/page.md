@@ -11,15 +11,15 @@ Mixed audience — ops reads the impact, the floor team reads the fix. {color="g
 - **Units expected**: 10,000
 - **Method**: `full cycle count`
 - **Mode**: strict
-- **Matched cleanly**: 8,500 (85.0%) ▲ +3%
-- **Floor — fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span>
+- **Matched cleanly**: 8,500 (85.0%) ▲ +3% {color="green"}
+- **Floor — fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span> {color="yellow"}
 	Miscounts + mislabeled bins we can correct. {color="gray"}
-- **Vendor — escalate**: 400 (4.0%) ▼ −90 <span color="red_bg">Vendor</span>
-- **Count status**: HEALTHY
-- **Total units**: 10,000
-- **Matched cleanly**: 85 (85.0%), 8,500 units
-- **Floor-fixable**: 11 (11.0%), 1,100
-- **Vendor**: 4 (4.0%), 400
+- **Vendor — escalate**: 400 (4.0%) ▼ −90 <span color="red_bg">Vendor</span> {color="red"}
+- **Count status**: HEALTHY {color="purple"}
+- **Total units**: 10,000 {color="gray"}
+- **Matched cleanly**: 85 (85.0%), 8,500 units {color="green"}
+- **Floor-fixable**: 11 (11.0%), 1,100 {color="yellow"}
+- **Vendor**: 4 (4.0%), 400 {color="red"}
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 ### Count pipeline
@@ -72,7 +72,7 @@ flowchart LR
 		<td>⛔ **4** Escalate short-ship</td>
 	</tr>
 </table>
-✅ done · 🔵 current · ⏸️ deferred · ⚪ todo · ⛔ blocked {color="gray"}
+✅ done · 🔵 current · ⚪ todo · ⛔ blocked · ⏸️ deferred {color="gray"}
 <callout icon="⚠️" color="yellow_bg">
 	**Action needed before the next count**
 	The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.
@@ -89,7 +89,7 @@ flowchart LR
 		<td>**What the problem is**</td>
 		<td>**Proposed fix**</td>
 	</tr>
-	<tr>
+	<tr color="gray_bg">
 		<td>**Floor — fixable** (1,100)</td>
 		<td></td>
 		<td></td>
@@ -110,7 +110,7 @@ flowchart LR
 		<td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
 		<td>Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log.</td>
 	</tr>
-	<tr>
+	<tr color="gray_bg">
 		<td>**Vendor — escalation** (400)</td>
 		<td></td>
 		<td></td>
@@ -124,7 +124,7 @@ flowchart LR
 		<td>The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted.</td>
 		<td>Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives.</td>
 	</tr>
-	<tr>
+	<tr color="gray_bg">
 		<td>**Correctly counted — no action** (0)</td>
 		<td></td>
 		<td></td>
@@ -142,10 +142,10 @@ flowchart LR
 **Discrepancies by owner**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
 Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 ## Count progress
-- **Zone A**: ██████████ 100.0% (100 of 100)
-- **Zone B**: █████████░ 92.0% (92 of 100)
-- **Zone C**: ████████░░ 85.0% (85 of 100)
-- **Overflow**: ░░░░░░░░░░ 4.0% (4 of 100)
+- **Zone A**: ██████████ 100.0% (100 of 100) {color="blue"}
+- **Zone B**: █████████░ 92.0% (92 of 100) {color="green"}
+- **Zone C**: ████████░░ 85.0% (85 of 100) {color="yellow"}
+- **Overflow**: ░░░░░░░░░░ 4.0% (4 of 100) {color="red"}
 **Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
 ## Verification
 - ✅ Reconciliation gate passes (10,000 = 10,000).
@@ -199,8 +199,8 @@ function pickWinner(a, b) {
 <columns>
 	<column ratio="33">
 		<callout icon="📌" color="purple_bg">
-			- **Matched cleanly**: 8,500 (85.0%)
-			- **Needs work**: 1,500 (15.0%)
+			- **Matched cleanly**: 8,500 (85.0%) {color="green"}
+			- **Needs work**: 1,500 (15.0%) {color="yellow"}
 		</callout>
 	</column>
 	<column ratio="67">
@@ -208,7 +208,7 @@ function pickWinner(a, b) {
 			**Reading this section**
 			The cards on the left summarise; the panels below break down count progress and checks side by side.
 		</callout>
-		- **Zone C**: █████████░ 88.0% (88 of 100)
+		- **Zone C**: █████████░ 88.0% (88 of 100) {color="yellow"}
 		- ✅ Reconciliation gate passes.
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
@@ -354,18 +354,18 @@ flowchart LR
     classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
 ## How to run the recount
-1. **Freeze the aisle and pull the expected list** *before any scanning*
+1. **Freeze the aisle and pull the expected list** *before any scanning* {color="blue"}
 	Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
 	- One row per bin, with the expected quantity.
 	- Flag overflow bins (`bin > 12`) — they take the manual path.
-2. **Scan every bin twice, reconcile on the pallet ID**
+2. **Scan every bin twice, reconcile on the pallet ID** {color="purple"}
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 	`reconcile`
 	```
 	counted = dedupe(scans, key="pallet_id")
 	assert sum(counted) == expected
 	```
-3. **Escalate anything that still won't balance**
+3. **Escalate anything that still won't balance** {color="yellow"}
 	<callout icon="⚠️" color="yellow_bg">
 		A residual gap is a vendor short-ship, not a miscount — open a ticket, don't force the numbers.
 	</callout>

@@ -5,12 +5,9 @@ Reconciled review of the 10,000-unit cycle count: what didn't match, why, and th
 Mixed audience — ops reads the impact, the floor team reads the fix.
 
 - [Overview](#overview)
-  - [Count pipeline](#count-pipeline)
-  - [Discrepancy resolution across teams](#discrepancy-resolution-across-teams)
 - [Discrepancies & fixes](#discrepancies--fixes)
 - [Count progress](#count-progress)
 - [Verification](#verification)
-  - [Follow-up checklist](#follow-up-checklist)
 - [Rollout](#rollout)
 - [Method](#method)
 - [At a glance](#at-a-glance)
@@ -84,7 +81,7 @@ flowchart LR
 | **System** |  | 🔵 **2a** Check scan log | ⚪ **3** Reconcile |  |
 | **Vendor** |  |  |  | ⛔ **4** Escalate short-ship |
 
-✅ done · 🔵 current · ⏸️ deferred · ⚪ todo · ⛔ blocked
+✅ done · 🔵 current · ⚪ todo · ⛔ blocked · ⏸️ deferred
 
 > ⚠️ **Action needed before the next count**
 >
@@ -134,8 +131,8 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
   - [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
 
-- **Owner**: Inventory Ops — **@site-lead** signs off each fix.
-- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+* **Owner**: Inventory Ops — **@site-lead** signs off each fix.
+* **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
 > 📝 **For the read-out**
 >

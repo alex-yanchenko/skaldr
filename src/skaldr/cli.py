@@ -1,6 +1,6 @@
 """CLI entry point: render a content file (once, only when stale, or on a --watch loop), validate it
-(--check), dump its normalised model (--emit-json), print the guide, export the schema, or install
-the skill."""
+(--check), export it as Markdown (--export), dump its normalised model (--emit-json), print the
+guide, export the schema, or install the skill."""
 
 import argparse
 import json
@@ -82,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         "--check",
         action="store_true",
         help="validate the content file(s) against the schema; exits non-zero if any file is invalid. "
-        "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed to one file to "
-        "render it once it passes — a file that fails is never written.",
+        "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
+        "file to render it once it passes — a file that fails is never written.",
     )
     parser.add_argument(
         "--strict",
@@ -253,20 +253,7 @@ def main(argv: list[str] | None = None) -> int:
             "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed "
             "to validate the whole set"
         )
-    if args.export and (args.out or args.pdf or args.embed or args.watch or args.emit_json):
-        parser.error(
-            "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
-        )
-    if args.export and (args.live is not None or args.if_stale):
-        parser.error("--live and --if-stale shape an HTML render; --export writes none")
-    if not args.export and (args.export_dir or args.chunk is not None):
-        parser.error("--export-dir and --chunk only apply with --export")
-    if args.chunk is not None and args.export != "notion":
-        parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
-    if args.chunk is not None and args.chunk < 1:
-        parser.error("--chunk takes a positive character count")
-    if args.check and args.export and len(args.data) > 1:
-        parser.error("--export writes one document: pass a single content file, or drop --export")
+    _reject_flags_that_do_not_fit_an_export(parser, args)
     if args.check and not (args.out or args.pdf or args.embed) and (args.live is not None or args.if_stale):
         parser.error(
             "--live and --if-stale shape a render; --check alone writes nothing, so add "
@@ -309,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
     if args.export:
-        return _export(data_path, args.export, args.export_dir, args.chunk)
+        return _export_document(data_path, args.export, args.export_dir, args.chunk)
     written: list[Path] = []
     try:
         report = load_report(data_path)
@@ -424,7 +411,26 @@ def _extract_source(target: str) -> int:
     return 0
 
 
-def _export(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
+def _reject_flags_that_do_not_fit_an_export(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if args.export and (args.out or args.pdf or args.embed or args.watch or args.emit_json):
+        parser.error(
+            "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
+        )
+    if args.export and (args.live is not None or args.if_stale or args.no_source):
+        parser.error("--live, --if-stale and --no-source shape an HTML render; --export writes none")
+    if not args.export and (args.export_dir or args.chunk is not None):
+        parser.error("--export-dir and --chunk only apply with --export")
+    if args.chunk is not None and args.export != "notion":
+        parser.error("--chunk splits a Notion page for the MCP; it only applies with --export notion")
+    if args.chunk is not None and args.chunk < 1:
+        parser.error("--chunk takes a positive character count")
+    if args.check and args.export and len(args.data) > 1:
+        parser.error("--export writes one document: pass a single content file, or drop --export")
+
+
+def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
     out_dir = Path(export_dir).resolve() if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
     try:
         report = load_report(data_path)
