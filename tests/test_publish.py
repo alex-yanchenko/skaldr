@@ -480,6 +480,7 @@ def test_the_comments_left_out_are_the_ones_next_to_the_block(source: str, embed
     assert without_publish_block(source) == embedded
 
 
+@pytest.mark.timeout(5)
 def test_shared_aliases_are_compared_once_so_an_alias_bomb_stays_fast() -> None:
     levels = ["l0: &l0 [x, x, x, x, x, x, x, x, x]"]
     levels += [f"l{depth}: &l{depth} [" + ", ".join([f"*l{depth - 1}"] * 9) + "]" for depth in range(1, 13)]

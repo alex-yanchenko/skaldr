@@ -54,6 +54,7 @@ build-backend = "uv_build"
 dev = [
     "pyright>=1.1",
     "pytest>=8.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.14",
     "skaldr[publish]",
     "types-pyyaml>=6.0",
@@ -92,3 +93,4 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+timeout = 60
