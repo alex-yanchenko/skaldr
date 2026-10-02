@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -294,13 +295,20 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
         pytest.param("not json", id="not-json"),
         pytest.param("[" * 100000, id="nested-too-deep-to-parse"),
         pytest.param('["page.03.md"]', id="not-an-object"),
-        pytest.param('{"files": "page.03.md"}', id="files-not-a-list"),
-        pytest.param('{"files": [3, null]}', id="entries-not-names"),
-        pytest.param('{"files": ["README.md", "notes.txt"]}', id="names-skaldr-never-writes"),
-        pytest.param('{"files": ["../page.03.md", "sub/page.03.md"]}', id="paths-outside-the-folder"),
+        pytest.param('{"files": ["page.03.md"]}', id="no-title"),
+        pytest.param('{"title": "T", "files": ["page.03.md"], "pages": 1}', id="unknown-key"),
+        pytest.param('{"title": "T", "files": "page.03.md"}', id="files-not-a-list"),
+        pytest.param('{"title": "T", "files": [3, null]}', id="entries-not-names"),
+        pytest.param('{"title": "T", "files": ["page.03.md", 3]}', id="names-mixed-with-non-names"),
+        pytest.param('{"title": "T", "files": ["README.md", "notes.txt"]}', id="names-skaldr-never-writes"),
+        pytest.param(
+            '{"title": "T", "files": ["../page.03.md", "sub/page.03.md"]}', id="paths-outside-the-folder"
+        ),
     ],
 )
-def test_a_manifest_skaldr_did_not_write_deletes_nothing(tmp_path: Path, manifest: str) -> None:
+def test_a_manifest_skaldr_did_not_write_deletes_nothing_and_is_reported(
+    tmp_path: Path, manifest: str
+) -> None:
     out_dir = tmp_path / "out"
     (out_dir / "sub").mkdir(parents=True)
     kept = [out_dir / "page.03.md", out_dir / "README.md", out_dir / "notes.txt", tmp_path / "page.03.md"]
@@ -309,9 +317,76 @@ def test_a_manifest_skaldr_did_not_write_deletes_nothing(tmp_path: Path, manifes
         path.write_text("mine", encoding="utf-8")
     (out_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
 
+    result = export_notion(parse_report(make_report()), out_dir)
+
+    assert ([path.read_text(encoding="utf-8") for path in kept], result) == (
+        ["mine"] * len(kept),
+        ExportResult("Test Report", (out_dir / "page.md",), unreadable_manifest=True),
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("page.03.md.bak", id="extra-suffix"),
+        pytest.param("xpage.md", id="extra-prefix"),
+        pytest.param("page.1.md", id="one-digit"),
+        pytest.param("page.٠٣.md", id="non-ascii-digits"),
+        pytest.param("page.03.md\n", id="trailing-newline"),
+    ],
+)
+def test_a_manifest_naming_a_file_skaldr_never_writes_leaves_that_file_alone(
+    tmp_path: Path, name: str
+) -> None:
+    (tmp_path / name).write_text("mine", encoding="utf-8")
+    (tmp_path / EXPORT_MANIFEST).write_text(json.dumps({"title": "T", "files": [name]}), encoding="utf-8")
+
+    result = export_notion(parse_report(make_report()), tmp_path)
+
+    assert ((tmp_path / name).read_text(encoding="utf-8"), result.unreadable_manifest) == ("mine", True)
+
+
+def _leave_absent(_path: Path) -> None:
+    return None
+
+
+@pytest.mark.parametrize(
+    ("make_it_not_a_file", "expected_names"),
+    [
+        pytest.param(_leave_absent, [EXPORT_MANIFEST, "page.md"], id="deleted-by-hand"),
+        pytest.param(Path.mkdir, [EXPORT_MANIFEST, "page.03.md", "page.md"], id="replaced-by-a-folder"),
+    ],
+)
+def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
+    tmp_path: Path, make_it_not_a_file: Callable[[Path], object], expected_names: list[str]
+) -> None:
+    make_it_not_a_file(tmp_path / "page.03.md")
+    (tmp_path / EXPORT_MANIFEST).write_text('{"title": "T", "files": ["page.03.md"]}', encoding="utf-8")
+
+    result = export_notion(parse_report(make_report()), tmp_path)
+
+    assert (sorted(path.name for path in tmp_path.iterdir()), result) == (
+        sorted(expected_names),
+        ExportResult("Test Report", (tmp_path / "page.md",)),
+    )
+
+
+def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep me", encoding="utf-8")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "page.md").symlink_to(outside)
+    (out_dir / EXPORT_MANIFEST).symlink_to(outside)
+
     export_notion(parse_report(make_report()), out_dir)
 
-    assert [path.read_text(encoding="utf-8") for path in kept] == ["mine"] * len(kept)
+    assert (
+        outside.read_text(encoding="utf-8"),
+        (out_dir / "page.md").is_symlink(),
+        (out_dir / "page.md").read_text(encoding="utf-8"),
+        (out_dir / EXPORT_MANIFEST).is_symlink(),
+    ) == ("keep me", False, "Hello.\n", False)
 
 
 def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(

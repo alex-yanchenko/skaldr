@@ -19,7 +19,7 @@ from typing import Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -474,6 +474,12 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
     except (ReportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if result.unreadable_manifest:
+        manifest = out_dir / EXPORT_MANIFEST
+        print(
+            f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
+            file=sys.stderr,
+        )
     for heading in result.oversized_sections:
         print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
     for path in result.files:

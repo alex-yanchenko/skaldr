@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from skaldr.cli import main
-from skaldr.export import ExportTarget
+from skaldr.export import EXPORT_MANIFEST, ExportTarget
 from tests.factories import heading_sections, make_report, write_report
 
 EXPORT_CLASH = "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
@@ -170,6 +170,39 @@ def test_the_cli_refuses_to_check_and_export_several_files(
     assert (
         "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export"
         in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize(
+    ("manifest", "expected_warning"),
+    [
+        pytest.param(None, "", id="first-export"),
+        pytest.param('{"title": "T", "files": ["page.md"]}', "", id="readable"),
+        pytest.param(
+            "not json",
+            "warning: {path} could not be read; pages an earlier export wrote were left in place\n",
+            id="unreadable",
+        ),
+    ],
+)
+def test_the_cli_warns_when_an_earlier_export_manifest_cannot_be_read(
+    tmp_path: Path,
+    export_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    manifest: str | None,
+    expected_warning: str,
+) -> None:
+    data_path = write_report(tmp_path, make_report())
+    if manifest is not None:
+        export_dir.mkdir()
+        (export_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+
+    assert main([str(data_path), "--export", "notion", "--export-dir", str(export_dir)]) == 0
+
+    captured = capsys.readouterr()
+    assert (captured.err, captured.out) == (
+        expected_warning.format(path=export_dir / EXPORT_MANIFEST),
+        f"OK  {export_dir / 'page.md'}\n",
     )
 
 
