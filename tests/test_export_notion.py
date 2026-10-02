@@ -103,6 +103,24 @@ def test_notion_special_characters_are_escaped_in_text_but_not_in_code_or_link_u
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param(
+            'mid line {color="red"} here', 'mid line \\{color\\="red"\\} here', id="a-block-color-attribute"
+        ),
+        pytest.param("a = b", "a \\= b", id="a-spaced-equals-sign"),
+        pytest.param(
+            "`x = 1` and [q](https://e.com/?a=1)",
+            "`x = 1` and [q](https://e.com/?a=1)",
+            id="code-and-link-url",
+        ),
+    ],
+)
+def test_an_equals_sign_is_escaped_so_notion_reads_no_block_attribute(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
 def test_inline_runs_become_notion_spans() -> None:
     runs: ExportRich = (
         Citation("a", 1, "https://example.com/a (b)"),
@@ -164,7 +182,7 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
             id="color-around-highlight",
         ),
         pytest.param(
-            "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone=info\\}", id="no-span-stays-prose"
+            "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone\\=info\\}", id="no-span-stays-prose"
         ),
         pytest.param(
             "[[a]{tone=danger}](https://x.io)",
