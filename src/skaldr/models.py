@@ -1087,7 +1087,14 @@ class Table(_Block):
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.rollup.by not in badge_keys:
                 raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
-            if not any(row[self.rollup.by].strip() for row in self.all_rows()):
+            located_rows = self._located_rows()
+            for loc, row in located_rows:
+                if isinstance(row[self.rollup.by], list):
+                    raise ValueError(
+                        f"rollup.by '{self.rollup.by}' counts each row under one badge, so its cells "
+                        f"can't hold a list of keys ({loc} holds {row[self.rollup.by]})"
+                    )
+            if not any(row[self.rollup.by].strip() for _, row in located_rows):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
                 )
@@ -1108,6 +1115,15 @@ class Table(_Block):
     def title_badges(self) -> list[Column]:
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
+
+    def _located_rows(self) -> list[tuple[str, dict[str, Any]]]:
+        if self.groups is not None:
+            return [
+                (f"groups.{group_index}.rows.{row_index}", cast("dict[str, Any]", row))
+                for group_index, group in enumerate(self.groups)
+                for row_index, row in enumerate(group.rows)
+            ]
+        return [(f"rows.{index}", row) for index, row in enumerate(self.all_rows())]
 
     def badge_keys(self, row: Mapping[str, Any], key: str) -> list[str]:
         return [badge for badge in _trimmed_badge_keys(row.get(key)) if badge]
