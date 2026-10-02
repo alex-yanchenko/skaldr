@@ -1,20 +1,25 @@
 import re
 from collections.abc import Collection, Sequence
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, get_args
 
 from markdown_it import MarkdownIt
 from markdown_it.rules_inline import StateInline
 from markdown_it.token import Token
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import override
 
 from skaldr.errors import ReportError
 from skaldr.mathml import refuse_invalid_math
-from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN
+from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
 ANCHOR_PREFIX: Final = "#"
 PLACEHOLDER: Final = "placeholder"
 CITATION: Final = "citation"
 INLINE_MATH: Final = "inline_math"
+TINT_OPEN: Final = "tint_open"
+TINT_CLOSE: Final = "tint_close"
+SPAN_TONES: Final = "span_tones"
 
 _REFERENCE_KEYS: Final = "reference_keys"
 _PLACEHOLDER_OPEN: Final = "{{"
@@ -24,6 +29,19 @@ _BRACE: Final = re.compile(r"[{}]")
 _CITATION: Final = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
 _MATH_OPEN: Final = "$`"
 _MATH_CLOSE: Final = "`$"
+_ATTRIBUTE_LIST: Final = re.compile(r"\{([^{}]*)\}")
+_NAMES_A_TONE: Final = re.compile(r"(?<!\S)(?:tone|bg)\s*=")
+_SPAN_ATTRIBUTES: Final = frozenset({"tone", "bg"})
+_TONE: Final = TypeAdapter[ToneLiteral](Tone)
+_PALETTE_ONLY_NAMES: Final = tuple(
+    name for name in get_args(BadgeColorLiteral) if name not in get_args(ToneLiteral)
+)
+
+
+@dataclass(frozen=True)
+class SpanTones:
+    tone: ToneLiteral | None
+    background: ToneLiteral | None
 
 
 class _RichMarkdown(MarkdownIt):
@@ -87,12 +105,95 @@ def _inline_math(state: StateInline, silent: bool) -> bool:
     return True
 
 
+def _attribute_token(attributes: str) -> str:
+    return "{" + attributes.strip() + "}"
+
+
+def _colours_no_text(attributes: str) -> ReportError:
+    return ReportError(
+        f"the attribute list {_attribute_token(attributes)} follows no [text] it can color: the text "
+        "inside a [text]{…} span is not empty and holds no link"
+    )
+
+
+def _span_tones(attributes: str) -> SpanTones:
+    token = _attribute_token(attributes)
+    tones: dict[str, ToneLiteral] = {}
+    for attribute in attributes.split():
+        key, equals, value = attribute.partition("=")
+        if not equals or not value:
+            raise ReportError(
+                f"malformed attribute '{attribute}' in {token}: write each attribute as key=value, "
+                "with no spaces around '='"
+            )
+        if key not in _SPAN_ATTRIBUTES:
+            raise ReportError(
+                f"unknown attribute '{key}' in {token}: a [text]{{…}} span takes tone=<tone> and bg=<tone>"
+            )
+        if key in tones:
+            raise ReportError(f"attribute '{key}' is set twice in {token}")
+        tones[key] = _span_tone(value, token)
+    return SpanTones(tones.get("tone"), tones.get("bg"))
+
+
+def _span_tone(value: str, token: str) -> ToneLiteral:
+    try:
+        return _TONE.validate_python(value)
+    except ValidationError as error:
+        raise ReportError(
+            f"unknown tone '{value}' in {token}: a tone is one of {', '.join(get_args(ToneLiteral))}, "
+            f"or a palette name {', '.join(_PALETTE_ONLY_NAMES)}"
+        ) from error
+
+
+def _attribute_list_at(state: StateInline, position: int) -> re.Match[str] | None:
+    attributes = _ATTRIBUTE_LIST.match(state.src, position, state.posMax)
+    if attributes is None or not _NAMES_A_TONE.search(attributes.group(1)):
+        return None
+    return attributes
+
+
+def _tinted_span(state: StateInline, silent: bool) -> bool:
+    start = state.pos
+    if silent or state.src[start] != "[":
+        return False
+    label_end = state.md.helpers.parseLinkLabel(state, start)
+    attributes = _attribute_list_at(state, label_end + 1) if label_end >= 0 else None
+    if attributes is None:
+        return False
+    if label_end == start + 1:
+        raise _colours_no_text(attributes.group(1))
+    opener = state.push(TINT_OPEN, "span", 1)
+    first_label_token = len(state.tokens)
+    end = state.posMax
+    state.pos, state.posMax = start + 1, label_end
+    state.md.inline.tokenize(state)
+    state.posMax = end
+    if any(token.type == "link_open" for token in state.tokens[first_label_token:]):
+        raise _colours_no_text(attributes.group(1))
+    opener.meta[SPAN_TONES] = _span_tones(attributes.group(1))
+    state.push(TINT_CLOSE, "span", -1)
+    state.pos = attributes.end()
+    return True
+
+
+def _stray_attribute_list(state: StateInline, silent: bool) -> bool:
+    if silent or state.src[state.pos] != "]":
+        return False
+    attributes = _attribute_list_at(state, state.pos + 1)
+    if attributes is not None:
+        raise _colours_no_text(attributes.group(1))
+    return False
+
+
 def _rich_markdown() -> MarkdownIt:
     markdown = _RichMarkdown("zero")
     markdown.enable(["escape", "backticks", "strikethrough", "emphasis", "link"])
     inline = markdown.inline.ruler
     inline.before("backticks", INLINE_MATH, _inline_math)
     inline.before("link", CITATION, _citation)
+    inline.before("link", "tinted_span", _tinted_span)
+    inline.after("link", "stray_attribute_list", _stray_attribute_list)
     inline.after("emphasis", PLACEHOLDER, _placeholder)
     return markdown
 

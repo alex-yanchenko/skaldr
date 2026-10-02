@@ -2,7 +2,7 @@ import pytest
 from markdown_it.token import Token
 
 from skaldr.errors import ReportError
-from skaldr.richtext_syntax import inline_tokens
+from skaldr.richtext_syntax import SPAN_TONES, SpanTones, inline_tokens
 
 Shape = tuple[tuple[str, object], ...]
 REFERENCE_KEYS = frozenset({"sop"})
@@ -11,7 +11,7 @@ REFERENCE_KEYS = frozenset({"sop"})
 def _payload(token: Token) -> object:
     if token.type == "link_open":
         return token.attrs["href"]
-    return token.content
+    return token.meta.get(SPAN_TONES, token.content)
 
 
 def _shape(text: str) -> Shape:
@@ -180,6 +180,124 @@ def test_text_that_forms_no_blank_citation_or_math_stays_text(text: str) -> None
     ],
 )
 def test_a_malformed_blank_or_math_span_fails_naming_it(text: str, message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        inline_tokens(text)
+
+    assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("text", "shape"),
+    [
+        pytest.param(
+            "[now]{ bg=warning   tone=red }",
+            (("tint_open", SpanTones("danger", "warning")), ("text", "now"), ("tint_close", "")),
+            id="both-attributes-in-either-order",
+        ),
+        pytest.param(
+            "[a [b] c]{tone=info}",
+            (("tint_open", SpanTones("info", None)), ("text", "a [b] c"), ("tint_close", "")),
+            id="balanced-brackets-in-the-text",
+        ),
+        pytest.param(
+            "[{{who}} [^sop]]{bg=info}",
+            (
+                ("tint_open", SpanTones(None, "info")),
+                ("placeholder", "who"),
+                ("text", " "),
+                ("citation", "sop"),
+                ("tint_close", ""),
+            ),
+            id="blank-and-citation-in-the-text",
+        ),
+        pytest.param(
+            "[[a]{tone=danger}](https://x.io)",
+            (
+                ("link_open", "https://x.io"),
+                ("tint_open", SpanTones("danger", None)),
+                ("text", "a"),
+                ("tint_close", ""),
+                ("link_close", ""),
+            ),
+            id="span-inside-a-link-label",
+        ),
+        pytest.param(
+            "[a]{tone=info}(https://e.com)",
+            (
+                ("tint_open", SpanTones("info", None)),
+                ("text", "a"),
+                ("tint_close", ""),
+                ("text", "(https://e.com)"),
+            ),
+            id="parentheses-after-a-span-are-not-a-link",
+        ),
+        pytest.param(
+            "[x](https://a.b/?q=[a]{tone=info})",
+            (("link_open", "https://a.b/?q=[a]{tone=info}"), ("text", "x"), ("link_close", "")),
+            id="span-syntax-inside-a-url",
+        ),
+    ],
+)
+def test_a_bracketed_span_with_tone_attributes_becomes_tint_tokens(text: str, shape: Shape) -> None:
+    assert _shape(text) == shape
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("[a]{x} [a]{} [a]{x=1} [a]{size=2}", id="braces-without-a-tone-or-bg-key"),
+        pytest.param("arr[i]{n=3}", id="index-then-a-set-literal"),
+        pytest.param("[a] {tone=info}", id="space-before-the-braces"),
+        pytest.param("[a]{Tone=info} [a]{tones=info} [a]{atone=info}", id="keys-that-are-not-tone-or-bg"),
+        pytest.param("[a]{tone=info", id="unclosed-braces"),
+        pytest.param("{tone=info} alone", id="braces-without-a-label"),
+    ],
+)
+def test_brackets_and_braces_that_form_no_span_stay_text(text: str) -> None:
+    assert _shape(text) == (("text", text),)
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        pytest.param(
+            "x []{tone=info} y",
+            "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+            "is not empty and holds no link",
+            id="empty-text",
+        ),
+        pytest.param(
+            "[see [docs](https://x.io) now]{ tone=info }",
+            "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+            "is not empty and holds no link",
+            id="link-inside-the-text",
+        ),
+        pytest.param(
+            "x ]{bg=info} y",
+            "the attribute list {bg=info} follows no [text] it can color: the text inside a [text]{…} span "
+            "is not empty and holds no link",
+            id="unopened-bracket",
+        ),
+        pytest.param(
+            "[a]{tone= info}",
+            "malformed attribute 'tone=' in {tone= info}: write each attribute as key=value, "
+            "with no spaces around '='",
+            id="space-after-the-equals-sign",
+        ),
+        pytest.param(
+            "[a]{tone=info `c`}",
+            "malformed attribute '`c`' in {tone=info `c`}: write each attribute as key=value, "
+            "with no spaces around '='",
+            id="markup-inside-the-braces",
+        ),
+        pytest.param(
+            "[a]{tone=info tone=danger}",
+            "attribute 'tone' is set twice in {tone=info tone=danger}",
+            id="repeated-attribute",
+        ),
+    ],
+)
+def test_an_attribute_list_that_cannot_color_text_fails_naming_it(text: str, message: str) -> None:
     with pytest.raises(ReportError) as raised:
         inline_tokens(text)
 
