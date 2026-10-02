@@ -3835,6 +3835,38 @@ def test_the_stylesheet_paints_a_col_by_its_tone_class() -> None:
     assert _css_declarations(html, "& col.tint.success") == ["--tb:var(--success-bg)"]
 
 
+def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert {
+        selector: _css_declarations(html, selector)
+        for selector in (
+            "& tbody tr.row.muted",
+            "& tbody tr.row.muted td",
+            "& tbody tr.row.muted td::after",
+            "& tbody tr.row.danger td",
+            "& tbody tr.row.tint td",
+        )
+    } == {
+        "& tbody tr.row.muted": [],
+        "& tbody tr.row.muted td": ["position:relative;background-color:var(--surface)"],
+        "& tbody tr.row.muted td::after": [
+            'content:"";position:absolute;inset:0;background:var(--surface);opacity:0.45;pointer-events:none'
+        ],
+        "& tbody tr.row.danger td": ["background:var(--danger-bg)"],
+        "& tbody tr.row.tint td": ["background:var(--tb)"],
+    }
+
+
+def test_a_row_hover_lays_a_translucent_wash_over_the_cell_so_a_column_tint_shows_through() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert _css_declarations(html, "& tbody tr.row:hover td") == [
+        "background-image:linear-gradient(var(--row-hover),var(--row-hover))"
+    ]
+    assert "--row-hover:color-mix(insrgb,var(--ink)5%,transparent);" in re.sub(r"\s+", "", html)
+
+
 def test_single_width_column_renders_full_width() -> None:
     table = make_table([{"key": "a", "label": "A", "kind": "text", "width": 3}], rows=[{"a": "x"}])
     html = render_html(parse_report(make_report(blocks=[table])))
