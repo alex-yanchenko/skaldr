@@ -89,14 +89,17 @@ def _list_node(
 
 
 def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Lowering, index: int) -> ListEntry:
-    listed = models.ListItem(text=item) if isinstance(item, str) else item
-    text = lowering.rich(listed.text)
+    if isinstance(item, str):
+        source, decided, checked, nested = item, False, False, list[str | models.ListItem]()
+    else:
+        source, decided, checked, nested = item.text, item.decided, item.checked, item.items
+    text = lowering.rich(source)
     if shape.style == "decision":
-        text = _marked(DecisionMark(listed.decided), text)
+        text = _marked(DecisionMark(decided), text)
     elif shape.text_numbering is not None:
         text = (Plain(f"{compute.list_label(index, shape.text_numbering)}. "), *text)
-    children: tuple[Node, ...] = (_list_node(listed.items, shape, lowering),) if listed.items else ()
-    return ListEntry(text, listed.checked, children)
+    children: tuple[Node, ...] = (_list_node(nested, shape, lowering),) if nested else ()
+    return ListEntry(text, checked, children)
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:

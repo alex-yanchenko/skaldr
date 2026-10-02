@@ -594,6 +594,12 @@ def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> No
     assert notion_of([block]) == "- ❓ open\n- ☑️ done\n"
 
 
+def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
+    block = {"type": "list", "items": ["", "two"]}
+
+    assert notion_of([block]) == "- \n- two\n"
+
+
 def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
     blocks = [
         {
