@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_args
 
@@ -19,6 +20,7 @@ from skaldr.models import (
     Fan,
     Flow,
     FlowStep,
+    FullWidthBlock,
     Grid,
     Group,
     Heading,
@@ -57,8 +59,12 @@ from tests.factories import (
     make_reconciled_table,
     make_report,
     make_request,
+    make_section,
     make_step,
+    make_tab,
     make_table,
+    make_tabs,
+    make_toggle,
 )
 
 
@@ -681,14 +687,13 @@ def test_a_toggle_with_a_blank_title_is_rejected() -> None:
     )
 
 
-def _inner_block_tags() -> str:
+def _union_tags(union: object) -> str:
     return ", ".join(
-        f"'{get_args(model.model_fields['type'].annotation)[0]}'"
-        for model in get_args(get_args(InnerBlock)[0])
+        f"'{get_args(model.model_fields['type'].annotation)[0]}'" for model in get_args(get_args(union)[0])
     )
 
 
-def test_a_toggle_refuses_a_section_inside_it() -> None:
+def test_a_toggle_where_a_section_block_can_go_refuses_a_section_inside_it() -> None:
     inner_section = {"type": "section", "title": "S", "blocks": [{"type": "text", "body": "x"}]}
 
     with pytest.raises(ReportError) as raised:
@@ -696,7 +701,81 @@ def test_a_toggle_refuses_a_section_inside_it() -> None:
 
     assert str(raised.value) == (
         "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
-        f"match any of the expected tags: {_inner_block_tags()}"
+        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+    )
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(make_toggle(make_request()), id="top-level"),
+        pytest.param({"type": "section", "title": "S", "blocks": [make_toggle(make_flow())]}, id="section"),
+        pytest.param(
+            {"type": "panel", "title": "P", "blocks": [make_toggle(make_command_request())]}, id="panel"
+        ),
+        pytest.param(make_toggle(make_toggle(make_request())), id="toggle-in-a-toggle"),
+    ],
+)
+def test_a_toggle_where_a_section_block_can_go_holds_a_request(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_request(), make_toggle(make_request())]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
+        "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
+        "sharing one would share those values; give one of them an `id`"
+    )
+
+
+def _in_a_grid_cell_toggle(block: dict[str, Any]) -> dict[str, Any]:
+    return make_grid([make_cell(6, [make_toggle(block)])])
+
+
+def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
+    return make_tabs(make_tab("Floor", block), make_tab("System"))
+
+
+@pytest.mark.parametrize(
+    ("container", "location"),
+    [
+        pytest.param(
+            _in_a_grid_cell_toggle, "blocks.0.grid.cells.0.blocks.0.toggle.blocks.0", id="inner-toggle"
+        ),
+        pytest.param(_in_a_tab, "blocks.0.tabs.tabs.0.blocks.0", id="tab"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("refused", "tag"),
+    [
+        pytest.param(make_section("s"), "section", id="section"),
+        pytest.param(
+            {"type": "panel", "title": "P", "blocks": [{"type": "text", "body": "x"}]}, "panel", id="panel"
+        ),
+        pytest.param(make_grid([make_cell(6)]), "grid", id="grid"),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [{"type": "text", "body": "x"}]}]},
+            "walkthrough",
+            id="walkthrough",
+        ),
+        pytest.param(make_request(), "request", id="request"),
+        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    ],
+)
+def test_a_toggle_in_a_cell_and_a_tab_refuse_every_block_wider_than_a_leaf(
+    container: Callable[[dict[str, Any]], dict[str, Any]], location: str, refused: dict[str, Any], tag: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[container(refused)]))
+
+    assert str(raised.value) == (
+        f"invalid content data: {location}: Input tag '{tag}' found using 'type' does not match any of the "
+        f"expected tags: {_union_tags(InnerBlock)}"
     )
 
 

@@ -2136,24 +2136,36 @@ class RequestFlow(_VariableOwner, _Block):
         return self
 
 
-class Toggle(_Block):
+class _ToggleBase(_Block):
     type: Literal["toggle"]
     title: str = Field(min_length=1, description="Summary label shown on the collapsible.")
     collapsed: bool = Field(
         default=True,
         description="Whether the toggle starts collapsed, as a section does. Set false to open it.",
     )
-    blocks: list["InnerBlock"] = Field(
-        min_length=1,
-        description="Blocks inside the toggle: any block except a section, panel, grid, walkthrough, "
-        "request or request_flow. A toggle may hold another toggle.",
-    )
 
     @model_validator(mode="after")
-    def _non_blank(self) -> "Toggle":
+    def _non_blank(self) -> "_ToggleBase":
         if not self.title.strip():
             raise ValueError("toggle title must not be blank")
         return self
+
+
+class InnerToggle(_ToggleBase):
+    blocks: list["InnerBlock"] = Field(
+        min_length=1,
+        description="Blocks inside a toggle in a grid cell, a walkthrough step's detail or a tab: any block "
+        "except a section, panel, grid, walkthrough, request or request_flow. It may hold another toggle "
+        "or a tabs block.",
+    )
+
+
+class Toggle(_ToggleBase):
+    blocks: list["FullWidthBlock"] = Field(
+        min_length=1,
+        description="Blocks inside a toggle at the top level, in a section, in a panel or in another such "
+        "toggle: any block a section holds, including a request or request_flow.",
+    )
 
 
 class Tab(FrozenModel):
@@ -2165,8 +2177,8 @@ class Tab(FrozenModel):
     )
     blocks: list["InnerBlock"] = Field(
         min_length=1,
-        description="Blocks shown while the tab is chosen: any block a toggle holds, including a toggle "
-        "or another tabs block.",
+        description="Blocks shown while the tab is chosen: any block a toggle in a grid cell holds, "
+        "including a toggle or another tabs block, and never a request or request_flow.",
     )
 
     @model_validator(mode="after")
@@ -2197,7 +2209,7 @@ class Tabs(_Block):
         return self
 
 
-_Leaf = (
+_Simple = (
     Heading
     | Text
     | ListBlock
@@ -2224,13 +2236,13 @@ _Leaf = (
     | Matrix
     | Swimlane
     | References
-    | Toggle
-    | Tabs
 )
+_Leaf = _Simple | InnerToggle | Tabs
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
-Toggle.model_rebuild()
+InnerToggle.model_rebuild()
 Tab.model_rebuild()
-FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
+FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Field(discriminator="type")]
+Toggle.model_rebuild()
 RequestLike = Request | RequestStep
 
 
@@ -2372,10 +2384,11 @@ class Walkthrough(_Block):
 
 
 Block = Annotated[
-    _Leaf | Request | RequestFlow | Section | Grid | Walkthrough | Panel, Field(discriminator="type")
+    _Simple | Toggle | Tabs | Request | RequestFlow | Section | Grid | Walkthrough | Panel,
+    Field(discriminator="type"),
 ]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
@@ -2383,7 +2396,7 @@ def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]
     for block in blocks:
         if isinstance(block, (Request, RequestFlow)):
             yield block
-        elif isinstance(block, (Section, Panel)):
+        elif isinstance(block, (Section, Panel, Toggle)):
             yield from iter_requests(block.blocks)
 
 
@@ -2407,7 +2420,7 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
     for block in blocks:
-        if isinstance(block, (Section, Panel, Toggle)):
+        if isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_referenced_badge_keys(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -2459,7 +2472,7 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
     for block in blocks:
         if isinstance(block, References):
             yield from block.items
-        elif isinstance(block, (Section, Panel, Toggle)):
+        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_reference_items(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -2478,7 +2491,7 @@ def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
     for block in blocks:
         if isinstance(block, Matrix):
             yield block
-        elif isinstance(block, (Section, Panel, Toggle)):
+        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_matrices(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -2497,7 +2510,7 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     for block in blocks:
         if isinstance(block, Table):
             yield block
-        elif isinstance(block, (Section, Panel, Toggle)):
+        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_tables(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -2516,7 +2529,7 @@ def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
     for block in blocks:
         if isinstance(block, Cards):
             yield from block.items
-        elif isinstance(block, (Section, Panel, Toggle)):
+        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_cards(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:
@@ -2535,7 +2548,7 @@ def iter_tabs(blocks: Sequence[AnyBlock]) -> Iterator[Tabs]:
             yield block
             for tab in block.tabs:
                 yield from iter_tabs(tab.blocks)
-        elif isinstance(block, (Section, Panel, Toggle)):
+        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
             yield from iter_tabs(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:

@@ -601,7 +601,7 @@ def test_a_level_four_heading_keeps_its_level_and_anchor() -> None:
     )
 
 
-def test_a_level_four_heading_inside_a_section_stays_at_level_four() -> None:
+def test_a_level_four_heading_inside_a_section_moves_down_to_level_five() -> None:
     section = {
         "type": "section",
         "title": "Open",
@@ -609,10 +609,10 @@ def test_a_level_four_heading_inside_a_section_stays_at_level_four() -> None:
         "blocks": [{"type": "heading", "text": "Deep", "level": 4}],
     }
 
-    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(5, (Plain("Deep"),), "deep"))
 
 
-def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -> None:
+def test_an_open_section_is_a_heading_and_a_level_three_heading_inside_it_moves_to_level_four() -> None:
     section = {
         "type": "section",
         "title": "Open",
@@ -628,8 +628,9 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
     [
         pytest.param(0, 1, id="below-the-range"),
         pytest.param(1, 1, id="top"),
-        pytest.param(4, 4, id="the-cap"),
-        pytest.param(7, 4, id="past-the-cap"),
+        pytest.param(5, 5, id="below-the-cap"),
+        pytest.param(6, 6, id="the-cap"),
+        pytest.param(7, 6, id="past-the-cap"),
     ],
 )
 def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:

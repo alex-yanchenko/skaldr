@@ -6,7 +6,7 @@ from skaldr.models import ListStyle, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 ListKind = ListStyle
-HeadingLevel = Literal[1, 2, 3, 4]
+HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 
 

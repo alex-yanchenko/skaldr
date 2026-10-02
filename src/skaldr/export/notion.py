@@ -26,6 +26,7 @@ from skaldr.export.tree import (
     Diagram,
     Divider,
     Heading,
+    HeadingLevel,
     ListKind,
     ListNode,
     Node,
@@ -47,6 +48,7 @@ FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
+DEEPEST_NOTION_HEADING: Final = 4
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 BACKGROUND_SUFFIX: Final = "_bg"
@@ -176,10 +178,17 @@ def _quote_line(node: Quote) -> str:
     return f"> {body}"
 
 
+def _heading_marks(level: HeadingLevel) -> str:
+    return "#" * min(level, DEEPEST_NOTION_HEADING)
+
+
 def _toggle_lines(node: Toggle) -> list[str]:
     children = _indent(_notion_blocks(node.children))
     if node.heading_level is not None:
-        return [f'{"#" * node.heading_level} {notion_inline(node.title)} {{toggle="true"}}', *children]
+        return [
+            f'{_heading_marks(node.heading_level)} {notion_inline(node.title)} {{toggle="true"}}',
+            *children,
+        ]
     return ["<details>", f"<summary>{notion_inline(node.title)}</summary>", *children, "</details>"]
 
 
@@ -202,7 +211,7 @@ def _tabs_lines(node: Tabs) -> list[str]:
 def _notion_lines(node: Node) -> list[str]:
     match node:
         case Heading():
-            return [f"{'#' * node.level} {notion_inline(node.text)}"]
+            return [f"{_heading_marks(node.level)} {notion_inline(node.text)}"]
         case Paragraph():
             text = _block_text(node.text)
             return [text + _trailing_color(node.tone)] if text else []

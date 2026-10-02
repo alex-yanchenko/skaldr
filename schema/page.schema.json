@@ -1398,7 +1398,7 @@
                 "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline",
-                "toggle": "#/$defs/Toggle"
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -1482,7 +1482,7 @@
                 "$ref": "#/$defs/References"
               },
               {
-                "$ref": "#/$defs/Toggle"
+                "$ref": "#/$defs/InnerToggle"
               },
               {
                 "$ref": "#/$defs/Tabs"
@@ -1805,7 +1805,7 @@
                 "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline",
-                "toggle": "#/$defs/Toggle"
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -1889,7 +1889,7 @@
                 "$ref": "#/$defs/References"
               },
               {
-                "$ref": "#/$defs/Toggle"
+                "$ref": "#/$defs/InnerToggle"
               },
               {
                 "$ref": "#/$defs/Tabs"
@@ -1929,6 +1929,177 @@
         "blocks"
       ],
       "title": "InnerGridCell",
+      "type": "object"
+    },
+    "InnerToggle": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "toggle",
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "description": "Summary label shown on the collapsible.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "collapsed": {
+          "default": true,
+          "description": "Whether the toggle starts collapsed, as a section does. Set false to open it.",
+          "title": "Collapsed",
+          "type": "boolean"
+        },
+        "blocks": {
+          "description": "Blocks inside a toggle in a grid cell, a walkthrough step's detail or a tab: any block except a section, panel, grid, walkthrough, request or request_flow. It may hold another toggle or a tabs block.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
+                "meter": "#/$defs/Meter",
+                "note": "#/$defs/Note",
+                "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
+                "references": "#/$defs/References",
+                "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
+                "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/DefList"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
+                "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "blocks"
+      ],
+      "title": "InnerToggle",
       "type": "object"
     },
     "JiraTarget": {
@@ -4454,7 +4625,7 @@
           "title": "Tone"
         },
         "blocks": {
-          "description": "Blocks shown while the tab is chosen: any block a toggle holds, including a toggle or another tabs block.",
+          "description": "Blocks shown while the tab is chosen: any block a toggle in a grid cell holds, including a toggle or another tabs block, and never a request or request_flow.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -4485,7 +4656,7 @@
                 "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline",
-                "toggle": "#/$defs/Toggle"
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -4569,7 +4740,7 @@
                 "$ref": "#/$defs/References"
               },
               {
-                "$ref": "#/$defs/Toggle"
+                "$ref": "#/$defs/InnerToggle"
               },
               {
                 "$ref": "#/$defs/Tabs"
@@ -4973,7 +5144,7 @@
           "type": "boolean"
         },
         "blocks": {
-          "description": "Blocks inside the toggle: any block except a section, panel, grid, walkthrough, request or request_flow. A toggle may hold another toggle.",
+          "description": "Blocks inside a toggle at the top level, in a section, in a panel or in another such toggle: any block a section holds, including a request or request_flow.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -4998,6 +5169,8 @@
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
+                "request": "#/$defs/Request",
+                "request_flow": "#/$defs/RequestFlow",
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
@@ -5092,6 +5265,12 @@
               },
               {
                 "$ref": "#/$defs/Tabs"
+              },
+              {
+                "$ref": "#/$defs/Request"
+              },
+              {
+                "$ref": "#/$defs/RequestFlow"
               }
             ]
           },
@@ -5249,7 +5428,7 @@
                 "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
                 "timeline": "#/$defs/Timeline",
-                "toggle": "#/$defs/Toggle"
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -5333,7 +5512,7 @@
                 "$ref": "#/$defs/References"
               },
               {
-                "$ref": "#/$defs/Toggle"
+                "$ref": "#/$defs/InnerToggle"
               },
               {
                 "$ref": "#/$defs/Tabs"

@@ -137,7 +137,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_request_flow(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
-        case models.Toggle():
+        case models.Toggle() | models.InnerToggle():
             return _toggle(block, lowering, depth)
         case models.Tabs():
             return [
@@ -176,7 +176,7 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     return [Heading(level, plain(block.title), anchor), *children]
 
 
-def _toggle(block: models.Toggle, lowering: Lowering, depth: int) -> list[Node]:
+def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth: int) -> list[Node]:
     children = _lower_blocks(block.blocks, lowering, depth)
     if block.collapsed:
         return [Toggle(plain(block.title), None, tuple(children))]

@@ -740,6 +740,19 @@ def test_a_page_without_a_tab_strip_carries_no_script_to_open_one() -> None:
     ]
 
 
+def test_a_request_inside_a_section_toggle_gets_its_radio_group_rail_and_runtime() -> None:
+    cases = [{"label": "a", "response": {"body": "x"}}, {"label": "b", "response": {"body": "y"}}]
+    section = {"type": "section", "title": "S", "blocks": [make_toggle(make_command_request(cases=cases))]}
+
+    html = render_html(parse_report(make_report(blocks=[section])))
+
+    assert (
+        re.findall(r'class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        _container_rules(html),
+        "data-rq-slot" in _request_runtime_script(html),
+    ) == ([("rq0", "rq0_0"), ("rq0", "rq0_1")], [(compute.strip_width(["a", "b"]), _rail("rq0"))], True)
+
+
 def test_a_divider_is_a_rule_between_the_blocks_around_it() -> None:
     blocks = [{"type": "text", "body": "Above."}, {"type": "divider"}, {"type": "text", "body": "Below."}]
 

@@ -26,6 +26,7 @@ from skaldr.models import (
     Grid,
     Heading,
     InnerGrid,
+    InnerToggle,
     Matrix,
     MatrixCell,
     Panel,
@@ -86,7 +87,7 @@ def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
         elif isinstance(block, Section):
             yield block
             yield from _iter_anchored(block.blocks)
-        elif isinstance(block, (Panel, Toggle)):
+        elif isinstance(block, (Panel, Toggle, InnerToggle)):
             yield from _iter_anchored(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:

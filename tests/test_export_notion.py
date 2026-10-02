@@ -15,6 +15,7 @@ from skaldr.export.tree import (
     Graph,
     GraphNode,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListKind,
     ListNode,
@@ -223,6 +224,34 @@ def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_
 
 def test_a_level_four_heading_is_four_hashes() -> None:
     assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
+
+
+def test_a_heading_deeper_than_notion_heading_4_is_written_as_heading_4() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+        ],
+    }
+
+    assert notion_of([section]) == "## Appendix\n#### Zone C\n#### Bin 12\n"
+
+
+@pytest.mark.parametrize(
+    ("level", "line"),
+    [
+        pytest.param(4, "#### Deep", id="heading-4"),
+        pytest.param(5, "#### Deep", id="heading-5"),
+        pytest.param(6, "#### Deep", id="heading-6"),
+    ],
+)
+def test_a_heading_node_past_level_four_is_written_at_the_deepest_level_notion_takes(
+    level: HeadingLevel, line: str
+) -> None:
+    assert render_notion([Heading(level, (Plain("Deep"),))]) == f"{line}\n"
 
 
 def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:

@@ -586,6 +586,20 @@ def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug(
     assert markdown_of(blocks) == "#### Bin detail\n\nSee [bins](#bin-detail).\n"
 
 
+def test_level_three_and_four_headings_inside_a_section_stay_one_level_apart() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+        ],
+    }
+
+    assert markdown_of([section]) == "## Appendix\n\n#### Zone C\n\n##### Bin 12\n"
+
+
 def test_a_divider_stands_apart_from_the_paragraph_above_so_it_is_never_a_setext_underline() -> None:
     blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
 
