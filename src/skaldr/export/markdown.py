@@ -9,10 +9,9 @@ from typing_extensions import assert_never
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    bang_cannot_open_an_image,
+    MarkupRuns,
     code_block_lines,
     code_span,
-    encode_url,
     escape_block_start,
     indent_lines,
     styled,
@@ -31,9 +30,10 @@ from skaldr.export.tree import (
     Quote,
     TableOfContents,
     Toggle,
+    heading_of,
     nested_nodes,
 )
-from skaldr.richtext import Citation, Rich, StyleName, visible_text, write_runs
+from skaldr.richtext import Rich, visible_text, write_runs
 
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
@@ -50,10 +50,6 @@ def _dash(use_alternate_markers: bool) -> str:
     return "*" if use_alternate_markers else "-"
 
 
-def _escape(text: str) -> str:
-    return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
-
-
 def _kept_in_a_github_slug(character: str) -> bool:
     category = unicodedata.category(character)
     return character in " -" or category[0] in "LMN" or category == "Pc"
@@ -63,40 +59,29 @@ def github_slug(text: str) -> str:
     return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
 
 
-class _MarkdownRuns:
+class _MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.heading_slugs = heading_slugs
 
-    def text(self, text: str, /) -> str:
-        return bang_cannot_open_an_image(_escape(text))
+    def escape(self, text: str, /) -> str:
+        return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
     def code(self, text: str, /) -> str:
         return code_span(text)
-
-    def link(self, label: str, url: str, /) -> str:
-        return f"[{label}]({encode_url(url)})"
 
     def anchor_link(self, label: str, anchor: str, /) -> str:
         slug = self.heading_slugs.get(anchor)
         return f"[{label}](#{slug})" if slug else label
 
-    def citation(self, run: Citation, /) -> str:
-        label = _escape(f"[{run.number}]")
-        return f"[{label}]({encode_url(run.url)})" if run.url else label
-
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
-
-    def styled(self, style: StyleName, inner: str, /) -> str:
-        return styled(style, inner)
 
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:
     for node in nodes:
-        if isinstance(node, Heading):
-            yield node.anchor, node.text
-        elif isinstance(node, Toggle) and node.heading_level is not None:
-            yield node.anchor, node.title
+        heading = heading_of(node)
+        if heading is not None:
+            yield heading.anchor, heading.text
         yield from _headings(nested_nodes(node))
 
 

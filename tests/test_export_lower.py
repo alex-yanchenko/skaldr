@@ -20,6 +20,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
     capped_heading_level,
+    heading_of,
 )
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
@@ -146,6 +147,23 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
 )
 def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:
     assert capped_heading_level(level) == capped
+
+
+@pytest.mark.parametrize(
+    ("node", "heading"),
+    [
+        pytest.param(Heading(3, (Plain("H"),), "h"), Heading(3, (Plain("H"),), "h"), id="heading"),
+        pytest.param(
+            Toggle((Plain("T"),), 2, (Paragraph((Plain("x"),)),), "t"),
+            Heading(2, (Plain("T"),), "t"),
+            id="heading-toggle",
+        ),
+        pytest.param(Toggle((Plain("T"),), None, ()), None, id="plain-toggle"),
+        pytest.param(Paragraph((Plain("p"),)), None, id="paragraph"),
+    ],
+)
+def test_a_heading_or_a_heading_toggle_reads_as_a_heading(node: Node, heading: Heading | None) -> None:
+    assert heading_of(node) == heading
 
 
 def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:

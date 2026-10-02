@@ -1,10 +1,11 @@
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import quote
 
 from skaldr.export.tree import CodeBlock, ToneName
-from skaldr.richtext import StyleName
+from skaldr.richtext import Citation, StyleName
 
 STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
@@ -74,3 +75,30 @@ def encode_url(url: str) -> str:
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
+
+
+class MarkupRuns(ABC):
+    @abstractmethod
+    def escape(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def code(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def anchor_link(self, label: str, anchor: str, /) -> str: ...
+
+    @abstractmethod
+    def placeholder(self, name: str, /) -> str: ...
+
+    def text(self, text: str, /) -> str:
+        return bang_cannot_open_an_image(self.escape(text))
+
+    def link(self, label: str, url: str, /) -> str:
+        return f"[{label}]({encode_url(url)})"
+
+    def citation(self, run: Citation, /) -> str:
+        label = self.escape(f"[{run.number}]")
+        return f"[{label}]({encode_url(run.url)})" if run.url else label
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        return styled(style, inner)

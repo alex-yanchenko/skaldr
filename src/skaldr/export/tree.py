@@ -87,6 +87,14 @@ def capped_heading_level(level: int) -> HeadingLevel:
     return HEADING_LEVELS[max(1, min(level, len(HEADING_LEVELS))) - 1]
 
 
+def heading_of(node: Node) -> Heading | None:
+    if isinstance(node, Heading):
+        return node
+    if isinstance(node, Toggle) and node.heading_level is not None:
+        return Heading(node.heading_level, node.title, node.anchor)
+    return None
+
+
 def nested_nodes(node: Node) -> tuple[Node, ...]:
     match node:
         case ListNode():
