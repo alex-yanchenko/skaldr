@@ -998,7 +998,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
-| `image` | its caption only | its caption only |
+| `image` | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
