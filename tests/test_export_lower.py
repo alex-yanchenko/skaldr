@@ -49,7 +49,7 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
+from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled
 from tests.factories import (
     API_BADGES,
     lowered,
@@ -132,6 +132,52 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
             ),
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("note", "visible", "runs"),
+    [
+        pytest.param(
+            "see [doc](https://e.com/d)",
+            "see doc",
+            (Plain("see "), Link((Plain("doc"),), "https://e.com/d")),
+            id="web-link",
+        ),
+        pytest.param(
+            "see [count](#count)",
+            "see count",
+            (Plain("see "), AnchorLink((Plain("count"),), "count")),
+            id="anchor",
+        ),
+        pytest.param(
+            "per [^sop]", "per [1]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"
+        ),
+        pytest.param(
+            "**[doc](https://e.com/d)**",
+            "doc",
+            (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
+            id="link-inside-bold",
+        ),
+    ],
+)
+def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_target(
+    note: str, visible: str, runs: Rich
+) -> None:
+    flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
+    references = {"type": "references", "items": [{"key": "sop", "text": "SOP", "url": "https://e.com/sop"}]}
+
+    diagrams = [
+        node
+        for node in lowered([{"type": "heading", "text": "Count"}, flow, references])
+        if isinstance(node, Diagram)
+    ]
+
+    assert diagrams == [
+        Diagram(
+            Graph("LR", (GraphNode("s1", "Scan", visible), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
+            (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
+        )
+    ]
 
 
 @pytest.mark.parametrize(

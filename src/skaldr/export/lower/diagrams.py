@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from itertools import pairwise
 from typing import Final
 
+from typing_extensions import assert_never
+
 from skaldr import compute
 from skaldr.charts import chart_legend, donut_total, format_total
 from skaldr.export.inline import bold, one_line
@@ -21,7 +23,7 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
-from skaldr.richtext import visible_text
+from skaldr.richtext import AnchorLink, Citation, Code, Link, Placeholder, Plain, Run, Styled, visible_text
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -43,8 +45,25 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
     return ListEntry(text, children=children)
 
 
+def _links_somewhere(run: Run) -> bool:
+    match run:
+        case Link() | AnchorLink() | Citation():
+            return True
+        case Styled():
+            return any(map(_links_somewhere, run.runs))
+        case Plain() | Code() | Placeholder():
+            return False
+        case _:
+            assert_never(run)
+
+
+def _diagram_cannot_show_all_of(step: FlowStep, lowering: Lowering) -> bool:
+    note_links = any(map(_links_somewhere, lowering.rich(step.note))) if step.note else False
+    return bool(step.points or step.badges) or note_links
+
+
 def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ...]:
-    detailed = [step for step in steps if step.points or step.badges]
+    detailed = [step for step in steps if _diagram_cannot_show_all_of(step, lowering)]
     return (bullets(_step_entry(step, lowering) for step in detailed),) if detailed else ()
 
 
