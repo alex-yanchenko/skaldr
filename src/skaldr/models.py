@@ -161,8 +161,16 @@ def _to_callout_tone(value: Any) -> Any:
 CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
 
 
+ACCEPTED_EMOJI_STATUSES: Final = frozenset(
+    {emoji.STATUS["fully_qualified"], emoji.STATUS["minimally_qualified"]}
+)
+
+
 def _one_emoji(value: str) -> str:
-    if not emoji.is_emoji(value):
+    entry = emoji.EMOJI_DATA.get(value)
+    if entry is not None and entry["status"] == emoji.STATUS["unqualified"]:
+        return emoji.emojize(entry["en"])
+    if entry is None or entry["status"] not in ACCEPTED_EMOJI_STATUSES:
         raise ValueError(f"icon must be a single emoji (got '{value}')")
     return value
 

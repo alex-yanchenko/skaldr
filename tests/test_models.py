@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Final, get_args
 
 import pytest
 from pydantic import ValidationError
@@ -1162,40 +1162,47 @@ def test_callout_rejects_a_non_semantic_tone_with_a_self_explaining_message(tone
         parse_report(make_report(blocks=[{"type": "callout", "tone": tone, "body": "b"}]))
 
 
+CALLOUT_WITHOUT_ICON: Final[dict[str, Any]] = {"type": "callout", "tone": "info", "body": "b"}
+
+
 @pytest.mark.parametrize(
-    "icon",
+    ("icon", "stored"),
     [
-        pytest.param("🚀", id="one-code-point"),
-        pytest.param("⚠️", id="with-a-variation-selector"),
-        pytest.param("👍🏽", id="with-a-skin-tone"),
-        pytest.param("👩‍💻", id="joined-by-a-zero-width-joiner"),
-        pytest.param("🇺🇦", id="a-flag"),
-        pytest.param("#️⃣", id="a-keycap"),
+        pytest.param("🧪", "🧪", id="one-code-point"),
+        pytest.param("⚠️", "⚠️", id="with-a-variation-selector"),
+        pytest.param("⚠", "⚠️", id="a-text-presentation-symbol-takes-its-emoji-form"),
+        pytest.param("©", "©️", id="a-text-symbol-with-an-emoji-form-takes-it"),
+        pytest.param("1⃣", "1️⃣", id="an-unqualified-keycap-takes-its-emoji-form"),
+        pytest.param("👍🏽", "👍🏽", id="with-a-skin-tone"),
+        pytest.param("👩‍🔬", "👩‍🔬", id="joined-by-a-zero-width-joiner"),
+        pytest.param("🇺🇦", "🇺🇦", id="a-flag"),
+        pytest.param("1️⃣", "1️⃣", id="a-keycap"),
     ],
 )
-def test_a_callout_and_a_note_take_one_emoji_as_their_icon(icon: str) -> None:
-    blocks = [
-        {"type": "callout", "tone": "info", "icon": icon, "body": "b"},
-        {"type": "note", "icon": icon, "body": "b"},
-    ]
+def test_a_callout_and_a_note_take_one_emoji_as_their_icon_in_its_emoji_form(icon: str, stored: str) -> None:
+    blocks = [{**CALLOUT_WITHOUT_ICON, "icon": icon}, {"type": "note", "icon": icon, "body": "b"}]
 
     report = parse_report(make_report(blocks=blocks))
 
     assert report.blocks == [
-        Callout(type="callout", tone="info", icon=icon, body="b"),
-        Note(type="note", icon=icon, body="b"),
+        Callout(type="callout", tone="info", icon=stored, body="b"),
+        Note(type="note", icon=stored, body="b"),
     ]
 
 
 @pytest.mark.parametrize(
     ("block", "icon"),
     [
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "A", id="a-letter"),
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "1", id="a-digit"),
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "✓", id="a-text-symbol"),
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "🚀🚀", id="two-emoji"),
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, " 🚀", id="an-emoji-with-a-space"),
-        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "", id="empty"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "A", id="a-letter"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "1", id="a-digit"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "✓", id="a-text-symbol-that-is-no-emoji"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🏽", id="a-skin-tone-alone"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "\N{ZERO WIDTH JOINER}", id="a-zero-width-joiner-alone"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🇺", id="half-a-flag"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🇺🇦🇺🇦", id="two-flags"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🧪🧪", id="two-emoji"),
+        pytest.param(CALLOUT_WITHOUT_ICON, " 🧪", id="an-emoji-padded-with-a-space"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "", id="empty"),
         pytest.param({"type": "note", "body": "b"}, "go", id="a-word-on-a-note"),
     ],
 )

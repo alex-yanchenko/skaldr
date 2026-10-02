@@ -244,7 +244,7 @@ In the example below, the numbered list continues a procedure whose first three 
     - "Whether overflow aisles get their own count window."
 ```
 
-Icons: a `callout` or a `note` may set `icon` to one emoji, shown at the head of the block. It replaces the icon the Markdown exports otherwise pick from the tone. It must be exactly one emoji: a flag, a skin tone or a joined emoji such as 👩‍💻 counts as one, while a letter, a digit, a word, a text symbol such as ✓, or two emoji fail the build.
+Icons: a `callout` or a `note` may set `icon` to one emoji, shown at the head of the block. It replaces the icon the Markdown exports otherwise pick from the tone. It must be exactly one emoji from the Unicode emoji list: a flag such as 🇺🇦, an emoji with a skin tone such as 👍🏽, a keycap such as 1️⃣ or a joined emoji such as 👩‍💻 each count as one. A symbol that has both a text and an emoji form, written without its emoji selector (⚠ for ⚠️, © for ©️), is stored in its emoji form. A letter, a digit, a word, a symbol that is not an emoji such as ✓, a skin tone or a single flag letter on its own, two emoji, or an emoji padded with spaces fail the build.
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
