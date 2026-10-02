@@ -82,10 +82,15 @@ There are no styling flags — everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
+`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
+```
+
+On an Intel Mac, add `--no-build-package cryptography` to the uv command, or `--pip-args='--only-binary=cryptography'` to the pipx one. The newest cryptography releases (49.0.0 onward) publish macOS wheels for Apple silicon only, so without the flag the installer builds cryptography from source, which needs a Rust toolchain and OpenSSL headers. With it, the resolver falls back to cryptography 48.0.1, the newest release with a macOS wheel that runs on Intel (`universal2`).
+
+```bash
 skaldr auth notion                  # OAuth in your browser, through your own Notion connection
 skaldr auth jira                    # your Atlassian account email and an API token
 skaldr auth status                  # who each service is signed in as, and where the credentials live
