@@ -335,7 +335,7 @@ curl -i -X GET \
   'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 ```
 
-**Response**: 200 OK
+**Recorded response**: 200 OK
 
 ```http
 content-type: application/json
@@ -359,7 +359,7 @@ curl -i -X GET \
   'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 ```
 
-**Response**: 200 OK
+**Recorded response**: 200 OK
 
 ```http
 content-type: application/json
@@ -382,7 +382,7 @@ curl -i -X GET \
   'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 ```
 
-**Response**: 401 Unauthorized
+**Recorded response**: 401 Unauthorized
 
 ```http
 content-type: application/json
@@ -407,7 +407,7 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 
 *The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.*
 
-**Output**
+**Recorded output**
 
 ```json
 [
@@ -432,7 +432,7 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 
 *The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.*
 
-**Output**
+**Recorded output**
 
 ```json
 [
@@ -467,7 +467,7 @@ curl -i -X POST \
   'https://wms.example.com/v2/sessions'
 ```
 
-**Response**: 200 OK
+**Recorded response**: 200 OK
 
 ```http
 content-type: application/json
@@ -491,7 +491,7 @@ curl -i -X GET \
   'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
 ```
 
-**Response**: 200 OK
+**Recorded response**: 200 OK
 
 ```http
 content-type: application/json
@@ -516,7 +516,7 @@ curl -i -X GET \
   'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
 ```
 
-**Response**: 401 Unauthorized
+**Recorded response**: 401 Unauthorized
 
 ```http
 content-type: application/json

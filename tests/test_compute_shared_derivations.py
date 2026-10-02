@@ -5,15 +5,27 @@ import pytest
 from skaldr.compute import (
     DerivedCardTally,
     MatrixCellDisplay,
+    RecordedBody,
+    ResponseCaption,
     derived_card_tally,
     matrix_cell_display,
     matrix_tallies,
+    read_recorded_body,
+    response_caption,
     swimlane_state_legend,
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Card, Cards, Comparison, MatrixCell, Swimlane, Table, parse_report
-from tests.factories import API_BADGES, make_report, make_swimlane, make_table, parsed_block
+from skaldr.models import Card, Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
+from tests.factories import (
+    API_BADGES,
+    make_command_request,
+    make_report,
+    make_request,
+    make_swimlane,
+    make_table,
+    parsed_block,
+)
 
 Q1_ON_PLAN: list[dict[str, Any]] = [{"name": "Q1", "color": "blue", "columns": ["Plan"]}]
 TAGGED_COLUMNS: list[dict[str, Any]] = [
@@ -229,3 +241,51 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
         MatrixCellDisplay(tone="amber", text=""),
         MatrixCellDisplay(tone=None, text="n/a"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("block", "caption"),
+    [
+        pytest.param(
+            make_command_request(cases=[{"label": "a", "response": {"status": 200, "body": "x"}}]),
+            ResponseCaption("Recorded output", shows_status=True),
+            id="command-with-a-status",
+        ),
+        pytest.param(
+            make_command_request(),
+            ResponseCaption("Recorded output", shows_status=False),
+            id="command-without-a-status",
+        ),
+        pytest.param(
+            make_request(), ResponseCaption("Recorded response", shows_status=True), id="http-with-a-status"
+        ),
+        pytest.param(
+            make_request(cases=[{"label": "a", "response": {"body": "x"}}]),
+            ResponseCaption("Recorded response", shows_status=True),
+            id="http-without-a-status-shows-that-it-has-none",
+        ),
+    ],
+)
+def test_a_recorded_response_is_captioned_by_what_produced_it(
+    block: dict[str, Any], caption: ResponseCaption
+) -> None:
+    request = parsed_block(Request, block)
+
+    assert response_caption(request, request.cases[0].response) == caption
+
+
+@pytest.mark.parametrize(
+    ("body", "recorded"),
+    [
+        pytest.param(
+            '{"a": [1]}', RecordedBody('{\n  "a": [\n    1\n  ]\n}', is_json=True), id="one-line-object"
+        ),
+        pytest.param("[1,\n 2]", RecordedBody("[1,\n 2]", is_json=True), id="hand-formatted-json-kept"),
+        pytest.param("5", RecordedBody("5", is_json=True), id="json-scalar-kept"),
+        pytest.param("not json", RecordedBody("not json", is_json=False), id="text"),
+    ],
+)
+def test_a_recorded_body_pretty_prints_one_line_json_and_says_whether_it_is_json(
+    body: str, recorded: RecordedBody
+) -> None:
+    assert read_recorded_body(body) == recorded

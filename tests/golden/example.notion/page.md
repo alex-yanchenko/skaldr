@@ -433,7 +433,7 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 		  -H 'Accept: application/json' \
 		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 		```
-		**Response**: 200 OK
+		**Recorded response**: 200 OK
 		```http
 		content-type: application/json
 
@@ -456,7 +456,7 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 		  -H 'Accept: application/json' \
 		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 		```
-		**Response**: 200 OK
+		**Recorded response**: 200 OK
 		```http
 		content-type: application/json
 
@@ -478,7 +478,7 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 		  -H 'Accept: application/json' \
 		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
 		```
-		**Response**: 401 Unauthorized
+		**Recorded response**: 401 Unauthorized
 		```http
 		content-type: application/json
 
@@ -501,7 +501,7 @@ Overflow bins are the one place the export and the WMS disagree by design. The c
 		vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
 		```
 		*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
-		**Output**
+		**Recorded output**
 		```json
 		[
 		  {
@@ -524,7 +524,7 @@ Overflow bins are the one place the export and the WMS disagree by design. The c
 		vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
 		```
 		*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
-		**Output**
+		**Recorded output**
 		```json
 		[
 		  {
@@ -552,7 +552,7 @@ curl -i -X POST \
   --data '{"key":"{{api_key}}","scope":"inventory.read"}' \
   'https://wms.example.com/v2/sessions'
 ```
-**Response**: 200 OK
+**Recorded response**: 200 OK
 ```http
 content-type: application/json
 
@@ -574,7 +574,7 @@ content-type: application/json
 		  -H 'Accept: application/json' \
 		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
 		```
-		**Response**: 200 OK
+		**Recorded response**: 200 OK
 		```http
 		content-type: application/json
 		x-total-count: 3
@@ -598,7 +598,7 @@ content-type: application/json
 		  -H 'Accept: application/json' \
 		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
 		```
-		**Response**: 401 Unauthorized
+		**Recorded response**: 401 Unauthorized
 		```http
 		content-type: application/json
 

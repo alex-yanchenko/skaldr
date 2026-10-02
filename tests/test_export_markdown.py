@@ -64,8 +64,8 @@ def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> No
 
     assert markdown_of([request]) == (
         "**Tier mappings on the partner API**\n\n"
-        "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Output**\n\n```json\n[]\n```\n\n"
-        "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Output**\n\n```\nnone\n```\n"
+        "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n"
+        "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n"
     )
 
 

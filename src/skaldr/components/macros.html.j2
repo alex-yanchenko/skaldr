@@ -234,7 +234,7 @@
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endif %}{% if core.command_note %}<p class="rq-cnote">{{ core.command_note | richtext }}</p>{% endif %}</div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="{% if runs_command %}Run the command, then paste its output here.{% else %}Run the command, then paste its whole output here. Include the headers if you kept -i.{% endif %}"></textarea></div></div>
 <div class="rq-live" hidden></div>
-<div class="rq-pane"><div class="rq-pane-hd"><span>{% if runs_command %}Recorded output{% else %}Recorded response{% endif %}</span>{% if not runs_command or case.response.status is not none %}<span class="rq-status {{ case_tone(case) }}">{{ status_line(case.response) }}</span>{% endif %}</div>
+{% set caption = response_caption(core, case.response) %}<div class="rq-pane"><div class="rq-pane-hd"><span>{{ caption.label }}</span>{% if caption.shows_status %}<span class="rq-status {{ case_tone(case) }}">{{ status_line(case.response) }}</span>{% endif %}</div>
 {% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
 <pre class="rq-resp">{{ recorded_body(case.response.body) }}</pre></div>
 {% if case.verdict %}

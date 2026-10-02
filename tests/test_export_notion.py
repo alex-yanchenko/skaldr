@@ -280,13 +280,13 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
         '\t<tab icon="⚠️">\n'
         "\t\tfinding\n"
         "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Output**\n"
+        "\t\t**Recorded output**\n"
         "\t\t```json\n\t\t[]\n\t\t```\n"
         "\t</tab>\n"
         '\t<tab icon="💡">\n'
         "\t\tcontrol\n"
         "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Output**\n"
+        "\t\t**Recorded output**\n"
         "\t\t```\n\t\tnone\n\t\t```\n"
         "\t</tab>\n"
         "</tabs>\n"

@@ -57,6 +57,7 @@ from tests.factories import (
     make_command_request,
     make_grid,
     make_report,
+    make_request,
     make_table,
 )
 
@@ -323,9 +324,74 @@ def test_a_request_with_one_case_shows_its_label_note_status_and_verdict() -> No
         Paragraph(italic(plain("all"))),
         CodeBlock(request["command"], "bash"),
         Paragraph(italic((Plain("needs the vault"),)), "muted"),
-        Paragraph((*bold("Response"), Plain(": "), Plain("200 OK"))),
+        Paragraph((*bold("Recorded output"), Plain(": "), Plain("200 OK"))),
         CodeBlock("ok", ""),
         Callout("success", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
+    )
+
+
+READ_WIDGETS = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://{{host}}/widgets'"
+
+
+def test_a_request_lists_its_labelled_variables_and_shows_a_case_with_no_status_line() -> None:
+    request = make_request(
+        variables=[{"name": "host", "label": "API host", "example": "api.example.com"}],
+        cases=[{"label": "one", "response": {"headers": {"content-type": "text/plain"}, "body": "ok"}}],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Read an endpoint")),
+        Paragraph(bold("Values you supply")),
+        ListNode(
+            "bullet",
+            (ListEntry((Code("{{host}}"), Plain(" "), Plain("API host: for example api.example.com"))),),
+        ),
+        Paragraph(italic(plain("one"))),
+        CodeBlock(READ_WIDGETS, "bash"),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("no status line"))),
+        CodeBlock("content-type: text/plain\n\nok", "http"),
+    )
+
+
+def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
+    request = make_request(
+        variables=[],
+        url="https://api.example.com/widgets",
+        cases=[
+            {"label": "missing", "verdict": "a **gap**", "response": {"status": 404, "body": "{}"}},
+            {"label": "found", "response": {"status": 200, "body": "[]"}},
+        ],
+    )
+    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://api.example.com/widgets'"
+
+    assert lowered([request]) == (
+        Paragraph(bold("Read an endpoint")),
+        Tabs(
+            (
+                Tab(
+                    (Plain("missing"),),
+                    (
+                        CodeBlock(command, "bash"),
+                        Paragraph((*bold("Recorded response"), Plain(": "), Plain("404 Not Found"))),
+                        CodeBlock("{}", "json"),
+                        Callout(
+                            "warning",
+                            (Paragraph((*bold("Verdict"), Plain(": "), Plain("a "), *bold("gap"))),),
+                        ),
+                    ),
+                    "warning",
+                ),
+                Tab(
+                    (Plain("found"),),
+                    (
+                        CodeBlock(command, "bash"),
+                        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
+                        CodeBlock("[]", "json"),
+                    ),
+                    "success",
+                ),
+            )
+        ),
     )
 
 
@@ -344,12 +410,12 @@ def test_a_request_with_several_cases_is_tabs() -> None:
             (
                 Tab(
                     (Plain("a"),),
-                    (CodeBlock("list", "bash"), Paragraph(bold("Output")), CodeBlock("x", "")),
+                    (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("x", "")),
                     "warning",
                 ),
                 Tab(
                     (Plain("b"),),
-                    (CodeBlock("list", "bash"), Paragraph(bold("Output")), CodeBlock("y", "")),
+                    (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("y", "")),
                     "success",
                 ),
             )
@@ -372,14 +438,14 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 "method": "POST",
                 "url": "https://{{host}}/t",
                 "headers": {"X-Key": "{{key}}", "X-Who": "{{who}}"},
-                "captures": [{"name": "token", "source": "body"}],
+                "captures": [{"name": "token", "source": "body"}, {"name": "expires", "source": "body"}],
                 "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
             },
             {
                 "label": "Read",
                 "method": "GET",
                 "url": "https://{{host}}/r",
-                "headers": {"Authorization": "Bearer {{token}}"},
+                "headers": {"Authorization": "Bearer {{token}}", "X-Expires": "{{expires}}"},
                 "cases": [
                     {
                         "label": "one",
@@ -405,20 +471,30 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 ListEntry((Code("{{who}}"), Plain(" "), Plain("who: supply a value"))),
             ),
         ),
-        Paragraph((*bold("Step 1 of 2: Get token"), Plain(", captures "), Code("token"))),
+        Paragraph(
+            (
+                *bold("Step 1 of 2: Get token"),
+                Plain(", captures "),
+                Code("token"),
+                Plain(", "),
+                Code("expires"),
+            )
+        ),
         Paragraph(italic(plain("one"))),
         CodeBlock(
             "curl -i -X POST \\\n  -H 'X-Key: {{key}}' \\\n  -H 'X-Who: {{who}}' \\\n  'https://{{host}}/t'",
             "bash",
         ),
-        Paragraph((*bold("Response"), Plain(": "), Plain("200 OK"))),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
         CodeBlock("{}", "json"),
         Paragraph(bold("Step 2 of 2: Read")),
         Paragraph(italic(plain("one"))),
         CodeBlock(
-            "curl -i -X GET \\\n  -H 'Authorization: Bearer {{token}}' \\\n  'https://{{host}}/r'", "bash"
+            "curl -i -X GET \\\n  -H 'Authorization: Bearer {{token}}' \\\n  -H 'X-Expires: {{expires}}' \\\n"
+            "  'https://{{host}}/r'",
+            "bash",
         ),
-        Paragraph((*bold("Response"), Plain(": "), Plain("200 OK"))),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
         CodeBlock("content-type: application/json\ncontent-type: charset=utf-8\n\n{}", "http"),
     )
 
