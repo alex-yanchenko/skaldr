@@ -91,7 +91,7 @@ flowchart LR
 >
 > The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.
 
-> 💡 Counts below are per distinct discrepancy class, not per unit.
+> 📏 Counts below are per distinct discrepancy class, not per unit.
 
 ## Discrepancies & fixes
 
@@ -122,6 +122,12 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 - **Zone C**: █████████░ 85.0%
 - **Overflow**: ░░░░░░░░░░ 4.0%
 
+| Zone | Counted | Variance | Note |
+| --- | --- | --- | --- |
+| Zone A | 3,100 | 0 | Matched the system count. |
+| Zone B | 2,760 | 12 | Two mislabeled bins, re-scanned. |
+| Overflow | 120 | 260 | Skipped by the `bin > 12` rule. |
+
 **Affects**: **inventory** **scan-app** **DC-West**
 
 ## Verification
@@ -144,9 +150,22 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 * **Owner**: Inventory Ops — **@site-lead** signs off each fix.
 * **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
-> 📝 **For the read-out**
+> 🎤 **For the read-out**
 >
 > Lead with the reconciliation gate — it is the one number leadership tracks.
+
+### Re-count procedure, from step iv
+
+- iv. Freeze inbound moves in the overflow aisles.
+- v. Re-scan every bin with the widened reader.
+  - i. Start with the aisles that held the 260 skipped units.
+- vi. Re-run reconciliation and compare against the first count.
+
+### Decisions
+
+- ☑️ De-duplicate on the pallet ID and keep the most recent scan.
+- ☑️ Hold the vendor line until a corrected ASN arrives.
+- ❓ Whether overflow aisles get a count window of their own.
 
 ## Rollout
 

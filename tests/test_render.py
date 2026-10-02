@@ -34,6 +34,7 @@ from tests.factories import (
     make_command_request,
     make_flow,
     make_grid,
+    make_label_table,
     make_reconciled_table,
     make_report,
     make_step,
@@ -41,6 +42,12 @@ from tests.factories import (
 )
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
+
+
+def _css_declarations(html: str, selector: str) -> list[str]:
+    pattern = r"\s+".join(re.escape(part) for part in selector.split()) + r"\s*\{([^{}]*)\}"
+    return [re.sub(r"\s+", "", body) for body in re.findall(pattern, html)]
+
 
 # The three color-scheme rules that drive every light-dark() token. They must render unlayered (see
 # test_host_override_essentials_sit_outside_any_layer); asserted by literal so a reformat fails loudly.
@@ -408,6 +415,61 @@ def test_bullet_list_has_no_checkboxes() -> None:
     assert 'type="checkbox"' not in html  # only a check-style list emits inputs
 
 
+@pytest.mark.parametrize(
+    ("options", "opening"),
+    [
+        pytest.param({}, '<ol class="list">', id="default"),
+        pytest.param({"start": 3}, '<ol class="list" start="3">', id="start"),
+        pytest.param({"numbering": "decimal"}, '<ol class="list">', id="decimal-is-the-default"),
+        pytest.param({"numbering": "letters"}, '<ol class="list" type="a">', id="letters"),
+        pytest.param({"numbering": "roman", "start": 4}, '<ol class="list" start="4" type="i">', id="roman"),
+    ],
+)
+def test_a_numbered_list_opens_at_its_start_in_its_numbering(
+    options: dict[str, object], opening: str
+) -> None:
+    block = {"type": "list", "style": "number", "items": ["a"], **options}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert f"{opening}<li>a</li></ol>" in html
+
+
+def test_a_nested_numbered_list_keeps_the_numbering_and_counts_from_one() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 3,
+        "numbering": "letters",
+        "items": [{"text": "a", "items": ["b"]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ol class="list" start="3" type="a"><li>a<ol class="list" type="a"><li>b</li></ol></li></ol>' in html
+    )
+
+
+def test_a_decision_list_leads_each_item_with_a_decided_or_open_glyph() -> None:
+    block = {
+        "type": "list",
+        "style": "decision",
+        "items": ["which region", {"text": "use the queue", "decided": True, "items": ["retry later"]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ul class="list decision">'
+        '<li><span class="dec open"><span class="glyph">?</span><span>which region</span></span></li>'
+        '<li><span class="dec decided"><span class="glyph">✓</span><span>use the queue</span></span>'
+        '<ul class="list decision"><li><span class="dec open"><span class="glyph">?</span>'
+        "<span>retry later</span></span></li></ul></li></ul>"
+    ) in html
+    assert _css_declarations(html, ".list.decision .dec.decided .glyph") == ["color:var(--success-fg)"]
+
+
 def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
     block = {
         "type": "def_list",
@@ -418,6 +480,32 @@ def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
 
     assert '<dl class="deflist"><dt>Action</dt><dd>Click <strong>Deploy</strong>.</dd>' in html
     assert '<dt>Say</dt><dd><p class="prose-p">One.</p><p class="prose-p">Two.</p></dd></dl>' in html
+
+
+def test_a_callout_and_a_note_with_an_icon_lead_with_it_beside_their_title_and_body() -> None:
+    callout = {"type": "callout", "tone": "info", "icon": "🚀", "title": "Launch", "body": "Go."}
+    note = {"type": "note", "icon": "📌", "body": "Aside."}
+
+    html = render_html(parse_report(make_report(blocks=[callout, note])))
+
+    assert (
+        '<div class="callout info iconed"><span class="block-icon" aria-hidden="true">🚀</span>'
+        '<div class="iconed-body"><div class="title">Launch</div><div>Go.</div></div></div>'
+    ) in html
+    assert (
+        '<div class="note-block iconed"><span class="block-icon" aria-hidden="true">📌</span>'
+        '<div class="iconed-body"><div>Aside.</div></div></div>'
+    ) in html
+    assert _css_declarations(html, "& > .block-icon") == ["flex:none;font-size:1.15em;line-height:1.4"]
+    assert _css_declarations(html, "& > .iconed-body") == ["flex:1;min-width:0"]
+
+
+def test_a_callout_without_an_icon_keeps_its_plain_markup() -> None:
+    block = {"type": "callout", "tone": "warning", "title": "Careful", "body": "b"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="callout warning"><div class="title">Careful</div><div>b</div></div>' in html
 
 
 def test_note_renders_optional_title_and_body() -> None:
@@ -3838,6 +3926,74 @@ def test_table_column_widths_render_proportional_colgroup() -> None:
     assert '<colgroup><col style="width:33.3%"><col style="width:66.7%"></colgroup>' in html
 
 
+@pytest.mark.parametrize(
+    ("columns", "colgroup"),
+    [
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "b", "label": "B", "kind": "number", "tone": "success"}],
+            '<colgroup><col><col class="tint success" style="width:10%"></colgroup>',
+            id="beside-the-default-widths",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 2},
+                {"key": "b", "label": "B", "kind": "number", "tone": "success", "width": 4},
+            ],
+            '<colgroup><col style="width:33.3%"><col class="tint success" style="width:66.7%"></colgroup>',
+            id="beside-weighted-widths",
+        ),
+    ],
+)
+def test_a_toned_column_tints_its_col(columns: list[dict[str, object]], colgroup: str) -> None:
+    table = make_table(columns, rows=[{"a": "x", "b": 10}])
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert colgroup in html
+
+
+def test_the_stylesheet_paints_a_col_by_its_tone_class() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert _css_declarations(html, "& col.tint") == ["background:var(--tb)"]
+    assert _css_declarations(html, "& col.tint.success") == ["--tb:var(--success-bg)"]
+
+
+def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert {
+        selector: _css_declarations(html, selector)
+        for selector in (
+            "& tbody tr.row.muted",
+            "& tbody tr.row.muted td",
+            "& tbody tr.row.muted td::after",
+            "& tbody tr.row.danger td",
+            "& tbody tr.row.tint td",
+        )
+    } == {
+        "& tbody tr.row.muted": [],
+        "& tbody tr.row.muted td": ["position:relative;background-color:var(--surface)"],
+        "& tbody tr.row.muted td::after": [
+            'content:"";position:absolute;inset:0;background:var(--surface);opacity:0.45;pointer-events:none'
+        ],
+        "& tbody tr.row.danger td": ["background:var(--danger-bg)"],
+        "& tbody tr.row.tint td": ["background:var(--tb)"],
+    }
+
+
+def test_a_row_hover_lays_a_translucent_wash_over_the_cell_so_a_column_tint_shows_through() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert _css_declarations(html, "& tbody tr.row:hover td") == [
+        "background-image:linear-gradient(var(--row-hover),var(--row-hover))"
+    ]
+    assert (
+        "--row-hover:light-dark(color-mix(insrgb,var(--ink)3%,transparent),"
+        "color-mix(insrgb,var(--ink)5%,transparent));" in re.sub(r"\s+", "", html)
+    )
+
+
 def test_single_width_column_renders_full_width() -> None:
     table = make_table([{"key": "a", "label": "A", "kind": "text", "width": 3}], rows=[{"a": "x"}])
     html = render_html(parse_report(make_report(blocks=[table])))
@@ -3908,6 +4064,23 @@ def test_table_without_widths_keeps_default_colgroup() -> None:
     html = render_html(parse_report(make_report(blocks=[table])))
 
     assert '<colgroup><col><col style="width:10%"></colgroup>' in html
+
+
+@pytest.mark.parametrize(
+    ("count", "width"),
+    [
+        pytest.param(9, "10", id="nine-numbers-keep-the-default"),
+        pytest.param(10, "9.1", id="ten-numbers-scale-to-elevenths"),
+        pytest.param(12, "7.7", id="twelve-numbers-scale-to-thirteenths"),
+    ],
+)
+def test_number_columns_too_many_for_their_default_width_scale_down_beside_the_label(
+    count: int, width: str
+) -> None:
+    html = render_html(parse_report(make_report(blocks=[make_label_table(["number"] * count)])))
+
+    cols = f'<col style="width:{width}%">' * count
+    assert f"<colgroup><col>{cols}</colgroup>" in html
 
 
 def test_subrows_render_compactly_scoped_over_the_main_cell_padding() -> None:

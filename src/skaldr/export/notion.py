@@ -1,6 +1,8 @@
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Final
 
 from typing_extensions import assert_never
@@ -31,6 +33,7 @@ from skaldr.export.tree import (
     Paragraph,
     Quote,
     TableCell,
+    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -50,6 +53,8 @@ CHUNK_BOUNDARY_LEVEL: Final = 2
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
+NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
+SHARE_DENOMINATOR_LIMIT: Final = 1_000_000
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -168,14 +173,48 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     return _row_lines(row.cells, texts, tone)
 
 
+def apportioned_pixels(weights: Sequence[float], total: int) -> list[int]:
+    exact = [Fraction(weight).limit_denominator(SHARE_DENOMINATOR_LIMIT) for weight in weights]
+    quotas = [weight / sum(exact) * total for weight in exact]
+    widths = [math.floor(quota) for quota in quotas]
+    by_remainder = sorted(range(len(quotas)), key=lambda index: widths[index] - quotas[index])
+    for index in by_remainder[: total - sum(widths)]:
+        widths[index] += 1
+    return widths
+
+
+def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
+    shares = [column.share for column in columns]
+    auto_count = shares.count(None)
+    if auto_count == len(shares):
+        return [None] * len(shares)
+    auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
+    weights = [auto_share if share is None else share for share in shares]
+    return apportioned_pixels(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
+
+
+def _width_attribute(width: int | None) -> str:
+    return "" if width is None else f' width="{width}"'
+
+
+def _colgroup_lines(columns: Sequence[TableColumn]) -> list[str]:
+    if not columns:
+        return []
+    cols = [
+        f"<col{_background_attribute(column.tone)}{_width_attribute(width)}>"
+        for column, width in zip(columns, _column_widths(columns), strict=True)
+    ]
+    return ["<colgroup>", *_indent(cols), "</colgroup>"]
+
+
 def _table_lines(table: TableNode) -> list[str]:
     attributes = ['fit-page-width="true"', 'header-row="true"']
     if table.header_column:
         attributes.append('header-column="true"')
     header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
-    rows = _row_lines(table.header, header_texts, None)
-    rows += [line for row in table.rows for line in _body_row_lines(table, row)]
-    return [f"<table {' '.join(attributes)}>", *_indent(rows), "</table>"]
+    lines = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
+    lines += [line for row in table.rows for line in _body_row_lines(table, row)]
+    return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
 def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
@@ -192,7 +231,7 @@ def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
 
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
-    for index, entry in enumerate(node.entries, start=1):
+    for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node.kind, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))
@@ -245,9 +284,8 @@ def _notion_lines(node: Node) -> list[str]:
         case DisplayMath():
             return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
         case Callout():
-            opening = (
-                f'<callout icon="{CALLOUT_ICON[node.tone]}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
-            )
+            icon = node.icon or CALLOUT_ICON[node.tone]
+            opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
             return [opening, *_indent(_notion_blocks(node.children)), "</callout>"]
         case Quote():
             return [_quote_line(node)]

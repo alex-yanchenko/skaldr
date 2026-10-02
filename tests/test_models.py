@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Final, get_args
 
 import pytest
 from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
@@ -13,6 +13,7 @@ from skaldr.models import (
     BadgeColorLiteral,
     Callout,
     Cards,
+    Column,
     DefItem,
     DefList,
     Fan,
@@ -49,6 +50,7 @@ from tests.factories import (
     make_command_request,
     make_flow,
     make_grid,
+    make_label_table,
     make_reconciled_table,
     make_report,
     make_request,
@@ -585,6 +587,96 @@ def test_checked_nested_in_a_non_check_style_list_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"`checked` is only valid"):
         parse_report(make_report(blocks=[block]))
+
+
+def test_a_numbered_list_takes_a_start_and_a_numbering() -> None:
+    block = {"type": "list", "style": "number", "start": 3, "numbering": "roman", "items": ["c"]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(type="list", style="number", start=3, numbering="roman", items=["c"])
+
+
+def test_a_decision_list_item_carries_a_decided_flag_defaulting_false() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "chosen", "decided": True}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        style="decision",
+        items=["open", ListItem(text="chosen", decided=True)],
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        pytest.param(
+            {"style": "bullet", "start": 2, "items": ["a"]},
+            "`start` is only valid in a `style: number` list",
+            id="start-on-a-bullet-list",
+        ),
+        pytest.param(
+            {"style": "check", "numbering": "letters", "items": ["a"]},
+            "`numbering` is only valid in a `style: number` list",
+            id="numbering-on-a-check-list",
+        ),
+        pytest.param(
+            {"style": "decision", "numbering": "decimal", "items": ["a"]},
+            "`numbering` is only valid in a `style: number` list",
+            id="decimal-numbering-on-a-decision-list",
+        ),
+        pytest.param(
+            {"style": "number", "items": [{"text": "a", "decided": True}]},
+            "`decided` is only valid in a `style: decision` list",
+            id="decided-in-a-number-list",
+        ),
+        pytest.param(
+            {"style": "bullet", "items": [{"text": "a", "items": [{"text": "b", "decided": True}]}]},
+            "`decided` is only valid in a `style: decision` list",
+            id="decided-nested-in-a-bullet-list",
+        ),
+        pytest.param(
+            {"style": "decision", "items": [{"text": "a", "checked": True}]},
+            "`checked` is only valid in a `style: check` list",
+            id="checked-in-a-decision-list",
+        ),
+    ],
+)
+def test_a_list_option_outside_its_style_is_rejected(options: dict[str, Any], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "list", **options}]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.list: Value error, {message}"
+
+
+@pytest.mark.parametrize(
+    ("start", "message"),
+    [
+        pytest.param(0, "Input should be greater than or equal to 1", id="below-one"),
+        pytest.param(
+            1_000_000_000,
+            "Input should be less than or equal to 999999999",
+            id="past-the-nine-digits-a-markdown-list-marker-holds",
+        ),
+    ],
+)
+def test_a_list_start_out_of_range_is_rejected(start: int, message: str) -> None:
+    block = {"type": "list", "style": "number", "start": start, "items": ["a"]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.list.start: {message}"
+
+
+def test_a_list_start_of_nine_digits_is_accepted() -> None:
+    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a"]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(type="list", style="number", start=999_999_999, items=["a"])
 
 
 def test_def_list_parses_to_whole_model() -> None:
@@ -1139,6 +1231,60 @@ def test_callout_rejects_a_non_semantic_tone_with_a_self_explaining_message(tone
         match=rf"callout tone must be one of info, success, warning, danger \(got '{tone}'\)",
     ):
         parse_report(make_report(blocks=[{"type": "callout", "tone": tone, "body": "b"}]))
+
+
+CALLOUT_WITHOUT_ICON: Final[dict[str, Any]] = {"type": "callout", "tone": "info", "body": "b"}
+
+
+@pytest.mark.parametrize(
+    ("icon", "stored"),
+    [
+        pytest.param("🧪", "🧪", id="one-code-point"),
+        pytest.param("⚠️", "⚠️", id="with-a-variation-selector"),
+        pytest.param("⚠", "⚠️", id="a-text-presentation-symbol-takes-its-emoji-form"),
+        pytest.param("©", "©️", id="a-text-symbol-with-an-emoji-form-takes-it"),
+        pytest.param("1⃣", "1️⃣", id="an-unqualified-keycap-takes-its-emoji-form"),
+        pytest.param("👍🏽", "👍🏽", id="with-a-skin-tone"),
+        pytest.param("👩‍🔬", "👩‍🔬", id="joined-by-a-zero-width-joiner"),
+        pytest.param("🇺🇦", "🇺🇦", id="a-flag"),
+        pytest.param("1️⃣", "1️⃣", id="a-keycap"),
+    ],
+)
+def test_a_callout_and_a_note_take_one_emoji_as_their_icon_in_its_emoji_form(icon: str, stored: str) -> None:
+    blocks = [{**CALLOUT_WITHOUT_ICON, "icon": icon}, {"type": "note", "icon": icon, "body": "b"}]
+
+    report = parse_report(make_report(blocks=blocks))
+
+    assert report.blocks == [
+        Callout(type="callout", tone="info", icon=stored, body="b"),
+        Note(type="note", icon=stored, body="b"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block", "icon"),
+    [
+        pytest.param(CALLOUT_WITHOUT_ICON, "A", id="a-letter"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "1", id="a-digit"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "✓", id="a-text-symbol-that-is-no-emoji"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🏽", id="a-skin-tone-alone"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "\N{ZERO WIDTH JOINER}", id="a-zero-width-joiner-alone"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🇺", id="half-a-flag"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🇺🇦🇺🇦", id="two-flags"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "🧪🧪", id="two-emoji"),
+        pytest.param(CALLOUT_WITHOUT_ICON, " 🧪", id="an-emoji-padded-with-a-space"),
+        pytest.param(CALLOUT_WITHOUT_ICON, "", id="empty"),
+        pytest.param({"type": "note", "body": "b"}, "go", id="a-word-on-a-note"),
+    ],
+)
+def test_an_icon_that_is_not_one_emoji_is_rejected(block: dict[str, Any], icon: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{**block, "icon": icon}]))
+
+    assert str(raised.value) == (
+        f"invalid content data: blocks.0.{block['type']}.icon: Value error, "
+        f"icon must be a single emoji (got '{icon}')"
+    )
 
 
 def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:
@@ -1847,6 +1993,106 @@ def test_table_column_widths_are_read_onto_every_column() -> None:
 
     assert isinstance(block, Table)
     assert [column.width for column in block.columns] == [2, 4]
+
+
+@pytest.mark.parametrize(
+    ("columns", "shares"),
+    [
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 2},
+                {"key": "b", "label": "B", "kind": "number", "width": 4},
+            ],
+            (2 / 6, 4 / 6),
+            id="weights-over-the-kind-defaults",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A"},
+                {"key": "b", "label": "B", "kind": "number"},
+                {"key": "c", "label": "C", "kind": "indicator"},
+            ],
+            (None, 0.1, 0.07),
+            id="kind-defaults-beside-an-auto-column",
+        ),
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "t", "label": "", "kind": "badge"}], (None,), id="all-auto"
+        ),
+    ],
+)
+def test_a_table_gives_each_cell_column_its_width_share(
+    columns: list[dict[str, Any]], shares: tuple[float | None, ...]
+) -> None:
+    values = {"a": "x", "b": 10, "c": "", "t": ""}
+    table = make_table(columns, rows=[{column["key"]: values[column["key"]] for column in columns}])
+
+    block = parse_report(make_report(blocks=[table])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.column_width_shares == shares
+
+
+@pytest.mark.parametrize(
+    ("kinds", "shares"),
+    [
+        pytest.param(["number"] * 9, (None, *[0.1] * 9), id="nine-numbers-leave-the-label-one-default-width"),
+        pytest.param(["number"] * 10, (None, *[1 / 11] * 10), id="ten-numbers-scale-to-elevenths"),
+        pytest.param(["number"] * 12, (None, *[1 / 13] * 12), id="twelve-numbers-scale-to-thirteenths"),
+        pytest.param(["indicator"] * 13, (None, *[0.07] * 13), id="thirteen-indicators-still-fit"),
+        pytest.param(
+            ["indicator"] * 14, (None, *[1 / 15] * 14), id="fourteen-indicators-scale-to-fifteenths"
+        ),
+        pytest.param(
+            ["number"] * 8 + ["indicator"] * 2,
+            (None, *[0.1 / 1.04] * 8, *[0.07 / 1.04] * 2),
+            id="mixed-kinds-keep-the-label-as-wide-as-a-number-column",
+        ),
+    ],
+)
+def test_kind_defaults_scale_down_so_an_auto_column_keeps_one_default_width(
+    kinds: list[str], shares: tuple[float | None, ...]
+) -> None:
+    block = parse_report(make_report(blocks=[make_label_table(kinds)])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.column_width_shares == pytest.approx(shares)
+
+
+def test_a_table_column_takes_a_tone_and_a_palette_alias_names_the_same_tone() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "tone": "info"},
+            {"key": "b", "label": "B", "kind": "number", "tone": "green"},
+            {"key": "c", "label": "C", "kind": "badge", "placement": "cell", "tone": "teal"},
+        ],
+        rows=[{"a": "x", "b": 10, "c": "K"}],
+    )
+
+    badges = {"K": {"label": "k", "tone": "blue", "legend": False}}
+
+    block = parse_report(make_report(blocks=[table], badges=badges)).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.columns == [
+        Column(key="a", label="A", tone="info"),
+        Column(key="b", label="B", kind="number", tone="success"),
+        Column(key="c", label="C", kind="badge", placement="cell", tone="teal"),
+    ]
+
+
+def test_a_title_placement_badge_column_cannot_take_a_tone() -> None:
+    table = make_table(
+        [{"key": "a", "label": "A"}, {"key": "t", "label": "", "kind": "badge", "tone": "info"}],
+        rows=[{"a": "x", "t": ""}],
+    )
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[table]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.table: Value error, "
+        "badge column(s) ['t'] can't take a tone (they ride under the title)"
+    )
 
 
 def test_table_mixed_widths_are_rejected() -> None:

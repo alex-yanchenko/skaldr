@@ -1,6 +1,7 @@
 {# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
 
 {% set STATUS_GLYPHS = {"done": "✓", "current": "◐", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
+{% set LIST_NUMBERING_TYPES = {"letters": "a", "roman": "i"} %}
 
 {% macro chip_item(item) %}
 {% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
@@ -63,8 +64,7 @@
 {% set title_key = b.title_key %}
 {% set sum_key = b.sum_key %}
 <div class="table-wrap"><table class="rep">
-{% set width_total = cell_cols | selectattr("width") | map(attribute="width") | sum %}
-<colgroup>{% for c in cell_cols %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
+<colgroup>{% for c in cell_cols %}{% set share = b.column_width_shares[loop.index0] %}<col{% if c.tone %} class="tint {{ c.tone }}"{% endif %}{% if share is not none %} style="width:{{ (share * 100) | round(1) if c.width else "%g" | format((share * 100) | round(1)) }}%"{% endif %}>{% endfor %}</colgroup>
 <thead><tr>{% for c in cell_cols %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% if b.groups is not none %}
@@ -88,8 +88,9 @@
    of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
 {# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
-{% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
-{% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " check" if style == "check" else "" }}">{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
+{% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% set decided = false if item is string else item.decided %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% elif style == "decision" %}<span class="dec {{ "decided" if decided else "open" }}"><span class="glyph">{{ "✓" if decided else "?" }}</span><span>{{ text | richtext }}</span></span>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro iconed(icon) %}{% if icon %}<span class="block-icon" aria-hidden="true">{{ icon }}</span><div class="iconed-body">{{ caller() }}</div>{% else %}{{ caller() }}{% endif %}{% endmacro %}
+{% macro rich_list(items, style, numbering=none, start=none) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " " ~ style if style in ("check", "decision") else "" }}"{% if start %} start="{{ start }}"{% endif %}{% if numbering in LIST_NUMBERING_TYPES %} type="{{ LIST_NUMBERING_TYPES[numbering] }}"{% endif %}>{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style, numbering) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
 {% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
@@ -277,7 +278,7 @@
 {% elif block.type == "text" %}
 {% for para in block.body | paragraphs %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
-{{ rich_list(block.items, block.style) }}
+{{ rich_list(block.items, block.style, block.numbering, block.start) }}
 {% elif block.type == "fact_strip" %}
 <div class="facts">{% for f in block.facts %}<span class="fact"><span class="k">{{ f.label }}</span><span>{{ f.value }}</span></span>{% endfor %}</div>
 {% elif block.type == "key_value" %}
@@ -289,7 +290,7 @@
 {% elif block.type == "badge_row" %}
 {% if block.groups %}<dl class="badge-groups">{% for g in block.groups %}<dt>{{ g.label }}</dt><dd>{% for item in g.items %}{{ chip_item(item) }}{% endfor %}</dd>{% endfor %}</dl>{% else %}<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>{% endif %}
 {% elif block.type == "callout" %}
-<div class="callout {{ block.tone }}">{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
+<div class="callout {{ block.tone }}{% if block.icon %} iconed{% endif %}">{% call iconed(block.icon) %}{% if block.title %}<div class="title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div>{% endcall %}</div>
 {% elif block.type == "status_list" %}
 <ul class="status-list">{% for item in block.items %}<li class="{{ item.state }}"><span class="glyph">{{ STATUS_GLYPHS[item.state] }}</span><span>{{ item.text | richtext }}</span></li>{% endfor %}</ul>
 {% elif block.type == "meter" %}
@@ -303,7 +304,7 @@
 {% elif block.type == "quote" %}
 <blockquote class="quote"><div>{{ prose_paras(block.body) }}</div>{% if block.cite %}<span class="cite">{{ block.cite }}</span>{% endif %}</blockquote>
 {% elif block.type == "note" %}
-<div class="note-block">{% if block.title %}<div class="note-block-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div></div>
+<div class="note-block{% if block.icon %} iconed{% endif %}">{% call iconed(block.icon) %}{% if block.title %}<div class="note-block-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div>{% endcall %}</div>
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "timeline" %}

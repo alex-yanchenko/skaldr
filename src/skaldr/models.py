@@ -13,7 +13,7 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -25,6 +25,7 @@ if sys.version_info >= (3, 11):
 else:
     from importlib.abc import Traversable
 
+import emoji
 import yaml
 from pydantic import (
     AfterValidator,
@@ -159,10 +160,28 @@ def _to_callout_tone(value: Any) -> Any:
 
 
 CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
+
+
+ACCEPTED_EMOJI_STATUSES: Final = frozenset(
+    {emoji.STATUS["fully_qualified"], emoji.STATUS["minimally_qualified"]}
+)
+
+
+def _one_emoji(value: str) -> str:
+    entry = emoji.EMOJI_DATA.get(value)
+    if entry is not None and entry["status"] == emoji.STATUS["unqualified"]:
+        return emoji.emojize(entry["en"])
+    if entry is None or entry["status"] not in ACCEPTED_EMOJI_STATUSES:
+        raise ValueError(f"icon must be a single emoji (got '{value}')")
+    return value
+
+
+Icon = Annotated[str, AfterValidator(_one_emoji)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+DEFAULT_COLUMN_WIDTH_SHARES: Final[Mapping[ColumnKind, float]] = {"number": 0.1, "indicator": 0.07}
 ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
@@ -279,6 +298,11 @@ class ListItem(FrozenModel):
         "YAML to record durable progress (an agent editing its plan marks items done here); a reader "
         "clicking a box in the browser is ephemeral and does not persist.",
     )
+    decided: bool = Field(
+        default=False,
+        description="Only meaningful in a `style: decision` list: marks the point a decision already "
+        "taken. Left false, the point is an open question.",
+    )
     items: list["str | ListItem"] = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
@@ -295,14 +319,16 @@ def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
             _check_list_depth(item.items, depth + 1)
 
 
-def _any_item_checked(items: list["str | ListItem"]) -> bool:
-    """Whether any item (at any depth) sets `checked` — used to reject the flag outside a check list."""
+def _any_item_flagged(items: list["str | ListItem"], flagged: Callable[["ListItem"], bool]) -> bool:
     return any(
-        isinstance(item, ListItem) and (item.checked or _any_item_checked(item.items)) for item in items
+        isinstance(item, ListItem) and (flagged(item) or _any_item_flagged(item.items, flagged))
+        for item in items
     )
 
 
-ListStyle = Literal["bullet", "number", "check"]
+ListStyle = Literal["bullet", "number", "check", "decision"]
+ListNumbering = Literal["decimal", "letters", "roman"]
+LARGEST_LIST_START: Final = 999_999_999
 
 
 class ListBlock(_Block):
@@ -310,7 +336,20 @@ class ListBlock(_Block):
     style: ListStyle = Field(
         default="bullet",
         description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
-        "(the ticks are ephemeral: a browser reload resets them).",
+        "(the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a "
+        "decision taken (`decided: true`) or an open question.",
+    )
+    start: Count | None = Field(
+        default=None,
+        ge=1,
+        le=LARGEST_LIST_START,
+        description="Only in a `style: number` list: the number the first point carries (default 1). "
+        "Nested lists count from 1.",
+    )
+    numbering: ListNumbering | None = Field(
+        default=None,
+        description="Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or "
+        "`roman` (i, ii, iii). Nested lists keep it.",
     )
     items: list[str | ListItem] = Field(
         min_length=1,
@@ -324,9 +363,15 @@ class ListBlock(_Block):
         return self
 
     @model_validator(mode="after")
-    def _checked_only_in_check_style(self) -> "ListBlock":
-        if self.style != "check" and _any_item_checked(self.items):
+    def _options_only_in_their_style(self) -> "ListBlock":
+        if self.style != "number" and self.start is not None:
+            raise ValueError("`start` is only valid in a `style: number` list")
+        if self.style != "number" and self.numbering is not None:
+            raise ValueError("`numbering` is only valid in a `style: number` list")
+        if self.style != "check" and _any_item_flagged(self.items, lambda item: item.checked):
             raise ValueError("`checked` is only valid in a `style: check` list")
+        if self.style != "decision" and _any_item_flagged(self.items, lambda item: item.decided):
+            raise ValueError("`decided` is only valid in a `style: decision` list")
         return self
 
 
@@ -530,6 +575,11 @@ class Callout(_Block):
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
     body: str = Field(description="Rich-text body.")
+    icon: Icon | None = Field(
+        default=None,
+        description="Optional single emoji shown at the head of the callout, in place of the tone's "
+        "default icon in the Markdown exports.",
+    )
 
 
 class StatusItem(FrozenModel):
@@ -643,6 +693,11 @@ class Note(_Block):
     type: Literal["note"]
     body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
+    icon: Icon | None = Field(
+        default=None,
+        description="Optional single emoji shown at the head of the note, in place of the default note "
+        "icon in the Markdown exports.",
+    )
 
 
 class Image(_Block):
@@ -845,6 +900,12 @@ class Column(FrozenModel):
         le=6,
         description="Proportional width weight (1-6); set it on every in-cell column, or none. A "
         "`title`-placement badge column takes no width (it rides under the title).",
+    )
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone that faintly tints the whole column. A row `tone` or a `tint_by` "
+        "row tint paints over it. A `title`-placement badge column takes no tone (it rides under the "
+        "title).",
     )
 
 
@@ -1078,14 +1139,15 @@ class Table(_Block):
         placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
         if placement_misuse:
             raise ValueError(f"column(s) {placement_misuse}: placement 'cell' is only for badge columns")
-        title_badge_widths = [
-            c.key
-            for c in self.columns
-            if c.kind == "badge" and c.placement == "title" and c.width is not None
-        ]
+        title_badge_widths = [c.key for c in self.title_badges if c.width is not None]
         if title_badge_widths:
             raise ValueError(
                 f"badge column(s) {title_badge_widths} can't take a width (they ride under the title)"
+            )
+        title_badge_tones = [c.key for c in self.title_badges if c.tone is not None]
+        if title_badge_tones:
+            raise ValueError(
+                f"badge column(s) {title_badge_tones} can't take a tone (they ride under the title)"
             )
         # in-cell columns get their own <td>: everything except title-placement badge chips.
         widthed = [c for c in self.cell_columns if c.width is not None]
@@ -1128,6 +1190,20 @@ class Table(_Block):
         """Columns that get their own <td>, in declared order — everything except title-placement
         badge columns (whose chip rides under the row title). The render's single source of order."""
         return [c for c in self.columns if not (c.kind == "badge" and c.placement == "title")]
+
+    @cached_property
+    def column_width_shares(self) -> tuple[float | None, ...]:
+        columns = self.cell_columns
+        weight_total = sum(column.width or 0 for column in columns)
+        if weight_total:
+            return tuple((column.width or 0) / weight_total for column in columns)
+        defaults = [DEFAULT_COLUMN_WIDTH_SHARES.get(column.kind) for column in columns]
+        sized = [share for share in defaults if share is not None]
+        if not sized:
+            return tuple(defaults)
+        room_asked = sum(sized) + defaults.count(None) * max(sized)
+        scale = min(1.0, 1 / room_asked)
+        return tuple(None if share is None else share * scale for share in defaults)
 
     @property
     def title_badges(self) -> list[Column]:

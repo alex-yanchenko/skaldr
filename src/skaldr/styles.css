@@ -43,6 +43,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
 		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
 		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
+		--row-hover:light-dark(color-mix(in srgb, var(--ink) 3%, transparent), color-mix(in srgb, var(--ink) 5%, transparent));
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
 		--hdr:light-dark(#475569,#2c3543); --hdr-fg:#ffffff; --hdr-h:41px;
 		--neutral-fg:light-dark(#475569,#cbd5e1); --neutral-bg:light-dark(#f1f5f9,#2b3441);
@@ -202,6 +203,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
+	.iconed{display:flex; gap:var(--s3); align-items:flex-start;
+		& > .block-icon{flex:none; font-size:1.15em; line-height:1.4}
+		& > .iconed-body{flex:1; min-width:0}}
 
 	/* Blank-line paragraphs in set-apart prose (callout/quote bodies); table cells use td .cell-p. */
 	.prose-p + .prose-p{margin-block-start:var(--s3)}
@@ -250,6 +254,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.list.check .chk{display:flex; gap:var(--s2); align-items:baseline; cursor:pointer}
 	.list.check .chk input{flex:none; margin:0; translate:0 2px; accent-color:var(--accent-fg); cursor:pointer}
 	.list.check .chk input:checked + span{color:var(--muted); text-decoration:line-through}
+	.list.decision{list-style:none; padding-inline-start:0}
+	.list.decision .decision{padding-inline-start:calc(1.2em + var(--s2))}
+	.list.decision .dec{display:flex; gap:var(--s2); align-items:baseline}
+	.list.decision .dec .glyph{flex:none; width:1.2em; text-align:center; font-weight:700; color:var(--warning-fg)}
+	.list.decision .dec.decided .glyph{color:var(--success-fg)}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
@@ -442,10 +451,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			font-weight:700; font-size:13px; color:var(--ink); box-shadow:inset 0 -1px 0 var(--rule)}
 		& tr.group .st{float:right; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums}
 		& tbody td{padding:16px; border-block-end:1px solid var(--line); vertical-align:top}
-		& tbody tr.row:hover td{background:var(--hover)}
+		& tbody tr.row:hover td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
 		/* Row emphasis (reserved row key `tone`): muted = a struck, dimmed "rejected" row; danger = a
 		   red-tinted "bad" row. The strike sits on the title only — struck numbers read as edits. */
-		& tbody tr.row.muted{opacity:0.55}
+		& tbody tr.row.muted td{position:relative; background-color:var(--surface)}
+		& tbody tr.row.muted td::after{content:""; position:absolute; inset:0; background:var(--surface); opacity:0.45; pointer-events:none}
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
@@ -458,6 +468,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
 		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
 		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
+		& col.tint{background:var(--tb)}
+		& col.tint.neutral{--tb:var(--neutral-bg)} & col.tint.info{--tb:var(--info-bg)}
+		& col.tint.success{--tb:var(--success-bg)} & col.tint.warning{--tb:var(--warning-bg)}
+		& col.tint.danger{--tb:var(--danger-bg)} & col.tint.accent{--tb:var(--accent-bg)}
+		& col.tint.teal{--tb:var(--teal-bg)} & col.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}

@@ -1,11 +1,14 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Final
+from typing import Final, Literal
+
+from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, StatusMark
+from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -47,17 +50,57 @@ def _marked(mark: Mark, text: ExportRich) -> ExportRich:
     return (mark, Plain(" "), *text)
 
 
+TextNumbering = Literal["letters", "roman"]
+
+
+@dataclass(frozen=True)
+class _ListShape:
+    style: models.ListStyle
+    text_numbering: TextNumbering | None
+
+
+def _text_numbering(numbering: models.ListNumbering | None) -> TextNumbering | None:
+    match numbering:
+        case "letters" | "roman":
+            return numbering
+        case "decimal" | None:
+            return None
+        case _:
+            assert_never(numbering)
+
+
 def lower_list(block: models.ListBlock, lowering: Lowering) -> list[Node]:
-    return [ListNode(block.style, tuple(_list_entry(item, block.style, lowering) for item in block.items))]
+    shape = _ListShape(block.style, _text_numbering(block.numbering))
+    return [_list_node(block.items, shape, lowering, block.start or 1)]
 
 
-def _list_entry(item: str | models.ListItem, kind: ListKind, lowering: Lowering) -> ListEntry:
+def _list_kind(shape: _ListShape) -> ListKind:
+    if shape.style == "decision" or shape.text_numbering is not None:
+        return "bullet"
+    return shape.style
+
+
+def _list_node(
+    items: Sequence[str | models.ListItem], shape: _ListShape, lowering: Lowering, start: int = 1
+) -> ListNode:
+    entries = tuple(
+        _list_entry(item, shape, lowering, index) for index, item in enumerate(items, start=start)
+    )
+    return ListNode(_list_kind(shape), entries, start if shape.text_numbering is None else 1)
+
+
+def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Lowering, index: int) -> ListEntry:
     if isinstance(item, str):
-        return ListEntry(lowering.rich(item))
-    children: tuple[Node, ...] = ()
-    if item.items:
-        children = (ListNode(kind, tuple(_list_entry(child, kind, lowering) for child in item.items)),)
-    return ListEntry(lowering.rich(item.text), item.checked, children)
+        source, decided, checked, nested = item, False, False, list[str | models.ListItem]()
+    else:
+        source, decided, checked, nested = item.text, item.decided, item.checked, item.items
+    text = lowering.rich(source)
+    if shape.style == "decision":
+        text = _marked(DecisionMark(decided), text)
+    elif shape.text_numbering is not None:
+        text = (Plain(f"{compute.list_label(index, shape.text_numbering)}. "), *text)
+    children: tuple[Node, ...] = (_list_node(nested, shape, lowering),) if nested else ()
+    return ListEntry(text, checked, children)
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:
@@ -130,17 +173,17 @@ def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
     return [Paragraph(with_bold_label(block.label, lowering.badge_items(block.items)))]
 
 
-def _titled_callout(tone: ToneName, title: str | None, body: str, lowering: Lowering) -> list[Node]:
-    heading: tuple[Node, ...] = (Paragraph(bold(title)),) if title else ()
-    return [Callout(tone, heading + lowering.prose(body))]
+def _titled_callout(tone: ToneName, block: models.Callout | models.Note, lowering: Lowering) -> list[Node]:
+    heading: tuple[Node, ...] = (Paragraph(bold(block.title)),) if block.title else ()
+    return [Callout(tone, heading + lowering.prose(block.body), block.icon)]
 
 
 def lower_callout(block: models.Callout, lowering: Lowering) -> list[Node]:
-    return _titled_callout(block.tone, block.title, block.body, lowering)
+    return _titled_callout(block.tone, block, lowering)
 
 
 def lower_note(block: models.Note, lowering: Lowering) -> list[Node]:
-    return _titled_callout("neutral", block.title, block.body, lowering)
+    return _titled_callout("neutral", block, lowering)
 
 
 def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node]:

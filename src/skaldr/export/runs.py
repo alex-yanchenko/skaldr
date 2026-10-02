@@ -43,7 +43,12 @@ class CheckMark:
     checked: bool
 
 
-Mark = StatusMark | SwimlaneMark | IndicatorMark | CheckMark
+@dataclass(frozen=True)
+class DecisionMark:
+    decided: bool
+
+
+Mark = StatusMark | SwimlaneMark | IndicatorMark | CheckMark | DecisionMark
 
 
 @dataclass(frozen=True)
@@ -72,7 +77,7 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
             return writer.chip(run)
         case Break():
             return writer.line_break()
-        case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark():
+        case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark() | DecisionMark():
             return writer.mark(run)
         case Gauge():
             return writer.gauge(run)
@@ -92,6 +97,8 @@ def mark_name(mark: Mark) -> str:
             return mark.tone
         case CheckMark():
             return "yes" if mark.checked else "no"
+        case DecisionMark():
+            return "decided" if mark.decided else "open"
         case _:
             assert_never(mark)
 
