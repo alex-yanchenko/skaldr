@@ -50,7 +50,18 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Citation, Code, InlineMath, Link, Plain, Rich, Styled, Tinted
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    InlineMath,
+    Link,
+    Plain,
+    Rich,
+    ScriptText,
+    Styled,
+    Tinted,
+)
 from tests.factories import (
     API_BADGES,
     lowered,
@@ -160,9 +171,27 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
             (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
             id="link-inside-bold",
         ),
+        pytest.param(
+            "per [[^sop]]{tone=info}",
+            "per [1]",
+            (Plain("per "), Tinted("info", None, (Citation("sop", 1, "https://e.com/sop"),))),
+            id="citation-inside-a-color-span",
+        ),
+        pytest.param(
+            "rate $`x_i`$",
+            "rate x_i",
+            (Plain("rate "), InlineMath("x_i")),
+            id="inline-math",
+        ),
+        pytest.param(
+            "about 10^3^",
+            "about 103",
+            (Plain("about 10"), ScriptText("superscript", "3")),
+            id="superscript",
+        ),
     ],
 )
-def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_target(
+def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
     note: str, visible: str, runs: Rich
 ) -> None:
     flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
@@ -180,6 +209,26 @@ def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_ta
             (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
         )
     ]
+
+
+def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub"},
+        "spokes": [{"label": "A", "note": "$`a^2`$"}, {"label": "B", "note": "plain"}],
+    }
+
+    assert lowered([fan]) == (
+        Diagram(
+            Graph(
+                "LR",
+                (GraphNode("hub", "Hub"), GraphNode("s1", "A", "a^2"), GraphNode("s2", "B", "plain")),
+                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+            ),
+            (ListNode("bullet", (ListEntry((*bold("A"), Plain(": "), InlineMath("a^2"))),)),),
+        ),
+    )
 
 
 @pytest.mark.parametrize(

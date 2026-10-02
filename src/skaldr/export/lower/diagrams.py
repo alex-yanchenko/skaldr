@@ -58,21 +58,23 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
     return ListEntry(text, children=children)
 
 
-def _links_somewhere(run: Run) -> bool:
+def _loses_meaning_in_a_plain_label(run: Run) -> bool:
     match run:
-        case Link() | AnchorLink() | Citation():
+        case Link() | AnchorLink() | Citation() | InlineMath() | ScriptText():
             return True
         case Styled() | Tinted():
-            return any(map(_links_somewhere, run.runs))
-        case Plain() | Code() | Placeholder() | ScriptText() | InlineMath():
+            return any(map(_loses_meaning_in_a_plain_label, run.runs))
+        case Plain() | Code() | Placeholder():
             return False
         case _:
             assert_never(run)
 
 
 def _diagram_cannot_show_all_of(step: FlowStep, lowering: Lowering) -> bool:
-    note_links = any(map(_links_somewhere, lowering.rich(step.note))) if step.note else False
-    return bool(step.points or step.badges) or note_links
+    note_loses_meaning = (
+        any(map(_loses_meaning_in_a_plain_label, lowering.rich(step.note))) if step.note else False
+    )
+    return bool(step.points or step.badges) or note_loses_meaning
 
 
 def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ...]:
