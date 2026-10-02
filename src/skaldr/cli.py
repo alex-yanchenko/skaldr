@@ -1,6 +1,6 @@
 """CLI entry point: render a content file (once, only when stale, or on a --watch loop), validate it
-(--check), dump its normalised model (--emit-json), print the guide, export the schema, or install
-the skill."""
+(--check), export it as Markdown (--export), dump its normalised model (--emit-json), print the
+guide, export the schema, or install the skill."""
 
 import argparse
 import json
@@ -16,7 +16,10 @@ from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Literal
 
+from typing_extensions import assert_never
+
 from skaldr.errors import ReportError
+from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -102,8 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         "--check",
         action="store_true",
         help="validate the content file(s) against the schema; exits non-zero if any file is invalid. "
-        "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed to one file to "
-        "render it once it passes — a file that fails is never written.",
+        "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
+        "file to render it once it passes. A file that fails is never written.",
     )
     parser.add_argument(
         "--strict",
@@ -168,6 +171,25 @@ def main(argv: list[str] | None = None) -> int:
         "survive. Pass milliseconds to also poll on a timer (for a screen that never loses focus). Full "
         "pages only — an --embed fragment is published as an Artifact and must not reload on a reader's "
         "screen.",
+    )
+    parser.add_argument(
+        "--export",
+        choices=EXPORT_TARGETS,
+        help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
+        "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
+    )
+    parser.add_argument(
+        "--export-dir",
+        metavar="DIR",
+        help="where --export writes (default: out/<data-stem>.<target>/)",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        metavar="N",
+        help="with --export notion: split the page into files of at most N characters, counted in Unicode "
+        "code points rather than bytes, each after the first starting at a level 1 or 2 heading, for a tool "
+        "or a paste box that caps its input size. A single section longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -249,11 +271,12 @@ def main(argv: list[str] | None = None) -> int:
             "--embed has no effect with --pdf alone (no HTML is written); add -o to also "
             "write the embed fragment, or drop --embed"
         )
-    if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed):
+    if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed or args.export):
         parser.error(
-            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed "
+            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export "
             "to validate the whole set"
         )
+    _reject_flags_that_do_not_fit_an_export(parser, args)
     if args.check and not (args.out or args.pdf or args.embed) and (args.live is not None or args.if_stale):
         parser.error(
             "--live and --if-stale shape a render; --check alone writes nothing, so add "
@@ -264,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.data:
             parser.error("--check needs at least one content file")
         failed = _check_files(args.data, strict=args.strict)
-        if failed or not (args.out or args.pdf or args.embed):
+        if failed or not (args.out or args.pdf or args.embed or args.export):
             return failed
 
     if not args.data:
@@ -295,6 +318,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(report.model_dump(mode="json"), indent=2))
         return 0
+    if args.export:
+        return _export_document(data_path, args.export, args.export_dir, args.chunk)
     written: list[Path] = []
     try:
         report = load_report(data_path)
@@ -406,6 +431,58 @@ def _extract_source(target: str) -> int:
         print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
         return 1
     print(source, end="")
+    return 0
+
+
+def _reject_flags_that_do_not_fit_an_export(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if not args.export:
+        if args.export_dir is not None or args.chunk is not None:
+            parser.error("--export-dir and --chunk only apply with --export")
+        return
+    if args.export_dir is not None and not args.export_dir.strip():
+        parser.error("--export-dir needs a folder path")
+    if args.out or args.pdf or args.embed or args.watch or args.emit_json:
+        parser.error(
+            "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
+        )
+    if args.live is not None or args.if_stale or args.no_source:
+        parser.error("--live, --if-stale and --no-source shape an HTML render; --export writes none")
+    if args.chunk is None:
+        return
+    if args.export != "notion":
+        parser.error("--chunk splits a Notion page into files; it only applies with --export notion")
+    if args.chunk < 1:
+        parser.error("--chunk takes a positive character count")
+
+
+def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
+    out_dir = (
+        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
+    ).resolve()
+    try:
+        report = load_report(data_path)
+        match target:
+            case "notion":
+                result = export_notion(report, out_dir, chunk=chunk)
+            case "markdown":
+                result = export_markdown(report, out_dir)
+            case _:
+                assert_never(target)
+    except (ReportError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if result.unreadable_manifest:
+        manifest = out_dir / EXPORT_MANIFEST
+        print(
+            f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
+            file=sys.stderr,
+        )
+    for heading in result.oversized_sections:
+        print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
+    for path in result.files:
+        print(f"OK  {path}")
     return 0
 
 

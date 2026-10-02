@@ -7,20 +7,12 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 """
 
 import math
-import sys
 from typing import TypedDict
 
 from markupsafe import Markup, escape
+from typing_extensions import assert_never
 
 from skaldr.models import Chart, Tone
-
-if sys.version_info >= (3, 11):
-    from typing import assert_never
-else:  # assert_never is stdlib from 3.11; a runtime-equivalent on 3.10 (the supported floor)
-    from typing import NoReturn
-
-    def assert_never(value: object) -> NoReturn:
-        raise AssertionError(f"unhandled value: {value!r}")
 
 
 class LegendRow(TypedDict):
@@ -154,9 +146,13 @@ def _line_svg(chart: Chart) -> str:
     return _svg(_grid_and_ticks(top) + body + _x_labels(chart.categories, xs))
 
 
+def donut_total(chart: Chart) -> float:
+    return sum(segment.value for segment in chart.slices)
+
+
 def _donut_svg(chart: Chart) -> str:
     circ = 2 * math.pi * _D_R
-    total = sum(segment.value for segment in chart.slices)
+    total = donut_total(chart)
     body = [f'<circle r="{_D_R}" fill="none" stroke="var(--panel)" stroke-width="{_D_SW}"/>']
     offset = 0.0
     for i, segment in enumerate(chart.slices):
@@ -167,7 +163,7 @@ def _donut_svg(chart: Chart) -> str:
             'transform="rotate(-90)"/>'
         )
         offset += dash
-    centre = escape(_format_total(total))
+    centre = escape(format_total(total))
     body.append(
         f'<text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7">{centre}</text>'
     )
@@ -179,7 +175,7 @@ def _donut_svg(chart: Chart) -> str:
     )
 
 
-def _format_total(value: float) -> str:
+def format_total(value: float) -> str:
     """Thousands-separated integer if whole, else one decimal — for the donut centre total."""
     return f"{value:,.0f}" if value == int(value) else f"{value:,.1f}"
 
@@ -206,7 +202,7 @@ def chart_legend(chart: Chart) -> list[LegendRow]:
     """Legend rows (label + resolved colour + optional share note). Colours come from the SAME
     `_fill` cycle the SVG uses, so a legend swatch always matches its series/slice."""
     if chart.variant == "donut":
-        total = sum(segment.value for segment in chart.slices)
+        total = donut_total(chart)
         return [
             {
                 "label": segment.label,

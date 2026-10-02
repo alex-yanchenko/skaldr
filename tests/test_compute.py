@@ -1,15 +1,18 @@
 import re
 import subprocess
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from skaldr.compute import (
+    DELTA_GLYPHS,
     HTTP_REASONS,
     anchor_slugs,
     command_for,
     first_table_index,
     fmt,
+    paragraphs,
     produced_names,
     provenance_footer,
     reconcile_line,
@@ -24,7 +27,7 @@ from skaldr.compute import (
     variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import Request, RequestFlow, Swimlane, Table, parse_report
+from skaldr.models import DeltaDirection, Request, RequestFlow, Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -655,6 +658,20 @@ def test_swimlane_layout_groups_and_headers_use_column_ids_and_subs() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("text", "parts"),
+    [
+        pytest.param("a\n\nb", ["a", "b"], id="blank-line"),
+        pytest.param("a\n\n\n\nb", ["a", "b"], id="run-of-blank-lines"),
+        pytest.param("  a \n\n  \n", ["a"], id="trimmed-and-whitespace-dropped"),
+        pytest.param("one\nline", ["one\nline"], id="single-newline-stays"),
+        pytest.param("\n\n", [], id="only-blank-lines"),
+    ],
+)
+def test_paragraphs_split_on_blank_lines_and_drop_empty_ones(text: str, parts: list[str]) -> None:
+    assert paragraphs(text) == parts
+
+
 def test_fmt_variants() -> None:
     assert fmt(1500) == "1,500"
     assert fmt(1500.0) == "1,500"
@@ -919,6 +936,18 @@ def test_first_table_index() -> None:
     report = parse_report(make_report(blocks=[{"type": "text", "body": "x"}, make_reconciled_table()]))
 
     assert first_table_index(report) == 1
+
+
+def test_a_table_nested_in_a_section_leaves_the_legend_at_the_top() -> None:
+    section = {"type": "section", "title": "S", "blocks": [make_reconciled_table()]}
+
+    assert (
+        first_table_index(parse_report(make_report(blocks=[{"type": "text", "body": "x"}, section]))) is None
+    )
+
+
+def test_every_delta_direction_has_a_glyph() -> None:
+    assert set(DELTA_GLYPHS) == set(get_args(DeltaDirection))
 
 
 def test_reference_numbers_are_in_document_order_across_blocks_and_sections() -> None:
