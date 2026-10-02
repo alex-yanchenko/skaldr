@@ -2607,6 +2607,44 @@ def test_richtext_writes_inline_math_as_mathml_and_keeps_prose_dollars() -> None
     )
 
 
+def test_raw_markup_in_inline_math_renders_as_escaped_text() -> None:
+    html = str(render_richtext(r"a $`\text{<script>alert(1)</script>}`$ b"))
+
+    assert html == (
+        'a <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>'
+        "<mtext>&lt;script&gt;alert(1)&lt;/script&gt;</mtext></mrow></math> b"
+    )
+
+
+def test_raw_markup_in_a_math_block_renders_as_escaped_text() -> None:
+    block = {"type": "math", "expression": r"\text{<script>alert(1)</script>}"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>'
+        "<mtext>&lt;script&gt;alert(1)&lt;/script&gt;</mtext></mrow></math></div>"
+    ) in html
+
+
+@pytest.mark.parametrize(
+    ("expression", "attribute"),
+    [
+        pytest.param(r"\href{javascript:alert(1)}{x}", "href", id="href"),
+        pytest.param(r"\class{loud}{x}", "class", id="class"),
+        pytest.param(r"\style{color:red}{x}", "style", id="style"),
+    ],
+)
+def test_inline_math_setting_a_page_level_attribute_fails_the_render(expression: str, attribute: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        render_richtext(f"$`{expression}`$")
+
+    assert str(raised.value) == (
+        f"math expression '{expression}' sets the {attribute} attribute, which is not a MathML attribute "
+        r"skaldr renders: leave out \href, \class and \style"
+    )
+
+
 def test_a_math_block_renders_display_mathml() -> None:
     html = render_html(parse_report(make_report(blocks=[{"type": "math", "expression": "\\frac{a}{b}"}])))
 

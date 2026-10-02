@@ -619,7 +619,8 @@ class Code(_Block):
 class Math(_Block):
     type: Literal["math"]
     expression: str = Field(
-        description="A LaTeX expression shown as display math, converted to MathML when the page builds."
+        min_length=1,
+        description="A LaTeX expression shown as display math, converted to MathML when the page builds.",
     )
 
     @field_validator("expression")
@@ -628,7 +629,7 @@ class Math(_Block):
         try:
             refuse_invalid_math(expression, "block")
         except ReportError as error:
-            raise ValueError(str(error)) from None
+            raise ValueError(str(error)) from error
         return expression
 
 

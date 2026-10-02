@@ -613,14 +613,53 @@ def test_math_parses_to_whole_model() -> None:
     assert report.blocks[0] == Math(type="math", expression="E = mc^2")
 
 
-def test_a_math_block_the_converter_rejects_fails_at_its_path() -> None:
+@pytest.mark.parametrize(
+    ("expression", "message"),
+    [
+        pytest.param(
+            "x^",
+            "Value error, invalid math expression 'x^': latex2mathml cannot convert it "
+            "(MissingSuperScriptOrSubscriptError)",
+            id="converter-rejects-it",
+        ),
+        pytest.param("", "String should have at least 1 character", id="empty"),
+        pytest.param(
+            r"\href{https://e.com}{x}",
+            r"Value error, math expression '\href{https://e.com}{x}' sets the href attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="href",
+        ),
+        pytest.param(
+            r"\class{loud}{x}",
+            r"Value error, math expression '\class{loud}{x}' sets the class attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="class",
+        ),
+        pytest.param(
+            r"\style{color:red}{x}",
+            r"Value error, math expression '\style{color:red}{x}' sets the style attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="style",
+        ),
+        pytest.param(
+            "a $$ b",
+            r"Value error, math expression 'a $$ b' holds $$, which ends a Notion equation early: "
+            r"write \$\$ for literal dollars",
+            id="double-dollar",
+        ),
+        pytest.param(
+            r"\simga",
+            r"Value error, math expression '\simga' uses \simga, which latex2mathml does not know: "
+            r"check its spelling, or write \text{...} for literal text",
+            id="unknown-command",
+        ),
+    ],
+)
+def test_a_math_block_that_cannot_render_fails_at_its_path(expression: str, message: str) -> None:
     with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[{"type": "math", "expression": "x^"}]))
+        parse_report(make_report(blocks=[{"type": "math", "expression": expression}]))
 
-    assert str(raised.value) == (
-        "invalid content data: blocks.0.math.expression: Value error, invalid math expression 'x^': "
-        "latex2mathml cannot convert it (MissingSuperScriptOrSubscriptError)"
-    )
+    assert str(raised.value) == f"invalid content data: blocks.0.math.expression: {message}"
 
 
 def test_panel_parses_to_whole_model() -> None:

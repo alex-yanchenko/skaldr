@@ -2166,6 +2166,7 @@
         },
         "expression": {
           "description": "A LaTeX expression shown as display math, converted to MathML when the page builds.",
+          "minLength": 1,
           "title": "Expression",
           "type": "string"
         }

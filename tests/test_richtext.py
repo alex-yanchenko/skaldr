@@ -235,6 +235,56 @@ def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None
 
 
 @pytest.mark.parametrize(
+    ("expression", "message"),
+    [
+        pytest.param(
+            r"\href{https://e.com}{x}",
+            r"math expression '\href{https://e.com}{x}' sets the href attribute, which is not a MathML "
+            r"attribute skaldr renders: leave out \href, \class and \style",
+            id="href",
+        ),
+        pytest.param(
+            r"\class{loud}{x}",
+            r"math expression '\class{loud}{x}' sets the class attribute, which is not a MathML "
+            r"attribute skaldr renders: leave out \href, \class and \style",
+            id="class",
+        ),
+        pytest.param(
+            r"\style{color:red}{x}",
+            r"math expression '\style{color:red}{x}' sets the style attribute, which is not a MathML "
+            r"attribute skaldr renders: leave out \href, \class and \style",
+            id="style",
+        ),
+        pytest.param(
+            "a$$b",
+            r"math expression 'a$$b' holds $$, which ends a Notion equation early: "
+            r"write \$\$ for literal dollars",
+            id="double-dollar",
+        ),
+        pytest.param(
+            r"\frac{a}",
+            r"math expression '\frac{a}' has a fraction with one part: \frac, \dfrac, \cfrac and "
+            r"\binom each take two, as in \frac{a}{b}",
+            id="fraction-with-one-part",
+        ),
+    ],
+)
+def test_inline_math_that_cannot_render_fails_naming_the_expression(expression: str, message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"see $`{expression}`$ here")
+
+    assert str(raised.value) == message
+
+
+def test_raw_markup_inside_inline_math_stays_part_of_the_expression() -> None:
+    assert parse_rich(r"a $`\text{<script>x</script>}`$ b") == (
+        Plain("a "),
+        InlineMath(r"\text{<script>x</script>}"),
+        Plain(" b"),
+    )
+
+
+@pytest.mark.parametrize(
     ("text", "runs"),
     [
         pytest.param("[late]{tone=danger}", (Tinted("danger", None, (Plain("late"),)),), id="color"),

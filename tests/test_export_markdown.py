@@ -255,6 +255,17 @@ def test_a_math_block_is_a_github_math_fence() -> None:
     assert markdown_of([block]) == "```math\n\\sum_{i=1}^{n} x_i\n= y\n```\n"
 
 
+def test_a_math_block_inside_a_panel_is_a_quoted_github_math_fence() -> None:
+    callout = {"type": "callout", "tone": "info", "body": "Rate"}
+    panel = {"type": "panel", "title": "P", "blocks": [callout, {"type": "math", "expression": "x_i"}]}
+
+    assert markdown_of([panel]) == "> 📝 **P**\n>\n> > 💡 Rate\n>\n> ```math\n> x_i\n> ```\n"
+
+
+def test_a_math_block_holding_a_backtick_fence_line_gets_a_longer_fence() -> None:
+    assert markdown_of([{"type": "math", "expression": "a\n```\nb"}]) == "````math\na\n```\nb\n````\n"
+
+
 def test_an_attribute_span_keeps_only_its_text_because_github_has_no_color() -> None:
     body = "[**late** a_b]{tone=danger bg=warning} [x]{y} [[docs]{tone=info}](https://x.io)"
 
