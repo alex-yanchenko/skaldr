@@ -10,6 +10,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Heading,
     ListEntry,
+    ListKind,
     ListNode,
     Paragraph,
     Quote,
@@ -216,6 +217,37 @@ def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
     assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
 
 
+@pytest.mark.parametrize(
+    ("kind", "markdown"),
+    [
+        pytest.param("bullet", "-\n  detail\n", id="bullet"),
+        pytest.param("number", "1.\n   detail\n", id="number"),
+    ],
+)
+def test_a_bare_marker_keeps_its_children_inside_the_item(kind: ListKind, markdown: str) -> None:
+    entry = ListEntry((), children=(Paragraph((Plain("detail"),)),))
+
+    assert render_markdown([ListNode(kind, (entry,))]) == markdown
+
+
+def test_a_section_title_ending_in_a_newline_links_to_its_heading() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix\n",
+        "blocks": [{"type": "text", "body": "[x](#appendix)"}],
+    }
+
+    assert markdown_of([section], meta={"title": "T", "toc": True}) == (
+        "- [Appendix](#appendix)\n\n## Appendix\n\n[x](#appendix)\n"
+    )
+
+
+def test_a_subtitle_led_by_spaces_and_a_dash_stays_a_paragraph() -> None:
+    assert markdown_of([{"type": "text", "body": "b"}], meta={"title": "T", "subtitle": ["  - draft"]}) == (
+        "\\- draft\n\nb\n"
+    )
+
+
 def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:
     callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),))
 
@@ -281,6 +313,9 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
         pytest.param("snake_case-name", "snake_case-name", id="underscore-and-hyphen"),
         pytest.param("Café Ünï", "café-ünï", id="unicode-letters-stay"),
         pytest.param("Ship it 🚀", "ship-it-", id="emoji-dropped"),
+        pytest.param("नमस्ते दुनिया", "नमस्ते-दुनिया", id="combining-marks-stay"),
+        pytest.param("Café", "café", id="decomposed-accent-stays"),
+        pytest.param("x² ½", "x²-½", id="other-numbers-stay"),
     ],
 )
 def test_a_heading_slug_follows_github(heading: str, slug: str) -> None:

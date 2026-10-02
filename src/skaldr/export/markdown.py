@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Final, Literal
@@ -36,7 +37,6 @@ from skaldr.richtext import Citation, Rich, StyleName, visible_text, write_runs
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
-GITHUB_SLUG_DROPPED = re.compile(r"[^\w\- ]")
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
 
@@ -45,8 +45,13 @@ def _escape(text: str) -> str:
     return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
 
+def _kept_in_a_github_slug(character: str) -> bool:
+    category = unicodedata.category(character)
+    return character in " -" or category[0] in "LMN" or category == "Pc"
+
+
 def github_slug(text: str) -> str:
-    return GITHUB_SLUG_DROPPED.sub("", text.lower()).replace(" ", "-")
+    return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
 
 
 class _MarkdownRuns:
@@ -151,15 +156,16 @@ class _MarkdownWriter:
                     marker, width = f"{dash} [{'x' if entry.checked else ' '}]", len(dash) + 1
                 case _:
                     assert_never(node.kind)
-            lines.append(f"{marker} {self.block_text(entry.text)}".rstrip())
-            lines += self.entry_children(entry, width)
+            line = f"{marker} {self.block_text(entry.text)}".rstrip()
+            lines.append(line)
+            lines += self.entry_children(entry, width, after_a_bare_marker=line == marker)
         return lines
 
-    def entry_children(self, entry: ListEntry, width: int) -> list[str]:
+    def entry_children(self, entry: ListEntry, width: int, after_a_bare_marker: bool) -> list[str]:
         children = self.blocks(entry.children)
         if not children:
             return []
-        gap = [] if isinstance(entry.children[0], ListNode) else [""]
+        gap = [] if after_a_bare_marker or isinstance(entry.children[0], ListNode) else [""]
         return gap + indent_lines(children, " " * width)
 
     def titled(self, title: str, children: Sequence[Node]) -> list[str]:

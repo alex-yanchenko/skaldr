@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from skaldr import compute, models
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for
+from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for, spaced
 from skaldr.export.lower.prose import (
     lower_callout,
     lower_code,
@@ -108,7 +108,9 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:
-    text = bold(step.label)
-    if step.sub:
-        text += plain(" ") + italic(lowering.rich(step.sub))
-    return ListEntry(text, children=tuple(_lower_blocks(step.detail, lowering, depth)), tone=step.tone)
+    parts = [bold(step.label), italic(lowering.rich(step.sub or ""))]
+    return ListEntry(
+        spaced([part for part in parts if part]),
+        children=tuple(_lower_blocks(step.detail, lowering, depth)),
+        tone=step.tone,
+    )

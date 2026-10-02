@@ -20,7 +20,7 @@ from skaldr.export.tree import (
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import Code, Link, Plain, Styled
+from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
 from tests.factories import lowered, make_report
 
 
@@ -42,6 +42,39 @@ def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
     assert lowered([{"type": "text", "body": "run  `a  b`\nnow"}]) == (
         Paragraph((Plain("run "), Code("a  b"), Plain(" now"))),
     )
+
+
+@pytest.mark.parametrize(
+    ("item", "runs"),
+    [
+        pytest.param("[a\nb](https://e.com)", (Link((Plain("a b"),), "https://e.com"),), id="link-label"),
+        pytest.param("[a\nb](#count)", (AnchorLink((Plain("a b"),), "count"),), id="anchor-link-label"),
+        pytest.param("**a\nb**", (Styled("bold", (Plain("a b"),)),), id="styled"),
+        pytest.param("  x  ", (Plain("x"),), id="outer-spaces-trimmed"),
+        pytest.param("  `x`  ", (Code("x"),), id="outer-spaces-around-code-dropped"),
+        pytest.param("`x\ry`", (Code("x y"),), id="code-carriage-return"),
+        pytest.param("`x\r\ny`", (Code("x y"),), id="code-crlf"),
+    ],
+)
+def test_rich_text_lowers_onto_one_line(item: str, runs: Rich) -> None:
+    blocks = [{"type": "heading", "text": "Count"}, {"type": "list", "items": [item]}]
+
+    assert lowered(blocks) == (
+        Heading(2, (Plain("Count"),), "count"),
+        ListNode("bullet", (ListEntry(runs),)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("Appendix\n", (Plain("Appendix"),), id="trailing-newline"),
+        pytest.param("  a \n b  ", (Plain("a b"),), id="inner-and-outer-whitespace"),
+        pytest.param(" \n ", (), id="only-whitespace"),
+    ],
+)
+def test_plain_text_is_trimmed_and_collapsed_to_one_line(text: str, runs: Rich) -> None:
+    assert plain(text) == runs
 
 
 def test_an_author_heading_id_becomes_the_anchor() -> None:
