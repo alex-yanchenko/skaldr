@@ -76,7 +76,7 @@ class _NotionRuns(MarkupRuns):
         return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
 
     def chip(self, run: Chip, /) -> str:
-        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.escape(run.label)}</span>'
+        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.text(run.label)}</span>'
 
 
 def notion_inline(runs: ExportRich) -> str:

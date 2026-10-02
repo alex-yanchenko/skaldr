@@ -134,13 +134,17 @@ def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColorLiteral) -> N
     assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
 
 
+def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_it() -> None:
+    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue_bg">`README.md`</span>'
+
+
 def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
     assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
         '\t- <span color="blue_bg">api</span> the API\n</details>\n'
         "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
         "- **Lead**: **Ana**\n<empty-block/>\n"
-        "- **Drift**: first\n\tsecond\n- **Gap**: \n<empty-block/>\n"
+        "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
         '- **Clean**: 9 (90.0%) <span color="green_bg">▲ +1</span> <span color="blue_bg">api</span>'
         ' {color="green"}\n\tsince Monday {color="gray"}\n'
         "- **Lag**: 3 days → flat\n"
@@ -148,7 +152,7 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         '- **Owners**: <span color="purple_bg">web</span>\n<empty-block/>\n'
         "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
         '- 🔵 **Mon**: Start <span color="blue_bg">api</span>\n\tkick-off\n- Later\n<empty-block/>\n'
-        '- **Zone**: ████░░░░░░ 42.9% (3 of 7) {color="yellow"}\n'
+        '- **Zone**: ████░░░░░░ 42.9% {color="yellow"}\n'
         'Jan to Dec {color="gray"}\n'
         '- **Q1**: 25.0%, slow {color="red"}\n- **Rest**: 75.0%\n'
     )

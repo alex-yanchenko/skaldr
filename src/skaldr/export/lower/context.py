@@ -68,7 +68,7 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
 
 def with_bold_label(label: str | None, text: ExportRich) -> ExportRich:
     name = bold(one_line(label or "").removesuffix(":").rstrip())
-    return (*name, Plain(": "), *text) if name else text
+    return (*name, Plain(": "), *text) if name and text else name + text
 
 
 def bullets(entries: Iterable[ListEntry]) -> ListNode:

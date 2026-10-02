@@ -135,9 +135,9 @@ def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node
 
 
 def _meter_entry(item: models.MeterItem) -> ListEntry:
-    reading = f"{compute.pct(item.value, item.max)} ({compute.fmt(item.value)} of {compute.fmt(item.max)})"
     gauge: ExportRich = (Gauge(item.value, item.max), Plain(" "))
-    return ListEntry(with_bold_label(item.label, gauge + plain(reading)), tone=item.tone)
+    share = plain(compute.pct(item.value, item.max))
+    return ListEntry(with_bold_label(item.label, gauge + share), tone=item.tone)
 
 
 def lower_meter(block: models.Meter) -> list[Node]:

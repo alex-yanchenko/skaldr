@@ -318,7 +318,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             id="toned-delta-is-a-colored-chip",
         ),
         pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
-        pytest.param({"label": "Empty", "value": ""}, (*bold("Empty"), Plain(": ")), id="empty-value"),
+        pytest.param({"label": "Empty", "value": ""}, bold("Empty"), id="empty-value-is-the-label-alone"),
     ],
 )
 def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
@@ -392,7 +392,7 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
             "bullet",
             (
                 ListEntry(
-                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" "), Plain("50.0% (5 of 10)")),
+                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" "), Plain("50.0%")),
                     tone="warning",
                 ),
             ),
@@ -497,7 +497,7 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
                 ListEntry(
                     (*bold("Fix"), Plain(": "), Plain("first")), children=(Paragraph((Plain("second"),)),)
                 ),
-                ListEntry((*bold("Gap"), Plain(": "))),
+                ListEntry(bold("Gap")),
             ),
         ),
     )
@@ -515,6 +515,7 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
         ),
         pytest.param(":", plain("West"), (Plain("West"),), id="a-lone-colon-is-no-label"),
         pytest.param(None, plain("West"), (Plain("West"),), id="no-label"),
+        pytest.param("Gap", (), bold("Gap"), id="no-text-leaves-no-dangling-colon"),
     ],
 )
 def test_a_label_is_bold_and_joined_to_its_text_by_one_colon(
