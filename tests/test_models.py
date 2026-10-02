@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any, get_args
 
@@ -136,6 +137,17 @@ def test_undeclared_badge_reference_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"badge key\(s\) not declared.*MADE_UP"):
         parse_report(make_report(blocks=[table]))
+
+
+def test_padded_badge_key_on_a_card_is_still_rejected_as_undeclared() -> None:
+    block = {"type": "cards", "items": [{"label": "Load", "value": 3, "badges": [" OPS "]}]}
+    badges = {"OPS": {"label": "Ops", "tone": "blue", "legend": "Operations."}}
+
+    with pytest.raises(
+        ReportError,
+        match=re.escape("badge key(s) not declared in `badges`: [' OPS '] (add them to the badges map)"),
+    ):
+        parse_report(make_report(badges=badges, blocks=[block]))
 
 
 def test_badge_row_needs_exactly_one_of_items_or_groups() -> None:
