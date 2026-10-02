@@ -23,6 +23,13 @@ the path, fix, re-run. Add an output flag and the check becomes a gate on that r
 --strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
 at all if the check fails.
 
+**Values are never coerced.** A number field takes a YAML number, so `value: '5'` and `start: '4'`
+fail where `value: 5` and `start: 4` pass. A whole-number field such as `span` or `start` takes an
+integer, not `2.0`; a field that takes decimals also takes an integer. A true/false field takes
+`true` or `false` (YAML also reads a bare `yes` or `no` as one), not a quoted `'no'` or a `1`. YAML
+reads `1e3` and `1e+3` as text, because its float form needs a dot and a signed exponent, so write
+`1000` or `1.0e+3` in a number field.
+
 A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
 and labels the schema marks with `pattern: \S` must hold visible text. An empty or whitespace-only
 one fails the build at its path with `must not be blank`; an optional one left blank says `must not

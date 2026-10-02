@@ -34,6 +34,8 @@ from skaldr.models import (
     Matrix,
     MatrixCell,
     Meta,
+    Meter,
+    MeterItem,
     Note,
     Panel,
     Report,
@@ -2190,6 +2192,80 @@ def test_card_of_rejects_boolean() -> None:
 
     with pytest.raises(ReportError, match=r"of\b.*must be a number, not a boolean"):
         parse_report(make_report(blocks=[block]))
+
+
+def _comparison(**overrides: Any) -> dict[str, Any]:
+    return {
+        "type": "comparison",
+        "options": ["a", "b"],
+        "rows": [{"feature": "f", "values": [True, False]}],
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        pytest.param(
+            _comparison(highlight=True),
+            "blocks.0.comparison.highlight: Value error, must be a number, not a boolean",
+            id="highlight-true",
+        ),
+        pytest.param(
+            _comparison(highlight="1"),
+            "blocks.0.comparison.highlight: Input should be a valid integer",
+            id="highlight-numeric-string",
+        ),
+        pytest.param(
+            {"type": "meter", "items": [{"label": "m", "value": "5", "max": 10}]},
+            "blocks.0.meter.items.0.value.int: Input should be a valid integer; "
+            "blocks.0.meter.items.0.value.float: Input should be a valid number",
+            id="meter-value-numeric-string",
+        ),
+        pytest.param(
+            {"type": "list", "style": "number", "start": "4", "items": ["a"]},
+            "blocks.0.list.start: Input should be a valid integer",
+            id="list-start-numeric-string",
+        ),
+        pytest.param(
+            {"type": "text", "body": "x", "span": 2.0},
+            "blocks.0.text.span: Input should be a valid integer",
+            id="span-a-float",
+        ),
+        pytest.param(
+            {"type": "section", "title": "S", "collapsed": "no", "blocks": [{"type": "text", "body": "x"}]},
+            "blocks.0.section.collapsed: Input should be a valid boolean",
+            id="collapsed-yes-no-string",
+        ),
+        pytest.param(
+            {"type": "list", "style": "check", "items": [{"text": "a", "checked": 1}]},
+            "blocks.0.list.items.0.ListItem.checked: Input should be a valid boolean",
+            id="checked-an-integer",
+        ),
+        pytest.param(
+            make_reconciled_table(
+                reconcile={"total": "100", "column": "count", "handled": {"label": "Clean", "value": 90}}
+            ),
+            "blocks.0.table.reconcile.total: Input should be a valid integer",
+            id="reconcile-total-numeric-string",
+        ),
+    ],
+)
+def test_a_value_of_the_wrong_yaml_type_is_refused_rather_than_coerced(
+    block: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {message}"
+
+
+def test_yaml_numbers_fill_number_fields_without_changing_type() -> None:
+    block = {"type": "meter", "items": [{"label": "m", "value": 5, "max": 10.5}]}
+
+    assert parse_report(make_report(blocks=[block])).blocks[0] == Meter(
+        type="meter", items=[MeterItem(label="m", value=5, max=10.5)]
+    )
 
 
 def test_meter_rejects_non_finite_value() -> None:

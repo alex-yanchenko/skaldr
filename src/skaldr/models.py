@@ -1349,7 +1349,7 @@ class Comparison(_Block):
     rows: list[ComparisonRow] = Field(
         min_length=1, description="Feature rows; each supplies one value per option."
     )
-    highlight: int | None = Field(
+    highlight: Count | None = Field(
         default=None, description="0-based index of the recommended option column to emphasise."
     )
     polarity: list[Literal["positive", "negative"]] | None = Field(
