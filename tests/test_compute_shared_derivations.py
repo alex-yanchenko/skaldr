@@ -13,24 +13,21 @@ from skaldr.compute import (
     table_tallies,
 )
 from skaldr.models import Card, Cards, Comparison, MatrixCell, Swimlane, Table, parse_report
-from tests.factories import API_BADGES, make_report
+from tests.factories import API_BADGES, make_report, make_swimlane, make_table, parsed_block
 
-
-def _swimlane(steps: list[dict[str, Any]]) -> Swimlane:
-    block = {
-        "type": "swimlane",
-        "lanes": list(dict.fromkeys(step["lane"] for step in steps)),
-        "columns": list(dict.fromkeys(step["col"] for step in steps)),
-        "groups": [{"name": "Q1", "color": "blue", "columns": ["Plan"]}],
-        "steps": steps,
-    }
-    swimlane = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(swimlane, Swimlane)
-    return swimlane
+Q1_ON_PLAN: list[dict[str, Any]] = [{"name": "Q1", "color": "blue", "columns": ["Plan"]}]
+TAGGED_COLUMNS: list[dict[str, Any]] = [
+    {"key": "a", "label": "A"},
+    {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+]
 
 
 def test_a_swimlane_with_no_values_has_no_totals() -> None:
-    assert swimlane_totals(_swimlane([{"lane": "Ops", "col": "Plan", "n": "1", "label": "a"}])) is None
+    swimlane = parsed_block(
+        Swimlane, make_swimlane([{"lane": "Ops", "col": "Plan", "n": "1", "label": "a"}], groups=Q1_ON_PLAN)
+    )
+
+    assert swimlane_totals(swimlane) is None
 
 
 def test_swimlane_totals_sum_each_lane_column_and_group_counting_a_missing_value_as_zero() -> None:
@@ -40,7 +37,7 @@ def test_swimlane_totals_sum_each_lane_column_and_group_counting_a_missing_value
         {"lane": "Dev", "col": "Ship", "n": "3", "label": "c"},
     ]
 
-    assert swimlane_totals(_swimlane(steps)) == {
+    assert swimlane_totals(parsed_block(Swimlane, make_swimlane(steps, groups=Q1_ON_PLAN))) == {
         "lanes": {"Ops": 2, "Dev": 3},
         "columns": {"Plan": 5, "Ship": 0},
         "groups": {"Q1": 5},
@@ -54,19 +51,16 @@ def test_the_swimlane_state_legend_lists_two_or_more_states_in_canonical_order()
         {"lane": "Ops", "col": "Ship", "n": "2", "label": "b", "state": "done"},
         {"lane": "Dev", "col": "Ship", "n": "3", "label": "c", "state": "deferred"},
     ]
+    legends = [
+        swimlane_state_legend(parsed_block(Swimlane, make_swimlane(steps)))
+        for steps in (one_state, three_states)
+    ]
 
-    assert (swimlane_state_legend(_swimlane(one_state)), swimlane_state_legend(_swimlane(three_states))) == (
-        [],
-        ["done", "blocked", "deferred"],
-    )
+    assert legends == [[], ["done", "blocked", "deferred"]]
 
 
 def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
-    tagged = {
-        "type": "table",
-        "columns": [{"key": "a", "label": "A"}, {"key": "tag", "label": "", "kind": "badge"}],
-        "rollup": {"by": "tag"},
-    }
+    tagged = make_table(TAGGED_COLUMNS, rollup={"by": "tag"})
     report = parse_report(
         make_report(
             badges=API_BADGES,
@@ -92,7 +86,6 @@ def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
     )
     cards = report.blocks[0]
     assert isinstance(cards, Cards)
-
     matrices, tables = matrix_tallies(report), table_tallies(report)
 
     assert [derived_card_tally(card, "API", matrices, tables) for card in cards.items] == [
@@ -110,71 +103,39 @@ def test_a_derived_card_takes_the_semantic_twin_of_its_badge_colour_unless_it_se
 
 def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_column() -> None:
     blocks = [
-        {
-            "type": "table",
-            "columns": [
-                {"key": "n", "label": "N", "kind": "number"},
-                {"key": "r", "label": "R", "kind": "rich"},
-            ],
-            "totals": {"column": "n"},
-            "rows": [{"n": 1, "r": "x"}],
-        },
-        {
-            "type": "table",
-            "columns": [
+        make_table(
+            [{"key": "n", "label": "N", "kind": "number"}, {"key": "r", "label": "R", "kind": "rich"}],
+            totals={"column": "n"},
+            rows=[{"n": 1, "r": "x"}],
+        ),
+        make_table(
+            [
                 {"key": "r", "label": "R", "kind": "rich"},
                 {"key": "t", "label": "T"},
                 {"key": "n", "label": "N", "kind": "number"},
             ],
-            "reconcile": {"total": 3, "column": "n", "handled": {"label": "Clean", "value": 2}},
-            "rows": [{"r": "x", "t": "y", "n": 1}],
-        },
-        {"type": "table", "columns": [{"key": "t", "label": "T"}], "rows": [{"t": "y"}]},
+            reconcile={"total": 3, "column": "n", "handled": {"label": "Clean", "value": 2}},
+            rows=[{"r": "x", "t": "y", "n": 1}],
+        ),
+        make_table([{"key": "t", "label": "T"}], rows=[{"t": "y"}]),
     ]
-    tables = [_table(block) for block in blocks]
+    tables = [parsed_block(Table, block) for block in blocks]
 
     assert [(table.title_key, table.sum_key) for table in tables] == [("r", "n"), ("t", "n"), ("t", None)]
 
 
-def _table(block: dict[str, Any]) -> Table:
-    table = parse_report(make_report(blocks=[block], badges=API_BADGES)).blocks[0]
-    assert isinstance(table, Table)
-    return table
-
-
 def test_a_row_tints_by_the_first_key_of_its_tint_column_and_a_blank_first_key_tints_nothing() -> None:
-    table = _table(
-        {
-            "type": "table",
-            "columns": [
-                {"key": "a", "label": "A"},
-                {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
-            ],
-            "tint_by": "tag",
-            "rows": [{"a": "x", "tag": "API"}],
-        }
+    table = parsed_block(
+        Table, make_table(TAGGED_COLUMNS, tint_by="tag", rows=[{"a": "x", "tag": "API"}]), badges=API_BADGES
     )
+    rows: list[dict[str, Any]] = [{"tag": " API "}, {"tag": ["API", ""]}, {"tag": ["", "API"]}, {}]
 
-    assert [
-        table.row_tint_key(row) for row in ({"tag": " API "}, {"tag": ["API", ""]}, {"tag": ["", "API"]}, {})
-    ] == [
-        "API",
-        "API",
-        "",
-        "",
-    ]
+    assert [table.row_tint_key(row) for row in rows] == ["API", "API", "", ""]
 
 
 def test_a_badge_cell_reads_one_key_or_a_list_trimmed_with_blanks_dropped() -> None:
-    table = _table(
-        {
-            "type": "table",
-            "columns": [
-                {"key": "a", "label": "A"},
-                {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
-            ],
-            "rows": [{"a": "x", "tag": "API"}],
-        }
+    table = parsed_block(
+        Table, make_table(TAGGED_COLUMNS, rows=[{"a": "x", "tag": "API"}]), badges=API_BADGES
     )
     rows: list[dict[str, Any]] = [
         {"tag": " API "},
@@ -188,13 +149,12 @@ def test_a_badge_cell_reads_one_key_or_a_list_trimmed_with_blanks_dropped() -> N
 
 
 def test_a_swimlane_places_each_step_by_lane_column_and_resolved_group() -> None:
-    swimlane = _swimlane(
-        [
-            {"lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
-            {"lane": "Ops", "col": "Ship", "n": "2", "label": "b"},
-            {"lane": "Ops", "col": "Plan", "n": "3", "label": "c"},
-        ]
-    )
+    steps = [
+        {"lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
+        {"lane": "Ops", "col": "Ship", "n": "2", "label": "b"},
+        {"lane": "Ops", "col": "Plan", "n": "3", "label": "c"},
+    ]
+    swimlane = parsed_block(Swimlane, make_swimlane(steps, groups=Q1_ON_PLAN))
     first, second, third = swimlane.steps
 
     assert (
@@ -205,24 +165,20 @@ def test_a_swimlane_places_each_step_by_lane_column_and_resolved_group() -> None
 
 
 def test_a_swimlane_group_spans_its_first_and_last_subcolumn() -> None:
-    block = {
-        "type": "swimlane",
-        "lanes": ["Ops"],
-        "columns": ["Plan", "Build", "Ship"],
-        "groups": [
-            {"name": "A", "color": "blue", "columns": ["Plan", "Build"]},
-            {"name": "B", "color": "amber", "columns": ["Build"]},
-        ],
-        "steps": [
-            {"lane": "Ops", "col": "Plan", "n": "1", "label": "a", "group": "A"},
-            {"lane": "Ops", "col": "Build", "n": "2", "label": "b", "group": "B"},
-            {"lane": "Ops", "col": "Ship", "n": "3", "label": "c"},
-        ],
-    }
-    swimlane = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(swimlane, Swimlane)
+    steps = [
+        {"lane": "Ops", "col": "Plan", "n": "1", "label": "a", "group": "A"},
+        {"lane": "Ops", "col": "Build", "n": "2", "label": "b", "group": "B"},
+        {"lane": "Ops", "col": "Ship", "n": "3", "label": "c"},
+    ]
+    groups = [
+        {"name": "A", "color": "blue", "columns": ["Plan", "Build"]},
+        {"name": "B", "color": "amber", "columns": ["Build"]},
+    ]
 
-    assert swimlane.group_spans == {"A": (0, 1), "B": (2, 2)}
+    assert parsed_block(Swimlane, make_swimlane(steps, groups=groups)).group_spans == {
+        "A": (0, 1),
+        "B": (2, 2),
+    }
 
 
 @pytest.mark.parametrize(
@@ -241,21 +197,19 @@ def test_a_comparison_option_is_negative_only_when_its_polarity_says_so(
         "rows": [{"feature": "Risky", "values": [True, False]}],
         **({"polarity": polarity} if polarity else {}),
     }
-    comparison = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(comparison, Comparison)
+    comparison = parsed_block(Comparison, block)
 
     assert [comparison.is_negative(index) for index in range(len(comparison.options))] == negative
 
 
 def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> None:
-    swimlane = _swimlane(
-        [
-            {"id": "a", "lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
-            {"id": "b", "lane": "Ops", "col": "Plan", "n": "1", "label": "b"},
-            {"id": "c", "lane": "Ops", "col": "Plan", "n": "2", "label": "c"},
-            {"lane": "Ops", "col": "Plan", "n": "3", "label": "d", "depends_on": ["c", "a", "b"]},
-        ]
-    )
+    steps = [
+        {"id": "a", "lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
+        {"id": "b", "lane": "Ops", "col": "Plan", "n": "1", "label": "b"},
+        {"id": "c", "lane": "Ops", "col": "Plan", "n": "2", "label": "c"},
+        {"lane": "Ops", "col": "Plan", "n": "3", "label": "d", "depends_on": ["c", "a", "b"]},
+    ]
+    swimlane = parsed_block(Swimlane, make_swimlane(steps))
 
     assert swimlane.dependency_numbers(swimlane.steps[3]) == ["2", "1"]
 

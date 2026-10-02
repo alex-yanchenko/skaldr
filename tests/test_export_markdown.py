@@ -198,6 +198,32 @@ def test_visible_text_of_export_runs_reads_chips_and_states_as_words() -> None:
     assert export_visible_text(runs) == "api done"
 
 
+def test_visible_text_reads_a_line_break_as_a_space_and_every_mark_kind_as_its_word() -> None:
+    runs: ExportRich = (
+        SwimlaneMark("todo"),
+        Break(),
+        IndicatorMark("info"),
+        Plain(" "),
+        CheckMark(checked=True),
+        Plain(" "),
+        CheckMark(checked=False),
+    )
+
+    assert export_visible_text(runs) == "todo info yes no"
+
+
+def test_a_total_row_of_plain_cells_is_written_bold() -> None:
+    table = Table(
+        (TableCell((Plain("Issue"),)), TableCell((Plain("Units"),))),
+        (
+            TableRow((TableCell((Plain("x"),)), TableCell((Plain("2"),)))),
+            TableRow((TableCell((Plain("Total"),)), TableCell((Plain("2"),))), emphasis="total"),
+        ),
+    )
+
+    assert render_markdown([table]) == "| Issue | Units |\n| --- | --- |\n| x | 2 |\n| **Total** | **2** |\n"
+
+
 def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
     assert (styled("bold", " x "), styled("italic", "  "), styled("bold", "")) == (" **x** ", "  ", "")
 

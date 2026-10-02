@@ -244,6 +244,20 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
     )
 
 
+def test_a_group_row_with_its_own_tone_keeps_that_background() -> None:
+    table = Table(
+        (TableCell((Plain("Name"),)),),
+        (TableRow((TableCell((Plain("group"),)),), "warning", emphasis="group"),),
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t</tr>\n"
+        '\t<tr color="yellow_bg">\n\t\t<td>**group**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
 def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
     swimlane = {
         "type": "swimlane",

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import yaml
 
@@ -7,8 +7,10 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import Node
-from skaldr.models import parse_report
+from skaldr.models import AnyBlock, parse_report
 from tests.factories.report_factory import make_report
+
+BlockT = TypeVar("BlockT", bound=AnyBlock)
 
 API_BADGES: dict[str, Any] = {"API": {"label": "api", "tone": "blue", "legend": "the API"}}
 BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
@@ -59,6 +61,13 @@ BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
         ],
     },
 ]
+
+
+def parsed_block(kind: type[BlockT], block: dict[str, Any], **overrides: Any) -> BlockT:
+    parsed = parse_report(make_report(blocks=[block], **overrides)).blocks[0]
+    if not isinstance(parsed, kind):
+        raise TypeError(f"expected a {kind.__name__} block, got {type(parsed).__name__}")
+    return parsed
 
 
 def lowered(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Node, ...]:

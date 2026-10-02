@@ -5,7 +5,7 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
-from skaldr.export.lower.context import with_bold_label
+from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
 from skaldr.export.markup import check_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
     Break,
@@ -42,7 +42,16 @@ from skaldr.export.tree import (
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
-from tests.factories import API_BADGES, lowered, make_flow, make_report, make_request
+from tests.factories import (
+    API_BADGES,
+    lowered,
+    make_cell,
+    make_flow,
+    make_grid,
+    make_report,
+    make_request,
+    make_table,
+)
 
 API_LEGEND = Toggle(
     (Plain("Legend: badges used on this page"),),
@@ -1193,5 +1202,89 @@ def test_a_grid_inside_a_grid_cell_lays_its_cells_one_after_another() -> None:
                 Column(33, (Paragraph((Plain("a"),)),)),
                 Column(67, (Paragraph((Plain("b"),)), Paragraph((Plain("c"),)))),
             )
+        ),
+    )
+
+
+def test_a_toned_one_cell_grid_becomes_its_callout() -> None:
+    grid = make_grid([{**make_cell(6, [{"type": "text", "body": "a"}]), "tone": "warning"}])
+
+    assert lowered([grid]) == (Callout("warning", (Paragraph((Plain("a"),)),)),)
+
+
+def test_a_toned_cell_of_an_inner_grid_becomes_a_callout_inside_the_outer_column() -> None:
+    inner = make_grid(
+        [
+            {**make_cell(3, [{"type": "text", "body": "b"}]), "tone": "danger"},
+            make_cell(3, [{"type": "text", "body": "c"}]),
+        ]
+    )
+    grid = make_grid([make_cell(2, [{"type": "text", "body": "a"}]), make_cell(4, [inner])])
+
+    assert lowered([grid]) == (
+        Columns(
+            (
+                Column(33, (Paragraph((Plain("a"),)),)),
+                Column(67, (Callout("danger", (Paragraph((Plain("b"),)),)), Paragraph((Plain("c"),)))),
+            )
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "tone", "named"),
+    [
+        pytest.param(None, None, None, id="none"),
+        pytest.param("", None, None, id="empty"),
+        pytest.param("success", "success", "success", id="a-tone-passes-through"),
+        pytest.param("muted", None, "muted", id="muted-is-a-row-tone-only"),
+        pytest.param("green", None, None, id="a-palette-name-is-not-a-tone"),
+        pytest.param(["info"], None, None, id="not-a-string"),
+    ],
+)
+def test_an_untyped_value_reads_as_a_tone_only_when_it_is_one(
+    value: object, tone: ToneLiteral | None, named: ToneName | None
+) -> None:
+    assert (tone_of(value), tone_named(value)) == (tone, named)
+
+
+def test_a_blank_indicator_cell_is_empty_and_untoned() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Issue"}, {"key": "risk", "label": "Risk", "kind": "indicator"}],
+        rows=[{"a": "x", "risk": " "}],
+    )
+
+    assert lowered([table]) == (Table(_cells("Issue", "Risk"), (TableRow(_cells("x", "")),)),)
+
+
+def test_a_rollup_without_a_label_is_its_counts_alone() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Issue"}, {"key": "tag", "label": "", "kind": "badge", "placement": "cell"}],
+        rollup={"by": "tag"},
+        rows=[{"a": "x", "tag": "API"}],
+    )
+
+    assert lowered([table], badges=API_BADGES) == (
+        API_LEGEND,
+        Table(
+            _cells("Issue", ""), (TableRow((TableCell((Plain("x"),)), TableCell((Chip("api", "blue"),)))),)
+        ),
+        Paragraph((Chip("api", "blue"), Plain(" "), Plain("1"))),
+    )
+
+
+def test_a_grouped_table_with_nothing_to_sum_labels_each_group_by_name_alone() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Issue"}, {"key": "n", "label": "Units", "kind": "number"}],
+        groups=[{"name": "Ours", "rows": [{"a": "x", "n": 2}]}],
+    )
+
+    assert lowered([table]) == (
+        Table(
+            _cells("Issue", "Units"),
+            (
+                TableRow(_cells("Ours", ""), emphasis="group"),
+                TableRow(_cells("x", "2")),
+            ),
         ),
     )
