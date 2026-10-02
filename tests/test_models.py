@@ -803,6 +803,29 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def test_rollup_by_an_in_cell_badge_column_holding_a_list_is_rejected() -> None:
+    badges = {
+        "API": {"label": "API", "tone": "blue", "legend": "api work"},
+        "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
+    }
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+        ],
+        rows=[{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}],
+        rollup={"by": "tag"},
+    )
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=badges, blocks=[table]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.0.table: Value error, rollup.by 'tag' counts each row under one "
+        "badge, so its cells can't hold a list of keys (row 1 lists ['API', 'WEB'])"
+    )
+
+
 def test_tint_by_a_non_badge_column_is_rejected() -> None:
     table = make_table(
         columns=[{"key": "item", "label": "I", "kind": "text"}],

@@ -1066,6 +1066,12 @@ class Table(_Block):
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.rollup.by not in badge_keys:
                 raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
+            for index, row in enumerate(self.all_rows()):
+                if isinstance(row[self.rollup.by], list):
+                    raise ValueError(
+                        f"rollup.by '{self.rollup.by}' counts each row under one badge, so its cells "
+                        f"can't hold a list of keys (row {index} lists {row[self.rollup.by]})"
+                    )
             if not any(row[self.rollup.by].strip() for row in self.all_rows()):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
