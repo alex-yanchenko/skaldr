@@ -302,3 +302,82 @@ def test_an_attribute_list_that_cannot_color_text_fails_naming_it(text: str, mes
         inline_tokens(text)
 
     assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("text", "shape"),
+    [
+        pytest.param(
+            "an ++under *line*++ here",
+            (
+                ("text", "an "),
+                ("underline_open", ""),
+                ("text", "under "),
+                ("em_open", ""),
+                ("text", "line"),
+                ("em_close", ""),
+                ("underline_close", ""),
+                ("text", " here"),
+            ),
+            id="underline-holding-italic",
+        ),
+        pytest.param(
+            "++i over i++",
+            (("underline_open", ""), ("text", "i over i"), ("underline_close", "")),
+            id="two-increments-read-as-an-underline",
+        ),
+        pytest.param(
+            "~~a ~b~ c~~ H~2~O",
+            (
+                ("s_open", ""),
+                ("text", "a "),
+                ("subscript", "b"),
+                ("text", " c"),
+                ("s_close", ""),
+                ("text", " H"),
+                ("subscript", "2"),
+                ("text", "O"),
+            ),
+            id="subscripts-inside-and-next-to-a-strike",
+        ),
+        pytest.param(
+            "x~n+1~ z^*^ e^\N{MINUS SIGN}i^ y~(k)~",
+            (
+                ("text", "x"),
+                ("subscript", "n+1"),
+                ("text", " z"),
+                ("superscript", "*"),
+                ("text", " e"),
+                ("superscript", "\N{MINUS SIGN}i"),
+                ("text", " y"),
+                ("subscript", "(k)"),
+            ),
+            id="operators-signs-and-parentheses-in-a-script",
+        ),
+    ],
+)
+def test_underline_and_script_marks_become_tokens(text: str, shape: Shape) -> None:
+    assert _shape(text) == shape
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("C++ and i++ then j++", id="increments"),
+        pytest.param("a ++ b ++ c", id="spaced-pluses"),
+        pytest.param("x++y++", id="underline-opening-inside-a-word"),
+        pytest.param("++x++y", id="underline-closing-inside-a-word"),
+        pytest.param("a ++b++c", id="underline-closing-into-a-word"),
+        pytest.param("about ~5 days, cut from ~5 days~ to 2", id="whitespace-inside-a-subscript"),
+        pytest.param("~/code,~/notes http://host/~alice/x~bob", id="paths-and-urls-with-tildes"),
+        pytest.param("cut ~5%~ and 2^a_b^ and x~a/b~", id="characters-a-script-does-not-hold"),
+        pytest.param("a^^b^^ and [^x^]", id="doubled-carets-and-a-caret-after-a-bracket"),
+        pytest.param("~~unclosed~", id="strike-opener-with-one-closing-tilde"),
+    ],
+)
+def test_pluses_tildes_and_carets_that_form_no_mark_stay_text(text: str) -> None:
+    assert _shape(text) == (("text", text),)
+
+
+def test_a_backslash_escaped_marker_opens_no_script() -> None:
+    assert _shape("a\\~b~ and c\\^d^") == (("text", "a~b~ and c^d^"),)
