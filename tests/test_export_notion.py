@@ -778,6 +778,12 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     assert notion_of([block]) == notion
 
 
+def test_a_numbered_list_past_nine_digits_keeps_every_number_as_text() -> None:
+    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a", "b"]}
+
+    assert notion_of([block]) == "- 999999999\\. a\n- 1000000000\\. b\n"
+
+
 def test_a_numbered_list_written_as_bullets_is_kept_apart_from_a_bullet_list_after_it() -> None:
     blocks = [
         {"type": "list", "style": "number", "start": 3, "items": ["three"]},

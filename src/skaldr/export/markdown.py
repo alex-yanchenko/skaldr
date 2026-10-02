@@ -45,6 +45,7 @@ from skaldr.export.tree import (
     heading_of,
     nested_nodes,
 )
+from skaldr.models import LARGEST_LIST_START
 from skaldr.richtext import SCRIPT_HTML_TAG, ScriptPosition
 
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
@@ -188,7 +189,8 @@ class _MarkdownWriter:
                 case "bullet":
                     marker, width = dash, len(dash) + 1
                 case "number":
-                    marker = f"{index}{')' if use_alternate_markers else '.'}"
+                    number = min(index, LARGEST_LIST_START)
+                    marker = f"{number}{')' if use_alternate_markers else '.'}"
                     width = len(marker) + 1
                 case "check":
                     marker, width = f"{dash} [{'x' if entry.checked else ' '}]", len(dash) + 1

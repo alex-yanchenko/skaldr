@@ -981,7 +981,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
-| a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
+| a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs |

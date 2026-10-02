@@ -556,6 +556,37 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     assert markdown_of([block]) == markdown
 
 
+@pytest.mark.parametrize(
+    ("blocks", "markdown"),
+    [
+        pytest.param(
+            [
+                {
+                    "type": "list",
+                    "style": "number",
+                    "start": 999_999_999,
+                    "items": ["a", {"text": "b", "items": ["c"]}],
+                }
+            ],
+            "999999999. a\n999999999. b\n           1. c\n",
+            id="items-past-nine-digits-repeat-the-largest-marker",
+        ),
+        pytest.param(
+            [
+                {"type": "list", "items": ["x"]},
+                {"type": "list", "style": "number", "start": 999_999_998, "items": ["a", "b", "c"]},
+            ],
+            "- x\n\n999999998. a\n999999999. b\n999999999. c\n",
+            id="the-last-nine-digit-marker-counts-on-and-the-next-repeats-it",
+        ),
+    ],
+)
+def test_a_numbered_list_never_writes_a_marker_longer_than_nine_digits(
+    blocks: list[dict[str, object]], markdown: str
+) -> None:
+    assert markdown_of(blocks) == markdown
+
+
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
     block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
 
