@@ -1,5 +1,6 @@
 import re
-from collections.abc import Callable, Mapping, Sequence
+from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import quote
 
@@ -76,9 +77,18 @@ def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
 
-class MarkupRuns:
-    def __init__(self, escape: Callable[[str], str]) -> None:
-        self.escape = escape
+class MarkupRuns(ABC):
+    @abstractmethod
+    def escape(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def code(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def anchor_link(self, label: str, anchor: str, /) -> str: ...
+
+    @abstractmethod
+    def placeholder(self, name: str, /) -> str: ...
 
     def text(self, text: str, /) -> str:
         return bang_cannot_open_an_image(self.escape(text))

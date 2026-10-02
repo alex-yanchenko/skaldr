@@ -30,6 +30,7 @@ from skaldr.export.tree import (
     Quote,
     TableOfContents,
     Toggle,
+    heading_of,
     nested_nodes,
 )
 from skaldr.richtext import Rich, visible_text, write_runs
@@ -49,10 +50,6 @@ def _dash(use_alternate_markers: bool) -> str:
     return "*" if use_alternate_markers else "-"
 
 
-def _escape(text: str) -> str:
-    return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
-
-
 def _kept_in_a_github_slug(character: str) -> bool:
     category = unicodedata.category(character)
     return character in " -" or category[0] in "LMN" or category == "Pc"
@@ -64,8 +61,10 @@ def github_slug(text: str) -> str:
 
 class _MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
-        super().__init__(_escape)
         self.heading_slugs = heading_slugs
+
+    def escape(self, text: str, /) -> str:
+        return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
     def code(self, text: str, /) -> str:
         return code_span(text)
@@ -80,10 +79,9 @@ class _MarkdownRuns(MarkupRuns):
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:
     for node in nodes:
-        if isinstance(node, Heading):
-            yield node.anchor, node.text
-        elif isinstance(node, Toggle) and node.heading_level is not None:
-            yield node.anchor, node.title
+        heading = heading_of(node)
+        if heading is not None:
+            yield heading.anchor, heading.text
         yield from _headings(nested_nodes(node))
 
 

@@ -26,6 +26,7 @@ from skaldr.export.tree import (
     TableOfContents,
     Toggle,
     ToneName,
+    heading_of,
 )
 from skaldr.richtext import Rich, visible_text, write_runs
 
@@ -47,28 +48,28 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
 }
 
 
-def _escape(text: str) -> str:
-    return text.translate(NOTION_ESCAPES)
-
-
 class _NotionRuns(MarkupRuns):
-    def __init__(self) -> None:
-        super().__init__(_escape)
+    def escape(self, text: str, /) -> str:
+        return text.translate(NOTION_ESCAPES)
 
     def text(self, text: str, /) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
         return bang_cannot_open_an_image(
-            "".join(self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces))
+            "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
         )
 
+    def _piece(self, index: int, piece: str) -> str:
+        is_file_name = index % 2 == 1
+        return self.code(piece) if is_file_name else self.escape(piece)
+
     def code(self, text: str, /) -> str:
-        return _escape(text) if "`" in text else f"`{text}`"
+        return self.escape(text) if "`" in text else f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
 
     def placeholder(self, name: str, /) -> str:
-        return f'<span color="yellow_bg">{_escape("{{" + name + "}}")}</span>'
+        return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
 
 
 def notion_inline(runs: Rich) -> str:
@@ -173,24 +174,14 @@ def render_notion(nodes: Sequence[Node]) -> str:
     return _page(_notion_blocks(nodes))
 
 
-def _starts_a_chunk(node: Node) -> bool:
-    if isinstance(node, Heading):
-        return node.level <= CHUNK_BOUNDARY_LEVEL
-    return (
-        isinstance(node, Toggle)
-        and node.heading_level is not None
-        and node.heading_level <= CHUNK_BOUNDARY_LEVEL
-    )
+def _chunk_heading(node: Node) -> Heading | None:
+    heading = heading_of(node)
+    return heading if heading is not None and heading.level <= CHUNK_BOUNDARY_LEVEL else None
 
 
 def _section_label(section: Sequence[Node]) -> str:
-    match section[0] if section else None:
-        case Heading(level=level, text=title) if level <= CHUNK_BOUNDARY_LEVEL:
-            return f"{'#' * level} {visible_text(title)}"
-        case Toggle(heading_level=int(level), title=title) if level <= CHUNK_BOUNDARY_LEVEL:
-            return f"{'#' * level} {visible_text(title)}"
-        case _:
-            return OPENING_SECTION_LABEL
+    heading = _chunk_heading(section[0]) if section else None
+    return f"{'#' * heading.level} {visible_text(heading.text)}" if heading else OPENING_SECTION_LABEL
 
 
 @dataclass(frozen=True)
@@ -202,7 +193,7 @@ class NotionChunks:
 def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
     sections: list[list[Node]] = [[]]
     for node in nodes:
-        if _starts_a_chunk(node) and sections[-1]:
+        if _chunk_heading(node) is not None and sections[-1]:
             sections.append([])
         sections[-1].append(node)
     chunks: list[str] = []
