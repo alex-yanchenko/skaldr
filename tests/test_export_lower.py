@@ -61,7 +61,9 @@ from tests.factories import (
     make_grid,
     make_report,
     make_request,
+    make_tab,
     make_table,
+    make_tabs,
     make_toggle,
 )
 
@@ -1331,6 +1333,36 @@ def test_a_heading_in_a_toggle_inside_a_section_moves_down_with_the_section_and_
         Heading(2, (Plain("Open"),), "open"),
         Toggle((Plain("More"),), None, (Heading(4, (Plain("Deep"),), "deep"),)),
     )
+
+
+RAW_COUNTS_TOGGLE = make_toggle({"type": "text", "body": "x"}, title="Raw counts")
+RAW_COUNTS_TOGGLE_NODE = Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),))
+
+
+@pytest.mark.parametrize(
+    ("block", "nodes"),
+    [
+        pytest.param(
+            make_grid([make_cell(6, [RAW_COUNTS_TOGGLE])]), (RAW_COUNTS_TOGGLE_NODE,), id="grid-cell"
+        ),
+        pytest.param(
+            make_tabs(make_tab("Floor", RAW_COUNTS_TOGGLE), make_tab("System")),
+            (
+                Tabs(
+                    (
+                        Tab((Plain("Floor"),), (RAW_COUNTS_TOGGLE_NODE,)),
+                        Tab((Plain("System"),), (Paragraph((Plain("System"),)),)),
+                    )
+                ),
+            ),
+            id="tab",
+        ),
+    ],
+)
+def test_a_toggle_inside_a_grid_cell_or_a_tab_lowers_like_a_top_level_toggle(
+    block: dict[str, Any], nodes: tuple[Node, ...]
+) -> None:
+    assert lowered([block]) == nodes
 
 
 def test_a_tabs_block_is_the_tabs_node_requests_use_with_each_tab_tone() -> None:
