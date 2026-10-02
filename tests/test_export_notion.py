@@ -473,6 +473,18 @@ def test_a_numbered_list_counts_from_its_start_in_decimal(options: dict[str, obj
     assert notion_of([block]) == notion
 
 
+def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:
+    blocks = [
+        {"type": "callout", "tone": "danger", "icon": "🔥", "body": "hot"},
+        {"type": "note", "icon": "📌", "title": "Aside", "body": "x"},
+    ]
+
+    assert notion_of(blocks) == (
+        '<callout icon="🔥" color="red_bg">\n\thot\n</callout>\n'
+        '<callout icon="📌" color="gray_bg">\n\t**Aside**\n\tx\n</callout>\n'
+    )
+
+
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
     block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
 

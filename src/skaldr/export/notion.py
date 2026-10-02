@@ -211,9 +211,8 @@ def _notion_lines(node: Node) -> list[str]:
         case CodeBlock():
             return code_block_lines(node)
         case Callout():
-            opening = (
-                f'<callout icon="{CALLOUT_ICON[node.tone]}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
-            )
+            icon = node.icon or CALLOUT_ICON[node.tone]
+            opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
             return [opening, *_indent(_notion_blocks(node.children)), "</callout>"]
         case Quote():
             return [_quote_line(node)]

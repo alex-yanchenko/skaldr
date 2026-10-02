@@ -584,6 +584,21 @@ def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
     assert markdown_of([callout]) == "> ⚠️ **Heads up**\n>\n> one\n>\n> two\n"
 
 
+def test_a_callout_and_a_note_icon_take_the_place_of_the_tone_icon() -> None:
+    blocks = [
+        {"type": "callout", "tone": "warning", "icon": "🚧", "title": "Heads up", "body": "one"},
+        {"type": "note", "icon": "📌", "body": "aside"},
+    ]
+
+    assert markdown_of(blocks) == "> 🚧 **Heads up**\n>\n> one\n\n> 📌 aside\n"
+
+
+def test_an_icon_leads_a_callout_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
+    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),), icon="🚀")
+
+    assert render_markdown([callout]) == "> 🚀\n>\n> - a\n"
+
+
 def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
     quote = {"type": "quote", "body": "first\n\nsecond", "cite": "Ops lead"}
 

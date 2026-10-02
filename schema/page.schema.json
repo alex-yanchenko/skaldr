@@ -241,6 +241,19 @@
           "description": "Rich-text body.",
           "title": "Body",
           "type": "string"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional single emoji shown at the head of the callout, in place of the tone's default icon in the Markdown exports.",
+          "title": "Icon"
         }
       },
       "required": [
@@ -2538,6 +2551,19 @@
           "default": null,
           "description": "Optional label for the note.",
           "title": "Title"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional single emoji shown at the head of the note, in place of the default note icon in the Markdown exports.",
+          "title": "Icon"
         }
       },
       "required": [

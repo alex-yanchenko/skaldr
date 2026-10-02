@@ -25,6 +25,7 @@ if sys.version_info >= (3, 11):
 else:
     from importlib.abc import Traversable
 
+import emoji
 import yaml
 from pydantic import (
     AfterValidator,
@@ -158,6 +159,15 @@ def _to_callout_tone(value: Any) -> Any:
 
 
 CalloutTone = Annotated[Literal["info", "success", "warning", "danger"], BeforeValidator(_to_callout_tone)]
+
+
+def _one_emoji(value: str) -> str:
+    if not emoji.is_emoji(value):
+        raise ValueError(f"icon must be a single emoji (got '{value}')")
+    return value
+
+
+Icon = Annotated[str, AfterValidator(_one_emoji)]
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
@@ -553,6 +563,11 @@ class Callout(_Block):
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
     body: str = Field(description="Rich-text body.")
+    icon: Icon | None = Field(
+        default=None,
+        description="Optional single emoji shown at the head of the callout, in place of the tone's "
+        "default icon in the Markdown exports.",
+    )
 
 
 class StatusItem(FrozenModel):
@@ -649,6 +664,11 @@ class Note(_Block):
     type: Literal["note"]
     body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
+    icon: Icon | None = Field(
+        default=None,
+        description="Optional single emoji shown at the head of the note, in place of the default note "
+        "icon in the Markdown exports.",
+    )
 
 
 class Image(_Block):

@@ -142,17 +142,17 @@ def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
     return [Paragraph(with_bold_label(block.label, lowering.badge_items(block.items)))]
 
 
-def _titled_callout(tone: ToneName, title: str | None, body: str, lowering: Lowering) -> list[Node]:
-    heading: tuple[Node, ...] = (Paragraph(bold(title)),) if title else ()
-    return [Callout(tone, heading + lowering.prose(body))]
+def _titled_callout(tone: ToneName, block: models.Callout | models.Note, lowering: Lowering) -> list[Node]:
+    heading: tuple[Node, ...] = (Paragraph(bold(block.title)),) if block.title else ()
+    return [Callout(tone, heading + lowering.prose(block.body), block.icon)]
 
 
 def lower_callout(block: models.Callout, lowering: Lowering) -> list[Node]:
-    return _titled_callout(block.tone, block.title, block.body, lowering)
+    return _titled_callout(block.tone, block, lowering)
 
 
 def lower_note(block: models.Note, lowering: Lowering) -> list[Node]:
-    return _titled_callout("neutral", block.title, block.body, lowering)
+    return _titled_callout("neutral", block, lowering)
 
 
 def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node]:

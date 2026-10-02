@@ -202,6 +202,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
+	.iconed{display:flex; gap:var(--s3); align-items:flex-start;
+		& > .block-icon{flex:none; font-size:1.15em; line-height:1.4}
+		& > .iconed-body{flex:1; min-width:0}}
 
 	/* Blank-line paragraphs in set-apart prose (callout/quote bodies); table cells use td .cell-p. */
 	.prose-p + .prose-p{margin-block-start:var(--s3)}

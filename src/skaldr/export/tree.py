@@ -68,6 +68,7 @@ class CodeBlock:
 class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
+    icon: str | None = None
 
 
 @dataclass(frozen=True)

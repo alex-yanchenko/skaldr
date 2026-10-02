@@ -472,6 +472,31 @@ def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
     assert '<dt>Say</dt><dd><p class="prose-p">One.</p><p class="prose-p">Two.</p></dd></dl>' in html
 
 
+def test_a_callout_and_a_note_with_an_icon_lead_with_it_beside_their_title_and_body() -> None:
+    callout = {"type": "callout", "tone": "info", "icon": "🚀", "title": "Launch", "body": "Go."}
+    note = {"type": "note", "icon": "📌", "body": "Aside."}
+
+    html = render_html(parse_report(make_report(blocks=[callout, note])))
+
+    assert (
+        '<div class="callout info iconed"><span class="block-icon" aria-hidden="true">🚀</span>'
+        '<div class="iconed-body"><div class="title">Launch</div><div>Go.</div></div></div>'
+    ) in html
+    assert (
+        '<div class="note-block iconed"><span class="block-icon" aria-hidden="true">📌</span>'
+        '<div class="iconed-body"><div>Aside.</div></div></div>'
+    ) in html
+    assert ".iconed{display:flex; gap:var(--s3); align-items:flex-start;" in html
+
+
+def test_a_callout_without_an_icon_keeps_its_plain_markup() -> None:
+    block = {"type": "callout", "tone": "warning", "title": "Careful", "body": "b"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<div class="callout warning"><div class="title">Careful</div><div>b</div></div>' in html
+
+
 def test_note_renders_optional_title_and_body() -> None:
     titled = {"type": "note", "title": "Read aloud", "body": "Speak softly."}
     plain = {"type": "note", "body": "Just an aside."}

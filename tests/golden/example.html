@@ -218,6 +218,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
+	.iconed{display:flex; gap:var(--s3); align-items:flex-start;
+		& > .block-icon{flex:none; font-size:1.15em; line-height:1.4}
+		& > .iconed-body{flex:1; min-width:0}}
 
 	/* Blank-line paragraphs in set-apart prose (callout/quote bodies); table cells use td .cell-p. */
 	.prose-p + .prose-p{margin-block-start:var(--s3)}
@@ -1069,7 +1072,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <div class="callout warning"><div class="title">Action needed before the next count</div><div>The <code>bin &gt; 12</code> scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.</div></div>
 
-<div class="callout info"><div>Counts below are per distinct discrepancy class, not per unit.</div></div>
+<div class="callout info iconed"><span class="block-icon" aria-hidden="true">📏</span><div class="iconed-body"><div>Counts below are per distinct discrepancy class, not per unit.</div></div></div>
 
 <h2 id="discrepancies-fixes">Discrepancies &amp; fixes</h2>
 
@@ -1133,7 +1136,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
 
-<div class="note-block"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div>
+<div class="note-block iconed"><span class="block-icon" aria-hidden="true">🎤</span><div class="iconed-body"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div></div>
 
 <h3 id="re-count-procedure-from-step-iv">Re-count procedure, from step iv</h3>
 

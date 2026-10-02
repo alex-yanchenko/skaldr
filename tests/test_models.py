@@ -1144,6 +1144,53 @@ def test_callout_rejects_a_non_semantic_tone_with_a_self_explaining_message(tone
         parse_report(make_report(blocks=[{"type": "callout", "tone": tone, "body": "b"}]))
 
 
+@pytest.mark.parametrize(
+    "icon",
+    [
+        pytest.param("🚀", id="one-code-point"),
+        pytest.param("⚠️", id="with-a-variation-selector"),
+        pytest.param("👍🏽", id="with-a-skin-tone"),
+        pytest.param("👩‍💻", id="joined-by-a-zero-width-joiner"),
+        pytest.param("🇺🇦", id="a-flag"),
+        pytest.param("#️⃣", id="a-keycap"),
+    ],
+)
+def test_a_callout_and_a_note_take_one_emoji_as_their_icon(icon: str) -> None:
+    blocks = [
+        {"type": "callout", "tone": "info", "icon": icon, "body": "b"},
+        {"type": "note", "icon": icon, "body": "b"},
+    ]
+
+    report = parse_report(make_report(blocks=blocks))
+
+    assert report.blocks == [
+        Callout(type="callout", tone="info", icon=icon, body="b"),
+        Note(type="note", icon=icon, body="b"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block", "icon"),
+    [
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "A", id="a-letter"),
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "1", id="a-digit"),
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "✓", id="a-text-symbol"),
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "🚀🚀", id="two-emoji"),
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, " 🚀", id="an-emoji-with-a-space"),
+        pytest.param({"type": "callout", "tone": "info", "body": "b"}, "", id="empty"),
+        pytest.param({"type": "note", "body": "b"}, "go", id="a-word-on-a-note"),
+    ],
+)
+def test_an_icon_that_is_not_one_emoji_is_rejected(block: dict[str, Any], icon: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{**block, "icon": icon}]))
+
+    assert str(raised.value) == (
+        f"invalid content data: blocks.0.{block['type']}.icon: Value error, "
+        f"icon must be a single emoji (got '{icon}')"
+    )
+
+
 def test_grid_cell_tone_parses_and_rejects_an_unknown_value() -> None:
     ok = make_grid([{"span": 6, "tone": "accent", "blocks": [{"type": "text", "body": "x"}]}])
     block = parse_report(make_report(blocks=[ok])).blocks[0]

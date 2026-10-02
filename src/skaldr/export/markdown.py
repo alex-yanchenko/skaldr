@@ -199,7 +199,7 @@ class _MarkdownWriter:
         return [title, *_spaced(self.blocks(children))]
 
     def callout_lines(self, node: Callout) -> list[str]:
-        icon = CALLOUT_ICON[node.tone]
+        icon = node.icon or CALLOUT_ICON[node.tone]
         lines = self.blocks(node.children)
         if lines and isinstance(node.children[0], Paragraph):
             lines[0] = f"{icon} {lines[0]}"

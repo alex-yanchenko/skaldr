@@ -1182,6 +1182,18 @@ def test_an_untitled_callout_and_note_are_their_body_alone() -> None:
     )
 
 
+def test_a_callout_and_a_note_carry_their_icon() -> None:
+    blocks = [
+        {"type": "callout", "tone": "success", "icon": "🚀", "title": "Go", "body": "now"},
+        {"type": "note", "icon": "📌", "body": "aside"},
+    ]
+
+    assert lowered(blocks) == (
+        Callout("success", (Paragraph(bold("Go")), Paragraph((Plain("now"),))), icon="🚀"),
+        Callout("neutral", (Paragraph((Plain("aside"),)),), icon="📌"),
+    )
+
+
 def test_a_collapsed_section_is_a_toggle_heading_with_its_updated_line() -> None:
     section = {
         "type": "section",

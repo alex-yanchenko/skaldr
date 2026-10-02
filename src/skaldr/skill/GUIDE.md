@@ -166,14 +166,14 @@ or to keep a small block from stretching across the whole page.
 | `def_list` | Labelled list — prominent term + rich body (e.g. Action/Expected/Say) | `items: [{term, body}]` |
 | `cards` | Headline numbers (a value may be author-set, or **derived** by counting a matrix / tables) | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` OR a derived item `{badge, of_matrix \| of_tables, label?, tone?, note?}` |
 | `badge_row` | A standalone row of chips, flat or grouped | `label?` + `items: [{key} \| {label, tone}]`, OR `groups: [{label, items[]}]` |
-| `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
+| `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body`, `icon?` (one emoji, e.g. `"🚧"`) |
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
-| `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
+| `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -241,6 +241,8 @@ Lists: `start` and `numbering` belong to a `style: number` list, `checked` to a 
     - { text: "Keep the most recent scan.", decided: true }
     - "Whether overflow aisles get their own count window."   # open
 ```
+
+Icons: a `callout` or a `note` may set `icon` to one emoji, shown at the head of the block. It replaces the icon the Markdown exports otherwise pick from the tone. It must be exactly one emoji: a flag, a skin tone or a joined emoji such as 👩‍💻 counts as one, while a letter, a digit, a word, a text symbol such as ✓, or two emoji fail the build.
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
@@ -954,6 +956,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges or note links and citations it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
 | a `number` list's `start` | the first marker is the start number, which GitHub honours | numbered items counting from the start number |
 | a `number` list's `numbering: letters\|roman` | a decimal list (Markdown has no letter or roman markers) | a decimal list (Notion-flavored Markdown has no numbering style) |
 | a `decision` list | a bullet list whose items start with ✅ (decided) or ❓ (open) | the same |
