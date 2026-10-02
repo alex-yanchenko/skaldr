@@ -123,6 +123,7 @@ text, headings, labels) is single-line: a blank line there is just collapsed whi
 > so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:
 > ```yaml
 > - type: callout
+>   tone: info
 >   body: |
 >     First paragraph.
 >
@@ -828,7 +829,7 @@ link instead.
     - { key: count,   label: "Units",         kind: number, pct_of_total: true }
     - { key: problem, label: "What happened", kind: rich }
   reconcile:                        # optional trust check
-    total: 10000
+    total: 9100
     column: count
     handled: { label: "Matched cleanly", value: 8500 }   # optional bucket outside the rows
   groups:                           # OR use `rows:` for an ungrouped table (not both)
@@ -870,10 +871,11 @@ link instead.
   column order instead of a mapping — no repeated keys:
 
   ```yaml
-  columns: [{key: issue, kind: text}, {key: tag, kind: badge}, {key: n, kind: number}]
-  rows:
-    - [Double-counted units, FLOOR, 600]     # positional: values in column order
-    - {issue: Complex, tag: FLOOR, n: 10, subrows: […]}   # still a mapping — mix freely
+  - type: table
+    columns: [{key: issue, label: "Discrepancy"}, {key: tag, label: "", kind: badge}, {key: n, label: "Units", kind: number}]
+    rows:
+      - [Double-counted units, FLOOR, 600]     # positional: values in column order
+      - {issue: Complex, tag: FLOOR, n: 10, subrows: [{label: "bin > 12", value: 4}]}   # still a mapping, mix freely
   ```
 
   A list row must have exactly one value per column (a length mismatch fails the build). Types and
