@@ -176,6 +176,44 @@ def test_a_badge_cell_reads_one_key_or_a_list_trimmed_with_blanks_dropped() -> N
     assert [table.badge_keys(row, "tag") for row in rows] == [["API"], ["API", "OPS"], [], [], []]
 
 
+def test_a_swimlane_places_each_step_by_lane_column_and_resolved_group() -> None:
+    swimlane = _swimlane(
+        [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "a"},
+            {"lane": "Ops", "col": "Ship", "n": "2", "label": "b"},
+            {"lane": "Ops", "col": "Plan", "n": "3", "label": "c"},
+        ]
+    )
+    first, second, third = swimlane.steps
+
+    assert (
+        swimlane.steps_at("Ops", "Plan", "Q1"),
+        swimlane.steps_at("Ops", "Ship", None),
+        swimlane.steps_at("Ops", "Plan", None),
+    ) == ([first, third], [second], [])
+
+
+def test_a_swimlane_group_spans_its_first_and_last_subcolumn() -> None:
+    block = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": ["Plan", "Build", "Ship"],
+        "groups": [
+            {"name": "A", "color": "blue", "columns": ["Plan", "Build"]},
+            {"name": "B", "color": "amber", "columns": ["Build"]},
+        ],
+        "steps": [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "a", "group": "A"},
+            {"lane": "Ops", "col": "Build", "n": "2", "label": "b", "group": "B"},
+            {"lane": "Ops", "col": "Ship", "n": "3", "label": "c"},
+        ],
+    }
+    swimlane = parse_report(make_report(blocks=[block])).blocks[0]
+    assert isinstance(swimlane, Swimlane)
+
+    assert swimlane.group_spans == {"A": (0, 1), "B": (2, 2)}
+
+
 def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> None:
     swimlane = _swimlane(
         [

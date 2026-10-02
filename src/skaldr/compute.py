@@ -422,8 +422,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "state": step.state,
                     "deps": block.dependency_numbers(step),
                 }
-                for step in block.steps
-                if step.lane == lane.key and step.col == sub["col"] and block.step_group(step) == sub["group"]
+                for step in block.steps_at(lane.key, sub["col"], sub["group"])
             ]
             cells.append(
                 {
@@ -444,8 +443,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     caps: list[SwimCap] = []
     caps_bottom: list[SwimCapBottom] = []
     for group in block.groups:
-        indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
-        line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
+        first, last = block.group_spans[group.name]
+        line_start, line_end = col_lines(first)[0], col_lines(last)[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
         group_total = totals["groups"][group.name] if totals is not None else None
         caps.append(

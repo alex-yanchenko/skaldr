@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
@@ -203,12 +204,10 @@ def _with_total(text: ExportRich, totals: Mapping[str, float] | None, key: str) 
 
 
 def _groups_starting_at(block: models.Swimlane) -> dict[str, list[str]]:
+    subcolumns = block.subcolumns()
     starting: dict[str, list[str]] = {column.key: [] for column in block.columns}
-    seen: set[str] = set()
-    for column, group in block.subcolumns():
-        if group is not None and group not in seen:
-            seen.add(group)
-            starting[column].append(group)
+    for group, (first, _) in block.group_spans.items():
+        starting[subcolumns[first][0]].append(group)
     return starting
 
 
@@ -224,22 +223,18 @@ def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) 
 
 
 def _split_columns(block: models.Swimlane) -> set[str]:
-    groups_per_column: dict[str, int] = {}
-    for column, _ in block.subcolumns():
-        groups_per_column[column] = groups_per_column.get(column, 0) + 1
+    groups_per_column = Counter(column for column, _ in block.subcolumns())
     return {column for column, count in groups_per_column.items() if count > 1}
 
 
-def _lane_cells(block: models.Swimlane, lane_key: str) -> list[TableCell]:
-    split = _split_columns(block)
+def _lane_cells(block: models.Swimlane, lane_key: str, split: set[str]) -> list[TableCell]:
     cells: list[TableCell] = []
     for column in block.columns:
         steps = [
             step
             for sub_column, group in block.subcolumns()
             if sub_column == column.key
-            for step in block.steps
-            if step.lane == lane_key and step.col == column.key and block.step_group(step) == group
+            for step in block.steps_at(lane_key, sub_column, group)
         ]
         cells.append(TableCell(_lines(_swim_step(block, step, column.key in split) for step in steps)))
     return cells
@@ -255,9 +250,13 @@ def _state_legend(states: Sequence[models.SwimlaneStepState]) -> list[Node]:
 def lower_swimlane(block: models.Swimlane) -> list[Node]:
     totals = compute.swimlane_totals(block)
     lane_totals = totals["lanes"] if totals is not None else None
+    split = _split_columns(block)
     rows = [
         TableRow(
-            (TableCell(_with_total(bold(lane.name), lane_totals, lane.key)), *_lane_cells(block, lane.key))
+            (
+                TableCell(_with_total(bold(lane.name), lane_totals, lane.key)),
+                *_lane_cells(block, lane.key, split),
+            )
         )
         for lane in block.lanes
     ]

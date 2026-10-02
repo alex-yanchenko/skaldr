@@ -12,8 +12,9 @@ state glyphs for status lists and timelines.
 import math
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
+from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
@@ -1480,9 +1481,30 @@ class Swimlane(_Block):
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
 
+    @cached_property
+    def _number_by_id(self) -> dict[str, str]:
+        return {step.id: step.n for step in self.steps if step.id is not None}
+
     def dependency_numbers(self, step: SwimlaneStep) -> list[str]:
-        number_by_id = {other.id: other.n for other in self.steps if other.id is not None}
-        return list(dict.fromkeys(number_by_id[dependency] for dependency in step.depends_on))
+        return list(dict.fromkeys(self._number_by_id[dependency] for dependency in step.depends_on))
+
+    @cached_property
+    def _placed_steps(self) -> dict[tuple[str, str, str | None], list[SwimlaneStep]]:
+        placed: defaultdict[tuple[str, str, str | None], list[SwimlaneStep]] = defaultdict(list)
+        for step in self.steps:
+            placed[(step.lane, step.col, self.step_group(step))].append(step)
+        return dict(placed)
+
+    def steps_at(self, lane: str, col: str, group: str | None) -> list[SwimlaneStep]:
+        return self._placed_steps.get((lane, col, group), [])
+
+    @cached_property
+    def group_spans(self) -> dict[str, tuple[int, int]]:
+        spans: dict[str, tuple[int, int]] = {}
+        for index, (_, group) in enumerate(self.subcolumns()):
+            if group is not None:
+                spans[group] = (spans[group][0], index) if group in spans else (index, index)
+        return spans
 
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,
@@ -1493,6 +1515,10 @@ class Swimlane(_Block):
         return covering[0].name if len(covering) == 1 else None
 
     def subcolumns(self) -> list[tuple[str, str | None]]:
+        return self._segments
+
+    @cached_property
+    def _segments(self) -> list[tuple[str, str | None]]:
         """The ordered atomic (column, group-name) segments the grid is built from. A column with no
         group → one `(col, None)` segment; a column split across N groups → N segments in canonical
         order (by column span, then declaration order). Raises if a group's segments cannot be laid out
