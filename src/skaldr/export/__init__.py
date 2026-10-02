@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -43,7 +44,7 @@ class ExportResult:
 @dataclass(frozen=True)
 class _EarlierExport:
     pages: frozenset[str]
-    manifest_unreadable: bool = False
+    unreadable_manifest: bool = False
 
 
 def _earlier_export(manifest_path: Path) -> _EarlierExport:
@@ -52,7 +53,7 @@ def _earlier_export(manifest_path: Path) -> _EarlierExport:
     except FileNotFoundError:
         return _EarlierExport(frozenset())
     except (OSError, ValidationError):
-        return _EarlierExport(frozenset(), manifest_unreadable=True)
+        return _EarlierExport(frozenset(), unreadable_manifest=True)
     return _EarlierExport(frozenset(manifest.files))
 
 
@@ -60,6 +61,8 @@ def _replace_file(path: Path, text: str) -> None:
     with tempfile.TemporaryDirectory(prefix=".skaldr-export-", dir=path.parent) as staging:
         staged = Path(staging) / path.name
         staged.write_text(text, encoding="utf-8")
+        if path.is_file() and not path.is_symlink():
+            shutil.copymode(path, staged)
         staged.replace(path)
 
 
@@ -84,7 +87,7 @@ def _export_pages(
         if path.is_file():
             path.unlink()
     _write_manifest(out_dir, title, pages)
-    return ExportResult(title, tuple(written), oversized_sections, earlier.manifest_unreadable)
+    return ExportResult(title, tuple(written), oversized_sections, earlier.unreadable_manifest)
 
 
 def _chunk_pages(chunks: Sequence[str]) -> dict[str, str]:

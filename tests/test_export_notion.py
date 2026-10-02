@@ -478,6 +478,16 @@ def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp
     ) == ("keep me", False, "Hello.\n", False)
 
 
+def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text("old", encoding="utf-8")
+    page.chmod(0o600)
+
+    export_notion(parse_report(make_report()), tmp_path)
+
+    assert (page.read_text(encoding="utf-8"), page.stat().st_mode & 0o777) == ("Hello.\n", 0o600)
+
+
 def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
