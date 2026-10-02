@@ -2275,7 +2275,7 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
                     # an opt-out (no chip on that row), not a reference.
                     for candidate in _as_badge_list(value):
                         if isinstance(candidate, str) and candidate.strip():
-                            yield candidate
+                            yield candidate.strip()
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:

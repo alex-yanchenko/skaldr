@@ -1454,6 +1454,85 @@ def test_table_placement_cell_badge_renders_its_own_labelled_column() -> None:
     assert '<span class="meaning">Read-only.</span>' in html
 
 
+_OPS_BADGES = {"OPS": {"label": "Ops", "tone": "blue", "legend": "Operations."}}
+_OPS_LEGEND_ROW = (
+    '<div class="legend-row"><span class="chip blue">Ops</span><span class="meaning">Operations.</span></div>'
+)
+
+
+def _rendered_one_row_badge_table(value: object, placement: str) -> str:
+    table = make_table(
+        columns=[
+            {"key": "name", "label": "Name", "kind": "text"},
+            {"key": "tag", "label": "Tag", "kind": "badge", "placement": placement},
+        ],
+        rows=[{"name": "Row one", "tag": value}],
+    )
+    return render_html(parse_report(make_report(badges=_OPS_BADGES, blocks=[table])))
+
+
+def _tbody(html: str) -> str:
+    match = re.search(r"<tbody>.*?</tbody>", html, re.S)
+    assert match is not None
+    return match.group(0)
+
+
+@pytest.mark.parametrize(
+    ("value", "placement", "expected_tbody"),
+    [
+        pytest.param(
+            " OPS ",
+            "cell",
+            '<tbody>\n<tr class="row">\n<td class="title">Row one\n</td>\n'
+            '<td class="bc"><span class="chip blue">Ops</span></td>\n</tr>\n</tbody>',
+            id="cell",
+        ),
+        pytest.param(
+            [" OPS "],
+            "cell",
+            '<tbody>\n<tr class="row">\n<td class="title">Row one\n</td>\n'
+            '<td class="bc"><span class="chip blue">Ops</span></td>\n</tr>\n</tbody>',
+            id="cell-list",
+        ),
+        pytest.param(
+            " OPS ",
+            "title",
+            '<tbody>\n<tr class="row">\n<td class="title">Row one\n'
+            '<div><span class="chip blue">Ops</span></div></td>\n</tr>\n</tbody>',
+            id="title",
+        ),
+    ],
+)
+def test_padded_table_badge_key_validates_and_renders_the_declared_badge(
+    value: object, placement: str, expected_tbody: str
+) -> None:
+    html = _rendered_one_row_badge_table(value, placement)
+
+    assert (_tbody(html), _OPS_LEGEND_ROW in html) == (expected_tbody, True)
+
+
+@pytest.mark.parametrize(
+    ("placement", "expected_tbody"),
+    [
+        pytest.param(
+            "cell",
+            '<tbody>\n<tr class="row">\n<td class="title">Row one\n</td>\n'
+            '<td class="bc"></td>\n</tr>\n</tbody>',
+            id="cell",
+        ),
+        pytest.param(
+            "title",
+            '<tbody>\n<tr class="row">\n<td class="title">Row one\n</td>\n</tr>\n</tbody>',
+            id="title",
+        ),
+    ],
+)
+def test_blank_table_badge_key_renders_no_chip_and_no_legend(placement: str, expected_tbody: str) -> None:
+    html = _rendered_one_row_badge_table("  ", placement)
+
+    assert (_tbody(html), _OPS_LEGEND_ROW in html) == (expected_tbody, False)
+
+
 def _cell_table(detail: str) -> dict[str, object]:
     return make_table(
         columns=[
