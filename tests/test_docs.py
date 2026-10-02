@@ -1,17 +1,19 @@
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 import yaml
 
-from skaldr.models import Report, package_text, parse_report
+from skaldr.export import ExportTarget
+from skaldr.models import AnyBlock, Report, package_text, parse_report
 from skaldr.render import render_html
 from tests.conftest import REPO_ROOT
 from tests.factories.report_factory import make_report
 
 GUIDE = package_text("skill/GUIDE.md")
+SKILL = package_text("skill/SKILL.md")
 README = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
 _FENCE_OPENING = re.compile(r"(?P<quote>> ?)?(?P<indent> *)```yaml")
@@ -110,3 +112,26 @@ def test_a_guide_example_builds_when_copied(example: GuideExample) -> None:
     html = render_html(parse_report(_as_document(example)))
 
     assert html.startswith("<!doctype html>")
+
+
+def _every_block_type() -> set[str]:
+    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
+
+
+def _readme_block_list(readme: str) -> str:
+    paragraph = re.search(r"^\*\*Blocks:\*\*(.*?)\n\n", readme, re.MULTILINE | re.DOTALL)
+    assert paragraph is not None
+    return paragraph.group(1)
+
+
+def test_the_readme_block_list_names_every_block_type() -> None:
+    listed = _readme_block_list(README)
+
+    assert {kind for kind in _every_block_type() if f"`{kind}`" not in listed} == set()
+
+
+@pytest.mark.parametrize("text", [pytest.param(SKILL, id="skill"), pytest.param(README, id="readme")])
+def test_the_skill_and_the_readme_name_both_export_targets(text: str) -> None:
+    named = {target for target in get_args(ExportTarget) if f"--export {target}" in text}
+
+    assert named == set(get_args(ExportTarget))

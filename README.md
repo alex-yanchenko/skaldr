@@ -49,7 +49,7 @@ The page cannot poll for changes: its own CSP is `default-src 'none'`, which blo
 network request, and a `file://` page could not fetch its own source anyway. So `--live` reloads on
 a signal it already has, which is you looking at the tab.
 
-That's the whole tool: point it at a content file, get an HTML page (or a PDF). A few more commands
+That's the whole tool: point it at a content file, get an HTML page, a PDF, or Markdown for GitHub or Notion (see `--export` below). A few more commands
 help you write the content file and share the result:
 
 ```bash
@@ -130,11 +130,8 @@ carries a `type` discriminator; the model is a pydantic discriminated union, so 
 type, a field from the wrong block, or an unknown key each fails with a precise
 `blocks.3.items.2.value`-style error before anything renders.
 
-**Blocks:** `heading` · `text` · `list` · `fact_strip` · `key_value` · `cards` · `badge_row` ·
-`callout` · `status_list` · `meter` · `table` · `code` · `quote` · `image` · `timeline` ·
-`flow` (a directional pipeline — arrow or step style, optional loop) · `section` (collapsible) ·
-`grid` (bounded 6-column layout, with optional per-cell emphasis panels). The `table` is the
-workhorse — typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
+**Blocks:** for prose and metadata, `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` · `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`; for numbers and state, `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` · `chart` · `comparison` · `matrix` · `timeline`; for processes, `flow` (a directional pipeline in arrow or step style, with an optional loop) · `fan` · `swimlane` · `walkthrough`; for recorded calls a reader can re-run, `request` · `request_flow`; and for layout, `section` (collapsible) · `panel` · `toggle` · `tabs` · `grid` (a bounded 6-column layout, with optional per-cell emphasis panels). `skaldr --guide` describes each one. The `table` is the
+workhorse: typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
 `tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
 total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
 nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
