@@ -50,6 +50,7 @@ from tests.factories import (
     folder_texts,
     make_command_request,
     make_report,
+    make_toggle,
     markdown_of,
 )
 
@@ -560,6 +561,12 @@ def test_a_toggle_is_its_bold_title_over_its_content() -> None:
     }
 
     assert markdown_of([toggle]) == "**Raw counts**\n\nx\n\n**Inner**\n\ny\n"
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts", collapsed=False)
+
+    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n"
 
 
 def _authored_tabs() -> dict[str, object]:

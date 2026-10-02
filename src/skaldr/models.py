@@ -2141,19 +2141,24 @@ class RequestFlow(_VariableOwner, _Block):
         return self
 
 
+def _refuse_blank(what: str) -> AfterValidator:
+    def refuse(value: str) -> str:
+        if not value.strip():
+            raise ValueError(f"{what} must not be blank")
+        return value
+
+    return AfterValidator(refuse)
+
+
 class _ToggleBase(_Block):
     type: Literal["toggle"]
-    title: str = Field(min_length=1, description="Summary label shown on the collapsible.")
+    title: Annotated[str, _refuse_blank("toggle title")] = Field(
+        min_length=1, description="Summary label shown on the collapsible."
+    )
     collapsed: bool = Field(
         default=True,
         description="Whether the toggle starts collapsed, as a section does. Set false to open it.",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "_ToggleBase":
-        if not self.title.strip():
-            raise ValueError("toggle title must not be blank")
-        return self
 
 
 class InnerToggle(_ToggleBase):
@@ -2174,7 +2179,9 @@ class Toggle(_ToggleBase):
 
 
 class Tab(FrozenModel):
-    label: str = Field(min_length=1, description="The tab's label in the strip, and its heading on paper.")
+    label: Annotated[str, _refuse_blank("tab label")] = Field(
+        min_length=1, description="The tab's label in the strip, and its heading on paper."
+    )
     tone: Tone | None = Field(
         default=None,
         description="Optional tone: a coloured dot before the label, the way a request case shows its "
@@ -2185,12 +2192,6 @@ class Tab(FrozenModel):
         description="Blocks shown while the tab is chosen: any block a toggle in a grid cell holds, "
         "including a toggle or another tabs block, and never a request or request_flow.",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "Tab":
-        if not self.label.strip():
-            raise ValueError("tab label must not be blank")
-        return self
 
 
 class Tabs(_Block):

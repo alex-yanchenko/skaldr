@@ -47,6 +47,7 @@ from tests.factories import (
     lowered,
     make_command_request,
     make_report,
+    make_toggle,
     notion_of,
 )
 
@@ -197,6 +198,12 @@ def test_a_toggle_is_a_details_block_with_its_content_tab_indented_at_every_dept
         "<details>\n<summary>Raw counts</summary>\n\tx\n"
         "\t<details>\n\t<summary>Inner</summary>\n\t\ty\n\t</details>\n</details>\n"
     )
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content_rather_than_a_details_block() -> None:
+    toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts", collapsed=False)
+
+    assert notion_of([toggle]) == "**Raw counts**\nx\n"
 
 
 def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_case_does() -> None:

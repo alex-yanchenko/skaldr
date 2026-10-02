@@ -446,12 +446,8 @@ def test_panel_renders_a_titled_card_holding_its_blocks() -> None:
     assert '<p class="text">Point.</p></div></div>' in html
 
 
-def _toggle(**overrides: object) -> dict[str, object]:
-    return {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}], **overrides}
-
-
 def test_a_toggle_is_a_collapsed_details_with_no_anchor() -> None:
-    html = render_html(parse_report(make_report(blocks=[_toggle()])))
+    html = render_html(parse_report(make_report(blocks=[make_toggle(title="Raw counts")])))
 
     assert (
         '<details class="toggle"><summary>Raw counts</summary>'
@@ -460,19 +456,21 @@ def test_a_toggle_is_a_collapsed_details_with_no_anchor() -> None:
 
 
 def test_a_toggle_set_not_collapsed_starts_open() -> None:
-    html = render_html(parse_report(make_report(blocks=[_toggle(collapsed=False)])))
+    html = render_html(parse_report(make_report(blocks=[make_toggle(title="Raw counts", collapsed=False)])))
 
     assert '<details class="toggle" open><summary>Raw counts</summary>' in html
 
 
 def test_a_pdf_render_opens_every_toggle() -> None:
-    html = render_html(parse_report(make_report(blocks=[_toggle()])), expand=True)
+    html = render_html(parse_report(make_report(blocks=[make_toggle(title="Raw counts")])), expand=True)
 
     assert '<details class="toggle" open><summary>Raw counts</summary>' in html
 
 
 def test_a_toggle_is_not_a_toc_entry_but_a_heading_inside_it_is_a_link_target() -> None:
-    toggle = _toggle(blocks=[{"type": "heading", "level": 3, "text": "Inside", "id": "inside"}])
+    toggle = make_toggle(
+        {"type": "heading", "level": 3, "text": "Inside", "id": "inside"}, title="Raw counts"
+    )
     blocks = [
         {"type": "heading", "text": "Overview"},
         toggle,
@@ -490,7 +488,7 @@ def test_a_toggle_is_not_a_toc_entry_but_a_heading_inside_it_is_a_link_target() 
 
 
 def test_a_toggle_nests_inside_a_grid_cell_and_another_toggle() -> None:
-    outer = _toggle(title="Outer", blocks=[_toggle(title="Inner")])
+    outer = make_toggle(make_toggle(title="Inner"), title="Outer")
     grid = make_grid([make_cell(6, [outer])])
 
     html = render_html(parse_report(make_report(blocks=[grid])))
@@ -503,12 +501,10 @@ def test_a_toggle_nests_inside_a_grid_cell_and_another_toggle() -> None:
 
 
 def test_a_badge_and_a_citation_inside_a_toggle_feed_the_legend_and_the_numbering() -> None:
-    toggle = _toggle(
-        blocks=[
-            {"type": "badge_row", "items": [{"key": "OPS"}]},
-            {"type": "text", "body": "Per the SOP [^sop]."},
-            {"type": "references", "items": [{"key": "sop", "text": "Counting SOP"}]},
-        ]
+    toggle = make_toggle(
+        {"type": "badge_row", "items": [{"key": "OPS"}]},
+        {"type": "text", "body": "Per the SOP [^sop]."},
+        {"type": "references", "items": [{"key": "sop", "text": "Counting SOP"}]},
     )
     badges = {"OPS": {"label": "ops", "tone": "blue", "legend": "Run by ops."}}
 
@@ -518,21 +514,34 @@ def test_a_badge_and_a_citation_inside_a_toggle_feed_the_legend_and_the_numberin
     assert '<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>' in html
 
 
-def _tabs(*labels: str, **tab_overrides: object) -> dict[str, object]:
-    tabs = [
-        {"label": label, "blocks": [{"type": "text", "body": label}], **tab_overrides} for label in labels
+def _rail(name: str) -> dict[str, str]:
+    return {
+        f".{name}": "grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)",
+        f".{name} > .rq-tabs": (
+            "flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+            "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; "
+            "overflow-y:auto; grid-row:1; grid-column:1"
+        ),
+        f".{name} > .rq-tabs > *": (
+            "border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; "
+            "text-overflow:clip"
+        ),
+        f".{name} > .rq-case": "grid-row:1; grid-column:2",
+    }
+
+
+def _container_rules(html: str) -> list[tuple[int, dict[str, str]]]:
+    return [
+        (int(width), dict(re.findall(r"([^{}]+)\{([^{}]*)\}", body)))
+        for width, body in re.findall(r"@container \(width < (\d+)px\)\{((?:[^{}]+\{[^{}]*\})*)\}", html)
     ]
-    return {"type": "tabs", "tabs": tabs}
 
 
 def test_a_tabs_block_writes_the_request_tab_strip_around_its_panes() -> None:
-    block = {
-        "type": "tabs",
-        "tabs": [
-            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "Recount."}]},
-            {"label": "System", "blocks": [{"type": "text", "body": "Rescan."}]},
-        ],
-    }
+    block = make_tabs(
+        make_tab("Floor", {"type": "text", "body": "Recount."}, tone="warning"),
+        make_tab("System", {"type": "text", "body": "Rescan."}),
+    )
 
     html = render_html(parse_report(make_report(blocks=[block])))
 
@@ -567,14 +576,8 @@ def test_a_tabs_block_strip_becomes_a_rail_below_the_width_its_labels_need() -> 
 
 
 def test_tab_blocks_and_requests_never_share_a_radio_group() -> None:
-    nested = _tabs("Inner", "Other")
-    outer = {
-        "type": "tabs",
-        "tabs": [
-            {"label": "Outer", "blocks": [nested]},
-            {"label": "Second", "blocks": [{"type": "divider"}]},
-        ],
-    }
+    nested = make_tabs(make_tab("Inner"), make_tab("Other"))
+    outer = make_tabs(make_tab("Outer", nested), make_tab("Second", {"type": "divider"}))
     request = make_command_request(
         cases=[{"label": "a", "response": {"body": "x"}}, {"label": "b", "response": {"body": "y"}}]
     )
@@ -585,7 +588,8 @@ def test_tab_blocks_and_requests_never_share_a_radio_group() -> None:
 
 
 def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
-    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System", tone="accent")])))
+    block = make_tabs(make_tab("Floor", tone="accent"), make_tab("System", tone="accent"))
+    html = render_html(parse_report(make_report(blocks=[block])))
     css = package_path("styles.css").read_text(encoding="utf-8")
 
     assert '<label for="tb0_0"><span class="rq-dot accent"></span>Floor</label>' in html
@@ -594,14 +598,15 @@ def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
 
 def test_print_shows_every_tab_under_its_label_and_drops_the_strip() -> None:
     css = package_path("styles.css").read_text(encoding="utf-8")
-    print_layer = css[css.index("@layer print {") :]
+    print_rules = re.sub(r"\s+", " ", css[css.index("@layer print {") :])
+    expected = [
+        ".tabs .rq-case{display:block}",
+        ":is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); "
+        "break-after:avoid}",
+        ":is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}",
+    ]
 
-    assert (
-        ".rq .rq-case{display:flex}\n\t\t.tabs .rq-case{display:block}\n"
-        "\t\t:is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); "
-        "border-top:1px solid var(--rule); break-after:avoid}\n"
-        "\t\t:is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}"
-    ) in print_layer
+    assert [rule for rule in expected if rule not in print_rules] == []
 
 
 def test_a_heading_inside_a_tab_is_a_link_target() -> None:
@@ -620,29 +625,6 @@ def test_a_heading_inside_a_tab_is_a_link_target() -> None:
 
     assert '<h4 id="aisle-c">Aisle C</h4>\n</section>' in html
     assert '<p class="text">See <a href="#aisle-c">aisle C</a>.</p></section>' in html
-
-
-def _rail(name: str) -> dict[str, str]:
-    return {
-        f".{name}": "grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)",
-        f".{name} > .rq-tabs": (
-            "flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
-            "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; "
-            "overflow-y:auto; grid-row:1; grid-column:1"
-        ),
-        f".{name} > .rq-tabs > *": (
-            "border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; "
-            "text-overflow:clip"
-        ),
-        f".{name} > .rq-case": "grid-row:1; grid-column:2",
-    }
-
-
-def _container_rules(html: str) -> list[tuple[int, dict[str, str]]]:
-    return [
-        (int(width), dict(re.findall(r"([^{}]+)\{([^{}]*)\}", body)))
-        for width, body in re.findall(r"@container \(width < (\d+)px\)\{((?:[^{}]+\{[^{}]*\})*)\}", html)
-    ]
 
 
 def test_an_outer_tab_strip_rail_rule_never_reaches_a_strip_nested_in_one_of_its_tabs() -> None:

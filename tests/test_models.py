@@ -25,6 +25,7 @@ from skaldr.models import (
     Group,
     Heading,
     InnerBlock,
+    InnerToggle,
     ListBlock,
     ListItem,
     Matrix,
@@ -643,24 +644,20 @@ def test_a_toggle_parses_to_whole_model_starting_collapsed() -> None:
     )
 
 
-def _toggle(*blocks: dict[str, Any]) -> dict[str, Any]:
-    return {"type": "toggle", "title": "More", "blocks": list(blocks) or [{"type": "text", "body": "x"}]}
-
-
 @pytest.mark.parametrize(
     "container",
     [
-        pytest.param({"type": "section", "title": "S", "blocks": [_toggle()]}, id="section"),
-        pytest.param({"type": "panel", "title": "P", "blocks": [_toggle()]}, id="panel"),
-        pytest.param(make_grid([make_cell(6, [_toggle()])]), id="grid-cell"),
+        pytest.param({"type": "section", "title": "S", "blocks": [make_toggle()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [make_toggle()]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [make_toggle()])]), id="grid-cell"),
         pytest.param(
-            make_grid([make_cell(6, [make_grid([make_cell(3, [_toggle()])])])]), id="inner-grid-cell"
+            make_grid([make_cell(6, [make_grid([make_cell(3, [make_toggle()])])])]), id="inner-grid-cell"
         ),
         pytest.param(
-            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [_toggle()]}]},
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [make_toggle()]}]},
             id="walkthrough-detail",
         ),
-        pytest.param(_toggle(_toggle()), id="another-toggle"),
+        pytest.param(make_toggle(make_toggle()), id="another-toggle"),
     ],
 )
 def test_a_toggle_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
@@ -679,12 +676,32 @@ def test_a_toggle_with_no_blocks_is_rejected() -> None:
     )
 
 
-def test_a_toggle_with_a_blank_title_is_rejected() -> None:
-    with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[{**_toggle(), "title": "  "}]))
+def test_a_toggle_in_a_grid_cell_parses_to_the_inner_toggle_holding_leaf_blocks() -> None:
+    grid = parse_report(make_report(blocks=[make_grid([make_cell(6, [make_toggle()])])])).blocks[0]
 
-    assert str(raised.value) == (
-        "invalid content data: blocks.0.toggle: Value error, toggle title must not be blank"
+    assert isinstance(grid, Grid)
+    assert grid.cells[0].blocks == [
+        InnerToggle(type="toggle", title="More", collapsed=True, blocks=[Text(type="text", body="x")])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(make_toggle(title="  "), "blocks.0.toggle.title", id="toggle"),
+        pytest.param(
+            make_grid([make_cell(6, [make_toggle(title="\t")])]),
+            "blocks.0.grid.cells.0.blocks.0.toggle.title",
+            id="inner-toggle",
+        ),
+    ],
+)
+def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert (
+        str(raised.value) == f"invalid content data: {location}: Value error, toggle title must not be blank"
     )
 
 
@@ -698,7 +715,7 @@ def test_a_toggle_where_a_section_block_can_go_refuses_a_section_inside_it() -> 
     inner_section = {"type": "section", "title": "S", "blocks": [{"type": "text", "body": "x"}]}
 
     with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[_toggle(inner_section)]))
+        parse_report(make_report(blocks=[make_toggle(inner_section)]))
 
     assert str(raised.value) == (
         "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
@@ -784,7 +801,7 @@ def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
     row = {"type": "badge_row", "items": [{"key": "OPS"}]}
 
     with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [_toggle(row)]}]))
+        parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [make_toggle(row)]}]))
 
     assert str(raised.value) == (
         "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
@@ -792,16 +809,8 @@ def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
     )
 
 
-def _tab(label: str, *blocks: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    return {"label": label, "blocks": list(blocks) or [{"type": "text", "body": label}], **overrides}
-
-
-def _tabs(*tabs: dict[str, Any]) -> dict[str, Any]:
-    return {"type": "tabs", "tabs": list(tabs) or [_tab("Floor"), _tab("System")]}
-
-
 def test_a_tabs_block_parses_to_whole_model() -> None:
-    block = _tabs(_tab("Floor", tone="amber"), _tab("System"))
+    block = make_tabs(make_tab("Floor", tone="amber"), make_tab("System"))
 
     report = parse_report(make_report(blocks=[block]))
 
@@ -817,16 +826,18 @@ def test_a_tabs_block_parses_to_whole_model() -> None:
 @pytest.mark.parametrize(
     "container",
     [
-        pytest.param({"type": "section", "title": "S", "blocks": [_tabs()]}, id="section"),
-        pytest.param({"type": "panel", "title": "P", "blocks": [_tabs()]}, id="panel"),
-        pytest.param(make_grid([make_cell(6, [_tabs()])]), id="grid-cell"),
-        pytest.param(make_grid([make_cell(6, [make_grid([make_cell(3, [_tabs()])])])]), id="inner-grid-cell"),
+        pytest.param({"type": "section", "title": "S", "blocks": [make_tabs()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [make_tabs()]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [make_tabs()])]), id="grid-cell"),
         pytest.param(
-            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [_tabs()]}]},
+            make_grid([make_cell(6, [make_grid([make_cell(3, [make_tabs()])])])]), id="inner-grid-cell"
+        ),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [make_tabs()]}]},
             id="walkthrough-detail",
         ),
-        pytest.param(_toggle(_tabs()), id="toggle"),
-        pytest.param(_tabs(_tab("Outer", _tabs()), _tab("Other")), id="another-tabs-block"),
+        pytest.param(make_toggle(make_tabs()), id="toggle"),
+        pytest.param(make_tabs(make_tab("Outer", make_tabs()), make_tab("Other")), id="another-tabs-block"),
     ],
 )
 def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
@@ -839,44 +850,50 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
     ("block", "message"),
     [
         pytest.param(
-            _tabs(_tab("Only")),
+            make_tabs(make_tab("Only")),
             "invalid content data: blocks.0.tabs.tabs: List should have at least 2 items after validation, "
             "not 1",
             id="one-tab",
         ),
         pytest.param(
-            _tabs(*(_tab(f"t{number}") for number in range(MAX_STRIP_LABELS + 1))),
+            make_tabs(*(make_tab(f"t{number}") for number in range(MAX_STRIP_LABELS + 1))),
             f"invalid content data: blocks.0.tabs.tabs: List should have at most {MAX_STRIP_LABELS} items "
             f"after validation, not {MAX_STRIP_LABELS + 1}",
             id="past-the-cap",
         ),
         pytest.param(
-            _tabs(_tab("Floor"), _tab("Floor")),
+            make_tabs(make_tab("Floor"), make_tab("Floor")),
             "invalid content data: blocks.0.tabs: Value error, tabs repeat a label: Floor",
             id="repeated-label",
         ),
         pytest.param(
-            _tabs(_tab("System"), _tab("Floor"), _tab("System"), _tab("Vendor"), _tab("Floor")),
+            make_tabs(
+                make_tab("System"),
+                make_tab("Floor"),
+                make_tab("System"),
+                make_tab("Vendor"),
+                make_tab("Floor"),
+            ),
             "invalid content data: blocks.0.tabs: Value error, tabs repeat a label: Floor, System",
             id="several-repeated-labels",
         ),
         pytest.param(
-            _tabs(_tab("  ", {"type": "text", "body": "x"}), _tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0: Value error, tab label must not be blank",
+            make_tabs(make_tab("  ", {"type": "text", "body": "x"}), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
             id="blank-label",
         ),
         pytest.param(
-            _tabs(_tab("\t \n", {"type": "text", "body": "x"}), _tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0: Value error, tab label must not be blank",
+            make_tabs(make_tab("\t \n", {"type": "text", "body": "x"}), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
             id="whitespace-label",
         ),
         pytest.param(
-            _tabs(_tab("", {"type": "text", "body": "x"}), _tab("System")),
+            make_tabs(make_tab("", {"type": "text", "body": "x"}), make_tab("System")),
             "invalid content data: blocks.0.tabs.tabs.0.label: String should have at least 1 character",
             id="empty-label",
         ),
         pytest.param(
-            _tabs(_tab("Floor", tone="purple"), _tab("System")),
+            make_tabs(make_tab("Floor", tone="purple"), make_tab("System")),
             "invalid content data: blocks.0.tabs.tabs.0.tone: Input should be 'neutral', 'info', "
             "'success', 'warning', 'danger', 'accent', 'teal' or 'sky'",
             id="unknown-tone",
@@ -893,7 +910,7 @@ def test_a_tabs_block_refuses_a_malformed_tab_set(block: dict[str, Any], message
 def test_a_tabs_block_at_the_strip_cap_is_accepted() -> None:
     labels = [f"t{number}" for number in range(MAX_STRIP_LABELS)]
 
-    parsed = parse_report(make_report(blocks=[_tabs(*(_tab(label) for label in labels))])).blocks[0]
+    parsed = parse_report(make_report(blocks=[make_tabs(*(make_tab(label) for label in labels))])).blocks[0]
 
     assert isinstance(parsed, Tabs)
     assert [tab.label for tab in parsed.tabs] == labels
@@ -977,7 +994,7 @@ def test_walk_blocks_visits_every_block_depth_first_in_document_order() -> None:
         },
         make_grid(
             [
-                make_cell(3, [_tabs(_tab("A", {"type": "note", "body": "n"}), _tab("B"))]),
+                make_cell(3, [make_tabs(make_tab("A", {"type": "note", "body": "n"}), make_tab("B"))]),
                 make_cell(3, [make_grid([make_cell(6, [{"type": "quote", "body": "q"}])])]),
             ]
         ),
@@ -1013,7 +1030,7 @@ def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:
     row = {"type": "badge_row", "items": [{"key": "OPS"}]}
 
     with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[_tabs(_tab("Floor", row), _tab("System"))]))
+        parse_report(make_report(blocks=[make_tabs(make_tab("Floor", row), make_tab("System"))]))
 
     assert str(raised.value) == (
         "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "

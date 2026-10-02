@@ -60,6 +60,7 @@ from tests.factories import (
     make_report,
     make_request,
     make_table,
+    make_toggle,
 )
 
 API_LEGEND = Toggle(
@@ -1214,19 +1215,15 @@ def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
     assert lowered([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
 
 
-def test_a_heading_inside_a_toggle_keeps_its_level_and_anchor() -> None:
-    section = {
-        "type": "section",
-        "title": "Open",
-        "collapsed": False,
-        "blocks": [
-            {
-                "type": "toggle",
-                "title": "More",
-                "blocks": [{"type": "heading", "level": 3, "text": "Deep", "id": "deep"}],
-            }
-        ],
-    }
+def test_a_heading_in_a_top_level_toggle_keeps_its_level_and_anchor() -> None:
+    toggle = make_toggle({"type": "heading", "level": 3, "text": "Deep", "id": "deep"})
+
+    assert lowered([toggle]) == (Toggle((Plain("More"),), None, (Heading(3, (Plain("Deep"),), "deep"),)),)
+
+
+def test_a_heading_in_a_toggle_inside_a_section_moves_down_with_the_section_and_keeps_its_anchor() -> None:
+    toggle = make_toggle({"type": "heading", "level": 3, "text": "Deep", "id": "deep"})
+    section = {"type": "section", "title": "Open", "collapsed": False, "blocks": [toggle]}
 
     assert lowered([section]) == (
         Heading(2, (Plain("Open"),), "open"),
