@@ -21,6 +21,9 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Diagram,
+    Graph,
+    GraphNode,
     Heading,
     ListEntry,
     ListKind,
@@ -103,6 +106,14 @@ def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
         "\n"
         "- **Scan**\n"
         "  - by aisle\n"
+    )
+
+
+def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+
+    assert render_markdown([diagram, Paragraph((Plain("after"),))]) == (
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\n\nafter\n'
     )
 
 

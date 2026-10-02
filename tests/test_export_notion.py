@@ -293,6 +293,44 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("title", "written"),
+    [
+        pytest.param("1. expired token", "1\\. expired token", id="ordinal-is-not-a-list"),
+        pytest.param("# 404 path", "\\# 404 path", id="hash-is-not-a-heading"),
+    ],
+)
+def test_a_tab_title_that_starts_like_a_block_stays_text(title: str, written: str) -> None:
+    tabs = Tabs((Tab((Plain(title),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{written}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+@pytest.mark.parametrize(
+    ("tone", "opening"),
+    [
+        pytest.param("success", '<tab icon="✅">', id="success"),
+        pytest.param("info", '<tab icon="💡">', id="info"),
+        pytest.param("warning", '<tab icon="⚠️">', id="warning"),
+        pytest.param("danger", '<tab icon="🛑">', id="danger"),
+        pytest.param("neutral", "<tab>", id="neutral-has-no-icon"),
+        pytest.param(None, "<tab>", id="no-tone"),
+    ],
+)
+def test_a_notion_tab_carries_the_icon_of_its_case_tone(tone: ToneName | None, opening: str) -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t{opening}\n\t\tt\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+
+    assert render_notion([diagram, Paragraph((Plain("after"),))]) == (
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\nafter\n'
+    )
+
+
 def test_a_page_with_a_table_of_contents_uses_the_notion_block() -> None:
     assert (
         notion_of([{"type": "heading", "text": "A"}], meta={"title": "T", "toc": True})

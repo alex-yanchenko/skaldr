@@ -193,7 +193,7 @@ def _tabs_lines(node: Tabs) -> list[str]:
     for tab in node.tabs:
         icon = tab_icon(tab.tone)
         lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
-        lines += [*_indent([notion_inline(tab.title), *_notion_blocks(tab.children)]), "</tab>"]
+        lines += [*_indent([_block_text(tab.title), *_notion_blocks(tab.children)]), "</tab>"]
     return ["<tabs>", *_indent(lines), "</tabs>"]
 
 
