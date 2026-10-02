@@ -1,3 +1,4 @@
+import html
 import re
 from functools import cache
 from typing import Final, Literal
@@ -47,7 +48,7 @@ MATHML_ATTRIBUTES: Final = frozenset(
 )
 TOKEN_ELEMENTS: Final = frozenset({"mi", "mo", "mn"})
 FRACTION_PARTS: Final = 2
-CONVERTER_HEX_ENTITY = re.compile(r"&#x([0-9A-Fa-f]+);")
+CONVERTER_HEX_ENTITY = re.compile(r"&#x[0-9A-Fa-f]+;")
 
 
 @cache
@@ -118,4 +119,4 @@ def _decode_converter_entities(element: Element) -> None:
 
 
 def _decoded(text: str) -> str:
-    return CONVERTER_HEX_ENTITY.sub(lambda match: chr(int(match.group(1), 16)), text)
+    return CONVERTER_HEX_ENTITY.sub(lambda match: html.unescape(match.group(0)), text)

@@ -67,12 +67,34 @@ def test_text_inside_the_expression_cannot_open_html() -> None:
     [
         pytest.param(r"\text{&lt;b&gt;}", "<mtext>&amp;lt;b&amp;gt;</mtext>", id="named-entities"),
         pytest.param(r"\text{&#60;}", "<mtext>&amp;#60;</mtext>", id="decimal-entity"),
+        pytest.param(r"\text{&#X3C;}", "<mtext>&amp;#X3C;</mtext>", id="hex-entity-with-a-capital-x"),
+        pytest.param(r"\text{&#x3C}", "<mtext>&amp;#x3C</mtext>", id="hex-entity-without-a-semicolon"),
     ],
 )
 def test_an_entity_the_author_typed_shows_as_typed_like_the_exports_show_it(
     expression: str, markup: str
 ) -> None:
     assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
+
+
+def test_a_hex_entity_the_author_typed_decodes_like_the_converters_own() -> None:
+    assert mathml(r"\text{&#x3C;b}", "inline") == f"{MATH_OPEN}<mrow><mtext>&lt;b</mtext></mrow></math>"
+
+
+@pytest.mark.parametrize(
+    ("expression", "character"),
+    [
+        pytest.param(r"\unicode{x41}", "A", id="letter"),
+        pytest.param(r"\unicode{x110000}", "\N{REPLACEMENT CHARACTER}", id="past-the-last-code-point"),
+        pytest.param(r"\unicode{xFFFFFFFFFFFF}", "\N{REPLACEMENT CHARACTER}", id="too-large-for-a-c-int"),
+        pytest.param(r"\unicode{xD800}", "\N{REPLACEMENT CHARACTER}", id="lone-surrogate"),
+        pytest.param(r"\unicode{x0}", "\N{REPLACEMENT CHARACTER}", id="nul"),
+    ],
+)
+def test_a_unicode_code_point_decodes_and_one_no_page_can_hold_becomes_the_replacement_character(
+    expression: str, character: str
+) -> None:
+    assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow><mi>{character}</mi></mrow></math>"
 
 
 def test_an_attribute_value_cannot_close_its_quotes() -> None:

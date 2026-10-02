@@ -29,6 +29,7 @@ from skaldr.models import (
     unresolvable_request_variables,
 )
 from skaldr.publish import without_publish_block
+from skaldr.replace_file import replace_file
 from skaldr.richtext import (
     SCRIPT_HTML_TAG,
     Citation,
@@ -327,7 +328,7 @@ def render_report(
     on someone else's screen is never what the author meant."""
     html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html, encoding="utf-8")
+    replace_file(out_path, html)
 
 
 def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:

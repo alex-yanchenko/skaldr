@@ -1,5 +1,3 @@
-import shutil
-import tempfile
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +10,7 @@ from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
+from skaldr.replace_file import replace_file
 
 __all__ = [
     "EXPORT_MANIFEST",
@@ -57,18 +56,9 @@ def _earlier_export(manifest_path: Path) -> _EarlierExport:
     return _EarlierExport(frozenset(manifest.files))
 
 
-def _replace_file(path: Path, text: str) -> None:
-    with tempfile.TemporaryDirectory(prefix=".skaldr-export-", dir=path.parent) as staging:
-        staged = Path(staging) / path.name
-        staged.write_text(text, encoding="utf-8")
-        if path.is_file() and not path.is_symlink():
-            shutil.copymode(path, staged)
-        staged.replace(path)
-
-
 def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
     manifest = ExportManifest(title=title, files=tuple(sorted(names)))
-    _replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
+    replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
 
 
 def _export_pages(
@@ -80,7 +70,7 @@ def _export_pages(
     written: list[Path] = []
     for name, text in pages.items():
         path = out_dir / name
-        _replace_file(path, text)
+        replace_file(path, text)
         written.append(path)
     for stale in sorted(earlier.pages - set(pages)):
         path = out_dir / stale
