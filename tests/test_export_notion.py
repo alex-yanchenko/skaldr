@@ -10,6 +10,7 @@ from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
     NotionChunks,
+    apportioned_pixels,
     chunk_notion,
     notion_inline,
     render_notion,
@@ -482,7 +483,7 @@ def test_auto_columns_share_what_a_number_column_default_width_leaves() -> None:
     ("count", "widths"),
     [
         pytest.param(9, [71] * 8 + [70] * 2, id="nine-numbers-share-tenths-with-the-label"),
-        pytest.param(10, [64] + [65] * 4 + [64] * 6, id="ten-numbers-share-elevenths-with-the-label"),
+        pytest.param(10, [65] * 4 + [64] * 7, id="ten-numbers-share-elevenths-with-the-label"),
         pytest.param(12, [55] * 6 + [54] * 7, id="twelve-numbers-share-thirteenths-with-the-label"),
     ],
 )
@@ -502,6 +503,20 @@ def test_number_columns_too_many_for_their_default_width_leave_the_label_a_posit
         "</table>\n"
     )
     assert sum(widths) == NOTION_DEFAULT_PAGE_WIDTH_PX
+
+
+@pytest.mark.parametrize(
+    "shares",
+    [
+        pytest.param([0.1] * 10, id="written-as-tenths"),
+        pytest.param([1 - 0.1 * 9, *[0.1] * 9], id="first-share-carries-float-noise"),
+        pytest.param([*[0.1] * 9, 1 - 0.1 * 9], id="last-share-carries-float-noise"),
+    ],
+)
+def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_float_noise(
+    shares: list[float],
+) -> None:
+    assert apportioned_pixels(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
 
 
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
