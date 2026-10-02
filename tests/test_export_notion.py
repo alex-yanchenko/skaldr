@@ -146,6 +146,25 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
     assert notion_inline((run,)) == written
 
 
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param("[late]{tone=danger}", '<span color="red">late</span>', id="colour"),
+        pytest.param("[due]{bg=amber}", '<span color="yellow_bg">due</span>', id="highlight"),
+        pytest.param(
+            "[**now** a|b]{tone=accent bg=sky}",
+            '<span color="purple"><span color="blue_bg">**now** a\\|b</span></span>',
+            id="colour-around-highlight",
+        ),
+        pytest.param(
+            "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone=info\\}", id="no-span-stays-prose"
+        ),
+    ],
+)
+def test_an_attribute_span_is_a_notion_colour_span(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
 def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> None:
     assert notion_inline(parse_rich("C++ in ~5 days, 2^10 and a ++ b ++ c")) == (
         "C++ in \\~5 days, 2\\^10 and a ++ b ++ c"

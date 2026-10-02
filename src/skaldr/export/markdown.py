@@ -42,6 +42,7 @@ from skaldr.export.tree import (
     heading_of,
     nested_nodes,
 )
+from skaldr.models import ToneLiteral
 from skaldr.richtext import SCRIPT_HTML_TAG, ScriptPosition
 
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
@@ -94,6 +95,9 @@ class _MarkdownRuns(MarkupRuns):
     def script(self, position: ScriptPosition, text: str, /) -> str:
         tag = SCRIPT_HTML_TAG[position]
         return f"<{tag}>{self.escape(text)}</{tag}>"
+
+    def tinted(self, _tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
+        return inner
 
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:

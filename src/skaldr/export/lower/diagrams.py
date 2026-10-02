@@ -33,6 +33,7 @@ from skaldr.richtext import (
     Run,
     ScriptText,
     Styled,
+    Tinted,
     visible_text,
 )
 
@@ -60,7 +61,7 @@ def _links_somewhere(run: Run) -> bool:
     match run:
         case Link() | AnchorLink() | Citation():
             return True
-        case Styled():
+        case Styled() | Tinted():
             return any(map(_links_somewhere, run.runs))
         case Plain() | Code() | Placeholder() | ScriptText():
             return False

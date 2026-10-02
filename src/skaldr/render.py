@@ -21,6 +21,7 @@ from skaldr.models import (
     Report,
     RequestLike,
     Section,
+    ToneLiteral,
     iter_requests,
     load_report,
     package_text,
@@ -74,6 +75,11 @@ class _HtmlRuns:
     def script(self, position: ScriptPosition, text: str, /) -> str:
         tag = SCRIPT_HTML_TAG[position]
         return f"<{tag}>{escape(text)}</{tag}>"
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
+        colour = [f"color:var(--{tone}-fg)"] if tone else []
+        highlight = [f"background:var(--{background}-bg)"] if background else []
+        return f'<span style="{";".join(colour + highlight)}">{inner}</span>'
 
 
 def render_richtext(

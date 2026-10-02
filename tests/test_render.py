@@ -3,6 +3,7 @@ import hashlib
 import re
 from collections.abc import Callable
 from html import unescape
+from typing import get_args
 
 import pytest
 
@@ -12,8 +13,10 @@ from skaldr.models import (
     MAX_REQUEST_CASES,
     Report,
     Request,
+    ToneLiteral,
     load_report,
     package_path,
+    package_text,
     parse_report,
 )
 from skaldr.render import (
@@ -2569,6 +2572,38 @@ def test_richtext_writes_underline_subscript_and_superscript_as_html_elements() 
     html = str(render_richtext("++under *it*++ H~2~O 10^3^ x~<i>~"))
 
     assert html == "<u>under <em>it</em></u> H<sub>2</sub>O 10<sup>3</sup> x<sub>&lt;i&gt;</sub>"
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("[late]{tone=danger}", '<span style="color:var(--danger-fg)">late</span>', id="colour"),
+        pytest.param(
+            "[due]{bg=amber}", '<span style="background:var(--warning-bg)">due</span>', id="highlight"
+        ),
+        pytest.param(
+            "[**now** &lt;]{tone=sky bg=neutral}",
+            '<span style="color:var(--sky-fg);background:var(--neutral-bg)">'
+            "<strong>now</strong> &amp;lt;</span>",
+            id="colour-and-highlight-around-escaped-marks",
+        ),
+    ],
+)
+def test_richtext_writes_an_attribute_span_with_the_tone_tokens(text: str, html: str) -> None:
+    assert str(render_richtext(text)) == html
+
+
+@pytest.mark.parametrize("tone", [pytest.param(tone, id=tone) for tone in get_args(ToneLiteral)])
+def test_every_tone_an_attribute_span_names_has_a_colour_and_a_tint_token(tone: str) -> None:
+    styles = package_text("styles.css")
+
+    assert (f"--{tone}-fg:light-dark(" in styles, f"--{tone}-bg:light-dark(" in styles) == (True, True)
+
+
+def test_richtext_keeps_brackets_and_braces_that_form_no_attribute_span_as_text() -> None:
+    html = str(render_richtext("[a]{x} [b] {tone=info} [c](https://e.com){tone=info}"))
+
+    assert html == '[a]{x} [b] {tone=info} <a href="https://e.com">c</a>{tone=info}'
 
 
 def test_richtext_keeps_marker_characters_that_form_no_mark_as_text() -> None:

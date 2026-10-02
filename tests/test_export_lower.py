@@ -49,7 +49,7 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled
+from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled, Tinted
 from tests.factories import (
     API_BADGES,
     lowered,
@@ -546,6 +546,7 @@ def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
         pytest.param("[a\nb](https://e.com)", (Link((Plain("a b"),), "https://e.com"),), id="link-label"),
         pytest.param("[a\nb](#count)", (AnchorLink((Plain("a b"),), "count"),), id="anchor-link-label"),
         pytest.param("**a\nb**", (Styled("bold", (Plain("a b"),)),), id="styled"),
+        pytest.param("[a\nb]{tone=info}", (Tinted("info", None, (Plain("a b"),)),), id="tinted"),
         pytest.param("  x  ", (Plain("x"),), id="outer-spaces-trimmed"),
         pytest.param("  `x`  ", (Code("x"),), id="outer-spaces-around-code-dropped"),
         pytest.param("`x\ry`", (Code("x y"),), id="code-carriage-return"),

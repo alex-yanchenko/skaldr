@@ -2,12 +2,13 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, get_args
 
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN
+from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
 StyleName = Literal["bold", "italic", "strike", "underline"]
 ScriptPosition = Literal["subscript", "superscript"]
@@ -60,7 +61,14 @@ class ScriptText:
     text: str
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText
+@dataclass(frozen=True)
+class Tinted:
+    tone: ToneLiteral | None
+    background: ToneLiteral | None
+    runs: "Rich"
+
+
+Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText | Tinted
 Rich = tuple[Run, ...]
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -69,6 +77,12 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
+_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]\{\s*([a-z]+\s*=[^{}\x00]*)\}")
+_SPAN_ATTRIBUTES: Final = frozenset({"tone", "bg"})
+_TONE: Final = TypeAdapter[ToneLiteral](Tone)
+_PALETTE_ONLY_NAMES: Final = tuple(
+    name for name in get_args(BadgeColorLiteral) if name not in get_args(ToneLiteral)
+)
 _SCRIPT_PASSES: tuple[tuple[re.Pattern[str], ScriptPosition], ...] = (
     (re.compile(r"(?<!~)~([^\s~`\x00]+)~(?!~)"), "subscript"),
     (re.compile(r"(?<![\[^])\^([^\s^`\x00]+)\^(?!\^)"), "superscript"),
@@ -169,11 +183,48 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     staged = _PLACEHOLDER.sub(blank, staged)
     for pattern, position in _SCRIPT_PASSES:
         staged = pattern.sub(partial(_set_aside_script, stash, position), staged)
+    staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
     return _parse_styles(staged, 0, stash)
 
 
 def _set_aside_script(stash: _Stash, position: ScriptPosition, match: re.Match[str]) -> str:
     return stash.set_aside(ScriptText(position, match.group(1)))
+
+
+def _set_aside_tint(stash: _Stash, match: re.Match[str]) -> str:
+    tones = _span_tones(match.group(2))
+    label = _parse_styles(match.group(1), 0, stash)
+    return stash.set_aside(Tinted(tones.get("tone"), tones.get("bg"), label))
+
+
+def _span_tones(attributes: str) -> dict[str, ToneLiteral]:
+    token = "{" + attributes.strip() + "}"
+    tones: dict[str, ToneLiteral] = {}
+    for attribute in attributes.split():
+        key, equals, value = attribute.partition("=")
+        if not equals:
+            raise ReportError(
+                f"malformed attribute '{attribute}' in {token}: write each attribute as key=value, "
+                "with no spaces around '='"
+            )
+        if key not in _SPAN_ATTRIBUTES:
+            raise ReportError(
+                f"unknown attribute '{key}' in {token}: a [text]{{…}} span takes tone=<tone> and bg=<tone>"
+            )
+        if key in tones:
+            raise ReportError(f"attribute '{key}' is set twice in {token}")
+        tones[key] = _span_tone(value, token)
+    return tones
+
+
+def _span_tone(value: str, token: str) -> ToneLiteral:
+    try:
+        return _TONE.validate_python(value)
+    except ValidationError:
+        raise ReportError(
+            f"unknown tone '{value}' in {token}: a tone is one of {', '.join(get_args(ToneLiteral))}, "
+            f"or a palette name {', '.join(_PALETTE_ONLY_NAMES)}"
+        ) from None
 
 
 def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
@@ -204,6 +255,8 @@ class RunWriter(Protocol):
 
     def script(self, position: ScriptPosition, text: str, /) -> str: ...
 
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
+
 
 def write_run(run: Run, writer: RunWriter) -> str:
     match run:
@@ -223,6 +276,8 @@ def write_run(run: Run, writer: RunWriter) -> str:
             return writer.styled(run.style, write_runs(run.runs, writer))
         case ScriptText():
             return writer.script(run.position, run.text)
+        case Tinted():
+            return writer.tinted(run.tone, run.background, write_runs(run.runs, writer))
         case _:
             assert_never(run)
 
@@ -255,6 +310,9 @@ class VisibleText:
 
     def script(self, _position: ScriptPosition, text: str, /) -> str:
         return text
+
+    def tinted(self, _tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
+        return inner
 
 
 def visible_text(runs: Rich) -> str:

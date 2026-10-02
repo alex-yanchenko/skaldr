@@ -201,6 +201,9 @@ class MarkupRuns(ABC):
     @abstractmethod
     def script(self, position: ScriptPosition, text: str, /) -> str: ...
 
+    @abstractmethod
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
+
     def text(self, text: str, /) -> str:
         return bang_cannot_open_an_image(self.escape(text))
 

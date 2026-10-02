@@ -38,7 +38,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
@@ -113,6 +113,16 @@ class _NotionRuns(MarkupRuns):
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
         return inline_math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
+        highlighted = (
+            _coloured_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
+        )
+        return _coloured_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
+
+
+def _coloured_span(color: str, inner: str) -> str:
+    return f'<span color="{color}">{inner}</span>'
 
 
 def notion_inline(runs: ExportRich) -> str:

@@ -243,6 +243,12 @@ def test_underline_and_scripts_in_prose_become_github_html_tags() -> None:
     )
 
 
+def test_an_attribute_span_keeps_only_its_text_because_github_has_no_colour() -> None:
+    assert markdown_of([{"type": "text", "body": "[**late** a_b]{tone=danger bg=warning} [x]{y}"}]) == (
+        "**late** a\\_b \\[x\\]{y}\n"
+    )
+
+
 def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_markdown() -> None:
     assert markdown_of([{"type": "text", "body": "C++ in ~5 days, 2^10 {x} and a ++ b ++ c"}]) == (
         "C++ in \\~5 days, 2^10 {x} and a ++ b ++ c\n"

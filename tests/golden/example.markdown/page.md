@@ -53,6 +53,8 @@ Percentages are of the 10,000-unit total. Counts were verified against the shelf
 
 Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 
+Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
+
 ### Count pipeline
 
 ```mermaid
