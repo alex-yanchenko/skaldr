@@ -226,8 +226,17 @@ def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit, message: str) 
             {"error": "invalid\x1b[2J_grant", "error_description": "code\x1b]0;title\x07 expired\r\n"},
             "Notion refused the sign-in: invalid[2J_grant (code]0;title expired)",
         ),
+        (
+            {"error": "\x1b\x07", "error_description": "\x1b\r\n"},
+            "Notion refused the sign-in: (unnamed error)",
+        ),
     ],
-    ids=["error only", "error with a description", "control characters in the error and description"],
+    ids=[
+        "error only",
+        "error with a description",
+        "control characters in the error and description",
+        "nothing but control characters",
+    ],
 )
 def test_a_refused_token_request_names_the_oauth_error(answer: dict[str, str], message: str) -> None:
     with pytest.raises(AuthError) as raised:

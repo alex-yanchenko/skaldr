@@ -7,7 +7,7 @@ from typing import get_args
 
 import httpx2
 
-from skaldr.auth import printable
+from skaldr.auth import without_control_characters
 from skaldr.auth.jira import API_TOKENS_PAGE, verify_jira_token
 from skaldr.auth.notion import (
     DEFAULT_CALLBACK_PORT,
@@ -206,11 +206,11 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
 
 
 def _workspace(credentials: NotionCredentials) -> str:
-    return printable(credentials.workspace_name or "") or "(unnamed workspace)"
+    return without_control_characters(credentials.workspace_name or "") or "(unnamed workspace)"
 
 
 def _person(credentials: JiraCredentials) -> str:
-    return printable(credentials.display_name or "") or "(no display name)"
+    return without_control_characters(credentials.display_name or "") or "(no display name)"
 
 
 def _required(answer: str, refusal: str) -> str:

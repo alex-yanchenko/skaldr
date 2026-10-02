@@ -19,7 +19,7 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, without_control_characters
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 
@@ -153,8 +153,7 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
                 "Notion refused the client ID or secret (invalid_client); copy both from the connection "
                 f"page at {INTEGRATIONS_PAGE} again"
             ) from exc
-        detail = f" ({printable(exc.description)})" if exc.description else ""
-        raise AuthError(f"Notion refused the sign-in: {printable(str(exc.error))}{detail}") from exc
+        raise _refused_sign_in(exc) from exc
     except httpx2.HTTPError as exc:
         raise _unreachable(exc) from exc
     except ValidationError as exc:
@@ -164,6 +163,13 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
     raise AuthError(
         f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
     )
+
+
+def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
+    code = without_control_characters(exc.error or "") or "(unnamed error)"
+    description = without_control_characters(exc.description or "")
+    detail = f" ({description})" if description else ""
+    return AuthError(f"Notion refused the sign-in: {code}{detail}")
 
 
 def _unreachable(exc: httpx2.HTTPError) -> AuthError:

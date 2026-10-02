@@ -191,7 +191,7 @@ def test_auth_notion_prints_only_the_printable_part_of_the_workspace_name(
 ) -> None:
     notion_client_in_environment(monkeypatch)
     browser = FakeBrowser(approving)
-    token = {**TOKEN_RESPONSE, "workspace_name": "Example\x1b[2J‮ Workspace\r\n"}
+    token = {**TOKEN_RESPONSE, "workspace_name": "Example\x1b[2J\N{RIGHT-TO-LEFT OVERRIDE} Workspace\r\n"}
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
