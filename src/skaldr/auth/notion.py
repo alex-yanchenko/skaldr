@@ -1,5 +1,6 @@
 import errno
 import json
+import re
 import secrets
 import socket
 import threading
@@ -18,7 +19,7 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 
@@ -36,6 +37,7 @@ _NO_IPV6_LOOPBACK = frozenset({errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT})
 _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
+_OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
 
 
 class _NotionToken(BaseModel):
@@ -151,8 +153,8 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
                 "Notion refused the client ID or secret (invalid_client); copy both from the connection "
                 f"page at {INTEGRATIONS_PAGE} again"
             ) from exc
-        detail = f" ({exc.description})" if exc.description else ""
-        raise AuthError(f"Notion refused the sign-in: {exc.error}{detail}") from exc
+        detail = f" ({printable(exc.description)})" if exc.description else ""
+        raise AuthError(f"Notion refused the sign-in: {printable(str(exc.error))}{detail}") from exc
     except httpx2.HTTPError as exc:
         raise _unreachable(exc) from exc
     except ValidationError as exc:
@@ -170,8 +172,11 @@ def _unreachable(exc: httpx2.HTTPError) -> AuthError:
 
 def _refuse_a_denied_consent(query: str) -> None:
     error = parse_qs(query).get("error")
-    if error:
+    if not error:
+        return
+    if _OAUTH_ERROR_CODE.fullmatch(error[0]):
         raise AuthError(f"Notion did not grant access: {error[0]}")
+    raise AuthError("Notion did not grant access")
 
 
 class _LoopbackServer(ThreadingHTTPServer):
@@ -267,9 +272,7 @@ def _answers_this_sign_in(query: str, state: str) -> bool:
     state_matches = received_state is not None and secrets.compare_digest(
         received_state[0].encode(), state.encode()
     )
-    if "code" in fields:
-        return state_matches
-    return "error" in fields and (state_matches or received_state is None)
+    return state_matches and ("code" in fields or "error" in fields)
 
 
 def _callback_handler_class(

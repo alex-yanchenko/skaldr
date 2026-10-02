@@ -69,6 +69,20 @@ def test_auth_jira_verifies_the_token_and_saves_it(
     )
 
 
+def test_auth_jira_prints_only_the_printable_part_of_the_display_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
+    myself = {**MYSELF, "displayName": "Example\x1b[2J Reader\x07\r\n"}
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        "Signed in to Jira at https://example.atlassian.net as Example[2J Reader. Saved to the keychain.\n",
+    )
+
+
 def test_auth_jira_saves_nothing_when_the_token_is_rejected(
     monkeypatch: pytest.MonkeyPatch, keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -167,6 +181,25 @@ def test_auth_notion_names_a_workspace_notion_left_unnamed(
     assert (exit_code, browser.finished()) == (0, [200])
     assert capsys.readouterr().out.endswith(
         "Signed in to Notion workspace (unnamed workspace). Saved to the keychain.\n"
+    )
+
+
+def test_auth_notion_prints_only_the_printable_part_of_the_workspace_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion_client_in_environment(monkeypatch)
+    browser = FakeBrowser(approving)
+    token = {**TOKEN_RESPONSE, "workspace_name": "Example\x1b[2J‮ Workspace\r\n"}
+
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())],
+        transport=fake_api({"/v1/oauth/token": (200, token)}, []),
+        open_browser=browser,
+    )
+
+    assert (exit_code, browser.finished()) == (0, [200])
+    assert capsys.readouterr().out.endswith(
+        "Signed in to Notion workspace Example[2J Workspace. Saved to the keychain.\n"
     )
 
 
@@ -294,6 +327,17 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
     assert capsys.readouterr().out == (
         "notion  signed in to workspace (unnamed workspace) (keychain)\n"
         "jira    signed in to https://example.atlassian.net as reader@example.com (keychain)\n"
+    )
+
+
+def test_status_prints_only_the_printable_part_of_stored_names(capsys: pytest.CaptureFixture[str]) -> None:
+    save_notion(make_notion_credentials(workspace_name="Example\x1b[2J Workspace"))
+    save_jira(make_jira_credentials(display_name="Example\x1b]0;title\x07 Reader"))
+
+    assert auth_cli.main(["status"]) == 0
+    assert capsys.readouterr().out == (
+        "notion  signed in to workspace Example[2J Workspace (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as Example]0;title Reader (keychain)\n"
     )
 
 

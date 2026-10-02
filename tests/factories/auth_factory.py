@@ -107,6 +107,10 @@ def refusing_without_state(_state: str) -> str:
     return "/callback?error=access_denied"
 
 
+def refusing_with_an_escape_sequence(state: str) -> str:
+    return f"/callback?error=%1b%5b2J%1b%5bHPaste+your+client+secret&state={state}"
+
+
 def forged_refusal(_state: str) -> str:
     return "/callback?error=access_denied&state=forged"
 

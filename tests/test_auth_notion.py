@@ -28,6 +28,7 @@ from tests.factories.auth_factory import (
     needs_ipv6_loopback,
     refusing,
     refusing_connections,
+    refusing_with_an_escape_sequence,
     refusing_without_state,
     summarise,
 )
@@ -160,7 +161,9 @@ def test_a_second_matching_callback_is_turned_away() -> None:
 
 
 @pytest.mark.parametrize(
-    "visit", [forged, answerless, forged_refusal], ids=["forged state", "no code or error", "forged refusal"]
+    "visit",
+    [forged, answerless, forged_refusal, refusing_without_state],
+    ids=["forged state", "no code or error", "forged refusal", "a refusal without a state"],
 )
 def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_endpoint(visit: Visit) -> None:
     seen: list[httpx2.Request] = []
@@ -172,17 +175,31 @@ def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_en
     assert (browser.finished(), seen) == ([400], [])
 
 
+def test_a_refusal_without_a_state_does_not_end_the_wait_for_the_real_callback() -> None:
+    browser = FakeBrowser(refusing_without_state, approving)
+
+    credentials = sign_in(browser)
+
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [400, 200]
+
+
 @pytest.mark.parametrize(
-    "visit", [refusing, refusing_without_state], ids=["with the state", "without a state"]
+    ("visit", "message"),
+    [
+        (refusing, "Notion did not grant access: access_denied"),
+        (refusing_with_an_escape_sequence, "Notion did not grant access"),
+    ],
+    ids=["an oauth error code", "an error that is not an oauth error code"],
 )
-def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
+def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit, message: str) -> None:
     seen: list[httpx2.Request] = []
     browser = FakeBrowser(visit)
 
-    with pytest.raises(AuthError, match=r"^Notion did not grant access: access_denied$"):
+    with pytest.raises(AuthError) as raised:
         sign_in(browser, seen)
 
-    assert (browser.finished(), seen) == ([200], [])
+    assert (str(raised.value), browser.finished(), seen) == (message, [200], [])
 
 
 @pytest.mark.parametrize(
@@ -197,8 +214,12 @@ def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
             {"error": "invalid_grant", "error_description": "code expired"},
             "Notion refused the sign-in: invalid_grant (code expired)",
         ),
+        (
+            {"error": "invalid\x1b[2J_grant", "error_description": "code\x1b]0;title\x07 expired\r\n"},
+            "Notion refused the sign-in: invalid[2J_grant (code]0;title expired)",
+        ),
     ],
-    ids=["error only", "error with a description"],
+    ids=["error only", "error with a description", "control characters in the error and description"],
 )
 def test_a_refused_token_request_names_the_oauth_error(answer: dict[str, str], message: str) -> None:
     with pytest.raises(AuthError) as raised:
