@@ -1127,6 +1127,12 @@ class Table(_Block):
             return self.reconcile.column
         return self.totals.column if self.totals else None
 
+    @property
+    def totals_label_key(self) -> str | None:
+        if self.totals is None:
+            return None
+        return next(column.key for column in self.cell_columns if column.key != self.totals.column)
+
     def all_rows(self) -> list[dict[str, Any]]:
         # casts: rows are mappings post-expansion (see `_expand_positional_rows`).
         if self.groups is not None:

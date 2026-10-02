@@ -106,7 +106,7 @@ def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
 
 def _totals_row(block: models.Table, total_key: str) -> TableRow:
     total = compute.fmt(compute.col_sum(block.all_rows(), total_key))
-    label_key = next(column.key for column in block.cell_columns if column.key != total_key)
+    label_key = block.totals_label_key
     return TableRow(
         tuple(
             TableCell(
