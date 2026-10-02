@@ -1,3 +1,4 @@
+from tests.factories.export_factory import lowered, markdown_of, write_report
 from tests.factories.report_factory import (
     NOTION_PAGE_ID,
     NOTION_PAGE_URL,
@@ -19,6 +20,7 @@ from tests.factories.report_factory import (
 __all__ = [
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
+    "lowered",
     "make_cell",
     "make_command_request",
     "make_flow",
@@ -32,4 +34,6 @@ __all__ = [
     "make_section",
     "make_step",
     "make_table",
+    "markdown_of",
+    "write_report",
 ]

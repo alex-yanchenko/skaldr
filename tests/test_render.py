@@ -362,6 +362,14 @@ def test_single_paragraph_callout_stays_inline_without_a_paragraph_wrapper() -> 
     assert '<p class="prose-p">' not in html  # no paragraph wrapper emitted for a single paragraph
 
 
+def test_a_run_of_blank_lines_in_a_text_body_writes_no_empty_paragraph() -> None:
+    block = {"type": "text", "body": "a\n\n\n\nb\n\n"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert re.findall(r'<p class="text">.*?</p>', html) == ['<p class="text">a</p>', '<p class="text">b</p>']
+
+
 def test_quote_body_splits_blank_line_paragraphs() -> None:
     block = {"type": "quote", "body": "Line one.\n\nLine two.", "cite": "src"}
 
