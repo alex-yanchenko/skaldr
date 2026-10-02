@@ -110,12 +110,13 @@ def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
 
 def _totals_row(block: models.Table, total_key: str) -> TableRow:
     total = compute.fmt(compute.col_sum(block.all_rows(), total_key))
+    label_key = next(column.key for column in block.cell_columns if column.key != total_key)
     return TableRow(
         tuple(
-            TableCell(bold(total))
-            if column.key == total_key
-            else TableCell(bold("Total") if index == 0 else ())
-            for index, column in enumerate(block.cell_columns)
+            TableCell(
+                bold(total) if column.key == total_key else bold("Total") if column.key == label_key else ()
+            )
+            for column in block.cell_columns
         ),
         emphasis="total",
     )

@@ -1024,6 +1024,26 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
     )
 
 
+def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "n", "label": "Units", "kind": "number"}, {"key": "a", "label": "Issue"}],
+        "totals": {"column": "n"},
+        "rows": [{"n": 2, "a": "x"}, {"n": 3, "a": "y"}],
+    }
+
+    assert lowered([table]) == (
+        Table(
+            _cells("Units", "Issue"),
+            (
+                TableRow((TableCell((Plain("2"),)), TableCell((Plain("x"),)))),
+                TableRow((TableCell((Plain("3"),)), TableCell((Plain("y"),)))),
+                TableRow((TableCell(bold("5")), TableCell(bold("Total"))), emphasis="total"),
+            ),
+        ),
+    )
+
+
 def test_a_blank_title_cell_starts_with_its_badge_or_subrow_not_a_break() -> None:
     table = {
         "type": "table",
