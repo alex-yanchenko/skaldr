@@ -45,6 +45,7 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    folder_texts,
     heading_sections,
     lowered,
     make_command_request,
@@ -222,9 +223,9 @@ def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
     seen: set[str] = set()
     for block in blocks:
         seen.add(block.type)
-        if isinstance(block, (Section, Panel)):
+        if isinstance(block, Section | Panel):
             seen |= _block_types_in(block.blocks)
-        if isinstance(block, (Grid, InnerGrid)):
+        if isinstance(block, Grid | InnerGrid):
             for cell in block.cells:
                 seen |= _block_types_in(cell.blocks)
         if isinstance(block, Walkthrough):
@@ -244,9 +245,7 @@ def test_the_export_fixture_uses_every_block_type() -> None:
 def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
     export_notion(load_report(EXAMPLE), tmp_path)
 
-    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
-        path.name: path.read_text(encoding="utf-8") for path in sorted(NOTION_GOLDEN.iterdir())
-    }
+    assert folder_texts(tmp_path) == folder_texts(NOTION_GOLDEN)
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:

@@ -44,7 +44,14 @@ from skaldr.export.tree import (
 from skaldr.models import load_report, parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
 from tests.conftest import REPO_ROOT
-from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, make_command_request, make_report, markdown_of
+from tests.factories import (
+    API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
+    folder_texts,
+    make_command_request,
+    make_report,
+    markdown_of,
+)
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
@@ -53,9 +60,7 @@ MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
 def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
     export_markdown(load_report(EXAMPLE), tmp_path)
 
-    assert {path.name: path.read_text(encoding="utf-8") for path in sorted(tmp_path.iterdir())} == {
-        path.name: path.read_text(encoding="utf-8") for path in sorted(MARKDOWN_GOLDEN.iterdir())
-    }
+    assert folder_texts(tmp_path) == folder_texts(MARKDOWN_GOLDEN)
 
 
 def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
