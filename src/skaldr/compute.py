@@ -11,14 +11,15 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Any, TypedDict
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Final, NamedTuple, TypedDict
 
 from skaldr.errors import ReportError
 from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
     Badge,
+    BadgeColorLiteral,
     Card,
     CaseTone,
     DeltaDirection,
@@ -36,7 +37,6 @@ from skaldr.models import (
     RequestResponse,
     Section,
     Swimlane,
-    SwimlaneStep,
     SwimlaneStepState,
     Table,
     Walkthrough,
@@ -149,6 +149,9 @@ def first_table_index(report: Report) -> int | None:
         if isinstance(block, Table):
             return index
     return None
+
+
+BADGE_LEGEND_SUBJECT: Final = "badges used on this page"
 
 
 def used_badges(report: Report) -> list[tuple[str, Badge]]:
@@ -273,7 +276,7 @@ class SwimLayout(TypedDict):
 
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
-DELTA_GLYPHS: dict[DeltaDirection, str] = {"up": "▲", "down": "▼", "flat": "→"}
+DELTA_GLYPHS: Final[Mapping[DeltaDirection, str]] = {"up": "▲", "down": "▼", "flat": "→"}
 
 
 class SwimTotals(TypedDict):
@@ -285,17 +288,17 @@ class SwimTotals(TypedDict):
 def swimlane_totals(block: Swimlane) -> SwimTotals | None:
     if all(step.value is None for step in block.steps):
         return None
-
-    def sum_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
-        return sum(step.value or 0 for step in block.steps if predicate(step))
-
+    steps = block.steps
     return {
-        "lanes": {lane.key: sum_where(lambda step, key=lane.key: step.lane == key) for lane in block.lanes},
+        "lanes": {
+            lane.key: sum(step.value or 0 for step in steps if step.lane == lane.key) for lane in block.lanes
+        },
         "columns": {
-            column.key: sum_where(lambda step, key=column.key: step.col == key) for column in block.columns
+            column.key: sum(step.value or 0 for step in steps if step.col == column.key)
+            for column in block.columns
         },
         "groups": {
-            group.name: sum_where(lambda step, name=group.name: block.step_group(step) == name)
+            group.name: sum(step.value or 0 for step in steps if block.step_group(step) == group.name)
             for group in block.groups
         },
     }
@@ -330,8 +333,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     nlanes = len(block.lanes)
     has_groups = bool(block.groups)
     totals = swimlane_totals(block)
-    has_totals = totals is not None
-    nfoot = int(has_totals)  # 1 when a totals footer row is present
+    nfoot = int(totals is not None)
     # group name → its palette colour (an ungrouped segment's None group has no tint).
     color_of = {group.name: group.color for group in block.groups}
 
@@ -419,8 +421,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "state": step.state,
                     "deps": block.dependency_numbers(step),
                 }
-                for step in block.steps
-                if step.lane == lane.key and step.col == sub["col"] and block.step_group(step) == sub["group"]
+                for step in block.steps_at(lane.key, sub["col"], sub["group"])
             ]
             cells.append(
                 {
@@ -441,8 +442,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     caps: list[SwimCap] = []
     caps_bottom: list[SwimCapBottom] = []
     for group in block.groups:
-        indices = [index for index, (_, name) in enumerate(subcols) if name == group.name]
-        line_start, line_end = col_lines(indices[0])[0], col_lines(indices[-1])[1]
+        first, last = block.group_spans[group.name]
+        line_start, line_end = col_lines(first)[0], col_lines(last)[1]
         edges = ("left " if line_start == 2 else "") + ("right" if line_end == right_edge else "")
         group_total = totals["groups"][group.name] if totals is not None else None
         caps.append(
@@ -505,7 +506,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "col_start": boundary_line,
                     "col_end": boundary_line + 1,
                     "row_start": full_rows[0],
-                    "row_end": footer_row[0] if has_totals else full_rows[1],
+                    "row_end": footer_row[0] if totals is not None else full_rows[1],
                 }
             )
     # horizontal dividers, each a continuous line. The header/body divider spans the DATA columns only
@@ -517,7 +518,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     for index in range(1, nlanes):
         hdiv.append({"row": lane_rows[index][0], "col_start": 1})
     # a full-width divider above the totals row sets it off from the lane rows.
-    if has_totals:
+    if totals is not None:
         hdiv.append({"row": footer_row[0], "col_start": 1})
 
     # footer totals row: one cell per column, summing that column's step values across all lanes/groups.
@@ -551,7 +552,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         "state_legend": swimlane_state_legend(block),
         "n_width": max(len(step.n) for step in block.steps),
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
-        "row_template": _swim_row_template(has_groups, nlanes, has_totals),
+        "row_template": _swim_row_template(has_groups, nlanes, totals is not None),
         "subcols": subcol_out,
         "headers": headers,
         "header_tints": header_tints,
@@ -590,6 +591,10 @@ def provenance_footer(report: Report) -> str | None:
         parts.append(f"updated {report.meta.updated}")
     parts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
     return " · ".join(parts) if parts else None
+
+
+def paragraphs(text: str) -> list[str]:
+    return [part.strip() for part in text.split("\n\n") if part.strip()]
 
 
 def fmt(value: Any) -> str:
@@ -673,15 +678,24 @@ def table_tallies(report: Report) -> dict[str, DerivedTally]:
     return tallies
 
 
+class DerivedCardTally(NamedTuple):
+    counted: int
+    total: int
+
+
 def derived_card_tally(
-    card: Card, matrix_tallies: Mapping[str, DerivedTally], table_tallies: Mapping[str, DerivedTally]
-) -> tuple[int, int]:
-    badge = card.badge or ""
+    card: Card,
+    badge: str,
+    matrix_tallies: Mapping[str, DerivedTally],
+    table_tallies: Mapping[str, DerivedTally],
+) -> DerivedCardTally:
     if card.of_matrix:
         tally = matrix_tallies[card.of_matrix]
-        return tally["counts"].get(badge, 0), tally["total"]
+        return DerivedCardTally(tally["counts"].get(badge, 0), tally["total"])
     tallies = [table_tallies[table_id] for table_id in card.of_tables or []]
-    return sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
+    return DerivedCardTally(
+        sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
+    )
 
 
 def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
@@ -692,11 +706,16 @@ def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
     return [[lookup.get((row, col)) for col in block.columns] for row in block.rows]
 
 
-def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> tuple[str | None, str]:
+class MatrixCellDisplay(NamedTuple):
+    tone: BadgeColorLiteral | None
+    text: str
+
+
+def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> MatrixCellDisplay:
     if cell.badge:
         badge = badges[cell.badge]
-        return badge.tone, cell.label or badge.label
-    return cell.tone, cell.label or ""
+        return MatrixCellDisplay(badge.tone, cell.label or badge.label)
+    return MatrixCellDisplay(cell.tone, cell.label or "")
 
 
 HTTP_REASONS = {

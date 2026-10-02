@@ -75,7 +75,7 @@ flowchart LR
 
 ### Discrepancy resolution across teams
 
-| Lane | **Detect**<br>In-house | **Investigate** | **Resolve** | **Escalate**<br>Vendor claim |
+| Lane | Detect<br>In-house | Investigate | Resolve | Escalate<br>Vendor claim |
 | --- | --- | --- | --- | --- |
 | **Floor** | ✅ **1** Recount bin | ⏸️ **2b** Re-label |  |  |
 | **System** |  | 🔵 **2a** Check scan log | ⚪ **3** Reconcile |  |
@@ -99,12 +99,12 @@ flowchart LR
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
-| **Floor — fixable** (1,100) |  |  |  |  |
+| **Floor — fixable (1,100)** |  |  |  |  |
 | Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340 | 🟡 | 600 (6.0% of total) | The same pallet is scanned twice when a picker re-enters an aisle within the count window. | De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan. |
 | Mislabeled bin codes **System** | 🟡 | 500 (5.0% of total) | Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup. | Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log. |
-| **Vendor — escalation** (400) |  |  |  |  |
+| **Vendor — escalation (400)** |  |  |  |  |
 | Short shipment **Vendor** | 🔴 | 400 (4.0% of total) | The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted. | Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives. |
-| **Correctly counted — no action** (0) |  |  |  |  |
+| **Correctly counted — no action (0)** |  |  |  |  |
 | *none* |  |  |  |  |
 
 **Discrepancies by owner**: **Floor** 1 · **System** 1 · **Vendor** 1
@@ -113,10 +113,10 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 ## Count progress
 
-- **Zone A**: ██████████ 100.0% (100 of 100)
-- **Zone B**: █████████░ 92.0% (92 of 100)
-- **Zone C**: ████████░░ 85.0% (85 of 100)
-- **Overflow**: ░░░░░░░░░░ 4.0% (4 of 100)
+- **Zone A**: ██████████ 100.0%
+- **Zone B**: █████████░ 92.0%
+- **Zone C**: █████████░ 85.0%
+- **Overflow**: ░░░░░░░░░░ 4.0%
 
 **Affects**: **inventory** **scan-app** **DC-West**
 
@@ -199,7 +199,7 @@ function pickWinner(a, b) {
 >
 > The cards on the left summarise; the panels below break down count progress and checks side by side.
 
-- **Zone C**: █████████░ 88.0% (88 of 100)
+- **Zone C**: █████████░ 88.0%
 
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.
@@ -247,7 +247,7 @@ pie
 
 ## Count methods compared
 
-|  | **★ Full cycle** | Sampling | Continuous |
+|  | ★ Full cycle | Sampling | Continuous |
 | --- | --- | --- | --- |
 | **Catches every bin** | ✓ | ✗ | ✓ |
 | **Effort** | high | low | medium |

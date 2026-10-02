@@ -12,11 +12,12 @@ state glyphs for status lists and timelines.
 import math
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
+from functools import cached_property
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
+from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -89,19 +90,23 @@ Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
 # a palette name only. An author may write either name wherever a tone or a badge colour is taken; these
 # maps normalise each input to its field's canonical spelling before the Literal validates, so a `tone:
 # green` (or a badge `tone: success`) just works instead of failing. teal/sky pass through unchanged.
-_PALETTE_TO_TONE = {
-    "slate": "neutral",
-    "blue": "info",
-    "green": "success",
-    "amber": "warning",
-    "red": "danger",
-    "violet": "accent",
+ToneLiteral = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"]
+BadgeColorLiteral = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
+TONE_BADGE_COLOR: Final[Mapping[ToneLiteral, BadgeColorLiteral]] = {
+    "neutral": "slate",
+    "info": "blue",
+    "success": "green",
+    "warning": "amber",
+    "danger": "red",
+    "accent": "violet",
+    "teal": "teal",
+    "sky": "sky",
 }
-_TONE_TO_PALETTE = {tone: palette for palette, tone in _PALETTE_TO_TONE.items()}
-
-
-def semantic_tone_name(name: str) -> str:
-    return _PALETTE_TO_TONE.get(name, name)
+BADGE_COLOR_TONE: Final[Mapping[BadgeColorLiteral, ToneLiteral]] = {
+    color: tone for tone, color in TONE_BADGE_COLOR.items()
+}
+_PALETTE_TO_TONE: Final[Mapping[str, str]] = dict(BADGE_COLOR_TONE.items())
+_TONE_TO_PALETTE: Final[Mapping[str, str]] = dict(TONE_BADGE_COLOR.items())
 
 
 def _to_tone(value: Any) -> Any:
@@ -110,8 +115,8 @@ def _to_tone(value: Any) -> Any:
     return _PALETTE_TO_TONE.get(value, value) if isinstance(value, str) else value
 
 
-def badge_color_of(tone: str) -> "BadgeColor":
-    return cast("BadgeColor", _TONE_TO_PALETTE.get(tone, tone))
+def badge_color_of(tone: ToneLiteral) -> BadgeColorLiteral:
+    return TONE_BADGE_COLOR[tone]
 
 
 def _to_badge_color(value: Any) -> Any:
@@ -128,19 +133,13 @@ def _tone_names(tone_type: Any) -> tuple[str, ...]:
 
 # Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
 # colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
-Tone = Annotated[
-    Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
-    BeforeValidator(_to_tone),
-]
+Tone = Annotated[ToneLiteral, BeforeValidator(_to_tone)]
 RowTone = Annotated[
     Literal["muted", "danger"], BeforeValidator(_to_tone)
 ]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
 # Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
 _ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
-BadgeColor = Annotated[
-    Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"],
-    BeforeValidator(_to_badge_color),
-]
+BadgeColor = Annotated[BadgeColorLiteral, BeforeValidator(_to_badge_color)]
 _CALLOUT_TONES = ("info", "success", "warning", "danger")
 
 
@@ -302,9 +301,12 @@ def _any_item_checked(items: list["str | ListItem"]) -> bool:
     )
 
 
+ListStyle = Literal["bullet", "number", "check"]
+
+
 class ListBlock(_Block):
     type: Literal["list"]
-    style: Literal["bullet", "number", "check"] = Field(
+    style: ListStyle = Field(
         default="bullet",
         description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
         "(the ticks are ephemeral: a browser reload resets them).",
@@ -423,15 +425,18 @@ class Card(FrozenModel):
         "`of_matrix`.",
     )
 
-    def tone_with(self, badge: Badge) -> str:
-        return self.tone or badge.tone
+    @property
+    def derived(self) -> bool:
+        return self.of_matrix is not None or self.of_tables is not None
+
+    def tone_with(self, badge: Badge) -> ToneLiteral:
+        return self.tone or BADGE_COLOR_TONE[badge.tone]
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
         if self.of_matrix is not None and self.of_tables is not None:
             raise ValueError("a derived card counts a matrix (`of_matrix`) OR tables (`of_tables`), not both")
-        derived = self.of_matrix is not None or self.of_tables is not None
-        if derived:
+        if self.derived:
             # Derived card: the count and percentage come from the source, so authoring them is a
             # contradiction. The badge names which state to count and supplies the card's chip/label/tone.
             if self.badge is None:
@@ -855,6 +860,10 @@ def _as_badge_list(value: Any) -> list[Any]:
     return cast("list[Any]", value) if isinstance(value, list) else [value]
 
 
+def _trimmed_badge_keys(value: Any) -> list[str]:
+    return ["" if key is None else str(key).strip() for key in _as_badge_list(value)]
+
+
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
     keys = {column.key for column in columns}
     for index, row in enumerate(rows):
@@ -1100,10 +1109,13 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
-    def row_tint_key(self, row: dict[str, Any]) -> str:
-        raw: object = row.get(self.tint_by) if self.tint_by else None
-        values = cast("list[object]", raw) if isinstance(raw, list) else [raw]
-        return str(values[0] or "").strip() if values else ""
+    def badge_keys(self, row: Mapping[str, Any], key: str) -> list[str]:
+        return [badge for badge in _trimmed_badge_keys(row.get(key)) if badge]
+
+    def row_tint_key(self, row: Mapping[str, Any]) -> str:
+        if self.tint_by is None:
+            return ""
+        return next(iter(_trimmed_badge_keys(row.get(self.tint_by))), "")
 
     @property
     def title_key(self) -> str:
@@ -1226,6 +1238,9 @@ class Comparison(_Block):
                 f"{len(self.options)} options — they must match"
             )
         return self
+
+    def is_negative(self, index: int) -> bool:
+        return self.polarity is not None and self.polarity[index] == "negative"
 
 
 class MatrixCell(FrozenModel):
@@ -1465,9 +1480,30 @@ class Swimlane(_Block):
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
 
+    @cached_property
+    def _number_by_id(self) -> dict[str, str]:
+        return {step.id: step.n for step in self.steps if step.id is not None}
+
     def dependency_numbers(self, step: SwimlaneStep) -> list[str]:
-        number_by_id = {other.id: other.n for other in self.steps if other.id is not None}
-        return list(dict.fromkeys(number_by_id[dependency] for dependency in step.depends_on))
+        return list(dict.fromkeys(self._number_by_id[dependency] for dependency in step.depends_on))
+
+    @cached_property
+    def _placed_steps(self) -> dict[tuple[str, str, str | None], list[SwimlaneStep]]:
+        placed: defaultdict[tuple[str, str, str | None], list[SwimlaneStep]] = defaultdict(list)
+        for step in self.steps:
+            placed[(step.lane, step.col, self.step_group(step))].append(step)
+        return dict(placed)
+
+    def steps_at(self, lane: str, col: str, group: str | None) -> list[SwimlaneStep]:
+        return self._placed_steps.get((lane, col, group), [])
+
+    @cached_property
+    def group_spans(self) -> dict[str, tuple[int, int]]:
+        spans: dict[str, tuple[int, int]] = {}
+        for index, (_, group) in enumerate(self.subcolumns()):
+            if group is not None:
+                spans[group] = (spans[group][0], index) if group in spans else (index, index)
+        return spans
 
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,
@@ -1478,6 +1514,10 @@ class Swimlane(_Block):
         return covering[0].name if len(covering) == 1 else None
 
     def subcolumns(self) -> list[tuple[str, str | None]]:
+        return self._segments
+
+    @cached_property
+    def _segments(self) -> list[tuple[str, str | None]]:
         """The ordered atomic (column, group-name) segments the grid is built from. A column with no
         group → one `(col, None)` segment; a column split across N groups → N segments in canonical
         order (by column span, then declaration order). Raises if a group's segments cannot be laid out

@@ -1,9 +1,11 @@
 from tests.factories.export_factory import (
     API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
     heading_sections,
     lowered,
     markdown_of,
     notion_of,
+    parsed_block,
     write_report,
 )
 from tests.factories.report_factory import (
@@ -21,11 +23,13 @@ from tests.factories.report_factory import (
     make_request,
     make_section,
     make_step,
+    make_swimlane,
     make_table,
 )
 
 __all__ = [
     "API_BADGES",
+    "BADGE_AND_STATE_BLOCKS",
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
     "heading_sections",
@@ -42,8 +46,10 @@ __all__ = [
     "make_request",
     "make_section",
     "make_step",
+    "make_swimlane",
     "make_table",
     "markdown_of",
     "notion_of",
+    "parsed_block",
     "write_report",
 ]

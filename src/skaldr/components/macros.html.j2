@@ -13,7 +13,7 @@
 
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
-<summary>Legend — badges used on this page</summary>
+<summary>Legend — {{ badge_legend_subject }}</summary>
 <div class="section-body">
 <div class="legend-grid">
 {% for key, b in used_badges %}<div class="legend-row"><span class="chip {{ b.tone }}">{{ b.label }}</span><span class="meaning">{{ b.legend }}</span></div>
@@ -26,7 +26,7 @@
 {# A rich/text table cell: a blank line is a paragraph break (like text.body); a single newline
    collapses. A one-paragraph cell renders inline, so single-line cells are unchanged. #}
 {% macro rich_cell(value) -%}
-{% set paras = value.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
+{% set paras = value | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
 {%- endmacro %}
 
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
@@ -39,7 +39,7 @@
 {% for c in cell_cols %}
 {% if c.key == title_key %}
 <td class="title">{{ rich_cell(row[c.key]) }}
-{% for bc in title_badges %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
+{% for bc in title_badges %}{% for bkey in b.badge_keys(row, bc.key) %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endfor %}{% endfor %}
 {% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
 {% elif c.kind == "number" %}
@@ -47,7 +47,7 @@
 {% elif c.kind == "indicator" %}
 <td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
 {% elif c.kind == "badge" %}
-<td class="bc">{% set raw = row[c.key] %}{% for key in (raw if raw is iterable and raw is not string else [raw]) %}{% set k = key | trim %}{% if k %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endif %}{% endfor %}</td>
+<td class="bc">{% for k in b.badge_keys(row, c.key) %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endfor %}</td>
 {% else %}
 <td>{{ rich_cell(row[c.key]) }}</td>
 {% endif %}
@@ -90,7 +90,7 @@
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
 {% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 {% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " check" if style == "check" else "" }}">{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
-{% macro prose_paras(text) %}{% set paras = text.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">
@@ -136,7 +136,7 @@
 
 {% macro comparison(b) %}
 <table class="cmp"><thead><tr><th></th>{% for opt in b.options %}<th{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ opt }}</th>{% endfor %}</tr></thead>
-<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, (b.polarity[loop.index0] == 'negative') if b.polarity else false) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, b.is_negative(loop.index0)) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
 {% endmacro %}
 
 {% macro references(b) %}
@@ -199,8 +199,8 @@
    border read the same palette colour name. #}
 {% macro derived_card(c) %}
 {% set b = badges[c.badge] %}
-{% set count, total = derived_card_tally(c, matrix_tallies, table_tallies) %}
-<div class="card {{ c.tone_with(b) }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
+{% set count, total = derived_card_tally(c, c.badge, matrix_tallies, table_tallies) %}
+<div class="card {{ c.tone or b.tone }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
 {% endmacro %}
 
 {% macro variable_slots(text, quoting="none") %}{% for literal, name in variable_parts(text) %}{{ literal }}{% if name %}<span class="rq-slot" data-rq-slot="{{ name }}" data-rq-quote="{{ quoting }}">&lsaquo;{{ name }}&rsaquo;</span>{% endif %}{% endfor %}{% endmacro %}
@@ -275,7 +275,7 @@
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}{% if block.sub %}<span class="hsub">{{ block.sub | richtext }}</span>{% endif %}</h{{ block.level }}>
 {% elif block.type == "text" %}
-{% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
+{% for para in block.body | paragraphs %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
 {{ rich_list(block.items, block.style) }}
 {% elif block.type == "fact_strip" %}
@@ -285,7 +285,7 @@
 {% elif block.type == "def_list" %}
 <dl class="deflist">{% for it in block.items %}<dt>{{ it.term }}</dt><dd>{{ prose_paras(it.body) }}</dd>{% endfor %}</dl>
 {% elif block.type == "cards" %}
-<div class="cards">{% for c in block.items %}{% if c.of_matrix or c.of_tables %}{{ derived_card(c) }}{% else %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ delta_glyphs[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endif %}{% endfor %}</div>
+<div class="cards">{% for c in block.items %}{% if c.derived %}{{ derived_card(c) }}{% else %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ delta_glyphs[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endif %}{% endfor %}</div>
 {% elif block.type == "badge_row" %}
 {% if block.groups %}<dl class="badge-groups">{% for g in block.groups %}<dt>{{ g.label }}</dt><dd>{% for item in g.items %}{{ chip_item(item) }}{% endfor %}</dd>{% endfor %}</dl>{% else %}<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>{% endif %}
 {% elif block.type == "callout" %}

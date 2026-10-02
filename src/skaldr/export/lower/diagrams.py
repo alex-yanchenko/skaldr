@@ -2,8 +2,8 @@ from collections.abc import Sequence
 from itertools import pairwise
 
 from skaldr import compute
-from skaldr.export.inline import bold, labelled, one_line, plain
-from skaldr.export.lower.context import Lowering, bullets, plain_cells
+from skaldr.export.inline import bold, one_line
+from skaldr.export.lower.context import Lowering, bullets, plain_cells, spaced, with_bold_label
 from skaldr.export.tree import (
     Diagram,
     Graph,
@@ -14,7 +14,7 @@ from skaldr.export.tree import (
     Paragraph,
     PieChart,
     PieSlice,
-    Table,
+    TableNode,
     TableRow,
     XYChart,
 )
@@ -28,9 +28,9 @@ def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") 
 
 
 def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
-    text = (labelled(step.label) + lowering.rich(step.note)) if step.note else bold(step.label)
+    text = with_bold_label(step.label, lowering.rich(step.note)) if step.note else bold(step.label)
     if step.badges:
-        text += plain(" ") + lowering.chips(step.badges)
+        text = spaced([text, lowering.chips(step.badges)])
     children: tuple[Node, ...] = ()
     if step.points:
         children = (bullets(ListEntry(lowering.rich(point)) for point in step.points),)
@@ -71,7 +71,7 @@ def lower_chart(block: Chart) -> list[Node]:
     title: list[Node] = [Paragraph(bold(block.title))] if block.title else []
     if block.variant == "donut":
         return [*title, Diagram(PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices)))]
-    table = Table(
+    table = TableNode(
         plain_cells("Series", *block.categories),
         tuple(
             TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)

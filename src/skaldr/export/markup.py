@@ -1,16 +1,19 @@
+import math
 import re
-from collections.abc import Callable, Sequence
-from typing import Literal
+from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
+from typing import Final
+from urllib.parse import quote
 
-from skaldr.export.runs import Gauge, Mark, MarkScheme
-from skaldr.export.tree import CodeBlock, ListKind, ListNode, Node, ToneName
+from typing_extensions import assert_never
+
+from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
+from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
+from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, StyleName
 
-MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
-
-STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
-CALLOUT_ICON: dict[ToneName, str] = {
+STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
+CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
     "warning": "⚠️",
@@ -21,28 +24,12 @@ CALLOUT_ICON: dict[ToneName, str] = {
     "teal": "💡",
     "sky": "💡",
 }
-TAB_TONES: frozenset[ToneName] = frozenset({"success", "info", "warning", "danger"})
-MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
-    "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
-    "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
-    "swimlane": {"done": "✅", "current": "🔵", "todo": "⚪", "blocked": "⛔", "deferred": "⏸️"},
-    "indicator": {
-        "success": "🟢",
-        "warning": "🟡",
-        "danger": "🔴",
-        "info": "🔵",
-        "neutral": "⚪",
-        "accent": "🟣",
-        "teal": "🟢",
-        "sky": "🔵",
-    },
-    "check": {"yes": "✓", "no": "✗"},
-}
-GAUGE_CELLS = 10
+TAB_TONES: Final[frozenset[ToneName]] = frozenset({"success", "info", "warning", "danger"})
+GAUGE_CELLS: Final = 10
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
-URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E", "\\": "\\\\"}
+URL_SAFE_CHARACTERS: Final = "/:?#[]@!$&'*+,;=%~"
 
 
 def _wrap_marker(marker: str, inner: str) -> str:
@@ -58,19 +45,31 @@ def styled(style: StyleName, inner: str) -> str:
     return _wrap_marker(STYLE_MARKER[style], inner)
 
 
-def bold_once(text: str) -> str:
-    if text.startswith(STYLE_MARKER["bold"]):
-        return text
-    return styled("bold", text)
+def is_emphasised_body_cell(table: TableNode, row: TableRow, index: int) -> bool:
+    return row.emphasis is not None or (table.header_column and index == 0)
+
+
+def body_cell_texts(table: TableNode, row: TableRow, texts: Sequence[str]) -> list[str]:
+    return [
+        styled("bold", text) if is_emphasised_body_cell(table, row, index) else text
+        for index, text in enumerate(texts)
+    ]
 
 
 def _longest_backtick_run(text: str) -> int:
     return max((len(run) for run in BACKTICK_RUN.findall(text)), default=0)
 
 
+def _commonmark_would_strip_a_space_from_each_end(text: str) -> bool:
+    return text.startswith(" ") and text.endswith(" ") and bool(text.strip(" "))
+
+
 def code_span(text: str) -> str:
     ticks = "`" * (_longest_backtick_run(text) + 1)
-    padding = " " if text.startswith("`") or text.endswith("`") else ""
+    needs_padding = (
+        text.startswith("`") or text.endswith("`") or _commonmark_would_strip_a_space_from_each_end(text)
+    )
+    padding = " " if needs_padding else ""
     return f"{ticks}{padding}{text}{padding}{ticks}"
 
 
@@ -89,11 +88,11 @@ def bang_cannot_open_an_image(escaped_text: str) -> str:
 
 
 def encode_url(url: str) -> str:
-    return "".join(URL_UNSAFE.get(character, character) for character in url)
+    return quote(url, safe=URL_SAFE_CHARACTERS + "\\").replace("\\", "\\\\")
 
 
 def gauge_bar(value: float, maximum: float) -> str:
-    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS))) if maximum else 0
+    filled = max(0, min(GAUGE_CELLS, math.floor(value / maximum * GAUGE_CELLS + 0.5)))
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
 
 
@@ -101,17 +100,99 @@ def tab_icon(tone: ToneName | None) -> str | None:
     return CALLOUT_ICON[tone] if tone in TAB_TONES else None
 
 
-def list_marker_family(node: Node) -> MarkerFamily | None:
-    return MARKER_FAMILY[node.kind] if isinstance(node, ListNode) else None
+def status_glyph(state: StatusState) -> str:
+    match state:
+        case "done":
+            return "✅"
+        case "current":
+            return "🔵"
+        case "pending":
+            return "⚪"
+        case "failed":
+            return "❌"
+        case "blocked":
+            return "⛔"
+        case _:
+            assert_never(state)
+
+
+def swimlane_glyph(state: SwimlaneStepState) -> str:
+    match state:
+        case "done":
+            return "✅"
+        case "current":
+            return "🔵"
+        case "todo":
+            return "⚪"
+        case "blocked":
+            return "⛔"
+        case "deferred":
+            return "⏸️"
+        case _:
+            assert_never(state)
+
+
+def indicator_glyph(tone: ToneLiteral) -> str:
+    match tone:
+        case "success" | "teal":
+            return "🟢"
+        case "warning":
+            return "🟡"
+        case "danger":
+            return "🔴"
+        case "info" | "sky":
+            return "🔵"
+        case "neutral":
+            return "⚪"
+        case "accent":
+            return "🟣"
+        case _:
+            assert_never(tone)
+
+
+def check_glyph(checked: bool) -> str:
+    match checked:
+        case True:
+            return "✓"
+        case False:
+            return "✗"
+        case _:
+            assert_never(checked)
+
+
+def mark_glyph(mark: Mark) -> str:
+    match mark:
+        case StatusMark():
+            return status_glyph(mark.state)
+        case SwimlaneMark():
+            return swimlane_glyph(mark.state)
+        case IndicatorMark():
+            return indicator_glyph(mark.tone)
+        case CheckMark():
+            return check_glyph(mark.checked)
+        case _:
+            assert_never(mark)
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
 
-class MarkupRuns:
-    def __init__(self, escape: Callable[[str], str]) -> None:
-        self.escape = escape
+class MarkupRuns(ABC):
+    @abstractmethod
+    def escape(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def code(self, text: str, /) -> str: ...
+
+    @abstractmethod
+    def anchor_link(self, label: str, anchor: str, /) -> str: ...
+
+    @abstractmethod
+    def placeholder(self, name: str, /) -> str: ...
+
+    @abstractmethod
+    def chip(self, run: Chip, /) -> str: ...
 
     def text(self, text: str, /) -> str:
         return bang_cannot_open_an_image(self.escape(text))
@@ -130,7 +211,7 @@ class MarkupRuns:
         return styled(style, inner)
 
     def mark(self, run: Mark, /) -> str:
-        return MARK_GLYPH[run.scheme][run.state]
+        return mark_glyph(run)
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)

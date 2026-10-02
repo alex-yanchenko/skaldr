@@ -47,10 +47,10 @@ flowchart LR
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>
 		<td>**Lane**</td>
-		<td>**Detect**<br>In-house</td>
+		<td>**Detect<br>In-house**</td>
 		<td>**Investigate**</td>
 		<td>**Resolve**</td>
-		<td>**Escalate**<br>Vendor claim</td>
+		<td>**Escalate<br>Vendor claim**</td>
 	</tr>
 	<tr>
 		<td>**Floor**</td>
@@ -98,7 +98,7 @@ flowchart LR
 		<td>**Proposed fix**</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Floor — fixable** (1,100)</td>
+		<td>**Floor — fixable (1,100)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -119,7 +119,7 @@ flowchart LR
 		<td>Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log.</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Vendor — escalation** (400)</td>
+		<td>**Vendor — escalation (400)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -133,7 +133,7 @@ flowchart LR
 		<td>Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives.</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Correctly counted — no action** (0)</td>
+		<td>**Correctly counted — no action (0)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -150,10 +150,10 @@ flowchart LR
 **Discrepancies by owner**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
 Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 ## Count progress
-- **Zone A**: ██████████ 100.0% (100 of 100) {color="blue"}
-- **Zone B**: █████████░ 92.0% (92 of 100) {color="green"}
-- **Zone C**: ████████░░ 85.0% (85 of 100) {color="yellow"}
-- **Overflow**: ░░░░░░░░░░ 4.0% (4 of 100) {color="red"}
+- **Zone A**: ██████████ 100.0% {color="blue"}
+- **Zone B**: █████████░ 92.0% {color="green"}
+- **Zone C**: █████████░ 85.0% {color="yellow"}
+- **Overflow**: ░░░░░░░░░░ 4.0% {color="red"}
 **Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
 ## Verification
 - ✅ Reconciliation gate passes (10,000 = 10,000).
@@ -168,7 +168,6 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 	- [ ] Stage on the pilot aisle first.
 	- [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
-<empty-block/>
 - **Owner**: Inventory Ops — **@site-lead** signs off each fix.
 - **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 <callout icon="📝" color="gray_bg">
@@ -217,7 +216,7 @@ function pickWinner(a, b) {
 			**Reading this section**
 			The cards on the left summarise; the panels below break down count progress and checks side by side.
 		</callout>
-		- **Zone C**: █████████░ 88.0% (88 of 100) {color="yellow"}
+		- **Zone C**: █████████░ 88.0% {color="yellow"}
 		<empty-block/>
 		- ✅ Reconciliation gate passes.
 		- ⛔ Awaiting `OPS-1234`.

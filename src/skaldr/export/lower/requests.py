@@ -2,11 +2,11 @@ import json
 from collections.abc import Sequence
 
 from skaldr import compute
-from skaldr.export.inline import bold, italic, labelled, plain
-from skaldr.export.lower.context import Lowering, bullets
+from skaldr.export.inline import bold, italic, plain
+from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.tree import Callout, CodeBlock, ListEntry, Node, Paragraph, Tab, Tabs
 from skaldr.models import Request, RequestCase, RequestFlow, RequestLike, RequestVariable
-from skaldr.richtext import Code, Rich
+from skaldr.richtext import Code, Plain, Rich
 
 
 def _is_json(body: str) -> bool:
@@ -32,12 +32,12 @@ def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tup
     if core.command_note:
         nodes.append(Paragraph(italic(lowering.rich(core.command_note)), "muted"))
     if case.response.status is not None or core.command is None:
-        nodes.append(Paragraph(labelled("Response") + plain(compute.status_line(case.response))))
+        nodes.append(Paragraph(with_bold_label("Response", plain(compute.status_line(case.response)))))
     else:
         nodes.append(Paragraph(bold("Output")))
     nodes.append(_response_block(case))
     if case.verdict:
-        verdict = Paragraph(labelled("Verdict") + lowering.rich(case.verdict))
+        verdict = Paragraph(with_bold_label("Verdict", lowering.rich(case.verdict)))
         nodes.append(Callout(compute.case_tone(case), (verdict,)))
     return tuple(nodes)
 
@@ -61,7 +61,7 @@ def _variable_entry(variable: RequestVariable) -> ListEntry:
     else:
         detail = "supply a value"
     return ListEntry(
-        (Code("{{" + variable.name + "}}"), *plain(f" {variable.label or variable.name}: {detail}"))
+        spaced([(Code("{{" + variable.name + "}}"),), plain(f"{variable.label or variable.name}: {detail}")])
     )
 
 
@@ -80,7 +80,7 @@ def lower_request_flow(block: RequestFlow, lowering: Lowering) -> list[Node]:
     for index, step in enumerate(block.steps, start=1):
         step_title: Rich = bold(f"Step {index} of {len(block.steps)}: {step.label}")
         for position, capture in enumerate(step.captures):
-            step_title += (*plain(", captures " if position == 0 else ", "), Code(capture.name))
+            step_title += (Plain(", captures " if position == 0 else ", "), Code(capture.name))
         nodes.append(Paragraph(step_title))
         nodes += _cases(step, lowering)
     return nodes
