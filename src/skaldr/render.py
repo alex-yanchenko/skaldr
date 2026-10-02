@@ -328,7 +328,7 @@ def render_report(
     on someone else's screen is never what the author meant."""
     html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    replace_file(out_path, html)
+    replace_file(out_path.resolve(), html)
 
 
 def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
