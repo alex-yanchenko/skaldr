@@ -2809,6 +2809,25 @@ def test_totals_footer_renders_the_sum_in_the_number_cell() -> None:
     assert '<tfoot><tr><td>Total</td><td class="num">15</td></tr></tfoot>' in html
 
 
+def test_totals_footer_labels_the_first_cell_that_is_not_the_summed_column() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "count", "label": "C", "kind": "number"},
+            {"key": "issue", "label": "I", "kind": "text"},
+            {"key": "note", "label": "N", "kind": "text"},
+        ],
+        "rows": [{"count": 10, "issue": "a", "note": "x"}, {"count": 5, "issue": "b", "note": "y"}],
+        "totals": {"column": "count"},
+    }
+    report = parse_report(make_report(blocks=[table]))
+
+    footer = re.search(r"<tfoot>.*?</tfoot>", render_html(report))
+
+    assert footer is not None
+    assert footer.group(0) == '<tfoot><tr><td class="num">15</td><td>Total</td><td></td></tr></tfoot>'
+
+
 def test_diff_code_marks_added_and_removed_lines() -> None:
     block = {"type": "code", "mode": "diff", "content": "+added\n-removed\n context"}
     report = parse_report(make_report(blocks=[block]))

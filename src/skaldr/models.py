@@ -17,6 +17,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
@@ -1127,6 +1128,12 @@ class Table(_Block):
             return self.reconcile.column
         return self.totals.column if self.totals else None
 
+    @property
+    def totals_label_key(self) -> str | None:
+        if self.totals is None:
+            return None
+        return next(column.key for column in self.cell_columns if column.key != self.totals.column)
+
     def all_rows(self) -> list[dict[str, Any]]:
         # casts: rows are mappings post-expansion (see `_expand_positional_rows`).
         if self.groups is not None:
@@ -1488,22 +1495,29 @@ class Swimlane(_Block):
         return list(dict.fromkeys(self._number_by_id[dependency] for dependency in step.depends_on))
 
     @cached_property
-    def _placed_steps(self) -> dict[tuple[str, str, str | None], list[SwimlaneStep]]:
+    def _placed_steps(self) -> dict[tuple[str, str, str | None], tuple[SwimlaneStep, ...]]:
         placed: defaultdict[tuple[str, str, str | None], list[SwimlaneStep]] = defaultdict(list)
         for step in self.steps:
             placed[(step.lane, step.col, self.step_group(step))].append(step)
-        return dict(placed)
+        return {placement: tuple(steps) for placement, steps in placed.items()}
 
-    def steps_at(self, lane: str, col: str, group: str | None) -> list[SwimlaneStep]:
-        return self._placed_steps.get((lane, col, group), [])
+    def steps_at(self, lane: str, col: str, group: str | None) -> tuple[SwimlaneStep, ...]:
+        return self._placed_steps.get((lane, col, group), ())
 
     @cached_property
-    def group_spans(self) -> dict[str, tuple[int, int]]:
+    def group_spans(self) -> Mapping[str, tuple[int, int]]:
         spans: dict[str, tuple[int, int]] = {}
         for index, (_, group) in enumerate(self.subcolumns()):
             if group is not None:
                 spans[group] = (spans[group][0], index) if group in spans else (index, index)
-        return spans
+        return MappingProxyType(spans)
+
+    @cached_property
+    def column_spans(self) -> Mapping[str, tuple[int, int]]:
+        spans: dict[str, tuple[int, int]] = {}
+        for index, (column, _) in enumerate(self.subcolumns()):
+            spans[column] = (spans[column][0], index) if column in spans else (index, index)
+        return MappingProxyType(spans)
 
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,
@@ -1513,17 +1527,17 @@ class Swimlane(_Block):
         covering = self._groups_covering(step.col)
         return covering[0].name if len(covering) == 1 else None
 
-    def subcolumns(self) -> list[tuple[str, str | None]]:
+    def subcolumns(self) -> tuple[tuple[str, str | None], ...]:
         return self._segments
 
     @cached_property
-    def _segments(self) -> list[tuple[str, str | None]]:
+    def _segments(self) -> tuple[tuple[str, str | None], ...]:
         """The ordered atomic (column, group-name) segments the grid is built from. A column with no
         group → one `(col, None)` segment; a column split across N groups → N segments in canonical
         order (by column span, then declaration order). Raises if a group's segments cannot be laid out
         contiguously (it interleaves with another group instead of nesting)."""
         if not self.groups:
-            return [(col.key, None) for col in self.columns]
+            return tuple((col.key, None) for col in self.columns)
         col_index = {col.key: index for index, col in enumerate(self.columns)}
         group_index = {group.name: index for index, group in enumerate(self.groups)}
 
@@ -1548,7 +1562,7 @@ class Swimlane(_Block):
                     f"swimlane group '{group.name}' cannot be laid out contiguously — it shares a column "
                     "with another group while spanning past it; groups must nest, not interleave"
                 )
-        return segments
+        return tuple(segments)
 
     @model_validator(mode="after")
     def _shape(self) -> "Swimlane":
