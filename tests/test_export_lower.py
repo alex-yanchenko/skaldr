@@ -9,6 +9,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -18,6 +19,7 @@ from skaldr.export.tree import (
     TableOfContents,
     TocEntry,
     Toggle,
+    capped_heading_level,
 )
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
@@ -105,6 +107,19 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
     }
 
     assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
+@pytest.mark.parametrize(
+    ("level", "capped"),
+    [
+        pytest.param(0, 1, id="below-the-range"),
+        pytest.param(1, 1, id="top"),
+        pytest.param(4, 4, id="the-cap"),
+        pytest.param(7, 4, id="past-the-cap"),
+    ],
+)
+def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:
+    assert capped_heading_level(level) == capped
 
 
 def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:

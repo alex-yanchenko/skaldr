@@ -1,10 +1,11 @@
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import code_block_lines, code_span, styled
+from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, styled
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -17,6 +18,7 @@ from skaldr.export.tree import (
     TableOfContents,
     TocEntry,
     Toggle,
+    ToneName,
 )
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Rich, Run, Styled, parse_rich
@@ -246,6 +248,10 @@ def test_a_subtitle_led_by_spaces_and_a_dash_stays_a_paragraph() -> None:
     assert markdown_of([{"type": "text", "body": "b"}], meta={"title": "T", "subtitle": ["  - draft"]}) == (
         "\\- draft\n\nb\n"
     )
+
+
+def test_every_tone_has_a_callout_icon() -> None:
+    assert sorted(CALLOUT_ICON) == sorted(get_args(ToneName))
 
 
 def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:

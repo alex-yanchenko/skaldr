@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from pathlib import PurePosixPath
+from typing import Final
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
@@ -16,7 +18,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Code, Link, Plain, Rich
 
-CODE_LANGUAGE_BY_SUFFIX: dict[str, str] = {
+CODE_LANGUAGE_BY_SUFFIX: Final[Mapping[str, str]] = {
     ".ts": "typescript",
     ".tsx": "typescript",
     ".js": "javascript",

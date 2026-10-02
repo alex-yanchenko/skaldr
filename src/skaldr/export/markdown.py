@@ -21,6 +21,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListKind,
     ListNode,
@@ -38,7 +39,15 @@ MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for charact
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
+MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
+    "bullet": "dash",
+    "check": "dash",
+    "number": "ordinal",
+}
+
+
+def _dash(use_alternate_markers: bool) -> str:
+    return "*" if use_alternate_markers else "-"
 
 
 def _escape(text: str) -> str:
@@ -138,12 +147,12 @@ class _MarkdownWriter:
     def block_text(self, runs: Rich) -> str:
         return escape_block_start(self.inline(runs))
 
-    def heading_line(self, level: int, runs: Rich) -> str:
+    def heading_line(self, level: HeadingLevel, runs: Rich) -> str:
         text = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), self.inline(runs))
         return f"{'#' * level} {text}"
 
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
-        dash = "*" if use_alternate_markers else "-"
+        dash = _dash(use_alternate_markers)
         lines: list[str] = []
         for index, entry in enumerate(node.entries, start=1):
             match node.kind:
@@ -187,7 +196,7 @@ class _MarkdownWriter:
         return _quoted(_joined([[part] for part in parts]))
 
     def toc_lines(self, node: TableOfContents, use_alternate_markers: bool) -> list[str]:
-        dash = "*" if use_alternate_markers else "-"
+        dash = _dash(use_alternate_markers)
         entries = [
             (self.runs.heading_slugs.get(entry.anchor), self.inline(entry.title)) for entry in node.entries
         ]

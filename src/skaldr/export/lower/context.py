@@ -7,8 +7,6 @@ from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, ToneName
 from skaldr.models import AnyBlock, Report, iter_reference_items
 from skaldr.richtext import Plain, Rich, RichContext
 
-MAX_HEADING_LEVEL = 4
-
 
 @dataclass(frozen=True)
 class Lowering:

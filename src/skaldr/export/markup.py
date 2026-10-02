@@ -1,13 +1,13 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import quote
 
 from skaldr.export.tree import CodeBlock, ToneName
 from skaldr.richtext import StyleName
 
-STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
-CALLOUT_ICON: dict[ToneName, str] = {
+STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
+CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
     "warning": "⚠️",
