@@ -10,6 +10,7 @@ EXPORT_CLASH = "--export writes its own files; it can't combine with -o/--pdf/--
 HTML_ONLY = "--live, --if-stale and --no-source shape an HTML render; --export writes none"
 DIR_OR_CHUNK_ALONE = "--export-dir and --chunk only apply with --export"
 CHUNK_NOT_POSITIVE = "--chunk takes a positive character count"
+CHUNK_NOTION_ONLY = "--chunk splits a Notion page into files; it only applies with --export notion"
 BLANK_EXPORT_DIR = "--export-dir needs a folder path"
 
 
@@ -19,21 +20,25 @@ def export_dir(tmp_path: Path) -> Path:
 
 
 @pytest.mark.parametrize(
-    ("target", "page"),
+    ("target", "expected_page"),
     [
         pytest.param("notion", "Hi.\n", id="notion"),
         pytest.param("markdown", "# Test Report\n\nHi.\n", id="markdown"),
     ],
 )
 def test_the_cli_exports_the_page_and_prints_its_path(
-    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str], target: ExportTarget, page: str
+    tmp_path: Path,
+    export_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    target: ExportTarget,
+    expected_page: str,
 ) -> None:
     data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "Hi."}]))
 
     assert main([str(data_path), "--export", target, "--export-dir", str(export_dir)]) == 0
 
     assert capsys.readouterr().out.splitlines() == [f"OK  {export_dir / 'page.md'}"]
-    assert (export_dir / "page.md").read_text(encoding="utf-8") == page
+    assert (export_dir / "page.md").read_text(encoding="utf-8") == expected_page
 
 
 def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
@@ -134,11 +139,7 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error_and_leaves_the_f
         pytest.param(["--chunk", "100"], DIR_OR_CHUNK_ALONE, id="chunk-alone"),
         pytest.param(["--export-dir", "d"], DIR_OR_CHUNK_ALONE, id="dir-alone"),
         pytest.param(["--export-dir", ""], DIR_OR_CHUNK_ALONE, id="empty-dir-alone"),
-        pytest.param(
-            ["--export", "markdown", "--chunk", "100"],
-            "--chunk splits a Notion page into files; it only applies with --export notion",
-            id="chunk-markdown",
-        ),
+        pytest.param(["--export", "markdown", "--chunk", "100"], CHUNK_NOTION_ONLY, id="chunk-markdown"),
         pytest.param(["--export", "notion", "--chunk", "0"], CHUNK_NOT_POSITIVE, id="chunk-zero"),
         pytest.param(["--export", "notion", "--chunk", "-5"], CHUNK_NOT_POSITIVE, id="chunk-negative"),
         pytest.param(["--export", "jira"], "invalid choice: 'jira'", id="unknown-target"),

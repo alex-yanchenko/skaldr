@@ -23,6 +23,10 @@ from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, Rich, parse_rich
 from tests.factories import heading_sections, lowered, make_report, notion_of
 
+CHUNK_THAT_SPLITS_EVERY_SECTION = 100
+CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
+NESTING_TOO_DEEP_TO_PARSE = 100_000
+
 
 def _section_text(title: str, body: str, rows: int) -> str:
     return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
@@ -333,14 +337,19 @@ def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
-    ("first_chunk", "second_chunk", "left"),
+    ("first_chunk", "second_chunk", "remaining_pages"),
     [
-        pytest.param(100, None, ["page.md"], id="chunked-then-whole"),
-        pytest.param(100, 100000, ["page.00.md"], id="many-chunks-then-one"),
+        pytest.param(CHUNK_THAT_SPLITS_EVERY_SECTION, None, ["page.md"], id="chunked-then-whole"),
+        pytest.param(
+            CHUNK_THAT_SPLITS_EVERY_SECTION,
+            CHUNK_THAT_HOLDS_THE_WHOLE_PAGE,
+            ["page.00.md"],
+            id="many-chunks-then-one",
+        ),
     ],
 )
 def test_a_re_export_removes_only_the_pages_its_earlier_run_wrote(
-    tmp_path: Path, first_chunk: int, second_chunk: int | None, left: list[str]
+    tmp_path: Path, first_chunk: int, second_chunk: int | None, remaining_pages: list[str]
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(3, "w = 4\n" * 20)))
     export_notion(report, tmp_path, chunk=first_chunk)
@@ -350,11 +359,11 @@ def test_a_re_export_removes_only_the_pages_its_earlier_run_wrote(
     export_notion(report, tmp_path, chunk=second_chunk)
 
     assert sorted(path.name for path in tmp_path.iterdir()) == sorted(
-        [*left, "page.07.md", "page.09.md", EXPORT_MANIFEST]
+        [*remaining_pages, "page.07.md", "page.09.md", EXPORT_MANIFEST]
     )
     assert json.loads((tmp_path / EXPORT_MANIFEST).read_text(encoding="utf-8")) == {
         "title": "Test Report",
-        "files": left,
+        "files": remaining_pages,
     }
 
 
@@ -362,7 +371,7 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
     tmp_path: Path,
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(3, "w = 4\n" * 20)))
-    export_notion(report, tmp_path, chunk=100)
+    export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
 
     export_markdown(report, tmp_path)
 
@@ -373,7 +382,7 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
     "manifest",
     [
         pytest.param("not json", id="not-json"),
-        pytest.param("[" * 100000, id="nested-too-deep-to-parse"),
+        pytest.param("[" * NESTING_TOO_DEEP_TO_PARSE, id="nested-too-deep-to-parse"),
         pytest.param('["page.03.md"]', id="not-an-object"),
         pytest.param('{"files": ["page.03.md"]}', id="no-title"),
         pytest.param('{"title": "T", "files": ["page.03.md"], "pages": 1}', id="unknown-key"),
@@ -482,7 +491,7 @@ def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
 
     monkeypatch.setattr(Path, "write_text", fail_on_the_third_page)
     with pytest.raises(OSError, match="disk full"):
-        export_notion(report, tmp_path, chunk=100)
+        export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
     monkeypatch.undo()
 
     export_notion(report, tmp_path)

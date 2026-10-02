@@ -80,8 +80,8 @@ def _block_text(runs: Rich) -> str:
     return escape_block_start(notion_inline(runs))
 
 
-def _color_attribute(tone: ToneName | None, suffix: str = "") -> str:
-    return f' color="{BLOCK_COLOR[tone]}{suffix}"' if tone else ""
+def _color_attribute(tone: ToneName, suffix: str = "") -> str:
+    return f' color="{BLOCK_COLOR[tone]}{suffix}"'
 
 
 def _trailing_color(tone: ToneName | None) -> str:
@@ -92,18 +92,22 @@ def _indent(lines: Sequence[str], depth: int = 1) -> list[str]:
     return indent_lines(lines, "\t" * depth)
 
 
+def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
+    match kind:
+        case "bullet":
+            return "-"
+        case "number":
+            return f"{index}."
+        case "check":
+            return "- [x]" if checked else "- [ ]"
+        case _:
+            assert_never(kind)
+
+
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=1):
-        match node.kind:
-            case "bullet":
-                marker = "-"
-            case "number":
-                marker = f"{index}."
-            case "check":
-                marker = "- [x]" if entry.checked else "- [ ]"
-            case _:
-                assert_never(node.kind)
+        marker = _list_marker(node.kind, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))
     return lines
