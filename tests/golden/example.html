@@ -716,7 +716,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rlink{color:var(--muted); text-decoration:none}
 		& .rlink:hover{color:var(--accent-fg)}}
 
-	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow); scroll-margin-top:var(--hdr-h);
+	details.section,details.toggle{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow); scroll-margin-top:var(--hdr-h);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
 		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);
@@ -1167,7 +1167,9 @@ ORDER BY n DESC;
 </div></div>
 
 <details class="section" id="appendix-discrepancy-reason-raw-counts"><summary>Appendix — discrepancy-reason raw counts<span class="upd">updated 18 Jul 2026</span></summary><div class="section-body"><ul class="list"><li>Double-count (same-window re-scan): 340</li><li>Double-count (bin &gt; 12 skip): 260</li><li>Mislabeled bin code (9-digit truncation): 500</li><li>Short shipment (vendor): 400</li></ul>
-<p class="text muted">Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.</p></div></details>
+<p class="text muted">Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.</p><details class="toggle"><summary>How the raw counts were pulled</summary><div class="section-body"><p class="text">One pass over the scan-stage audit log for cycle <code>Q3-2026</code>, grouped by the reason code each scanner attached.</p><ul class="list"><li>Scans with no reason code count as matched.</li><li>A pallet scanned in two aisles counts once, under its first aisle.</li></ul>
+</div></details>
+</div></details>
 
 <h2 id="counts-at-a-glance">Counts at a glance</h2>
 

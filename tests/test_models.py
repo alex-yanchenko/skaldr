@@ -21,6 +21,7 @@ from skaldr.models import (
     Grid,
     Group,
     Heading,
+    InnerBlock,
     ListBlock,
     ListItem,
     Matrix,
@@ -36,6 +37,7 @@ from skaldr.models import (
     Table,
     Text,
     Timeline,
+    Toggle,
     ToneLiteral,
     Walkthrough,
     WalkthroughStep,
@@ -619,6 +621,92 @@ def test_panel_parses_to_whole_model() -> None:
 def test_panel_with_no_blocks_is_rejected() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.panel\.blocks"):
         parse_report(make_report(blocks=[{"type": "panel", "title": "Empty", "blocks": []}]))
+
+
+def test_a_toggle_parses_to_whole_model_starting_collapsed() -> None:
+    block = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Toggle(
+        type="toggle", title="Raw counts", collapsed=True, blocks=[Text(type="text", body="x")]
+    )
+
+
+def _toggle(*blocks: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "toggle", "title": "More", "blocks": list(blocks) or [{"type": "text", "body": "x"}]}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [_toggle()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [_toggle()]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [_toggle()])]), id="grid-cell"),
+        pytest.param(
+            make_grid([make_cell(6, [make_grid([make_cell(3, [_toggle()])])])]), id="inner-grid-cell"
+        ),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [_toggle()]}]},
+            id="walkthrough-detail",
+        ),
+        pytest.param(_toggle(_toggle()), id="another-toggle"),
+    ],
+)
+def test_a_toggle_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_toggle_with_no_blocks_is_rejected() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "toggle", "title": "Empty", "blocks": []}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.toggle.blocks: "
+        "List should have at least 1 item after validation, not 0"
+    )
+
+
+def test_a_toggle_with_a_blank_title_is_rejected() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{**_toggle(), "title": "  "}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.toggle: Value error, toggle title must not be blank"
+    )
+
+
+def _inner_block_tags() -> str:
+    return ", ".join(
+        f"'{get_args(model.model_fields['type'].annotation)[0]}'"
+        for model in get_args(get_args(InnerBlock)[0])
+    )
+
+
+def test_a_toggle_refuses_a_section_inside_it() -> None:
+    inner_section = {"type": "section", "title": "S", "blocks": [{"type": "text", "body": "x"}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[_toggle(inner_section)]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
+        f"match any of the expected tags: {_inner_block_tags()}"
+    )
+
+
+def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
+    row = {"type": "badge_row", "items": [{"key": "OPS"}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [_toggle(row)]}]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
+        "(add them to the badges map)"
+    )
 
 
 def test_a_level_four_heading_parses_to_whole_model() -> None:

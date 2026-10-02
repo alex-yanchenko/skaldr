@@ -135,6 +135,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_request_flow(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
+        case models.Toggle():
+            return _toggle(block, lowering, depth)
         case models.Panel():
             return [
                 Callout(
@@ -161,6 +163,13 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]
     return [Heading(level, plain(block.title), anchor), *children]
+
+
+def _toggle(block: models.Toggle, lowering: Lowering, depth: int) -> list[Node]:
+    children = _lower_blocks(block.blocks, lowering, depth)
+    if block.collapsed:
+        return [Toggle(plain(block.title), None, tuple(children))]
+    return [Paragraph(bold(block.title)), *children]
 
 
 def _column_ratios(spans: Sequence[int]) -> list[int]:

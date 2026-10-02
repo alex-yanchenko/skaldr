@@ -549,6 +549,19 @@ def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> Non
     assert render_markdown([node]) == markdown
 
 
+def test_a_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "blocks": [
+            {"type": "text", "body": "x"},
+            {"type": "toggle", "title": "Inner", "blocks": [{"type": "text", "body": "y"}]},
+        ],
+    }
+
+    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n\n**Inner**\n\ny\n"
+
+
 def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug() -> None:
     blocks = [
         {"type": "heading", "level": 4, "text": "Bin detail", "id": "bins"},

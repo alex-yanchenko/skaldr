@@ -271,6 +271,15 @@ blocks:
       - type: text
         muted: true
         body: "Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units."
+      - type: toggle
+        title: "How the raw counts were pulled"
+        blocks:
+          - type: text
+            body: "One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached."
+          - type: list
+            items:
+              - "Scans with no reason code count as matched."
+              - "A pallet scanned in two aisles counts once, under its first aisle."
 
   - type: heading
     level: 2

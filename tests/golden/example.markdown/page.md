@@ -219,6 +219,13 @@ function pickWinner(a, b) {
 
 Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.
 
+**How the raw counts were pulled**
+
+One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
+
+- Scans with no reason code count as matched.
+- A pallet scanned in two aisles counts once, under its first aisle.
+
 ## Counts at a glance
 
 **Clean vs discrepant units by zone**

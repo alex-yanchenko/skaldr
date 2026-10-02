@@ -442,6 +442,78 @@ def test_panel_renders_a_titled_card_holding_its_blocks() -> None:
     assert '<p class="text">Point.</p></div></div>' in html
 
 
+def _toggle(**overrides: object) -> dict[str, object]:
+    return {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}], **overrides}
+
+
+def test_a_toggle_is_a_collapsed_details_with_no_anchor() -> None:
+    html = render_html(parse_report(make_report(blocks=[_toggle()])))
+
+    assert (
+        '<details class="toggle"><summary>Raw counts</summary>'
+        '<div class="section-body"><p class="text">x</p></div></details>'
+    ) in html
+
+
+def test_a_toggle_set_not_collapsed_starts_open() -> None:
+    html = render_html(parse_report(make_report(blocks=[_toggle(collapsed=False)])))
+
+    assert '<details class="toggle" open><summary>Raw counts</summary>' in html
+
+
+def test_a_pdf_render_opens_every_toggle() -> None:
+    html = render_html(parse_report(make_report(blocks=[_toggle()])), expand=True)
+
+    assert '<details class="toggle" open><summary>Raw counts</summary>' in html
+
+
+def test_a_toggle_is_not_a_toc_entry_but_a_heading_inside_it_is_a_link_target() -> None:
+    toggle = _toggle(blocks=[{"type": "heading", "level": 3, "text": "Inside", "id": "inside"}])
+    blocks = [
+        {"type": "heading", "text": "Overview"},
+        toggle,
+        {"type": "text", "body": "Jump [in](#inside)."},
+    ]
+
+    html = render_html(parse_report(make_report(meta={"title": "T", "toc": True}, blocks=blocks)))
+
+    assert '<nav class="toc"><a href="#overview">Overview</a></nav>' in html
+    assert (
+        '<details class="toggle"><summary>Raw counts</summary><div class="section-body">'
+        '<h3 id="inside">Inside</h3>\n</div></details>\n\n'
+        '<p class="text">Jump <a href="#inside">in</a>.</p>'
+    ) in html
+
+
+def test_a_toggle_nests_inside_a_grid_cell_and_another_toggle() -> None:
+    outer = _toggle(title="Outer", blocks=[_toggle(title="Inner")])
+    grid = make_grid([make_cell(6, [outer])])
+
+    html = render_html(parse_report(make_report(blocks=[grid])))
+
+    assert (
+        '<div class="grid"><div class="cell span-6"><details class="toggle"><summary>Outer</summary>'
+        '<div class="section-body"><details class="toggle"><summary>Inner</summary>'
+        '<div class="section-body"><p class="text">x</p></div></details>\n</div></details>\n</div></div>'
+    ) in html
+
+
+def test_a_badge_and_a_citation_inside_a_toggle_feed_the_legend_and_the_numbering() -> None:
+    toggle = _toggle(
+        blocks=[
+            {"type": "badge_row", "items": [{"key": "OPS"}]},
+            {"type": "text", "body": "Per the SOP [^sop]."},
+            {"type": "references", "items": [{"key": "sop", "text": "Counting SOP"}]},
+        ]
+    )
+    badges = {"OPS": {"label": "ops", "tone": "blue", "legend": "Run by ops."}}
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[toggle])))
+
+    assert '<span class="chip blue">ops</span><span class="meaning">Run by ops.</span>' in html
+    assert '<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>' in html
+
+
 def test_a_divider_is_a_rule_between_the_blocks_around_it() -> None:
     blocks = [{"type": "text", "body": "Above."}, {"type": "divider"}, {"type": "text", "body": "Below."}]
 

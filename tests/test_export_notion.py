@@ -40,6 +40,7 @@ from skaldr.models import (
     load_report,
     parse_report,
 )
+from skaldr.models import Toggle as ToggleBlock
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
 from tests.conftest import REPO_ROOT
 from tests.factories import (
@@ -192,6 +193,16 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
     )
 
 
+def test_a_toggle_is_a_details_block_with_its_content_tab_indented_at_every_depth() -> None:
+    inner = {"type": "toggle", "title": "Inner", "blocks": [{"type": "text", "body": "y"}]}
+    toggle = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}, inner]}
+
+    assert notion_of([toggle]) == (
+        "<details>\n<summary>Raw counts</summary>\n\tx\n"
+        "\t<details>\n\t<summary>Inner</summary>\n\t\ty\n\t</details>\n</details>\n"
+    )
+
+
 def test_a_level_four_heading_is_four_hashes() -> None:
     assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
 
@@ -233,7 +244,7 @@ def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
     seen: set[str] = set()
     for block in blocks:
         seen.add(block.type)
-        if isinstance(block, Section | Panel):
+        if isinstance(block, Section | Panel | ToggleBlock):
             seen |= _block_types_in(block.blocks)
         if isinstance(block, Grid | InnerGrid):
             for cell in block.cells:

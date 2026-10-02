@@ -231,6 +231,12 @@ function pickWinner(a, b) {
 	- Mislabeled bin code (9-digit truncation): 500
 	- Short shipment (vendor): 400
 	Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units. {color="gray"}
+	<details>
+	<summary>How the raw counts were pulled</summary>
+		One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
+		- Scans with no reason code count as matched.
+		- A pallet scanned in two aisles counts once, under its first aisle.
+	</details>
 ## Counts at a glance
 **Clean vs discrepant units by zone**
 <table fit-page-width="true" header-row="true">

@@ -39,6 +39,7 @@ from skaldr.models import (
     Swimlane,
     SwimlaneStepState,
     Table,
+    Toggle,
     Walkthrough,
     col_sum,
     iter_matrices,
@@ -82,7 +83,7 @@ def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
         elif isinstance(block, Section):
             yield block
             yield from _iter_anchored(block.blocks)
-        elif isinstance(block, Panel):
+        elif isinstance(block, (Panel, Toggle)):
             yield from _iter_anchored(block.blocks)
         elif isinstance(block, (Grid, InnerGrid)):
             for cell in block.cells:

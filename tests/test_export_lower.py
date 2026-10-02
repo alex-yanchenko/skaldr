@@ -1196,6 +1196,43 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
     )
 
 
+def test_a_collapsed_toggle_is_a_plain_toggle_with_no_heading_or_anchor() -> None:
+    toggle = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}]}
+
+    assert lowered([toggle]) == (Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),)),)
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "collapsed": False,
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+
+    assert lowered([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
+
+
+def test_a_heading_inside_a_toggle_keeps_its_level_and_anchor() -> None:
+    section = {
+        "type": "section",
+        "title": "Open",
+        "collapsed": False,
+        "blocks": [
+            {
+                "type": "toggle",
+                "title": "More",
+                "blocks": [{"type": "heading", "level": 3, "text": "Deep", "id": "deep"}],
+            }
+        ],
+    }
+
+    assert lowered([section]) == (
+        Heading(2, (Plain("Open"),), "open"),
+        Toggle((Plain("More"),), None, (Heading(4, (Plain("Deep"),), "deep"),)),
+    )
+
+
 def test_a_divider_lowers_to_a_divider_node_between_its_neighbours() -> None:
     blocks = [{"type": "text", "body": "a"}, {"type": "divider"}, {"type": "text", "body": "b"}]
 

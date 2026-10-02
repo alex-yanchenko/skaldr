@@ -330,6 +330,8 @@
 {{ request_flow(block) }}
 {% elif block.type == "section" %}
 <details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+{% elif block.type == "toggle" %}
+<details class="toggle"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "panel" %}
 <div class="panel-card"><div class="panel-card-hd">{{ block.title }}</div><div class="panel-card-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></div>
 {% elif block.type == "grid" %}
