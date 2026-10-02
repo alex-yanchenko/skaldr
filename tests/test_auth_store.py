@@ -28,6 +28,7 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     PlaintextKeyring,
+    insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
 )
@@ -246,15 +247,6 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 
     with pytest.raises(AuthError, match=r"^The system keychain is unavailable: locked$"):
         operation()
-
-
-def insecure_keyring_refusal(backend: str) -> str:
-    return (
-        f"The keyring backend {backend} does not keep secrets in a secure store, so skaldr will not save to "
-        "it. Choose a secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's "
-        "keyringrc.cfg, for example keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring "
-        "or keyring.backends.SecretService.Keyring"
-    )
 
 
 @pytest.mark.parametrize(

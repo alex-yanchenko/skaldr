@@ -18,9 +18,11 @@ from tests.factories.auth_factory import (
     FakeBrowser,
     InMemoryKeyring,
     LockedKeyring,
+    PlaintextKeyring,
     approving,
     fake_api,
     free_port,
+    insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
 )
@@ -272,6 +274,53 @@ def test_auth_notion_refuses_a_blank_client(
 
     assert auth_cli.main(["notion"]) == 1
     assert capsys.readouterr().err == f"error: {error}\n"
+
+
+@pytest.mark.parametrize(
+    "client_in_environment", [False, True], ids=["client to prompt for", "client from the environment"]
+)
+def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_opening_the_browser(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], client_in_environment: bool
+) -> None:
+    if client_in_environment:
+        notion_client_in_environment(monkeypatch)
+    plaintext = PlaintextKeyring()
+    keyring.set_keyring(plaintext)
+    refuse_prompts(monkeypatch)
+    browser = FakeBrowser(approving)
+    seen: list[httpx2.Request] = []
+
+    with socket.create_server(("127.0.0.1", 0)) as blocker:
+        port = blocker.getsockname()[1]
+        exit_code = auth_cli.main(
+            ["notion", "--port", str(port)], transport=fake_api({}, seen), open_browser=browser
+        )
+
+    assert (exit_code, capsys.readouterr().err, browser.opened, seen, plaintext.entries) == (
+        1,
+        f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
+        [],
+        [],
+        {},
+    )
+
+
+def test_auth_jira_refuses_an_insecure_keyring_before_asking_for_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plaintext = PlaintextKeyring()
+    keyring.set_keyring(plaintext)
+    refuse_prompts(monkeypatch)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({}, seen))
+
+    assert (exit_code, capsys.readouterr().err, seen, plaintext.entries) == (
+        1,
+        f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
+        [],
+        {},
+    )
 
 
 def test_auth_notion_names_a_busy_port(

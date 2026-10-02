@@ -163,13 +163,18 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
         raise AuthError(f"The system keychain is unavailable: {exc}") from exc
 
 
-def _save(service: Service, credentials: BaseModel) -> None:
+def refuse_an_insecure_keyring() -> None:
     with _keychain_errors_as_auth_errors():
-        _refuse_an_insecure_keyring(keyring.get_keyring())
+        _refuse_an_insecure_backend(keyring.get_keyring())
+
+
+def _save(service: Service, credentials: BaseModel) -> None:
+    refuse_an_insecure_keyring()
+    with _keychain_errors_as_auth_errors():
         keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
 
 
-def _refuse_an_insecure_keyring(backend: KeyringBackend) -> None:
+def _refuse_an_insecure_backend(backend: KeyringBackend) -> None:
     chained: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
     for candidate in chained:
         module = type(candidate).__module__

@@ -42,6 +42,15 @@ class PlaintextKeyring(InMemoryKeyring):
     __module__ = "keyrings.alt.file"
 
 
+def insecure_keyring_refusal(backend: str) -> str:
+    return (
+        f"The keyring backend {backend} does not keep secrets in a secure store, so skaldr will not save to "
+        "it. Choose a secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's "
+        "keyringrc.cfg, for example keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring "
+        "or keyring.backends.SecretService.Keyring"
+    )
+
+
 class LockedKeyring(KeyringBackend):
     @properties.classproperty
     def priority(cls) -> float:

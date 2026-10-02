@@ -27,6 +27,7 @@ from skaldr.auth.store import (
     load_notion,
     normalise_site,
     notion_client_from_environment,
+    refuse_an_insecure_keyring,
     save_jira,
     save_notion,
     stored_notion,
@@ -102,6 +103,7 @@ def _tcp_port(text: str) -> int:
 def _sign_in_to_notion(
     port: int, transport: httpx2.BaseTransport | None, open_browser: Callable[[str], object]
 ) -> None:
+    refuse_an_insecure_keyring()
     print(
         f"Register a public Notion connection once at {INTEGRATIONS_PAGE}, with redirect URI "
         f"{redirect_uri_for(port)}"
@@ -130,6 +132,7 @@ def _sign_in_to_notion(
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
+    refuse_an_insecure_keyring()
     site = normalise_site(input("Jira site (https://<site>.atlassian.net): "))
     email = _required(input("Atlassian account email: "), "An Atlassian account email is required")
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
