@@ -6,12 +6,20 @@ from functools import cache
 from typing import Final, Literal
 from xml.etree.ElementTree import Element, tostring
 
+from latex2mathml.commands import MATRICES
 from latex2mathml.converter import convert_to_element
+from latex2mathml.tokenizer import tokenize
+from webcolors import names, normalize_hex
 
 from skaldr.errors import ReportError
 
 MathDisplay = Literal["inline", "block"]
 NOTION_EQUATION_FENCE: Final = "$$"
+ENVIRONMENT_OPENING: Final = r"\begin{"
+KNOWN_ENVIRONMENTS: Final = frozenset(command.removeprefix("\\") for command in MATRICES)
+NEW_ENVIRONMENT = re.compile(r"\\newenvironment\{([^{}]+)\}")
+COLOUR_ATTRIBUTES: Final = frozenset({"mathcolor", "mathbackground", "border-color"})
+CSS_COLOUR_NAMES: Final = frozenset(names("css3"))
 MATHML_ATTRIBUTES: Final = frozenset(
     {
         "accent",
@@ -89,9 +97,11 @@ CONVERTER_HEX_ENTITY = re.compile(r"&#x[0-9A-Fa-f]+;")
 def mathml(expression: str, display: MathDisplay) -> str:
     _refuse_notion_equation_fence(expression)
     root = _converted(expression, display)
+    _refuse_unknown_environment(expression)
     for element in root.iter():
         _decode_converter_entities(element)
         _refuse_attributes_outside_mathml(element, expression)
+        _refuse_unknown_colour(element, expression)
         _refuse_unknown_command(element, expression)
         _refuse_element_missing_a_part(element, expression)
     return tostring(root, encoding="unicode")
@@ -125,6 +135,38 @@ def _refuse_attributes_outside_mathml(element: Element, expression: str) -> None
                 f"math expression '{expression}' sets the {name} attribute, which is not a MathML attribute "
                 r"skaldr renders: leave out \href, \class and \style"
             )
+
+
+def _refuse_unknown_environment(expression: str) -> None:
+    defined = KNOWN_ENVIRONMENTS | frozenset(NEW_ENVIRONMENT.findall(expression))
+    for token in tokenize(expression):
+        if not token.startswith(ENVIRONMENT_OPENING):
+            continue
+        environment = token.removeprefix(ENVIRONMENT_OPENING).removesuffix("}")
+        if environment not in defined:
+            raise ReportError(
+                f"math expression '{expression}' opens the {environment} environment, which latex2mathml "
+                f"does not define: use one of {', '.join(sorted(KNOWN_ENVIRONMENTS))}"
+            )
+
+
+def _refuse_unknown_colour(element: Element, expression: str) -> None:
+    for name, value in element.attrib.items():
+        if name in COLOUR_ATTRIBUTES and not _is_css_colour(value):
+            raise ReportError(
+                f"math expression '{expression}' sets the colour '{value}', which is neither a CSS colour "
+                "name nor a #rgb or #rrggbb value"
+            )
+
+
+def _is_css_colour(value: str) -> bool:
+    if value.lower() in CSS_COLOUR_NAMES:
+        return True
+    try:
+        normalize_hex(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _refuse_unknown_command(element: Element, expression: str) -> None:

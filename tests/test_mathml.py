@@ -97,11 +97,103 @@ def test_a_unicode_code_point_decodes_and_one_no_page_can_hold_becomes_the_repla
     assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow><mi>{character}</mi></mrow></math>"
 
 
-def test_an_attribute_value_cannot_close_its_quotes() -> None:
-    assert mathml(r'\color{red" onload="x}{y}', "inline") == (
-        f'{MATH_OPEN}<mrow><mstyle mathcolor="red&quot; onload=&quot;x"><mrow><mi>y</mi></mrow></mstyle>'
-        "</mrow></math>"
+def test_an_attribute_value_cannot_close_its_quotes(stub_converter: Callable[[Element], None]) -> None:
+    root = Element("math")
+    SubElement(root, "mspace", {"width": '1em" onload="x'})
+    stub_converter(root)
+
+    assert mathml("x", "inline") == '<math><mspace width="1em&quot; onload=&quot;x" /></math>'
+
+
+KNOWN_ENVIRONMENTS = (
+    "Bmatrix, Bmatrix*, Vmatrix, Vmatrix*, align, align*, array, bmatrix, bmatrix*, cases, displaylines, "
+    "eqalign, eqalignno, matrix, matrix*, pmatrix, pmatrix*, smallmatrix, split, substack, vmatrix, vmatrix*"
+)
+
+
+@pytest.mark.parametrize(
+    ("expression", "environment"),
+    [
+        pytest.param(r"\begin{pmatrx} a & b \end{pmatrx}", "pmatrx", id="misspelt-matrix"),
+        pytest.param(r"\begin{aligned} a &= b \\ c &= d \end{aligned}", "aligned", id="aligned"),
+        pytest.param(r"x = \begin{equation} y \end{equation}", "equation", id="equation"),
+    ],
+)
+def test_an_environment_latex2mathml_does_not_define_fails_naming_it(
+    expression: str, environment: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        mathml(expression, "block")
+
+    assert str(raised.value) == (
+        f"math expression '{expression}' opens the {environment} environment, which latex2mathml does not "
+        f"define: use one of {KNOWN_ENVIRONMENTS}"
     )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        pytest.param(r"\begin{matrix} a & b \\ c & d \end{matrix}", id="matrix"),
+        pytest.param(r"\begin{pmatrix} a & b \end{pmatrix}", id="pmatrix"),
+        pytest.param(r"\begin{bmatrix} a & b \end{bmatrix}", id="bmatrix"),
+        pytest.param(r"\begin{Vmatrix*} a \end{Vmatrix*}", id="starred-matrix"),
+        pytest.param(r"f(x) = \begin{cases} 1 & x > 0 \\ 0 & x \le 0 \end{cases}", id="cases"),
+        pytest.param(r"\begin{array}{c|c} a & b \end{array}", id="array"),
+        pytest.param(r"\begin{split} a &= b \\ &= c \end{split}", id="split"),
+        pytest.param(r"\begin{align*} a &= b \end{align*}", id="starred-align"),
+        pytest.param(r"\begin {smallmatrix} a \end {smallmatrix}", id="space-before-the-name"),
+        pytest.param(
+            r"\newenvironment{pair}{\left(}{\right)} \begin{pair} x \end{pair}", id="newenvironment"
+        ),
+    ],
+)
+def test_an_environment_latex2mathml_defines_converts(expression: str) -> None:
+    assert mathml(expression, "block").startswith('<math xmlns="http://www.w3.org/1998/Math/MathML"')
+
+
+@pytest.mark.parametrize(
+    ("expression", "colour"),
+    [
+        pytest.param(r"\color{simga} x", "simga", id="misspelt-name"),
+        pytest.param(r"\textcolor{simga}{x}", "simga", id="text-colour"),
+        pytest.param(r"\colorbox{simga}{x}", "simga", id="box-background"),
+        pytest.param(r"\fcolorbox{simga}{red}{x}", "simga", id="box-border"),
+        pytest.param(r"\color{rgb(1,0,0)} x", "rgb(1,0,0)", id="function-notation"),
+        pytest.param(r"\color{#ff} x", "#ff", id="two-digit-hex"),
+        pytest.param(r'\color{red" onload="x}{y}', 'red" onload="x', id="value-holding-quotes"),
+    ],
+)
+def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: str, colour: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        mathml(expression, "block")
+
+    assert str(raised.value) == (
+        f"math expression '{expression}' sets the colour '{colour}', which is neither a CSS colour name "
+        "nor a #rgb or #rrggbb value"
+    )
+
+
+@pytest.mark.parametrize(
+    ("expression", "markup"),
+    [
+        pytest.param(r"\color{red} x", '<mstyle mathcolor="red"><mi>x</mi></mstyle>', id="name"),
+        pytest.param(
+            r"\color{DarkSlateGray} x",
+            '<mstyle mathcolor="DarkSlateGray"><mi>x</mi></mstyle>',
+            id="mixed-case-name",
+        ),
+        pytest.param(r"\color{#f00} x", '<mstyle mathcolor="#f00"><mi>x</mi></mstyle>', id="short-hex"),
+        pytest.param(r"\color{#00AA00} x", '<mstyle mathcolor="#00AA00"><mi>x</mi></mstyle>', id="long-hex"),
+        pytest.param(
+            r"\fcolorbox{navy}{#eee}{x}",
+            '<mpadded mathbackground="#eee" border-color="navy"><mtext>x</mtext></mpadded>',
+            id="box",
+        ),
+    ],
+)
+def test_a_css_colour_name_or_hex_value_converts(expression: str, markup: str) -> None:
+    assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
 
 
 @pytest.mark.parametrize(
@@ -138,7 +230,7 @@ def stub_converter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Elemen
 
 def _math_with_attribute(name: str) -> Element:
     root = Element("math")
-    SubElement(root, "mi", {name: "v"}).text = "x"
+    SubElement(root, "mi", {name: "red"}).text = "x"
     return root
 
 
@@ -173,7 +265,7 @@ def test_an_attribute_on_the_mathml_allowlist_passes(
 ) -> None:
     stub_converter(_math_with_attribute(attribute))
 
-    assert mathml("x", "inline") == f'<math><mi {attribute}="v">x</mi></math>'
+    assert mathml("x", "inline") == f'<math><mi {attribute}="red">x</mi></math>'
 
 
 def test_the_allowlist_is_the_set_of_attributes_latex2mathml_emits() -> None:
