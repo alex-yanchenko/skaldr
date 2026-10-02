@@ -755,7 +755,12 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
 @pytest.mark.parametrize(
     ("options", "notion"),
     [
-        pytest.param({"start": 9}, "9. c\n10. d\n\t1. e\n", id="start-counts-on-and-a-nested-list-from-one"),
+        pytest.param(
+            {"start": 9},
+            "- 9\\. c\n- 10\\. d\n\t1. e\n",
+            id="a-start-past-one-is-bullets-led-by-the-escaped-number-and-a-nested-list-is-native",
+        ),
+        pytest.param({"start": 1}, "1. c\n2. d\n\t1. e\n", id="a-start-of-one-is-native"),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
         pytest.param(
             {"numbering": "letters"}, "- a. c\n- b. d\n\t- a. e\n", id="letters-are-bullets-led-by-the-letter"
@@ -771,6 +776,16 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert notion_of([block]) == notion
+
+
+def test_a_numbered_list_written_as_bullets_is_kept_apart_from_a_bullet_list_after_it() -> None:
+    blocks = [
+        {"type": "list", "style": "number", "start": 3, "items": ["three"]},
+        {"type": "list", "items": ["dot"]},
+        {"type": "list", "style": "number", "items": ["one"]},
+    ]
+
+    assert notion_of(blocks) == "- 3\\. three\n<empty-block/>\n- dot\n1. one\n"
 
 
 def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:

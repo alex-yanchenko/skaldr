@@ -54,6 +54,7 @@ SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
+NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
@@ -221,22 +222,30 @@ def _table_lines(table: TableNode) -> list[str]:
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
-def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
-    match kind:
+def _numbers_as_bullets(node: ListNode) -> bool:
+    return node.kind == "number" and node.start != NOTION_LIST_START
+
+
+def _written_kind(node: ListNode) -> ListKind:
+    return "bullet" if _numbers_as_bullets(node) else node.kind
+
+
+def _list_marker(node: ListNode, index: int, checked: bool) -> str:
+    match node.kind:
         case "bullet":
             return "-"
         case "number":
-            return f"{index}."
+            return f"- {index}\\." if _numbers_as_bullets(node) else f"{index}."
         case "check":
             return "- [x]" if checked else "- [ ]"
         case _:
-            assert_never(kind)
+            assert_never(node.kind)
 
 
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
-        marker = _list_marker(node.kind, index, entry.checked)
+        marker = _list_marker(node, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))
     return lines
@@ -317,7 +326,7 @@ def _notion_lines(node: Node) -> list[str]:
 
 
 def _list_kind(node: Node) -> ListKind | None:
-    return node.kind if isinstance(node, ListNode) else None
+    return _written_kind(node) if isinstance(node, ListNode) else None
 
 
 def _notion_blocks(nodes: Sequence[Node]) -> list[str]:
