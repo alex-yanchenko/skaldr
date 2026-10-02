@@ -4,6 +4,7 @@ from dataclasses import replace
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, RichContext, Run, Styled, parse_rich
 
 WHITESPACE_RUN = re.compile(r"\s+")
+LINE_ENDING = re.compile(r"\r\n?|\n")
 
 
 def one_line(text: str) -> str:
@@ -29,7 +30,7 @@ def _on_one_line(run: Run) -> Run:
         case Plain():
             return Plain(WHITESPACE_RUN.sub(" ", run.text))
         case Code():
-            return Code(" ".join(run.text.splitlines()))
+            return Code(LINE_ENDING.sub(" ", run.text))
         case Link() | AnchorLink():
             return replace(run, label=tuple(map(_on_one_line, run.label)))
         case Styled():

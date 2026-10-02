@@ -69,7 +69,7 @@ def bang_cannot_open_an_image(escaped_text: str) -> str:
 
 
 def encode_url(url: str) -> str:
-    return quote(url, safe=URL_SAFE_CHARACTERS)
+    return quote(url, safe=URL_SAFE_CHARACTERS + "\\").replace("\\", "\\\\")
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
