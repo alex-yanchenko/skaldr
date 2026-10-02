@@ -165,8 +165,9 @@ def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, f
         pytest.param(0, 10, "░░░░░░░░░░", id="empty"),
         pytest.param(12, 10, "██████████", id="over-the-maximum-stays-full"),
         pytest.param(-1, 10, "░░░░░░░░░░", id="below-zero-stays-empty"),
-        pytest.param(1, 4, "██░░░░░░░░", id="two-and-a-half-cells-round-down-to-even"),
-        pytest.param(3, 4, "████████░░", id="seven-and-a-half-cells-round-up-to-even"),
+        pytest.param(1, 4, "███░░░░░░░", id="two-and-a-half-cells-fill-three"),
+        pytest.param(3, 4, "████████░░", id="seven-and-a-half-cells-fill-eight"),
+        pytest.param(5, 100, "█░░░░░░░░░", id="a-half-cell-fills-one-so-a-small-share-shows"),
     ],
 )
 def test_a_gauge_is_ten_cells_filled_in_proportion(value: float, maximum: float, bar: str) -> None:
