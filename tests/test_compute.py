@@ -1,10 +1,12 @@
 import re
 import subprocess
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from skaldr.compute import (
+    DELTA_GLYPHS,
     HTTP_REASONS,
     anchor_slugs,
     command_for,
@@ -25,7 +27,7 @@ from skaldr.compute import (
     variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import Request, RequestFlow, Swimlane, Table, parse_report
+from skaldr.models import DeltaDirection, Request, RequestFlow, Swimlane, Table, parse_report
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -934,6 +936,18 @@ def test_first_table_index() -> None:
     report = parse_report(make_report(blocks=[{"type": "text", "body": "x"}, make_reconciled_table()]))
 
     assert first_table_index(report) == 1
+
+
+def test_a_table_nested_in_a_section_leaves_the_legend_at_the_top() -> None:
+    section = {"type": "section", "title": "S", "blocks": [make_reconciled_table()]}
+
+    assert (
+        first_table_index(parse_report(make_report(blocks=[{"type": "text", "body": "x"}, section]))) is None
+    )
+
+
+def test_every_delta_direction_has_a_glyph() -> None:
+    assert set(DELTA_GLYPHS) == set(get_args(DeltaDirection))
 
 
 def test_reference_numbers_are_in_document_order_across_blocks_and_sections() -> None:

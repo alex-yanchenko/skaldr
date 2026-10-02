@@ -2,7 +2,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from skaldr import compute
-from skaldr.export.inline import one_line, rich_line
+from skaldr.export.inline import bold, one_line, rich_line
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, ToneName
 from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items
@@ -26,7 +26,7 @@ class Lowering:
 
     def chip(self, key: str) -> Chip:
         badge = self.report.badges[key]
-        return Chip(one_line(badge.label), badge.tone)
+        return Chip.on_one_line(badge.label, badge.tone)
 
     def chips(self, keys: Sequence[str]) -> ExportRich:
         return spaced(tuple((self.chip(key),) for key in keys))
@@ -34,9 +34,11 @@ class Lowering:
     def badge_items(self, items: Sequence[BadgeRef | BadgeLiteral]) -> ExportRich:
         return spaced(
             tuple(
-                (self.chip(item.key),)
-                if isinstance(item, BadgeRef)
-                else (Chip(one_line(item.label), item.tone),)
+                (
+                    self.chip(item.key)
+                    if isinstance(item, BadgeRef)
+                    else Chip.on_one_line(item.label, item.tone),
+                )
                 for item in items
             )
         )
@@ -62,6 +64,11 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
             runs += (Plain(separator),)
         runs += part
     return runs
+
+
+def with_bold_label(label: str | None, text: ExportRich) -> ExportRich:
+    name = bold(one_line(label or "").removesuffix(":").rstrip())
+    return (*name, Plain(": "), *text) if name else text
 
 
 def bullets(entries: Iterable[ListEntry]) -> ListNode:

@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Protocol
 
-from skaldr.models import BadgeColor
+from skaldr.export.inline import one_line
+from skaldr.models import BadgeColor, StatusState
 from skaldr.richtext import Run, RunWriter, VisibleText, write_run
-
-MarkScheme = Literal["status", "timeline"]
 
 
 @dataclass(frozen=True)
@@ -12,11 +11,17 @@ class Chip:
     label: str
     tone: BadgeColor
 
+    @classmethod
+    def on_one_line(cls, label: str, tone: BadgeColor) -> "Chip":
+        return cls(one_line(label), tone)
+
 
 @dataclass(frozen=True)
-class Mark:
-    scheme: MarkScheme
-    state: str
+class StatusMark:
+    state: StatusState
+
+
+Mark = StatusMark
 
 
 @dataclass(frozen=True)
@@ -41,7 +46,7 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
     match run:
         case Chip():
             return writer.chip(run)
-        case Mark():
+        case StatusMark():
             return writer.mark(run)
         case Gauge():
             return writer.gauge(run)

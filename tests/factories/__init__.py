@@ -1,5 +1,6 @@
 from tests.factories.export_factory import (
     API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
     heading_sections,
     lowered,
     markdown_of,
@@ -26,6 +27,7 @@ from tests.factories.report_factory import (
 
 __all__ = [
     "API_BADGES",
+    "BADGE_AND_STATE_BLOCKS",
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
     "heading_sections",

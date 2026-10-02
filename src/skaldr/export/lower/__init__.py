@@ -1,8 +1,9 @@
 from collections.abc import Sequence
+from itertools import chain
 
 from skaldr import compute, models
 from skaldr.errors import ReportError
-from skaldr.export.inline import bold, italic, one_line, plain
+from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, lowering_for, spaced
 from skaldr.export.lower.prose import (
     lower_badge_row,
@@ -22,7 +23,6 @@ from skaldr.export.lower.prose import (
     lower_status_list,
     lower_timeline,
 )
-from skaldr.export.runs import Chip
 from skaldr.export.tree import (
     Callout,
     Heading,
@@ -83,7 +83,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.DefList():
             return lower_def_list(block, lowering)
         case models.Cards():
-            return lower_cards(block.items, lowering)
+            return lower_cards(block, lowering)
         case models.BadgeRow():
             return lower_badge_row(block, lowering)
         case models.Callout():
@@ -143,22 +143,24 @@ def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: 
     )
 
 
-def _legend(report: models.Report) -> list[Node]:
-    used = compute.used_badges(report)
+def _legend(lowering: Lowering) -> list[Node]:
+    used = compute.used_badges(lowering.report)
     if not used:
         return []
     entries = tuple(
-        ListEntry(spaced([(Chip(one_line(badge.label), badge.tone),), plain(f"{badge.legend}")]))
-        for _, badge in used
+        ListEntry(spaced([(lowering.chip(key),), plain(f"{badge.legend}")])) for key, badge in used
     )
-    return [Toggle(plain("Legend: badges used on this page"), None, (ListNode("bullet", entries),))]
+    title = plain(f"Legend: {compute.BADGE_LEGEND_SUBJECT}")
+    return [Toggle(title, None, (ListNode("bullet", entries),))]
+
+
+def place_legend(
+    blocks: Sequence[Sequence[Node]], legend: Sequence[Node], legend_at: int | None
+) -> list[Node]:
+    split = legend_at or 0
+    return [*chain.from_iterable(blocks[:split]), *legend, *chain.from_iterable(blocks[split:])]
 
 
 def _blocks_with_the_legend(report: models.Report, lowering: Lowering) -> list[Node]:
-    legend_at = compute.first_table_index(report)
-    nodes = [] if legend_at is not None else _legend(report)
-    for index, block in enumerate(report.blocks):
-        if index == legend_at:
-            nodes += _legend(report)
-        nodes += _lower_block(block, lowering, depth=0)
-    return nodes
+    blocks = [_lower_block(block, lowering, depth=0) for block in report.blocks]
+    return place_legend(blocks, _legend(lowering), compute.first_table_index(report))

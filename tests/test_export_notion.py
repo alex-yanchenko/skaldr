@@ -1,13 +1,14 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
+from skaldr.export.runs import Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
     Heading,
@@ -20,13 +21,30 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import BadgeColor, parse_report
+from skaldr.models import BadgeColorLiteral, parse_report
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
-from tests.factories import API_BADGES, heading_sections, lowered, make_report, notion_of
+from tests.factories import (
+    API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
+    heading_sections,
+    lowered,
+    make_report,
+    notion_of,
+)
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
+NOTION_CHIP_COLOR: dict[str, str] = {
+    "slate": "gray",
+    "blue": "blue",
+    "green": "green",
+    "amber": "yellow",
+    "red": "red",
+    "violet": "purple",
+    "teal": "green",
+    "sky": "blue",
+}
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
@@ -66,7 +84,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Chip("api", "amber"),
         Plain(" "),
         AnchorLink((Plain("method"),), "method"),
-        Mark("status", "blocked"),
+        StatusMark("blocked"),
         Gauge(3, 10),
         Plain(" wow!"),
         *parse_rich("[img](https://e.com/x.png)"),
@@ -109,21 +127,31 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
     assert notion_of(blocks) == "- \\# not a heading\n> \\- not a list<br>\\# nor a heading<br>*Ops*\n"
 
 
-@pytest.mark.parametrize(
-    ("tone", "color"),
-    [
-        pytest.param("slate", "gray", id="slate"),
-        pytest.param("blue", "blue", id="blue"),
-        pytest.param("green", "green", id="green"),
-        pytest.param("amber", "yellow", id="amber"),
-        pytest.param("red", "red", id="red"),
-        pytest.param("violet", "purple", id="violet"),
-        pytest.param("teal", "green", id="teal"),
-        pytest.param("sky", "blue", id="sky"),
-    ],
-)
-def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColor, color: str) -> None:
+@pytest.mark.parametrize("tone", [pytest.param(tone, id=tone) for tone in get_args(BadgeColorLiteral)])
+def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColorLiteral) -> None:
+    color = NOTION_CHIP_COLOR.get(tone)
+
     assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
+
+
+def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
+    assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
+        "<details>\n<summary>Legend: badges used on this page</summary>\n"
+        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
+        "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
+        "- **Lead**: **Ana**\n<empty-block/>\n"
+        "- **Drift**: first\n\tsecond\n- **Gap**: \n<empty-block/>\n"
+        '- **Clean**: 9 (90.0%) <span color="green_bg">▲ +1</span> <span color="blue_bg">api</span>'
+        ' {color="green"}\n\tsince Monday {color="gray"}\n'
+        "- **Lag**: 3 days → flat\n"
+        '**Affects**: <span color="blue_bg">api</span> <span color="green_bg">ops</span>\n'
+        '- **Owners**: <span color="purple_bg">web</span>\n<empty-block/>\n'
+        "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
+        '- 🔵 **Mon**: Start <span color="blue_bg">api</span>\n\tkick-off\n- Later\n<empty-block/>\n'
+        '- **Zone**: ████░░░░░░ 42.9% (3 of 7) {color="yellow"}\n'
+        'Jan to Dec {color="gray"}\n'
+        '- **Q1**: 25.0%, slow {color="red"}\n- **Rest**: 75.0%\n'
+    )
 
 
 def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> None:

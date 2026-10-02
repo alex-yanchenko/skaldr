@@ -4,8 +4,11 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import quote
 
-from skaldr.export.runs import Chip, Gauge, Mark, MarkScheme
+from typing_extensions import assert_never
+
+from skaldr.export.runs import Chip, Gauge, Mark
 from skaldr.export.tree import CodeBlock, ToneName
+from skaldr.models import StatusState
 from skaldr.richtext import Citation, StyleName
 
 STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -20,11 +23,7 @@ CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "teal": "💡",
     "sky": "💡",
 }
-MARK_GLYPH: dict[MarkScheme, dict[str, str]] = {
-    "status": {"done": "✅", "current": "🔵", "pending": "⚪", "failed": "❌", "blocked": "⛔"},
-    "timeline": {"done": "✅", "current": "🔵", "pending": "⚪"},
-}
-GAUGE_CELLS = 10
+GAUGE_CELLS: Final = 10
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
@@ -80,8 +79,24 @@ def encode_url(url: str) -> str:
 
 
 def gauge_bar(value: float, maximum: float) -> str:
-    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS))) if maximum else 0
+    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS)))
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
+
+
+def status_glyph(state: StatusState) -> str:
+    match state:
+        case "done":
+            return "✅"
+        case "current":
+            return "🔵"
+        case "pending":
+            return "⚪"
+        case "failed":
+            return "❌"
+        case "blocked":
+            return "⛔"
+        case _:
+            assert_never(state)
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
@@ -118,7 +133,7 @@ class MarkupRuns(ABC):
         return styled(style, inner)
 
     def mark(self, run: Mark, /) -> str:
-        return MARK_GLYPH[run.scheme][run.state]
+        return status_glyph(run.state)
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)

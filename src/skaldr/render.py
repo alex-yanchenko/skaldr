@@ -110,6 +110,7 @@ def _environment() -> Environment:
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
         delta_glyphs=compute.DELTA_GLYPHS,
+        badge_legend_subject=compute.BADGE_LEGEND_SUBJECT,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

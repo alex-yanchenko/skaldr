@@ -29,7 +29,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BadgeColor
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
@@ -47,15 +47,8 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "teal": "green",
     "sky": "blue",
 }
-CHIP_COLOR: dict[BadgeColor, str] = {
-    "slate": "gray",
-    "blue": "blue",
-    "green": "green",
-    "amber": "yellow",
-    "red": "red",
-    "violet": "purple",
-    "teal": "green",
-    "sky": "blue",
+CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
+    color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
 
 

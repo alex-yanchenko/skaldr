@@ -4,9 +4,10 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower import lower_report
-from skaldr.export.markup import MARK_GLYPH
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, MarkScheme
+from skaldr.export.lower import lower_report, place_legend
+from skaldr.export.lower.context import with_bold_label
+from skaldr.export.markup import status_glyph
+from skaldr.export.runs import Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -24,7 +25,7 @@ from skaldr.export.tree import (
     capped_heading_level,
     heading_of,
 )
-from skaldr.models import StatusState, TimelineState, parse_report
+from skaldr.models import StatusState, parse_report
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
 from tests.factories import API_BADGES, lowered, make_cell, make_flow, make_grid, make_report
 
@@ -238,6 +239,32 @@ def test_the_badge_legend_comes_right_after_the_table_of_contents_when_the_page_
     )
 
 
+@pytest.mark.parametrize(
+    ("legend_at", "nodes"),
+    [
+        pytest.param(
+            None,
+            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
+            id="no-top-level-table-puts-it-first",
+        ),
+        pytest.param(
+            2,
+            [Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), API_LEGEND, Paragraph((Plain("table"),))],
+            id="right-before-the-first-top-level-table",
+        ),
+        pytest.param(
+            0,
+            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
+            id="table-first",
+        ),
+    ],
+)
+def test_the_badge_legend_goes_where_the_html_puts_it(legend_at: int | None, nodes: list[Node]) -> None:
+    blocks = [[Paragraph((Plain("a"),))], [Paragraph((Plain("b"),))], [Paragraph((Plain("table"),))]]
+
+    assert place_legend(blocks, [API_LEGEND], legend_at) == nodes
+
+
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:
     card = {
         "label": "Clean",
@@ -290,26 +317,53 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             (*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("▼ -8%", "green")),
             id="toned-delta-is-a-colored-chip",
         ),
+        pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
+        pytest.param({"label": "Empty", "value": ""}, (*bold("Empty"), Plain(": ")), id="empty-value"),
     ],
 )
 def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
     assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
 
-def test_a_derived_card_fails_until_its_source_blocks_export() -> None:
-    blocks = [
-        {"type": "cards", "items": [{"badge": "API", "of_matrix": "m"}]},
-        {
-            "type": "matrix",
-            "id": "m",
-            "rows": ["r"],
-            "columns": ["c"],
-            "cells": [{"row": "r", "col": "c", "badge": "API"}],
-        },
-    ]
-
-    with pytest.raises(ReportError, match=r"^a derived `cards` item has no Markdown export yet$"):
+@pytest.mark.parametrize(
+    "blocks",
+    [
+        pytest.param(
+            [
+                {"type": "cards", "items": [{"badge": "API", "of_matrix": "m"}]},
+                {
+                    "type": "matrix",
+                    "id": "m",
+                    "rows": ["r"],
+                    "columns": ["c"],
+                    "cells": [{"row": "r", "col": "c", "badge": "API"}],
+                },
+            ],
+            id="of-matrix",
+        ),
+        pytest.param(
+            [
+                {"type": "cards", "items": [{"badge": "API", "of_tables": ["t"]}]},
+                {
+                    "type": "table",
+                    "id": "t",
+                    "columns": [
+                        {"key": "item", "label": "Item", "kind": "text"},
+                        {"key": "state", "label": "State", "kind": "badge"},
+                    ],
+                    "rows": [{"item": "a", "state": "API"}],
+                    "rollup": {"by": "state"},
+                },
+            ],
+            id="of-tables",
+        ),
+    ],
+)
+def test_a_derived_card_fails_until_its_source_blocks_export(blocks: list[dict[str, Any]]) -> None:
+    with pytest.raises(ReportError) as raised:
         lowered(blocks, badges=API_BADGES)
+
+    assert str(raised.value) == "a derived `cards` item has no Markdown export yet"
 
 
 def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
@@ -398,13 +452,13 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
 
     assert lowered(blocks, badges=API_BADGES) == (
         API_LEGEND,
-        ListNode("bullet", (ListEntry((Mark("status", "blocked"), Plain(" "), Plain("Vendor"))),)),
+        ListNode("bullet", (ListEntry((StatusMark("blocked"), Plain(" "), Plain("Vendor"))),)),
         ListNode(
             "bullet",
             (
                 ListEntry(
                     (
-                        Mark("timeline", "done"),
+                        StatusMark("done"),
                         Plain(" "),
                         *bold("Mon"),
                         Plain(": "),
@@ -420,15 +474,14 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("state", "scheme"),
-    [
-        *(pytest.param(state, "status", id=f"status-{state}") for state in get_args(StatusState)),
-        *(pytest.param(state, "timeline", id=f"timeline-{state}") for state in get_args(TimelineState)),
-    ],
-)
-def test_every_state_a_block_allows_has_a_glyph(state: str, scheme: MarkScheme) -> None:
-    assert MARK_GLYPH[scheme][state]
+def test_a_state_glyph_is_a_coloured_emoji_because_markdown_has_no_css_class_to_colour_it() -> None:
+    assert {state: status_glyph(state) for state in get_args(StatusState)} == {
+        "done": "✅",
+        "current": "🔵",
+        "pending": "⚪",
+        "failed": "❌",
+        "blocked": "⛔",
+    }
 
 
 def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_alone() -> None:
@@ -448,6 +501,26 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
             ),
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("label", "text", "runs"),
+    [
+        pytest.param("Site", plain("West"), (*bold("Site"), Plain(": "), Plain("West")), id="label-and-text"),
+        pytest.param(
+            "Site:",
+            plain("West"),
+            (*bold("Site"), Plain(": "), Plain("West")),
+            id="its-own-colon-is-not-doubled",
+        ),
+        pytest.param(":", plain("West"), (Plain("West"),), id="a-lone-colon-is-no-label"),
+        pytest.param(None, plain("West"), (Plain("West"),), id="no-label"),
+    ],
+)
+def test_a_label_is_bold_and_joined_to_its_text_by_one_colon(
+    label: str | None, text: ExportRich, runs: ExportRich
+) -> None:
+    assert with_bold_label(label, text) == runs
 
 
 def test_a_badge_row_is_a_labelled_line_and_its_groups_are_labelled_bullets() -> None:
