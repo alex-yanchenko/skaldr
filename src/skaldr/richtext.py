@@ -86,7 +86,9 @@ _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
 _LINK_TARGET = re.compile(r"(?<=\])\([^)\s]+\)")
 _LINK_TARGET_MARK = re.compile(r"\x01(\d+)\x01")
-_SET_ASIDE_MARKERS: Final = ("\x00", "\x01")
+_STASH_MARKER: Final = "\x00"
+_LINK_TARGET_MARKER: Final = "\x01"
+_SET_ASIDE_MARKERS: Final = (_STASH_MARKER, _LINK_TARGET_MARKER)
 
 
 def _attribute_list(excluded: str) -> str:
@@ -239,10 +241,16 @@ def _refuse_stray_attribute_list(staged: str, link_targets: _LinkTargets) -> Non
         return
     attributes = stray.group(1)
     token = _attribute_token(_SENTINEL.sub("…", link_targets.restored(attributes)))
-    if any(marker in attributes for marker in _SET_ASIDE_MARKERS):
+    if _LINK_TARGET_MARKER in attributes:
         raise ReportError(
-            f"the attribute list {token} holds a `code` span, math or a [^citation]: an attribute list "
-            "holds only key=value attributes, as in {tone=info bg=warning}"
+            f"the attribute list {token} holds a link: an attribute list holds only key=value attributes, "
+            "as in {tone=info bg=warning}"
+        )
+    if _STASH_MARKER in attributes:
+        raise ReportError(
+            f"the attribute list {token} holds other markup, such as a `code` span, math, a [^citation] or "
+            "a colored [text]{…} span: an attribute list holds only key=value attributes, as in "
+            "{tone=info bg=warning}"
         )
     raise ReportError(
         f"the attribute list {token} follows no [text] it can color: the text inside a [text]{{…}} span "

@@ -481,6 +481,7 @@ def test_an_attribute_list_that_colors_no_text_fails_naming_the_token(text: str,
         pytest.param("[a]{tone=info `c`}", "{tone=info …}", id="code-span"),
         pytest.param("[a]{tone=info [^sop]}", "{tone=info …}", id="citation"),
         pytest.param("[a]{bg=info $`x`$ tone=danger}", "{bg=info … tone=danger}", id="inline-math"),
+        pytest.param("[a]{tone=info [b]{tone=danger}}", "{tone=info …}", id="colored-span"),
     ],
 )
 def test_an_attribute_list_holding_markup_fails_naming_the_token(text: str, token: str) -> None:
@@ -488,8 +489,28 @@ def test_an_attribute_list_holding_markup_fails_naming_the_token(text: str, toke
         parse_rich(f"x {text} y", FULL_CONTEXT)
 
     assert str(raised.value) == (
-        f"the attribute list {token} holds a `code` span, math or a [^citation]: an attribute list "
-        "holds only key=value attributes, as in {tone=info bg=warning}"
+        f"the attribute list {token} holds other markup, such as a `code` span, math, a [^citation] or a "
+        "colored [text]{…} span: an attribute list holds only key=value attributes, as in "
+        "{tone=info bg=warning}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        pytest.param("[a]{tone=info [b](u)}", "{tone=info [b](u)}", id="bare-target"),
+        pytest.param("[a]{tone=info [b](https://u.io)}", "{tone=info [b](https://u.io)}", id="web-link"),
+        pytest.param("[a]{tone=info [b](#method)}", "{tone=info [b](#method)}", id="anchor-link"),
+        pytest.param("[a]{tone=info [b](u) `c`}", "{tone=info [b](u) …}", id="link-and-a-code-span"),
+    ],
+)
+def test_an_attribute_list_holding_a_link_fails_naming_the_link(text: str, token: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"x {text} y", FULL_CONTEXT)
+
+    assert str(raised.value) == (
+        f"the attribute list {token} holds a link: an attribute list holds only key=value attributes, "
+        "as in {tone=info bg=warning}"
     )
 
 
