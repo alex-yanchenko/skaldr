@@ -7,7 +7,8 @@ import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ReportError
-from skaldr.models import Report
+from skaldr.models import Report, parse_report
+from skaldr.render import render_html, render_report
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
@@ -998,3 +999,76 @@ def test_check_and_if_stale_are_the_plan_loop(tmp_path: Path, capsys: pytest.Cap
 
     assert main(["--check", str(data_path), "-o", str(out_path), "--if-stale"]) == 0
     assert out_path.stat().st_mtime_ns == first
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        pytest.param(r"\unicode{x110000}", id="past-the-last-code-point"),
+        pytest.param(r"\unicode{xFFFFFFFFFFFF}", id="too-large-for-a-c-int"),
+        pytest.param(r"\unicode{xD800}", id="lone-surrogate"),
+        pytest.param(r"\unicode{x0}", id="nul"),
+    ],
+)
+def test_a_code_point_no_page_can_hold_builds_as_the_replacement_character(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], expression: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "math", "expression": expression}]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--no-source"])
+
+    assert (exit_code, capsys.readouterr().err) == (0, "")
+    assert (
+        '<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>'
+        "<mi>\N{REPLACEMENT CHARACTER}</mi></mrow></math></div>"
+    ) in out_path.read_text(encoding="utf-8")
+
+
+def test_a_render_that_fails_while_writing_leaves_the_earlier_page_in_place(tmp_path: Path) -> None:
+    out_path = tmp_path / "report.html"
+    out_path.write_text("earlier page", encoding="utf-8")
+    report = parse_report(make_report(blocks=[{"type": "text", "body": "lone \ud800 surrogate"}]))
+
+    with pytest.raises(UnicodeEncodeError):
+        render_report(report, out_path)
+
+    assert (out_path.read_text(encoding="utf-8"), sorted(tmp_path.iterdir())) == ("earlier page", [out_path])
+
+
+def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    target = tmp_path / "published" / "report.html"
+    target.parent.mkdir()
+    target.write_text("earlier page", encoding="utf-8")
+    link = tmp_path / "out" / "report.html"
+    link.parent.mkdir()
+    link.symlink_to(target)
+
+    exit_code = main([str(data_path)])
+
+    expected_page = render_html(parse_report(make_report()), source=data_path.read_text(encoding="utf-8"))
+    assert (exit_code, capsys.readouterr().err, link.is_symlink(), target.read_text(encoding="utf-8")) == (
+        0,
+        "",
+        True,
+        expected_page,
+    )
+
+
+def test_a_directory_at_the_output_path_fails_naming_that_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "o.html"
+    out_path.mkdir()
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"error: [Errno 21] Is a directory: '{out_path.resolve()}'\n",
+    )

@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from collections.abc import Callable
 from html import unescape
+from typing import get_args
 
 import pytest
 
@@ -13,8 +14,10 @@ from skaldr.models import (
     MAX_STRIP_LABELS,
     Report,
     Request,
+    ToneLiteral,
     load_report,
     package_path,
+    package_text,
     parse_report,
 )
 from skaldr.render import (
@@ -3022,6 +3025,126 @@ def test_richtext_applies_the_inline_subset() -> None:
     html = str(render_richtext("**b** *i* `c` ~~s~~ [t](https://x.com)"))
 
     assert html == '<strong>b</strong> <em>i</em> <code>c</code> <del>s</del> <a href="https://x.com">t</a>'
+
+
+def test_richtext_writes_underline_subscript_and_superscript_as_html_elements() -> None:
+    html = str(render_richtext("++under *it*++ H~2~O 10^3^ f^'^"))
+
+    assert html == "<u>under <em>it</em></u> H<sub>2</sub>O 10<sup>3</sup> f<sup>&#39;</sup>"
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("[late]{tone=danger}", '<span style="color:var(--danger-fg)">late</span>', id="color"),
+        pytest.param(
+            "[due]{bg=amber}", '<span style="background:var(--warning-bg)">due</span>', id="highlight"
+        ),
+        pytest.param(
+            "[**now** &lt;]{tone=sky bg=neutral}",
+            '<span style="color:var(--sky-fg);background:var(--neutral-bg)">'
+            "<strong>now</strong> &amp;lt;</span>",
+            id="color-and-highlight-around-escaped-marks",
+        ),
+        pytest.param(
+            "[[a]{tone=danger}](https://x.io)",
+            '<a href="https://x.io"><span style="color:var(--danger-fg)">a</span></a>',
+            id="span-inside-a-link-label",
+        ),
+    ],
+)
+def test_richtext_writes_an_attribute_span_with_the_tone_tokens(text: str, html: str) -> None:
+    assert str(render_richtext(text)) == html
+
+
+def test_richtext_writes_inline_math_as_mathml_and_keeps_prose_dollars() -> None:
+    html = str(render_richtext("costs $5, so $`x_i < 2`$ holds"))
+
+    assert html == (
+        'costs $5, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>'
+        "<msub><mi>x</mi><mi>i</mi></msub><mo>&lt;</mo><mn>2</mn></mrow></math> holds"
+    )
+
+
+def test_raw_markup_in_inline_math_renders_as_escaped_text() -> None:
+    html = str(render_richtext(r"a $`\text{<script>alert(1)</script>}`$ b"))
+
+    assert html == (
+        'a <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>'
+        "<mtext>&lt;script&gt;alert(1)&lt;/script&gt;</mtext></mrow></math> b"
+    )
+
+
+def test_raw_markup_in_a_math_block_renders_as_escaped_text() -> None:
+    block = {"type": "math", "expression": r"\text{<script>alert(1)</script>}"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>'
+        "<mtext>&lt;script&gt;alert(1)&lt;/script&gt;</mtext></mrow></math></div>"
+    ) in html
+
+
+@pytest.mark.parametrize(
+    ("expression", "attribute"),
+    [
+        pytest.param(r"\href{javascript:alert(1)}{x}", "href", id="href"),
+        pytest.param(r"\class{loud}{x}", "class", id="class"),
+        pytest.param(r"\style{color:red}{x}", "style", id="style"),
+    ],
+)
+def test_inline_math_setting_a_page_level_attribute_fails_the_render(expression: str, attribute: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        render_richtext(f"$`{expression}`$")
+
+    assert str(raised.value) == (
+        f"math expression '{expression}' sets the {attribute} attribute, which is not a MathML attribute "
+        r"skaldr renders: leave out \href, \class and \style"
+    )
+
+
+def test_a_math_block_renders_display_mathml() -> None:
+    html = render_html(parse_report(make_report(blocks=[{"type": "math", "expression": "\\frac{a}{b}"}])))
+
+    assert (
+        '<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac>'
+        "<mrow><mi>a</mi></mrow><mrow><mi>b</mi></mrow></mfrac></mrow></math></div>"
+    ) in html
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param(f"--{tone}-{kind}:light-dark(", id=f"{tone}-{kind}")
+        for tone in get_args(ToneLiteral)
+        for kind in ("fg", "bg")
+    ],
+)
+def test_every_tone_an_attribute_span_names_has_a_color_and_a_tint_token(token: str) -> None:
+    assert token in package_text("styles.css")
+
+
+def test_a_link_inside_an_attribute_span_fails_the_build_instead_of_publishing_its_syntax() -> None:
+    with pytest.raises(ReportError) as raised:
+        render_richtext("[see [docs](https://x.io) now]{tone=info}")
+
+    assert str(raised.value) == (
+        "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+        "is not empty and holds no link and no other [ or ]"
+    )
+
+
+def test_richtext_keeps_brackets_and_braces_that_form_no_attribute_span_as_text() -> None:
+    html = str(render_richtext("[a]{x} [b] {tone=info} [c](https://e.com){tone=info}"))
+
+    assert html == '[a]{x} [b] {tone=info} <a href="https://e.com">c</a>{tone=info}'
+
+
+def test_richtext_keeps_marker_characters_that_form_no_mark_as_text() -> None:
+    html = str(render_richtext("C++ in ~5 days, cut from ~5 days~ to 2, 2^10 & a ++ b ++ c"))
+
+    assert html == "C++ in ~5 days, cut from ~5 days~ to 2, 2^10 &amp; a ++ b ++ c"
 
 
 def test_richtext_escapes_raw_html() -> None:

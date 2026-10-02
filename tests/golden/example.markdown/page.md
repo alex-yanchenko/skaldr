@@ -51,6 +51,10 @@ The count reconciles exactly: every unit lands in one bucket and the counts sum 
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.
 
+Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
+
+Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
+
 ### Count pipeline
 
 ```mermaid
@@ -183,6 +187,12 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 ## Method
 
 Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below.
+
+A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units and $`e`$ the expected units; the page reports the mean over the $`n`$ zones, with $`\sigma`$ as its spread.
+
+```math
+\bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
+```
 
 `reconciliation.sql`
 

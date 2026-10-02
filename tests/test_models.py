@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Final, get_args
 
 import pytest
+from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 from pydantic import ValidationError
 
 from skaldr import compute
@@ -29,6 +30,7 @@ from skaldr.models import (
     InnerToggle,
     ListBlock,
     ListItem,
+    Math,
     Matrix,
     MatrixCell,
     Meta,
@@ -711,6 +713,74 @@ def test_note_parses_to_whole_model_with_optional_title() -> None:
     report = parse_report(make_report(blocks=[block]))
 
     assert report.blocks[0] == Note(type="note", body="An aside.", title=None)
+
+
+def test_math_parses_to_whole_model() -> None:
+    report = parse_report(make_report(blocks=[{"type": "math", "expression": "E = mc^2"}]))
+
+    assert report.blocks[0] == Math(type="math", expression="E = mc^2")
+
+
+@pytest.mark.parametrize(
+    ("expression", "message"),
+    [
+        pytest.param(
+            "x^",
+            "Value error, invalid math expression 'x^': latex2mathml cannot convert it "
+            "(MissingSuperScriptOrSubscriptError)",
+            id="converter-rejects-it",
+        ),
+        pytest.param("", "String should have at least 1 character", id="empty"),
+        pytest.param(
+            r"\href{https://e.com}{x}",
+            r"Value error, math expression '\href{https://e.com}{x}' sets the href attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="href",
+        ),
+        pytest.param(
+            r"\class{loud}{x}",
+            r"Value error, math expression '\class{loud}{x}' sets the class attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="class",
+        ),
+        pytest.param(
+            r"\style{color:red}{x}",
+            r"Value error, math expression '\style{color:red}{x}' sets the style attribute, which is not "
+            r"a MathML attribute skaldr renders: leave out \href, \class and \style",
+            id="style",
+        ),
+        pytest.param(
+            "a $$ b",
+            r"Value error, math expression 'a $$ b' holds $$, which ends a Notion equation early: "
+            r"write \$\$ for literal dollars",
+            id="double-dollar",
+        ),
+        pytest.param(
+            r"\simga",
+            r"Value error, math expression '\simga' uses \simga, which latex2mathml does not know: "
+            r"check its spelling, or write \text{...} for literal text",
+            id="unknown-command",
+        ),
+    ],
+)
+def test_a_math_block_that_cannot_render_fails_at_its_path(expression: str, message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "math", "expression": expression}]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.math.expression: {message}"
+
+
+def test_a_math_block_that_cannot_render_keeps_the_converter_failure_as_the_cause() -> None:
+    with pytest.raises(ValidationError) as raised:
+        Math.model_validate({"type": "math", "expression": "x^"})
+
+    value_error = raised.value.errors()[0].get("ctx", {})["error"]
+    report_error = value_error.__cause__
+    assert (type(value_error), type(report_error), type(report_error.__cause__)) == (
+        ValueError,
+        ReportError,
+        MissingSuperScriptOrSubscriptError,
+    )
 
 
 def test_panel_parses_to_whole_model() -> None:

@@ -42,6 +42,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish import Publish, section_choice_errors
 
@@ -666,6 +667,23 @@ class Code(_Block):
     mode: Literal["plain", "diff"] = Field(
         default="plain", description="plain, or diff (+/- lines tinted success/danger)."
     )
+
+
+class Math(_Block):
+    type: Literal["math"]
+    expression: str = Field(
+        min_length=1,
+        description="A LaTeX expression shown as display math, converted to MathML when the page builds.",
+    )
+
+    @field_validator("expression")
+    @classmethod
+    def _converts_to_mathml(cls, expression: str) -> str:
+        try:
+            refuse_invalid_math(expression, "block")
+        except ReportError as error:
+            raise ValueError(str(error)) from error
+        return expression
 
 
 class Quote(_Block):
@@ -2308,6 +2326,7 @@ _Simple = (
     | Range
     | Table
     | Code
+    | Math
     | Quote
     | Note
     | Divider
@@ -2500,6 +2519,7 @@ def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
             | Range()
             | Table()
             | Code()
+            | Math()
             | Quote()
             | Note()
             | Divider()

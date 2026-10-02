@@ -22,6 +22,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    DisplayMath,
     Divider,
     Graph,
     GraphEdge,
@@ -52,7 +53,18 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    InlineMath,
+    Link,
+    Plain,
+    Rich,
+    ScriptText,
+    Styled,
+    Tinted,
+)
 from tests.factories import (
     API_BADGES,
     lowered,
@@ -165,9 +177,27 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
             (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
             id="link-inside-bold",
         ),
+        pytest.param(
+            "per [[^sop]]{tone=info}",
+            "per [1]",
+            (Plain("per "), Tinted("info", None, (Citation("sop", 1, "https://e.com/sop"),))),
+            id="citation-inside-a-color-span",
+        ),
+        pytest.param(
+            "rate $`x_i`$",
+            "rate x_i",
+            (Plain("rate "), InlineMath("x_i")),
+            id="inline-math",
+        ),
+        pytest.param(
+            "about 10^3^",
+            "about 103",
+            (Plain("about 10"), ScriptText("superscript", "3")),
+            id="superscript",
+        ),
     ],
 )
-def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_target(
+def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
     note: str, visible: str, runs: Rich
 ) -> None:
     flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
@@ -185,6 +215,26 @@ def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_ta
             (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
         )
     ]
+
+
+def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub"},
+        "spokes": [{"label": "A", "note": "$`a^2`$"}, {"label": "B", "note": "plain"}],
+    }
+
+    assert lowered([fan]) == (
+        Diagram(
+            Graph(
+                "LR",
+                (GraphNode("hub", "Hub"), GraphNode("s1", "A", "a^2"), GraphNode("s2", "B", "plain")),
+                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+            ),
+            (ListNode("bullet", (ListEntry((*bold("A"), Plain(": "), InlineMath("a^2"))),)),),
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -552,6 +602,7 @@ def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
         pytest.param("[a\nb](https://e.com)", (Link((Plain("a b"),), "https://e.com"),), id="link-label"),
         pytest.param("[a\nb](#count)", (AnchorLink((Plain("a b"),), "count"),), id="anchor-link-label"),
         pytest.param("**a\nb**", (Styled("bold", (Plain("a b"),)),), id="styled"),
+        pytest.param("[a\nb]{tone=info}", (Tinted("info", None, (Plain("a b"),)),), id="tinted"),
         pytest.param("  x  ", (Plain("x"),), id="outer-spaces-trimmed"),
         pytest.param("  `x`  ", (Code("x"),), id="outer-spaces-around-code-dropped"),
         pytest.param("`x\ry`", (Code("x y"),), id="code-carriage-return"),
@@ -1235,6 +1286,30 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
         Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
     )
+
+
+@pytest.mark.parametrize(
+    ("expression", "lowered_expression"),
+    [
+        pytest.param("E = mc^2", "E = mc^2", id="one-line"),
+        pytest.param("\n  a \\\\\n\n  b\n\n", "  a \\\\\n  b", id="blank-lines-dropped"),
+    ],
+)
+def test_a_math_block_keeps_its_expression_without_blank_lines(
+    expression: str, lowered_expression: str
+) -> None:
+    assert lowered([{"type": "math", "expression": expression}]) == (DisplayMath(lowered_expression),)
+
+
+@pytest.mark.parametrize(
+    ("item", "runs"),
+    [
+        pytest.param("$`a\nb`$", (InlineMath("a b"),), id="line-break-inside"),
+        pytest.param("$`a\r\nb`$", (InlineMath("a b"),), id="crlf-inside"),
+    ],
+)
+def test_inline_math_lowers_onto_one_line(item: str, runs: Rich) -> None:
+    assert lowered([{"type": "list", "items": [item]}]) == (ListNode("bullet", (ListEntry(runs),)),)
 
 
 def test_an_untitled_callout_and_note_are_their_body_alone() -> None:

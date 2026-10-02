@@ -1071,6 +1071,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <p class="text">The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a <strong>hard gate</strong> — a page that does not balance <em>will not build</em>. The old <del>bin &gt; 12</del> scan rule is under review; see the <a href="https://example.com/runbook">method</a>.</p>
 <p class="text muted">Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.</p>
+<p class="text">Every bin label now ends in a <u>check digit</u>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and ~2 days of rescans are out of scope.</p>
+<p class="text">Zone C is <span style="color:var(--danger-fg)">behind schedule</span>, its recount is <span style="background:var(--warning-bg)">due Friday</span>, and the <span style="color:var(--accent-fg);background:var(--sky-bg)">vendor lots</span> stay open until the supplier replies.</p>
 <h3 id="count-pipeline">Count pipeline</h3>
 
 <div class="flow arrow">
@@ -1208,6 +1210,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <h2 id="method">Method</h2>
 
 <p class="text">Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below.</p>
+<p class="text">A zone&#39;s drift is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mfrac><mrow><mo stretchy="false">|</mo><mi>c</mi><mo>−</mo><mi>e</mi><mo stretchy="false">|</mo></mrow><mrow><mi>e</mi></mrow></mfrac></mrow></math>, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>c</mi></mrow></math> is the counted units and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>e</mi></mrow></math> the expected units; the page reports the mean over the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> zones, with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> as its spread.</p>
+<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mrow><mi>d</mi></mrow><mo stretchy="true">¯</mo></mover><mo>=</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>n</mi></mrow></mfrac><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mrow><mi>n</mi></mrow></munderover><mfrac><mrow><mo stretchy="false">|</mo><msub><mi>c</mi><mi>i</mi></msub><mo>−</mo><msub><mi>e</mi><mi>i</mi></msub><mo stretchy="false">|</mo></mrow><mrow><msub><mi>e</mi><mi>i</mi></msub></mrow></mfrac></mrow></math></div>
+
 <div class="code"><div class="code-label">reconciliation.sql</div><pre>SELECT reason, count(*) AS n
 FROM count_audit
 WHERE cycle_id = &#39;Q3-2026&#39;

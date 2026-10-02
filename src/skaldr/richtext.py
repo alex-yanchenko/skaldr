@@ -1,14 +1,20 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from functools import partial
+from typing import Final, Literal, Protocol, get_args
 
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN
+from skaldr.mathml import refuse_invalid_math
+from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
-StyleName = Literal["bold", "italic", "strike"]
+MarkerStyle = Literal["bold", "italic", "strike"]
+StyleName = Literal[MarkerStyle, "underline"]
+ScriptPosition = Literal["subscript", "superscript"]
+SCRIPT_HTML_TAG: Final[Mapping[ScriptPosition, str]] = {"subscript": "sub", "superscript": "sup"}
 
 
 @dataclass(frozen=True)
@@ -51,17 +57,59 @@ class Styled:
     runs: "Rich"
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled
+@dataclass(frozen=True)
+class ScriptText:
+    position: ScriptPosition
+    text: str
+
+
+@dataclass(frozen=True)
+class Tinted:
+    tone: ToneLiteral | None
+    background: ToneLiteral | None
+    runs: "Rich"
+
+
+@dataclass(frozen=True)
+class InlineMath:
+    expression: str
+
+
+Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText | Tinted | InlineMath
 Rich = tuple[Run, ...]
 
-_CODE_SPAN = re.compile(r"`([^`]+)`")
+_MATH_OR_CODE_SPAN = re.compile(r"\$`([^`]+)`\$|`([^`]+)`")
 _FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
-_STYLE_PASSES: tuple[tuple[re.Pattern[str], StyleName], ...] = (
+_LINK_TARGET = re.compile(r"(?<=\])\([^)\s]+\)")
+_LINK_TARGET_MARK = re.compile(r"\x01(\d+)\x01")
+_STASH_MARKER: Final = "\x00"
+_LINK_TARGET_MARKER: Final = "\x01"
+_SET_ASIDE_MARKERS: Final = (_STASH_MARKER, _LINK_TARGET_MARKER)
+
+
+def _attribute_list(excluded: str) -> str:
+    return rf"\{{(?=[^{{}}{excluded}]*?(?<![^\s{{])(?:tone|bg)\s*=)([^{{}}{excluded}]*)\}}"
+
+
+_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]" + _attribute_list("".join(_SET_ASIDE_MARKERS)))
+_STRAY_ATTRIBUTE_LIST = re.compile(r"\]" + _attribute_list(""))
+_SPAN_ATTRIBUTES: Final = frozenset({"tone", "bg"})
+_TONE: Final = TypeAdapter[ToneLiteral](Tone)
+_PALETTE_ONLY_NAMES: Final = tuple(
+    name for name in get_args(BadgeColorLiteral) if name not in get_args(ToneLiteral)
+)
+_SCRIPT_TEXT: Final = r"((?:[^\W_]|[-+=().,'*" + "\N{MINUS SIGN}\N{PRIME}" + r"])+)"
+_SCRIPT_PASSES: Final[tuple[tuple[re.Pattern[str], ScriptPosition], ...]] = (
+    (re.compile(rf"(?<![~\\])~{_SCRIPT_TEXT}~(?!~)"), "subscript"),
+    (re.compile(rf"(?<![\[^\\])\^{_SCRIPT_TEXT}\^(?!\^)"), "superscript"),
+)
+_STYLE_PASSES: Final[tuple[tuple[re.Pattern[str], StyleName], ...]] = (
     (re.compile(r"\*\*([^*]+)\*\*"), "bold"),
+    (re.compile(r"(?<![\w+])\+\+([^\s+](?:[^+]*[^\s+])?)\+\+(?![\w+])"), "underline"),
     (re.compile(r"~~([^~]+)~~"), "strike"),
     (re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)"), "italic"),
 )
@@ -95,6 +143,21 @@ class _Stash:
         return tuple(runs)
 
 
+class _LinkTargets:
+    def __init__(self) -> None:
+        self.targets: list[str] = []
+
+    def set_aside(self, fragment: str) -> str:
+        return _LINK_TARGET.sub(self._set_aside_one, fragment)
+
+    def restored(self, fragment: str) -> str:
+        return _LINK_TARGET_MARK.sub(lambda match: self.targets[int(match.group(1))], fragment)
+
+    def _set_aside_one(self, match: re.Match[str]) -> str:
+        self.targets.append(match.group(0))
+        return f"\x01{len(self.targets) - 1}\x01"
+
+
 def _invalid_placeholder(name: str) -> ReportError:
     if "\x00" in name:
         return ReportError(
@@ -117,7 +180,8 @@ def _anchor_holding_markup(url: str) -> ReportError:
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     rules = context if context is not None else RichContext()
     stash = _Stash()
-    staged = _CODE_SPAN.sub(lambda match: stash.set_aside(Code(match.group(1))), text.replace("\x00", ""))
+    link_targets = _LinkTargets()
+    staged = _MATH_OR_CODE_SPAN.sub(partial(_set_aside_math_or_code, stash), _without_set_aside_markers(text))
 
     def cite(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -144,16 +208,113 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
             return stash.set_aside(Link(label, url))
         return match.group(0)
 
-    def blank(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if "\x00" in name or not _PLACEHOLDER_NAME.fullmatch(name):
-            raise _invalid_placeholder(name)
-        return stash.set_aside(Placeholder(name))
+    staged = link_targets.set_aside(_FOOTNOTE.sub(cite, staged))
+    staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
+    _refuse_stray_attribute_list(staged, link_targets)
+    staged = _LINK.sub(link, link_targets.restored(staged))
+    return _parse_styles(_set_aside_placeholders_and_scripts(stash, staged), 0, stash)
 
-    staged = _FOOTNOTE.sub(cite, staged)
-    staged = _LINK.sub(link, staged)
-    staged = _PLACEHOLDER.sub(blank, staged)
-    return _parse_styles(staged, 0, stash)
+
+def _set_aside_placeholders_and_scripts(stash: _Stash, fragment: str) -> str:
+    staged = _PLACEHOLDER.sub(partial(_set_aside_placeholder, stash), fragment)
+    for pattern, position in _SCRIPT_PASSES:
+        staged = pattern.sub(partial(_set_aside_script, stash, position), staged)
+    return staged
+
+
+def _set_aside_placeholder(stash: _Stash, match: re.Match[str]) -> str:
+    name = match.group(1)
+    if "\x00" in name or not _PLACEHOLDER_NAME.fullmatch(name):
+        raise _invalid_placeholder(name)
+    return stash.set_aside(Placeholder(name))
+
+
+def _without_set_aside_markers(text: str) -> str:
+    for marker in _SET_ASIDE_MARKERS:
+        text = text.replace(marker, "")
+    return text
+
+
+def _refuse_stray_attribute_list(staged: str, link_targets: _LinkTargets) -> None:
+    stray = _STRAY_ATTRIBUTE_LIST.search(staged)
+    if not stray:
+        return
+    attributes = stray.group(1)
+    token = _attribute_token(_SENTINEL.sub("…", link_targets.restored(attributes)))
+    if _LINK_TARGET_MARKER in attributes:
+        raise ReportError(
+            f"the attribute list {token} holds a link: an attribute list holds only key=value attributes, "
+            "as in {tone=info bg=warning}"
+        )
+    if _STASH_MARKER in attributes:
+        raise ReportError(
+            f"the attribute list {token} holds other markup, such as a `code` span, math, a [^citation] or "
+            "a colored [text]{…} span: an attribute list holds only key=value attributes, as in "
+            "{tone=info bg=warning}"
+        )
+    raise ReportError(
+        f"the attribute list {token} follows no [text] it can color: the text inside a [text]{{…}} span "
+        "is not empty and holds no link and no other [ or ]"
+    )
+
+
+def _attribute_token(attributes: str) -> str:
+    return "{" + attributes.strip() + "}"
+
+
+def _set_aside_math_or_code(stash: _Stash, match: re.Match[str]) -> str:
+    math, code = match.group(1), match.group(2)
+    if math is None:
+        return stash.set_aside(Code(code))
+    expression = math.strip()
+    refuse_invalid_math(expression, "inline")
+    return stash.set_aside(InlineMath(expression))
+
+
+def _set_aside_script(stash: _Stash, position: ScriptPosition, match: re.Match[str]) -> str:
+    return stash.set_aside(ScriptText(position, match.group(1)))
+
+
+def _set_aside_tint(stash: _Stash, match: re.Match[str]) -> str:
+    tones = _span_tones(match.group(2))
+    label = _parse_styles(_set_aside_placeholders_and_scripts(stash, match.group(1)), 0, stash)
+    return stash.set_aside(Tinted(tones.tone, tones.background, label))
+
+
+@dataclass(frozen=True)
+class _SpanTones:
+    tone: ToneLiteral | None
+    background: ToneLiteral | None
+
+
+def _span_tones(attributes: str) -> _SpanTones:
+    token = _attribute_token(attributes)
+    tones: dict[str, ToneLiteral] = {}
+    for attribute in attributes.split():
+        key, equals, value = attribute.partition("=")
+        if not equals:
+            raise ReportError(
+                f"malformed attribute '{attribute}' in {token}: write each attribute as key=value, "
+                "with no spaces around '='"
+            )
+        if key not in _SPAN_ATTRIBUTES:
+            raise ReportError(
+                f"unknown attribute '{key}' in {token}: a [text]{{…}} span takes tone=<tone> and bg=<tone>"
+            )
+        if key in tones:
+            raise ReportError(f"attribute '{key}' is set twice in {token}")
+        tones[key] = _span_tone(value, token)
+    return _SpanTones(tones.get("tone"), tones.get("bg"))
+
+
+def _span_tone(value: str, token: str) -> ToneLiteral:
+    try:
+        return _TONE.validate_python(value)
+    except ValidationError as error:
+        raise ReportError(
+            f"unknown tone '{value}' in {token}: a tone is one of {', '.join(get_args(ToneLiteral))}, "
+            f"or a palette name {', '.join(_PALETTE_ONLY_NAMES)}"
+        ) from error
 
 
 def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
@@ -182,6 +343,12 @@ class RunWriter(Protocol):
 
     def styled(self, style: StyleName, inner: str, /) -> str: ...
 
+    def script(self, position: ScriptPosition, text: str, /) -> str: ...
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
+
+    def math(self, expression: str, /) -> str: ...
+
 
 def write_run(run: Run, writer: RunWriter) -> str:
     match run:
@@ -199,6 +366,12 @@ def write_run(run: Run, writer: RunWriter) -> str:
             return writer.placeholder(run.name)
         case Styled():
             return writer.styled(run.style, write_runs(run.runs, writer))
+        case ScriptText():
+            return writer.script(run.position, run.text)
+        case Tinted():
+            return writer.tinted(run.tone, run.background, write_runs(run.runs, writer))
+        case InlineMath():
+            return writer.math(run.expression)
         case _:
             assert_never(run)
 
@@ -228,6 +401,15 @@ class VisibleText:
 
     def styled(self, _style: StyleName, inner: str, /) -> str:
         return inner
+
+    def script(self, _position: ScriptPosition, text: str, /) -> str:
+        return text
+
+    def tinted(self, _tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
+        return inner
+
+    def math(self, expression: str, /) -> str:
+        return expression
 
 
 def visible_text(runs: Rich) -> str:

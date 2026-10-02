@@ -24,6 +24,8 @@ Mixed audience — ops reads the impact, the floor team reads the fix. {color="g
 - **Vendor**: 4.0%, 400 {color="red"}
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
+Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
+Zone C is <span color="red">behind schedule</span>, its recount is <span color="yellow_bg">due Friday</span>, and the <span color="purple"><span color="blue_bg">vendor lots</span></span> stay open until the supplier replies.
 ### Count pipeline
 ```mermaid
 flowchart LR
@@ -234,6 +236,10 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 - ⚪ **next count**: Re-verify reconciliation
 ## Method
 Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below.
+A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units and $`e`$ the expected units; the page reports the mean over the $`n`$ zones, with $`\sigma`$ as its spread.
+$$
+\bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
+$$
 `reconciliation.sql`
 ```sql
 SELECT reason, count(*) AS n

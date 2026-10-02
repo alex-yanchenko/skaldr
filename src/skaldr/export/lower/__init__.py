@@ -17,6 +17,7 @@ from skaldr.export.lower.prose import (
     lower_image,
     lower_key_value,
     lower_list,
+    lower_math,
     lower_meter,
     lower_note,
     lower_quote,
@@ -105,6 +106,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_range(block, lowering)
         case models.Code():
             return lower_code(block)
+        case models.Math():
+            return lower_math(block)
         case models.Quote():
             return lower_quote(block, lowering)
         case models.Note():

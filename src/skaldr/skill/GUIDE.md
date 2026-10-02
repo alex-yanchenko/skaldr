@@ -92,8 +92,14 @@ schema lists the canonical names; the alias names still validate at build even i
 Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items, `quote.body`,
 `key_value` values, timeline/status text) accept a small markdown subset:
 
-`**bold**` · `*italic*` · `` `code` `` · `~~strike~~` · `[label](https://url)`
+`**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `` $`x_i`$ `` (inline math) · `[label](https://url)`
 (links allow `http`, `https`, `mailto` only).
+
+**Underline, subscript and superscript.** `++underline++` opens only where no letter or digit runs into it, and the text inside starts and ends with a non-space, so `C++`, `i++` and `a ++ b ++ c` stay prose. Two increments in one paragraph, like `++i over i++`, do read as an underline of `i over i`, since nothing tells them apart from one; put code in backticks (`` `++i` ``) and it stays code. Subscript `~…~` and superscript `^…^` follow Pandoc: the marked text holds no spaces, so `about ~5 days` and `cut from ~5 days~ to 2` stay prose, and `~~strike~~` is still a strike. The marked text holds only letters, digits and `+ - − = ( ) . , ' ′ *`, as in `H~2~O`, `10^3^`, `e^-i^` and `x~i,j~`, so paths, URLs, regexes and `~5%~` stay prose (`~/code,~/notes`, `C:\~tmp~\x`, `(^|[^\p{L}])`), and a `~` or `^` right after a backslash opens nothing. The marked text is plain text; no other mark goes inside a subscript or a superscript.
+
+**Colour and highlight.** `[text]{tone=danger}` colours the text, `[text]{bg=warning}` highlights it, and `[text]{tone=danger bg=warning}` does both. The braces hold space-separated `key=value` attributes in either order, `tone` and `bg` at most once each, and each value is a tone or its palette name (see Colours & tones above). The bracketed text may hold other marks, but not a link or another `[` or `]`; a link inside, or an empty `[]`, fails the build naming the attribute list. A span inside a link label works: `[[docs]{tone=info}](https://url)` is a link whose label is coloured. Braces right after `]` that hold `tone=` or `bg=` are an attribute list, so an unknown tone, an unknown attribute next to them, a repeated attribute, spaces around `=`, or a code span, math or citation inside the braces fail the build naming the token. Anything else, like `arr[i]{n=3}`, `[a]{x=1}` or `[a] {tone=info}`, stays prose, and `[label](https://url)` is still a link, since nothing inside a link's URL is read as a span.
+
+**Math.** A `` `code` `` span wrapped in dollars, `` $`\frac{a}{b}`$ ``, is inline LaTeX math, and a `math` block (`{type: math, expression: '\sum_{i=1}^{n} x_i'}`) is display math on its own line. skaldr converts both to MathML when the page builds, so the page needs no script or font to show them. An expression the converter cannot read fails the build naming it, and so do an unknown command (a typo like `\simga`), a fraction, stack, root or script missing a part (`\frac{a}`, `\overset{a}`, `\displaystyle_a`), an environment latex2mathml does not define (`aligned`, `equation`, or a typo like `pmatrx`; `matrix`, `pmatrix`, `bmatrix`, `cases`, `array`, `split` and `align` are defined), a colour that is neither a CSS colour name nor a `#rgb` or `#rrggbb` value (`\color{simga}`), a command that sets an attribute MathML has no use for (`\href`, `\class`, `\style`), and `$$`, which would end the Notion export's equation early (write `\$\$` for literal dollars). A backslash inside `\text{…}` is literal text. An entity typed there shows as typed when it is a named entity (`&lt;`), a decimal one (`&#60;`), a hex one with a capital X (`&#X3C;`), or a hex one without its closing semicolon (`&#x3C`). A hex entity written `&#x3C;` decodes to its character, as `\unicode{x3C}` does, and shows as U+FFFD instead when its code point is past U+10FFFF, a surrogate (U+D800 to U+DFFF), a control character other than tab and newline (U+0000 to U+001F and U+007F to U+009F), or a noncharacter (U+FDD0 to U+FDEF, or one ending in FFFE or FFFF such as U+FFFE or U+10FFFF). A lone `$` in prose, like `costs $5`, stays text. In YAML, single-quote an expression so its backslashes reach skaldr unchanged.
 
 **Same-page anchor links.** `[label](#slug)` jumps to a heading or section on the same page. The
 `slug` is the heading text lowercased with non-alphanumerics turned to `-` (so `## Count pipeline` →
@@ -172,6 +178,7 @@ or to keep a small block from stretching across the whole page.
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns` (each `{key, label, kind?, width?, tone?}`), `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
+| `math` | A display equation, written in LaTeX and rendered as MathML | `expression` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
@@ -970,7 +977,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges or note links and citations it can't show | the same |
+| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges, or note links, citations, inline math, subscripts and superscripts it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
@@ -989,6 +996,11 @@ case, where the page is shared as a URL an agent later has to read back.
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
+| `++underline++` | an `<ins>` tag | an underline span |
+| `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
+| `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
+| `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
+| `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
 

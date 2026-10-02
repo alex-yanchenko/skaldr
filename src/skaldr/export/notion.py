@@ -26,6 +26,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    DisplayMath,
     Divider,
     Heading,
     HeadingLevel,
@@ -44,7 +45,8 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, ToneLiteral
+from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
@@ -54,6 +56,7 @@ CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
+EQUATION_FENCE: Final = "$$"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 SHARE_DENOMINATOR_LIMIT: Final = 1_000_000
 BACKGROUND_SUFFIX: Final = "_bg"
@@ -71,6 +74,19 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
+LATEX_SCRIPT_OPERATOR: Final[Mapping[ScriptPosition, str]] = {"subscript": "_", "superscript": "^"}
+LATEX_TEXT_ESCAPES: Final = str.maketrans(
+    {
+        "\\": "\\textbackslash{}",
+        "^": "\\textasciicircum{}",
+        "~": "\\textasciitilde{}",
+        **{character: "\\" + character for character in "{}$&#%_"},
+    }
+)
+
+
+def latex_text(text: str) -> str:
+    return "\\text{" + text.translate(LATEX_TEXT_ESCAPES) + "}"
 
 
 class _NotionRuns(MarkupRuns):
@@ -98,6 +114,22 @@ class _NotionRuns(MarkupRuns):
 
     def chip(self, run: Chip, /) -> str:
         return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.text(run.label)}</span>'
+
+    def underline(self, inner: str, /) -> str:
+        return f'<span underline="true">{inner}</span>'
+
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        return self.math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
+        highlighted = (
+            _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
+        )
+        return _colored_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
+
+
+def _colored_span(color: str, inner: str) -> str:
+    return f'<span color="{color}">{inner}</span>'
 
 
 def notion_inline(runs: ExportRich) -> str:
@@ -260,6 +292,8 @@ def _notion_lines(node: Node) -> list[str]:
             return _table_lines(node)
         case CodeBlock():
             return code_block_lines(node)
+        case DisplayMath():
+            return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
         case Callout():
             icon = node.icon or CALLOUT_ICON[node.tone]
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'

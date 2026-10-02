@@ -16,19 +16,30 @@ from markupsafe import Markup, escape
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
+from skaldr.mathml import mathml
 from skaldr.models import (
     Heading,
     Report,
     Section,
+    ToneLiteral,
     iter_requests,
     load_report,
     package_text,
     unresolvable_request_variables,
 )
 from skaldr.publish import without_publish_block
-from skaldr.richtext import Citation, RichContext, StyleName, parse_rich, write_runs
+from skaldr.replace_file import replace_file
+from skaldr.richtext import (
+    SCRIPT_HTML_TAG,
+    Citation,
+    RichContext,
+    ScriptPosition,
+    StyleName,
+    parse_rich,
+    write_runs,
+)
 
-_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del"}
+_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
 
 
 class _HtmlRuns:
@@ -61,6 +72,22 @@ class _HtmlRuns:
     def styled(self, style: StyleName, inner: str, /) -> str:
         tag = _HTML_STYLE_TAG[style]
         return f"<{tag}>{inner}</{tag}>"
+
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        tag = SCRIPT_HTML_TAG[position]
+        return f"<{tag}>{escape(text)}</{tag}>"
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
+        color = [f"color:var(--{tone}-fg)"] if tone else []
+        highlight = [f"background:var(--{background}-bg)"] if background else []
+        return f'<span style="{";".join(color + highlight)}">{inner}</span>'
+
+    def math(self, expression: str, /) -> str:
+        return mathml(expression, "inline")
+
+
+def display_math(expression: str) -> Markup:
+    return Markup(mathml(expression, "block"))
 
 
 def render_richtext(
@@ -116,6 +143,7 @@ def _environment() -> Environment:
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
+        display_math=display_math,
     )
     return env
 
@@ -300,7 +328,7 @@ def render_report(
     on someone else's screen is never what the author meant."""
     html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html, encoding="utf-8")
+    replace_file(out_path.resolve(), html)
 
 
 def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:

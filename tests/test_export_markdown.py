@@ -43,7 +43,17 @@ from skaldr.export.tree import (
     ToneName,
 )
 from skaldr.models import load_report, parse_report
-from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Link,
+    Placeholder,
+    Plain,
+    Run,
+    ScriptText,
+    Styled,
+    parse_rich,
+)
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -153,6 +163,9 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
         pytest.param(Citation("b", 2), r"\[2\]", id="citation-without-url"),
         pytest.param(Placeholder("owner"), "`{{owner}}`", id="placeholder"),
         pytest.param(Styled("strike", (Plain("old"),)), "~~old~~", id="strike"),
+        pytest.param(Styled("underline", (Plain("a*b"),)), r"<ins>a\*b</ins>", id="underline"),
+        pytest.param(ScriptText("subscript", "<i>"), r"<sub>\<i\></sub>", id="subscript"),
+        pytest.param(ScriptText("superscript", "-1"), "<sup>-1</sup>", id="superscript"),
         pytest.param(
             Link((Plain("paren"),), "https://example.com/(x)>"),
             "[paren](https://example.com/%28x%29%3E)",
@@ -224,6 +237,49 @@ def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(
 
 def test_a_dollar_sign_is_escaped_so_github_does_not_render_math() -> None:
     assert markdown_of([{"type": "text", "body": "costs $5 and $x$"}]) == "costs \\$5 and \\$x\\$\n"
+
+
+def test_underline_and_scripts_in_prose_become_github_html_tags() -> None:
+    assert markdown_of([{"type": "text", "body": "++new++ H~2~O at 10^3^"}]) == (
+        "<ins>new</ins> H<sub>2</sub>O at 10<sup>3</sup>\n"
+    )
+
+
+def test_inline_math_is_written_unescaped_in_github_math_form_while_prose_dollars_stay_escaped() -> None:
+    assert markdown_of([{"type": "text", "body": "costs $5, so $`x_i < 2`$ holds"}]) == (
+        "costs \\$5, so $`x_i < 2`$ holds\n"
+    )
+
+
+def test_a_math_block_is_a_github_math_fence() -> None:
+    block = {"type": "math", "expression": "\\sum_{i=1}^{n} x_i\n\n= y\n"}
+
+    assert markdown_of([block]) == "```math\n\\sum_{i=1}^{n} x_i\n= y\n```\n"
+
+
+def test_a_math_block_inside_a_panel_is_a_quoted_github_math_fence() -> None:
+    callout = {"type": "callout", "tone": "info", "body": "Rate"}
+    panel = {"type": "panel", "title": "P", "blocks": [callout, {"type": "math", "expression": "x_i"}]}
+
+    assert markdown_of([panel]) == "> 📝 **P**\n>\n> > 💡 Rate\n>\n> ```math\n> x_i\n> ```\n"
+
+
+def test_a_math_block_holding_a_backtick_fence_line_gets_a_longer_fence() -> None:
+    assert markdown_of([{"type": "math", "expression": "a\n```\nb"}]) == "````math\na\n```\nb\n````\n"
+
+
+def test_an_attribute_span_keeps_only_its_text_because_github_has_no_color() -> None:
+    body = "[**late** a_b]{tone=danger bg=warning} [x]{y} [[docs]{tone=info}](https://x.io)"
+
+    assert markdown_of([{"type": "text", "body": body}]) == (
+        "**late** a\\_b \\[x\\]{y} [docs](https://x.io)\n"
+    )
+
+
+def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_markdown() -> None:
+    assert markdown_of([{"type": "text", "body": "C++ in ~5 days, 2^10 {x} and a ++ b ++ c"}]) == (
+        "C++ in \\~5 days, 2^10 {x} and a ++ b ++ c\n"
+    )
 
 
 def test_emphasis_at_the_start_of_a_line_keeps_its_markers() -> None:
