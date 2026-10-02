@@ -4932,6 +4932,7 @@
           "items": {
             "$ref": "#/$defs/Tab"
           },
+          "maxItems": 24,
           "minItems": 2,
           "title": "Tabs",
           "type": "array"

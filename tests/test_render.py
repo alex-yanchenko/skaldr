@@ -10,7 +10,7 @@ import pytest
 from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import (
-    MAX_REQUEST_CASES,
+    MAX_STRIP_LABELS,
     Report,
     Request,
     load_report,
@@ -738,6 +738,32 @@ def test_a_page_without_a_tab_strip_carries_no_script_to_open_one() -> None:
         False,
         False,
     ]
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [make_tabs()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [make_tabs()]}, id="panel"),
+        pytest.param(make_toggle(make_tabs()), id="toggle"),
+        pytest.param(make_grid([make_cell(6, [make_toggle(make_tabs())])]), id="inner-toggle"),
+        pytest.param(make_grid([make_cell(6, [make_tabs()])]), id="grid-cell"),
+        pytest.param(
+            make_grid([make_cell(6, [make_grid([make_cell(6, [make_tabs()])])])]), id="inner-grid-cell"
+        ),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [make_tabs()]}]},
+            id="walkthrough-detail",
+        ),
+    ],
+)
+def test_a_tabs_block_inside_any_container_renders_its_radios_and_rail(container: dict[str, object]) -> None:
+    html = render_html(parse_report(make_report(blocks=[container])))
+
+    assert (
+        re.findall(r'class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        _container_rules(html),
+    ) == ([("tb0", "tb0_0"), ("tb0", "tb0_1")], [(compute.strip_width(["Floor", "System"]), _rail("tb0"))])
 
 
 def test_a_request_inside_a_section_toggle_gets_its_radio_group_rail_and_runtime() -> None:
@@ -2568,14 +2594,7 @@ def test_the_width_a_strip_asks_for_is_read_off_its_labels(labels: list[str], wi
     """The threshold a block switches at, pinned to the value rather than its direction. Every part of
     it moves the answer: the per-character advance, the room a dot and the padding take, the slack for
     a wider fallback face, and the container's own padding."""
-    report = _request_report(
-        cases=[{"label": label, "response": {"status": 200, "body": "[]"}} for label in labels],
-        case_variable="resource",
-    )
-    block = parse_report(report).blocks[0]
-    assert isinstance(block, Request)
-
-    assert compute.case_strip_width(block) == width
+    assert compute.strip_width(labels) == width
 
 
 def test_the_case_cap_matches_the_selectors_the_stylesheet_writes() -> None:
@@ -2584,17 +2603,17 @@ def test_the_case_cap_matches_the_selectors_the_stylesheet_writes() -> None:
     and which the strip cannot select; a cap below it refuses a case the stylesheet would have served."""
     css = package_path("styles.css").read_text(encoding="utf-8")
 
-    assert css.count(".rq-pick:nth-of-type(") == MAX_REQUEST_CASES
-    assert f":nth-of-type({MAX_REQUEST_CASES}):checked" in css
-    assert f":nth-of-type({MAX_REQUEST_CASES + 1}):checked" not in css
+    assert css.count(".rq-pick:nth-of-type(") == MAX_STRIP_LABELS
+    assert f":nth-of-type({MAX_STRIP_LABELS}):checked" in css
+    assert f":nth-of-type({MAX_STRIP_LABELS + 1}):checked" not in css
 
 
 def test_the_case_cap_is_refused_one_past_its_edge() -> None:
-    at_cap = _request_report(cases=_cases(MAX_REQUEST_CASES), case_variable="resource")
-    over = _request_report(cases=_cases(MAX_REQUEST_CASES + 1), case_variable="resource")
+    at_cap = _request_report(cases=_cases(MAX_STRIP_LABELS), case_variable="resource")
+    over = _request_report(cases=_cases(MAX_STRIP_LABELS + 1), case_variable="resource")
 
     assert parse_report(at_cap) is not None
-    with pytest.raises(ReportError, match=rf"records at most {MAX_REQUEST_CASES} cases"):
+    with pytest.raises(ReportError, match=rf"records at most {MAX_STRIP_LABELS} cases"):
         parse_report(over)
 
 

@@ -19,9 +19,7 @@ from skaldr.errors import ReportError
 from skaldr.models import (
     Heading,
     Report,
-    RequestLike,
     Section,
-    Tabs,
     iter_requests,
     load_report,
     package_text,
@@ -111,7 +109,6 @@ def _environment() -> Environment:
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
-        case_strip_labels=compute.case_strip_labels,
         response_caption=compute.response_caption,
         derived_card_tally=compute.derived_card_tally,
         delta_glyphs=compute.DELTA_GLYPHS,
@@ -138,17 +135,10 @@ def _render(
     def anchor_id(block: Heading | Section) -> str:
         return slugs[id(block)]
 
-    groups = compute.request_groups(report)
+    strips = compute.strip_registry(report)
 
-    def case_group(core: RequestLike) -> str:
-        return groups[id(core)]
-
-    tab_groups = compute.tab_groups(report)
-
-    def tab_group(block: Tabs) -> str:
-        return tab_groups[id(block)]
-
-    strip_rules = [compute.case_strip_rules(report, groups), compute.tab_strip_rules(report, tab_groups)]
+    def strip_of(owner: compute.StripOwner) -> compute.Strip:
+        return strips[id(owner)]
 
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
@@ -165,8 +155,7 @@ def _render(
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
-    globals_["case_group"] = case_group
-    globals_["tab_group"] = tab_group
+    globals_["strip_of"] = strip_of
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references
@@ -176,13 +165,13 @@ def _render(
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
-        styles=package_text("styles.css") + "\n" + "\n".join(filter(None, strip_rules)),
+        styles=package_text("styles.css") + "\n" + compute.strip_rules(strips.values()),
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         has_requests=any(iter_requests(report.blocks)),
-        has_strips=bool(groups or tab_groups),
+        has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
     )

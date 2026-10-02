@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import (
-    MAX_REQUEST_CASES,
+    MAX_STRIP_LABELS,
     TONE_BADGE_COLOR,
     BadgeColorLiteral,
     Callout,
@@ -50,6 +50,7 @@ from skaldr.models import (
     load_report,
     parse_report,
     read_text_file,
+    walk_blocks,
 )
 from tests.factories import (
     make_cell,
@@ -844,9 +845,9 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
             id="one-tab",
         ),
         pytest.param(
-            _tabs(*(_tab(f"t{number}") for number in range(MAX_REQUEST_CASES + 1))),
-            "invalid content data: blocks.0.tabs: Value error, a tabs block holds at most "
-            f"{MAX_REQUEST_CASES} tabs, and this one has {MAX_REQUEST_CASES + 1}",
+            _tabs(*(_tab(f"t{number}") for number in range(MAX_STRIP_LABELS + 1))),
+            f"invalid content data: blocks.0.tabs.tabs: List should have at most {MAX_STRIP_LABELS} items "
+            f"after validation, not {MAX_STRIP_LABELS + 1}",
             id="past-the-cap",
         ),
         pytest.param(
@@ -855,9 +856,24 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
             id="repeated-label",
         ),
         pytest.param(
+            _tabs(_tab("System"), _tab("Floor"), _tab("System"), _tab("Vendor"), _tab("Floor")),
+            "invalid content data: blocks.0.tabs: Value error, tabs repeat a label: Floor, System",
+            id="several-repeated-labels",
+        ),
+        pytest.param(
             _tabs(_tab("  ", {"type": "text", "body": "x"}), _tab("System")),
             "invalid content data: blocks.0.tabs.tabs.0: Value error, tab label must not be blank",
             id="blank-label",
+        ),
+        pytest.param(
+            _tabs(_tab("\t \n", {"type": "text", "body": "x"}), _tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0: Value error, tab label must not be blank",
+            id="whitespace-label",
+        ),
+        pytest.param(
+            _tabs(_tab("", {"type": "text", "body": "x"}), _tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should have at least 1 character",
+            id="empty-label",
         ),
         pytest.param(
             _tabs(_tab("Floor", tone="purple"), _tab("System")),
@@ -872,6 +888,125 @@ def test_a_tabs_block_refuses_a_malformed_tab_set(block: dict[str, Any], message
         parse_report(make_report(blocks=[block]))
 
     assert str(raised.value) == message
+
+
+def test_a_tabs_block_at_the_strip_cap_is_accepted() -> None:
+    labels = [f"t{number}" for number in range(MAX_STRIP_LABELS)]
+
+    parsed = parse_report(make_report(blocks=[_tabs(*(_tab(label) for label in labels))])).blocks[0]
+
+    assert isinstance(parsed, Tabs)
+    assert [tab.label for tab in parsed.tabs] == labels
+
+
+def test_a_request_repeating_several_case_labels_names_each_once_in_sorted_order() -> None:
+    labels = ("b", "a", "b", "c", "a")
+    cases = [{"label": label, "response": {"status": 200, "body": "[]"}} for label in labels]
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_request(cases=cases)]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.request: Value error, request repeats a case label: a, b"
+    )
+
+
+_DUPLICATE_MATRIX = {
+    "type": "matrix",
+    "id": "dup",
+    "rows": ["r1"],
+    "columns": ["c1"],
+    "cells": [{"row": "r1", "col": "c1", "label": "x"}],
+}
+_GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": "ghost"}]}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(make_toggle, id="toggle"),
+        pytest.param(_in_a_grid_cell_toggle, id="inner-toggle"),
+        pytest.param(_in_a_tab, id="tab"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("beside", "nested", "message"),
+    [
+        pytest.param(
+            _DUPLICATE_MATRIX,
+            _DUPLICATE_MATRIX,
+            "invalid content data: Value error, matrix id(s) used more than once: ['dup'] — matrix ids "
+            "must be unique",
+            id="matrix-id",
+        ),
+        pytest.param(
+            _rollup_table("dup"),
+            _rollup_table("dup"),
+            "invalid content data: Value error, table id(s) used more than once: ['dup'] — table ids must "
+            "be unique",
+            id="table-id",
+        ),
+        pytest.param(
+            {"type": "text", "body": "x"},
+            _GHOST_MATRIX_CARD,
+            "invalid content data: Value error, card of_matrix 'ghost' names no matrix with that id",
+            id="card-matrix-reference",
+        ),
+    ],
+)
+def test_a_reference_check_reaches_into_every_toggle_and_tab(
+    container: Callable[[dict[str, Any]], dict[str, Any]],
+    beside: dict[str, Any],
+    nested: dict[str, Any],
+    message: str,
+) -> None:
+    badges = {"HAVE": {"label": "H", "tone": "green", "legend": "x"}}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(badges=badges, blocks=[beside, container(nested)]))
+
+    assert str(raised.value) == message
+
+
+def test_walk_blocks_visits_every_block_depth_first_in_document_order() -> None:
+    blocks = [
+        {
+            "type": "section",
+            "title": "S",
+            "blocks": [make_toggle({"type": "divider"}), {"type": "text", "body": "a"}],
+        },
+        make_grid(
+            [
+                make_cell(3, [_tabs(_tab("A", {"type": "note", "body": "n"}), _tab("B"))]),
+                make_cell(3, [make_grid([make_cell(6, [{"type": "quote", "body": "q"}])])]),
+            ]
+        ),
+        {
+            "type": "walkthrough",
+            "steps": [{"label": "Go", "detail": [make_toggle({"type": "code", "content": "c"})]}],
+        },
+        {"type": "panel", "title": "P", "blocks": [make_flow()]},
+    ]
+
+    report = parse_report(make_report(blocks=blocks))
+
+    assert [block.type for block in walk_blocks(report.blocks)] == [
+        "section",
+        "toggle",
+        "divider",
+        "text",
+        "grid",
+        "tabs",
+        "note",
+        "text",
+        "grid",
+        "quote",
+        "walkthrough",
+        "toggle",
+        "code",
+        "panel",
+        "request_flow",
+    ]
 
 
 def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:

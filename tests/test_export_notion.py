@@ -33,16 +33,10 @@ from skaldr.export.tree import (
 from skaldr.models import (
     AnyBlock,
     BadgeColorLiteral,
-    Grid,
-    InnerGrid,
-    Panel,
-    Section,
-    Walkthrough,
     load_report,
     parse_report,
+    walk_blocks,
 )
-from skaldr.models import Tabs as TabsBlock
-from skaldr.models import Toggle as ToggleBlock
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
 from tests.conftest import REPO_ROOT
 from tests.factories import (
@@ -288,21 +282,7 @@ def test_block_nodes_become_notion_blocks() -> None:
 
 
 def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
-    seen: set[str] = set()
-    for block in blocks:
-        seen.add(block.type)
-        if isinstance(block, Section | Panel | ToggleBlock):
-            seen |= _block_types_in(block.blocks)
-        if isinstance(block, Grid | InnerGrid):
-            for cell in block.cells:
-                seen |= _block_types_in(cell.blocks)
-        if isinstance(block, Walkthrough):
-            for step in block.steps:
-                seen |= _block_types_in(step.detail)
-        if isinstance(block, TabsBlock):
-            for tab in block.tabs:
-                seen |= _block_types_in(tab.blocks)
-    return seen
+    return {block.type for block in walk_blocks(blocks)}
 
 
 def _every_block_type() -> set[str]:

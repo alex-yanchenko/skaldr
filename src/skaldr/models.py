@@ -36,6 +36,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import PydanticCustomError
+from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
@@ -1817,9 +1818,16 @@ class RequestCase(FrozenModel):
         return self
 
 
-MAX_REQUEST_CASES = 24
-"""How many cases one call may record. The stylesheet pairs a radio with its label by position, and
-writes that many pairs, so a case past this one would render without its label ever lighting up."""
+MAX_STRIP_LABELS = 24
+"""How many labels one tab strip may carry: a call's cases, or a tabs block's tabs. The stylesheet pairs
+a radio with its label by position, and writes that many pairs, so a label past this one would render
+without ever lighting up."""
+
+
+def _check_distinct_strip_labels(labels: Iterable[str], refusal: str) -> None:
+    repeated = sorted(label for label, count in Counter(labels).items() if count > 1)
+    if repeated:
+        raise ValueError(f"{refusal}: {', '.join(repeated)}")
 
 
 class _RequestCore(FrozenModel):
@@ -1908,13 +1916,10 @@ class _RequestCore(FrozenModel):
 
     @model_validator(mode="after")
     def _core_shape(self) -> "_RequestCore":
-        labels = [case.label for case in self.cases]
-        duplicated = {label for label in labels if labels.count(label) > 1}
-        if duplicated:
-            raise ValueError(f"request repeats a case label: {', '.join(sorted(duplicated))}")
-        if len(self.cases) > MAX_REQUEST_CASES:
+        _check_distinct_strip_labels((case.label for case in self.cases), "request repeats a case label")
+        if len(self.cases) > MAX_STRIP_LABELS:
             raise ValueError(
-                f"a request records at most {MAX_REQUEST_CASES} cases, and this one has "
+                f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
                 f"{len(self.cases)} — split it into blocks a reader can take in"
             )
         if self.case_variable is None:
@@ -2192,20 +2197,14 @@ class Tabs(_Block):
     type: Literal["tabs"]
     tabs: list[Tab] = Field(
         min_length=2,
-        description=f"The tabs, in strip order; the first starts chosen. Two to {MAX_REQUEST_CASES}, with "
+        max_length=MAX_STRIP_LABELS,
+        description=f"The tabs, in strip order; the first starts chosen. Two to {MAX_STRIP_LABELS}, with "
         "distinct labels. Every tab prints, each under its label.",
     )
 
     @model_validator(mode="after")
     def _shape(self) -> "Tabs":
-        if len(self.tabs) > MAX_REQUEST_CASES:
-            raise ValueError(
-                f"a tabs block holds at most {MAX_REQUEST_CASES} tabs, and this one has {len(self.tabs)}"
-            )
-        labels = [tab.label for tab in self.tabs]
-        repeated = sorted({label for label in labels if labels.count(label) > 1})
-        if repeated:
-            raise ValueError(f"tabs repeat a label: {', '.join(repeated)}")
+        _check_distinct_strip_labels((tab.label for tab in self.tabs), "tabs repeat a label")
         return self
 
 
@@ -2391,13 +2390,62 @@ Block = Annotated[
 AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
+def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+    match block:
+        case Section() | Panel() | Toggle() | InnerToggle():
+            return block.blocks
+        case Grid() | InnerGrid():
+            return [inner for cell in block.cells for inner in cell.blocks]
+        case Walkthrough():
+            return [inner for step in block.steps for inner in step.detail]
+        case Tabs():
+            return [inner for tab in block.tabs for inner in tab.blocks]
+        case (
+            Heading()
+            | Text()
+            | ListBlock()
+            | FactStrip()
+            | KeyValue()
+            | DefList()
+            | Cards()
+            | BadgeRow()
+            | Callout()
+            | StatusList()
+            | Meter()
+            | Range()
+            | Table()
+            | Code()
+            | Quote()
+            | Note()
+            | Divider()
+            | Image()
+            | Timeline()
+            | Flow()
+            | Fan()
+            | Chart()
+            | Comparison()
+            | Matrix()
+            | Swimlane()
+            | References()
+            | Request()
+            | RequestFlow()
+        ):
+            return ()
+        case _:
+            assert_never(block)
+
+
+def walk_blocks(blocks: Sequence[AnyBlock]) -> Iterator[AnyBlock]:
+    for block in blocks:
+        yield block
+        yield from walk_blocks(child_blocks(block))
+
+
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
     """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, (Request, RequestFlow)):
             yield block
-        elif isinstance(block, (Section, Panel, Toggle)):
-            yield from iter_requests(block.blocks)
 
 
 def unresolvable_request_variables(blocks: Sequence[AnyBlock]) -> set[str]:
@@ -2419,19 +2467,8 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
-    for block in blocks:
-        if isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_referenced_badge_keys(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_referenced_badge_keys(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_referenced_badge_keys(step.detail)
-        elif isinstance(block, Tabs):
-            for tab in block.tabs:
-                yield from iter_referenced_badge_keys(tab.blocks)
-        elif isinstance(block, BadgeRow):
+    for block in walk_blocks(blocks):
+        if isinstance(block, BadgeRow):
             for item in (*block.items, *(i for group in block.groups for i in group.items)):
                 if isinstance(item, BadgeRef):
                     yield item.key
@@ -2469,93 +2506,33 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
     """Every reference item in the block tree (recursing into sections and grids), in document
     order. One source for both the derived numbering and the global key-uniqueness check."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, References):
             yield from block.items
-        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_reference_items(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_reference_items(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_reference_items(step.detail)
-        elif isinstance(block, Tabs):
-            for tab in block.tabs:
-                yield from iter_reference_items(tab.blocks)
 
 
 def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
     """Every matrix in the block tree (recursing into containers), in document order — for the derived
     cell tallies and the matrix-id uniqueness / `of_matrix` reference checks."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Matrix):
             yield block
-        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_matrices(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_matrices(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_matrices(step.detail)
-        elif isinstance(block, Tabs):
-            for tab in block.tabs:
-                yield from iter_matrices(tab.blocks)
 
 
 def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     """Every table in the block tree (recursing into containers), in document order — for the derived
     row tallies and the table-id uniqueness / `of_tables` reference checks."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Table):
             yield block
-        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_tables(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_tables(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_tables(step.detail)
-        elif isinstance(block, Tabs):
-            for tab in block.tabs:
-                yield from iter_tables(tab.blocks)
 
 
 def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
     """Every card in the block tree (recursing into containers), in document order — for the
     `of_matrix`/`of_tables` reference checks and the derived-value computation."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Cards):
             yield from block.items
-        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_cards(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_cards(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_cards(step.detail)
-        elif isinstance(block, Tabs):
-            for tab in block.tabs:
-                yield from iter_cards(tab.blocks)
-
-
-def iter_tabs(blocks: Sequence[AnyBlock]) -> Iterator[Tabs]:
-    for block in blocks:
-        if isinstance(block, Tabs):
-            yield block
-            for tab in block.tabs:
-                yield from iter_tabs(tab.blocks)
-        elif isinstance(block, (Section, Panel, Toggle, InnerToggle)):
-            yield from iter_tabs(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_tabs(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_tabs(step.detail)
 
 
 class Report(FrozenModel):
