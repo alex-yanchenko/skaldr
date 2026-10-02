@@ -2566,7 +2566,7 @@ def test_swimlane_without_groups_has_one_subcolumn_per_column() -> None:
     block = _swimlane_block(make_report(blocks=[_swimlane()]))
 
     assert block.groups == []
-    assert block.subcolumns() == [("C1", None), ("C2", None)]
+    assert block.subcolumns() == (("C1", None), ("C2", None))
 
 
 def test_swimlane_orders_a_split_columns_subcolumns_by_span_then_declaration() -> None:
@@ -2591,13 +2591,13 @@ def test_swimlane_orders_a_split_columns_subcolumns_by_span_then_declaration() -
         )
     )
 
-    assert block.subcolumns() == [
+    assert block.subcolumns() == (
         ("S1", "MVP"),
         ("S2", "MVP"),
         ("S2", "Beta"),
         ("S2", "GA"),
         ("S3", "GA"),
-    ]
+    )
 
 
 def test_swimlane_leaves_an_ungrouped_column_among_grouped_columns_untouched() -> None:
@@ -2618,7 +2618,7 @@ def test_swimlane_leaves_an_ungrouped_column_among_grouped_columns_untouched() -
         )
     )
 
-    assert block.subcolumns() == [("Early", "Push"), ("Mid", "Push"), ("Late", None)]
+    assert block.subcolumns() == (("Early", "Push"), ("Mid", "Push"), ("Late", None))
 
 
 def test_chart_stacked_only_applies_to_bar() -> None:

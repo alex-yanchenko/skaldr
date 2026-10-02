@@ -161,7 +161,7 @@ def test_a_swimlane_places_each_step_by_lane_column_and_resolved_group() -> None
         swimlane.steps_at("Ops", "Plan", "Q1"),
         swimlane.steps_at("Ops", "Ship", None),
         swimlane.steps_at("Ops", "Plan", None),
-    ) == ([first, third], [second], [])
+    ) == ((first, third), (second,), ())
 
 
 def test_a_swimlane_group_spans_its_first_and_last_subcolumn() -> None:
