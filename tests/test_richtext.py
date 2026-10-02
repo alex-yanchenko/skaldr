@@ -467,6 +467,48 @@ def test_an_attribute_list_that_colors_no_text_fails_naming_the_token(text: str,
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        pytest.param("[a]{tone=info `c`}", "{tone=info …}", id="code-span"),
+        pytest.param("[a]{tone=info [^sop]}", "{tone=info …}", id="citation"),
+        pytest.param("[a]{bg=info $`x`$ tone=danger}", "{bg=info … tone=danger}", id="inline-math"),
+    ],
+)
+def test_an_attribute_list_holding_markup_fails_naming_the_token(text: str, token: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"x {text} y", FULL_CONTEXT)
+
+    assert str(raised.value) == (
+        f"the attribute list {token} holds a `code` span, math or a [^citation]: an attribute list "
+        "holds only key=value attributes, as in {tone=info bg=warning}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "[x](https://a.b/?q=[a]{tone=info})",
+            (Link((Plain("x"),), "https://a.b/?q=[a]{tone=info}"),),
+            id="span-syntax-inside-a-url",
+        ),
+        pytest.param(
+            "[a](https://x/]{tone=info})",
+            (Link((Plain("a"),), "https://x/]{tone=info}"),),
+            id="stray-attribute-list-inside-a-url",
+        ),
+        pytest.param(
+            "[[docs]{tone=info}](https://a.b/?q=[c]{bg=info})",
+            (Link((Tinted("info", None, (Plain("docs"),)),), "https://a.b/?q=[c]{bg=info}"),),
+            id="tinted-label-and-span-syntax-inside-the-url",
+        ),
+    ],
+)
+def test_a_link_url_is_never_read_as_an_attribute_span(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
 def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:
     assert parse_rich("[see `x` [^sop]](https://example.com/a)", FULL_CONTEXT) == (
         Link(
@@ -519,8 +561,17 @@ def test_a_placeholder_wrapped_around_other_markup_fails_without_leaking_the_sen
     assert "\x00" not in str(raised.value)
 
 
-def test_nul_bytes_in_the_input_are_dropped() -> None:
-    assert parse_rich("a\x00b **c**") == (Plain("ab "), Styled("bold", (Plain("c"),)))
+@pytest.mark.parametrize(
+    "marker", [pytest.param("\x00", id="nul"), pytest.param("\x01", id="start-of-heading")]
+)
+def test_the_control_characters_the_parser_marks_with_are_dropped_from_the_input(marker: str) -> None:
+    assert parse_rich(f"a{marker}b **c** [d](https://e.com) {marker}0{marker}") == (
+        Plain("ab "),
+        Styled("bold", (Plain("c"),)),
+        Plain(" "),
+        Link((Plain("d"),), "https://e.com"),
+        Plain(" 0"),
+    )
 
 
 def test_an_asterisk_inside_a_url_or_code_span_is_not_emphasis() -> None:

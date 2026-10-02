@@ -84,9 +84,17 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
-_SPAN_ATTRIBUTE_LIST: Final = r"\{(?=[^{}\x00]*?(?<![^\s{])(?:tone|bg)\s*=)([^{}\x00]*)\}"
-_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]" + _SPAN_ATTRIBUTE_LIST)
-_STRAY_ATTRIBUTE_LIST = re.compile(r"\]" + _SPAN_ATTRIBUTE_LIST)
+_LINK_TARGET = re.compile(r"(?<=\])\([^)\s]+\)")
+_LINK_TARGET_MARK = re.compile(r"\x01(\d+)\x01")
+_SET_ASIDE_MARKERS: Final = ("\x00", "\x01")
+
+
+def _attribute_list(excluded: str) -> str:
+    return rf"\{{(?=[^{{}}{excluded}]*?(?<![^\s{{])(?:tone|bg)\s*=)([^{{}}{excluded}]*)\}}"
+
+
+_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]" + _attribute_list("".join(_SET_ASIDE_MARKERS)))
+_STRAY_ATTRIBUTE_LIST = re.compile(r"\]" + _attribute_list(""))
 _SPAN_ATTRIBUTES: Final = frozenset({"tone", "bg"})
 _TONE: Final = TypeAdapter[ToneLiteral](Tone)
 _PALETTE_ONLY_NAMES: Final = tuple(
@@ -133,6 +141,21 @@ class _Stash:
         return tuple(runs)
 
 
+class _LinkTargets:
+    def __init__(self) -> None:
+        self.targets: list[str] = []
+
+    def set_aside(self, fragment: str) -> str:
+        return _LINK_TARGET.sub(self._set_aside_one, fragment)
+
+    def restored(self, fragment: str) -> str:
+        return _LINK_TARGET_MARK.sub(lambda match: self.targets[int(match.group(1))], fragment)
+
+    def _set_aside_one(self, match: re.Match[str]) -> str:
+        self.targets.append(match.group(0))
+        return f"\x01{len(self.targets) - 1}\x01"
+
+
 def _invalid_placeholder(name: str) -> ReportError:
     if "\x00" in name:
         return ReportError(
@@ -155,7 +178,8 @@ def _anchor_holding_markup(url: str) -> ReportError:
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     rules = context if context is not None else RichContext()
     stash = _Stash()
-    staged = _MATH_OR_CODE_SPAN.sub(partial(_set_aside_math_or_code, stash), text.replace("\x00", ""))
+    link_targets = _LinkTargets()
+    staged = _MATH_OR_CODE_SPAN.sub(partial(_set_aside_math_or_code, stash), _without_set_aside_markers(text))
 
     def cite(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -182,10 +206,10 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
             return stash.set_aside(Link(label, url))
         return match.group(0)
 
-    staged = _FOOTNOTE.sub(cite, staged)
+    staged = link_targets.set_aside(_FOOTNOTE.sub(cite, staged))
     staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
-    _refuse_stray_attribute_list(staged)
-    staged = _LINK.sub(link, staged)
+    _refuse_stray_attribute_list(staged, link_targets)
+    staged = _LINK.sub(link, link_targets.restored(staged))
     return _parse_styles(_set_aside_placeholders_and_scripts(stash, staged), 0, stash)
 
 
@@ -203,13 +227,27 @@ def _set_aside_placeholder(stash: _Stash, match: re.Match[str]) -> str:
     return stash.set_aside(Placeholder(name))
 
 
-def _refuse_stray_attribute_list(staged: str) -> None:
+def _without_set_aside_markers(text: str) -> str:
+    for marker in _SET_ASIDE_MARKERS:
+        text = text.replace(marker, "")
+    return text
+
+
+def _refuse_stray_attribute_list(staged: str, link_targets: _LinkTargets) -> None:
     stray = _STRAY_ATTRIBUTE_LIST.search(staged)
-    if stray:
+    if not stray:
+        return
+    attributes = stray.group(1)
+    token = _attribute_token(_SENTINEL.sub("…", link_targets.restored(attributes)))
+    if any(marker in attributes for marker in _SET_ASIDE_MARKERS):
         raise ReportError(
-            f"the attribute list {_attribute_token(stray.group(1))} follows no [text] it can color: the text "
-            "inside a [text]{…} span is not empty and holds no link and no other [ or ]"
+            f"the attribute list {token} holds a `code` span, math or a [^citation]: an attribute list "
+            "holds only key=value attributes, as in {tone=info bg=warning}"
         )
+    raise ReportError(
+        f"the attribute list {token} follows no [text] it can color: the text inside a [text]{{…}} span "
+        "is not empty and holds no link and no other [ or ]"
+    )
 
 
 def _attribute_token(attributes: str) -> str:
