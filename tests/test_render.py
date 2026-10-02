@@ -3865,7 +3865,10 @@ def test_a_row_hover_lays_a_translucent_wash_over_the_cell_so_a_column_tint_show
     assert _css_declarations(html, "& tbody tr.row:hover td") == [
         "background-image:linear-gradient(var(--row-hover),var(--row-hover))"
     ]
-    assert "--row-hover:color-mix(insrgb,var(--ink)5%,transparent);" in re.sub(r"\s+", "", html)
+    assert (
+        "--row-hover:light-dark(color-mix(insrgb,var(--ink)3%,transparent),"
+        "color-mix(insrgb,var(--ink)5%,transparent));" in re.sub(r"\s+", "", html)
+    )
 
 
 def test_single_width_column_renders_full_width() -> None:
