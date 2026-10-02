@@ -4,6 +4,9 @@ from collections.abc import Callable
 
 import keyring
 import pytest
+from keyring.backend import KeyringBackend
+from keyring.backends import fail, null
+from keyring.backends.chainer import ChainerBackend
 from pydantic import ValidationError
 
 from skaldr.auth.store import (
@@ -24,6 +27,7 @@ from tests.factories.auth_factory import (
     SITES_OFF_JIRA_CLOUD,
     InMemoryKeyring,
     LockedKeyring,
+    PlaintextKeyring,
     make_jira_credentials,
     make_notion_credentials,
 )
@@ -242,6 +246,71 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 
     with pytest.raises(AuthError, match=r"^The system keychain is unavailable: locked$"):
         operation()
+
+
+def insecure_keyring_refusal(backend: str) -> str:
+    return (
+        f"The keyring backend {backend} does not keep secrets in a secure store, so skaldr will not save to "
+        "it. Choose a secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's "
+        "keyringrc.cfg, for example keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring "
+        "or keyring.backends.SecretService.Keyring"
+    )
+
+
+@pytest.mark.parametrize(
+    ("backend", "name"),
+    [
+        (PlaintextKeyring(), "keyrings.alt.file.PlaintextKeyring"),
+        (null.Keyring(), "keyring.backends.null.Keyring"),
+        (fail.Keyring(), "keyring.backends.fail.Keyring"),
+    ],
+    ids=["keyrings.alt plaintext", "null", "fail"],
+)
+def test_saving_to_an_insecure_keyring_backend_is_refused_by_name(backend: KeyringBackend, name: str) -> None:
+    keyring.set_keyring(backend)
+
+    with pytest.raises(AuthError) as raised:
+        save_jira(make_jira_credentials())
+
+    assert str(raised.value) == insecure_keyring_refusal(name)
+
+
+def test_a_refused_plaintext_keyring_receives_nothing() -> None:
+    plaintext = PlaintextKeyring()
+    keyring.set_keyring(plaintext)
+
+    with pytest.raises(AuthError) as raised:
+        save_notion(make_notion_credentials())
+
+    assert (str(raised.value), plaintext.entries) == (
+        insecure_keyring_refusal("keyrings.alt.file.PlaintextKeyring"),
+        {},
+    )
+
+
+def test_a_chained_keyring_with_an_insecure_backend_in_it_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    secure, plaintext = InMemoryKeyring(), PlaintextKeyring()
+    monkeypatch.setattr(ChainerBackend, "backends", [secure, plaintext])
+    keyring.set_keyring(ChainerBackend())
+
+    with pytest.raises(AuthError) as raised:
+        save_jira(make_jira_credentials())
+
+    assert (str(raised.value), secure.entries, plaintext.entries) == (
+        insecure_keyring_refusal("keyrings.alt.file.PlaintextKeyring"),
+        {},
+        {},
+    )
+
+
+def test_a_chained_keyring_of_secure_backends_is_saved_to(monkeypatch: pytest.MonkeyPatch) -> None:
+    secure = InMemoryKeyring()
+    monkeypatch.setattr(ChainerBackend, "backends", [secure])
+    keyring.set_keyring(ChainerBackend())
+
+    save_jira(make_jira_credentials())
+
+    assert secure.entries == {("skaldr", "jira"): make_jira_credentials().model_dump_json()}
 
 
 @pytest.mark.parametrize(

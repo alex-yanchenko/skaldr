@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
 import keyring
+from keyring.backend import KeyringBackend
+from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
 from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
@@ -21,6 +23,7 @@ _NOTION_ACCESS_TOKEN = NOTION_ENVIRONMENT[0]
 _NOTION_CLIENT_ENVIRONMENT = NOTION_ENVIRONMENT[1:]
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
 _JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
+_INSECURE_KEYRINGS = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
 _SITE_SHAPE = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
@@ -162,7 +165,26 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
 
 def _save(service: Service, credentials: BaseModel) -> None:
     with _keychain_errors_as_auth_errors():
+        _refuse_an_insecure_keyring(keyring.get_keyring())
         keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
+
+
+def _refuse_an_insecure_keyring(backend: KeyringBackend) -> None:
+    chained: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
+    for candidate in chained:
+        module = type(candidate).__module__
+        if _is_an_insecure_keyring_module(module):
+            raise AuthError(
+                f"The keyring backend {module}.{type(candidate).__qualname__} does not keep secrets in a "
+                "secure store, so skaldr will not save to it. Choose a secure backend with the "
+                "PYTHON_KEYRING_BACKEND environment variable or keyring's keyringrc.cfg, for example "
+                "keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring or "
+                "keyring.backends.SecretService.Keyring"
+            )
+
+
+def _is_an_insecure_keyring_module(module: str) -> bool:
+    return any(module == insecure or module.startswith(f"{insecure}.") for insecure in _INSECURE_KEYRINGS)
 
 
 def _load_from_keychain(service: Service, model: type[CredentialsT]) -> CredentialsT | None:

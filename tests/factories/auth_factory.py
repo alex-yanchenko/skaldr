@@ -38,6 +38,10 @@ class InMemoryKeyring(KeyringBackend):
             raise PasswordDeleteError(username)
 
 
+class PlaintextKeyring(InMemoryKeyring):
+    __module__ = "keyrings.alt.file"
+
+
 class LockedKeyring(KeyringBackend):
     @properties.classproperty
     def priority(cls) -> float:
