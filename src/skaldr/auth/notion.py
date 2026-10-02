@@ -161,7 +161,7 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
         fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
         raise AuthError(
             f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
-        ) from exc
+        ) from None
     except json.JSONDecodeError as exc:
         raise AuthError("Notion's token answer is not JSON") from exc
 

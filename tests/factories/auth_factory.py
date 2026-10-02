@@ -74,25 +74,52 @@ MYSELF: dict[str, object] = {
 
 Visit = Callable[[str], str]
 
-SITES_OFF_JIRA_CLOUD = [
-    pytest.param("acme.atlassian.net@evil.example", id="userinfo that reads as the site"),
-    pytest.param("https://acme.atlassian.net@evil.example", id="userinfo after the scheme"),
-    pytest.param("https://reader:secret@acme.atlassian.net", id="a user name and password"),
-    pytest.param("https://evil.example#@acme.atlassian.net", id="a fragment before the site"),
-    pytest.param("https://evil.example\\@acme.atlassian.net", id="a backslash before the site"),
-    pytest.param("https://acme.atlassian.net/?next=/jira", id="a query"),
-    pytest.param("https://acme.atlassian.net/jira#top", id="a fragment"),
-    pytest.param("https://127.0.0.1", id="an ip literal"),
-    pytest.param("https://[::1]", id="an ipv6 literal"),
-    pytest.param("localhost:22", id="localhost with a port"),
-    pytest.param("https://evil.example", id="a host outside atlassian.net"),
-    pytest.param("https://atlassian.net", id="atlassian.net itself"),
-    pytest.param("https://acme.atlassian.net.evil.example", id="atlassian.net inside another host"),
-]
-
 
 def site_refusal(typed: str) -> str:
     return f"The Jira site must be an https URL like https://<site>.atlassian.net, not {typed!r}"
+
+
+USERINFO_REFUSAL = (
+    "The Jira site must be an https URL like https://<site>.atlassian.net, with no user name or password "
+    "before the host"
+)
+
+
+SITE_REFUSALS = [
+    pytest.param("acme.atlassian.net@evil.example", USERINFO_REFUSAL, id="userinfo that reads as the site"),
+    pytest.param("https://acme.atlassian.net@evil.example", USERINFO_REFUSAL, id="userinfo after the scheme"),
+    pytest.param("https://reader:secret@acme.atlassian.net", USERINFO_REFUSAL, id="a user name and password"),
+    pytest.param(
+        "https://evil.example#@acme.atlassian.net", USERINFO_REFUSAL, id="a fragment before the site"
+    ),
+    pytest.param(
+        "https://evil.example\\@acme.atlassian.net", USERINFO_REFUSAL, id="a backslash before the site"
+    ),
+    pytest.param(
+        "https://acme.atlassian.net/?next=/jira",
+        site_refusal("https://acme.atlassian.net/?next=/jira"),
+        id="a query",
+    ),
+    pytest.param(
+        "https://acme.atlassian.net/jira#top",
+        site_refusal("https://acme.atlassian.net/jira#top"),
+        id="a fragment",
+    ),
+    pytest.param("https://127.0.0.1", site_refusal("https://127.0.0.1"), id="an ip literal"),
+    pytest.param("https://[::1]", site_refusal("https://[::1]"), id="an ipv6 literal"),
+    pytest.param("localhost:22", site_refusal("localhost:22"), id="localhost with a port"),
+    pytest.param(
+        "https://evil.example", site_refusal("https://evil.example"), id="a host outside atlassian.net"
+    ),
+    pytest.param("https://atlassian.net", site_refusal("https://atlassian.net"), id="atlassian.net itself"),
+    pytest.param(
+        "https://acme.atlassian.net.evil.example",
+        site_refusal("https://acme.atlassian.net.evil.example"),
+        id="atlassian.net inside another host",
+    ),
+]
+
+SITES_OFF_JIRA_CLOUD = [pytest.param(case.values[0], id=case.id) for case in SITE_REFUSALS]
 
 
 def approving(state: str) -> str:

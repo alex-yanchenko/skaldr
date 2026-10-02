@@ -1,4 +1,5 @@
 import json
+import traceback
 from collections.abc import Callable
 
 import keyring
@@ -19,12 +20,12 @@ from skaldr.auth.store import (
 )
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
+    SITE_REFUSALS,
     SITES_OFF_JIRA_CLOUD,
     InMemoryKeyring,
     LockedKeyring,
     make_jira_credentials,
     make_notion_credentials,
-    site_refusal,
 )
 
 
@@ -161,6 +162,48 @@ def test_an_unreadable_keychain_entry_says_to_sign_in_again(keychain: InMemoryKe
         load_jira()
 
 
+@pytest.mark.parametrize(
+    ("service", "stored", "load"),
+    [
+        ("notion", '{"access_token": "secret-access-value"}', load_notion),
+        ("jira", '{"email": "e", "display_name": null, "api_token": "secret-access-value"}', load_jira),
+    ],
+    ids=["notion missing fields", "jira missing its site"],
+)
+def test_an_unreadable_keychain_entry_keeps_its_secret_out_of_the_traceback(
+    keychain: InMemoryKeyring, service: str, stored: str, load: Callable[[], object]
+) -> None:
+    keychain.entries[("skaldr", service)] = stored
+
+    with pytest.raises(AuthError) as raised:
+        load()
+
+    assert "secret-access-value" not in "".join(traceback.format_exception(raised.value))
+
+
+SITE_WITH_A_PASSWORD = "https://reader:secret-password@example.atlassian.net"
+
+
+def test_a_refused_site_keeps_its_password_out_of_the_traceback() -> None:
+    with pytest.raises(AuthError) as raised:
+        jira_credentials(SITE_WITH_A_PASSWORD, "e", "api-token")
+
+    assert "secret-password" not in "".join(traceback.format_exception(raised.value))
+
+
+def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JIRA_SITE", SITE_WITH_A_PASSWORD)
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+    monkeypatch.setenv("JIRA_API_TOKEN", "env-token")
+
+    with pytest.raises(AuthError) as raised:
+        load_jira()
+
+    assert "secret-password" not in "".join(traceback.format_exception(raised.value))
+
+
 def test_forget_deletes_the_entry_and_reports_whether_one_existed(keychain: InMemoryKeyring) -> None:
     save_jira(make_jira_credentials())
 
@@ -211,12 +254,12 @@ def test_a_site_that_is_not_an_https_origin_is_refused(typed: str) -> None:
         normalise_site(typed)
 
 
-@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
-def test_a_site_that_is_not_a_plain_jira_cloud_origin_is_refused(typed: str) -> None:
+@pytest.mark.parametrize(("typed", "refusal"), SITE_REFUSALS)
+def test_a_site_that_is_not_a_plain_jira_cloud_origin_is_refused(typed: str, refusal: str) -> None:
     with pytest.raises(AuthError) as raised:
         normalise_site(typed)
 
-    assert str(raised.value) == site_refusal(typed)
+    assert str(raised.value) == refusal
 
 
 @pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
@@ -231,9 +274,9 @@ def test_a_keychain_entry_for_a_site_off_jira_cloud_is_unreadable(
         load_jira()
 
 
-@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
+@pytest.mark.parametrize(("typed", "refusal"), SITE_REFUSALS)
 def test_a_jira_site_in_the_environment_off_jira_cloud_is_refused(
-    monkeypatch: pytest.MonkeyPatch, typed: str
+    monkeypatch: pytest.MonkeyPatch, typed: str, refusal: str
 ) -> None:
     monkeypatch.setenv("JIRA_SITE", typed)
     monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
@@ -242,7 +285,7 @@ def test_a_jira_site_in_the_environment_off_jira_cloud_is_refused(
     with pytest.raises(AuthError) as raised:
         load_jira()
 
-    assert str(raised.value) == f"JIRA_SITE: {site_refusal(typed)}"
+    assert str(raised.value) == f"JIRA_SITE: {refusal}"
 
 
 def test_jira_credentials_hold_only_an_https_origin() -> None:

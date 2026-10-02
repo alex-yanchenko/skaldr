@@ -19,6 +19,7 @@ Source = Literal["keychain", "environment"]
 NOTION_ENVIRONMENT = ("NOTION_ACCESS_TOKEN", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET")
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
 _JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
+_SITE_SHAPE = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
 class UnreadableEntryError(AuthError):
@@ -74,7 +75,7 @@ def jira_credentials(
     try:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
     except ValidationError as exc:
-        raise AuthError(exc.errors(include_input=False)[0]["msg"]) from exc
+        raise AuthError(exc.errors(include_input=False)[0]["msg"]) from None
 
 
 def save_notion(credentials: NotionCredentials) -> None:
@@ -144,7 +145,9 @@ def _carries_more_than_a_path(url: HttpUrl) -> bool:
 
 
 def _site_refusal(typed: str) -> str:
-    return f"The Jira site must be an https URL like https://<site>.atlassian.net, not {typed!r}"
+    if "@" in typed:
+        return f"{_SITE_SHAPE}, with no user name or password before the host"
+    return f"{_SITE_SHAPE}, not {typed!r}"
 
 
 @contextmanager
@@ -167,10 +170,10 @@ def _load_from_keychain(service: Service, model: type[CredentialsT]) -> Credenti
         return None
     try:
         return model.model_validate_json(stored)
-    except ValidationError as exc:
+    except ValidationError:
         raise UnreadableEntryError(
             f"The keychain entry for {service} is unreadable; run `skaldr auth {service}` again"
-        ) from exc
+        ) from None
 
 
 def _environment(name: str) -> str | None:

@@ -3,6 +3,7 @@ import os
 import re
 import socket
 import time
+import traceback
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
@@ -257,6 +258,7 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
         sign_in(FakeBrowser(approving), token=(200, answer))
 
     assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
+    assert "secret-refresh-value" not in "".join(traceback.format_exception(raised.value))
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:

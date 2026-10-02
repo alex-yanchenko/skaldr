@@ -6,12 +6,11 @@ from skaldr.auth.store import JiraCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     MYSELF,
-    SITES_OFF_JIRA_CLOUD,
+    SITE_REFUSALS,
     basic_auth_header,
     fake_api,
     make_jira_credentials,
     refusing_connections,
-    site_refusal,
     summarise,
 )
 
@@ -65,14 +64,14 @@ def test_a_token_is_never_sent_to_a_site_that_is_not_https() -> None:
     assert seen == []
 
 
-@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
-def test_a_token_is_never_sent_off_jira_cloud(typed: str) -> None:
+@pytest.mark.parametrize(("typed", "refusal"), SITE_REFUSALS)
+def test_a_token_is_never_sent_off_jira_cloud(typed: str, refusal: str) -> None:
     seen: list[httpx2.Request] = []
 
     with pytest.raises(AuthError) as raised:
         verify_jira_token(typed, "reader@example.com", "api-token", transport=fake_api({}, seen))
 
-    assert (str(raised.value), seen) == (site_refusal(typed), [])
+    assert (str(raised.value), seen) == (refusal, [])
 
 
 @pytest.mark.parametrize("status", [401, 403], ids=["unauthorized", "forbidden"])
