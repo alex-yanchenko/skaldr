@@ -1,15 +1,22 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Final, Literal, Protocol, get_args
+from typing import Final, Literal, Protocol, cast, get_args
 
 from pydantic import TypeAdapter, ValidationError
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.mathml import refuse_invalid_math
-from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
+from skaldr.models import (
+    ALLOWED_URL_SCHEMES,
+    REFERENCE_KEY_PATTERN,
+    BadgeColorLiteral,
+    Report,
+    Tone,
+    ToneLiteral,
+)
 
 MarkerStyle = Literal["bold", "italic", "strike"]
 StyleName = Literal[MarkerStyle, "underline"]
@@ -414,3 +421,20 @@ class VisibleText:
 
 def visible_text(runs: Rich) -> str:
     return write_runs(runs, VisibleText())
+
+
+def _string_fields(value: object, path: tuple[str, ...]) -> Iterator[tuple[str, str]]:
+    if isinstance(value, str):
+        yield ".".join(path), value
+    elif isinstance(value, dict):
+        for key, item in cast("dict[str, object]", value).items():
+            yield from _string_fields(item, (*path, key))
+    elif isinstance(value, list):
+        for index, item in enumerate(cast("list[object]", value)):
+            yield from _string_fields(item, (*path, str(index)))
+
+
+def located_rich_text_error(report: Report, text: str, error: ReportError) -> ReportError:
+    fields = _string_fields(report.model_dump(mode="json"), ())
+    field = next((path for path, value in fields if text in value), None)
+    return ReportError(f"{field}: {error}" if field else str(error))

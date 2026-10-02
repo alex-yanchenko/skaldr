@@ -94,7 +94,10 @@ def test_an_export_of_an_invalid_file_without_check_reports_the_error_and_writes
 
     assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
 
-    assert capsys.readouterr().err.startswith("error: rich text links to unknown anchor '#nowhere'")
+    assert capsys.readouterr().err == (
+        "error: blocks.0.body: rich text links to unknown anchor '#nowhere' — "
+        "no heading or section has that id\n"
+    )
     assert not export_dir.exists()
 
 

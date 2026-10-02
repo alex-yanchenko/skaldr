@@ -483,6 +483,43 @@ def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     assert "2 unfilled placeholders: ticket, url" in captured.err  # plural + sorted
 
 
+@pytest.mark.parametrize(
+    ("blocks", "message"),
+    [
+        pytest.param(
+            [
+                {"type": "text", "body": "Intro."},
+                {"type": "list", "items": ["fine", "the rate $`\\simga`$"]},
+            ],
+            "blocks.1.items.1: math expression '\\simga' uses \\simga, which latex2mathml does not know: "
+            "check its spelling, or write \\text{...} for literal text",
+            id="math-in-a-list-item",
+        ),
+        pytest.param(
+            [{"type": "list", "items": [{"text": "parent", "items": ["ok", "see [a]{tone=purple}"]}]}],
+            "blocks.0.items.0.items.1: unknown tone 'purple' in {tone=purple}: a tone is one of neutral, "
+            "info, success, warning, danger, accent, teal, sky, or a palette name slate, blue, green, amber, "
+            "red, violet",
+            id="tone-in-a-nested-point",
+        ),
+        pytest.param(
+            [{"type": "callout", "tone": "info", "body": "First.\n\nThen {{two words}}."}],
+            "blocks.0.body: invalid placeholder '{{two words}}': a placeholder name is letters, digits, '_' "
+            "or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="placeholder-in-a-second-paragraph",
+        ),
+    ],
+)
+def test_check_names_the_field_whose_rich_text_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], blocks: list[dict[str, object]], message: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (1, f"FAIL  {data_path}: {message}\n\n1 file failed\n")
+
+
 def test_check_strict_passes_when_no_placeholders_remain(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

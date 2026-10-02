@@ -35,6 +35,7 @@ from skaldr.richtext import (
     RichContext,
     ScriptPosition,
     StyleName,
+    located_rich_text_error,
     parse_rich,
     write_runs,
 )
@@ -175,7 +176,10 @@ def _render(
     cited_references: set[str] = set()
 
     def richtext(text: str) -> Markup:
-        return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
+        try:
+            return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
+        except ReportError as error:
+            raise located_rich_text_error(report, str(text), error) from error
 
     filters = cast("dict[str, Any]", env.filters)
     filters["richtext"] = richtext
