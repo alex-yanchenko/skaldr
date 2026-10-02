@@ -92,6 +92,7 @@ def _environment() -> Environment:
     )
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
+    filters["paragraphs"] = compute.paragraphs
     filters["richtext"] = render_richtext
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(

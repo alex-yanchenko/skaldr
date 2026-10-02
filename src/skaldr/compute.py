@@ -583,6 +583,10 @@ def provenance_footer(report: Report) -> str | None:
     return " · ".join(parts) if parts else None
 
 
+def paragraphs(text: str) -> list[str]:
+    return [part.strip() for part in text.split("\n\n") if part.strip()]
+
+
 def fmt(value: Any) -> str:
     """Thousands separators for ints/whole floats; strings pass through untouched."""
     if isinstance(value, bool):

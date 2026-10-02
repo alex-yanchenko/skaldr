@@ -1,15 +1,18 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
+from skaldr.models import ListStyle, ToneLiteral
 
-ToneName = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky", "muted"]
-ListKind = Literal["bullet", "number", "check"]
+ToneName = Literal[ToneLiteral, "muted"]
+ListKind = ListStyle
+HeadingLevel = Literal[1, 2, 3, 4]
+HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 
 
 @dataclass(frozen=True)
 class Heading:
-    level: int
+    level: HeadingLevel
     text: ExportRich
     anchor: str | None = None
 
@@ -55,7 +58,7 @@ class Quote:
 @dataclass(frozen=True)
 class Toggle:
     title: ExportRich
-    heading_level: int | None
+    heading_level: HeadingLevel | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
 
@@ -78,6 +81,18 @@ Node = Heading | Paragraph | ListNode | CodeBlock | Callout | Quote | Toggle | T
 class LoweredDocument:
     title: str
     body: tuple[Node, ...]
+
+
+def capped_heading_level(level: int) -> HeadingLevel:
+    return HEADING_LEVELS[max(1, min(level, len(HEADING_LEVELS))) - 1]
+
+
+def heading_of(node: Node) -> Heading | None:
+    if isinstance(node, Heading):
+        return node
+    if isinstance(node, Toggle) and node.heading_level is not None:
+        return Heading(node.heading_level, node.title, node.anchor)
+    return None
 
 
 def nested_nodes(node: Node) -> tuple[Node, ...]:

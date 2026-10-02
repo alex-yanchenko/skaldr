@@ -19,7 +19,7 @@ from typing import Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.export import EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
@@ -176,8 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         "--export",
         choices=EXPORT_TARGETS,
         help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
-        "(tabs, callouts, columns, toggles, colored table cells) to paste or send through the Notion MCP; "
-        "`markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
+        "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
     )
     parser.add_argument(
         "--export-dir",
@@ -188,9 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         "--chunk",
         type=int,
         metavar="N",
-        help="with --export notion: split the page into files of at most N characters, each after the "
-        "first starting at a level 1 or 2 heading, for a tool or a paste box that caps its input size. A "
-        "single section longer than N stays whole.",
+        help="with --export notion: split the page into files of at most N characters, counted in Unicode "
+        "code points rather than bytes, each after the first starting at a level 1 or 2 heading, for a tool "
+        "or a paste box that caps its input size. A single section longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -439,9 +438,11 @@ def _reject_flags_that_do_not_fit_an_export(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
     if not args.export:
-        if args.export_dir or args.chunk is not None:
+        if args.export_dir is not None or args.chunk is not None:
             parser.error("--export-dir and --chunk only apply with --export")
         return
+    if args.export_dir is not None and not args.export_dir.strip():
+        parser.error("--export-dir needs a folder path")
     if args.out or args.pdf or args.embed or args.watch or args.emit_json:
         parser.error(
             "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
@@ -458,7 +459,7 @@ def _reject_flags_that_do_not_fit_an_export(
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
     out_dir = (
-        Path(export_dir) if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
+        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
     ).resolve()
     try:
         report = load_report(data_path)
@@ -472,6 +473,12 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
     except (ReportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if result.unreadable_manifest:
+        manifest = out_dir / EXPORT_MANIFEST
+        print(
+            f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
+            file=sys.stderr,
+        )
     for heading in result.oversized_sections:
         print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
     for path in result.files:

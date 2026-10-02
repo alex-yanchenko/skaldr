@@ -11,6 +11,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -20,15 +21,17 @@ from skaldr.export.tree import (
     TableOfContents,
     TocEntry,
     Toggle,
+    capped_heading_level,
+    heading_of,
 )
 from skaldr.models import StatusState, TimelineState, parse_report
-from skaldr.richtext import Code, Link, Plain, Styled
-from tests.factories import API_BADGES, lowered, make_report
+from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
+from tests.factories import API_BADGES, lowered, make_cell, make_flow, make_grid, make_report
 
 API_LEGEND = Toggle(
     (Plain("Legend: badges used on this page"),),
     None,
-    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" the API"))),)),),
+    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" "), Plain("the API"))),)),),
 )
 
 
@@ -41,15 +44,76 @@ def test_a_report_lowers_to_its_title_and_body() -> None:
     )
 
 
-def test_a_block_with_no_markdown_form_yet_fails_naming_its_type() -> None:
-    with pytest.raises(ReportError, match=r"^a `flow` block has no Markdown export yet$"):
-        lowered([{"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}])
+@pytest.mark.parametrize(
+    ("block", "block_type"),
+    [
+        pytest.param({"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}, "flow", id="flow"),
+        pytest.param(
+            {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "A"}, {"label": "B"}]},
+            "fan",
+            id="fan",
+        ),
+        pytest.param(make_grid([make_cell(6)]), "grid", id="grid"),
+        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    ],
+)
+def test_a_block_with_no_markdown_form_yet_fails_naming_its_type(
+    block: dict[str, Any], block_type: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        lowered([block])
+
+    assert str(raised.value) == f"a `{block_type}` block has no Markdown export yet"
+
+
+def test_a_walkthrough_step_with_no_sub_is_its_bold_label() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "d"}]}],
+    }
+
+    assert lowered([walkthrough]) == (
+        ListNode("number", (ListEntry(bold("Go"), children=(Paragraph((Plain("d"),)),)),)),
+    )
 
 
 def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
     assert lowered([{"type": "text", "body": "run  `a  b`\nnow"}]) == (
         Paragraph((Plain("run "), Code("a  b"), Plain(" now"))),
     )
+
+
+@pytest.mark.parametrize(
+    ("item", "runs"),
+    [
+        pytest.param("[a\nb](https://e.com)", (Link((Plain("a b"),), "https://e.com"),), id="link-label"),
+        pytest.param("[a\nb](#count)", (AnchorLink((Plain("a b"),), "count"),), id="anchor-link-label"),
+        pytest.param("**a\nb**", (Styled("bold", (Plain("a b"),)),), id="styled"),
+        pytest.param("  x  ", (Plain("x"),), id="outer-spaces-trimmed"),
+        pytest.param("  `x`  ", (Code("x"),), id="outer-spaces-around-code-dropped"),
+        pytest.param("`x\ry`", (Code("x y"),), id="code-carriage-return"),
+        pytest.param("`x\r\ny`", (Code("x y"),), id="code-crlf"),
+    ],
+)
+def test_rich_text_lowers_onto_one_line(item: str, runs: Rich) -> None:
+    blocks = [{"type": "heading", "text": "Count"}, {"type": "list", "items": [item]}]
+
+    assert lowered(blocks) == (
+        Heading(2, (Plain("Count"),), "count"),
+        ListNode("bullet", (ListEntry(runs),)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("Appendix\n", (Plain("Appendix"),), id="trailing-newline"),
+        pytest.param("  a \n b  ", (Plain("a b"),), id="inner-and-outer-whitespace"),
+        pytest.param(" \n ", (), id="only-whitespace"),
+    ],
+)
+def test_plain_text_is_trimmed_and_collapsed_to_one_line(text: str, runs: Rich) -> None:
+    assert plain(text) == runs
 
 
 def test_an_author_heading_id_becomes_the_anchor() -> None:
@@ -80,6 +144,36 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
     }
 
     assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
+@pytest.mark.parametrize(
+    ("level", "capped"),
+    [
+        pytest.param(0, 1, id="below-the-range"),
+        pytest.param(1, 1, id="top"),
+        pytest.param(4, 4, id="the-cap"),
+        pytest.param(7, 4, id="past-the-cap"),
+    ],
+)
+def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:
+    assert capped_heading_level(level) == capped
+
+
+@pytest.mark.parametrize(
+    ("node", "heading"),
+    [
+        pytest.param(Heading(3, (Plain("H"),), "h"), Heading(3, (Plain("H"),), "h"), id="heading"),
+        pytest.param(
+            Toggle((Plain("T"),), 2, (Paragraph((Plain("x"),)),), "t"),
+            Heading(2, (Plain("T"),), "t"),
+            id="heading-toggle",
+        ),
+        pytest.param(Toggle((Plain("T"),), None, ()), None, id="plain-toggle"),
+        pytest.param(Paragraph((Plain("p"),)), None, id="paragraph"),
+    ],
+)
+def test_a_heading_or_a_heading_toggle_reads_as_a_heading(node: Node, heading: Heading | None) -> None:
+    assert heading_of(node) == heading
 
 
 def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
@@ -165,8 +259,10 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
                         *bold("Clean"),
                         Plain(": "),
                         Plain("9"),
-                        Plain(" (90.0%)"),
-                        Plain(" ▲ +1"),
+                        Plain(" "),
+                        Plain("(90.0%)"),
+                        Plain(" "),
+                        Plain("▲ +1"),
                         Plain(" "),
                         Chip("api", "blue"),
                     ),
@@ -186,7 +282,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         ),
         pytest.param(
             {"label": "Lag", "value": 3, "delta": {"label": "flat"}},
-            (*bold("Lag"), Plain(": "), Plain("3"), Plain(" flat")),
+            (*bold("Lag"), Plain(": "), Plain("3"), Plain(" "), Plain("flat")),
             id="delta-without-direction",
         ),
         pytest.param(
@@ -242,7 +338,8 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
             "bullet",
             (
                 ListEntry(
-                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" 50.0% (5 of 10)")), tone="warning"
+                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" "), Plain("50.0% (5 of 10)")),
+                    tone="warning",
                 ),
             ),
         ),
@@ -377,7 +474,11 @@ def test_a_badge_label_or_legend_with_a_line_break_stays_on_one_line() -> None:
         Toggle(
             (Plain("Legend: badges used on this page"),),
             None,
-            (ListNode("bullet", (ListEntry((Chip("a pi", "blue"), Plain(" the API, - folded "))),)),),
+            (
+                ListNode(
+                    "bullet", (ListEntry((Chip("a pi", "blue"), Plain(" "), Plain("the API, - folded"))),)
+                ),
+            ),
         ),
         Paragraph((Chip("a pi", "blue"),)),
     )

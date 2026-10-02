@@ -362,6 +362,14 @@ def test_single_paragraph_callout_stays_inline_without_a_paragraph_wrapper() -> 
     assert '<p class="prose-p">' not in html  # no paragraph wrapper emitted for a single paragraph
 
 
+def test_a_run_of_blank_lines_in_a_text_body_writes_no_empty_paragraph() -> None:
+    block = {"type": "text", "body": "a\n\n\n\nb\n\n"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert re.findall(r'<p class="text">.*?</p>', html) == ['<p class="text">a</p>', '<p class="text">b</p>']
+
+
 def test_quote_body_splits_blank_line_paragraphs() -> None:
     block = {"type": "quote", "body": "Line one.\n\nLine two.", "cite": "src"}
 
@@ -2498,12 +2506,54 @@ def test_richtext_escapes_a_link_target_inside_its_href() -> None:
             "<del>a <strong>b ~~ c</strong> d</del>",
             id="strike-holds-a-bold-with-tildes",
         ),
+        pytest.param("*a **b* c**", "*a **b* c**", id="italic-crossing-bold-stays-text"),
     ],
 )
 def test_richtext_crossed_emphasis_nests_inside_the_first_match_instead_of_interleaving_tags(
     text: str, html: str
 ) -> None:
     assert str(render_richtext(text)) == html
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param(
+            "~~cut from **~5 days**~~ to 2",
+            "<del>cut from <strong>~5 days</strong></del> to 2",
+            id="a-tilde-inside-a-bold-leaves-the-strike-around-it",
+        ),
+        pytest.param(
+            "*see ~~a**b~~ here*",
+            "<em>see <del>a**b</del> here</em>",
+            id="asterisks-inside-a-strike-leave-the-italic-around-it",
+        ),
+    ],
+)
+def test_richtext_a_marker_character_inside_an_inner_emphasis_does_not_block_the_outer_one(
+    text: str, html: str
+) -> None:
+    assert str(render_richtext(text)) == html
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("[l](https://a.io/`c`)", "[l](https://a.io/<code>c</code>)", id="code-span"),
+        pytest.param(
+            "[l](https://a.io/[^sop])",
+            '[l](https://a.io/<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>)',
+            id="citation",
+        ),
+    ],
+)
+def test_richtext_a_web_link_whose_target_holds_markup_stays_text(text: str, html: str) -> None:
+    assert str(render_richtext(text, {"sop": 1})) == html
+
+
+def test_richtext_rejects_an_anchor_link_whose_target_holds_a_code_span() -> None:
+    with pytest.raises(ReportError, match=r"links to the anchor '#sec…', whose target holds a `code` span"):
+        render_richtext("[l](#sec`c`)", anchor_ids=frozenset({"sec"}))
 
 
 def test_richtext_renders_a_placeholder_as_a_chip_and_collects_it() -> None:

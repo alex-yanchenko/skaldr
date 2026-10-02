@@ -58,7 +58,7 @@ _CODE_SPAN = re.compile(r"`([^`]+)`")
 _FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
-_PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_-]+")
+_PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
 _STYLE_PASSES: tuple[tuple[re.Pattern[str], StyleName], ...] = (
     (re.compile(r"\*\*([^*]+)\*\*"), "bold"),

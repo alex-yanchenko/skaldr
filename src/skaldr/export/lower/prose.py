@@ -1,9 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import PurePosixPath
+from typing import Final
 
 from skaldr import compute, models
 from skaldr.errors import ReportError
-from skaldr.export.inline import bold, italic, labelled, one_line, paragraphs, plain
+from skaldr.export.inline import bold, italic, labelled, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced
 from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import (
@@ -19,7 +20,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Code, Link, Plain
 
-CODE_LANGUAGE_BY_SUFFIX: dict[str, str] = {
+CODE_LANGUAGE_BY_SUFFIX: Final[Mapping[str, str]] = {
     ".ts": "typescript",
     ".tsx": "typescript",
     ".js": "javascript",
@@ -72,7 +73,7 @@ def lower_def_list(block: models.DefList, lowering: Lowering) -> list[Node]:
 
 
 def _definition(term: str, body: str, lowering: Lowering) -> ListEntry:
-    parts = paragraphs(body)
+    parts = compute.paragraphs(body)
     first = lowering.rich(parts[0]) if parts else ()
     rest = tuple(Paragraph(lowering.rich(part)) for part in parts[1:])
     return ListEntry(labelled(term) + first, children=rest)
@@ -86,7 +87,7 @@ def _delta(delta: models.CardDelta) -> ExportRich:
     text = f"{compute.DELTA_GLYPHS[delta.direction]} {delta.label}" if delta.direction else delta.label
     if delta.tone:
         return (Plain(" "), Chip(one_line(text), models.badge_color_of(delta.tone)))
-    return plain(f" {text}")
+    return (Plain(" "), *plain(text))
 
 
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
@@ -94,12 +95,12 @@ def _card(card: models.Card, lowering: Lowering) -> ListEntry:
         raise ReportError("a derived `cards` item has no Markdown export yet")
     value: ExportRich = plain(compute.fmt(card.value)) if card.value is not None else ()
     if card.of and isinstance(card.value, (int, float)):
-        value += plain(f" ({compute.pct(card.value, card.of)})")
+        value += (Plain(" "), *plain(f"({compute.pct(card.value, card.of)})"))
     if card.delta:
         value += _delta(card.delta)
     text = (labelled(card.label) + value) if card.label else value
     if card.badges:
-        text += plain(" ") + lowering.chips(card.badges)
+        text += (Plain(" "), *lowering.chips(card.badges))
     children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
     return ListEntry(text, children=children, tone=card.tone)
 
@@ -137,8 +138,10 @@ def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node
 
 
 def _meter_entry(item: models.MeterItem) -> ListEntry:
-    reading = f" {compute.pct(item.value, item.max)} ({compute.fmt(item.value)} of {compute.fmt(item.max)})"
-    return ListEntry((*labelled(item.label), Gauge(item.value, item.max), *plain(reading)), tone=item.tone)
+    reading = f"{compute.pct(item.value, item.max)} ({compute.fmt(item.value)} of {compute.fmt(item.max)})"
+    return ListEntry(
+        (*labelled(item.label), Gauge(item.value, item.max), Plain(" "), *plain(reading)), tone=item.tone
+    )
 
 
 def lower_meter(block: models.Meter) -> list[Node]:
@@ -148,7 +151,7 @@ def lower_meter(block: models.Meter) -> list[Node]:
 def _range_segment(segment: models.RangeSegment, total: float, lowering: Lowering) -> ListEntry:
     text = labelled(segment.label) + plain(compute.pct(segment.span, total))
     if segment.sub:
-        text += plain(", ") + lowering.rich(segment.sub)
+        text += (Plain(", "), *lowering.rich(segment.sub))
     return ListEntry(text, tone=segment.tone)
 
 
@@ -184,7 +187,7 @@ def lower_code(block: models.Code) -> list[Node]:
 
 
 def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
-    lines = tuple(lowering.rich(part) for part in paragraphs(block.body))
+    lines = tuple(lowering.rich(part) for part in compute.paragraphs(block.body))
     return [Quote(lines, plain(block.cite) if block.cite else ())]
 
 
@@ -198,7 +201,7 @@ def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:
     if item.state:
         text = _marked(Mark("timeline", item.state), text)
     if item.badges:
-        text += plain(" ") + lowering.chips(item.badges)
+        text += (Plain(" "), *lowering.chips(item.badges))
     children: tuple[Node, ...] = (Paragraph(lowering.rich(item.body)),) if item.body else ()
     return ListEntry(text, children=children)
 
