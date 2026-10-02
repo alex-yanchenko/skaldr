@@ -919,7 +919,7 @@ pulls in, and the emitted JSON is fully flattened.
 
 ## Where it publishes: `publish`
 
-An optional top-level `publish` block says where the document lives outside skaldr: Notion pages and Jira issues. `where` has a different shape for each service; the other keys mean the same thing everywhere. An item whose content leaves the document is archived, never deleted: a Notion page moves to the trash, where it can be restored, and a Jira issue is closed.
+An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, so writing the block and signing in with `skaldr auth` changes nothing about what a render or an export does. `where` has a different shape for each service; the other keys mean the same thing everywhere.
 
 ```yaml
 publish:

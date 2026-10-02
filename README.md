@@ -82,7 +82,7 @@ There are no styling flags — everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
+`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
