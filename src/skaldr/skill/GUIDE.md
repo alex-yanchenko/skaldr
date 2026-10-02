@@ -156,8 +156,9 @@ To show a literal `{{`, put it in a `` `code` `` span.
 ## Numbers are formatted for you
 
 Write raw numbers (`8500`, not `"8,500"`). skaldr adds thousands separators, computes
-percentages, subtotals, and the reconciliation line. A number field rejects booleans and
-infinities.
+percentages, subtotals, and the reconciliation line. A number field, a table `number` cell and a
+subrow value reject booleans, infinities, and anything beyond 1e300 in either direction, so the sums
+and chart axes skaldr derives always stay finite.
 
 ## Blocks
 

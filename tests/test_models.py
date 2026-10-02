@@ -2131,7 +2131,7 @@ def test_reconcile_without_handled_bucket_passes() -> None:
 def test_number_column_rejects_non_finite_value() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "x", "count": float("inf")}]}])
 
-    with pytest.raises(ReportError, match=r"count: number column must be finite"):
+    with pytest.raises(ReportError, match=r"groups\.0\.rows\.0\.count: must be a finite number$"):
         parse_report(make_report(blocks=[table]))
 
 
@@ -2219,8 +2219,79 @@ def test_subrow_value_rejects_non_finite() -> None:
         reconcile={"total": 10, "column": "count"}, groups=[{"name": "g", "rows": [row]}]
     )
 
-    with pytest.raises(ReportError, match=r"subrows\.0\.value: number must be finite"):
+    with pytest.raises(ReportError, match=r"subrows\.0\.value: must be a finite number$"):
         parse_report(make_report(blocks=[table]))
+
+
+BEYOND_FLOAT_RANGE = 10**400
+NUMBER_OUT_OF_RANGE = "must be between -1e+300 and 1e+300"
+
+
+def _bar_chart(*values: float) -> dict[str, Any]:
+    return {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["a"],
+        "series": [{"label": f"s{index}", "values": [value]} for index, value in enumerate(values)],
+    }
+
+
+@pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(
+            make_reconciled_table(
+                groups=[{"name": "g", "rows": [{"issue": "x", "count": BEYOND_FLOAT_RANGE}]}]
+            ),
+            f"blocks.0.table: Value error, groups.0.rows.0.count: {NUMBER_OUT_OF_RANGE}",
+            id="table-number-cell-beyond-float-range",
+        ),
+        pytest.param(
+            make_reconciled_table(
+                reconcile={"total": 10, "column": "count"},
+                groups=[
+                    {
+                        "name": "g",
+                        "rows": [
+                            {
+                                "issue": "x",
+                                "count": 10,
+                                "subrows": [{"label": "a", "value": BEYOND_FLOAT_RANGE}],
+                            }
+                        ],
+                    }
+                ],
+            ),
+            f"blocks.0.table: Value error, groups.0.rows.0.subrows.0.value: {NUMBER_OUT_OF_RANGE}",
+            id="subrow-value-beyond-float-range",
+        ),
+        pytest.param(
+            _bar_chart(1e308, 1e308),
+            f"blocks.0.chart.series.0.values.0: Value error, {NUMBER_OUT_OF_RANGE}; "
+            f"blocks.0.chart.series.1.values.0: Value error, {NUMBER_OUT_OF_RANGE}",
+            id="chart-value-near-the-float-limit",
+        ),
+        pytest.param(
+            {"type": "chart", "variant": "donut", "slices": [{"label": "a", "value": 1e301}]},
+            f"blocks.0.chart.slices.0.value: Value error, {NUMBER_OUT_OF_RANGE}",
+            id="donut-slice-past-the-bound",
+        ),
+        pytest.param(
+            {"type": "cards", "items": [{"label": "x", "value": -BEYOND_FLOAT_RANGE}]},
+            f"blocks.0.cards.items.0.value.function-before[_reject_bool_and_non_finite(), "
+            f"union[int,float]]: Value error, {NUMBER_OUT_OF_RANGE}; "
+            "blocks.0.cards.items.0.value.str: Input should be a valid string",
+            id="card-value-below-the-negative-bound",
+        ),
+    ],
+)
+def test_a_number_beyond_the_shared_bound_is_refused_with_its_path(
+    block: dict[str, Any], location: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {location}"
 
 
 def test_table_requires_a_text_or_rich_column() -> None:

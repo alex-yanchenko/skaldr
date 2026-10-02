@@ -459,6 +459,21 @@ def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.Cap
     assert f"FAIL  {data_path}" in captured.err
 
 
+def test_check_reports_a_number_cell_beyond_float_range_as_a_failed_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "x", "count": 10**400}]}])
+    data_path = _write(tmp_path, make_report(blocks=[table]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: invalid content data: blocks.0.table: Value error, groups.0.rows.0.count: "
+        "must be between -1e+300 and 1e+300\n\n1 file failed\n",
+    )
+
+
 def test_check_notes_unfilled_placeholders_but_passes_without_strict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

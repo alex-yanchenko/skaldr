@@ -4593,6 +4593,38 @@ def test_chart_escapes_author_category_labels() -> None:
     assert "&lt;x&gt;" in html  # the label is escaped inside the SVG <text>, never raw markup
 
 
+def _bar_chart_at_the_bound(**overrides: object) -> dict[str, object]:
+    return {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["a"],
+        "series": [{"label": "s0", "values": [1e300]}, {"label": "s1", "values": [1e300]}],
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(_bar_chart_at_the_bound(), id="grouped-bars"),
+        pytest.param(_bar_chart_at_the_bound(stacked=True), id="stacked-bars"),
+        pytest.param(_bar_chart_at_the_bound(variant="line"), id="lines"),
+        pytest.param(
+            {
+                "type": "chart",
+                "variant": "donut",
+                "slices": [{"label": "a", "value": 1e300}, {"label": "b", "value": 1e300}],
+            },
+            id="donut",
+        ),
+    ],
+)
+def test_a_chart_of_the_largest_numbers_skaldr_accepts_still_renders(block: dict[str, object]) -> None:
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert html.count('role="img"') == 1
+
+
 def _command_page(**overrides: object) -> str:
     return render_html(parse_report(make_report(blocks=[make_command_request(**overrides)])))
 

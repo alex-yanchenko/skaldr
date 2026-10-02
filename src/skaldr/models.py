@@ -71,6 +71,9 @@ REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 ANCHOR_ID_PATTERN = SLUG_PATTERN
 
 
+LARGEST_NUMBER: Final = 1e300
+
+
 def _reject_bool_and_non_finite(value: Any) -> Any:
     """Guard numeric fields at the boundary: `bool` is an int subclass pydantic would silently
     coerce (`value: true` → 1), and `.inf`/`.nan` render as literal 'inf'/'nan'. Non-numbers pass
@@ -79,11 +82,16 @@ def _reject_bool_and_non_finite(value: Any) -> Any:
         raise ValueError("must be a number, not a boolean")
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError("must be a finite number")
-    # A Python int is unbounded; one beyond the float range overflows any float arithmetic
-    # downstream (e.g. chart axis scaling). Reject it at the boundary rather than crash later.
-    if isinstance(value, int) and abs(value) > sys.float_info.max:
-        raise ValueError("must be a finite number")
+    if isinstance(value, int | float) and abs(value) > LARGEST_NUMBER:
+        raise ValueError(f"must be between -{LARGEST_NUMBER:g} and {LARGEST_NUMBER:g}")
     return value
+
+
+def _refuse_an_unusable_number(value: int | float, location: str) -> None:
+    try:
+        _reject_bool_and_non_finite(value)
+    except ValueError as error:
+        raise ValueError(f"{location}: {error}") from error
 
 
 # Numeric field types that reject bool + non-finite before pydantic coerces them.
@@ -979,8 +987,7 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
             if column.kind == "number":
                 if isinstance(value, bool) or not isinstance(value, int | float):
                     raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
-                if not math.isfinite(value):
-                    raise ValueError(f"{loc}.{index}.{column.key}: number column must be finite")
+                _refuse_an_unusable_number(value, f"{loc}.{index}.{column.key}")
             elif column.kind == "badge" and column.placement == "cell":
                 # an in-cell badge holds one key or a list of keys (several wrapping chips)
                 badge_vals = _as_badge_list(value)
@@ -1019,8 +1026,8 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                 sub_value = subrow["value"]
                 if isinstance(sub_value, bool) or not isinstance(sub_value, int | float | str):
                     raise ValueError(f"{sub_loc}.value: must be a number or string")
-                if isinstance(sub_value, float) and not math.isfinite(sub_value):
-                    raise ValueError(f"{sub_loc}.value: number must be finite")
+                if not isinstance(sub_value, str):
+                    _refuse_an_unusable_number(sub_value, f"{sub_loc}.value")
 
 
 # A table row is authored as a mapping (column key → value) OR a positional list of values in column
