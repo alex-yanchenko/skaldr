@@ -159,11 +159,11 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
         raise _unreachable(exc) from exc
     except ValidationError as exc:
         fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
-        raise AuthError(
-            f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
-        ) from None
     except json.JSONDecodeError as exc:
         raise AuthError("Notion's token answer is not JSON") from exc
+    raise AuthError(
+        f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
+    )
 
 
 def _unreachable(exc: httpx2.HTTPError) -> AuthError:

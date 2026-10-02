@@ -80,7 +80,8 @@ def jira_credentials(
     try:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
     except ValidationError as exc:
-        raise AuthError(exc.errors(include_input=False)[0]["msg"]) from None
+        refusal: str = exc.errors(include_input=False)[0]["msg"]
+    raise AuthError(refusal)
 
 
 def save_notion(credentials: NotionCredentials) -> None:
@@ -200,9 +201,10 @@ def _load_from_keychain(service: Service, model: type[CredentialsT]) -> Credenti
     try:
         return model.model_validate_json(stored)
     except ValidationError:
-        raise UnreadableEntryError(
-            f"The keychain entry for {service} is unreadable; run `skaldr auth {service}` again"
-        ) from None
+        pass
+    raise UnreadableEntryError(
+        f"The keychain entry for {service} is unreadable; run `skaldr auth {service}` again"
+    )
 
 
 def _environment(name: str) -> str | None:
@@ -242,4 +244,5 @@ def _jira_from_environment() -> JiraCredentials | None:
     try:
         return jira_credentials(site, email, api_token)
     except AuthError as exc:
-        raise AuthError(f"JIRA_SITE: {exc}") from exc
+        refusal = str(exc)
+    raise AuthError(f"JIRA_SITE: {refusal}")

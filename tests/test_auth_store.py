@@ -1,5 +1,4 @@
 import json
-import traceback
 from collections.abc import Callable
 
 import keyring
@@ -24,6 +23,7 @@ from skaldr.auth.store import (
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     SITE_REFUSALS,
+    SITE_WITH_A_PASSWORD,
     SITES_OFF_JIRA_CLOUD,
     InMemoryKeyring,
     LockedKeyring,
@@ -31,6 +31,7 @@ from tests.factories.auth_factory import (
     insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
+    rendered_traceback,
 )
 
 
@@ -204,17 +205,24 @@ def test_an_unreadable_keychain_entry_keeps_its_secret_out_of_the_traceback(
     with pytest.raises(AuthError) as raised:
         load()
 
-    assert "secret-access-value" not in "".join(traceback.format_exception(raised.value))
-
-
-SITE_WITH_A_PASSWORD = "https://reader:secret-password@example.atlassian.net"
+    error = raised.value
+    assert ("secret-access-value" in rendered_traceback(error), error.__cause__, error.__context__) == (
+        False,
+        None,
+        None,
+    )
 
 
 def test_a_refused_site_keeps_its_password_out_of_the_traceback() -> None:
     with pytest.raises(AuthError) as raised:
         jira_credentials(SITE_WITH_A_PASSWORD, "e", "api-token")
 
-    assert "secret-password" not in "".join(traceback.format_exception(raised.value))
+    error = raised.value
+    assert ("secret-password" in rendered_traceback(error), error.__cause__, error.__context__) == (
+        False,
+        None,
+        None,
+    )
 
 
 def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_traceback(
@@ -227,7 +235,12 @@ def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_tr
     with pytest.raises(AuthError) as raised:
         load_jira()
 
-    assert "secret-password" not in "".join(traceback.format_exception(raised.value))
+    error = raised.value
+    assert ("secret-password" in rendered_traceback(error), error.__cause__, error.__context__) == (
+        False,
+        None,
+        None,
+    )
 
 
 def test_forget_deletes_the_entry_and_reports_whether_one_existed(keychain: InMemoryKeyring) -> None:

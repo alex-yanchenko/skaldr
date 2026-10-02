@@ -3,7 +3,6 @@ import os
 import re
 import socket
 import time
-import traceback
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
@@ -31,6 +30,7 @@ from tests.factories.auth_factory import (
     refusing_connections,
     refusing_with_an_escape_sequence,
     refusing_without_state,
+    rendered_traceback,
     summarise,
 )
 
@@ -257,8 +257,14 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
     with pytest.raises(AuthError) as raised:
         sign_in(FakeBrowser(approving), token=(200, answer))
 
-    assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
-    assert "secret-refresh-value" not in "".join(traceback.format_exception(raised.value))
+    error = raised.value
+    leaks = "secret-refresh-value" in rendered_traceback(error)
+    assert (str(error), leaks, error.__cause__, error.__context__) == (
+        f"Notion's token answer is missing or has invalid fields: {fields}",
+        False,
+        None,
+        None,
+    )
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:

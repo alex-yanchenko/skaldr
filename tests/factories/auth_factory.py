@@ -2,6 +2,7 @@ import base64
 import json
 import socket
 import threading
+import traceback
 from collections.abc import Callable
 from urllib.parse import parse_qs, urlsplit
 
@@ -13,6 +14,12 @@ from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
 from skaldr.auth.store import JiraCredentials, NotionCredentials
+
+SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
+
+
+def rendered_traceback(error: BaseException) -> str:
+    return "".join(traceback.format_exception(error))
 
 
 class InMemoryKeyring(KeyringBackend):
