@@ -5,7 +5,7 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr import compute
-from skaldr.charts import chart_legend, donut_total, format_total
+from skaldr.charts import chart_legend, donut_total
 from skaldr.export.inline import bold, one_line
 from skaldr.export.lower.context import Lowering, bullets, plain_cells, spaced, with_bold_label
 from skaldr.export.tree import (
@@ -97,7 +97,7 @@ def _donut_table(block: Chart) -> TableNode:
         TableRow(plain_cells(item.label, compute.fmt(item.value), legend["note"] or ""), item.tone)
         for item, legend in zip(block.slices, chart_legend(block), strict=True)
     )
-    total = TableRow(plain_cells(TOTAL_LABEL, format_total(donut_total(block)), ""), emphasis="total")
+    total = TableRow(plain_cells(TOTAL_LABEL, compute.fmt(donut_total(block)), ""), emphasis="total")
     return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total))
 
 

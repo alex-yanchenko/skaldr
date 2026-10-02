@@ -233,6 +233,30 @@ def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
     )
 
 
+def test_a_donut_total_is_written_with_the_precision_of_its_values() -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": "A", "value": 12.25}, {"label": "B", "value": 3.5}],
+    }
+
+    assert lowered([donut]) == (
+        Diagram(
+            PieChart((PieSlice("A", 12.25), PieSlice("B", 3.5))),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "12.25", "78%")),
+                        TableRow(_cells("B", "3.5", "22%")),
+                        TableRow(_cells("Total", "15.75", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 def test_a_titled_donut_writes_its_title_above_the_pie() -> None:
     donut = {"type": "chart", "variant": "donut", "title": "Mix", "slices": [{"label": "A", "value": 1200}]}
 
