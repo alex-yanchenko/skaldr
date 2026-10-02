@@ -51,6 +51,8 @@ The count reconciles exactly: every unit lands in one bucket and the counts sum 
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.
 
+Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
+
 ### Count pipeline
 
 ```mermaid

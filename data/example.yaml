@@ -56,6 +56,8 @@ blocks:
   - type: text
     muted: true
     body: "Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated."
+  - type: text
+    body: "Every bin label now ends in a ++check digit++. The cold room logged H~2~O condensation on 3 of 10^2^ shelves, so its scans run twice; C++ tooling and ~2 days of rescans are out of scope."
 
   - type: heading
     level: 3

@@ -24,6 +24,7 @@ Mixed audience — ops reads the impact, the floor team reads the fix. {color="g
 - **Vendor**: 4.0%, 400 {color="red"}
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
+Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 ### Count pipeline
 ```mermaid
 flowchart LR

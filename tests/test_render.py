@@ -2565,6 +2565,18 @@ def test_richtext_applies_the_inline_subset() -> None:
     assert html == '<strong>b</strong> <em>i</em> <code>c</code> <del>s</del> <a href="https://x.com">t</a>'
 
 
+def test_richtext_writes_underline_subscript_and_superscript_as_html_elements() -> None:
+    html = str(render_richtext("++under *it*++ H~2~O 10^3^ x~<i>~"))
+
+    assert html == "<u>under <em>it</em></u> H<sub>2</sub>O 10<sup>3</sup> x<sub>&lt;i&gt;</sub>"
+
+
+def test_richtext_keeps_marker_characters_that_form_no_mark_as_text() -> None:
+    html = str(render_richtext("C++ in ~5 days, cut from ~5 days~ to 2, 2^10 & a ++ b ++ c"))
+
+    assert html == "C++ in ~5 days, cut from ~5 days~ to 2, 2^10 &amp; a ++ b ++ c"
+
+
 def test_richtext_escapes_raw_html() -> None:
     assert str(render_richtext("<script>x & y")) == "&lt;script&gt;x &amp; y"
 

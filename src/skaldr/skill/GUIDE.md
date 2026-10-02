@@ -92,8 +92,10 @@ schema lists the canonical names; the alias names still validate at build even i
 Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items, `quote.body`,
 `key_value` values, timeline/status text) accept a small markdown subset:
 
-`**bold**` · `*italic*` · `` `code` `` · `~~strike~~` · `[label](https://url)`
+`**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `[label](https://url)`
 (links allow `http`, `https`, `mailto` only).
+
+**Underline, subscript and superscript.** `++underline++` opens only where no letter or digit runs into it, and the text inside starts and ends with a non-space, so `C++`, `i++` and `a ++ b ++ c` stay prose. Subscript `~…~` and superscript `^…^` follow Pandoc: the marked text holds no spaces, so `about ~5 days` and `cut from ~5 days~ to 2` stay prose, and `~~strike~~` is still a strike. The marked text is plain text; no other mark goes inside a subscript or a superscript.
 
 **Same-page anchor links.** `[label](#slug)` jumps to a heading or section on the same page. The
 `slug` is the heading text lowercased with non-alphanumerics turned to `-` (so `## Count pipeline` →
@@ -946,6 +948,8 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
+| `++underline++` | an `<ins>` tag | an underline span |
+| `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
 

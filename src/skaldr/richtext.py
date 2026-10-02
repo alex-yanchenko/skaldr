@@ -1,14 +1,17 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from functools import partial
+from typing import Final, Literal, Protocol
 
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN
 
-StyleName = Literal["bold", "italic", "strike"]
+StyleName = Literal["bold", "italic", "strike", "underline"]
+ScriptPosition = Literal["subscript", "superscript"]
+SCRIPT_HTML_TAG: Final[Mapping[ScriptPosition, str]] = {"subscript": "sub", "superscript": "sup"}
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,13 @@ class Styled:
     runs: "Rich"
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled
+@dataclass(frozen=True)
+class ScriptText:
+    position: ScriptPosition
+    text: str
+
+
+Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText
 Rich = tuple[Run, ...]
 
 _CODE_SPAN = re.compile(r"`([^`]+)`")
@@ -60,8 +69,13 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
+_SCRIPT_PASSES: tuple[tuple[re.Pattern[str], ScriptPosition], ...] = (
+    (re.compile(r"(?<!~)~([^\s~`\x00]+)~(?!~)"), "subscript"),
+    (re.compile(r"(?<![\[^])\^([^\s^`\x00]+)\^(?!\^)"), "superscript"),
+)
 _STYLE_PASSES: tuple[tuple[re.Pattern[str], StyleName], ...] = (
     (re.compile(r"\*\*([^*]+)\*\*"), "bold"),
+    (re.compile(r"(?<![\w+])\+\+([^\s+](?:[^+]*[^\s+])?)\+\+(?![\w+])"), "underline"),
     (re.compile(r"~~([^~]+)~~"), "strike"),
     (re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)"), "italic"),
 )
@@ -153,7 +167,13 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     staged = _FOOTNOTE.sub(cite, staged)
     staged = _LINK.sub(link, staged)
     staged = _PLACEHOLDER.sub(blank, staged)
+    for pattern, position in _SCRIPT_PASSES:
+        staged = pattern.sub(partial(_set_aside_script, stash, position), staged)
     return _parse_styles(staged, 0, stash)
+
+
+def _set_aside_script(stash: _Stash, position: ScriptPosition, match: re.Match[str]) -> str:
+    return stash.set_aside(ScriptText(position, match.group(1)))
 
 
 def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:
@@ -182,6 +202,8 @@ class RunWriter(Protocol):
 
     def styled(self, style: StyleName, inner: str, /) -> str: ...
 
+    def script(self, position: ScriptPosition, text: str, /) -> str: ...
+
 
 def write_run(run: Run, writer: RunWriter) -> str:
     match run:
@@ -199,6 +221,8 @@ def write_run(run: Run, writer: RunWriter) -> str:
             return writer.placeholder(run.name)
         case Styled():
             return writer.styled(run.style, write_runs(run.runs, writer))
+        case ScriptText():
+            return writer.script(run.position, run.text)
         case _:
             assert_never(run)
 
@@ -228,6 +252,9 @@ class VisibleText:
 
     def styled(self, _style: StyleName, inner: str, /) -> str:
         return inner
+
+    def script(self, _position: ScriptPosition, text: str, /) -> str:
+        return text
 
 
 def visible_text(runs: Rich) -> str:

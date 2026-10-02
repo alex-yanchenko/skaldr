@@ -2,7 +2,7 @@ import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from typing import Final
+from typing import Final, Literal
 from urllib.parse import quote
 
 from typing_extensions import assert_never
@@ -10,9 +10,10 @@ from typing_extensions import assert_never
 from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
 from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Citation, StyleName
+from skaldr.richtext import Citation, ScriptPosition, StyleName
 
-STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
+MarkerStyle = Literal["bold", "italic", "strike"]
+STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
@@ -41,7 +42,7 @@ def _wrap_marker(marker: str, inner: str) -> str:
     return f"{lead}{marker}{core}{marker}{trail}"
 
 
-def styled(style: StyleName, inner: str) -> str:
+def styled(style: MarkerStyle, inner: str) -> str:
     return _wrap_marker(STYLE_MARKER[style], inner)
 
 
@@ -194,6 +195,12 @@ class MarkupRuns(ABC):
     @abstractmethod
     def chip(self, run: Chip, /) -> str: ...
 
+    @abstractmethod
+    def underline(self, inner: str, /) -> str: ...
+
+    @abstractmethod
+    def script(self, position: ScriptPosition, text: str, /) -> str: ...
+
     def text(self, text: str, /) -> str:
         return bang_cannot_open_an_image(self.escape(text))
 
@@ -208,7 +215,13 @@ class MarkupRuns(ABC):
         return "<br>"
 
     def styled(self, style: StyleName, inner: str, /) -> str:
-        return styled(style, inner)
+        match style:
+            case "underline":
+                return self.underline(inner)
+            case "bold" | "italic" | "strike":
+                return styled(style, inner)
+            case _:
+                assert_never(style)
 
     def mark(self, run: Mark, /) -> str:
         return mark_glyph(run)

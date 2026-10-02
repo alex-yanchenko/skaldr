@@ -27,9 +27,17 @@ from skaldr.models import (
     unresolvable_request_variables,
 )
 from skaldr.publish import without_publish_block
-from skaldr.richtext import Citation, RichContext, StyleName, parse_rich, write_runs
+from skaldr.richtext import (
+    SCRIPT_HTML_TAG,
+    Citation,
+    RichContext,
+    ScriptPosition,
+    StyleName,
+    parse_rich,
+    write_runs,
+)
 
-_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del"}
+_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
 
 
 class _HtmlRuns:
@@ -62,6 +70,10 @@ class _HtmlRuns:
     def styled(self, style: StyleName, inner: str, /) -> str:
         tag = _HTML_STYLE_TAG[style]
         return f"<{tag}>{inner}</{tag}>"
+
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        tag = SCRIPT_HTML_TAG[position]
+        return f"<{tag}>{escape(text)}</{tag}>"
 
 
 def render_richtext(

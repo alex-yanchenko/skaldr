@@ -42,6 +42,7 @@ from skaldr.export.tree import (
     heading_of,
     nested_nodes,
 )
+from skaldr.richtext import SCRIPT_HTML_TAG, ScriptPosition
 
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
@@ -86,6 +87,13 @@ class _MarkdownRuns(MarkupRuns):
 
     def chip(self, run: Chip, /) -> str:
         return styled("bold", self.escape(run.label))
+
+    def underline(self, inner: str, /) -> str:
+        return f"<ins>{inner}</ins>"
+
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        tag = SCRIPT_HTML_TAG[position]
+        return f"<{tag}>{self.escape(text)}</{tag}>"
 
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:

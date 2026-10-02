@@ -39,6 +39,7 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
+from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
@@ -62,6 +63,23 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
+LATEX_SCRIPT_OPERATOR: Final[Mapping[ScriptPosition, str]] = {"subscript": "_", "superscript": "^"}
+LATEX_TEXT_ESCAPES: Final = str.maketrans(
+    {
+        "\\": "\\textbackslash{}",
+        "^": "\\textasciicircum{}",
+        "~": "\\textasciitilde{}",
+        **{character: "\\" + character for character in "{}$&#%_"},
+    }
+)
+
+
+def latex_text(text: str) -> str:
+    return "\\text{" + text.translate(LATEX_TEXT_ESCAPES) + "}"
+
+
+def inline_math(expression: str) -> str:
+    return f"$`{expression}`$"
 
 
 class _NotionRuns(MarkupRuns):
@@ -89,6 +107,12 @@ class _NotionRuns(MarkupRuns):
 
     def chip(self, run: Chip, /) -> str:
         return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.text(run.label)}</span>'
+
+    def underline(self, inner: str, /) -> str:
+        return f'<span underline="true">{inner}</span>'
+
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        return inline_math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
 
 
 def notion_inline(runs: ExportRich) -> str:

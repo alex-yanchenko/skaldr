@@ -23,7 +23,18 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
-from skaldr.richtext import AnchorLink, Citation, Code, Link, Placeholder, Plain, Run, Styled, visible_text
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    Link,
+    Placeholder,
+    Plain,
+    Run,
+    ScriptText,
+    Styled,
+    visible_text,
+)
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -51,7 +62,7 @@ def _links_somewhere(run: Run) -> bool:
             return True
         case Styled():
             return any(map(_links_somewhere, run.runs))
-        case Plain() | Code() | Placeholder():
+        case Plain() | Code() | Placeholder() | ScriptText():
             return False
         case _:
             assert_never(run)

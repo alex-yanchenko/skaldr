@@ -12,6 +12,8 @@ from skaldr.richtext import (
     Plain,
     Rich,
     RichContext,
+    ScriptPosition,
+    ScriptText,
     Styled,
     StyleName,
     parse_rich,
@@ -91,6 +93,78 @@ def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
     assert parse_rich(text, FULL_CONTEXT) == runs
 
 
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("++u++", (Styled("underline", (Plain("u"),)),), id="underline"),
+        pytest.param(
+            "an ++under *line*++ here",
+            (
+                Plain("an "),
+                Styled("underline", (Plain("under "), Styled("italic", (Plain("line"),)))),
+                Plain(" here"),
+            ),
+            id="underline-holding-italic",
+        ),
+        pytest.param(
+            "H~2~O", (Plain("H"), ScriptText("subscript", "2"), Plain("O")), id="subscript-inside-a-word"
+        ),
+        pytest.param("10^3^", (Plain("10"), ScriptText("superscript", "3")), id="superscript"),
+        pytest.param(
+            "x~i,j~ and e^-1^",
+            (Plain("x"), ScriptText("subscript", "i,j"), Plain(" and e"), ScriptText("superscript", "-1")),
+            id="punctuation-inside-a-script",
+        ),
+        pytest.param(
+            "~~old~~ H~2~O",
+            (Styled("strike", (Plain("old"),)), Plain(" H"), ScriptText("subscript", "2"), Plain("O")),
+            id="strike-next-to-a-subscript",
+        ),
+        pytest.param(
+            "~~a ~b~ c~~",
+            (Styled("strike", (Plain("a "), ScriptText("subscript", "b"), Plain(" c"))),),
+            id="subscript-inside-a-strike",
+        ),
+        pytest.param(
+            "**x^2^**",
+            (Styled("bold", (Plain("x"), ScriptText("superscript", "2"))),),
+            id="superscript-inside-bold",
+        ),
+        pytest.param(
+            "++H~2~O++",
+            (Styled("underline", (Plain("H"), ScriptText("subscript", "2"), Plain("O"))),),
+            id="subscript-inside-underline",
+        ),
+    ],
+)
+def test_underline_and_script_marks_parse_into_runs(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("about ~5 days", id="lone-tilde"),
+        pytest.param("cut from ~5 days~ to 2", id="whitespace-inside-a-subscript"),
+        pytest.param("2^10 and 2^ 10^", id="unclosed-and-spaced-superscript"),
+        pytest.param("~~unclosed~", id="strike-opener-with-one-closing-tilde"),
+        pytest.param("a^^b^^", id="doubled-carets"),
+        pytest.param("[^a][^b]", id="unknown-citations-side-by-side"),
+        pytest.param("C++ and C++", id="cplusplus-twice"),
+        pytest.param("i++ then j++", id="increments"),
+        pytest.param("a ++ b ++ c", id="spaced-pluses"),
+        pytest.param("++unclosed", id="unclosed-underline"),
+        pytest.param("x++y++", id="underline-inside-a-word"),
+    ],
+)
+def test_marker_characters_that_do_not_form_a_mark_stay_prose(text: str) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == (Plain(text),)
+
+
+def test_a_subscript_cannot_hold_a_code_span() -> None:
+    assert parse_rich("x~`i`~") == (Plain("x~"), Code("i"), Plain("~"))
+
+
 def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:
     assert parse_rich("[see `x` [^sop]](https://example.com/a)", FULL_CONTEXT) == (
         Link(
@@ -162,9 +236,13 @@ def test_visible_text_reads_every_run_as_a_reader_would() -> None:
         Citation("k", 2),
         Placeholder("who"),
         Styled("bold", (Plain("!"),)),
+        Styled("underline", (Plain(" H"),)),
+        ScriptText("subscript", "2"),
+        Plain("O "),
+        ScriptText("superscript", "3"),
     )
 
-    assert visible_text(runs) == "a b[2]who!"
+    assert visible_text(runs) == "a b[2]who! H2O 3"
 
 
 class _TaggedRuns:
@@ -189,11 +267,16 @@ class _TaggedRuns:
     def styled(self, style: StyleName, inner: str, /) -> str:
         return f"<{style}:{inner}>"
 
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        return f"<{position}:{text}>"
+
 
 def test_write_runs_hands_every_run_to_its_writer_method_in_order() -> None:
-    runs = parse_rich("a `c` [see `x` [^sop]](https://e.com) [m](#method) {{who}} ~~*x*~~", FULL_CONTEXT)
+    runs = parse_rich(
+        "a `c` [see `x` [^sop]](https://e.com) [m](#method) {{who}} ~~*x*~~ ++u++ H~2~O 10^3^", FULL_CONTEXT
+    )
 
     assert write_runs(runs, _TaggedRuns()) == (
         "a <code:c> <link:see <code:x> <cite:sop=1>|https://e.com> <anchor:m|method> <blank:who> "
-        "<strike:<italic:x>>"
+        "<strike:<italic:x>> <underline:u> H<subscript:2>O 10<superscript:3>"
     )

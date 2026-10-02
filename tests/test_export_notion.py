@@ -40,7 +40,7 @@ from skaldr.models import (
     load_report,
     parse_report,
 )
-from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, ScriptText, parse_rich
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -118,6 +118,37 @@ def test_inline_runs_become_notion_spans() -> None:
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
         '<span color="yellow_bg">api</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+    )
+
+
+def test_underline_is_a_notion_underline_span_and_scripts_are_inline_math() -> None:
+    assert notion_inline(parse_rich("++new *one*++ H~2~O at 10^3^")) == (
+        '<span underline="true">new *one*</span> H$`_{\\text{2}}`$O at 10$`^{\\text{3}}`$'
+    )
+
+
+@pytest.mark.parametrize(
+    ("run", "written"),
+    [
+        pytest.param(ScriptText("subscript", "a_b"), "$`_{\\text{a\\_b}}`$", id="underscore"),
+        pytest.param(ScriptText("subscript", "{x}"), "$`_{\\text{\\{x\\}}}`$", id="braces"),
+        pytest.param(
+            ScriptText("superscript", "\\$&#%~"),
+            "$`^{\\text{\\textbackslash{}\\$\\&\\#\\%\\textasciitilde{}}}`$",
+            id="backslash-dollar-ampersand-hash-percent-tilde",
+        ),
+        pytest.param(ScriptText("subscript", "^"), "$`_{\\text{\\textasciicircum{}}}`$", id="caret"),
+    ],
+)
+def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_command(
+    run: ScriptText, written: str
+) -> None:
+    assert notion_inline((run,)) == written
+
+
+def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> None:
+    assert notion_inline(parse_rich("C++ in ~5 days, 2^10 and a ++ b ++ c")) == (
+        "C++ in \\~5 days, 2\\^10 and a ++ b ++ c"
     )
 
 
