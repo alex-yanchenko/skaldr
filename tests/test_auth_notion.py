@@ -18,6 +18,7 @@ from tests.factories.auth_factory import (
     Visit,
     answerless,
     approving,
+    approving_without_state,
     basic_auth_header,
     fake_api,
     favicon,
@@ -163,8 +164,14 @@ def test_a_second_matching_callback_is_turned_away() -> None:
 
 @pytest.mark.parametrize(
     "visit",
-    [forged, answerless, forged_refusal, refusing_without_state],
-    ids=["forged state", "no code or error", "forged refusal", "a refusal without a state"],
+    [forged, answerless, forged_refusal, refusing_without_state, approving_without_state],
+    ids=[
+        "forged state",
+        "no code or error",
+        "forged refusal",
+        "a refusal without a state",
+        "a code without a state",
+    ],
 )
 def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_endpoint(visit: Visit) -> None:
     seen: list[httpx2.Request] = []

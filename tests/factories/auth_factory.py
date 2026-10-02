@@ -4,6 +4,7 @@ import socket
 import threading
 import traceback
 from collections.abc import Callable
+from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
@@ -105,41 +106,47 @@ USERINFO_REFUSAL = (
 )
 
 
-SITE_REFUSALS = [
-    pytest.param("acme.atlassian.net@evil.example", USERINFO_REFUSAL, id="userinfo that reads as the site"),
-    pytest.param("https://acme.atlassian.net@evil.example", USERINFO_REFUSAL, id="userinfo after the scheme"),
-    pytest.param("https://reader:secret@acme.atlassian.net", USERINFO_REFUSAL, id="a user name and password"),
-    pytest.param(
-        "https://evil.example#@acme.atlassian.net", USERINFO_REFUSAL, id="a fragment before the site"
-    ),
-    pytest.param(
-        "https://evil.example\\@acme.atlassian.net", USERINFO_REFUSAL, id="a backslash before the site"
-    ),
-    pytest.param(
-        "https://acme.atlassian.net/?next=/jira",
-        site_refusal("https://acme.atlassian.net/?next=/jira"),
-        id="a query",
-    ),
-    pytest.param(
-        "https://acme.atlassian.net/jira#top",
-        site_refusal("https://acme.atlassian.net/jira#top"),
-        id="a fragment",
-    ),
-    pytest.param("https://127.0.0.1", site_refusal("https://127.0.0.1"), id="an ip literal"),
-    pytest.param("https://[::1]", site_refusal("https://[::1]"), id="an ipv6 literal"),
-    pytest.param("localhost:22", site_refusal("localhost:22"), id="localhost with a port"),
-    pytest.param(
-        "https://evil.example", site_refusal("https://evil.example"), id="a host outside atlassian.net"
-    ),
-    pytest.param("https://atlassian.net", site_refusal("https://atlassian.net"), id="atlassian.net itself"),
-    pytest.param(
-        "https://acme.atlassian.net.evil.example",
-        site_refusal("https://acme.atlassian.net.evil.example"),
-        id="atlassian.net inside another host",
-    ),
-]
+@dataclass(frozen=True)
+class RefusedSite:
+    case: str
+    typed: str
+    carries_userinfo: bool = False
 
-SITES_OFF_JIRA_CLOUD = [pytest.param(case.values[0], id=case.id) for case in SITE_REFUSALS]
+    @property
+    def refusal(self) -> str:
+        return USERINFO_REFUSAL if self.carries_userinfo else site_refusal(self.typed)
+
+
+REFUSED_SITES = (
+    RefusedSite("userinfo that reads as the site", "acme.atlassian.net@evil.example", carries_userinfo=True),
+    RefusedSite(
+        "userinfo after the scheme", "https://acme.atlassian.net@evil.example", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a user name and password", "https://reader:secret@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a fragment before the site", "https://evil.example#@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a backslash before the site", "https://evil.example\\@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a backslash after the site", "https://acme.atlassian.net\\@evil.example", carries_userinfo=True
+    ),
+    RefusedSite("a backslash for a slash", "https://acme.atlassian.net\\jira"),
+    RefusedSite("a query", "https://acme.atlassian.net/?next=/jira"),
+    RefusedSite("a fragment", "https://acme.atlassian.net/jira#top"),
+    RefusedSite("an ip literal", "https://127.0.0.1"),
+    RefusedSite("an ipv6 literal", "https://[::1]"),
+    RefusedSite("localhost with a port", "localhost:22"),
+    RefusedSite("a host outside atlassian.net", "https://evil.example"),
+    RefusedSite("atlassian.net itself", "https://atlassian.net"),
+    RefusedSite("atlassian.net inside another host", "https://acme.atlassian.net.evil.example"),
+)
+
+SITE_REFUSALS = [pytest.param(site.typed, site.refusal, id=site.case) for site in REFUSED_SITES]
+SITES_OFF_JIRA_CLOUD = [pytest.param(site.typed, id=site.case) for site in REFUSED_SITES]
 
 
 def approving(state: str) -> str:
@@ -160,6 +167,10 @@ def refusing_with_an_escape_sequence(state: str) -> str:
 
 def forged_refusal(_state: str) -> str:
     return "/callback?error=access_denied&state=forged"
+
+
+def approving_without_state(_state: str) -> str:
+    return "/callback?code=the-code"
 
 
 def forged(_state: str) -> str:
