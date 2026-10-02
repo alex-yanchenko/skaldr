@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 
 import keyring
@@ -18,10 +19,12 @@ from skaldr.auth.store import (
 )
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
+    SITES_OFF_JIRA_CLOUD,
     InMemoryKeyring,
     LockedKeyring,
     make_jira_credentials,
     make_notion_credentials,
+    site_refusal,
 )
 
 
@@ -206,6 +209,40 @@ def test_a_typed_site_becomes_its_https_origin(typed: str, site: str) -> None:
 def test_a_site_that_is_not_an_https_origin_is_refused(typed: str) -> None:
     with pytest.raises(AuthError, match=r"^The Jira site must be an https URL"):
         normalise_site(typed)
+
+
+@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
+def test_a_site_that_is_not_a_plain_jira_cloud_origin_is_refused(typed: str) -> None:
+    with pytest.raises(AuthError) as raised:
+        normalise_site(typed)
+
+    assert str(raised.value) == site_refusal(typed)
+
+
+@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
+def test_a_keychain_entry_for_a_site_off_jira_cloud_is_unreadable(
+    keychain: InMemoryKeyring, typed: str
+) -> None:
+    keychain.entries[("skaldr", "jira")] = json.dumps({**make_jira_credentials().model_dump(), "site": typed})
+
+    with pytest.raises(
+        AuthError, match=r"^The keychain entry for jira is unreadable; run `skaldr auth jira` again$"
+    ):
+        load_jira()
+
+
+@pytest.mark.parametrize("typed", SITES_OFF_JIRA_CLOUD)
+def test_a_jira_site_in_the_environment_off_jira_cloud_is_refused(
+    monkeypatch: pytest.MonkeyPatch, typed: str
+) -> None:
+    monkeypatch.setenv("JIRA_SITE", typed)
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+    monkeypatch.setenv("JIRA_API_TOKEN", "env-token")
+
+    with pytest.raises(AuthError) as raised:
+        load_jira()
+
+    assert str(raised.value) == f"JIRA_SITE: {site_refusal(typed)}"
 
 
 def test_jira_credentials_hold_only_an_https_origin() -> None:

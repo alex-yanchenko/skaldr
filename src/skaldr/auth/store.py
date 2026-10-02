@@ -18,6 +18,7 @@ Source = Literal["keychain", "environment"]
 
 NOTION_ENVIRONMENT = ("NOTION_ACCESS_TOKEN", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET")
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
+_JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
 
 
 class UnreadableEntryError(AuthError):
@@ -120,13 +121,26 @@ def forget(service: Service) -> bool:
 
 def _https_origin(typed: str) -> str | None:
     text = typed.strip()
+    if "\\" in text:
+        return None
     try:
         url = HttpUrl(text if "://" in text else f"https://{text}")
     except ValidationError:
         return None
-    if url.scheme != "https" or not url.host:
+    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host):
+        return None
+    if _carries_more_than_a_path(url):
         return None
     return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
+
+
+def _is_a_jira_cloud_host(host: str | None) -> bool:
+    return host is not None and host.endswith(_JIRA_CLOUD_HOST_SUFFIX)
+
+
+def _carries_more_than_a_path(url: HttpUrl) -> bool:
+    parts = (url.username, url.password, url.query, url.fragment)
+    return any(part is not None for part in parts)
 
 
 def _site_refusal(typed: str) -> str:
