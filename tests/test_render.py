@@ -514,6 +514,114 @@ def test_a_badge_and_a_citation_inside_a_toggle_feed_the_legend_and_the_numberin
     assert '<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>' in html
 
 
+def _tabs(*labels: str, **tab_overrides: object) -> dict[str, object]:
+    tabs = [
+        {"label": label, "blocks": [{"type": "text", "body": label}], **tab_overrides} for label in labels
+    ]
+    return {"type": "tabs", "tabs": tabs}
+
+
+def test_a_tabs_block_writes_the_request_tab_strip_around_its_panes() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "Recount."}]},
+            {"label": "System", "blocks": [{"type": "text", "body": "Rescan."}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<div class="tabs"><div class="rq-cases tb0" role="group" aria-label="Tabs">\n'
+        '<input type="radio" class="rq-pick" name="tb0" id="tb0-0" checked>\n'
+        '<section class="rq-case">\n<h4 class="rq-case-hd">Floor</h4>\n'
+        '<p class="text">Recount.</p></section>\n'
+        '<input type="radio" class="rq-pick" name="tb0" id="tb0-1">\n'
+        '<section class="rq-case">\n<h4 class="rq-case-hd">System</h4>\n'
+        '<p class="text">Rescan.</p></section>\n'
+        '<div class="rq-tabs"><label for="tb0-0"><span class="rq-dot warning"></span>Floor</label>'
+        '<label for="tb0-1">System</label></div>\n'
+        "</div>\n</div>"
+    ) in html
+
+
+def test_a_tabs_block_needs_no_script_to_choose_a_tab() -> None:
+    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System")])))
+
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+
+    assert [script for script in scripts if "rq-" in script] == []
+
+
+def test_a_tabs_block_strip_becomes_a_rail_below_the_width_its_labels_need() -> None:
+    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System")])))
+
+    assert (
+        "@container (width < 197px){.tb0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+        "gap:0 var(--s3)}.tb0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+        "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; "
+        "grid-row:1; grid-column:1}.tb0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; "
+        "white-space:normal; overflow:visible; text-overflow:clip}.tb0 .rq-case{grid-row:1; grid-column:2}}"
+    ) in html
+
+
+def test_tab_blocks_and_requests_never_share_a_radio_group() -> None:
+    nested = _tabs("Inner", "Other")
+    outer = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Outer", "blocks": [nested]},
+            {"label": "Second", "blocks": [{"type": "divider"}]},
+        ],
+    }
+    request = make_command_request(
+        cases=[{"label": "a", "response": {"body": "x"}}, {"label": "b", "response": {"body": "y"}}]
+    )
+
+    html = render_html(parse_report(make_report(blocks=[outer, request])))
+
+    assert re.findall(r'class="rq-pick" name="([^"]+)"', html) == ["tb0", "tb1", "tb1", "tb0", "rq0", "rq0"]
+
+
+def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
+    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System", tone="accent")])))
+    css = package_path("styles.css").read_text(encoding="utf-8")
+
+    assert '<label for="tb0-0"><span class="rq-dot accent"></span>Floor</label>' in html
+    assert ".rq-dot.accent{background:var(--accent-fg)}" in css
+
+
+def test_print_shows_every_tab_under_its_label_and_drops_the_strip() -> None:
+    css = package_path("styles.css").read_text(encoding="utf-8")
+    print_layer = css[css.index("@layer print {") :]
+
+    assert (
+        ".rq .rq-case{display:flex}\n\t\t.tabs .rq-case{display:block}\n"
+        "\t\t:is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); "
+        "border-top:1px solid var(--rule); break-after:avoid}\n"
+        "\t\t:is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}"
+    ) in print_layer
+
+
+def test_a_heading_inside_a_tab_is_a_link_target() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {
+                "label": "Floor",
+                "blocks": [{"type": "heading", "level": 4, "text": "Aisle C", "id": "aisle-c"}],
+            },
+            {"label": "System", "blocks": [{"type": "text", "body": "See [aisle C](#aisle-c)."}]},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert '<h4 id="aisle-c">Aisle C</h4>\n</section>' in html
+    assert '<p class="text">See <a href="#aisle-c">aisle C</a>.</p></section>' in html
+
+
 def test_a_divider_is_a_rule_between_the_blocks_around_it() -> None:
     blocks = [{"type": "text", "body": "Above."}, {"type": "divider"}, {"type": "text", "body": "Below."}]
 

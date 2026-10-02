@@ -2156,6 +2156,47 @@ class Toggle(_Block):
         return self
 
 
+class Tab(FrozenModel):
+    label: str = Field(min_length=1, description="The tab's label in the strip, and its heading on paper.")
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone: a coloured dot before the label, the way a request case shows its "
+        "outcome. Omit it for a plain label.",
+    )
+    blocks: list["InnerBlock"] = Field(
+        min_length=1,
+        description="Blocks shown while the tab is chosen: any block a toggle holds, including a toggle "
+        "or another tabs block.",
+    )
+
+    @model_validator(mode="after")
+    def _non_blank(self) -> "Tab":
+        if not self.label.strip():
+            raise ValueError("tab label must not be blank")
+        return self
+
+
+class Tabs(_Block):
+    type: Literal["tabs"]
+    tabs: list[Tab] = Field(
+        min_length=2,
+        description=f"The tabs, in strip order; the first starts chosen. Two to {MAX_REQUEST_CASES}, with "
+        "distinct labels. Every tab prints, each under its label.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Tabs":
+        if len(self.tabs) > MAX_REQUEST_CASES:
+            raise ValueError(
+                f"a tabs block holds at most {MAX_REQUEST_CASES} tabs, and this one has {len(self.tabs)}"
+            )
+        labels = [tab.label for tab in self.tabs]
+        repeated = sorted({label for label in labels if labels.count(label) > 1})
+        if repeated:
+            raise ValueError(f"tabs repeat a label: {', '.join(repeated)}")
+        return self
+
+
 _Leaf = (
     Heading
     | Text
@@ -2184,9 +2225,11 @@ _Leaf = (
     | Swimlane
     | References
     | Toggle
+    | Tabs
 )
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 Toggle.model_rebuild()
+Tab.model_rebuild()
 FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
 RequestLike = Request | RequestStep
 
@@ -2372,6 +2415,9 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from iter_referenced_badge_keys(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from iter_referenced_badge_keys(tab.blocks)
         elif isinstance(block, BadgeRow):
             for item in (*block.items, *(i for group in block.groups for i in group.items)):
                 if isinstance(item, BadgeRef):
@@ -2421,6 +2467,9 @@ def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from iter_reference_items(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from iter_reference_items(tab.blocks)
 
 
 def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
@@ -2437,6 +2486,9 @@ def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from iter_matrices(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from iter_matrices(tab.blocks)
 
 
 def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
@@ -2453,6 +2505,9 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from iter_tables(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from iter_tables(tab.blocks)
 
 
 def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
@@ -2469,6 +2524,25 @@ def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from iter_cards(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from iter_cards(tab.blocks)
+
+
+def iter_tabs(blocks: Sequence[AnyBlock]) -> Iterator[Tabs]:
+    for block in blocks:
+        if isinstance(block, Tabs):
+            yield block
+            for tab in block.tabs:
+                yield from iter_tabs(tab.blocks)
+        elif isinstance(block, (Section, Panel, Toggle)):
+            yield from iter_tabs(block.blocks)
+        elif isinstance(block, (Grid, InnerGrid)):
+            for cell in block.cells:
+                yield from iter_tabs(cell.blocks)
+        elif isinstance(block, Walkthrough):
+            for step in block.steps:
+                yield from iter_tabs(step.detail)
 
 
 class Report(FrozenModel):

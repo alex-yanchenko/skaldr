@@ -38,7 +38,9 @@ from skaldr.export.tree import (
     LoweredDocument,
     Node,
     Paragraph,
+    Tab,
     TableOfContents,
+    Tabs,
     TocEntry,
     Toggle,
     capped_heading_level,
@@ -137,6 +139,15 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return _section(block, lowering, depth)
         case models.Toggle():
             return _toggle(block, lowering, depth)
+        case models.Tabs():
+            return [
+                Tabs(
+                    tuple(
+                        Tab(plain(tab.label), tuple(_lower_blocks(tab.blocks, lowering, depth)), tab.tone)
+                        for tab in block.tabs
+                    )
+                )
+            ]
         case models.Panel():
             return [
                 Callout(

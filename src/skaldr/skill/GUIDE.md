@@ -189,6 +189,7 @@ or to keep a small block from stretching across the whole page.
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
 | `toggle` | Collapsible group for anywhere a block can go, with no TOC entry or anchor | `title`, `collapsed?` (default true), `blocks[]` |
+| `tabs` | Several panes shown one at a time, chosen from the label strip a multi-case `request` uses | `tabs: [{label, tone?, blocks[]}]` (2 to 24 tabs, distinct labels) |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 | `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` — a step's `detail` may include a `grid` for a two-column step (Action \| Script) |
 
@@ -230,6 +231,15 @@ A top-level `section` is a document region on a par with an `h2`, so it gets its
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
 
 A `toggle` is the collapsible for everywhere a `section` cannot go: inside a section, a panel, a grid cell or a walkthrough step's detail, as well as at the top level. It looks like a section's collapse but gets no TOC entry and no anchor, so use it to tuck away detail rather than to mark a region. It starts collapsed like a section (`collapsed: false` opens it) and holds any block except a section, panel, grid, walkthrough, request or request_flow. A toggle may hold another toggle, and a heading inside one still gets its anchor.
+
+A `tabs` block shows one of its panes at a time, chosen from the same label strip a multi-case `request` uses, so choosing a tab needs no script and a strip too wide for its container turns into a rail. The first tab starts chosen. A tab's optional `tone` puts a coloured dot before its label; leave it out for a plain label. A tabs block goes wherever a toggle goes and holds the same blocks, including a toggle or another tabs block. On paper every tab prints, each under its own label, so a tab never hides content from a PDF.
+
+```yaml
+- type: tabs
+  tabs:
+    - { label: "Floor", tone: warning, blocks: [{ type: text, body: "Recount Zone C by hand." }] }
+    - { label: "System", blocks: [{ type: text, body: "Rescan the truncated bins." }] }
+```
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
@@ -944,6 +954,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a multi-case `request` | each case under a bold title | native tabs |
+| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | native tabs, with the same icon on a tab whose tone has one |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `toggle` | its bold title with its content below | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level and stops at `####` | the same |

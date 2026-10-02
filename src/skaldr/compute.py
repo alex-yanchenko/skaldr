@@ -11,7 +11,7 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, Final, NamedTuple, TypedDict
 
 from skaldr.errors import ReportError
@@ -39,7 +39,9 @@ from skaldr.models import (
     Swimlane,
     SwimlaneStepState,
     Table,
+    Tabs,
     Toggle,
+    ToneLiteral,
     Walkthrough,
     col_sum,
     iter_matrices,
@@ -47,6 +49,7 @@ from skaldr.models import (
     iter_referenced_badge_keys,
     iter_requests,
     iter_tables,
+    iter_tabs,
 )
 
 __all__ = [
@@ -91,6 +94,9 @@ def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
         elif isinstance(block, Walkthrough):
             for step in block.steps:
                 yield from _iter_anchored(step.detail)
+        elif isinstance(block, Tabs):
+            for tab in block.tabs:
+                yield from _iter_anchored(tab.blocks)
 
 
 def reference_numbers(report: Report) -> dict[str, int]:
@@ -915,8 +921,47 @@ def case_strip_width(core: RequestLike) -> int:
     mark pointing at the pane. Wrapped, the rule can only sit under the last row, so a selection in an
     earlier row points at nothing. Below this width the strip becomes a rail instead, which has no row
     to wrap out of."""
-    labels = sum(len(case.label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for case in core.cases)
-    return math.ceil(labels * CASE_STRIP_SLACK) + 32
+    return strip_width(case.label for case in core.cases)
+
+
+def strip_width(labels: Iterable[str]) -> int:
+    width = sum(len(label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for label in labels)
+    return math.ceil(width * CASE_STRIP_SLACK) + 32
+
+
+class StripLabel(NamedTuple):
+    label: str
+    tone: ToneLiteral | None
+
+
+def case_strip_labels(core: RequestLike) -> list[StripLabel]:
+    return [StripLabel(case.label, case_tone(case)) for case in core.cases]
+
+
+def rail_rule(name: str, width: int) -> str:
+    return (
+        f"@container (width < {width}px){{"
+        f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+        f"gap:0 var(--s3)}}"
+        f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+        f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
+        f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
+        f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+        f"white-space:normal; overflow:visible; text-overflow:clip}}"
+        f".{name} .rq-case{{grid-row:1; grid-column:2}}"
+        "}"
+    )
+
+
+def tab_groups(report: Report) -> dict[int, str]:
+    return {id(block): f"tb{index}" for index, block in enumerate(iter_tabs(report.blocks))}
+
+
+def tab_strip_rules(report: Report, groups: dict[int, str]) -> str:
+    return "\n".join(
+        rail_rule(groups[id(block)], strip_width(tab.label for tab in block.tabs))
+        for block in iter_tabs(report.blocks)
+    )
 
 
 def case_strip_rules(report: Report, groups: dict[int, str]) -> str:
@@ -925,24 +970,11 @@ def case_strip_rules(report: Report, groups: dict[int, str]) -> str:
     A query condition takes a literal rather than a custom property, so the threshold cannot ride on
     the element as a variable and each call contributes its own rule. `groups` is the same map the
     markup names its radios from, so a rule and the strip it shapes cannot drift apart."""
-    rules: list[str] = []
-    for core in iter_request_cores(report):
-        if len(core.cases) < 2:
-            continue
-        name = groups[id(core)]
-        rules.append(
-            f"@container (width < {case_strip_width(core)}px){{"
-            f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
-            f"gap:0 var(--s3)}}"
-            f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
-            f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
-            f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
-            f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
-            f"white-space:normal; overflow:visible; text-overflow:clip}}"
-            f".{name} .rq-case{{grid-row:1; grid-column:2}}"
-            "}"
-        )
-    return "\n".join(rules)
+    return "\n".join(
+        rail_rule(groups[id(core)], case_strip_width(core))
+        for core in iter_request_cores(report)
+        if len(core.cases) > 1
+    )
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:

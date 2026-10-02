@@ -40,6 +40,7 @@ from skaldr.models import (
     load_report,
     parse_report,
 )
+from skaldr.models import Tabs as TabsBlock
 from skaldr.models import Toggle as ToggleBlock
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
 from tests.conftest import REPO_ROOT
@@ -203,6 +204,23 @@ def test_a_toggle_is_a_details_block_with_its_content_tab_indented_at_every_dept
     )
 
 
+def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_case_does() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "tone": "accent", "blocks": [{"type": "text", "body": "b"}]},
+            {"label": "Vendor", "blocks": [{"type": "divider"}]},
+        ],
+    }
+
+    assert notion_of([block]) == (
+        '<tabs>\n\t<tab icon="⚠️">\n\t\tFloor\n\t\ta\n\t</tab>\n'
+        "\t<tab>\n\t\tSystem\n\t\tb\n\t</tab>\n"
+        "\t<tab>\n\t\tVendor\n\t\t---\n\t</tab>\n</tabs>\n"
+    )
+
+
 def test_a_level_four_heading_is_four_hashes() -> None:
     assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
 
@@ -252,6 +270,9 @@ def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
         if isinstance(block, Walkthrough):
             for step in block.steps:
                 seen |= _block_types_in(step.detail)
+        if isinstance(block, TabsBlock):
+            for tab in block.tabs:
+                seen |= _block_types_in(tab.blocks)
     return seen
 
 

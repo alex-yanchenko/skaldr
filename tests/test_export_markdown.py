@@ -562,6 +562,21 @@ def test_a_toggle_is_its_bold_title_over_its_content() -> None:
     assert markdown_of([toggle]) == "**Raw counts**\n\nx\n\n**Inner**\n\ny\n"
 
 
+def _authored_tabs() -> dict[str, object]:
+    return {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "tone": "accent", "blocks": [{"type": "text", "body": "b"}]},
+            {"label": "Vendor", "blocks": [{"type": "text", "body": "c"}]},
+        ],
+    }
+
+
+def test_authored_tabs_are_bold_titled_parts_led_by_the_icon_a_request_case_tone_gets() -> None:
+    assert markdown_of([_authored_tabs()]) == "**⚠️ Floor**\n\na\n\n**System**\n\nb\n\n**Vendor**\n\nc\n"
+
+
 def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug() -> None:
     blocks = [
         {"type": "heading", "level": 4, "text": "Bin detail", "id": "bins"},

@@ -1233,6 +1233,25 @@ def test_a_heading_inside_a_toggle_keeps_its_level_and_anchor() -> None:
     )
 
 
+def test_a_tabs_block_is_the_tabs_node_requests_use_with_each_tab_tone() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "blocks": [{"type": "heading", "level": 3, "text": "Scan"}]},
+        ],
+    }
+
+    assert lowered([block]) == (
+        Tabs(
+            (
+                Tab((Plain("Floor"),), (Paragraph((Plain("a"),)),), "warning"),
+                Tab((Plain("System"),), (Heading(3, (Plain("Scan"),), "scan"),)),
+            )
+        ),
+    )
+
+
 def test_a_divider_lowers_to_a_divider_node_between_its_neighbours() -> None:
     blocks = [{"type": "text", "body": "a"}, {"type": "divider"}, {"type": "text", "body": "b"}]
 

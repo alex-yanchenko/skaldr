@@ -221,11 +221,22 @@
 
 {% macro verbatim_command(command) %}{% set grouped = "\n" in command %}<pre class="rq-cmd">{% if grouped %}<span class="rq-pipe" hidden>{ </span>{% endif %}{{ variable_slots(command) }}<span class="rq-pipe" hidden>{% if grouped %}{{ "\n}" }}{% endif %} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endmacro %}
 
-{% macro request_cases(core, group) %}
-<div class="rq-cases {{ group }}"{% if core.cases | length > 1 %} role="group" aria-label="Recorded cases"{% endif %}>
-{% for case in core.cases %}
+{% macro tab_strip(group, labels, aria_label) %}
+<div class="rq-cases {{ group }}"{% if labels | length > 1 %} role="group" aria-label="{{ aria_label }}"{% endif %}>
+{% for entry in labels %}
 <input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}-{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
-<section class="rq-case" data-rq-case="{{ loop.index0 }}"{% if core.command is not none %} data-rq-command{% endif %}>
+{{ caller(loop.index0) }}
+{% endfor %}
+{% if labels | length > 1 %}
+<div class="rq-tabs">{% for entry in labels %}<label for="{{ group }}-{{ loop.index0 }}">{% if entry.tone %}<span class="rq-dot {{ entry.tone }}"></span>{% endif %}{{ entry.label }}</label>{% endfor %}</div>
+{% endif %}
+</div>
+{% endmacro %}
+
+{% macro request_cases(core, group) %}
+{% call(index) tab_strip(group, case_strip_labels(core), "Recorded cases") %}
+{% set case = core.cases[index] %}
+<section class="rq-case" data-rq-case="{{ index }}"{% if core.command is not none %} data-rq-command{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
 {% set runs_command = core.command is not none %}
 {% set command = command_for(core, case) %}
@@ -240,12 +251,7 @@
 {% if case.verdict %}
 <div class="rq-verdict {{ case_tone(case) }}"><span class="rq-vlbl">Verdict</span><span>{{ case.verdict | richtext }}</span></div>
 {% endif %}
-</section>
-{% endfor %}
-{% if core.cases | length > 1 %}
-<div class="rq-tabs">{% for case in core.cases %}<label for="{{ group }}-{{ loop.index0 }}"><span class="rq-dot {{ case_tone(case) }}"></span>{{ case.label }}</label>{% endfor %}</div>
-{% endif %}
-</div>
+</section>{% endcall %}
 {% endmacro %}
 
 {% macro request(block) %}
@@ -332,6 +338,12 @@
 <details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "toggle" %}
 <details class="toggle"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+{% elif block.type == "tabs" %}
+<div class="tabs">{% call(index) tab_strip(tab_group(block), block.tabs, "Tabs") %}
+<section class="rq-case">
+<h4 class="rq-case-hd">{{ block.tabs[index].label }}</h4>
+{% for inner in block.tabs[index].blocks %}{{ render_block(inner) }}{% endfor %}</section>{% endcall %}
+</div>
 {% elif block.type == "panel" %}
 <div class="panel-card"><div class="panel-card-hd">{{ block.title }}</div><div class="panel-card-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></div>
 {% elif block.type == "grid" %}
