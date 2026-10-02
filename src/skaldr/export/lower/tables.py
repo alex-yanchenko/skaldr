@@ -29,11 +29,6 @@ def _cell_text(value: object, lowering: Lowering) -> ExportRich:
     return _lines(lowering.rich(part) for part in compute.paragraphs(str(value)))
 
 
-def _badge_keys(raw: object) -> list[str]:
-    values = cast("list[object]", raw) if isinstance(raw, list) else [raw]
-    return [str(key).strip() for key in values if key is not None and str(key).strip()]
-
-
 def _subrows(row: Row) -> list[Row]:
     return cast("list[Row]", row.get("subrows") or [])
 
@@ -42,7 +37,7 @@ def _title_cell(block: models.Table, row: Row, value: object, lowering: Lowering
     chips = [
         lowering.chips(keys)
         for badge_column in block.title_badges
-        if (keys := _badge_keys(row.get(badge_column.key)))
+        if (keys := block.badge_keys(row, badge_column.key))
     ]
     title = spaced([part for part in (_cell_text(value, lowering), *chips) if part])
     subrows = [
@@ -69,7 +64,7 @@ def _row_tone(block: models.Table, row: Row, lowering: Lowering) -> ToneName | N
     raw_tone = row.get("tone")
     if isinstance(raw_tone, str) and raw_tone:
         return tone_named(raw_tone)
-    tint_key = block.row_tint_key(dict(row))
+    tint_key = block.row_tint_key(row)
     return tone_named(lowering.report.badges[tint_key].tone) if tint_key else None
 
 
@@ -84,7 +79,7 @@ def _table_row(block: models.Table, row: Row, lowering: Lowering) -> TableRow:
         elif column.kind == "indicator":
             row_cells.append(_indicator_cell(value))
         elif column.kind == "badge":
-            row_cells.append(TableCell(lowering.chips(_badge_keys(value))))
+            row_cells.append(TableCell(lowering.chips(block.badge_keys(row, column.key))))
         else:
             row_cells.append(TableCell(_cell_text(value, lowering)))
     return TableRow(tuple(row_cells), _row_tone(block, row, lowering))

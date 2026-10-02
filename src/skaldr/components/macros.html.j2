@@ -39,7 +39,7 @@
 {% for c in cell_cols %}
 {% if c.key == title_key %}
 <td class="title">{{ rich_cell(row[c.key]) }}
-{% for bc in title_badges %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
+{% for bc in title_badges %}{% for bkey in b.badge_keys(row, bc.key) %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endfor %}{% endfor %}
 {% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
 {% elif c.kind == "number" %}
@@ -47,7 +47,7 @@
 {% elif c.kind == "indicator" %}
 <td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
 {% elif c.kind == "badge" %}
-<td class="bc">{% set raw = row[c.key] %}{% for key in (raw if raw is iterable and raw is not string else [raw]) %}{% set k = key | trim %}{% if k %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endif %}{% endfor %}</td>
+<td class="bc">{% for k in b.badge_keys(row, c.key) %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endfor %}</td>
 {% else %}
 <td>{{ rich_cell(row[c.key]) }}</td>
 {% endif %}

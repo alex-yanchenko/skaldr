@@ -863,6 +863,10 @@ def _as_badge_list(value: Any) -> list[Any]:
     return cast("list[Any]", value) if isinstance(value, list) else [value]
 
 
+def _trimmed_badge_keys(value: Any) -> list[str]:
+    return ["" if key is None else str(key).strip() for key in _as_badge_list(value)]
+
+
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
     keys = {column.key for column in columns}
     for index, row in enumerate(rows):
@@ -1108,10 +1112,13 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
-    def row_tint_key(self, row: dict[str, Any]) -> str:
-        raw: object = row.get(self.tint_by) if self.tint_by else None
-        values = cast("list[object]", raw) if isinstance(raw, list) else [raw]
-        return str(values[0] or "").strip() if values else ""
+    def badge_keys(self, row: Mapping[str, Any], key: str) -> list[str]:
+        return [badge for badge in _trimmed_badge_keys(row.get(key)) if badge]
+
+    def row_tint_key(self, row: Mapping[str, Any]) -> str:
+        if self.tint_by is None:
+            return ""
+        return next(iter(_trimmed_badge_keys(row.get(self.tint_by))), "")
 
     @property
     def title_key(self) -> str:

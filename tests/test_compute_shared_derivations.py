@@ -154,6 +154,28 @@ def test_a_row_tints_by_the_first_key_of_its_tint_column_and_a_blank_first_key_t
     ]
 
 
+def test_a_badge_cell_reads_one_key_or_a_list_trimmed_with_blanks_dropped() -> None:
+    table = _table(
+        {
+            "type": "table",
+            "columns": [
+                {"key": "a", "label": "A"},
+                {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+            ],
+            "rows": [{"a": "x", "tag": "API"}],
+        }
+    )
+    rows: list[dict[str, Any]] = [
+        {"tag": " API "},
+        {"tag": ["API", " ", "OPS "]},
+        {"tag": ""},
+        {"tag": None},
+        {},
+    ]
+
+    assert [table.badge_keys(row, "tag") for row in rows] == [["API"], ["API", "OPS"], [], [], []]
+
+
 def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> None:
     swimlane = _swimlane(
         [
