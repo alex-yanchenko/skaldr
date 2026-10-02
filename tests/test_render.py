@@ -3568,7 +3568,7 @@ def test_range_segments_carry_their_span_as_flex_with_soft_tint() -> None:
     block = {
         "type": "range",
         "segments": [
-            {"label": "Transferable", "span": 3, "tone": "success", "sub": "full **credit**"},
+            {"label": "Supported", "span": 3, "tone": "success", "sub": "security **fixes**"},
             {"label": "Expired", "span": 1, "tone": "danger"},
         ],
     }
@@ -3578,8 +3578,8 @@ def test_range_segments_carry_their_span_as_flex_with_soft_tint() -> None:
     assert '<div class="range">' in html
     assert (
         '<div class="rbar">'
-        '<div class="rseg success" style="flex:3"><span class="rlab">Transferable</span>'
-        '<span class="rsub">full <strong>credit</strong></span></div>'
+        '<div class="rseg success" style="flex:3"><span class="rlab">Supported</span>'
+        '<span class="rsub">security <strong>fixes</strong></span></div>'
         '<div class="rseg danger" style="flex:1"><span class="rlab">Expired</span></div>'
         "</div>" in html
     )

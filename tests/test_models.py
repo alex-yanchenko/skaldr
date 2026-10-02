@@ -1616,9 +1616,9 @@ def test_positional_row_preserves_a_list_cell_value() -> None:
         {"key": "name", "label": "N", "kind": "text"},
         {"key": "access", "label": "Access", "kind": "badge", "placement": "cell"},
     ]
-    table = Table.model_validate(make_table(columns=cols, rows=[["SOAXREF", ["WRITE", "READ"]]]))
+    table = Table.model_validate(make_table(columns=cols, rows=[["Supplier ledger", ["WRITE", "READ"]]]))
 
-    assert table.all_rows() == [{"name": "SOAXREF", "access": ["WRITE", "READ"]}]
+    assert table.all_rows() == [{"name": "Supplier ledger", "access": ["WRITE", "READ"]}]
 
 
 @pytest.mark.parametrize("row", [["x"], ["x", 1, "extra"]], ids=["too-few", "too-many"])

@@ -327,7 +327,7 @@ dangling arrows.
   loop: true            # draws a "↺ back to <first>" return marker — for a cycle, not a one-way flow
   numbered: true        # 1..n on the nodes (default); set false to hide
   steps:
-    - { label: "Source",  tone: info,    note: "Atlas Advisor + $indexStats" }
+    - { label: "Source",  tone: info,    note: "Query log + index stats" }
     - { label: "Reason",  tone: info,    points: ["Weighs index overlap", "Scores by hit-ratio"] }
     - { label: "Propose", tone: accent }
     - { label: "Deliver", tone: success }
@@ -387,7 +387,7 @@ too thin for the explanation each step carries.
         - { type: list, items: ["exactly-one-default per registry", "the reconcile invariant"] }
     - label: "Slice into shippable tickets"
       detail:
-        - { type: code, label: "dedupe key", content: "key = (school_id, course_key)" }
+        - { type: code, label: "dedupe key", content: "key = (warehouse_id, sku)" }
 ```
 
 `detail` holds the same blocks you'd put anywhere else (it can be long — that's the point). The
@@ -408,7 +408,7 @@ line; an optional `axis` labels the extent's ends.
 - type: range
   axis: { min: "2015", max: "2025" }      # optional end-cap labels; either end may be omitted
   segments:
-    - { label: "Transferable", span: 7, tone: success, sub: "full credit" }
+    - { label: "Supported", span: 7, tone: success, sub: "security fixes" }
     - { label: "Review", span: 2, tone: warning }
     - { label: "Expired", span: 1, tone: danger }
 ```
@@ -857,7 +857,7 @@ link instead.
 
   ```yaml
   - { key: access, label: "Access", kind: badge, placement: cell, width: 1 }
-  # row: { name: "SOAXREF", access: [WRITE, PARTNER], … }   # two chips in one cell
+  # row: { name: "Supplier ledger", access: [WRITE, PARTNER], … }   # two chips in one cell
   ```
 - **Column widths** are automatic by default. To set proportions, give every in-cell column a
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
