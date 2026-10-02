@@ -2,20 +2,18 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Final
+from typing import Final, Literal
 
 from typing_extensions import assert_never
 
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    MarkerFamily,
     MarkupRuns,
     code_block_lines,
     code_span,
     escape_block_start,
     indent_lines,
-    list_marker_family,
     styled,
 )
 from skaldr.export.tree import (
@@ -24,6 +22,7 @@ from skaldr.export.tree import (
     Heading,
     HeadingLevel,
     ListEntry,
+    ListKind,
     ListNode,
     LoweredDocument,
     Node,
@@ -38,6 +37,12 @@ from skaldr.richtext import Rich, visible_text, write_runs
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
+MarkerFamily = Literal["dash", "ordinal"]
+MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
+    "bullet": "dash",
+    "check": "dash",
+    "number": "ordinal",
+}
 
 
 def _dash(use_alternate_markers: bool) -> str:
@@ -98,7 +103,9 @@ def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
 
 
 def _marker_family(node: Node) -> MarkerFamily | None:
-    return "dash" if isinstance(node, TableOfContents) else list_marker_family(node)
+    if isinstance(node, ListNode):
+        return MARKER_FAMILY[node.kind]
+    return "dash" if isinstance(node, TableOfContents) else None
 
 
 def _spaced(lines: Sequence[str]) -> list[str]:

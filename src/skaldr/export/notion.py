@@ -7,19 +7,18 @@ from typing_extensions import assert_never
 
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    MarkerFamily,
     MarkupRuns,
     bang_cannot_open_an_image,
     code_block_lines,
     escape_block_start,
     indent_lines,
-    list_marker_family,
     styled,
 )
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Heading,
+    ListKind,
     ListNode,
     Node,
     Paragraph,
@@ -147,23 +146,31 @@ def _notion_lines(node: Node) -> list[str]:
             assert_never(node)
 
 
+def _list_kind(node: Node) -> ListKind | None:
+    return node.kind if isinstance(node, ListNode) else None
+
+
 def _notion_blocks(nodes: Sequence[Node]) -> list[str]:
     lines: list[str] = []
-    previous_family: MarkerFamily | None = None
+    previous_kind: ListKind | None = None
     for node in nodes:
         node_lines = _notion_lines(node)
         if not node_lines:
             continue
-        family = list_marker_family(node)
-        if family is not None and family == previous_family:
+        kind = _list_kind(node)
+        if kind is not None and kind == previous_kind:
             lines.append(EMPTY_BLOCK)
         lines += node_lines
-        previous_family = family
+        previous_kind = kind
     return lines
 
 
+def _page(lines: Sequence[str]) -> str:
+    return "\n".join(lines) + "\n"
+
+
 def render_notion(nodes: Sequence[Node]) -> str:
-    return "\n".join(_notion_blocks(nodes)) + "\n"
+    return _page(_notion_blocks(nodes))
 
 
 def _starts_a_chunk(node: Node) -> bool:
@@ -202,7 +209,10 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
     oversized: list[str] = []
     current_chunk = ""
     for section in sections:
-        text = render_notion(section)
+        lines = _notion_blocks(section)
+        if not lines:
+            continue
+        text = _page(lines)
         if len(text) > limit:
             oversized.append(_section_label(section))
         if current_chunk and len(current_chunk) + len(text) > limit:
@@ -211,4 +221,4 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
         current_chunk += text
     if current_chunk:
         chunks.append(current_chunk)
-    return NotionChunks(tuple(chunks), tuple(oversized))
+    return NotionChunks(tuple(chunks) or (render_notion(nodes),), tuple(oversized))

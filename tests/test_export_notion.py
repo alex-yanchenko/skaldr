@@ -11,7 +11,9 @@ from skaldr.export.tree import (
     Callout,
     Heading,
     ListEntry,
+    ListKind,
     ListNode,
+    Node,
     Paragraph,
     Quote,
     Toggle,
@@ -235,9 +237,87 @@ def test_back_to_back_lists_of_one_kind_get_an_empty_block_between_them_so_they_
         {"type": "list", "style": "number", "items": ["b"]},
         {"type": "list", "style": "check", "items": ["c"]},
         {"type": "list", "items": ["d"]},
+        {"type": "list", "items": ["e"]},
     ]
 
-    assert notion_of(blocks) == "1. a\n<empty-block/>\n1. b\n- [ ] c\n<empty-block/>\n- d\n"
+    assert notion_of(blocks) == "1. a\n<empty-block/>\n1. b\n- [ ] c\n- d\n<empty-block/>\n- e\n"
+
+
+def _one_entry_list(kind: ListKind, text: str, children: tuple[Node, ...] = ()) -> ListNode:
+    return ListNode(kind, (ListEntry((Plain(text),), children=children),))
+
+
+@pytest.mark.parametrize(
+    ("nodes", "notion"),
+    [
+        pytest.param(
+            (_one_entry_list("check", "a"), _one_entry_list("bullet", "b")),
+            "- [ ] a\n- b\n",
+            id="check-then-bullet",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), _one_entry_list("number", "b")),
+            "- a\n1. b\n",
+            id="bullet-then-number",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), Paragraph(()), _one_entry_list("bullet", "b")),
+            "- a\n<empty-block/>\n- b\n",
+            id="an-empty-paragraph-between-writes-nothing",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), Paragraph((Plain("p"),)), _one_entry_list("bullet", "b")),
+            "- a\np\n- b\n",
+            id="a-paragraph-between-keeps-them-apart",
+        ),
+        pytest.param(
+            (
+                _one_entry_list(
+                    "bullet", "p", (_one_entry_list("number", "a"), _one_entry_list("number", "b"))
+                ),
+            ),
+            "- p\n\t1. a\n\t<empty-block/>\n\t1. b\n",
+            id="inside-a-list-entry",
+        ),
+        pytest.param(
+            (Callout("info", (_one_entry_list("check", "a"), _one_entry_list("check", "b"))),),
+            '<callout icon="💡" color="blue_bg">\n\t- [ ] a\n\t<empty-block/>\n\t- [ ] b\n</callout>\n',
+            id="inside-a-callout",
+        ),
+    ],
+)
+def test_an_empty_block_separates_only_lists_of_the_same_kind_that_notion_would_merge(
+    nodes: tuple[Node, ...], notion: str
+) -> None:
+    assert render_notion(nodes) == notion
+
+
+OPENING_THAT_RENDERS_NOTHING = (Paragraph(()), Heading(2, (Plain("A"),)), Paragraph((Plain("a"),)))
+SECTIONS_WITH_LISTS = (
+    _one_entry_list("bullet", "intro"),
+    Heading(2, (Plain("A"),)),
+    _one_entry_list("bullet", "a"),
+    _one_entry_list("bullet", "b"),
+    Toggle((Plain("B"),), 2, (Paragraph(()),)),
+    Heading(1, (Plain("C"),)),
+)
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        pytest.param(OPENING_THAT_RENDERS_NOTHING, id="opening-renders-nothing"),
+        pytest.param((), id="empty-body"),
+        pytest.param((Paragraph(()),), id="body-renders-nothing"),
+        pytest.param(SECTIONS_WITH_LISTS, id="sections-with-lists"),
+        pytest.param(lowered(heading_sections(4, "x = 1\n" * 20)), id="code-sections"),
+    ],
+)
+@pytest.mark.parametrize(
+    "limit", [pytest.param(limit, id=f"limit-{limit}") for limit in (1, 20, 400, 100000)]
+)
+def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: int) -> None:
+    assert "".join(chunk_notion(nodes, limit).chunks) == render_notion(nodes)
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:

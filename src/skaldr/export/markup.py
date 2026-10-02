@@ -1,17 +1,10 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
-from typing import Final, Literal
+from typing import Final
 from urllib.parse import quote
 
-from skaldr.export.tree import CodeBlock, ListKind, ListNode, Node, ToneName
+from skaldr.export.tree import CodeBlock, ToneName
 from skaldr.richtext import Citation, StyleName
-
-MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
-    "bullet": "dash",
-    "check": "dash",
-    "number": "ordinal",
-}
 
 STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
@@ -77,10 +70,6 @@ def bang_cannot_open_an_image(escaped_text: str) -> str:
 
 def encode_url(url: str) -> str:
     return quote(url, safe=URL_SAFE_CHARACTERS)
-
-
-def list_marker_family(node: Node) -> MarkerFamily | None:
-    return MARKER_FAMILY[node.kind] if isinstance(node, ListNode) else None
 
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
