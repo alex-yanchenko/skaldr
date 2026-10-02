@@ -114,12 +114,12 @@ class _NotionRuns(MarkupRuns):
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
         highlighted = (
-            _coloured_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
+            _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
         )
-        return _coloured_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
+        return _colored_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
 
 
-def _coloured_span(color: str, inner: str) -> str:
+def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 

@@ -11,7 +11,8 @@ from skaldr.errors import ReportError
 from skaldr.mathml import refuse_invalid_math
 from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
-StyleName = Literal["bold", "italic", "strike", "underline"]
+MarkerStyle = Literal["bold", "italic", "strike"]
+StyleName = Literal[MarkerStyle, "underline"]
 ScriptPosition = Literal["subscript", "superscript"]
 SCRIPT_HTML_TAG: Final[Mapping[ScriptPosition, str]] = {"subscript": "sub", "superscript": "sup"}
 
@@ -83,17 +84,20 @@ _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 _PLACEHOLDER_NAME = re.compile(REFERENCE_KEY_PATTERN)
 _SENTINEL = re.compile(r"\x00(\d+)\x00")
-_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]\{\s*([a-z]+\s*=[^{}\x00]*)\}")
+_SPAN_ATTRIBUTE_LIST: Final = r"\{(?=[^{}\x00]*?(?<![^\s{])(?:tone|bg)\s*=)([^{}\x00]*)\}"
+_ATTRIBUTE_SPAN = re.compile(r"\[([^\[\]]+)\]" + _SPAN_ATTRIBUTE_LIST)
+_STRAY_ATTRIBUTE_LIST = re.compile(r"\]" + _SPAN_ATTRIBUTE_LIST)
 _SPAN_ATTRIBUTES: Final = frozenset({"tone", "bg"})
 _TONE: Final = TypeAdapter[ToneLiteral](Tone)
 _PALETTE_ONLY_NAMES: Final = tuple(
     name for name in get_args(BadgeColorLiteral) if name not in get_args(ToneLiteral)
 )
-_SCRIPT_PASSES: tuple[tuple[re.Pattern[str], ScriptPosition], ...] = (
-    (re.compile(r"(?<!~)~([^\s~`\x00]+)~(?!~)"), "subscript"),
-    (re.compile(r"(?<![\[^])\^([^\s^`\x00]+)\^(?!\^)"), "superscript"),
+_SCRIPT_TEXT: Final = r"((?:[^\W_]|[-+=().,'*" + "\N{MINUS SIGN}\N{PRIME}" + r"])+)"
+_SCRIPT_PASSES: Final[tuple[tuple[re.Pattern[str], ScriptPosition], ...]] = (
+    (re.compile(rf"(?<![~\\])~{_SCRIPT_TEXT}~(?!~)"), "subscript"),
+    (re.compile(rf"(?<![\[^\\])\^{_SCRIPT_TEXT}\^(?!\^)"), "superscript"),
 )
-_STYLE_PASSES: tuple[tuple[re.Pattern[str], StyleName], ...] = (
+_STYLE_PASSES: Final[tuple[tuple[re.Pattern[str], StyleName], ...]] = (
     (re.compile(r"\*\*([^*]+)\*\*"), "bold"),
     (re.compile(r"(?<![\w+])\+\+([^\s+](?:[^+]*[^\s+])?)\+\+(?![\w+])"), "underline"),
     (re.compile(r"~~([^~]+)~~"), "strike"),
@@ -178,19 +182,38 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
             return stash.set_aside(Link(label, url))
         return match.group(0)
 
-    def blank(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if "\x00" in name or not _PLACEHOLDER_NAME.fullmatch(name):
-            raise _invalid_placeholder(name)
-        return stash.set_aside(Placeholder(name))
-
     staged = _FOOTNOTE.sub(cite, staged)
+    staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
+    _refuse_stray_attribute_list(staged)
     staged = _LINK.sub(link, staged)
-    staged = _PLACEHOLDER.sub(blank, staged)
+    return _parse_styles(_set_aside_placeholders_and_scripts(stash, staged), 0, stash)
+
+
+def _set_aside_placeholders_and_scripts(stash: _Stash, fragment: str) -> str:
+    staged = _PLACEHOLDER.sub(partial(_set_aside_placeholder, stash), fragment)
     for pattern, position in _SCRIPT_PASSES:
         staged = pattern.sub(partial(_set_aside_script, stash, position), staged)
-    staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
-    return _parse_styles(staged, 0, stash)
+    return staged
+
+
+def _set_aside_placeholder(stash: _Stash, match: re.Match[str]) -> str:
+    name = match.group(1)
+    if "\x00" in name or not _PLACEHOLDER_NAME.fullmatch(name):
+        raise _invalid_placeholder(name)
+    return stash.set_aside(Placeholder(name))
+
+
+def _refuse_stray_attribute_list(staged: str) -> None:
+    stray = _STRAY_ATTRIBUTE_LIST.search(staged)
+    if stray:
+        raise ReportError(
+            f"the attribute list {_attribute_token(stray.group(1))} follows no [text] it can color: the text "
+            "inside a [text]{…} span is not empty and holds no link and no other [ or ]"
+        )
+
+
+def _attribute_token(attributes: str) -> str:
+    return "{" + attributes.strip() + "}"
 
 
 def _set_aside_math_or_code(stash: _Stash, match: re.Match[str]) -> str:
@@ -208,12 +231,18 @@ def _set_aside_script(stash: _Stash, position: ScriptPosition, match: re.Match[s
 
 def _set_aside_tint(stash: _Stash, match: re.Match[str]) -> str:
     tones = _span_tones(match.group(2))
-    label = _parse_styles(match.group(1), 0, stash)
-    return stash.set_aside(Tinted(tones.get("tone"), tones.get("bg"), label))
+    label = _parse_styles(_set_aside_placeholders_and_scripts(stash, match.group(1)), 0, stash)
+    return stash.set_aside(Tinted(tones.tone, tones.background, label))
 
 
-def _span_tones(attributes: str) -> dict[str, ToneLiteral]:
-    token = "{" + attributes.strip() + "}"
+@dataclass(frozen=True)
+class _SpanTones:
+    tone: ToneLiteral | None
+    background: ToneLiteral | None
+
+
+def _span_tones(attributes: str) -> _SpanTones:
+    token = _attribute_token(attributes)
     tones: dict[str, ToneLiteral] = {}
     for attribute in attributes.split():
         key, equals, value = attribute.partition("=")
@@ -229,17 +258,17 @@ def _span_tones(attributes: str) -> dict[str, ToneLiteral]:
         if key in tones:
             raise ReportError(f"attribute '{key}' is set twice in {token}")
         tones[key] = _span_tone(value, token)
-    return tones
+    return _SpanTones(tones.get("tone"), tones.get("bg"))
 
 
 def _span_tone(value: str, token: str) -> ToneLiteral:
     try:
         return _TONE.validate_python(value)
-    except ValidationError:
+    except ValidationError as error:
         raise ReportError(
             f"unknown tone '{value}' in {token}: a tone is one of {', '.join(get_args(ToneLiteral))}, "
             f"or a palette name {', '.join(_PALETTE_ONLY_NAMES)}"
-        ) from None
+        ) from error
 
 
 def _parse_styles(fragment: str, pass_index: int, stash: _Stash) -> Rich:

@@ -255,9 +255,11 @@ def test_a_math_block_is_a_github_math_fence() -> None:
     assert markdown_of([block]) == "```math\n\\sum_{i=1}^{n} x_i\n= y\n```\n"
 
 
-def test_an_attribute_span_keeps_only_its_text_because_github_has_no_colour() -> None:
-    assert markdown_of([{"type": "text", "body": "[**late** a_b]{tone=danger bg=warning} [x]{y}"}]) == (
-        "**late** a\\_b \\[x\\]{y}\n"
+def test_an_attribute_span_keeps_only_its_text_because_github_has_no_color() -> None:
+    body = "[**late** a_b]{tone=danger bg=warning} [x]{y} [[docs]{tone=info}](https://x.io)"
+
+    assert markdown_of([{"type": "text", "body": body}]) == (
+        "**late** a\\_b \\[x\\]{y} [docs](https://x.io)\n"
     )
 
 

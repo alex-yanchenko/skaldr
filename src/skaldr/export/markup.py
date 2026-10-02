@@ -2,7 +2,7 @@ import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from typing import Final, Literal
+from typing import Final
 from urllib.parse import quote
 
 from typing_extensions import assert_never
@@ -10,9 +10,8 @@ from typing_extensions import assert_never
 from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
 from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Citation, ScriptPosition, StyleName
+from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName
 
-MarkerStyle = Literal["bold", "italic", "strike"]
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
@@ -201,8 +200,8 @@ class MarkupRuns(ABC):
     @abstractmethod
     def script(self, position: ScriptPosition, text: str, /) -> str: ...
 
-    @abstractmethod
-    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
+    def tinted(self, _tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
+        return inner
 
     def math(self, expression: str, /) -> str:
         return f"$`{expression}`$"

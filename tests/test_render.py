@@ -2569,15 +2569,15 @@ def test_richtext_applies_the_inline_subset() -> None:
 
 
 def test_richtext_writes_underline_subscript_and_superscript_as_html_elements() -> None:
-    html = str(render_richtext("++under *it*++ H~2~O 10^3^ x~<i>~"))
+    html = str(render_richtext("++under *it*++ H~2~O 10^3^ f^'^"))
 
-    assert html == "<u>under <em>it</em></u> H<sub>2</sub>O 10<sup>3</sup> x<sub>&lt;i&gt;</sub>"
+    assert html == "<u>under <em>it</em></u> H<sub>2</sub>O 10<sup>3</sup> f<sup>&#39;</sup>"
 
 
 @pytest.mark.parametrize(
     ("text", "html"),
     [
-        pytest.param("[late]{tone=danger}", '<span style="color:var(--danger-fg)">late</span>', id="colour"),
+        pytest.param("[late]{tone=danger}", '<span style="color:var(--danger-fg)">late</span>', id="color"),
         pytest.param(
             "[due]{bg=amber}", '<span style="background:var(--warning-bg)">due</span>', id="highlight"
         ),
@@ -2585,7 +2585,12 @@ def test_richtext_writes_underline_subscript_and_superscript_as_html_elements() 
             "[**now** &lt;]{tone=sky bg=neutral}",
             '<span style="color:var(--sky-fg);background:var(--neutral-bg)">'
             "<strong>now</strong> &amp;lt;</span>",
-            id="colour-and-highlight-around-escaped-marks",
+            id="color-and-highlight-around-escaped-marks",
+        ),
+        pytest.param(
+            "[[a]{tone=danger}](https://x.io)",
+            '<a href="https://x.io"><span style="color:var(--danger-fg)">a</span></a>',
+            id="span-inside-a-link-label",
         ),
     ],
 )
@@ -2611,11 +2616,26 @@ def test_a_math_block_renders_display_mathml() -> None:
     ) in html
 
 
-@pytest.mark.parametrize("tone", [pytest.param(tone, id=tone) for tone in get_args(ToneLiteral)])
-def test_every_tone_an_attribute_span_names_has_a_colour_and_a_tint_token(tone: str) -> None:
-    styles = package_text("styles.css")
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param(f"--{tone}-{kind}:light-dark(", id=f"{tone}-{kind}")
+        for tone in get_args(ToneLiteral)
+        for kind in ("fg", "bg")
+    ],
+)
+def test_every_tone_an_attribute_span_names_has_a_color_and_a_tint_token(token: str) -> None:
+    assert token in package_text("styles.css")
 
-    assert (f"--{tone}-fg:light-dark(" in styles, f"--{tone}-bg:light-dark(" in styles) == (True, True)
+
+def test_a_link_inside_an_attribute_span_fails_the_build_instead_of_publishing_its_syntax() -> None:
+    with pytest.raises(ReportError) as raised:
+        render_richtext("[see [docs](https://x.io) now]{tone=info}")
+
+    assert str(raised.value) == (
+        "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+        "is not empty and holds no link and no other [ or ]"
+    )
 
 
 def test_richtext_keeps_brackets_and_braces_that_form_no_attribute_span_as_text() -> None:

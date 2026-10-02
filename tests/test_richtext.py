@@ -138,6 +138,28 @@ def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
             (Styled("underline", (Plain("H"), ScriptText("subscript", "2"), Plain("O"))),),
             id="subscript-inside-underline",
         ),
+        pytest.param("e^-i^", (Plain("e"), ScriptText("superscript", "-i")), id="signed-superscript"),
+        pytest.param(
+            "x~n+1~ z^*^ f^\N{PRIME}\N{PRIME}^ y~(k)~ x^\N{MINUS SIGN}1^",
+            (
+                Plain("x"),
+                ScriptText("subscript", "n+1"),
+                Plain(" z"),
+                ScriptText("superscript", "*"),
+                Plain(" f"),
+                ScriptText("superscript", "\N{PRIME}\N{PRIME}"),
+                Plain(" y"),
+                ScriptText("subscript", "(k)"),
+                Plain(" x"),
+                ScriptText("superscript", "\N{MINUS SIGN}1"),
+            ),
+            id="operators-primes-and-parentheses-inside-a-script",
+        ),
+        pytest.param(
+            "++i over i++",
+            (Styled("underline", (Plain("i over i"),)),),
+            id="two-increments-in-one-paragraph-read-as-an-underline",
+        ),
     ],
 )
 def test_underline_and_script_marks_parse_into_runs(text: str, runs: Rich) -> None:
@@ -158,6 +180,12 @@ def test_underline_and_script_marks_parse_into_runs(text: str, runs: Rich) -> No
         pytest.param("a ++ b ++ c", id="spaced-pluses"),
         pytest.param("++unclosed", id="unclosed-underline"),
         pytest.param("x++y++", id="underline-inside-a-word"),
+        pytest.param("~/code,~/notes", id="home-directory-paths"),
+        pytest.param("http://host/~alice/x~bob", id="url-with-tildes"),
+        pytest.param("C:\\~tmp~\\x", id="windows-path-with-tildes"),
+        pytest.param("(^|[^\\p{L}])", id="regex-with-carets"),
+        pytest.param("cut ~5%~ of it", id="percent-inside-tildes"),
+        pytest.param("2^a_b^ and x~a/b~", id="underscore-and-slash-inside-markers"),
     ],
 )
 def test_marker_characters_that_do_not_form_a_mark_stay_prose(text: str) -> None:
@@ -209,12 +237,12 @@ def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None
 @pytest.mark.parametrize(
     ("text", "runs"),
     [
-        pytest.param("[late]{tone=danger}", (Tinted("danger", None, (Plain("late"),)),), id="colour"),
+        pytest.param("[late]{tone=danger}", (Tinted("danger", None, (Plain("late"),)),), id="color"),
         pytest.param("[due]{bg=warning}", (Tinted(None, "warning", (Plain("due"),)),), id="highlight"),
         pytest.param(
             "[now]{tone=danger bg=warning}",
             (Tinted("danger", "warning", (Plain("now"),)),),
-            id="colour-and-highlight",
+            id="color-and-highlight",
         ),
         pytest.param(
             "[now]{ bg=warning   tone=danger }",
@@ -247,6 +275,38 @@ def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None
             id="marks-inside-the-span",
         ),
         pytest.param(
+            "[{{who}} 10^3^ [^sop]]{bg=info}",
+            (
+                Tinted(
+                    None,
+                    "info",
+                    (
+                        Placeholder("who"),
+                        Plain(" 10"),
+                        ScriptText("superscript", "3"),
+                        Plain(" "),
+                        Citation("sop", 1, "https://example.com/sop"),
+                    ),
+                ),
+            ),
+            id="placeholder-script-and-citation-inside-the-span",
+        ),
+        pytest.param(
+            "[[a]{tone=danger}](https://x.io)",
+            (Link((Tinted("danger", None, (Plain("a"),)),), "https://x.io"),),
+            id="span-inside-a-link-label",
+        ),
+        pytest.param(
+            "[[a]{tone=danger} b](#method)",
+            (AnchorLink((Tinted("danger", None, (Plain("a"),)), Plain(" b")), "method"),),
+            id="span-inside-an-anchor-link-label",
+        ),
+        pytest.param(
+            "[x](https://x.io/~a~/b^c^) [y]{tone=info}",
+            (Link((Plain("x"),), "https://x.io/~a~/b^c^"), Plain(" "), Tinted("info", None, (Plain("y"),))),
+            id="script-markers-inside-a-url-stay-in-the-url",
+        ),
+        pytest.param(
             "**a [b]{tone=info} c**",
             (Styled("bold", (Plain("a "), Tinted("info", None, (Plain("b"),)), Plain(" c"))),),
             id="span-inside-bold",
@@ -273,10 +333,14 @@ def test_an_attribute_span_parses_into_a_tinted_run(text: str, runs: Rich) -> No
         pytest.param("[a]{x}", id="braces-without-an-attribute"),
         pytest.param("[a]{}", id="empty-braces"),
         pytest.param("[a] {tone=info}", id="space-before-the-braces"),
-        pytest.param("[]{tone=info}", id="empty-label"),
         pytest.param("{tone=info} alone", id="braces-without-a-label"),
         pytest.param("[a]{tone=info", id="unclosed-braces"),
         pytest.param("[a]{Tone=info}", id="capitalised-key"),
+        pytest.param("arr[i]{n=3}", id="index-then-a-set-literal"),
+        pytest.param("[a]{x=1}", id="unknown-key-alone"),
+        pytest.param("[a]{size=2}", id="size-key-alone"),
+        pytest.param("[a]{tones=info} [b]{bgcolor=red}", id="keys-that-only-start-with-tone-or-bg"),
+        pytest.param("[a]{atone=info}", id="key-that-ends-with-tone"),
     ],
 )
 def test_brackets_and_braces_that_form_no_attribute_span_stay_prose(text: str) -> None:
@@ -299,9 +363,20 @@ def test_brackets_and_braces_that_form_no_attribute_span_stay_prose(text: str) -
             id="empty-tone",
         ),
         pytest.param(
-            "[a]{size=2}",
-            "unknown attribute 'size' in {size=2}: a [text]{…} span takes tone=<tone> and bg=<tone>",
-            id="unknown-attribute",
+            "[a]{tone=bogus}",
+            "unknown tone 'bogus' in {tone=bogus}: a tone is one of neutral, info, success, warning, "
+            "danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, violet",
+            id="bogus-tone",
+        ),
+        pytest.param(
+            "[a]{tone=info x=1}",
+            "unknown attribute 'x' in {tone=info x=1}: a [text]{…} span takes tone=<tone> and bg=<tone>",
+            id="unknown-attribute-after-a-tone",
+        ),
+        pytest.param(
+            "[a]{size=2 bg=info}",
+            "unknown attribute 'size' in {size=2 bg=info}: a [text]{…} span takes tone=<tone> and bg=<tone>",
+            id="unknown-attribute-before-a-background",
         ),
         pytest.param(
             "[a]{tone=info tone=danger}",
@@ -321,6 +396,25 @@ def test_an_attribute_span_that_names_no_valid_tone_fails_naming_the_token(text:
         parse_rich(f"x {text} y")
 
     assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        pytest.param("[see [docs](https://x.io) now]{tone=info}", "{tone=info}", id="link-inside-the-span"),
+        pytest.param("[see [^nope] now]{bg=warning}", "{bg=warning}", id="unresolved-citation-inside"),
+        pytest.param("[]{tone=info}", "{tone=info}", id="empty-text"),
+        pytest.param("[a [b] c]{ tone=danger bg=info }", "{tone=danger bg=info}", id="bracket-inside"),
+    ],
+)
+def test_an_attribute_list_that_colors_no_text_fails_naming_the_token(text: str, token: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"x {text} y", FULL_CONTEXT)
+
+    assert str(raised.value) == (
+        f"the attribute list {token} follows no [text] it can color: the text inside a [text]{{…}} span "
+        "is not empty and holds no link and no other [ or ]"
+    )
 
 
 def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:

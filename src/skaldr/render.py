@@ -78,9 +78,9 @@ class _HtmlRuns:
         return f"<{tag}>{escape(text)}</{tag}>"
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
-        colour = [f"color:var(--{tone}-fg)"] if tone else []
+        color = [f"color:var(--{tone}-fg)"] if tone else []
         highlight = [f"background:var(--{background}-bg)"] if background else []
-        return f'<span style="{";".join(colour + highlight)}">{inner}</span>'
+        return f'<span style="{";".join(color + highlight)}">{inner}</span>'
 
     def math(self, expression: str, /) -> str:
         return mathml(expression, "inline")
