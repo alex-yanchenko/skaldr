@@ -1603,10 +1603,11 @@
         },
         "level": {
           "default": 2,
-          "description": "Heading level: 2 (major heading) or 3 (sub-heading).",
+          "description": "Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
           "enum": [
             2,
-            3
+            3,
+            4
           ],
           "title": "Level",
           "type": "integer"

@@ -107,6 +107,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+	h4:not(.rq-case-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
 	   heading's own weight/size so it reads as a subtitle, not part of the title. */
 	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;

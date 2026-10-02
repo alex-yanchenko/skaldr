@@ -20,6 +20,7 @@ from skaldr.models import (
     FlowStep,
     Grid,
     Group,
+    Heading,
     ListBlock,
     ListItem,
     Matrix,
@@ -618,6 +619,19 @@ def test_panel_parses_to_whole_model() -> None:
 def test_panel_with_no_blocks_is_rejected() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.panel\.blocks"):
         parse_report(make_report(blocks=[{"type": "panel", "title": "Empty", "blocks": []}]))
+
+
+def test_a_level_four_heading_parses_to_whole_model() -> None:
+    report = parse_report(make_report(blocks=[{"type": "heading", "level": 4, "text": "Bin detail"}]))
+
+    assert report.blocks[0] == Heading(type="heading", text="Bin detail", level=4)
+
+
+def test_a_heading_below_level_four_is_rejected() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "heading", "level": 5, "text": "Too deep"}]))
+
+    assert str(raised.value) == "invalid content data: blocks.0.heading.level: Input should be 2, 3 or 4"
 
 
 def test_a_divider_parses_to_a_block_with_no_fields_of_its_own() -> None:

@@ -123,6 +123,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+	h4:not(.rq-case-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
 	   heading's own weight/size so it reads as a subtitle, not part of the title. */
 	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;
@@ -1127,6 +1128,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <h3 id="follow-up-checklist">Follow-up checklist</h3>
 
 <ul class="list check"><li><label class="chk"><input type="checkbox" checked><span>Confirm the <code>bin &gt; 12</code> scan rule with the site lead.</span></label></li><li><label class="chk"><input type="checkbox"><span>Ship the 9-digit bin-code widening behind the scan flag.</span></label><ul class="list check"><li><label class="chk"><input type="checkbox"><span>Stage on the pilot aisle first.</span></label></li><li><label class="chk"><input type="checkbox"><span>Watch the mis-scan rate for one shift before widening.</span></label></li></ul></li><li><label class="chk"><input type="checkbox"><span>Re-run the count and re-verify reconciliation.</span></label></li></ul>
+
+<h4 id="sign-off-and-rollback">Sign-off and rollback</h4>
 
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
 

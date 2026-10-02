@@ -657,6 +657,31 @@ def test_walkthrough_heading_in_a_step_detail_gets_a_slug_id() -> None:
     assert '<h3 id="nested-step-note">Nested step note</h3>' in html
 
 
+def test_a_level_four_heading_is_an_h4_with_its_anchor_and_sub() -> None:
+    heading = {"type": "heading", "level": 4, "text": "Bin detail", "sub": "by **aisle**"}
+
+    html = render_html(parse_report(make_report(blocks=[heading])))
+
+    assert '<h4 id="bin-detail">Bin detail<span class="hsub">by <strong>aisle</strong></span></h4>' in html
+
+
+def test_an_anchor_link_reaches_a_level_four_heading_inside_a_section() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "level": 4, "text": "Raw", "id": "raw"}],
+    }
+    blocks = [section, {"type": "text", "body": "See [the raw counts](#raw)."}]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert (
+        '<div class="section-body"><h4 id="raw">Raw</h4>\n</div></details>\n\n'
+        '<p class="text">See <a href="#raw">the raw counts</a>.</p>'
+    ) in html
+
+
 def test_section_gets_an_anchor_id_and_appears_in_the_toc() -> None:
     report = parse_report(
         make_report(

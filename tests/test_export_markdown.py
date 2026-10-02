@@ -549,6 +549,15 @@ def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> Non
     assert render_markdown([node]) == markdown
 
 
+def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug() -> None:
+    blocks = [
+        {"type": "heading", "level": 4, "text": "Bin detail", "id": "bins"},
+        {"type": "text", "body": "See [bins](#bins)."},
+    ]
+
+    assert markdown_of(blocks) == "#### Bin detail\n\nSee [bins](#bin-detail).\n"
+
+
 def test_a_divider_stands_apart_from_the_paragraph_above_so_it_is_never_a_setext_underline() -> None:
     blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
 

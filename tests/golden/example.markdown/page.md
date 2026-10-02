@@ -137,8 +137,10 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
   - [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
 
-* **Owner**: Inventory Ops — **@site-lead** signs off each fix.
-* **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+#### Sign-off and rollback
+
+- **Owner**: Inventory Ops — **@site-lead** signs off each fix.
+- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
 ---
 

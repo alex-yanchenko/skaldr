@@ -158,7 +158,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
+| `heading` | Section structure (feeds the TOC at level 2; levels 3 and 4 get an anchor but no TOC entry) | `text`, `level?: 2\|3\|4` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -942,6 +942,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
+| `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level and stops at `####` | the same |
 | `grid` | its cells one after another | native columns |
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
 | badges | bold labels | coloured chips |

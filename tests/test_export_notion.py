@@ -192,6 +192,10 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
     )
 
 
+def test_a_level_four_heading_is_four_hashes() -> None:
+    assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
+
+
 def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
     blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
 

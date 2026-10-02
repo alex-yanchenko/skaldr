@@ -595,6 +595,23 @@ def test_a_heading_sub_is_a_muted_italic_line_under_it() -> None:
     )
 
 
+def test_a_level_four_heading_keeps_its_level_and_anchor() -> None:
+    assert lowered([{"type": "heading", "level": 4, "text": "Bin detail"}]) == (
+        Heading(4, (Plain("Bin detail"),), "bin-detail"),
+    )
+
+
+def test_a_level_four_heading_inside_a_section_stays_at_level_four() -> None:
+    section = {
+        "type": "section",
+        "title": "Open",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "text": "Deep", "level": 4}],
+    }
+
+    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
 def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -> None:
     section = {
         "type": "section",

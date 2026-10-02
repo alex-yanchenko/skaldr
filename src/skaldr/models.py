@@ -236,8 +236,9 @@ class Meta(FrozenModel):
 class Heading(_Block):
     type: Literal["heading"]
     text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
-    level: Literal[2, 3] = Field(
-        default=2, description="Heading level: 2 (major heading) or 3 (sub-heading)."
+    level: Literal[2, 3, 4] = Field(
+        default=2,
+        description="Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
     )
     id: str | None = Field(
         default=None,

@@ -782,6 +782,25 @@ def test_toc_includes_sections_interleaved_in_document_order() -> None:
     ]
 
 
+@pytest.mark.parametrize("level", [pytest.param(3, id="level-3"), pytest.param(4, id="level-4")])
+def test_a_sub_heading_gets_an_anchor_but_no_toc_entry(level: int) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "toc": True},
+            blocks=[
+                {"type": "heading", "text": "Overview"},
+                {"type": "heading", "level": level, "text": "Bins"},
+            ],
+        )
+    )
+    slugs = anchor_slugs(report)
+
+    assert (sorted(slugs.values()), toc_entries(report, slugs)) == (
+        ["bins", "overview"],
+        [("overview", "Overview")],
+    )
+
+
 def test_toc_empty_when_toc_disabled() -> None:
     report = parse_report(make_report(blocks=[{"type": "heading", "text": "X"}]))
 
