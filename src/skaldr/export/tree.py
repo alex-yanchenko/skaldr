@@ -51,7 +51,7 @@ class TableRow:
 
 
 @dataclass(frozen=True)
-class Table:
+class TableNode:
     header: tuple[TableCell, ...]
     rows: tuple[TableRow, ...]
     header_column: bool = False
@@ -84,14 +84,14 @@ class Toggle:
 
 
 @dataclass(frozen=True)
-class Column:
+class GridColumn:
     ratio: int
     children: "tuple[Node, ...]"
 
 
 @dataclass(frozen=True)
 class Columns:
-    columns: tuple[Column, ...]
+    columns: tuple[GridColumn, ...]
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,16 @@ class TableOfContents:
 
 
 Node = (
-    Heading | Paragraph | ListNode | Table | CodeBlock | Callout | Quote | Toggle | Columns | TableOfContents
+    Heading
+    | Paragraph
+    | ListNode
+    | TableNode
+    | CodeBlock
+    | Callout
+    | Quote
+    | Toggle
+    | Columns
+    | TableOfContents
 )
 
 
@@ -136,5 +145,5 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return node.children
         case Columns():
             return tuple(child for column in node.columns for child in column.children)
-        case Heading() | Paragraph() | Table() | CodeBlock() | Quote() | TableOfContents():
+        case Heading() | Paragraph() | TableNode() | CodeBlock() | Quote() | TableOfContents():
             return ()

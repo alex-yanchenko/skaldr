@@ -8,7 +8,7 @@ from urllib.parse import quote
 from typing_extensions import assert_never
 
 from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
-from skaldr.export.tree import CodeBlock, Table, TableRow, ToneName
+from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, StyleName
 
@@ -44,11 +44,11 @@ def styled(style: StyleName, inner: str) -> str:
     return _wrap_marker(STYLE_MARKER[style], inner)
 
 
-def is_emphasised_body_cell(table: Table, row: TableRow, index: int) -> bool:
+def is_emphasised_body_cell(table: TableNode, row: TableRow, index: int) -> bool:
     return row.emphasis is not None or (table.header_column and index == 0)
 
 
-def body_cell_texts(table: Table, row: TableRow, texts: Sequence[str]) -> list[str]:
+def body_cell_texts(table: TableNode, row: TableRow, texts: Sequence[str]) -> list[str]:
     return [
         styled("bold", text) if is_emphasised_body_cell(table, row, index) else text
         for index, text in enumerate(texts)

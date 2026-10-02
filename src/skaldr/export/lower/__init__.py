@@ -26,8 +26,8 @@ from skaldr.export.lower.prose import (
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
 from skaldr.export.tree import (
     Callout,
-    Column,
     Columns,
+    GridColumn,
     Heading,
     ListEntry,
     ListNode,
@@ -162,7 +162,9 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
         return [node for children in cell_nodes for node in children]
     ratios = _column_ratios([cell.span for cell in block.cells])
     return [
-        Columns(tuple(Column(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True)))
+        Columns(
+            tuple(GridColumn(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True))
+        )
     ]
 
 

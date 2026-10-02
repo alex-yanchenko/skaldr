@@ -18,8 +18,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    Table,
     TableCell,
+    TableNode,
     TableRow,
     Toggle,
     ToneName,
@@ -222,7 +222,7 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
 
 
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
-    table = Table(
+    table = TableNode(
         (TableCell((Plain("Name"),)), TableCell(())),
         (
             TableRow((TableCell((Plain("group"),)), TableCell(())), emphasis="group"),
@@ -245,7 +245,7 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
 
 
 def test_a_group_row_with_its_own_tone_keeps_that_background() -> None:
-    table = Table(
+    table = TableNode(
         (TableCell((Plain("Name"),)),),
         (TableRow((TableCell((Plain("group"),)),), "warning", emphasis="group"),),
     )

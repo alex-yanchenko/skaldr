@@ -31,8 +31,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    Table,
     TableCell,
+    TableNode,
     TableOfContents,
     Toggle,
     heading_of,
@@ -154,8 +154,8 @@ class _MarkdownWriter:
     def cell_text(self, cell: TableCell) -> str:
         return self.inline(cell.text).replace("|", "\\|")
 
-    def table_lines(self, table: Table) -> list[str]:
-        width = max(len(table.header), max((len(row.cells) for row in table.rows), default=0))
+    def table_lines(self, table: TableNode) -> list[str]:
+        width = max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
         lines = [
             _table_row(_pad([self.cell_text(cell) for cell in table.header], width)),
             _table_row(["---"] * width),
@@ -225,7 +225,7 @@ class _MarkdownWriter:
                 return [text] if text else []
             case ListNode():
                 return self.list_lines(node, use_alternate_markers)
-            case Table():
+            case TableNode():
                 return self.table_lines(node)
             case CodeBlock():
                 return code_block_lines(node)

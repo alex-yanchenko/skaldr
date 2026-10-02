@@ -1,23 +1,25 @@
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, tone_of, with_bold_label
-from skaldr.export.runs import Break, CheckMark, ExportRich, IndicatorMark, SwimlaneMark
-from skaldr.export.tree import Node, Paragraph, Table, TableCell, TableRow, ToneName
+from skaldr.export.runs import Break, CheckMark, ExportRich, ExportRun, IndicatorMark, SwimlaneMark
+from skaldr.export.tree import Node, Paragraph, TableCell, TableNode, TableRow, ToneName
 from skaldr.richtext import Link, Plain
 
 Row = Mapping[str, Any]
+EMPTY_GROUP_LABEL: Final = "none"
 
 
-def _lines(lines: Iterable[ExportRich]) -> ExportRich:
-    runs: ExportRich = ()
+def _joined_by_breaks(lines: Iterable[ExportRich]) -> ExportRich:
+    runs: list[ExportRun] = []
     for line in lines:
-        if line:
-            runs += (Break(), *line) if runs else line
-    return runs
+        if line and runs:
+            runs.append(Break())
+        runs.extend(line)
+    return tuple(runs)
 
 
 def _blank_cells(count: int) -> tuple[TableCell, ...]:
@@ -27,7 +29,7 @@ def _blank_cells(count: int) -> tuple[TableCell, ...]:
 def _cell_text(value: object, lowering: Lowering) -> ExportRich:
     if value is None or value == "":
         return ()
-    return _lines(lowering.rich(part) for part in compute.paragraphs(str(value)))
+    return _joined_by_breaks(lowering.rich(part) for part in compute.paragraphs(str(value)))
 
 
 def _subrows(row: Row) -> list[Row]:
@@ -44,12 +46,12 @@ def _title_cell(block: models.Table, row: Row, value: object, lowering: Lowering
     subrows = [
         lowering.rich(str(sub["label"])) + plain(f": {compute.fmt(sub['value'])}") for sub in _subrows(row)
     ]
-    return TableCell(_lines([title, *subrows]))
+    return TableCell(_joined_by_breaks([title, *subrows]))
 
 
 def _number_cell(block: models.Table, column: models.Column, value: object) -> TableCell:
     parts = [plain(compute.fmt(value)) if value is not None else ()]
-    if column.pct_of_total and block.reconcile and isinstance(value, (int, float)):
+    if column.pct_of_total and block.reconcile and isinstance(value, int | float):
         parts.append(plain(f"({compute.pct(value, block.reconcile.total)} of total)"))
     return TableCell(spaced([part for part in parts if part]))
 
@@ -98,7 +100,7 @@ def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
         if group_rows:
             rows += [_table_row(block, row, lowering) for row in group_rows]
         else:
-            rows.append(TableRow((TableCell(italic(plain("none"))), *_blank_cells(width - 1))))
+            rows.append(TableRow((TableCell(italic(plain(EMPTY_GROUP_LABEL))), *_blank_cells(width - 1))))
     return rows
 
 
@@ -129,7 +131,9 @@ def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:
     rows = _table_body(block, lowering)
     if block.totals:
         rows.append(_totals_row(block, block.totals.column))
-    nodes: list[Node] = [Table(plain_cells(*(column.label for column in block.cell_columns)), tuple(rows))]
+    nodes: list[Node] = [
+        TableNode(plain_cells(*(column.label for column in block.cell_columns)), tuple(rows))
+    ]
     nodes += _rollup(block, lowering)
     if block.reconcile:
         nodes.append(Paragraph(plain(compute.reconcile_line(block)), "muted"))
@@ -167,7 +171,7 @@ def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]
         )
         for row in block.rows
     ]
-    return [Table(header, tuple(rows), header_column=True)]
+    return [TableNode(header, tuple(rows), header_column=True)]
 
 
 def _matrix_cell(cell: models.MatrixCell | None, lowering: Lowering) -> TableCell:
@@ -184,7 +188,7 @@ def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
         TableRow((TableCell(plain(row_name)), *(_matrix_cell(cell, lowering) for cell in grid_row)))
         for row_name, grid_row in zip(block.rows, compute.matrix_grid(block), strict=True)
     ]
-    return [Table(header, tuple(rows), header_column=True)]
+    return [TableNode(header, tuple(rows), header_column=True)]
 
 
 def _swim_step(block: models.Swimlane, step: models.SwimlaneStep, show_group: bool) -> ExportRich:
@@ -221,7 +225,7 @@ def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) 
     for column in block.columns:
         names = [_with_total(plain(name), group_totals, name) for name in starting[column.key]]
         sub = italic(plain(column.sub)) if column.sub else ()
-        header.append(TableCell(_lines([plain(column.name), sub, spaced(names, ", ")])))
+        header.append(TableCell(_joined_by_breaks([plain(column.name), sub, spaced(names, ", ")])))
     return tuple(header)
 
 
@@ -239,7 +243,9 @@ def _lane_cells(block: models.Swimlane, lane_key: str, split: set[str]) -> list[
             if sub_column == column.key
             for step in block.steps_at(lane_key, sub_column, group)
         ]
-        cells.append(TableCell(_lines(_swim_step(block, step, column.key in split) for step in steps)))
+        cells.append(
+            TableCell(_joined_by_breaks(_swim_step(block, step, column.key in split) for step in steps))
+        )
     return cells
 
 
@@ -269,5 +275,5 @@ def lower_swimlane(block: models.Swimlane) -> list[Node]:
             *(TableCell(plain(compute.fmt(totals["columns"][column.key]))) for column in block.columns),
         )
         rows.append(TableRow(footer, emphasis="total"))
-    table = Table(_swimlane_header(block, totals), tuple(rows), header_column=True)
+    table = TableNode(_swimlane_header(block, totals), tuple(rows), header_column=True)
     return [table, *_state_legend(compute.swimlane_state_legend(block))]

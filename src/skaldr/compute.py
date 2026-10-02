@@ -11,7 +11,7 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Final, NamedTuple, TypedDict
 
 from skaldr.errors import ReportError
@@ -37,7 +37,6 @@ from skaldr.models import (
     RequestResponse,
     Section,
     Swimlane,
-    SwimlaneStep,
     SwimlaneStepState,
     Table,
     Walkthrough,
@@ -289,17 +288,17 @@ class SwimTotals(TypedDict):
 def swimlane_totals(block: Swimlane) -> SwimTotals | None:
     if all(step.value is None for step in block.steps):
         return None
-
-    def sum_where(predicate: Callable[[SwimlaneStep], bool]) -> float:
-        return sum(step.value or 0 for step in block.steps if predicate(step))
-
+    steps = block.steps
     return {
-        "lanes": {lane.key: sum_where(lambda step, key=lane.key: step.lane == key) for lane in block.lanes},
+        "lanes": {
+            lane.key: sum(step.value or 0 for step in steps if step.lane == lane.key) for lane in block.lanes
+        },
         "columns": {
-            column.key: sum_where(lambda step, key=column.key: step.col == key) for column in block.columns
+            column.key: sum(step.value or 0 for step in steps if step.col == column.key)
+            for column in block.columns
         },
         "groups": {
-            group.name: sum_where(lambda step, name=group.name: block.step_group(step) == name)
+            group.name: sum(step.value or 0 for step in steps if block.step_group(step) == group.name)
             for group in block.groups
         },
     }
@@ -334,8 +333,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     nlanes = len(block.lanes)
     has_groups = bool(block.groups)
     totals = swimlane_totals(block)
-    has_totals = totals is not None
-    nfoot = int(has_totals)  # 1 when a totals footer row is present
+    nfoot = int(totals is not None)
     # group name → its palette colour (an ungrouped segment's None group has no tint).
     color_of = {group.name: group.color for group in block.groups}
 
@@ -508,7 +506,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "col_start": boundary_line,
                     "col_end": boundary_line + 1,
                     "row_start": full_rows[0],
-                    "row_end": footer_row[0] if has_totals else full_rows[1],
+                    "row_end": footer_row[0] if totals is not None else full_rows[1],
                 }
             )
     # horizontal dividers, each a continuous line. The header/body divider spans the DATA columns only
@@ -520,7 +518,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
     for index in range(1, nlanes):
         hdiv.append({"row": lane_rows[index][0], "col_start": 1})
     # a full-width divider above the totals row sets it off from the lane rows.
-    if has_totals:
+    if totals is not None:
         hdiv.append({"row": footer_row[0], "col_start": 1})
 
     # footer totals row: one cell per column, summing that column's step values across all lanes/groups.
@@ -554,7 +552,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
         "state_legend": swimlane_state_legend(block),
         "n_width": max(len(step.n) for step in block.steps),
         "col_template": f"max-content repeat({ncols}, var(--swim-col))",
-        "row_template": _swim_row_template(has_groups, nlanes, has_totals),
+        "row_template": _swim_row_template(has_groups, nlanes, totals is not None),
         "subcols": subcol_out,
         "headers": headers,
         "header_tints": header_tints,

@@ -20,8 +20,8 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
-    Column,
     Columns,
+    GridColumn,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -30,8 +30,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    Table,
     TableCell,
+    TableNode,
     TableOfContents,
     TableRow,
     TocEntry,
@@ -375,7 +375,7 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() 
                 ),
             ),
         ),
-        Table(
+        TableNode(
             (TableCell(()), *_cells("c")),
             (
                 TableRow((TableCell((Plain("r1"),)), TableCell((Plain("api"),), "info"))),
@@ -404,7 +404,7 @@ def test_a_derived_card_sums_its_tables_and_keeps_an_explicit_tone() -> None:
     assert lowered(blocks, badges=API_BADGES) == (
         ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)")), tone="danger"),)),
         API_LEGEND,
-        Table(
+        TableNode(
             _cells("A"),
             (
                 TableRow((TableCell((Plain("x"), Plain(" "), Chip("api", "blue"))),)),
@@ -774,7 +774,7 @@ def test_a_comparison_colors_a_boolean_by_its_option_polarity(
     }
 
     assert lowered([comparison]) == (
-        Table(
+        TableNode(
             (TableCell(()), *_cells("A", "B")),
             (
                 TableRow(
@@ -795,7 +795,7 @@ def test_a_comparison_bolds_its_highlighted_option_and_keeps_text_and_toned_cell
     }
 
     assert lowered([comparison]) == (
-        Table(
+        TableNode(
             (TableCell(()), TableCell((Plain("A"),)), TableCell((Plain("★ B"),))),
             (
                 TableRow(
@@ -825,7 +825,7 @@ def test_a_matrix_shows_badge_toned_labelled_and_blank_cells() -> None:
 
     assert lowered([matrix], badges=API_BADGES) == (
         API_LEGEND,
-        Table(
+        TableNode(
             (TableCell(()), *_cells("c1", "c2", "c3", "c4")),
             (
                 TableRow(
@@ -856,7 +856,7 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
     }
 
     assert lowered([swimlane]) == (
-        Table(
+        TableNode(
             (
                 TableCell((Plain("Lane"),)),
                 TableCell(
@@ -945,7 +945,7 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
     }
 
     assert lowered([swimlane]) == (
-        Table(
+        TableNode(
             (
                 TableCell((Plain("Lane"),)),
                 TableCell((Plain("Plan"), Break(), Plain("A"), Plain(", "), Plain("B"))),
@@ -1015,7 +1015,7 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
     }
 
     assert lowered([table]) == (
-        Table(
+        TableNode(
             _cells("Issue", "Units"),
             (
                 TableRow(
@@ -1046,7 +1046,7 @@ def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -
     }
 
     assert lowered([table]) == (
-        Table(
+        TableNode(
             _cells("Units", "Issue"),
             (
                 TableRow((TableCell((Plain("2"),)), TableCell((Plain("x"),)))),
@@ -1069,7 +1069,7 @@ def test_a_blank_title_cell_starts_with_its_badge_or_subrow_not_a_break() -> Non
 
     assert lowered([table], badges=API_BADGES) == (
         API_LEGEND,
-        Table(
+        TableNode(
             _cells("Issue"),
             (
                 TableRow((TableCell((Chip("api", "blue"),)),)),
@@ -1096,7 +1096,7 @@ def test_a_reconciled_table_shows_its_rollup_and_reconcile_line_which_the_footer
 
     assert lowered([table], badges=API_BADGES) == (
         API_LEGEND,
-        Table(
+        TableNode(
             _cells("Issue", "Risk", "Units"),
             (
                 TableRow(
@@ -1149,7 +1149,7 @@ def test_a_tinted_table_row_takes_the_tone_of_its_first_badge_key(
 
     assert lowered([table], badges=badges) == (
         API_LEGEND,
-        Table(_cells("A", ""), (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone),)),
+        TableNode(_cells("A", ""), (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone),)),
     )
 
 
@@ -1166,8 +1166,8 @@ def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens
     assert lowered([two, one]) == (
         Columns(
             (
-                Column(25, (Callout("info", (Paragraph((Plain("a"),)),)),)),
-                Column(75, (Paragraph((Plain("b"),)),)),
+                GridColumn(25, (Callout("info", (Paragraph((Plain("a"),)),)),)),
+                GridColumn(75, (Paragraph((Plain("b"),)),)),
             )
         ),
         Paragraph((Plain("c"),)),
@@ -1175,12 +1175,16 @@ def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens
 
 
 def test_three_equal_grid_cells_get_ratios_that_add_up_to_a_hundred() -> None:
-    grid = {"type": "grid", "cells": [{"span": 2, "blocks": [{"type": "text", "body": x}]} for x in "abc"]}
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 2, "blocks": [{"type": "text", "body": body}]} for body in "abc"],
+    }
 
     assert lowered([grid]) == (
         Columns(
             tuple(
-                Column(ratio, (Paragraph((Plain(x),)),)) for ratio, x in zip((33, 33, 34), "abc", strict=True)
+                GridColumn(ratio, (Paragraph((Plain(body),)),))
+                for ratio, body in zip((33, 33, 34), "abc", strict=True)
             )
         ),
     )
@@ -1189,7 +1193,7 @@ def test_three_equal_grid_cells_get_ratios_that_add_up_to_a_hundred() -> None:
 def test_a_grid_inside_a_grid_cell_lays_its_cells_one_after_another() -> None:
     inner = {
         "type": "grid",
-        "cells": [{"span": 3, "blocks": [{"type": "text", "body": x}]} for x in "bc"],
+        "cells": [{"span": 3, "blocks": [{"type": "text", "body": body}]} for body in "bc"],
     }
     grid = {
         "type": "grid",
@@ -1199,8 +1203,8 @@ def test_a_grid_inside_a_grid_cell_lays_its_cells_one_after_another() -> None:
     assert lowered([grid]) == (
         Columns(
             (
-                Column(33, (Paragraph((Plain("a"),)),)),
-                Column(67, (Paragraph((Plain("b"),)), Paragraph((Plain("c"),)))),
+                GridColumn(33, (Paragraph((Plain("a"),)),)),
+                GridColumn(67, (Paragraph((Plain("b"),)), Paragraph((Plain("c"),)))),
             )
         ),
     )
@@ -1224,8 +1228,8 @@ def test_a_toned_cell_of_an_inner_grid_becomes_a_callout_inside_the_outer_column
     assert lowered([grid]) == (
         Columns(
             (
-                Column(33, (Paragraph((Plain("a"),)),)),
-                Column(67, (Callout("danger", (Paragraph((Plain("b"),)),)), Paragraph((Plain("c"),)))),
+                GridColumn(33, (Paragraph((Plain("a"),)),)),
+                GridColumn(67, (Callout("danger", (Paragraph((Plain("b"),)),)), Paragraph((Plain("c"),)))),
             )
         ),
     )
@@ -1254,7 +1258,7 @@ def test_a_blank_indicator_cell_is_empty_and_untoned() -> None:
         rows=[{"a": "x", "risk": " "}],
     )
 
-    assert lowered([table]) == (Table(_cells("Issue", "Risk"), (TableRow(_cells("x", "")),)),)
+    assert lowered([table]) == (TableNode(_cells("Issue", "Risk"), (TableRow(_cells("x", "")),)),)
 
 
 def test_a_rollup_without_a_label_is_its_counts_alone() -> None:
@@ -1266,7 +1270,7 @@ def test_a_rollup_without_a_label_is_its_counts_alone() -> None:
 
     assert lowered([table], badges=API_BADGES) == (
         API_LEGEND,
-        Table(
+        TableNode(
             _cells("Issue", ""), (TableRow((TableCell((Plain("x"),)), TableCell((Chip("api", "blue"),)))),)
         ),
         Paragraph((Chip("api", "blue"), Plain(" "), Plain("1"))),
@@ -1280,7 +1284,7 @@ def test_a_grouped_table_with_nothing_to_sum_labels_each_group_by_name_alone() -
     )
 
     assert lowered([table]) == (
-        Table(
+        TableNode(
             _cells("Issue", "Units"),
             (
                 TableRow(_cells("Ours", ""), emphasis="group"),

@@ -28,8 +28,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    Table,
     TableCell,
+    TableNode,
     TableOfContents,
     TableRow,
     TocEntry,
@@ -213,7 +213,7 @@ def test_visible_text_reads_a_line_break_as_a_space_and_every_mark_kind_as_its_w
 
 
 def test_a_total_row_of_plain_cells_is_written_bold() -> None:
-    table = Table(
+    table = TableNode(
         (TableCell((Plain("Issue"),)), TableCell((Plain("Units"),))),
         (
             TableRow((TableCell((Plain("x"),)), TableCell((Plain("2"),)))),
@@ -246,7 +246,7 @@ def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
 
 
 def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
-    table = Table(
+    table = TableNode(
         (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
         (
             TableRow((TableCell((Plain("group"),)),), emphasis="group"),
