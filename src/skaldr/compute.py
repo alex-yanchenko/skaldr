@@ -943,12 +943,12 @@ def rail_rule(name: str, width: int) -> str:
         f"@container (width < {width}px){{"
         f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
         f"gap:0 var(--s3)}}"
-        f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+        f".{name} > .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
         f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
         f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
-        f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+        f".{name} > .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
         f"white-space:normal; overflow:visible; text-overflow:clip}}"
-        f".{name} .rq-case{{grid-row:1; grid-column:2}}"
+        f".{name} > .rq-case{{grid-row:1; grid-column:2}}"
         "}"
     )
 

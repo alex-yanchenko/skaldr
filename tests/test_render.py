@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+from collections import Counter
 from collections.abc import Callable
 from html import unescape
 
@@ -34,7 +35,10 @@ from tests.factories import (
     make_reconciled_table,
     make_report,
     make_step,
+    make_tab,
     make_table,
+    make_tabs,
+    make_toggle,
 )
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
@@ -534,36 +538,32 @@ def test_a_tabs_block_writes_the_request_tab_strip_around_its_panes() -> None:
 
     assert (
         '<div class="tabs"><div class="rq-cases tb0" role="group" aria-label="Tabs">\n'
-        '<input type="radio" class="rq-pick" name="tb0" id="tb0-0" checked>\n'
+        '<input type="radio" class="rq-pick" name="tb0" id="tb0_0" checked>\n'
         '<section class="rq-case">\n<h4 class="rq-case-hd">Floor</h4>\n'
         '<p class="text">Recount.</p></section>\n'
-        '<input type="radio" class="rq-pick" name="tb0" id="tb0-1">\n'
+        '<input type="radio" class="rq-pick" name="tb0" id="tb0_1">\n'
         '<section class="rq-case">\n<h4 class="rq-case-hd">System</h4>\n'
         '<p class="text">Rescan.</p></section>\n'
-        '<div class="rq-tabs"><label for="tb0-0"><span class="rq-dot warning"></span>Floor</label>'
-        '<label for="tb0-1">System</label></div>\n'
+        '<div class="rq-tabs"><label for="tb0_0"><span class="rq-dot warning"></span>Floor</label>'
+        '<label for="tb0_1">System</label></div>\n'
         "</div>\n</div>"
     ) in html
 
 
-def test_a_tabs_block_needs_no_script_to_choose_a_tab() -> None:
-    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System")])))
+def test_choosing_a_tab_is_a_radio_each_label_selects_with_no_handler_on_the_markup() -> None:
+    html = render_html(parse_report(make_report(blocks=[make_tabs()])))
 
-    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-
-    assert [script for script in scripts if "rq-" in script] == []
+    assert (
+        re.findall(r'<input type="radio" class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        re.findall(r'<label for="([^"]+)"', html),
+        re.findall(r"\son[a-z]+=", html),
+    ) == ([("tb0", "tb0_0"), ("tb0", "tb0_1")], ["tb0_0", "tb0_1"], [])
 
 
 def test_a_tabs_block_strip_becomes_a_rail_below_the_width_its_labels_need() -> None:
-    html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System")])))
+    html = render_html(parse_report(make_report(blocks=[make_tabs()])))
 
-    assert (
-        "@container (width < 197px){.tb0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
-        "gap:0 var(--s3)}.tb0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
-        "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; "
-        "grid-row:1; grid-column:1}.tb0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; "
-        "white-space:normal; overflow:visible; text-overflow:clip}.tb0 .rq-case{grid-row:1; grid-column:2}}"
-    ) in html
+    assert _container_rules(html) == [(compute.strip_width(["Floor", "System"]), _rail("tb0"))]
 
 
 def test_tab_blocks_and_requests_never_share_a_radio_group() -> None:
@@ -588,7 +588,7 @@ def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
     html = render_html(parse_report(make_report(blocks=[_tabs("Floor", "System", tone="accent")])))
     css = package_path("styles.css").read_text(encoding="utf-8")
 
-    assert '<label for="tb0-0"><span class="rq-dot accent"></span>Floor</label>' in html
+    assert '<label for="tb0_0"><span class="rq-dot accent"></span>Floor</label>' in html
     assert ".rq-dot.accent{background:var(--accent-fg)}" in css
 
 
@@ -620,6 +620,124 @@ def test_a_heading_inside_a_tab_is_a_link_target() -> None:
 
     assert '<h4 id="aisle-c">Aisle C</h4>\n</section>' in html
     assert '<p class="text">See <a href="#aisle-c">aisle C</a>.</p></section>' in html
+
+
+def _rail(name: str) -> dict[str, str]:
+    return {
+        f".{name}": "grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)",
+        f".{name} > .rq-tabs": (
+            "flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+            "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; "
+            "overflow-y:auto; grid-row:1; grid-column:1"
+        ),
+        f".{name} > .rq-tabs > *": (
+            "border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; "
+            "text-overflow:clip"
+        ),
+        f".{name} > .rq-case": "grid-row:1; grid-column:2",
+    }
+
+
+def _container_rules(html: str) -> list[tuple[int, dict[str, str]]]:
+    return [
+        (int(width), dict(re.findall(r"([^{}]+)\{([^{}]*)\}", body)))
+        for width, body in re.findall(r"@container \(width < (\d+)px\)\{((?:[^{}]+\{[^{}]*\})*)\}", html)
+    ]
+
+
+def test_an_outer_tab_strip_rail_rule_never_reaches_a_strip_nested_in_one_of_its_tabs() -> None:
+    inner = make_tabs(make_tab("Inner"), make_tab("Other"))
+    outer = make_tabs(make_tab("Outer", inner), make_tab("Second"))
+
+    html = render_html(parse_report(make_report(blocks=[outer])))
+
+    assert _container_rules(html) == [
+        (compute.strip_width(["Outer", "Second"]), _rail("tb0")),
+        (compute.strip_width(["Inner", "Other"]), _rail("tb1")),
+    ]
+
+
+def test_a_request_strip_still_turns_into_a_rail_at_the_width_its_case_labels_need() -> None:
+    html = render_html(parse_report(_request_report()))
+
+    assert _container_rules(html) == [(compute.strip_width(["widgets", "admin"]), _rail("rq0"))]
+
+
+def test_a_heading_slugged_like_a_radio_id_leaves_every_label_bound_to_its_radio() -> None:
+    cases = [{"label": "a", "response": {"body": "x"}}, {"label": "b", "response": {"body": "y"}}]
+    blocks = [
+        {"type": "heading", "text": "tb0 0"},
+        {"type": "heading", "text": "rq0 0"},
+        make_tabs(),
+        make_command_request(cases=cases),
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+    repeated_ids = [name for name, count in Counter(re.findall(r' id="([^"]+)"', html)).items() if count > 1]
+    radio_ids = re.findall(r'<input type="radio" class="rq-pick" name="[^"]+" id="([^"]+)"', html)
+    label_targets = re.findall(r'<label for="([^"]+)"', html)
+
+    assert (repeated_ids, label_targets) == ([], radio_ids)
+
+
+STRIP_ANCHOR_SCRIPT = (
+    "<script>\n"
+    "(function () {\n"
+    "\tfunction picksAround(target) {\n"
+    "\t\tvar picks = [];\n"
+    '\t\tfor (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {\n'
+    "\t\t\tvar pick = pane.previousElementSibling;\n"
+    '\t\t\tif (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);\n'
+    "\t\t}\n"
+    "\t\treturn picks;\n"
+    "\t}\n"
+    "\tfunction revealHashTarget() {\n"
+    "\t\tvar id;\n"
+    "\t\ttry {\n"
+    "\t\t\tid = decodeURIComponent(location.hash.slice(1));\n"
+    "\t\t} catch (error) {\n"
+    "\t\t\treturn;\n"
+    "\t\t}\n"
+    "\t\tvar target = id && document.getElementById(id);\n"
+    "\t\tif (!target) return;\n"
+    "\t\tvar picks = picksAround(target);\n"
+    "\t\tif (!picks.length) return;\n"
+    "\t\tpicks.forEach(function (pick) {\n"
+    "\t\t\tpick.checked = true;\n"
+    '\t\t\tpick.dispatchEvent(new Event("change", { bubbles: true }));\n'
+    "\t\t});\n"
+    "\t\ttarget.scrollIntoView();\n"
+    "\t}\n"
+    '\twindow.addEventListener("hashchange", revealHashTarget);\n'
+    "\trevealHashTarget();\n"
+    "})();\n"
+    "</script>"
+)
+
+
+@pytest.mark.parametrize(
+    "blocks",
+    [
+        pytest.param([make_tabs()], id="tabs"),
+        pytest.param([make_command_request()], id="request"),
+        pytest.param([make_flow()], id="request-flow"),
+    ],
+)
+def test_a_page_with_a_tab_strip_carries_the_script_that_opens_the_tab_holding_a_linked_target(
+    blocks: list[dict[str, object]],
+) -> None:
+    report = parse_report(make_report(blocks=blocks))
+
+    assert [html.count(STRIP_ANCHOR_SCRIPT) for html in (render_html(report), render_embed(report))] == [1, 1]
+
+
+def test_a_page_without_a_tab_strip_carries_no_script_to_open_one() -> None:
+    report = parse_report(make_report(blocks=[make_toggle(), {"type": "heading", "text": "Plain"}]))
+
+    assert [STRIP_ANCHOR_SCRIPT in html for html in (render_html(report), render_embed(report))] == [
+        False,
+        False,
+    ]
 
 
 def test_a_divider_is_a_rule_between_the_blocks_around_it() -> None:
@@ -2476,7 +2594,7 @@ def test_a_strip_too_wide_for_its_container_becomes_a_rail() -> None:
 
     assert len(rules) == 1
     assert int(rules[0]) > 400
-    assert ".rq0 .rq-tabs{flex-direction:column" in html
+    assert ".rq0 > .rq-tabs{flex-direction:column" in html
 
 
 def test_each_block_gets_the_breakpoint_its_own_labels_need() -> None:

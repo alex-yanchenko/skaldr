@@ -182,6 +182,7 @@ def _render(
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         has_requests=any(iter_requests(report.blocks)),
+        has_strips=bool(groups or tab_groups),
         source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
     )

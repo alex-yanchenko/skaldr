@@ -224,11 +224,11 @@
 {% macro tab_strip(group, labels, aria_label) %}
 <div class="rq-cases {{ group }}"{% if labels | length > 1 %} role="group" aria-label="{{ aria_label }}"{% endif %}>
 {% for entry in labels %}
-<input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}-{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
+<input type="radio" class="rq-pick" name="{{ group }}" id="{{ group }}_{{ loop.index0 }}"{% if loop.first %} checked{% endif %}>
 {{ caller(loop.index0) }}
 {% endfor %}
 {% if labels | length > 1 %}
-<div class="rq-tabs">{% for entry in labels %}<label for="{{ group }}-{{ loop.index0 }}">{% if entry.tone %}<span class="rq-dot {{ entry.tone }}"></span>{% endif %}{{ entry.label }}</label>{% endfor %}</div>
+<div class="rq-tabs">{% for entry in labels %}<label for="{{ group }}_{{ loop.index0 }}">{% if entry.tone %}<span class="rq-dot {{ entry.tone }}"></span>{% endif %}{{ entry.label }}</label>{% endfor %}</div>
 {% endif %}
 </div>
 {% endmacro %}

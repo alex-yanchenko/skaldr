@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-mdbvS+6f+ajrz0kFNoIgx13/H0BWfJQlePsJE5ulZSo='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1024,10 +1024,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	}
 }
 
-@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 394px){.rq1{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq1 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq1 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq1 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 283px){.tb0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.tb0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.tb0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.tb0 .rq-case{grid-row:1; grid-column:2}}</style>
+@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 394px){.rq1{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq1 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq1 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq1 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 283px){.tb0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.tb0 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.tb0 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.tb0 > .rq-case{grid-row:1; grid-column:2}}</style>
 <script>
 /* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
    persisted — it is a per-view reader control that resets to the default cap on reload. */
@@ -1228,21 +1228,21 @@ ORDER BY n DESC;
 
 
 <div class="tabs"><div class="rq-cases tb0" role="group" aria-label="Tabs">
-<input type="radio" class="rq-pick" name="tb0" id="tb0-0" checked>
+<input type="radio" class="rq-pick" name="tb0" id="tb0_0" checked>
 <section class="rq-case">
 <h4 class="rq-case-hd">Floor</h4>
 <ul class="list"><li>Re-label the Zone B bins the scanner misread.</li><li>Recount Zone C by hand before sign-off.</li></ul>
 </section>
-<input type="radio" class="rq-pick" name="tb0" id="tb0-1">
+<input type="radio" class="rq-pick" name="tb0" id="tb0_1">
 <section class="rq-case">
 <h4 class="rq-case-hd">System</h4>
 <p class="text">Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.</p></section>
-<input type="radio" class="rq-pick" name="tb0" id="tb0-2">
+<input type="radio" class="rq-pick" name="tb0" id="tb0_2">
 <section class="rq-case">
 <h4 class="rq-case-hd">Vendor</h4>
 <div class="callout danger"><div>Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.</div></div>
 </section>
-<div class="rq-tabs"><label for="tb0-0"><span class="rq-dot warning"></span>Floor</label><label for="tb0-1"><span class="rq-dot info"></span>System</label><label for="tb0-2"><span class="rq-dot danger"></span>Vendor</label></div>
+<div class="rq-tabs"><label for="tb0_0"><span class="rq-dot warning"></span>Floor</label><label for="tb0_1"><span class="rq-dot info"></span>System</label><label for="tb0_2"><span class="rq-dot danger"></span>Vendor</label></div>
 </div>
 </div>
 
@@ -1275,7 +1275,7 @@ assert sum(counted) == expected
 </div>
 </div>
 <div class="rq-cases rq0" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq0" id="rq0-0" checked>
+<input type="radio" class="rq-pick" name="rq0" id="rq0_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">a bin that balances</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1296,7 +1296,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Expected and counted agree, so the bin needs no recount.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq0" id="rq0-1">
+<input type="radio" class="rq-pick" name="rq0" id="rq0_1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">an overflow bin</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1317,7 +1317,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A 24-unit gap on a bin flagged <code>overflow: true</code>. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq0" id="rq0-2">
+<input type="radio" class="rq-pick" name="rq0" id="rq0_2">
 <section class="rq-case" data-rq-case="2">
 <h4 class="rq-case-hd">a bin the token cannot read</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1334,7 +1334,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq0-0"><span class="rq-dot success"></span>a bin that balances</label><label for="rq0-1"><span class="rq-dot success"></span>an overflow bin</label><label for="rq0-2"><span class="rq-dot warning"></span>a bin the token cannot read</label></div>
+<div class="rq-tabs"><label for="rq0_0"><span class="rq-dot success"></span>a bin that balances</label><label for="rq0_1"><span class="rq-dot success"></span>an overflow bin</label><label for="rq0_2"><span class="rq-dot warning"></span>a bin the token cannot read</label></div>
 </div>
 
 </section>
@@ -1344,7 +1344,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Every overflow bin in one warehouse</span></div>
 <div class="rq-cases rq1" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq1" id="rq1-0" checked>
+<input type="radio" class="rq-pick" name="rq1" id="rq1_0" checked>
 <section class="rq-case" data-rq-case="0" data-rq-command>
 <h4 class="rq-case-hd">NW-04, the finding</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
@@ -1363,7 +1363,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 ]</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Two overflow bins short, 26 units between them, matching the manual-path queue.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq1" id="rq1-1">
+<input type="radio" class="rq-pick" name="rq1" id="rq1_1">
 <section class="rq-case" data-rq-case="1" data-rq-command>
 <h4 class="rq-case-hd">NW-02, the control</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
@@ -1378,7 +1378,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 ]</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq1-0"><span class="rq-dot warning"></span>NW-04, the finding</label><label for="rq1-1"><span class="rq-dot success"></span>NW-02, the control</label></div>
+<div class="rq-tabs"><label for="rq1_0"><span class="rq-dot warning"></span>NW-04, the finding</label><label for="rq1_1"><span class="rq-dot success"></span>NW-02, the control</label></div>
 </div>
 
 </section>
@@ -1401,7 +1401,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
 <div class="rq-step-body"><div class="rq-cases rq2">
-<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
+<input type="radio" class="rq-pick" name="rq2" id="rq2_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">200</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">POST https://wms.example.com/v2/sessions
@@ -1427,7 +1427,7 @@ Content-Type: application/json
 <div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 2 of 2</span><span class="rq-step-t">Read the bins that did not balance</span></div>
 <div class="rq-step-body"><div class="rq-cases rq3" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq3" id="rq3-0" checked>
+<input type="radio" class="rq-pick" name="rq3" id="rq3_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">with the token</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1449,7 +1449,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 </pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq3" id="rq3-1">
+<input type="radio" class="rq-pick" name="rq3" id="rq3_1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">once the token has expired</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1468,7 +1468,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq3-0"><span class="rq-dot success"></span>with the token</label><label for="rq3-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
+<div class="rq-tabs"><label for="rq3_0"><span class="rq-dot success"></span>with the token</label><label for="rq3_1"><span class="rq-dot warning"></span>once the token has expired</label></div>
 </div>
 </div>
 </section>
@@ -1806,6 +1806,36 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 			}
 		});
 	});
+})();
+</script><script>
+(function () {
+	function picksAround(target) {
+		var picks = [];
+		for (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {
+			var pick = pane.previousElementSibling;
+			if (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);
+		}
+		return picks;
+	}
+	function revealHashTarget() {
+		var id;
+		try {
+			id = decodeURIComponent(location.hash.slice(1));
+		} catch (error) {
+			return;
+		}
+		var target = id && document.getElementById(id);
+		if (!target) return;
+		var picks = picksAround(target);
+		if (!picks.length) return;
+		picks.forEach(function (pick) {
+			pick.checked = true;
+			pick.dispatchEvent(new Event("change", { bubbles: true }));
+		});
+		target.scrollIntoView();
+	}
+	window.addEventListener("hashchange", revealHashTarget);
+	revealHashTarget();
 })();
 </script></body>
 </html>
