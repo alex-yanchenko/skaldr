@@ -1,6 +1,7 @@
 import re
 
 import pytest
+from pydantic import ValidationError
 
 from skaldr.errors import ReportError
 from skaldr.models import ToneLiteral
@@ -446,6 +447,13 @@ def test_an_attribute_span_that_names_no_valid_tone_fails_naming_the_token(text:
         parse_rich(f"x {text} y")
 
     assert str(raised.value) == message
+
+
+def test_an_unknown_tone_keeps_the_validation_failure_as_its_cause() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich("[a]{tone=purple}")
+
+    assert type(raised.value.__cause__) is ValidationError
 
 
 @pytest.mark.parametrize(

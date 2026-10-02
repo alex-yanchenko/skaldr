@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, get_args
 
 import pytest
+from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 from pydantic import ValidationError
 
 from skaldr import compute
@@ -660,6 +661,19 @@ def test_a_math_block_that_cannot_render_fails_at_its_path(expression: str, mess
         parse_report(make_report(blocks=[{"type": "math", "expression": expression}]))
 
     assert str(raised.value) == f"invalid content data: blocks.0.math.expression: {message}"
+
+
+def test_a_math_block_that_cannot_render_keeps_the_converter_failure_as_the_cause() -> None:
+    with pytest.raises(ValidationError) as raised:
+        Math.model_validate({"type": "math", "expression": "x^"})
+
+    value_error = raised.value.errors()[0].get("ctx", {})["error"]
+    report_error = value_error.__cause__
+    assert (type(value_error), type(report_error), type(report_error.__cause__)) == (
+        ValueError,
+        ReportError,
+        MissingSuperScriptOrSubscriptError,
+    )
 
 
 def test_panel_parses_to_whole_model() -> None:

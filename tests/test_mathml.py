@@ -2,6 +2,7 @@ from collections.abc import Callable, Iterator
 from xml.etree.ElementTree import Element, SubElement
 
 import pytest
+from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 
 from skaldr import mathml as mathml_module
 from skaldr.errors import ReportError
@@ -468,3 +469,10 @@ def test_a_converter_failure_names_the_exception_latex2mathml_raised() -> None:
     assert str(raised.value) == (
         "invalid math expression 'x^': latex2mathml cannot convert it (MissingSuperScriptOrSubscriptError)"
     )
+
+
+def test_a_converter_failure_keeps_the_exception_latex2mathml_raised_as_its_cause() -> None:
+    with pytest.raises(ReportError) as raised:
+        mathml("x^", "block")
+
+    assert type(raised.value.__cause__) is MissingSuperScriptOrSubscriptError
