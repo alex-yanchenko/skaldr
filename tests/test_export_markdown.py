@@ -5,7 +5,7 @@ import pytest
 
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import CALLOUT_ICON, bold_once, code_block_lines, code_span, gauge_bar, styled
+from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -199,12 +199,7 @@ def test_visible_text_of_export_runs_reads_chips_and_states_as_words() -> None:
 
 
 def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
-    assert (styled("bold", " x "), styled("italic", "  "), bold_once("**y**"), bold_once("")) == (
-        " **x** ",
-        "  ",
-        "**y**",
-        "",
-    )
+    assert (styled("bold", " x "), styled("italic", "  "), styled("bold", "")) == (" **x** ", "  ", "")
 
 
 def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
@@ -234,7 +229,34 @@ def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
         header_column=True,
     )
 
-    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| group |  |\n| x | y |\n"
+    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **x** | y |\n"
+
+
+def test_a_comparison_bolds_its_feature_column_and_leaves_the_header_to_the_pipe_table() -> None:
+    comparison = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 1,
+        "rows": [{"feature": "Risky", "values": [True, False]}],
+    }
+
+    assert markdown_of([comparison]) == "|  | A | ★ B |\n| --- | --- | --- |\n| **Risky** | ✓ | ✗ |\n"
+
+
+def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the_pipe_table() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan", "sub": "wk 1"}],
+        "steps": [{"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "value": 2}],
+    }
+
+    assert markdown_of([swimlane]) == (
+        "| Lane | Plan<br>*wk 1* |\n"
+        "| --- | --- |\n"
+        "| **Ops (2)** | ⚪ **1** Draft (2) |\n"
+        "| **Total** | **2** |\n"
+    )
 
 
 def test_a_grid_becomes_its_cells_in_order() -> None:

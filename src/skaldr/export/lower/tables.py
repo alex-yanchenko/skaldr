@@ -93,7 +93,7 @@ def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
     rows: list[TableRow] = []
     for group in block.groups:
         group_rows = cast("list[dict[str, Any]]", group.rows)
-        label = bold(group.name)
+        label = plain(group.name)
         if block.sum_key:
             label = spaced([label, plain(f"({compute.fmt(compute.col_sum(group_rows, block.sum_key))})")])
         rows.append(TableRow((TableCell(label), *_blank_cells(width - 1)), emphasis="group"))
@@ -110,7 +110,7 @@ def _totals_row(block: models.Table, total_key: str) -> TableRow:
     return TableRow(
         tuple(
             TableCell(
-                bold(total) if column.key == total_key else bold("Total") if column.key == label_key else ()
+                plain(total) if column.key == total_key else plain("Total") if column.key == label_key else ()
             )
             for column in block.cell_columns
         ),
@@ -153,14 +153,14 @@ def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]
     header = (
         TableCell(()),
         *(
-            TableCell(bold(f"★ {option}") if index == block.highlight else plain(option))
+            TableCell(plain(f"★ {option}" if index == block.highlight else option))
             for index, option in enumerate(block.options)
         ),
     )
     rows = [
         TableRow(
             (
-                TableCell(bold(row.feature)),
+                TableCell(plain(row.feature)),
                 *(
                     _comparison_cell(cell, block.is_negative(index), lowering)
                     for index, cell in enumerate(row.values)
@@ -182,7 +182,7 @@ def _matrix_cell(cell: models.MatrixCell | None, lowering: Lowering) -> TableCel
 def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
     header = (TableCell(()), *plain_cells(*block.columns))
     rows = [
-        TableRow((TableCell(bold(row_name)), *(_matrix_cell(cell, lowering) for cell in grid_row)))
+        TableRow((TableCell(plain(row_name)), *(_matrix_cell(cell, lowering) for cell in grid_row)))
         for row_name, grid_row in zip(block.rows, compute.matrix_grid(block), strict=True)
     ]
     return [Table(header, tuple(rows), header_column=True)]
@@ -222,7 +222,7 @@ def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) 
     for column in block.columns:
         names = [_with_total(plain(name), group_totals, name) for name in starting[column.key]]
         sub = italic(plain(column.sub)) if column.sub else ()
-        header.append(TableCell(_lines([bold(column.name), sub, spaced(names, ", ")])))
+        header.append(TableCell(_lines([plain(column.name), sub, spaced(names, ", ")])))
     return tuple(header)
 
 
@@ -258,7 +258,7 @@ def lower_swimlane(block: models.Swimlane) -> list[Node]:
     rows = [
         TableRow(
             (
-                TableCell(_with_total(bold(lane.name), lane_totals, lane.key)),
+                TableCell(_with_total(plain(lane.name), lane_totals, lane.key)),
                 *_lane_cells(block, lane.key, split),
             )
         )
@@ -266,7 +266,7 @@ def lower_swimlane(block: models.Swimlane) -> list[Node]:
     ]
     if totals is not None:
         footer = (
-            TableCell(bold("Total")),
+            TableCell(plain("Total")),
             *(TableCell(plain(compute.fmt(totals["columns"][column.key]))) for column in block.columns),
         )
         rows.append(TableRow(footer, emphasis="total"))

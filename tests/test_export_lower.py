@@ -369,8 +369,8 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() 
         Table(
             (TableCell(()), *_cells("c")),
             (
-                TableRow((TableCell(bold("r1")), TableCell((Plain("api"),), "info"))),
-                TableRow((TableCell(bold("r2")), TableCell(()))),
+                TableRow((TableCell((Plain("r1"),)), TableCell((Plain("api"),), "info"))),
+                TableRow((TableCell((Plain("r2"),)), TableCell(()))),
             ),
             header_column=True,
         ),
@@ -767,7 +767,11 @@ def test_a_comparison_colors_a_boolean_by_its_option_polarity(
     assert lowered([comparison]) == (
         Table(
             (TableCell(()), *_cells("A", "B")),
-            (TableRow((TableCell(bold("Risky")), cell, TableCell((CheckMark(checked=True),), "success"))),),
+            (
+                TableRow(
+                    (TableCell((Plain("Risky"),)), cell, TableCell((CheckMark(checked=True),), "success"))
+                ),
+            ),
             header_column=True,
         ),
     )
@@ -783,11 +787,11 @@ def test_a_comparison_bolds_its_highlighted_option_and_keeps_text_and_toned_cell
 
     assert lowered([comparison]) == (
         Table(
-            (TableCell(()), TableCell((Plain("A"),)), TableCell(bold("★ B"))),
+            (TableCell(()), TableCell((Plain("A"),)), TableCell((Plain("★ B"),))),
             (
                 TableRow(
                     (
-                        TableCell(bold("Note")),
+                        TableCell((Plain("Note"),)),
                         TableCell((Plain("plain"),)),
                         TableCell((Plain("toned"),), "warning"),
                     )
@@ -817,7 +821,7 @@ def test_a_matrix_shows_badge_toned_labelled_and_blank_cells() -> None:
             (
                 TableRow(
                     (
-                        TableCell(bold("r1")),
+                        TableCell((Plain("r1"),)),
                         TableCell((Plain("api"),), "info"),
                         TableCell((Plain("yes"),), "info"),
                         TableCell((Plain("n/a"),), "neutral"),
@@ -848,7 +852,7 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
                 TableCell((Plain("Lane"),)),
                 TableCell(
                     (
-                        *bold("Plan"),
+                        Plain("Plan"),
                         Break(),
                         *italic(plain("wk 1")),
                         Break(),
@@ -857,12 +861,12 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
                         Plain("(5)"),
                     )
                 ),
-                TableCell(bold("Ship")),
+                TableCell((Plain("Ship"),)),
             ),
             (
                 TableRow(
                     (
-                        TableCell((*bold("Ops"), Plain(" "), Plain("(5)"))),
+                        TableCell((Plain("Ops"), Plain(" "), Plain("(5)"))),
                         TableCell(
                             (
                                 SwimlaneMark("done"),
@@ -887,7 +891,7 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
                         ),
                     )
                 ),
-                TableRow((TableCell(bold("Total")), *_cells("2", "3")), emphasis="total"),
+                TableRow(_cells("Total", "2", "3"), emphasis="total"),
             ),
             header_column=True,
         ),
@@ -935,12 +939,12 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
         Table(
             (
                 TableCell((Plain("Lane"),)),
-                TableCell((*bold("Plan"), Break(), Plain("A"), Plain(", "), Plain("B"))),
+                TableCell((Plain("Plan"), Break(), Plain("A"), Plain(", "), Plain("B"))),
             ),
             (
                 TableRow(
                     (
-                        TableCell(bold("Ops")),
+                        TableCell((Plain("Ops"),)),
                         TableCell(
                             (
                                 SwimlaneMark("todo"),
@@ -1006,7 +1010,7 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
             _cells("Issue", "Units"),
             (
                 TableRow(
-                    (TableCell((*bold("Ours"), Plain(" "), Plain("(2)"))), TableCell(())), emphasis="group"
+                    (TableCell((Plain("Ours"), Plain(" "), Plain("(2)"))), TableCell(())), emphasis="group"
                 ),
                 TableRow(
                     (
@@ -1015,10 +1019,10 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
                     )
                 ),
                 TableRow(
-                    (TableCell((*bold("Theirs"), Plain(" "), Plain("(0)"))), TableCell(())), emphasis="group"
+                    (TableCell((Plain("Theirs"), Plain(" "), Plain("(0)"))), TableCell(())), emphasis="group"
                 ),
                 TableRow((TableCell(italic(plain("none"))), TableCell(()))),
-                TableRow((TableCell(bold("Total")), TableCell(bold("2"))), emphasis="total"),
+                TableRow(_cells("Total", "2"), emphasis="total"),
             ),
         ),
     )
@@ -1038,7 +1042,7 @@ def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -
             (
                 TableRow((TableCell((Plain("2"),)), TableCell((Plain("x"),)))),
                 TableRow((TableCell((Plain("3"),)), TableCell((Plain("y"),)))),
-                TableRow((TableCell(bold("5")), TableCell(bold("Total"))), emphasis="total"),
+                TableRow(_cells("5", "Total"), emphasis="total"),
             ),
         ),
     )

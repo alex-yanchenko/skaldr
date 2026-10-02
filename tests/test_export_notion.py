@@ -235,9 +235,47 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
     assert render_notion([table]) == (
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Name**</td>\n\t\t<td></td>\n\t</tr>\n"
-        '\t<tr color="gray_bg">\n\t\t<td>group</td>\n\t\t<td></td>\n\t</tr>\n'
-        '\t<tr color="blue_bg">\n\t\t<td color="red_bg">x</td>\n\t\t<td color="green_bg">y</td>\n\t</tr>\n'
+        '\t<tr color="gray_bg">\n\t\t<td>**group**</td>\n\t\t<td></td>\n\t</tr>\n'
+        '\t<tr color="blue_bg">\n'
+        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="green_bg">y</td>\n'
+        "\t</tr>\n"
         "\t<tr>\n\t\t<td>**9**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan", "sub": "wk 1"}],
+        "groups": [{"name": "Q1", "color": "blue", "columns": ["Plan"]}],
+        "steps": [{"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "value": 2}],
+    }
+
+    assert notion_of([swimlane]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Lane**</td>\n\t\t<td>**Plan<br>*wk 1*<br>Q1 (2)**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>⚪ **1** Draft (2)</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_grouped_table_bolds_its_group_rows_and_its_totals_row_as_a_whole() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Issue"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "totals": {"column": "n"},
+        "groups": [{"name": "Ours", "rows": [{"a": "x", "n": 2}]}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Issue**</td>\n\t\t<td>**Units**</td>\n\t</tr>\n"
+        '\t<tr color="gray_bg">\n\t\t<td>**Ours (2)**</td>\n\t\t<td></td>\n\t</tr>\n'
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>2</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
         "</table>\n"
     )
 

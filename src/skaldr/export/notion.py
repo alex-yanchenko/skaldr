@@ -9,7 +9,7 @@ from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
     bang_cannot_open_an_image,
-    bold_once,
+    body_cell_texts,
     code_block_lines,
     escape_block_start,
     indent_lines,
@@ -125,10 +125,8 @@ def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName 
     return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
 
 
-def _body_row_lines(row: TableRow) -> list[str]:
-    texts = [_table_cell_text(cell) for cell in row.cells]
-    if row.emphasis == "total":
-        texts = [bold_once(text) if text else text for text in texts]
+def _body_row_lines(table: Table, row: TableRow) -> list[str]:
+    texts = body_cell_texts(table, row, [_table_cell_text(cell) for cell in row.cells])
     tone = "neutral" if row.tone is None and row.emphasis == "group" else row.tone
     return _row_lines(row.cells, texts, tone)
 
@@ -137,9 +135,9 @@ def _table_lines(table: Table) -> list[str]:
     attributes = ' fit-page-width="true" header-row="true"'
     if table.header_column:
         attributes += ' header-column="true"'
-    header_texts = [bold_once(_table_cell_text(cell)) if cell.text else "" for cell in table.header]
+    header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
     rows = _row_lines(table.header, header_texts, None)
-    rows += [line for row in table.rows for line in _body_row_lines(row)]
+    rows += [line for row in table.rows for line in _body_row_lines(table, row)]
     return [f"<table{attributes}>", *_indent(rows), "</table>"]
 
 

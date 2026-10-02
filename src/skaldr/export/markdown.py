@@ -10,7 +10,7 @@ from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
-    bold_once,
+    body_cell_texts,
     code_block_lines,
     code_span,
     escape_block_start,
@@ -161,9 +161,7 @@ class _MarkdownWriter:
             _table_row(["---"] * width),
         ]
         for row in table.rows:
-            texts = [self.cell_text(cell) for cell in row.cells]
-            if row.emphasis == "total":
-                texts = [bold_once(text) if text else text for text in texts]
+            texts = body_cell_texts(table, row, [self.cell_text(cell) for cell in row.cells])
             lines.append(_table_row(_pad(texts, width)))
         return lines
 
