@@ -430,9 +430,11 @@ def _reject_flags_that_do_not_fit_an_export(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
     if not args.export:
-        if args.export_dir:
+        if args.export_dir is not None:
             parser.error("--export-dir only applies with --export")
         return
+    if args.export_dir is not None and not args.export_dir.strip():
+        parser.error("--export-dir needs a folder path")
     if args.out or args.pdf or args.embed or args.watch or args.emit_json:
         parser.error(
             "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
@@ -443,7 +445,7 @@ def _reject_flags_that_do_not_fit_an_export(
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None) -> int:
     out_dir = (
-        Path(export_dir) if export_dir else Path.cwd() / "out" / f"{data_path.stem}.{target}"
+        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
     ).resolve()
     try:
         report = load_report(data_path)

@@ -7,17 +7,23 @@ from tests.factories import make_report, write_report
 
 EXPORT_CLASH = "--export writes its own files; it can't combine with -o/--pdf/--embed/--watch/--emit-json"
 HTML_ONLY = "--live, --if-stale and --no-source shape an HTML render; --export writes none"
+BLANK_EXPORT_DIR = "--export-dir needs a folder path"
+
+
+@pytest.fixture
+def export_dir(tmp_path: Path) -> Path:
+    return tmp_path / "exported"
 
 
 def test_the_cli_exports_the_page_and_prints_its_path(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "Hi."}]))
 
-    assert main([str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 0
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 0
 
-    assert capsys.readouterr().out.splitlines() == [f"OK  {tmp_path / 'n' / 'page.md'}"]
-    assert (tmp_path / "n" / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHi.\n"
+    assert capsys.readouterr().out.splitlines() == [f"OK  {export_dir / 'page.md'}"]
+    assert (export_dir / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHi.\n"
 
 
 def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
@@ -33,46 +39,48 @@ def test_the_cli_writes_an_export_under_out_named_for_the_file_and_target(
     ) == "# Test Report\n\nHello.\n"
 
 
-def test_check_then_export_of_a_valid_file_writes_the_page(tmp_path: Path) -> None:
+def test_check_then_export_of_a_valid_file_writes_the_page(tmp_path: Path, export_dir: Path) -> None:
     data_path = write_report(tmp_path, make_report())
 
-    assert main(["--check", str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 0
+    assert main(["--check", str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 0
 
-    assert (tmp_path / "n" / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHello.\n"
+    assert (export_dir / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHello.\n"
 
 
-def test_the_cli_checks_before_it_exports_and_writes_nothing_for_an_invalid_file(tmp_path: Path) -> None:
+def test_the_cli_checks_before_it_exports_and_writes_nothing_for_an_invalid_file(
+    tmp_path: Path, export_dir: Path
+) -> None:
     data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
 
-    assert main(["--check", str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 1
+    assert main(["--check", str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
 
-    assert not (tmp_path / "n").exists()
+    assert not export_dir.exists()
 
 
 def test_an_export_of_an_invalid_file_without_check_reports_the_error_and_writes_nothing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "[x](#nowhere)"}]))
 
-    assert main([str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 1
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
 
     assert capsys.readouterr().err.startswith("error: rich text links to unknown anchor '#nowhere'")
-    assert not (tmp_path / "n").exists()
+    assert not export_dir.exists()
 
 
 def test_an_export_of_a_block_with_no_markdown_form_reports_it_and_writes_nothing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     flow = {"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}
     data_path = write_report(tmp_path, make_report(blocks=[flow]))
 
-    assert main([str(data_path), "--export", "markdown", "--export-dir", str(tmp_path / "n")]) == 1
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
 
     assert capsys.readouterr().err == "error: a `flow` block has no Markdown export yet\n"
-    assert not (tmp_path / "n").exists()
+    assert not export_dir.exists()
 
 
-def test_an_export_dir_that_cannot_be_written_reports_the_error(
+def test_an_export_dir_that_cannot_be_written_reports_the_error_and_leaves_the_file_alone(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data_path = write_report(tmp_path, make_report())
@@ -81,7 +89,8 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error(
 
     assert main([str(data_path), "--export", "markdown", "--export-dir", str(blocker)]) == 1
 
-    assert capsys.readouterr().err.startswith("error: ")
+    assert capsys.readouterr().err == f"error: [Errno 17] File exists: '{blocker}'\n"
+    assert blocker.read_text(encoding="utf-8") == "a file, not a folder"
 
 
 @pytest.mark.parametrize(
@@ -95,7 +104,10 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error(
         pytest.param(["--export", "markdown", "--live"], HTML_ONLY, id="with-live"),
         pytest.param(["--export", "markdown", "--if-stale"], HTML_ONLY, id="with-if-stale"),
         pytest.param(["--export", "markdown", "--no-source"], HTML_ONLY, id="with-no-source"),
+        pytest.param(["--export", "markdown", "--export-dir", ""], BLANK_EXPORT_DIR, id="empty-dir"),
+        pytest.param(["--export", "markdown", "--export-dir", "  "], BLANK_EXPORT_DIR, id="blank-dir"),
         pytest.param(["--export-dir", "d"], "--export-dir only applies with --export", id="dir-alone"),
+        pytest.param(["--export-dir", ""], "--export-dir only applies with --export", id="empty-dir-alone"),
         pytest.param(["--export", "jira"], "invalid choice: 'jira'", id="unknown-target"),
     ],
 )
