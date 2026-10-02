@@ -846,7 +846,8 @@ link instead.
 - **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
   The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
-  `by` must name a `badge` column.
+  `by` must name a `badge` column, and each row counts under one badge, so a rollup over an in-cell
+  badge column whose cells hold a list of keys is rejected.
 - **`tint_by`** — `<badge-column-key>` — faintly tints each row by the tone of the badge in that
   column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
   skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
@@ -928,6 +929,25 @@ written with a backslash in front of every `</script` and its begin marker reads
 A top-of-file comment tells agents this. Pass `--no-source` to omit the embed (e.g. a shared page
 whose authoring notes shouldn't ship). The `--embed` fragment carries it too — that's the artifact
 case, where the page is shared as a URL an agent later has to read back.
+
+## Exporting as Markdown
+
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names). Write the YAML the same way for every output; what changes is how some blocks look:
+
+| Block | GitHub-flavored | Notion |
+| --- | --- | --- |
+| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges or note links and citations it can't show | the same |
+| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
+| `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a multi-case `request` | each case under a bold title | native tabs |
+| a collapsed `section` | a heading with its content below | a toggle heading |
+| `grid` | its cells one after another | native columns |
+| badges | bold labels | coloured chips |
+| tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
+| tones on flow and fan steps | Mermaid node colours | the same |
+| `image` | its caption only | its caption only |
+
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
 
 ## What you never write
 

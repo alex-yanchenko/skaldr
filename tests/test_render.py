@@ -362,6 +362,14 @@ def test_single_paragraph_callout_stays_inline_without_a_paragraph_wrapper() -> 
     assert '<p class="prose-p">' not in html  # no paragraph wrapper emitted for a single paragraph
 
 
+def test_a_run_of_blank_lines_in_a_text_body_writes_no_empty_paragraph() -> None:
+    block = {"type": "text", "body": "a\n\n\n\nb\n\n"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert re.findall(r'<p class="text">.*?</p>', html) == ['<p class="text">a</p>', '<p class="text">b</p>']
+
+
 def test_quote_body_splits_blank_line_paragraphs() -> None:
     block = {"type": "quote", "body": "Line one.\n\nLine two.", "cite": "src"}
 
@@ -2561,6 +2569,72 @@ def test_richtext_escapes_raw_html() -> None:
     assert str(render_richtext("<script>x & y")) == "&lt;script&gt;x &amp; y"
 
 
+def test_richtext_escapes_a_link_target_inside_its_href() -> None:
+    html = str(render_richtext('[x](https://e.com/?a=1&b="2") [y](#sec)', anchor_ids=frozenset({"sec"})))
+
+    assert html == '<a href="https://e.com/?a=1&amp;b=&#34;2&#34;">x</a> <a href="#sec">y</a>'
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("**a ~~b** c~~", "<strong>a ~~b</strong> c~~", id="bold-crosses-strike"),
+        pytest.param("~~a *b~~ c*", "<del>a *b</del> c*", id="strike-crosses-italic"),
+        pytest.param(
+            "~~a **b ~~ c** d~~",
+            "<del>a <strong>b ~~ c</strong> d</del>",
+            id="strike-holds-a-bold-with-tildes",
+        ),
+        pytest.param("*a **b* c**", "*a **b* c**", id="italic-crossing-bold-stays-text"),
+    ],
+)
+def test_richtext_crossed_emphasis_nests_inside_the_first_match_instead_of_interleaving_tags(
+    text: str, html: str
+) -> None:
+    assert str(render_richtext(text)) == html
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param(
+            "~~cut from **~5 days**~~ to 2",
+            "<del>cut from <strong>~5 days</strong></del> to 2",
+            id="a-tilde-inside-a-bold-leaves-the-strike-around-it",
+        ),
+        pytest.param(
+            "*see ~~a**b~~ here*",
+            "<em>see <del>a**b</del> here</em>",
+            id="asterisks-inside-a-strike-leave-the-italic-around-it",
+        ),
+    ],
+)
+def test_richtext_a_marker_character_inside_an_inner_emphasis_does_not_block_the_outer_one(
+    text: str, html: str
+) -> None:
+    assert str(render_richtext(text)) == html
+
+
+@pytest.mark.parametrize(
+    ("text", "html"),
+    [
+        pytest.param("[l](https://a.io/`c`)", "[l](https://a.io/<code>c</code>)", id="code-span"),
+        pytest.param(
+            "[l](https://a.io/[^sop])",
+            '[l](https://a.io/<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>)',
+            id="citation",
+        ),
+    ],
+)
+def test_richtext_a_web_link_whose_target_holds_markup_stays_text(text: str, html: str) -> None:
+    assert str(render_richtext(text, {"sop": 1})) == html
+
+
+def test_richtext_rejects_an_anchor_link_whose_target_holds_a_code_span() -> None:
+    with pytest.raises(ReportError, match=r"links to the anchor '#sec…', whose target holds a `code` span"):
+        render_richtext("[l](#sec`c`)", anchor_ids=frozenset({"sec"}))
+
+
 def test_richtext_renders_a_placeholder_as_a_chip_and_collects_it() -> None:
     seen: set[str] = set()
     html = str(render_richtext("Open {{deployed_url}} now", placeholders=seen))
@@ -2812,6 +2886,25 @@ def test_totals_footer_renders_the_sum_in_the_number_cell() -> None:
     html = render_html(report)
 
     assert '<tfoot><tr><td>Total</td><td class="num">15</td></tr></tfoot>' in html
+
+
+def test_totals_footer_labels_the_first_cell_that_is_not_the_summed_column() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "count", "label": "C", "kind": "number"},
+            {"key": "issue", "label": "I", "kind": "text"},
+            {"key": "note", "label": "N", "kind": "text"},
+        ],
+        "rows": [{"count": 10, "issue": "a", "note": "x"}, {"count": 5, "issue": "b", "note": "y"}],
+        "totals": {"column": "count"},
+    }
+    report = parse_report(make_report(blocks=[table]))
+
+    footer = re.search(r"<tfoot>.*?</tfoot>", render_html(report))
+
+    assert footer is not None
+    assert footer.group(0) == '<tfoot><tr><td class="num">15</td><td>Total</td><td></td></tr></tfoot>'
 
 
 def test_diff_code_marks_added_and_removed_lines() -> None:

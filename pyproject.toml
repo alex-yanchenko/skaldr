@@ -12,6 +12,7 @@ dependencies = [
     "markupsafe>=2.1",
     "pydantic>=2.13.4",
     "pyyaml>=6.0",
+    "typing-extensions>=4.6",
 ]
 keywords = ["report", "html", "yaml", "components", "jinja"]
 classifiers = [
@@ -36,7 +37,6 @@ publish = [
     "authlib>=1.8.0",
     "httpx2>=2.13.1",
     "keyring>=25.7.0",
-    "typing-extensions>=4.6",
 ]
 
 [project.scripts]

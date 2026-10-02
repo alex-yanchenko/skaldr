@@ -17,8 +17,6 @@ from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
 from skaldr.models import (
-    ALLOWED_URL_SCHEMES,
-    REFERENCE_KEY_PATTERN,
     Heading,
     Report,
     RequestLike,
@@ -29,20 +27,41 @@ from skaldr.models import (
     unresolvable_request_variables,
 )
 from skaldr.publish import without_publish_block
+from skaldr.richtext import Citation, RichContext, StyleName, parse_rich, write_runs
 
-_CODE_SPAN = re.compile(r"`([^`]+)`")
-_FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
-_BOLD = re.compile(r"\*\*([^*]+)\*\*")
-_STRIKE = re.compile(r"~~([^~]+)~~")
-_ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
-# `{{ … }}` is skaldr's reserved fill-me-later syntax, so match ANY such token and validate the name in
-# the handler — a `{{…}}` that isn't a clean placeholder is a hard build error, never silently emitted as
-# prose. The capture is `[^{}]` (a name never contains a brace): that bounds the scan so it stays linear
-# on pathological input (many unclosed `{{`) and can't cross into a neighbouring token. A literal `{{`
-# goes in a `code` span (stashed before this runs). A placeholder name is letters, digits, `_` or `-`.
-_PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
-_PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_-]+")
+_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del"}
+
+
+class _HtmlRuns:
+    def __init__(self, cited: set[str], placeholders: set[str] | None) -> None:
+        self.cited = cited
+        self.placeholders = placeholders
+
+    def text(self, text: str, /) -> str:
+        return str(escape(text))
+
+    def code(self, text: str, /) -> str:
+        return f"<code>{escape(text)}</code>"
+
+    def link(self, label: str, url: str, /) -> str:
+        return f'<a href="{escape(url)}">{label}</a>'
+
+    def anchor_link(self, label: str, anchor: str, /) -> str:
+        return f'<a href="#{escape(anchor)}">{label}</a>'
+
+    def citation(self, run: Citation, /) -> str:
+        anchor = "" if run.key in self.cited else f' id="fnref-{run.key}"'
+        self.cited.add(run.key)
+        return f'<sup class="fn"><a{anchor} href="#ref-{run.key}">[{run.number}]</a></sup>'
+
+    def placeholder(self, name: str, /) -> str:
+        if self.placeholders is not None:
+            self.placeholders.add(name)
+        return f'<span class="placeholder">{name}</span>'
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        tag = _HTML_STYLE_TAG[style]
+        return f"<{tag}>{inner}</{tag}>"
 
 
 def render_richtext(
@@ -52,91 +71,15 @@ def render_richtext(
     anchor_ids: frozenset[str] | None = None,
     placeholders: set[str] | None = None,
 ) -> Markup:
-    """Escape, then apply the limited inline markdown subset. Code spans, footnote markers, and
-    links are stashed as finished HTML *before* the bold/strike/italic passes run, so a stray `*`
-    or `~` inside a code span or a URL can't corrupt them. `[^key]` markers resolve to a superscript
-    number linking to the `references` list — but only for keys `ref_numbers` actually declares; an
-    unknown key is left as literal text so a typo surfaces instead of vanishing. `cited` records
-    which keys have already been rendered so only the first occurrence carries the `fnref-` anchor
-    id (keeping ids unique) and the references list knows which keys are actually cited; pass one
-    shared set across a whole render. `anchor_ids` is the set of valid same-page `#slug` targets — a
-    `[…](#id)` link resolves only if its target is in it (a full render passes it; None leaves such
-    links literal). `placeholders`, when passed, collects every `{{name}}` blank's name (the tokens
-    always render as a chip regardless)."""
-    # NUL is the stash sentinel below; strip any literal NUL from input so it can't collide.
-    escaped = str(escape(text)).replace("\x00", "")
-    stash: list[str] = []
-    seen: set[str] = cited if cited is not None else set()
-
-    def _stash(html: str) -> str:
-        stash.append(html)
-        return f"\x00{len(stash) - 1}\x00"
-
-    result = _CODE_SPAN.sub(lambda match: _stash(f"<code>{match.group(1)}</code>"), escaped)
-
-    def _footnote(match: re.Match[str]) -> str:
-        key = match.group(1)
-        if ref_numbers is None or key not in ref_numbers:
-            return match.group(0)
-        # Only the first citation of a key gets the anchor id, so a source cited twice can't emit a
-        # duplicate `fnref-` id; every citation still links forward to the list entry.
-        anchor = "" if key in seen else f' id="fnref-{key}"'
-        seen.add(key)
-        return _stash(f'<sup class="fn"><a{anchor} href="#ref-{key}">[{ref_numbers[key]}]</a></sup>')
-
-    result = _FOOTNOTE.sub(_footnote, result)
-
-    def _link(match: re.Match[str]) -> str:
-        label, url = match.group(1), match.group(2)
-        if url.startswith("#"):
-            # Same-page anchor: the target must be a real heading/section id, so a dangling `#link`
-            # fails the build instead of shipping a jump-to-nowhere. `url` is already HTML-escaped, and
-            # every valid slug is `[a-z0-9-]`. Only a full render supplies the anchor set; without one
-            # (a bare render_richtext call) there is nothing to resolve against, so leave it literal.
-            if anchor_ids is None:
-                return match.group(0)
-            if url[1:] not in anchor_ids:
-                raise ReportError(
-                    f"rich text links to unknown anchor '{url}' — no heading or section has that id"
-                )
-            return _stash(f'<a href="{url}">{label}</a>')
-        if url.startswith(ALLOWED_URL_SCHEMES):
-            return _stash(f'<a href="{url}">{label}</a>')
-        return match.group(0)
-
-    result = _LINK.sub(_link, result)
-
-    def _placeholder(match: re.Match[str]) -> str:
-        # A `{{name}}` fill-me-later blank: always renders as a visible chip so it can't be shipped
-        # unnoticed; `placeholders`, when passed, collects the names for the --check --strict gate.
-        # A `{{…}}` whose name isn't letters/digits/`_`/`-` is a typo'd blank — fail the build naming
-        # it, rather than silently emitting it as prose (which would defeat the whole point + the gate).
-        name = match.group(1)
-        if "\x00" in name:
-            # the name captured an earlier-stashed inline element (a link / code span / citation), so a
-            # placeholder was wrapped around other markup. Report it without leaking the stash sentinel.
-            raise ReportError(
-                "invalid placeholder: a {{…}} blank is a bare name (letters, digits, '_' or '-'), so it "
-                "can't contain a link, `code` span, or [^citation]"
-            )
-        if not _PLACEHOLDER_NAME.fullmatch(name):
-            raise ReportError(
-                "invalid placeholder '{{" + name + "}}': a placeholder name is letters, digits, '_' or "
-                "'-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)"
-            )
-        if placeholders is not None:
-            placeholders.add(name)
-        return _stash(f'<span class="placeholder">{name}</span>')
-
-    result = _PLACEHOLDER.sub(_placeholder, result)
-    result = _BOLD.sub(r"<strong>\1</strong>", result)
-    result = _STRIKE.sub(r"<del>\1</del>", result)
-    result = _ITALIC.sub(r"<em>\1</em>", result)
-    # A stashed link can contain a stashed code span (`[`code`](url)`), so a single pass would
-    # leave the inner placeholder unexpanded — resolve repeatedly until no markers remain.
-    while "\x00" in result:
-        result = re.sub(r"\x00(\d+)\x00", lambda match: stash[int(match.group(1))], result)
-    return Markup(result)
+    """Rich text as HTML: `parse_rich` reads the inline subset and every other character is escaped.
+    `[^key]` markers resolve to a superscript number only for keys `ref_numbers` declares; an unknown
+    key stays literal text so a typo surfaces. `anchor_ids` is the set of valid same-page `#slug`
+    targets: a `[…](#id)` link to an id outside it fails the build, and None leaves such links literal.
+    `cited` records which reference keys have rendered, so only the first citation of a key carries
+    the `fnref-` anchor id and the references list knows which keys are cited; pass one shared set
+    across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name."""
+    runs = parse_rich(str(text), RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids))
+    return Markup(write_runs(runs, _HtmlRuns(cited if cited is not None else set(), placeholders)))
 
 
 def _environment() -> Environment:
@@ -149,6 +92,7 @@ def _environment() -> Environment:
     )
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
+    filters["paragraphs"] = compute.paragraphs
     filters["richtext"] = render_richtext
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
@@ -157,6 +101,7 @@ def _environment() -> Environment:
         reconcile_line=compute.reconcile_line,
         table_rollup=compute.table_rollup,
         matrix_grid=compute.matrix_grid,
+        matrix_cell_display=compute.matrix_cell_display,
         swimlane_layout=compute.swimlane_layout,
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
@@ -165,6 +110,10 @@ def _environment() -> Environment:
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
+        response_caption=compute.response_caption,
+        derived_card_tally=compute.derived_card_tally,
+        delta_glyphs=compute.DELTA_GLYPHS,
+        badge_legend_subject=compute.BADGE_LEGEND_SUBJECT,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

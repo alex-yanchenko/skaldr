@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from pydantic import ValidationError
@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import (
+    TONE_BADGE_COLOR,
+    BadgeColorLiteral,
     Callout,
     Cards,
     DefItem,
@@ -32,8 +34,10 @@ from skaldr.models import (
     Table,
     Text,
     Timeline,
+    ToneLiteral,
     Walkthrough,
     WalkthroughStep,
+    badge_color_of,
     load_report,
     parse_report,
     read_text_file,
@@ -815,6 +819,56 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+@pytest.mark.parametrize(
+    ("rows", "located"),
+    [
+        pytest.param(
+            {"rows": [{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}]},
+            "rows.1 holds ['API', 'WEB']",
+            id="flat-table",
+        ),
+        pytest.param(
+            {
+                "groups": [
+                    {"name": "One", "rows": [{"item": "a", "tag": "API"}]},
+                    {"name": "Two", "rows": [{"item": "b", "tag": ["API", "WEB"]}]},
+                ]
+            },
+            "groups.1.rows.0 holds ['API', 'WEB']",
+            id="grouped-table",
+        ),
+        pytest.param(
+            {"rows": [{"item": "a", "tag": ["API"]}]},
+            "rows.0 holds ['API']",
+            id="one-key-list",
+        ),
+    ],
+)
+def test_rollup_by_an_in_cell_badge_column_holding_a_list_is_rejected(
+    rows: dict[str, Any], located: str
+) -> None:
+    badges = {
+        "API": {"label": "API", "tone": "blue", "legend": "api work"},
+        "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
+    }
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "I", "kind": "text"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+        ],
+        rollup={"by": "tag"},
+        **rows,
+    )
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=badges, blocks=[table]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.0.table: Value error, rollup.by 'tag' counts each row under one "
+        f"badge, so its cells can't hold a list of keys ({located})"
+    )
+
+
 def test_tint_by_a_non_badge_column_is_rejected() -> None:
     table = make_table(
         columns=[{"key": "item", "label": "I", "kind": "text"}],
@@ -978,6 +1032,25 @@ def test_tone_and_badge_colour_alias_in_both_directions(palette: str, semantic: 
         )
     )
     assert badged.badges["K"].tone == palette
+
+
+@pytest.mark.parametrize(
+    ("tone", "color"),
+    [
+        pytest.param("success", "green", id="semantic-tone-takes-its-palette-twin"),
+        pytest.param("neutral", "slate", id="neutral-is-slate"),
+        pytest.param("teal", "teal", id="palette-only-tone-keeps-its-name"),
+    ],
+)
+def test_the_badge_color_of_a_tone(tone: ToneLiteral, color: BadgeColorLiteral) -> None:
+    assert badge_color_of(tone) == color
+
+
+def test_the_tone_to_badge_color_table_pairs_every_tone_with_a_distinct_color() -> None:
+    assert (set(TONE_BADGE_COLOR), sorted(TONE_BADGE_COLOR.values())) == (
+        set(get_args(ToneLiteral)),
+        sorted(get_args(BadgeColorLiteral)),
+    )
 
 
 def test_callout_accepts_a_palette_alias_of_a_semantic_tone() -> None:
@@ -2555,7 +2628,7 @@ def test_swimlane_without_groups_has_one_subcolumn_per_column() -> None:
     block = _swimlane_block(make_report(blocks=[_swimlane()]))
 
     assert block.groups == []
-    assert block.subcolumns() == [("C1", None), ("C2", None)]
+    assert block.subcolumns() == (("C1", None), ("C2", None))
 
 
 def test_swimlane_orders_a_split_columns_subcolumns_by_span_then_declaration() -> None:
@@ -2580,13 +2653,13 @@ def test_swimlane_orders_a_split_columns_subcolumns_by_span_then_declaration() -
         )
     )
 
-    assert block.subcolumns() == [
+    assert block.subcolumns() == (
         ("S1", "MVP"),
         ("S2", "MVP"),
         ("S2", "Beta"),
         ("S2", "GA"),
         ("S3", "GA"),
-    ]
+    )
 
 
 def test_swimlane_leaves_an_ungrouped_column_among_grouped_columns_untouched() -> None:
@@ -2607,7 +2680,7 @@ def test_swimlane_leaves_an_ungrouped_column_among_grouped_columns_untouched() -
         )
     )
 
-    assert block.subcolumns() == [("Early", "Push"), ("Mid", "Push"), ("Late", None)]
+    assert block.subcolumns() == (("Early", "Push"), ("Mid", "Push"), ("Late", None))
 
 
 def test_chart_stacked_only_applies_to_bar() -> None:
