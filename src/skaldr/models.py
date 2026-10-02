@@ -86,8 +86,10 @@ def _reject_bool_and_non_finite(value: Any) -> Any:
 
 # Numeric field types that reject bool + non-finite before pydantic coerces them.
 # Number keeps the int-vs-float distinction (a card's `600` stays an int); Count is int-only.
-Number = Annotated[int | float, BeforeValidator(_reject_bool_and_non_finite)]
-Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
+_NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
+Number = Annotated[int | float, _NUMBER_GUARD]
+Count = Annotated[int, _NUMBER_GUARD]
+SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -213,10 +215,8 @@ class _Block(FrozenModel):
     the 6 content columns the block occupies. It is width only; blocks still stack vertically (one per
     row). To place several blocks in a single row, use a `grid` (whose cells carry their own span)."""
 
-    span: Count | None = Field(
+    span: SixthsCount | None = Field(
         default=None,
-        ge=1,
-        le=6,
         description="Block width in content columns (1 to 6); omit for full width. Same column-count "
         "vocabulary as a grid cell's span, relative to the block's container (the page, or the "
         "enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to "
@@ -342,10 +342,8 @@ class ListBlock(_Block):
         "(the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a "
         "decision taken (`decided: true`) or an open question.",
     )
-    start: Count | None = Field(
+    start: Annotated[int, Field(ge=1, le=LARGEST_LIST_START), _NUMBER_GUARD] | None = Field(
         default=None,
-        ge=1,
-        le=LARGEST_LIST_START,
         description="Only in a `style: number` list: the number the first point carries (default 1). "
         "Nested lists count from 1.",
     )
@@ -901,10 +899,8 @@ class Column(FrozenModel):
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
     )
-    width: Count | None = Field(
+    width: SixthsCount | None = Field(
         default=None,
-        ge=1,
-        le=6,
         description="Proportional width weight (1-6); set it on every in-cell column, or none. A "
         "`title`-placement badge column takes no width (it rides under the title).",
     )
@@ -1804,10 +1800,8 @@ class RequestVariable(FrozenModel):
 
 
 class RequestResponse(FrozenModel):
-    status: Count | None = Field(
+    status: Annotated[int, Field(ge=100, le=599), _NUMBER_GUARD] | None = Field(
         default=None,
-        ge=100,
-        le=599,
         description="The status you recorded. Omit for a response with no status line, such as a bare "
         "token from `curl -s`. The case's tone follows this number, so you never pick one.",
     )

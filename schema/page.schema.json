@@ -130,8 +130,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -196,8 +196,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -480,8 +480,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -520,8 +520,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -712,8 +712,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -810,8 +810,8 @@
         "width": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -859,8 +859,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1040,8 +1040,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1080,8 +1080,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1131,8 +1131,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1172,8 +1172,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1227,8 +1227,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1357,8 +1357,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1626,8 +1626,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1701,8 +1701,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1769,8 +1769,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1981,8 +1981,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2278,8 +2278,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2318,8 +2318,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2350,8 +2350,8 @@
         "start": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 999999999,
+              "maximum": 999999999,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2454,8 +2454,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2491,8 +2491,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2712,8 +2712,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2816,8 +2816,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2974,8 +2974,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3192,8 +3192,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3241,8 +3241,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3462,8 +3462,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3502,8 +3502,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3830,8 +3830,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3899,8 +3899,8 @@
         "status": {
           "anyOf": [
             {
-              "ge": 100,
-              "le": 599,
+              "maximum": 599,
+              "minimum": 100,
               "type": "integer"
             },
             {
@@ -4167,8 +4167,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4404,8 +4404,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4444,8 +4444,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4917,8 +4917,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5062,8 +5062,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5118,8 +5118,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5160,8 +5160,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5267,8 +5267,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5466,8 +5466,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
