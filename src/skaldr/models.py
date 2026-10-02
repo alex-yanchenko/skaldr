@@ -12,8 +12,9 @@ state glyphs for status lists and timelines.
 import math
 import re
 import sys
-from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
@@ -427,6 +428,9 @@ class Card(FrozenModel):
     @property
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
+
+    def tone_with(self, badge: Badge) -> ToneLiteral:
+        return self.tone or BADGE_COLOR_TONE[badge.tone]
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
@@ -856,6 +860,10 @@ def _as_badge_list(value: Any) -> list[Any]:
     return cast("list[Any]", value) if isinstance(value, list) else [value]
 
 
+def _trimmed_badge_keys(value: Any) -> list[str]:
+    return ["" if key is None else str(key).strip() for key in _as_badge_list(value)]
+
+
 def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
     keys = {column.key for column in columns}
     for index, row in enumerate(rows):
@@ -1101,6 +1109,30 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
+    def badge_keys(self, row: Mapping[str, Any], key: str) -> list[str]:
+        return [badge for badge in _trimmed_badge_keys(row.get(key)) if badge]
+
+    def row_tint_key(self, row: Mapping[str, Any]) -> str:
+        if self.tint_by is None:
+            return ""
+        return next(iter(_trimmed_badge_keys(row.get(self.tint_by))), "")
+
+    @property
+    def title_key(self) -> str:
+        return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
+
+    @property
+    def sum_key(self) -> str | None:
+        if self.reconcile:
+            return self.reconcile.column
+        return self.totals.column if self.totals else None
+
+    @property
+    def totals_label_key(self) -> str | None:
+        if self.totals is None:
+            return None
+        return next(column.key for column in self.cell_columns if column.key != self.totals.column)
+
     def all_rows(self) -> list[dict[str, Any]]:
         # casts: rows are mappings post-expansion (see `_expand_positional_rows`).
         if self.groups is not None:
@@ -1212,6 +1244,9 @@ class Comparison(_Block):
                 f"{len(self.options)} options — they must match"
             )
         return self
+
+    def is_negative(self, index: int) -> bool:
+        return self.polarity is not None and self.polarity[index] == "negative"
 
 
 class MatrixCell(FrozenModel):
@@ -1417,6 +1452,14 @@ class SwimlaneGroup(FrozenModel):
     )
 
 
+def _first_and_last_index(keys: Iterable[str | None]) -> dict[str, tuple[int, int]]:
+    spans: dict[str, tuple[int, int]] = {}
+    for index, key in enumerate(keys):
+        if key is not None:
+            spans[key] = (spans[key][0], index) if key in spans else (index, index)
+    return spans
+
+
 class Swimlane(_Block):
     type: Literal["swimlane"]
     lanes: list[SwimlaneLane] = Field(
@@ -1451,6 +1494,31 @@ class Swimlane(_Block):
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
 
+    @cached_property
+    def _number_by_id(self) -> dict[str, str]:
+        return {step.id: step.n for step in self.steps if step.id is not None}
+
+    def dependency_numbers(self, step: SwimlaneStep) -> list[str]:
+        return list(dict.fromkeys(self._number_by_id[dependency] for dependency in step.depends_on))
+
+    @cached_property
+    def _placed_steps(self) -> dict[tuple[str, str, str | None], tuple[SwimlaneStep, ...]]:
+        placed: defaultdict[tuple[str, str, str | None], list[SwimlaneStep]] = defaultdict(list)
+        for step in self.steps:
+            placed[(step.lane, step.col, self.step_group(step))].append(step)
+        return {placement: tuple(steps) for placement, steps in placed.items()}
+
+    def steps_at(self, lane: str, col: str, group: str | None) -> tuple[SwimlaneStep, ...]:
+        return self._placed_steps.get((lane, col, group), ())
+
+    @cached_property
+    def group_spans(self) -> Mapping[str, tuple[int, int]]:
+        return _first_and_last_index(group for _, group in self.subcolumns())
+
+    @cached_property
+    def column_spans(self) -> Mapping[str, tuple[int, int]]:
+        return _first_and_last_index(column for column, _ in self.subcolumns())
+
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,
         else None (an ungrouped column)."""
@@ -1459,13 +1527,17 @@ class Swimlane(_Block):
         covering = self._groups_covering(step.col)
         return covering[0].name if len(covering) == 1 else None
 
-    def subcolumns(self) -> list[tuple[str, str | None]]:
+    def subcolumns(self) -> tuple[tuple[str, str | None], ...]:
+        return self._segments
+
+    @cached_property
+    def _segments(self) -> tuple[tuple[str, str | None], ...]:
         """The ordered atomic (column, group-name) segments the grid is built from. A column with no
         group → one `(col, None)` segment; a column split across N groups → N segments in canonical
         order (by column span, then declaration order). Raises if a group's segments cannot be laid out
         contiguously (it interleaves with another group instead of nesting)."""
         if not self.groups:
-            return [(col.key, None) for col in self.columns]
+            return tuple((col.key, None) for col in self.columns)
         col_index = {col.key: index for index, col in enumerate(self.columns)}
         group_index = {group.name: index for index, group in enumerate(self.groups)}
 
@@ -1490,7 +1562,7 @@ class Swimlane(_Block):
                     f"swimlane group '{group.name}' cannot be laid out contiguously — it shares a column "
                     "with another group while spanning past it; groups must nest, not interleave"
                 )
-        return segments
+        return tuple(segments)
 
     @model_validator(mode="after")
     def _shape(self) -> "Swimlane":

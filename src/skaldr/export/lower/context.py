@@ -1,12 +1,33 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TypeGuard
 
 from skaldr import compute
-from skaldr.export.inline import bold, one_line, rich_line
+from skaldr.export.inline import bold, one_line, plain, rich_line
 from skaldr.export.runs import Chip, ExportRich
-from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, ToneName
-from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items
+from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
+from skaldr.models import (
+    TONE_BADGE_COLOR,
+    AnyBlock,
+    BadgeLiteral,
+    BadgeRef,
+    Report,
+    ToneLiteral,
+    iter_reference_items,
+)
 from skaldr.richtext import Plain, Rich, RichContext
+
+
+def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
+    return isinstance(value, str) and value in TONE_BADGE_COLOR
+
+
+def tone_of(value: object) -> ToneLiteral | None:
+    return value if _is_tone(value) else None
+
+
+def tone_named(value: object) -> ToneName | None:
+    return "muted" if value == "muted" else tone_of(value)
 
 
 @dataclass(frozen=True)
@@ -14,6 +35,8 @@ class Lowering:
     report: Report
     rich_context: RichContext
     anchors: dict[int, str]
+    matrix_tallies: Mapping[str, compute.DerivedTally]
+    table_tallies: Mapping[str, compute.DerivedTally]
 
     def rich(self, text: str) -> Rich:
         return rich_line(text, self.rich_context)
@@ -54,6 +77,8 @@ def lowering_for(report: Report) -> Lowering:
             anchor_ids=frozenset(anchors.values()),
         ),
         anchors=anchors,
+        matrix_tallies=compute.matrix_tallies(report),
+        table_tallies=compute.table_tallies(report),
     )
 
 
@@ -73,3 +98,7 @@ def with_bold_label(label: str | None, text: ExportRich) -> ExportRich:
 
 def bullets(entries: Iterable[ListEntry]) -> ListNode:
     return ListNode("bullet", tuple(entries))
+
+
+def plain_cells(*texts: str) -> tuple[TableCell, ...]:
+    return tuple(TableCell(plain(text)) for text in texts)

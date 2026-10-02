@@ -5,6 +5,7 @@ from tests.factories.export_factory import (
     lowered,
     markdown_of,
     notion_of,
+    parsed_block,
     write_report,
 )
 from tests.factories.report_factory import (
@@ -22,6 +23,7 @@ from tests.factories.report_factory import (
     make_request,
     make_section,
     make_step,
+    make_swimlane,
     make_table,
 )
 
@@ -44,8 +46,10 @@ __all__ = [
     "make_request",
     "make_section",
     "make_step",
+    "make_swimlane",
     "make_table",
     "markdown_of",
     "notion_of",
+    "parsed_block",
     "write_report",
 ]

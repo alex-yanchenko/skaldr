@@ -59,6 +59,16 @@ def make_table(columns: list[dict[str, Any]], **overrides: Any) -> dict[str, Any
     return {"type": "table", "columns": columns, **overrides}
 
 
+def make_swimlane(steps: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
+    return {
+        "type": "swimlane",
+        "lanes": list(dict.fromkeys(step["lane"] for step in steps)),
+        "columns": list(dict.fromkeys(step["col"] for step in steps)),
+        "steps": steps,
+        **overrides,
+    }
+
+
 def make_request(**overrides: Any) -> dict[str, Any]:
     """A minimal valid `request`: one reader field the url uses, and one recorded case."""
     block: dict[str, Any] = {

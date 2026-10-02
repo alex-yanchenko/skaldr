@@ -23,8 +23,11 @@ from skaldr.export.lower.prose import (
     lower_status_list,
     lower_timeline,
 )
+from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
 from skaldr.export.tree import (
     Callout,
+    Columns,
+    GridColumn,
     Heading,
     ListEntry,
     ListNode,
@@ -104,8 +107,16 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_image(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
+        case models.Comparison():
+            return lower_comparison(block, lowering)
+        case models.Matrix():
+            return lower_matrix(block, lowering)
+        case models.Swimlane():
+            return lower_swimlane(block)
         case models.References():
             return lower_references(block, lowering)
+        case models.Table():
+            return lower_table(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
         case models.Panel():
@@ -114,6 +125,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
                     "neutral", (Paragraph(bold(block.title)), *_lower_blocks(block.blocks, lowering, depth))
                 )
             ]
+        case models.Grid() | models.InnerGrid():
+            return _grid(block, lowering, depth)
         case models.Walkthrough():
             return [
                 ListNode("number", tuple(_walkthrough_entry(step, lowering, depth) for step in block.steps))
@@ -132,6 +145,27 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]
     return [Heading(level, plain(block.title), anchor), *children]
+
+
+def _column_ratios(spans: Sequence[int]) -> list[int]:
+    total = sum(spans)
+    ratios = [round(span / total * 100) for span in spans]
+    return [*ratios[:-1], 100 - sum(ratios[:-1])]
+
+
+def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int) -> list[Node]:
+    cell_nodes: list[tuple[Node, ...]] = []
+    for cell in block.cells:
+        children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
+        cell_nodes.append((Callout(cell.tone, children),) if cell.tone else children)
+    if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
+        return [node for children in cell_nodes for node in children]
+    ratios = _column_ratios([cell.span for cell in block.cells])
+    return [
+        Columns(
+            tuple(GridColumn(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True))
+        )
+    ]
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:

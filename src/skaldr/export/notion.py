@@ -9,6 +9,7 @@ from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
     bang_cannot_open_an_image,
+    body_cell_texts,
     code_block_lines,
     escape_block_start,
     indent_lines,
@@ -18,13 +19,17 @@ from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_expo
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Columns,
     Heading,
     ListKind,
     ListNode,
     Node,
     Paragraph,
     Quote,
+    TableCell,
+    TableNode,
     TableOfContents,
+    TableRow,
     Toggle,
     ToneName,
     heading_of,
@@ -33,9 +38,12 @@ from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
+SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
+FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
+BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
     "muted": "gray",
@@ -99,6 +107,41 @@ def _indent(lines: Sequence[str], depth: int = 1) -> list[str]:
     return indent_lines(lines, "\t" * depth)
 
 
+def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
+    return SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", text)
+
+
+def _table_cell_text(cell: TableCell) -> str:
+    return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(notion_inline(cell.text)))
+
+
+def _background_attribute(tone: ToneName | None) -> str:
+    return _color_attribute(tone, BACKGROUND_SUFFIX) if tone else ""
+
+
+def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName | None) -> list[str]:
+    tagged = [
+        f"<td{_background_attribute(cell.tone)}>{text}</td>" for cell, text in zip(cells, texts, strict=True)
+    ]
+    return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
+
+
+def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
+    texts = body_cell_texts(table, row, [_table_cell_text(cell) for cell in row.cells])
+    tone = "neutral" if row.tone is None and row.emphasis == "group" else row.tone
+    return _row_lines(row.cells, texts, tone)
+
+
+def _table_lines(table: TableNode) -> list[str]:
+    attributes = ['fit-page-width="true"', 'header-row="true"']
+    if table.header_column:
+        attributes.append('header-column="true"')
+    header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
+    rows = _row_lines(table.header, header_texts, None)
+    rows += [line for row in table.rows for line in _body_row_lines(table, row)]
+    return [f"<table {' '.join(attributes)}>", *_indent(rows), "</table>"]
+
+
 def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
     match kind:
         case "bullet":
@@ -134,6 +177,13 @@ def _toggle_lines(node: Toggle) -> list[str]:
     return ["<details>", f"<summary>{notion_inline(node.title)}</summary>", *children, "</details>"]
 
 
+def _columns_lines(node: Columns) -> list[str]:
+    lines: list[str] = []
+    for column in node.columns:
+        lines += [f'<column ratio="{column.ratio}">', *_indent(_notion_blocks(column.children)), "</column>"]
+    return ["<columns>", *_indent(lines), "</columns>"]
+
+
 def _notion_lines(node: Node) -> list[str]:
     match node:
         case Heading():
@@ -143,15 +193,21 @@ def _notion_lines(node: Node) -> list[str]:
             return [text + _trailing_color(node.tone)] if text else []
         case ListNode():
             return _list_lines(node)
+        case TableNode():
+            return _table_lines(node)
         case CodeBlock():
             return code_block_lines(node)
         case Callout():
-            opening = f'<callout icon="{CALLOUT_ICON[node.tone]}"{_color_attribute(node.tone, "_bg")}>'
+            opening = (
+                f'<callout icon="{CALLOUT_ICON[node.tone]}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
+            )
             return [opening, *_indent(_notion_blocks(node.children)), "</callout>"]
         case Quote():
             return [_quote_line(node)]
         case Toggle():
             return _toggle_lines(node)
+        case Columns():
+            return _columns_lines(node)
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:

@@ -7,9 +7,9 @@ from urllib.parse import quote
 
 from typing_extensions import assert_never
 
-from skaldr.export.runs import Chip, Gauge, Mark
-from skaldr.export.tree import CodeBlock, ToneName
-from skaldr.models import StatusState
+from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
+from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
+from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, StyleName
 
 STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -42,6 +42,17 @@ def _wrap_marker(marker: str, inner: str) -> str:
 
 def styled(style: StyleName, inner: str) -> str:
     return _wrap_marker(STYLE_MARKER[style], inner)
+
+
+def is_emphasised_body_cell(table: TableNode, row: TableRow, index: int) -> bool:
+    return row.emphasis is not None or (table.header_column and index == 0)
+
+
+def body_cell_texts(table: TableNode, row: TableRow, texts: Sequence[str]) -> list[str]:
+    return [
+        styled("bold", text) if is_emphasised_body_cell(table, row, index) else text
+        for index, text in enumerate(texts)
+    ]
 
 
 def _longest_backtick_run(text: str) -> int:
@@ -100,6 +111,64 @@ def status_glyph(state: StatusState) -> str:
             assert_never(state)
 
 
+def swimlane_glyph(state: SwimlaneStepState) -> str:
+    match state:
+        case "done":
+            return "✅"
+        case "current":
+            return "🔵"
+        case "todo":
+            return "⚪"
+        case "blocked":
+            return "⛔"
+        case "deferred":
+            return "⏸️"
+        case _:
+            assert_never(state)
+
+
+def indicator_glyph(tone: ToneLiteral) -> str:
+    match tone:
+        case "success" | "teal":
+            return "🟢"
+        case "warning":
+            return "🟡"
+        case "danger":
+            return "🔴"
+        case "info" | "sky":
+            return "🔵"
+        case "neutral":
+            return "⚪"
+        case "accent":
+            return "🟣"
+        case _:
+            assert_never(tone)
+
+
+def check_glyph(checked: bool) -> str:
+    match checked:
+        case True:
+            return "✓"
+        case False:
+            return "✗"
+        case _:
+            assert_never(checked)
+
+
+def mark_glyph(mark: Mark) -> str:
+    match mark:
+        case StatusMark():
+            return status_glyph(mark.state)
+        case SwimlaneMark():
+            return swimlane_glyph(mark.state)
+        case IndicatorMark():
+            return indicator_glyph(mark.tone)
+        case CheckMark():
+            return check_glyph(mark.checked)
+        case _:
+            assert_never(mark)
+
+
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
@@ -130,11 +199,14 @@ class MarkupRuns(ABC):
         label = self.escape(f"[{run.number}]")
         return f"[{label}]({encode_url(run.url)})" if run.url else label
 
+    def line_break(self) -> str:
+        return "<br>"
+
     def styled(self, style: StyleName, inner: str, /) -> str:
         return styled(style, inner)
 
     def mark(self, run: Mark, /) -> str:
-        return status_glyph(run.state)
+        return mark_glyph(run)
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)

@@ -3,7 +3,6 @@ from pathlib import PurePosixPath
 from typing import Final
 
 from skaldr import compute, models
-from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, StatusMark
@@ -85,14 +84,30 @@ def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
     return [bullets(_card(card, lowering) for card in block.items)]
 
 
+def _derived_card(card: models.Card, badge_key: str, badge: models.Badge, lowering: Lowering) -> ExportRich:
+    count, total = compute.derived_card_tally(
+        card, badge_key, lowering.matrix_tallies, lowering.table_tallies
+    )
+    return (
+        Chip.on_one_line(card.label or badge.label, badge.tone),
+        *plain(f": {compute.fmt(count)} ({compute.pct(count, total)})"),
+    )
+
+
 def _delta(delta: models.CardDelta) -> ExportRich:
     text = f"{compute.DELTA_GLYPHS[delta.direction]} {delta.label}" if delta.direction else delta.label
     return (Chip.on_one_line(text, models.badge_color_of(delta.tone)),) if delta.tone else plain(text)
 
 
+def _card_note(card: models.Card) -> tuple[Node, ...]:
+    return (Paragraph(plain(card.note), "muted"),) if card.note else ()
+
+
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
-    if card.derived:
-        raise ReportError("a derived `cards` item has no Markdown export yet")
+    if card.derived and card.badge is not None:
+        badge = lowering.report.badges[card.badge]
+        text = _derived_card(card, card.badge, badge, lowering)
+        return ListEntry(text, children=_card_note(card), tone=card.tone_with(badge))
     parts: list[ExportRich] = [plain(compute.fmt(card.value))]
     if card.of and isinstance(card.value, int | float):
         parts.append(plain(f"({compute.pct(card.value, card.of)})"))
@@ -100,8 +115,7 @@ def _card(card: models.Card, lowering: Lowering) -> ListEntry:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
     text = with_bold_label(card.label, spaced([part for part in parts if part]))
-    children: tuple[Node, ...] = (Paragraph(plain(card.note), "muted"),) if card.note else ()
-    return ListEntry(text, children=children, tone=card.tone)
+    return ListEntry(text, children=_card_note(card), tone=card.tone)
 
 
 def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:

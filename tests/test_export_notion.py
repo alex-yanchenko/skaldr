@@ -8,7 +8,7 @@ import pytest
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
-from skaldr.export.runs import Chip, ExportRich, Gauge, StatusMark
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
     Heading,
@@ -18,6 +18,9 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
+    TableNode,
+    TableRow,
     Toggle,
     ToneName,
 )
@@ -84,6 +87,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Chip("api", "amber"),
         Plain(" "),
         AnchorLink((Plain("method"),), "method"),
+        Break(),
         StatusMark("blocked"),
         Gauge(3, 10),
         Plain(" wow!"),
@@ -93,7 +97,7 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow_bg">api</span> method⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow_bg">api</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 
@@ -195,6 +199,119 @@ def test_a_page_with_a_table_of_contents_uses_the_notion_block() -> None:
     assert (
         notion_of([{"type": "heading", "text": "A"}], meta={"title": "T", "toc": True})
         == "<table_of_contents/>\n## A\n"
+    )
+
+
+def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}, {"key": "c", "label": "C"}],
+        "rows": [{"a": "`flag` + default", "b": "- leading dash", "c": "1 + 1 and a+b"}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n"
+        "\t\t<td>`flag` \N{FULLWIDTH PLUS SIGN} default</td>\n"
+        "\t\t<td>\\- leading dash</td>\n"
+        "\t\t<td>1 + 1 and a+b</td>\n"
+        "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
+    table = TableNode(
+        (TableCell((Plain("Name"),)), TableCell(())),
+        (
+            TableRow((TableCell((Plain("group"),)), TableCell(())), emphasis="group"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal")), "sky"),
+            TableRow((TableCell((Plain("9"),)), TableCell(())), emphasis="total"),
+        ),
+        header_column=True,
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t\t<td></td>\n\t</tr>\n"
+        '\t<tr color="gray_bg">\n\t\t<td>**group**</td>\n\t\t<td></td>\n\t</tr>\n'
+        '\t<tr color="blue_bg">\n'
+        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="green_bg">y</td>\n'
+        "\t</tr>\n"
+        "\t<tr>\n\t\t<td>**9**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_group_row_with_its_own_tone_keeps_that_background() -> None:
+    table = TableNode(
+        (TableCell((Plain("Name"),)),),
+        (TableRow((TableCell((Plain("group"),)),), "warning", emphasis="group"),),
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t</tr>\n"
+        '\t<tr color="yellow_bg">\n\t\t<td>**group**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
+def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan", "sub": "wk 1"}],
+        "groups": [{"name": "Q1", "color": "blue", "columns": ["Plan"]}],
+        "steps": [{"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "value": 2}],
+    }
+
+    assert notion_of([swimlane]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Lane**</td>\n\t\t<td>**Plan<br>*wk 1*<br>Q1 (2)**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>⚪ **1** Draft (2)</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_grouped_table_bolds_its_group_rows_and_its_totals_row_as_a_whole() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Issue"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "totals": {"column": "n"},
+        "groups": [{"name": "Ours", "rows": [{"a": "x", "n": 2}]}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Issue**</td>\n\t\t<td>**Units**</td>\n\t</tr>\n"
+        '\t<tr color="gray_bg">\n\t\t<td>**Ours (2)**</td>\n\t\t<td></td>\n\t</tr>\n'
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>2</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_grid_becomes_columns_and_a_grid_inside_a_cell_stacks() -> None:
+    inner = {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "text", "body": "b"}]},
+            {"span": 3, "blocks": [{"type": "text", "body": "c"}]},
+        ],
+    }
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 2, "blocks": [{"type": "text", "body": "a"}]}, {"span": 4, "blocks": [inner]}],
+    }
+
+    assert notion_of([grid]) == (
+        "<columns>\n"
+        '\t<column ratio="33">\n\t\ta\n\t</column>\n'
+        '\t<column ratio="67">\n\t\tb\n\t\tc\n\t</column>\n'
+        "</columns>\n"
     )
 
 
