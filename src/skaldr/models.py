@@ -13,11 +13,10 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
-from types import MappingProxyType
 from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
@@ -1453,6 +1452,14 @@ class SwimlaneGroup(FrozenModel):
     )
 
 
+def _first_and_last_index(keys: Iterable[str | None]) -> dict[str, tuple[int, int]]:
+    spans: dict[str, tuple[int, int]] = {}
+    for index, key in enumerate(keys):
+        if key is not None:
+            spans[key] = (spans[key][0], index) if key in spans else (index, index)
+    return spans
+
+
 class Swimlane(_Block):
     type: Literal["swimlane"]
     lanes: list[SwimlaneLane] = Field(
@@ -1506,18 +1513,11 @@ class Swimlane(_Block):
 
     @cached_property
     def group_spans(self) -> Mapping[str, tuple[int, int]]:
-        spans: dict[str, tuple[int, int]] = {}
-        for index, (_, group) in enumerate(self.subcolumns()):
-            if group is not None:
-                spans[group] = (spans[group][0], index) if group in spans else (index, index)
-        return MappingProxyType(spans)
+        return _first_and_last_index(group for _, group in self.subcolumns())
 
     @cached_property
     def column_spans(self) -> Mapping[str, tuple[int, int]]:
-        spans: dict[str, tuple[int, int]] = {}
-        for index, (column, _) in enumerate(self.subcolumns()):
-            spans[column] = (spans[column][0], index) if column in spans else (index, index)
-        return MappingProxyType(spans)
+        return _first_and_last_index(column for column, _ in self.subcolumns())
 
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,

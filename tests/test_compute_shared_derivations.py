@@ -1,3 +1,4 @@
+import copy
 from typing import Any
 
 import pytest
@@ -197,6 +198,17 @@ def test_a_swimlane_column_spans_its_first_and_last_segment() -> None:
         "Build": (1, 2),
         "Ship": (3, 3),
     }
+
+
+def test_a_swimlane_whose_spans_were_read_can_still_be_deep_copied() -> None:
+    steps = [{"lane": "Ops", "col": "Plan", "n": "1", "label": "a", "group": "A"}]
+    groups = [{"name": "A", "color": "blue", "columns": ["Plan"]}]
+    block = parsed_block(Swimlane, make_swimlane(steps, groups=groups))
+    spans = (dict(block.column_spans), dict(block.group_spans))
+
+    copied = copy.deepcopy(block)
+
+    assert (copied, (dict(copied.column_spans), dict(copied.group_spans))) == (block, spans)
 
 
 @pytest.mark.parametrize(
