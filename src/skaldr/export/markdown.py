@@ -10,15 +10,18 @@ from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
     MarkupRuns,
+    body_cell_texts,
     code_block_lines,
     code_span,
     escape_block_start,
     indent_lines,
     styled,
 )
+from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Columns,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -28,12 +31,13 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
+    TableNode,
     TableOfContents,
     Toggle,
     heading_of,
     nested_nodes,
 )
-from skaldr.richtext import Rich, visible_text, write_runs
 
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
@@ -76,8 +80,11 @@ class _MarkdownRuns(MarkupRuns):
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
 
+    def chip(self, run: Chip, /) -> str:
+        return styled("bold", self.escape(run.label))
 
-def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, Rich]]:
+
+def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:
     for node in nodes:
         heading = heading_of(node)
         if heading is not None:
@@ -90,7 +97,7 @@ def github_heading_slugs(nodes: Sequence[Node]) -> dict[str, str]:
     taken: set[str] = set()
     slugs: dict[str, str] = {}
     for anchor, text in _headings(nodes):
-        base = slug = github_slug(visible_text(text))
+        base = slug = github_slug(export_visible_text(text))
         while slug in taken:
             repeats[base] += 1
             slug = f"{base}-{repeats[base]}"
@@ -114,6 +121,14 @@ def _quoted(lines: Sequence[str]) -> list[str]:
     return [f"> {line}" if line else ">" for line in lines]
 
 
+def _pad(cells: Sequence[str], width: int) -> list[str]:
+    return [*cells, *[""] * (width - len(cells))]
+
+
+def _table_row(cells: Sequence[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
 def _joined(sections: Sequence[Sequence[str]]) -> list[str]:
     out: list[str] = []
     for lines in sections:
@@ -126,15 +141,29 @@ class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.runs = _MarkdownRuns(heading_slugs)
 
-    def inline(self, runs: Rich) -> str:
-        return write_runs(runs, self.runs)
+    def inline(self, runs: ExportRich) -> str:
+        return write_export_runs(runs, self.runs)
 
-    def block_text(self, runs: Rich) -> str:
+    def block_text(self, runs: ExportRich) -> str:
         return escape_block_start(self.inline(runs))
 
-    def heading_line(self, level: HeadingLevel, runs: Rich) -> str:
+    def heading_line(self, level: HeadingLevel, runs: ExportRich) -> str:
         text = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), self.inline(runs))
         return f"{'#' * level} {text}"
+
+    def cell_text(self, cell: TableCell) -> str:
+        return self.inline(cell.text).replace("|", "\\|")
+
+    def table_lines(self, table: TableNode) -> list[str]:
+        width = max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
+        lines = [
+            _table_row(_pad([self.cell_text(cell) for cell in table.header], width)),
+            _table_row(["---"] * width),
+        ]
+        for row in table.rows:
+            texts = body_cell_texts(table, row, [self.cell_text(cell) for cell in row.cells])
+            lines.append(_table_row(_pad(texts, width)))
+        return lines
 
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)
@@ -196,6 +225,8 @@ class _MarkdownWriter:
                 return [text] if text else []
             case ListNode():
                 return self.list_lines(node, use_alternate_markers)
+            case TableNode():
+                return self.table_lines(node)
             case CodeBlock():
                 return code_block_lines(node)
             case Callout():
@@ -206,6 +237,8 @@ class _MarkdownWriter:
                 if node.heading_level is not None:
                     return self.titled(self.heading_line(node.heading_level, node.title), node.children)
                 return self.titled(styled("bold", self.inline(node.title)), node.children)
+            case Columns():
+                return self.blocks(nested_nodes(node))
             case TableOfContents():
                 return self.toc_lines(node, use_alternate_markers)
             case _:

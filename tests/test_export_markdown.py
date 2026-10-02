@@ -5,7 +5,19 @@ import pytest
 
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, styled
+from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
+from skaldr.export.runs import (
+    Break,
+    CheckMark,
+    Chip,
+    ExportRich,
+    ExportRun,
+    Gauge,
+    IndicatorMark,
+    StatusMark,
+    SwimlaneMark,
+    export_visible_text,
+)
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -16,14 +28,17 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
+    TableNode,
     TableOfContents,
+    TableRow,
     TocEntry,
     Toggle,
     ToneName,
 )
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
-from tests.factories import make_report, markdown_of
+from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, make_report, markdown_of
 
 
 def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: Path) -> None:
@@ -62,9 +77,16 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
         ),
         pytest.param(AnchorLink((Plain("method"),), "method"), "[method](#how-we-count)", id="anchor-link"),
         pytest.param(AnchorLink((Plain("gone"),), "nowhere"), "gone", id="anchor-link-to-no-heading"),
+        pytest.param(StatusMark("done"), "✅", id="status-mark"),
+        pytest.param(SwimlaneMark("deferred"), "⏸️", id="swimlane-mark"),
+        pytest.param(IndicatorMark("warning"), "🟡", id="indicator-mark"),
+        pytest.param(CheckMark(checked=False), "✗", id="check-mark"),
+        pytest.param(Break(), "<br>", id="line-break"),
+        pytest.param(Gauge(10, 10), "██████████", id="full-gauge"),
+        pytest.param(Chip("a*b_c", "blue"), r"**a\*b\_c**", id="chip-label-is-escaped"),
     ],
 )
-def test_an_inline_run_becomes_markdown(run: Run, written: str) -> None:
+def test_an_inline_run_becomes_markdown(run: ExportRun, written: str) -> None:
     nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph((run,))]
 
     assert render_markdown(nodes) == f"## How we count\n\n{written}\n"
@@ -154,8 +176,125 @@ def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, f
     assert code_block_lines(CodeBlock(content, "md")) == [f"{fence}md", *content.split("\n"), fence]
 
 
+@pytest.mark.parametrize(
+    ("value", "maximum", "bar"),
+    [
+        pytest.param(5, 10, "█████░░░░░", id="half"),
+        pytest.param(0, 10, "░░░░░░░░░░", id="empty"),
+        pytest.param(12, 10, "██████████", id="over-the-maximum-stays-full"),
+        pytest.param(-1, 10, "░░░░░░░░░░", id="below-zero-stays-empty"),
+        pytest.param(1, 4, "███░░░░░░░", id="two-and-a-half-cells-fill-three"),
+        pytest.param(3, 4, "████████░░", id="seven-and-a-half-cells-fill-eight"),
+        pytest.param(5, 100, "█░░░░░░░░░", id="a-half-cell-fills-one-so-a-small-share-shows"),
+    ],
+)
+def test_a_gauge_is_ten_cells_filled_in_proportion(value: float, maximum: float, bar: str) -> None:
+    assert gauge_bar(value, maximum) == bar
+
+
+def test_visible_text_of_export_runs_reads_chips_and_states_as_words() -> None:
+    runs: ExportRich = (Chip("api", "blue"), Plain(" "), StatusMark("done"), Gauge(1, 2))
+
+    assert export_visible_text(runs) == "api done"
+
+
+def test_visible_text_reads_a_line_break_as_a_space_and_every_mark_kind_as_its_word() -> None:
+    runs: ExportRich = (
+        SwimlaneMark("todo"),
+        Break(),
+        IndicatorMark("info"),
+        Plain(" "),
+        CheckMark(checked=True),
+        Plain(" "),
+        CheckMark(checked=False),
+    )
+
+    assert export_visible_text(runs) == "todo info yes no"
+
+
+def test_a_total_row_of_plain_cells_is_written_bold() -> None:
+    table = TableNode(
+        (TableCell((Plain("Issue"),)), TableCell((Plain("Units"),))),
+        (
+            TableRow((TableCell((Plain("x"),)), TableCell((Plain("2"),)))),
+            TableRow((TableCell((Plain("Total"),)), TableCell((Plain("2"),))), emphasis="total"),
+        ),
+    )
+
+    assert render_markdown([table]) == "| Issue | Units |\n| --- | --- |\n| x | 2 |\n| **Total** | **2** |\n"
+
+
 def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
-    assert (styled("bold", " x "), styled("italic", "  ")) == (" **x** ", "  ")
+    assert (styled("bold", " x "), styled("italic", "  "), styled("bold", "")) == (" **x** ", "  ", "")
+
+
+def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "Name"}, {"key": "n", "label": "Units", "kind": "number"}],
+        "rows": [{"a": "a|b and `x|y`", "n": 2}, {"a": "two\n\nlines", "n": 3}],
+        "totals": {"column": "n"},
+    }
+
+    assert markdown_of([table]) == (
+        "| Name | Units |\n"
+        "| --- | --- |\n"
+        "| a\\|b and `x\\|y` | 2 |\n"
+        "| two<br>lines | 3 |\n"
+        "| **Total** | **5** |\n"
+    )
+
+
+def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
+        (
+            TableRow((TableCell((Plain("group"),)),), emphasis="group"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),))), "sky"),
+        ),
+        header_column=True,
+    )
+
+    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **x** | y |\n"
+
+
+def test_a_comparison_bolds_its_feature_column_and_leaves_the_header_to_the_pipe_table() -> None:
+    comparison = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "highlight": 1,
+        "rows": [{"feature": "Risky", "values": [True, False]}],
+    }
+
+    assert markdown_of([comparison]) == "|  | A | ★ B |\n| --- | --- | --- |\n| **Risky** | ✓ | ✗ |\n"
+
+
+def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the_pipe_table() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan", "sub": "wk 1"}],
+        "steps": [{"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "value": 2}],
+    }
+
+    assert markdown_of([swimlane]) == (
+        "| Lane | Plan<br>*wk 1* |\n"
+        "| --- | --- |\n"
+        "| **Ops (2)** | ⚪ **1** Draft (2) |\n"
+        "| **Total** | **2** |\n"
+    )
+
+
+def test_a_grid_becomes_its_cells_in_order() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
+            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
+        ],
+    }
+
+    assert markdown_of([grid]) == "a\n\nb\n"
 
 
 @pytest.mark.parametrize(
@@ -351,6 +490,38 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
 
 
+def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
+    row = {"type": "badge_row", "items": [{"key": "API"}]}
+
+    assert (
+        markdown_of([row], badges=API_BADGES)
+        == "**Legend: badges used on this page**\n\n- **api** the API\n\n**api**\n"
+    )
+
+
+def test_every_badge_and_state_block_becomes_github_markdown() -> None:
+    assert markdown_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
+        "**Legend: badges used on this page**\n\n- **api** the API\n\n"
+        "- **Site**: West\n- **Owner**: ops\n\n"
+        "* **Lead**: **Ana**\n\n"
+        "- **Drift**: first\n\n  second\n- **Gap**\n\n"
+        "* **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n* **Lag**: 3 days → flat\n\n"
+        "**Affects**: **api** **ops**\n\n"
+        "- **Owners**: **web**\n\n"
+        "* ✅ Ship\n* ⛔ Vendor\n\n"
+        "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
+        "* **Zone**: ████░░░░░░ 42.9%\n\n"
+        "Jan to Dec\n\n"
+        "- **Q1**: 25.0%, slow\n- **Rest**: 75.0%\n"
+    )
+
+
+def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
+    row = {"type": "badge_row", "label": "Affects:", "items": [{"label": "api", "tone": "blue"}]}
+
+    assert markdown_of([row]) == "**Affects**: **api**\n"
+
+
 @pytest.mark.parametrize(
     ("heading", "slug"),
     [
@@ -418,9 +589,12 @@ def test_the_table_of_contents_and_anchor_links_point_at_github_slugs() -> None:
 
 
 def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
-    blocks = [{"type": "list", "items": ["West"]}, {"type": "heading", "text": "A"}]
+    blocks = [
+        {"type": "fact_strip", "facts": [{"label": "Site", "value": "West"}]},
+        {"type": "heading", "text": "A"},
+    ]
 
-    assert markdown_of(blocks, meta={"title": "T", "toc": True}) == "- [A](#a)\n\n* West\n\n## A\n"
+    assert markdown_of(blocks, meta={"title": "T", "toc": True}) == "- [A](#a)\n\n* **Site**: West\n\n## A\n"
 
 
 def test_a_page_with_no_toc_entries_drops_the_table_of_contents() -> None:

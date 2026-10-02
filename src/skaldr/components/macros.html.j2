@@ -1,7 +1,6 @@
 {# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
 
 {% set STATUS_GLYPHS = {"done": "✓", "current": "◐", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
-{% set DELTA_GLYPHS = {"up": "▲", "down": "▼", "flat": "→"} %}
 
 {% macro chip_item(item) %}
 {% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
@@ -14,7 +13,7 @@
 
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
-<summary>Legend — badges used on this page</summary>
+<summary>Legend — {{ badge_legend_subject }}</summary>
 <div class="section-body">
 <div class="legend-grid">
 {% for key, b in used_badges %}<div class="legend-row"><span class="chip {{ b.tone }}">{{ b.label }}</span><span class="meaning">{{ b.legend }}</span></div>
@@ -35,12 +34,12 @@
 {# tint_by: an explicit row tone wins, so only resolve a tint when the row sets none. A cell-badge value
    can be a list; the row's tint takes the first key's tone. A blank cell leaves the row untinted. #}
 {% set tinttone = none %}
-{% if b.tint_by and not rtone %}{% set raw = row[b.tint_by] %}{% set tk = ((raw[0] if raw is iterable and raw is not string else raw) or "") | trim %}{% if tk %}{% set tinttone = badges[tk].tone %}{% endif %}{% endif %}
+{% if b.tint_by and not rtone %}{% set tk = b.row_tint_key(row) %}{% if tk %}{% set tinttone = badges[tk].tone %}{% endif %}{% endif %}
 <tr class="row{% if rtone %} {{ rtone }}{% endif %}{% if tinttone %} tint {{ tinttone }}{% endif %}">
 {% for c in cell_cols %}
 {% if c.key == title_key %}
 <td class="title">{{ rich_cell(row[c.key]) }}
-{% for bc in title_badges %}{% set bkey = row[bc.key] | trim %}{% if bkey %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endif %}{% endfor %}
+{% for bc in title_badges %}{% for bkey in b.badge_keys(row, bc.key) %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endfor %}{% endfor %}
 {% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
 {% elif c.kind == "number" %}
@@ -48,7 +47,7 @@
 {% elif c.kind == "indicator" %}
 <td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
 {% elif c.kind == "badge" %}
-<td class="bc">{% set raw = row[c.key] %}{% for key in (raw if raw is iterable and raw is not string else [raw]) %}{% set k = key | trim %}{% if k %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endif %}{% endfor %}</td>
+<td class="bc">{% for k in b.badge_keys(row, c.key) %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endfor %}</td>
 {% else %}
 <td>{{ rich_cell(row[c.key]) }}</td>
 {% endif %}
@@ -61,10 +60,8 @@
    owns the split so template and validation can't drift. #}
 {% set cell_cols = b.cell_columns %}
 {% set title_badges = b.title_badges %}
-{% set text_cols = b.columns | selectattr("kind", "equalto", "text") | map(attribute="key") | list %}
-{% set rich_cols = b.columns | selectattr("kind", "equalto", "rich") | map(attribute="key") | list %}
-{% set title_key = text_cols[0] if text_cols else (rich_cols[0] if rich_cols else cell_cols[0].key) %}
-{% set sum_key = b.reconcile.column if b.reconcile else (b.totals.column if b.totals else none) %}
+{% set title_key = b.title_key %}
+{% set sum_key = b.sum_key %}
 <div class="table-wrap"><table class="rep">
 {% set width_total = cell_cols | selectattr("width") | map(attribute="width") | sum %}
 <colgroup>{% for c in cell_cols %}<col{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
@@ -80,7 +77,7 @@
 {% for row in b.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
 {% endif %}
 </tbody>
-{% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif loop.first %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
+{% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif c.key == b.totals_label_key %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
 </table></div>
 {% set buckets = table_rollup(b) %}
 {% if buckets %}<div class="rollup">{% if b.rollup.label %}<span class="rollup-lab">{{ b.rollup.label }}</span>{% endif %}{% for r in buckets %}<span class="rollup-item"><span class="chip {{ badges[r.key].tone }}">{{ badges[r.key].label }}</span><span class="rollup-n">{{ r.count }}</span></span>{% endfor %}</div>{% endif %}
@@ -139,7 +136,7 @@
 
 {% macro comparison(b) %}
 <table class="cmp"><thead><tr><th></th>{% for opt in b.options %}<th{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ opt }}</th>{% endfor %}</tr></thead>
-<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, (b.polarity[loop.index0] == 'negative') if b.polarity else false) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, b.is_negative(loop.index0)) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
 {% endmacro %}
 
 {% macro references(b) %}
@@ -190,7 +187,7 @@
 <div class="mx-wrap"><table class="mx">
 <thead><tr><th></th>{% for col in b.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
 <tbody>
-{% for row in b.rows %}{% set rowcells = grid[loop.index0] %}<tr><th>{{ row }}</th>{% for cell in rowcells %}{% if cell is none %}<td class="c"><span></span></td>{% else %}{% if cell.badge %}{% set tone = badges[cell.badge].tone %}{% set text = cell.label or badges[cell.badge].label %}{% elif cell.tone %}{% set tone = cell.tone %}{% set text = cell.label or "" %}{% else %}{% set tone = none %}{% set text = cell.label %}{% endif %}<td class="c{% if tone %} {{ tone }}{% endif %}"><span>{{ text }}</span></td>{% endif %}{% endfor %}</tr>
+{% for row in b.rows %}{% set rowcells = grid[loop.index0] %}<tr><th>{{ row }}</th>{% for cell in rowcells %}{% if cell is none %}<td class="c"><span></span></td>{% else %}{% set tone, text = matrix_cell_display(cell, badges) %}<td class="c{% if tone %} {{ tone }}{% endif %}"><span>{{ text }}</span></td>{% endif %}{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table></div>
@@ -202,7 +199,7 @@
    border read the same palette colour name. #}
 {% macro derived_card(c) %}
 {% set b = badges[c.badge] %}
-{% if c.of_matrix %}{% set mt = matrix_tallies[c.of_matrix] %}{% set count = mt.counts.get(c.badge, 0) %}{% set total = mt.total %}{% else %}{% set agg = namespace(count=0, total=0) %}{% for tid in c.of_tables %}{% set tt = table_tallies[tid] %}{% set agg.count = agg.count + tt.counts.get(c.badge, 0) %}{% set agg.total = agg.total + tt.total %}{% endfor %}{% set count = agg.count %}{% set total = agg.total %}{% endif %}
+{% set count, total = derived_card_tally(c, c.badge, matrix_tallies, table_tallies) %}
 <div class="card {{ c.tone or b.tone }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
 {% endmacro %}
 
@@ -288,7 +285,7 @@
 {% elif block.type == "def_list" %}
 <dl class="deflist">{% for it in block.items %}<dt>{{ it.term }}</dt><dd>{{ prose_paras(it.body) }}</dd>{% endfor %}</dl>
 {% elif block.type == "cards" %}
-<div class="cards">{% for c in block.items %}{% if c.of_matrix or c.of_tables %}{{ derived_card(c) }}{% else %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ DELTA_GLYPHS[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endif %}{% endfor %}</div>
+<div class="cards">{% for c in block.items %}{% if c.derived %}{{ derived_card(c) }}{% else %}<div class="card{% if c.tone %} {{ c.tone }}{% endif %}"><div class="l">{{ c.label }}</div><div class="n{% if c.value is string %} str{% elif c.value < 0 %} neg{% endif %}">{{ c.value | fmt }}{% if c.of %}<span class="pct">{{ pct(c.value, c.of) }}</span>{% endif %}{% if c.delta %}<span class="delta {{ c.delta.tone or 'neutral' }}">{% if c.delta.direction %}{{ delta_glyphs[c.delta.direction] }} {% endif %}{{ c.delta.label }}</span>{% endif %}</div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}{% if c.badges %}{{ chip_keys(c.badges) }}{% endif %}</div>{% endif %}{% endfor %}</div>
 {% elif block.type == "badge_row" %}
 {% if block.groups %}<dl class="badge-groups">{% for g in block.groups %}<dt>{{ g.label }}</dt><dd>{% for item in g.items %}{{ chip_item(item) }}{% endfor %}</dd>{% endfor %}</dl>{% else %}<div class="badge-row">{% if block.label %}<span class="label">{{ block.label }}</span>{% endif %}{% for item in block.items %}{{ chip_item(item) }}{% endfor %}</div>{% endif %}
 {% elif block.type == "callout" %}
