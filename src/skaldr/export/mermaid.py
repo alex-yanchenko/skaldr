@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 from typing_extensions import assert_never
 
@@ -12,7 +13,7 @@ class NodeColors(NamedTuple):
     stroke: str
 
 
-MERMAID_FILL: dict[ToneName, NodeColors] = {
+MERMAID_FILL: Final[Mapping[ToneName, NodeColors]] = {
     "success": NodeColors("#e6f4ea", "#1e8e3e"),
     "info": NodeColors("#e8f0fe", "#1a73e8"),
     "warning": NodeColors("#fef7e0", "#b06000"),
@@ -23,20 +24,33 @@ MERMAID_FILL: dict[ToneName, NodeColors] = {
     "neutral": NodeColors("#f1f3f4", "#5f6368"),
     "muted": NodeColors("#f1f3f4", "#5f6368"),
 }
-MERMAID_TEXT = "#1f2328"
-MERMAID_ENTITY = {"#": "#35;", '"': "#quot;", "%": "#37;", "<": "#lt;", ">": "#gt;", "`": "#96;"}
+MERMAID_TEXT: Final = "#1f2328"
+MERMAID_ENTITY: Final[Mapping[str, str]] = {
+    "#": "#35;",
+    "&": "#38;",
+    '"': "#quot;",
+    "%": "#37;",
+    "<": "#lt;",
+    ">": "#gt;",
+    "`": "#96;",
+}
+MERMAID_ESCAPES: Final = str.maketrans(MERMAID_ENTITY)
 
 
 def _mermaid_text(text: str) -> str:
-    return "".join(MERMAID_ENTITY.get(character, character) for character in one_line(text))
+    return one_line(text).translate(MERMAID_ESCAPES)
 
 
 def _quoted_string(text: str) -> str:
     return f'"{_mermaid_text(text)}"'
 
 
+def _without_negative_zero(value: float) -> float:
+    return abs(value) if value == 0 else value
+
+
 def _mermaid_number(value: float) -> str:
-    return format(Decimal(repr(value)), "f")
+    return format(Decimal(repr(_without_negative_zero(value))), "f")
 
 
 def _node_line(node: GraphNode) -> str:
@@ -76,10 +90,6 @@ def _mermaid_lines(figure: Figure) -> list[str]:
             return _xy_lines(figure)
         case _:
             assert_never(figure)
-
-
-def mermaid_source(figure: Figure) -> str:
-    return "\n".join(_mermaid_lines(figure))
 
 
 def mermaid_fence_lines(figure: Figure) -> list[str]:
