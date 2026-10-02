@@ -26,6 +26,10 @@
 		target.scrollIntoView();
 	}
 	window.addEventListener("hashchange", revealHashTarget);
+	document.addEventListener("click", function (event) {
+		var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+		if (link && link.hash === location.hash) revealHashTarget();
+	});
 	revealHashTarget();
 })();
 </script>

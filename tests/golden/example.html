@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-mdbvS+6f+ajrz0kFNoIgx13/H0BWfJQlePsJE5ulZSo='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -1887,6 +1887,10 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 		target.scrollIntoView();
 	}
 	window.addEventListener("hashchange", revealHashTarget);
+	document.addEventListener("click", function (event) {
+		var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+		if (link && link.hash === location.hash) revealHashTarget();
+	});
 	revealHashTarget();
 })();
 </script></body>

@@ -750,6 +750,13 @@ def test_a_heading_slugged_like_a_radio_id_leaves_every_label_bound_to_its_radio
     assert (repeated_ids, label_targets) == ([], radio_ids)
 
 
+CURRENT_HASH_CLICK_LISTENER = (
+    '\tdocument.addEventListener("click", function (event) {\n'
+    "\t\tvar link = event.target instanceof Element ? event.target.closest('a[href^=\"#\"]') : null;\n"
+    "\t\tif (link && link.hash === location.hash) revealHashTarget();\n"
+    "\t});\n"
+)
+
 STRIP_ANCHOR_SCRIPT = (
     "<script>\n"
     "(function () {\n"
@@ -779,10 +786,17 @@ STRIP_ANCHOR_SCRIPT = (
     "\t\ttarget.scrollIntoView();\n"
     "\t}\n"
     '\twindow.addEventListener("hashchange", revealHashTarget);\n'
+    f"{CURRENT_HASH_CLICK_LISTENER}"
     "\trevealHashTarget();\n"
     "})();\n"
     "</script>"
 )
+
+
+def test_a_click_on_a_link_to_the_hash_already_current_reveals_its_target_again() -> None:
+    html = render_html(parse_report(make_report(blocks=[make_tabs()])))
+
+    assert html.count(CURRENT_HASH_CLICK_LISTENER) == 1
 
 
 @pytest.mark.parametrize(
