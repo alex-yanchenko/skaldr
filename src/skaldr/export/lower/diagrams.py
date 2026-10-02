@@ -27,6 +27,7 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    InlineMath,
     Link,
     Placeholder,
     Plain,
@@ -63,7 +64,7 @@ def _links_somewhere(run: Run) -> bool:
             return True
         case Styled() | Tinted():
             return any(map(_links_somewhere, run.runs))
-        case Plain() | Code() | Placeholder() | ScriptText():
+        case Plain() | Code() | Placeholder() | ScriptText() | InlineMath():
             return False
         case _:
             assert_never(run)

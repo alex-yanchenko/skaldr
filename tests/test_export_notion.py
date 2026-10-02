@@ -165,6 +165,22 @@ def test_an_attribute_span_is_a_notion_colour_span(text: str, notion: str) -> No
     assert notion_inline(parse_rich(text)) == notion
 
 
+def test_inline_math_is_notion_inline_math_while_prose_dollars_stay_escaped() -> None:
+    assert notion_inline(parse_rich("costs $5, so $`x_i < 2`$ holds")) == "costs \\$5, so $`x_i < 2`$ holds"
+
+
+def test_a_math_block_is_a_notion_equation_block_indented_inside_a_callout() -> None:
+    callout = {"type": "callout", "tone": "info", "body": "Rate"}
+    math = {"type": "math", "expression": "a\n\n  b\n"}
+
+    assert notion_of([math, {"type": "panel", "title": "P", "blocks": [callout, math]}]) == (
+        "$$\na\n  b\n$$\n"
+        '<callout icon="📝" color="gray_bg">\n\t**P**\n'
+        '\t<callout icon="💡" color="blue_bg">\n\t\tRate\n\t</callout>\n'
+        "\t$$\n\ta\n\t  b\n\t$$\n</callout>\n"
+    )
+
+
 def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> None:
     assert notion_inline(parse_rich("C++ in ~5 days, 2^10 and a ++ b ++ c")) == (
         "C++ in \\~5 days, 2\\^10 and a ++ b ++ c"

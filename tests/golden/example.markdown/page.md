@@ -165,6 +165,12 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below.
 
+A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units and $`e`$ the expected units; the page reports the mean over the $`n`$ zones, with $`\sigma`$ as its spread.
+
+```math
+\bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
+```
+
 `reconciliation.sql`
 
 ```sql

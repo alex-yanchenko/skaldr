@@ -92,12 +92,14 @@ schema lists the canonical names; the alias names still validate at build even i
 Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items, `quote.body`,
 `key_value` values, timeline/status text) accept a small markdown subset:
 
-`**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `[label](https://url)`
+`**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `` $`x_i`$ `` (inline math) · `[label](https://url)`
 (links allow `http`, `https`, `mailto` only).
 
 **Underline, subscript and superscript.** `++underline++` opens only where no letter or digit runs into it, and the text inside starts and ends with a non-space, so `C++`, `i++` and `a ++ b ++ c` stay prose. Subscript `~…~` and superscript `^…^` follow Pandoc: the marked text holds no spaces, so `about ~5 days` and `cut from ~5 days~ to 2` stay prose, and `~~strike~~` is still a strike. The marked text is plain text; no other mark goes inside a subscript or a superscript.
 
 **Colour and highlight.** `[text]{tone=danger}` colours the text, `[text]{bg=warning}` highlights it, and `[text]{tone=danger bg=warning}` does both. The braces hold space-separated `key=value` attributes in either order, `tone` and `bg` at most once each, and each value is a tone or its palette name (see Colours & tones above). The bracketed text may hold other marks, but not a link. Braces right after `]` that open with a lowercase name and `=` are an attribute list, so an unknown attribute, an unknown tone, a repeated attribute, or spaces around `=` fail the build naming the token. Anything else, like `[a]{x}` or `[a] {tone=info}`, stays prose, and `[label](https://url)` is still a link.
+
+**Math.** A `` `code` `` span wrapped in dollars, `` $`\frac{a}{b}`$ ``, is inline LaTeX math, and a `math` block (`{type: math, expression: '\sum_{i=1}^{n} x_i'}`) is display math on its own line. skaldr converts both to MathML when the page builds, so the page needs no script or font to show them. An expression the converter cannot read fails the build naming it, and so does one using `\href`, `\class` or `\style`. A lone `$` in prose, like `costs $5`, stays text. In YAML, single-quote an expression so its backslashes reach skaldr unchanged.
 
 **Same-page anchor links.** `[label](#slug)` jumps to a heading or section on the same page. The
 `slug` is the heading text lowercased with non-alphanumerics turned to `-` (so `## Count pipeline` →
@@ -176,6 +178,7 @@ or to keep a small block from stretching across the whole page.
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
+| `math` | A display equation, written in LaTeX and rendered as MathML | `expression` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
@@ -953,6 +956,8 @@ case, where the page is shared as a URL an agent later has to read back.
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
+| `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
+| `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
 

@@ -8,6 +8,7 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    InlineMath,
     Link,
     Placeholder,
     Plain,
@@ -165,6 +166,44 @@ def test_marker_characters_that_do_not_form_a_mark_stay_prose(text: str) -> None
 
 def test_a_subscript_cannot_hold_a_code_span() -> None:
     assert parse_rich("x~`i`~") == (Plain("x~"), Code("i"), Plain("~"))
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("a $`x_i`$ b", (Plain("a "), InlineMath("x_i"), Plain(" b")), id="inline-math"),
+        pytest.param("$` \\frac{a}{b} `$", (InlineMath("\\frac{a}{b}"),), id="outer-spaces-are-trimmed"),
+        pytest.param(
+            "$`x` and `y`$",
+            (Plain("$"), Code("x"), Plain(" and "), Code("y"), Plain("$")),
+            id="two-code-spans-between-dollars",
+        ),
+        pytest.param("`$x$`", (Code("$x$"),), id="dollars-inside-a-code-span"),
+        pytest.param("$`x`", (Plain("$"), Code("x")), id="no-closing-dollar"),
+        pytest.param("costs $5 and $x$", (Plain("costs $5 and $x$"),), id="prose-dollars"),
+        pytest.param(
+            "[the $`x`$ term](https://e.com)",
+            (Link((Plain("the "), InlineMath("x"), Plain(" term")), "https://e.com"),),
+            id="inline-math-in-a-link-label",
+        ),
+        pytest.param(
+            "**$`a^2`$**",
+            (Styled("bold", (InlineMath("a^2"),)),),
+            id="carets-inside-math-are-not-a-superscript",
+        ),
+    ],
+)
+def test_a_code_span_between_dollars_parses_into_inline_math(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
+def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich("see $`x^`$ here")
+
+    assert str(raised.value) == (
+        "invalid math expression 'x^': latex2mathml cannot convert it (MissingSuperScriptOrSubscriptError)"
+    )
 
 
 @pytest.mark.parametrize(
@@ -360,9 +399,11 @@ def test_visible_text_reads_every_run_as_a_reader_would() -> None:
         Plain("O "),
         ScriptText("superscript", "3"),
         Tinted("danger", "warning", (Plain(" hot"),)),
+        Plain(" "),
+        InlineMath("x_i"),
     )
 
-    assert visible_text(runs) == "a b[2]who! H2O 3 hot"
+    assert visible_text(runs) == "a b[2]who! H2O 3 hot x_i"
 
 
 class _TaggedRuns:
@@ -393,15 +434,19 @@ class _TaggedRuns:
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
         return f"<tint:{tone}/{background}:{inner}>"
 
+    def math(self, expression: str, /) -> str:
+        return f"<math:{expression}>"
+
 
 def test_write_runs_hands_every_run_to_its_writer_method_in_order() -> None:
     runs = parse_rich(
         "a `c` [see `x` [^sop]](https://e.com) [m](#method) {{who}} ~~*x*~~ ++u++ H~2~O 10^3^ "
-        "[*hot*]{bg=danger}",
+        "[*hot*]{bg=danger} $`x_i`$",
         FULL_CONTEXT,
     )
 
     assert write_runs(runs, _TaggedRuns()) == (
         "a <code:c> <link:see <code:x> <cite:sop=1>|https://e.com> <anchor:m|method> <blank:who> "
-        "<strike:<italic:x>> <underline:u> H<subscript:2>O 10<superscript:3> <tint:None/danger:<italic:hot>>"
+        "<strike:<italic:x>> <underline:u> H<subscript:2>O 10<superscript:3> <tint:None/danger:<italic:hot>> "
+        "<math:x_i>"
     )

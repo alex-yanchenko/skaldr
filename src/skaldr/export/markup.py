@@ -204,6 +204,9 @@ class MarkupRuns(ABC):
     @abstractmethod
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
 
+    def math(self, expression: str, /) -> str:
+        return f"$`{expression}`$"
+
     def text(self, text: str, /) -> str:
         return bang_cannot_open_an_image(self.escape(text))
 

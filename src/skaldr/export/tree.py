@@ -64,6 +64,11 @@ class CodeBlock:
 
 
 @dataclass(frozen=True)
+class DisplayMath:
+    expression: str
+
+
+@dataclass(frozen=True)
 class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
@@ -172,6 +177,7 @@ Node = (
     | ListNode
     | TableNode
     | CodeBlock
+    | DisplayMath
     | Callout
     | Quote
     | Toggle
@@ -212,5 +218,7 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return tuple(child for tab in node.tabs for child in tab.children)
         case Diagram():
             return node.supplement
-        case Heading() | Paragraph() | TableNode() | CodeBlock() | Quote() | TableOfContents():
+        case (
+            Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Quote() | TableOfContents()
+        ):
             return ()

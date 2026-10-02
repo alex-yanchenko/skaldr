@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
+from skaldr.mathml import refuse_invalid_math
 from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
 StyleName = Literal["bold", "italic", "strike", "underline"]
@@ -68,10 +69,15 @@ class Tinted:
     runs: "Rich"
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText | Tinted
+@dataclass(frozen=True)
+class InlineMath:
+    expression: str
+
+
+Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText | Tinted | InlineMath
 Rich = tuple[Run, ...]
 
-_CODE_SPAN = re.compile(r"`([^`]+)`")
+_MATH_OR_CODE_SPAN = re.compile(r"\$`([^`]+)`\$|`([^`]+)`")
 _FOOTNOTE = re.compile(rf"\[\^({REFERENCE_KEY_PATTERN})\]")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
@@ -145,7 +151,7 @@ def _anchor_holding_markup(url: str) -> ReportError:
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     rules = context if context is not None else RichContext()
     stash = _Stash()
-    staged = _CODE_SPAN.sub(lambda match: stash.set_aside(Code(match.group(1))), text.replace("\x00", ""))
+    staged = _MATH_OR_CODE_SPAN.sub(partial(_set_aside_math_or_code, stash), text.replace("\x00", ""))
 
     def cite(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -185,6 +191,15 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
         staged = pattern.sub(partial(_set_aside_script, stash, position), staged)
     staged = _ATTRIBUTE_SPAN.sub(partial(_set_aside_tint, stash), staged)
     return _parse_styles(staged, 0, stash)
+
+
+def _set_aside_math_or_code(stash: _Stash, match: re.Match[str]) -> str:
+    math, code = match.group(1), match.group(2)
+    if math is None:
+        return stash.set_aside(Code(code))
+    expression = math.strip()
+    refuse_invalid_math(expression, "inline")
+    return stash.set_aside(InlineMath(expression))
 
 
 def _set_aside_script(stash: _Stash, position: ScriptPosition, match: re.Match[str]) -> str:
@@ -257,6 +272,8 @@ class RunWriter(Protocol):
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
 
+    def math(self, expression: str, /) -> str: ...
+
 
 def write_run(run: Run, writer: RunWriter) -> str:
     match run:
@@ -278,6 +295,8 @@ def write_run(run: Run, writer: RunWriter) -> str:
             return writer.script(run.position, run.text)
         case Tinted():
             return writer.tinted(run.tone, run.background, write_runs(run.runs, writer))
+        case InlineMath():
+            return writer.math(run.expression)
         case _:
             assert_never(run)
 
@@ -313,6 +332,9 @@ class VisibleText:
 
     def tinted(self, _tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
         return inner
+
+    def math(self, expression: str, /) -> str:
+        return expression
 
 
 def visible_text(runs: Rich) -> str:

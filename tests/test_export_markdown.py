@@ -243,6 +243,18 @@ def test_underline_and_scripts_in_prose_become_github_html_tags() -> None:
     )
 
 
+def test_inline_math_is_written_unescaped_in_github_math_form_while_prose_dollars_stay_escaped() -> None:
+    assert markdown_of([{"type": "text", "body": "costs $5, so $`x_i < 2`$ holds"}]) == (
+        "costs \\$5, so $`x_i < 2`$ holds\n"
+    )
+
+
+def test_a_math_block_is_a_github_math_fence() -> None:
+    block = {"type": "math", "expression": "\\sum_{i=1}^{n} x_i\n\n= y\n"}
+
+    assert markdown_of([block]) == "```math\n\\sum_{i=1}^{n} x_i\n= y\n```\n"
+
+
 def test_an_attribute_span_keeps_only_its_text_because_github_has_no_colour() -> None:
     assert markdown_of([{"type": "text", "body": "[**late** a_b]{tone=danger bg=warning} [x]{y}"}]) == (
         "**late** a\\_b \\[x\\]{y}\n"

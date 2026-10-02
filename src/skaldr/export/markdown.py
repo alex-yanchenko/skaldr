@@ -25,6 +25,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    DisplayMath,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -253,6 +254,8 @@ class _MarkdownWriter:
                 return self.table_lines(node)
             case CodeBlock():
                 return code_block_lines(node)
+            case DisplayMath():
+                return code_block_lines(CodeBlock(node.expression, "math"))
             case Callout():
                 return self.callout_lines(node)
             case Quote():

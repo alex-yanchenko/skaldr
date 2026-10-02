@@ -201,6 +201,10 @@ blocks:
     text: "Method"
   - type: text
     body: "Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below."
+  - type: text
+    body: 'A zone''s drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units and $`e`$ the expected units; the page reports the mean over the $`n`$ zones, with $`\sigma`$ as its spread.'
+  - type: math
+    expression: '\bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}'
   - type: code
     label: "reconciliation.sql"
     content: |

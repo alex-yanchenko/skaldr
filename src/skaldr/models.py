@@ -39,6 +39,7 @@ from pydantic_core import PydanticCustomError
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish import Publish, section_choice_errors
 
@@ -613,6 +614,22 @@ class Code(_Block):
     mode: Literal["plain", "diff"] = Field(
         default="plain", description="plain, or diff (+/- lines tinted success/danger)."
     )
+
+
+class Math(_Block):
+    type: Literal["math"]
+    expression: str = Field(
+        description="A LaTeX expression shown as display math, converted to MathML when the page builds."
+    )
+
+    @field_validator("expression")
+    @classmethod
+    def _converts_to_mathml(cls, expression: str) -> str:
+        try:
+            refuse_invalid_math(expression, "block")
+        except ReportError as error:
+            raise ValueError(str(error)) from None
+        return expression
 
 
 class Quote(_Block):
@@ -2146,6 +2163,7 @@ _Leaf = (
     | Range
     | Table
     | Code
+    | Math
     | Quote
     | Note
     | Image

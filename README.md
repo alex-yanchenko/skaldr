@@ -133,7 +133,7 @@ workhorse — typed columns, grouped subtotals, sub-rows, colour-only `indicator
 `tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
 total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
 nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
-`~~strike~~`, links); raw HTML is never interpreted.
+`~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`, `[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math` block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
 
 Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/skaldr/skill/GUIDE.md)),
 [`data/example.yaml`](data/example.yaml) (a file exercising every block), and

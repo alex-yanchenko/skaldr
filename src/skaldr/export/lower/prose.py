@@ -9,6 +9,7 @@ from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    DisplayMath,
     ListEntry,
     ListKind,
     ListNode,
@@ -195,6 +196,10 @@ def lower_code(block: models.Code) -> list[Node]:
     label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
     language = "diff" if block.mode == "diff" else code_language(block.label)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
+
+
+def lower_math(block: models.Math) -> list[Node]:
+    return [DisplayMath("\n".join(line for line in block.expression.split("\n") if line.strip()))]
 
 
 def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:

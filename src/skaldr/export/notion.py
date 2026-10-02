@@ -23,6 +23,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    DisplayMath,
     Heading,
     ListKind,
     ListNode,
@@ -48,6 +49,7 @@ FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
+EQUATION_FENCE: Final = "$$"
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -76,10 +78,6 @@ LATEX_TEXT_ESCAPES: Final = str.maketrans(
 
 def latex_text(text: str) -> str:
     return "\\text{" + text.translate(LATEX_TEXT_ESCAPES) + "}"
-
-
-def inline_math(expression: str) -> str:
-    return f"$`{expression}`$"
 
 
 class _NotionRuns(MarkupRuns):
@@ -112,7 +110,7 @@ class _NotionRuns(MarkupRuns):
         return f'<span underline="true">{inner}</span>'
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
-        return inline_math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
+        return self.math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
         highlighted = (
@@ -244,6 +242,8 @@ def _notion_lines(node: Node) -> list[str]:
             return _table_lines(node)
         case CodeBlock():
             return code_block_lines(node)
+        case DisplayMath():
+            return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
         case Callout():
             opening = (
                 f'<callout icon="{CALLOUT_ICON[node.tone]}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'

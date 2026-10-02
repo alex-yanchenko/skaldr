@@ -21,6 +21,7 @@ from skaldr.models import (
     Group,
     ListBlock,
     ListItem,
+    Math,
     Matrix,
     MatrixCell,
     Meta,
@@ -604,6 +605,22 @@ def test_note_parses_to_whole_model_with_optional_title() -> None:
     report = parse_report(make_report(blocks=[block]))
 
     assert report.blocks[0] == Note(type="note", body="An aside.", title=None)
+
+
+def test_math_parses_to_whole_model() -> None:
+    report = parse_report(make_report(blocks=[{"type": "math", "expression": "E = mc^2"}]))
+
+    assert report.blocks[0] == Math(type="math", expression="E = mc^2")
+
+
+def test_a_math_block_the_converter_rejects_fails_at_its_path() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "math", "expression": "x^"}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.math.expression: Value error, invalid math expression 'x^': "
+        "latex2mathml cannot convert it (MissingSuperScriptOrSubscriptError)"
+    )
 
 
 def test_panel_parses_to_whole_model() -> None:

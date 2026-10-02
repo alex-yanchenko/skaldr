@@ -21,6 +21,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    DisplayMath,
     Graph,
     GraphEdge,
     GraphNode,
@@ -49,7 +50,7 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled, Tinted
+from skaldr.richtext import AnchorLink, Citation, Code, InlineMath, Link, Plain, Rich, Styled, Tinted
 from tests.factories import (
     API_BADGES,
     lowered,
@@ -1124,6 +1125,30 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
         Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
     )
+
+
+@pytest.mark.parametrize(
+    ("expression", "lowered_expression"),
+    [
+        pytest.param("E = mc^2", "E = mc^2", id="one-line"),
+        pytest.param("\n  a \\\\\n\n  b\n\n", "  a \\\\\n  b", id="blank-lines-dropped"),
+    ],
+)
+def test_a_math_block_keeps_its_expression_without_blank_lines(
+    expression: str, lowered_expression: str
+) -> None:
+    assert lowered([{"type": "math", "expression": expression}]) == (DisplayMath(lowered_expression),)
+
+
+@pytest.mark.parametrize(
+    ("item", "runs"),
+    [
+        pytest.param("$`a\nb`$", (InlineMath("a b"),), id="line-break-inside"),
+        pytest.param("$`a\r\nb`$", (InlineMath("a b"),), id="crlf-inside"),
+    ],
+)
+def test_inline_math_lowers_onto_one_line(item: str, runs: Rich) -> None:
+    assert lowered([{"type": "list", "items": [item]}]) == (ListNode("bullet", (ListEntry(runs),)),)
 
 
 def test_an_untitled_callout_and_note_are_their_body_alone() -> None:

@@ -16,6 +16,7 @@ from markupsafe import Markup, escape
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
+from skaldr.mathml import mathml
 from skaldr.models import (
     Heading,
     Report,
@@ -81,6 +82,13 @@ class _HtmlRuns:
         highlight = [f"background:var(--{background}-bg)"] if background else []
         return f'<span style="{";".join(colour + highlight)}">{inner}</span>'
 
+    def math(self, expression: str, /) -> str:
+        return mathml(expression, "inline")
+
+
+def display_math(expression: str) -> Markup:
+    return Markup(mathml(expression, "block"))
+
 
 def render_richtext(
     text: str,
@@ -135,6 +143,7 @@ def _environment() -> Environment:
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
+        display_math=display_math,
     )
     return env
 

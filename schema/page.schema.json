@@ -1355,6 +1355,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
@@ -1411,6 +1412,9 @@
               },
               {
                 "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
               },
               {
                 "$ref": "#/$defs/Quote"
@@ -1749,6 +1753,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
@@ -1805,6 +1810,9 @@
               },
               {
                 "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
               },
               {
                 "$ref": "#/$defs/Quote"
@@ -2131,6 +2139,42 @@
         "text"
       ],
       "title": "ListItem",
+      "type": "object"
+    },
+    "Math": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "math",
+          "title": "Type",
+          "type": "string"
+        },
+        "expression": {
+          "description": "A LaTeX expression shown as display math, converted to MathML when the page builds.",
+          "title": "Expression",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "expression"
+      ],
+      "title": "Math",
       "type": "object"
     },
     "Matrix": {
@@ -2651,6 +2695,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
@@ -2709,6 +2754,9 @@
               },
               {
                 "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
               },
               {
                 "$ref": "#/$defs/Quote"
@@ -3860,6 +3908,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
@@ -3918,6 +3967,9 @@
               },
               {
                 "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
               },
               {
                 "$ref": "#/$defs/Quote"
@@ -4779,6 +4831,7 @@
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
                 "list": "#/$defs/ListBlock",
+                "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
@@ -4835,6 +4888,9 @@
               },
               {
                 "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Math"
               },
               {
                 "$ref": "#/$defs/Quote"
@@ -4925,6 +4981,7 @@
             "image": "#/$defs/Image",
             "key_value": "#/$defs/KeyValue",
             "list": "#/$defs/ListBlock",
+            "math": "#/$defs/Math",
             "matrix": "#/$defs/Matrix",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
@@ -4986,6 +5043,9 @@
           },
           {
             "$ref": "#/$defs/Code"
+          },
+          {
+            "$ref": "#/$defs/Math"
           },
           {
             "$ref": "#/$defs/Quote"

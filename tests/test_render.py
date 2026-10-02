@@ -2593,6 +2593,24 @@ def test_richtext_writes_an_attribute_span_with_the_tone_tokens(text: str, html:
     assert str(render_richtext(text)) == html
 
 
+def test_richtext_writes_inline_math_as_mathml_and_keeps_prose_dollars() -> None:
+    html = str(render_richtext("costs $5, so $`x_i < 2`$ holds"))
+
+    assert html == (
+        'costs $5, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>'
+        "<msub><mi>x</mi><mi>i</mi></msub><mo>&lt;</mo><mn>2</mn></mrow></math> holds"
+    )
+
+
+def test_a_math_block_renders_display_mathml() -> None:
+    html = render_html(parse_report(make_report(blocks=[{"type": "math", "expression": "\\frac{a}{b}"}])))
+
+    assert (
+        '<div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac>'
+        "<mrow><mi>a</mi></mrow><mrow><mi>b</mi></mrow></mfrac></mrow></math></div>"
+    ) in html
+
+
 @pytest.mark.parametrize("tone", [pytest.param(tone, id=tone) for tone in get_args(ToneLiteral)])
 def test_every_tone_an_attribute_span_names_has_a_colour_and_a_tint_token(tone: str) -> None:
     styles = package_text("styles.css")
