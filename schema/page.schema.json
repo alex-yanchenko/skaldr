@@ -1993,6 +1993,7 @@
         "title": {
           "description": "Summary label shown on the collapsible.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },
@@ -4687,6 +4688,7 @@
         "label": {
           "description": "The tab's label in the strip, and its heading on paper.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -5224,6 +5226,7 @@
         "title": {
           "description": "Summary label shown on the collapsible.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },

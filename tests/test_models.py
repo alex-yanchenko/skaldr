@@ -797,6 +797,53 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
     )
 
 
+@pytest.mark.parametrize(
+    ("definition", "field", "schema"),
+    [
+        pytest.param(
+            "Toggle",
+            "title",
+            {
+                "description": "Summary label shown on the collapsible.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Title",
+                "type": "string",
+            },
+            id="toggle-title",
+        ),
+        pytest.param(
+            "InnerToggle",
+            "title",
+            {
+                "description": "Summary label shown on the collapsible.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Title",
+                "type": "string",
+            },
+            id="inner-toggle-title",
+        ),
+        pytest.param(
+            "Tab",
+            "label",
+            {
+                "description": "The tab's label in the strip, and its heading on paper.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Label",
+                "type": "string",
+            },
+            id="tab-label",
+        ),
+    ],
+)
+def test_the_schema_refuses_a_blank_toggle_title_or_tab_label_as_the_build_does(
+    definition: str, field: str, schema: dict[str, object]
+) -> None:
+    assert Report.model_json_schema()["$defs"][definition]["properties"][field] == schema
+
+
 def _union_tags(union: object) -> str:
     return ", ".join(
         f"'{get_args(model.model_fields['type'].annotation)[0]}'" for model in get_args(get_args(union)[0])

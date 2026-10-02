@@ -36,6 +36,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic.config import JsonDict
 from pydantic_core import PydanticCustomError
 from typing_extensions import assert_never
 
@@ -2226,10 +2227,15 @@ def _refuse_blank(what: str) -> AfterValidator:
     return AfterValidator(refuse)
 
 
+_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"pattern": r"\S"}
+
+
 class _ToggleBase(_Block):
     type: Literal["toggle"]
     title: Annotated[str, _refuse_blank("toggle title")] = Field(
-        min_length=1, description="Summary label shown on the collapsible."
+        min_length=1,
+        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
+        description="Summary label shown on the collapsible.",
     )
     collapsed: bool = Field(
         default=True,
@@ -2256,7 +2262,9 @@ class Toggle(_ToggleBase):
 
 class Tab(FrozenModel):
     label: Annotated[str, _refuse_blank("tab label")] = Field(
-        min_length=1, description="The tab's label in the strip, and its heading on paper."
+        min_length=1,
+        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
+        description="The tab's label in the strip, and its heading on paper.",
     )
     tone: Tone | None = Field(
         default=None,
