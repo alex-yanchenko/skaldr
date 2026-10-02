@@ -1,4 +1,4 @@
-# skaldr — agent guide
+# skaldr: agent guide
 
 skaldr renders **one YAML content file** into **one self-contained HTML report page**. You write
 *what* the report says; skaldr owns all design. This file is the fast on-ramp when you open the
@@ -17,10 +17,10 @@ uv run skaldr ...           # uv uses the system Python ≥ 3.10
 
 ## Author a report
 
-1. **Load the contract from the tool** (matches the installed version — trust it over memory):
+1. **Load the contract from the tool** (matches the installed version, so trust it over memory):
    `skaldr --guide` (the authoring guide: blocks, rules, the `table`, a complete example) and
    `skaldr --write-schema /tmp/s.json` (exact fields).
-2. **Write the YAML from real evidence** — never invent numbers to fill the template.
+2. **Write the YAML from real evidence.** Never invent numbers to fill the template.
 3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion, `skaldr report.yaml
    --export markdown` or `--export notion` writes the same document as Markdown instead.
 4. **Done = skaldr prints `OK` and the output file exists.** A structural mistake fails the build
@@ -28,8 +28,8 @@ uv run skaldr ...           # uv uses the system Python ≥ 3.10
 
 ## Don't
 
-- Don't hand-write HTML/CSS or hunt for a source generator — skaldr owns rendering; just run it.
-- Don't restate the block catalog from memory — `skaldr --guide` is the source of truth, and it
+- Don't hand-write HTML/CSS or hunt for a source generator: skaldr owns rendering; just run it.
+- Don't restate the block catalog from memory: `skaldr --guide` is the source of truth, and it
   tracks the installed version.
 
 The installable Claude skill (same guidance, auto-loaded when a user asks for a report) is

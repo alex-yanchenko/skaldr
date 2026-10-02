@@ -9,7 +9,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Chip colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026).",
+          "description": "Chip colour: a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026).",
           "enum": [
             "slate",
             "blue",
@@ -33,7 +33,7 @@
               "type": "boolean"
             }
           ],
-          "description": "One-line meaning, shown in the derived legend. Set `false` to keep this badge out of the legend entirely \u2014 for a one-off inline chip that needs no explanation.",
+          "description": "One-line meaning, shown in the derived legend. Set `false` to keep this badge out of the legend entirely, for a one-off inline chip that needs no explanation.",
           "title": "Legend"
         }
       },
@@ -87,7 +87,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Chip colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin.",
+          "description": "Chip colour: a palette name (slate/blue/\u2026) or its semantic tone twin.",
           "enum": [
             "slate",
             "blue",
@@ -176,7 +176,7 @@
           "type": "array"
         },
         "groups": {
-          "description": "Grouped chips \u2014 each group renders as a labelled gutter row. Use this OR `items`, not both.",
+          "description": "Grouped chips: each group renders as a labelled gutter row. Use this OR `items`, not both.",
           "items": {
             "$ref": "#/$defs/BadgeGroup"
           },
@@ -214,7 +214,7 @@
           "type": "string"
         },
         "tone": {
-          "description": "Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A callout is semantic, so teal/sky/accent/neutral aren't callout tones \u2014 use a card/badge_row/note.",
+          "description": "Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A callout is semantic, so teal/sky/accent/neutral aren't callout tones; use a card/badge_row/note.",
           "enum": [
             "info",
             "success",
@@ -277,7 +277,7 @@
             }
           ],
           "default": null,
-          "description": "Card label above the number. Required for a normal card; for a derived card (`of_matrix`/`of_tables`) it defaults to the badge's label \u2014 set it only to override.",
+          "description": "Card label above the number. Required for a normal card; for a derived card (`of_matrix`/`of_tables`) it defaults to the badge's label; set it only to override.",
           "title": "Label"
         },
         "value": {
@@ -394,7 +394,7 @@
             }
           ],
           "default": null,
-          "description": "Derive this card's value by counting the cells in the matrix with this `id` whose state is `badge`; the percentage denominator is that matrix's total cell count. When set, `value` and `of` are computed \u2014 don't author them. Requires `badge`; not with `of_tables`.",
+          "description": "Derive this card's value by counting the cells in the matrix with this `id` whose state is `badge`; the percentage denominator is that matrix's total cell count. When set, `value` and `of` are computed, so don't author them. Requires `badge`; not with `of_tables`.",
           "title": "Of Matrix"
         },
         "of_tables": {
@@ -410,7 +410,7 @@
             }
           ],
           "default": null,
-          "description": "Derive this card's value by counting `badge` across the tables with these `id`s \u2014 a page-level summary over several per-section tables that can't drift. Each named table must declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with `of_matrix`.",
+          "description": "Derive this card's value by counting `badge` across the tables with these `id`s, a page-level summary over several per-section tables that can't drift. Each named table must declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with `of_matrix`.",
           "title": "Of Tables"
         }
       },
@@ -464,7 +464,7 @@
             }
           ],
           "default": null,
-          "description": "Delta colour \u2014 YOU set it: up isn't always good (down is good for cost/errors), so skaldr never infers it. Omit for a neutral chip.",
+          "description": "Delta colour, which YOU set: up isn't always good (down is good for cost/errors), so skaldr never infers it. Omit for a neutral chip.",
           "title": "Tone"
         }
       },
@@ -602,7 +602,7 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "description": "Series name \u2014 shown in the legend.",
+          "description": "Series name, shown in the legend.",
           "minLength": 1,
           "title": "Label",
           "type": "string"
@@ -658,7 +658,7 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "description": "Slice name \u2014 shown in the legend.",
+          "description": "Slice name, shown in the legend.",
           "minLength": 1,
           "title": "Label",
           "type": "string"
@@ -780,7 +780,7 @@
         },
         "kind": {
           "default": "text",
-          "description": "text (default) / rich (first one becomes the title column), number, badge (a coloured chip \u2014 see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
+          "description": "text (default) / rich (first one becomes the title column), number, badge (a coloured chip; see `placement`), or indicator (a colour-only dot in its own column; the cell value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
           "enum": [
             "text",
             "number",
@@ -877,7 +877,7 @@
           "type": "string"
         },
         "options": {
-          "description": "The things being compared \u2014 the column headers (2+).",
+          "description": "The things being compared: the column headers (2+).",
           "items": {
             "type": "string"
           },
@@ -924,7 +924,7 @@
             }
           ],
           "default": null,
-          "description": "Optional per-option polarity, one per option (default all positive). In a 'negative' column a true \u2713 reads as BAD (red) and a false \u2717 as GOOD (green) \u2014 for present-is-bad attributes (e.g. 'leaks disk layout'). Affects only \u2713/\u2717 bool cells; the glyph still marks present/absent.",
+          "description": "Optional per-option polarity, one per option (default all positive). In a 'negative' column a true \u2713 reads as BAD (red) and a false \u2717 as GOOD (green), for present-is-bad attributes (e.g. 'leaks disk layout'). Affects only \u2713/\u2717 bool cells; the glyph still marks present/absent.",
           "title": "Polarity"
         }
       },
@@ -979,7 +979,7 @@
       "additionalProperties": false,
       "properties": {
         "feature": {
-          "description": "Row label \u2014 the attribute being compared.",
+          "description": "Row label: the attribute being compared.",
           "minLength": 1,
           "title": "Feature",
           "type": "string"
@@ -1058,7 +1058,7 @@
           "type": "string"
         },
         "items": {
-          "description": "Term/definition pairs \u2014 a real labelled list for procedural sub-labels like Action / Expected / Say. Unlike `key_value` (compact muted metadata), the term reads as a prominent label and the body is full rich prose.",
+          "description": "Term/definition pairs: a real labelled list for procedural sub-labels like Action / Expected / Say. Unlike `key_value` (compact muted metadata), the term reads as a prominent label and the body is full rich prose.",
           "items": {
             "$ref": "#/$defs/DefItem"
           },
@@ -1191,7 +1191,7 @@
         },
         "hub": {
           "$ref": "#/$defs/FlowStep",
-          "description": "The single node \u2014 the 'one' side (a fan-in's target, a fan-out's source)."
+          "description": "The single node: the 'one' side (a fan-in's target, a fan-out's source)."
         },
         "spokes": {
           "description": "The 'many' side (2+): the nodes that converge into (in) or diverge from (out) the hub.",
@@ -1255,7 +1255,7 @@
         },
         "style": {
           "default": "arrow",
-          "description": "arrow (default): short-labelled nodes joined by \u2192 connectors \u2014 reach for it when the DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each carry a caption line \u2014 reach for it when every stage needs a sentence of explanation.",
+          "description": "arrow (default): short-labelled nodes joined by \u2192 connectors; reach for it when the DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each carry a caption line; reach for it when every stage needs a sentence of explanation.",
           "enum": [
             "arrow",
             "steps"
@@ -1265,7 +1265,7 @@
         },
         "loop": {
           "default": false,
-          "description": "Draw a '\u21ba back to <first>' return marker after the last node \u2014 for a cycle, not a one-way pipeline.",
+          "description": "Draw a '\u21ba back to <first>' return marker after the last node, for a cycle, not a one-way pipeline.",
           "title": "Loop",
           "type": "boolean"
         },
@@ -1287,7 +1287,7 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "description": "Short stage name \u2014 the node label.",
+          "description": "Short stage name: the node label.",
           "minLength": 1,
           "title": "Label",
           "type": "string"
@@ -1329,7 +1329,7 @@
           "title": "Note"
         },
         "points": {
-          "description": "Optional detail bullets (rich text) under the node, for when one line isn't enough. Render below the note. Best paired with style: steps \u2014 a few bullets crowd a compact arrow chip.",
+          "description": "Optional detail bullets (rich text) under the node, for when one line isn't enough. Render below the note. Best paired with style: steps, since a few bullets crowd a compact arrow chip.",
           "items": {
             "type": "string"
           },
@@ -1576,7 +1576,7 @@
           "type": "string"
         },
         "rows": {
-          "description": "Rows in this group \u2014 each a mapping or a positional list in the declared column order. Empty renders a '\u2014 none \u2014' row.",
+          "description": "Rows in this group, each a mapping or a positional list in the declared column order. Empty renders a 'none' row.",
           "items": {
             "anyOf": [
               {
@@ -1684,7 +1684,7 @@
             }
           ],
           "default": null,
-          "description": "Optional caption line under the heading, styled subordinate \u2014 a real subtitle slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that stays the plain `text`).",
+          "description": "Optional caption line under the heading, styled subordinate: a real subtitle slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that stays the plain `text`).",
           "title": "Sub"
         }
       },
@@ -1719,7 +1719,7 @@
           "type": "string"
         },
         "src": {
-          "description": "A data: URI (self-contained \u2014 no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
+          "description": "A data: URI (self-contained, no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
           "title": "Src",
           "type": "string"
         },
@@ -2337,7 +2337,7 @@
         },
         "style": {
           "default": "bullet",
-          "description": "Bulleted, numbered, or `check` \u2014 tickable checkboxes for a live checklist (the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a decision taken (`decided: true`) or an open question.",
+          "description": "Bulleted, numbered, or `check`, which shows tickable checkboxes for a live checklist (the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a decision taken (`decided: true`) or an open question.",
           "enum": [
             "bullet",
             "number",
@@ -2564,13 +2564,13 @@
       "additionalProperties": false,
       "properties": {
         "row": {
-          "description": "Which row this cell sits in \u2014 one of the block's `rows`.",
+          "description": "Which row this cell sits in: one of the block's `rows`.",
           "minLength": 1,
           "title": "Row",
           "type": "string"
         },
         "col": {
-          "description": "Which column this cell sits in \u2014 one of the block's `columns`.",
+          "description": "Which column this cell sits in: one of the block's `columns`.",
           "minLength": 1,
           "title": "Col",
           "type": "string"
@@ -2608,7 +2608,7 @@
             }
           ],
           "default": null,
-          "description": "A one-off fill colour (palette or semantic name) for a cell with no vocabulary badge \u2014 e.g. a RACI letter or a \u2713. Use this OR `badge`, not both.",
+          "description": "A one-off fill colour (palette or semantic name) for a cell with no vocabulary badge, e.g. a RACI letter or a \u2713. Use this OR `badge`, not both.",
           "title": "Tone"
         },
         "label": {
@@ -2684,7 +2684,7 @@
             }
           ],
           "default": null,
-          "description": "When the report was last revised; feeds the footer as 'updated <value>'. A free-form label like the date (author it \u2014 never auto-now).",
+          "description": "When the report was last revised; feeds the footer as 'updated <value>'. A free-form label like the date (author it; never auto-now).",
           "title": "Updated"
         },
         "toc": {
@@ -2998,7 +2998,7 @@
           "type": "string"
         },
         "blocks": {
-          "description": "Blocks inside the panel \u2014 any block except another panel, section, grid, or walkthrough. Unlike a `section`, a panel is always open \u2014 a titled framed card, one per 'slide' in a deck-style doc.",
+          "description": "Blocks inside the panel: any block except another panel, section, grid, or walkthrough. Unlike a `section`, a panel is always open: a titled framed card, one per 'slide' in a deck-style doc.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3338,7 +3338,7 @@
               "type": "number"
             }
           ],
-          "description": "Relative width (> 0). Spans are normalised across the segments, so only the ratios matter \u2014 [3, 1] and [30, 10] render identically.",
+          "description": "Relative width (> 0). Spans are normalised across the segments, so only the ratios matter: [3, 1] and [30, 10] render identically.",
           "title": "Span"
         },
         "tone": {
@@ -4219,11 +4219,11 @@
             }
           ],
           "default": null,
-          "description": "When this section was last revised; shown as a muted stamp in its header. A free-form label like the report date (author it \u2014 never auto-now).",
+          "description": "When this section was last revised; shown as a muted stamp in its header. A free-form label like the report date (author it; never auto-now).",
           "title": "Updated"
         },
         "blocks": {
-          "description": "Blocks in the section \u2014 any block except another section, grid, or walkthrough.",
+          "description": "Blocks in the section: any block except another section, grid, or walkthrough.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -4462,7 +4462,7 @@
           "type": "string"
         },
         "lanes": {
-          "description": "Lanes, in row order (top to bottom). A bare string is shorthand for `{name: \u2026}`; use `{id, name}` to give a stable reference key. Capped at 8 \u2014 more rows than that stop reading as a matrix; split into two swimlanes instead.",
+          "description": "Lanes, in row order (top to bottom). A bare string is shorthand for `{name: \u2026}`; use `{id, name}` to give a stable reference key. Capped at 8: more rows than that stop reading as a matrix; split into two swimlanes instead.",
           "items": {
             "$ref": "#/$defs/SwimlaneLane"
           },
@@ -4472,7 +4472,7 @@
           "type": "array"
         },
         "columns": {
-          "description": "Columns, left to right \u2014 the sprint / phase axis. A bare string is shorthand for `{name: \u2026}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
+          "description": "Columns, left to right: the sprint / phase axis. A bare string is shorthand for `{name: \u2026}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
           "items": {
             "$ref": "#/$defs/SwimlaneColumn"
           },
@@ -4561,7 +4561,7 @@
           "type": "string"
         },
         "color": {
-          "description": "Cap colour \u2014 a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026). Author-chosen, never auto-assigned: a group's colour carries meaning.",
+          "description": "Cap colour: a palette name (slate/blue/\u2026) or its semantic tone twin (neutral/info/\u2026). Author-chosen, never auto-assigned: a group's colour carries meaning.",
           "enum": [
             "slate",
             "blue",
@@ -4576,7 +4576,7 @@
           "type": "string"
         },
         "columns": {
-          "description": "The columns this group spans, by their key (id, or name if no id) \u2014 a CONTIGUOUS run of the block's `columns` (a group cannot skip a column). Order need not match; it is derived from the block `columns`.",
+          "description": "The columns this group spans, by their key (id, or name if no id): a CONTIGUOUS run of the block's `columns` (a group cannot skip a column). Order need not match; it is derived from the block `columns`.",
           "items": {
             "type": "string"
           },
@@ -4628,19 +4628,19 @@
       "additionalProperties": false,
       "properties": {
         "lane": {
-          "description": "Which lane this step sits in \u2014 one of the block's `lanes`.",
+          "description": "Which lane this step sits in: one of the block's `lanes`.",
           "minLength": 1,
           "title": "Lane",
           "type": "string"
         },
         "col": {
-          "description": "Which column (sprint) this step sits in \u2014 one of the block's `columns`. Two steps sharing a lane/col stack in that cell.",
+          "description": "Which column (sprint) this step sits in: one of the block's `columns`. Two steps sharing a lane/col stack in that cell.",
           "minLength": 1,
           "title": "Col",
           "type": "string"
         },
         "n": {
-          "description": "The number shown in the step's cell \u2014 a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
+          "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
           "minLength": 1,
           "title": "N",
           "type": "string"
@@ -4661,7 +4661,7 @@
             }
           ],
           "default": null,
-          "description": "Which group (milestone) this step belongs to \u2014 one of the block's `groups` that covers its `col`. Required only when the column is split across more than one group; inferred otherwise.",
+          "description": "Which group (milestone) this step belongs to: one of the block's `groups` that covers its `col`. Required only when the column is split across more than one group; inferred otherwise.",
           "title": "Group"
         },
         "value": {
@@ -4677,7 +4677,7 @@
             }
           ],
           "default": null,
-          "description": "Optional numeric weight for this step (points, hours, cost, count \u2014 whatever the matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column (footer row), per-lane (beside the lane label), and per-group (on the cap) totals \u2014 so the numbers never drift by hand. A step with no value counts as 0.",
+          "description": "Optional numeric weight for this step (points, hours, cost, count: whatever the matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column (footer row), per-lane (beside the lane label), and per-group (on the cap) totals, so the numbers never drift by hand. A step with no value counts as 0.",
           "title": "Value"
         },
         "url": {
@@ -4690,12 +4690,12 @@
             }
           ],
           "default": null,
-          "description": "Optional link (http/https/mailto) for the step \u2014 e.g. its Jira/GitHub ticket. The step's number becomes a link out to it.",
+          "description": "Optional link (http/https/mailto) for the step, e.g. its Jira/GitHub ticket. The step's number becomes a link out to it.",
           "title": "Url"
         },
         "state": {
           "default": "todo",
-          "description": "Progress state \u2014 the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress \u2014 the raised blue badge), `todo` (default \u2014 planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold \u2014 amber + dashed), `deferred` (pushed out / post-MVP \u2014 a warm hollow badge that recedes). The value counts toward the totals in every state.",
+          "description": "Progress state: the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
           "enum": [
             "done",
             "current",
@@ -5512,7 +5512,7 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "description": "Step title \u2014 a few words to a short sentence; it wraps across lines, so it can be long.",
+          "description": "Step title: a few words to a short sentence; it wraps across lines, so it can be long.",
           "minLength": 1,
           "title": "Label",
           "type": "string"
@@ -5550,7 +5550,7 @@
             }
           ],
           "default": null,
-          "description": "Optional tone for the step's left rail. Every step always HAS the rail (it is the list's structure); tone only changes its colour, so use it to mark a key step \u2014 not every step. The numeral stays a uniform muted grey regardless, so tones can't leave steps mismatched.",
+          "description": "Optional tone for the step's left rail. Every step always HAS the rail (it is the list's structure); tone only changes its colour, so use it to mark a key step, not every step. The numeral stays a uniform muted grey regardless, so tones can't leave steps mismatched.",
           "title": "Tone"
         },
         "detail": {

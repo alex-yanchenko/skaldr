@@ -1,7 +1,9 @@
+import ast
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Any, get_args
+from pathlib import Path
+from typing import get_args
 
 import pytest
 import yaml
@@ -70,12 +72,11 @@ _EXAMPLES = _yaml_examples(GUIDE)
 _BUILDABLE = [example for example in _EXAMPLES if example.opening not in _SKELETON_OPENINGS]
 
 
-def _as_document(example: GuideExample) -> dict[str, Any]:
-    data = yaml.safe_load(example.text)
-    if isinstance(data, dict) and "version" in data:
-        return data
-    assert isinstance(data, list), f"guide line {example.line} is neither a document nor a block list"
-    return make_report(badges=_GUIDE_BADGES, blocks=data)
+def _as_document(example: GuideExample) -> object:
+    data: object = yaml.safe_load(example.text)
+    if isinstance(data, list):
+        return make_report(badges=_GUIDE_BADGES, blocks=data)
+    return data
 
 
 def _top_level_keys_named_in(text: str) -> set[str]:
@@ -135,3 +136,53 @@ def test_the_skill_and_the_readme_name_both_export_targets(text: str) -> None:
     named = {target for target in get_args(ExportTarget) if f"--export {target}" in text}
 
     assert named == set(get_args(ExportTarget))
+
+
+EM_DASH, EN_DASH = chr(0x2014), chr(0x2013)
+_EM_OR_EN_DASH = re.compile(f"[{EM_DASH}{EN_DASH}]")
+
+_SHIPPED_PROSE = (
+    "README.md",
+    "AGENTS.md",
+    "src/skaldr/skill/GUIDE.md",
+    "src/skaldr/skill/SKILL.md",
+    "src/skaldr/skill/example.yaml",
+)
+
+
+def _docstrings_of(tree: ast.Module) -> set[int]:
+    owners = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    return {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, owners)
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+
+
+def _string_literals_with_a_dash(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    docstrings = _docstrings_of(tree)
+    return [
+        f"{path.relative_to(REPO_ROOT)}:{node.lineno}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+        and _EM_OR_EN_DASH.search(node.value)
+    ]
+
+
+@pytest.mark.parametrize("path", _SHIPPED_PROSE)
+def test_shipped_prose_carries_no_em_or_en_dash(path: str) -> None:
+    text = (REPO_ROOT / path).read_text(encoding="utf-8")
+
+    assert [line for line in text.splitlines() if _EM_OR_EN_DASH.search(line)] == []
+
+
+def test_no_string_in_the_package_source_carries_an_em_or_en_dash() -> None:
+    sources = sorted((REPO_ROOT / "src" / "skaldr").rglob("*.py"))
+
+    assert [hit for source in sources for hit in _string_literals_with_a_dash(source)] == []

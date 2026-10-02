@@ -289,12 +289,12 @@ def test_derived_card_without_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_an_authored_value_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its value — don't set `value`"):
+    with pytest.raises(ReportError, match=r"computes its value; don't set `value`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "value": 5}))
 
 
 def test_derived_card_with_an_authored_of_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its percentage — don't set `of`"):
+    with pytest.raises(ReportError, match=r"computes its percentage; don't set `of`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "of": 10}))
 
 
@@ -954,9 +954,9 @@ def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() ->
         parse_report(make_report(blocks=[make_request(), make_toggle(make_request())]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
-        "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
-        "sharing one would share those values; give one of them an `id`"
+        "invalid content data: Value error, request block label(s) used more than once: "
+        "['Read an endpoint']. A label keys what a reader's fields are remembered under while their tab "
+        "is open, so two blocks sharing one would share those values; give one of them an `id`"
     )
 
 
@@ -1161,14 +1161,14 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
         pytest.param(
             _DUPLICATE_MATRIX,
             _DUPLICATE_MATRIX,
-            "invalid content data: Value error, matrix id(s) used more than once: ['dup'] — matrix ids "
+            "invalid content data: Value error, matrix id(s) used more than once: ['dup']; matrix ids "
             "must be unique",
             id="matrix-id",
         ),
         pytest.param(
             _rollup_table("dup"),
             _rollup_table("dup"),
-            "invalid content data: Value error, table id(s) used more than once: ['dup'] — table ids must "
+            "invalid content data: Value error, table id(s) used more than once: ['dup']; table ids must "
             "be unique",
             id="table-id",
         ),
@@ -2982,7 +2982,7 @@ def test_matrix_cell_unknown_col_is_rejected() -> None:
 
 def test_matrix_two_cells_at_the_same_position_are_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "a"}, {"row": "r1", "col": "c1", "label": "b"}])
-    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\) — at most one per cell"):
+    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\); at most one per cell"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3413,7 +3413,7 @@ def test_swimlane_step_in_a_split_column_must_name_its_group() -> None:
     )
     with pytest.raises(
         ReportError,
-        match=r"swimlane step in column 'C1' must name a group — that column is split across 2 groups",
+        match=r"swimlane step in column 'C1' must name a group: that column is split across 2 groups",
     ):
         parse_report(make_report(blocks=[block]))
 

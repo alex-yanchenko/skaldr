@@ -1,7 +1,7 @@
 # skaldr
 
 Turn **one YAML file** into **one polished, self-contained HTML report page**. You describe *what*
-the report says — findings, tables, a pipeline, the numbers — and skaldr owns *how* it looks:
+the report says (findings, tables, a pipeline, the numbers) and skaldr owns *how* it looks:
 layout, spacing, colour, light/dark, all decided once, here. No design work, no CSS, no drift.
 
 **See it →** [sales pipeline](https://alex-yanchenko.github.io/skaldr/) ·
@@ -27,7 +27,7 @@ skaldr report.yaml                 # → out/report.html
 skaldr report.yaml -o review.html  # choose the output path
 skaldr report.yaml --watch -o review.html  # re-render on every save (live edit→preview; Ctrl-C to stop)
 skaldr report.yaml --pdf report.pdf  # a ready-to-share PDF (drives a headless Chrome/Chromium)
-open review.html                   # a self-contained file — open it, host it, or share it
+open review.html                   # a self-contained file: open it, host it, or share it
 ```
 
 **Live preview without a watcher process.** `--watch` needs a process that stays alive, which an
@@ -57,14 +57,14 @@ skaldr --guide                     # the authoring guide: every block, the rules
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
-skaldr --check reports/*.yaml      # validate a whole set at once — for a pre-commit hook or CI
+skaldr --check reports/*.yaml      # validate a whole set at once, for a pre-commit hook or CI
 skaldr --check report.yaml -o report.html   # gate the render on the check: nothing reaches disk unless it passes
 skaldr --emit-json report.yaml     # print the normalised model as JSON on stdout (for tooling/agents)
 skaldr --extract-source report.html  # recover the YAML source embedded in a render (a file or an http(s) URL)
 ```
 
 For a **PDF**, use `--pdf` (above): it prints the page's print styling with a headless browser you
-already have — the reliable way to a shareable PDF. (Printing a published Artifact doesn't work: it's
+already have, which is the reliable way to a shareable PDF. (Printing a published Artifact doesn't work: it's
 a sandboxed frame the browser flattens to a snapshot, so the print CSS never applies.) `--pdf` needs
 a Chrome/Chromium/Edge on the machine; set `SKALDR_BROWSER` to point at one if it isn't auto-found.
 
@@ -78,7 +78,7 @@ skaldr report.yaml --export notion --chunk 20000   # page.00.md, page.01.md, …
 
 Every block has a Markdown form. Flows, fans, donut charts, and unstacked bar or line charts with one series become Mermaid diagrams, which GitHub and Notion both draw. A chart drawn as a diagram keeps its data table under it, and a donut's table lists each slice's value and share and the total. A chart with several series, or a stacked bar chart, is its data table alone. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and coloured table cells. A Notion page takes its title from the page itself, so the Notion export holds the body only, while the GitHub-flavored file starts with the title as its heading. The folder keeps a `.skaldr-export.json` list of the files skaldr wrote there, and a re-export removes only those an earlier run wrote and this one no longer needs. skaldr only writes the files; it never calls Notion.
 
-There are no styling flags — everything is in the content file.
+There are no styling flags: everything is in the content file.
 
 ## Sign in to Notion and Jira
 
@@ -109,7 +109,7 @@ Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or
 ```yaml
 version: 1
 meta:
-  title: "Q3 Warehouse Inventory Count — Discrepancies & Fixes"
+  title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"
   subtitle: ["Reconciled review of the 10,000-unit cycle count."]
   source: "WMS export"          # optional; feeds the provenance footer
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
@@ -143,14 +143,14 @@ Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/
 
 ## Guarantees
 
-- **One self-contained file** — inline CSS, system fonts, no external resources; the page
+- **One self-contained file:** inline CSS, system fonts, no external resources; the page
   carries its own `<!doctype>` + `<meta charset>` so it renders correctly from `file://`, any
   static host, or a claude.ai Artifact.
-- **Validation is the product** — structural mistakes fail the build with a field path, never
+- **Validation is the product:** structural mistakes fail the build with a field path, never
   reach the reader's eyes.
-- **Derived, not authored** — number formatting, percentages, subtotals, the legend, the TOC,
+- **Derived, not authored:** number formatting, percentages, subtotals, the legend, the TOC,
   and the provenance footer are all computed, so they can't drift from the data.
-- **Light & dark** — the palette follows the viewer's OS theme; a small corner menu lets the
+- **Light & dark:** the palette follows the viewer's OS theme; a small corner menu lets the
   reader switch theme and page width.
 
 ## Let an AI write it
@@ -169,7 +169,7 @@ live/recording cues) and drives the audience deck into the org's real brand temp
 ranked, actionable pain-points report for the maintainer. Each lands in its own `~/.claude/skills/<name>/`.
 
 **Skills keep themselves current.** After a `brew upgrade skaldr`, an installed skill refreshes itself
-the next time you run `skaldr` — no need to re-run `--install-skill`. It only ever refreshes a skill
+the next time you run `skaldr`, with no need to re-run `--install-skill`. It only ever refreshes a skill
 you already installed (never creates one), never touches a symlinked skill (a contributor's live-edit
 link), and never interferes with a render. Set `SKALDR_SKILL_SYNC=0` to turn the auto-refresh off.
 
@@ -178,8 +178,8 @@ link), and never interferes with a render. Set `SKALDR_SKILL_SYNC=0` to turn the
 with `--watch` so you can follow along). Delete that `skaldr:plan-rule` block to opt out; re-running
 it refreshes the block in place. `--install-skill` never touches `CLAUDE.md` on its own.
 
-Then in Claude Code (or Cowork), ask in plain language — *"make me a skaldr report on this data
-export: what's clean, what's broken, and the fix"* — and it writes the content file and renders the
+Then in Claude Code (or Cowork), ask in plain language (*"make me a skaldr report on this data
+export: what's clean, what's broken, and the fix"*) and it writes the content file and renders the
 page. The skill reads the current guide from the tool itself (`skaldr --guide`), so it stays correct
 across upgrades without reinstalling.
 
@@ -190,7 +190,7 @@ uv run skaldr data/example.yaml -o out/example.html   # run from a checkout
 uv run pytest                                          # tests
 ```
 
-- [`src/skaldr/models.py`](src/skaldr/models.py) — the content-file contract (pydantic).
-- [`src/skaldr/compute.py`](src/skaldr/compute.py) — derived values (legend, TOC, subtotals, footer).
-- [`src/skaldr/render.py`](src/skaldr/render.py) + [`components/`](src/skaldr/components) — Jinja rendering.
-- [`src/skaldr/styles.css`](src/skaldr/styles.css) — the single tokenised stylesheet.
+- [`src/skaldr/models.py`](src/skaldr/models.py): the content-file contract (pydantic).
+- [`src/skaldr/compute.py`](src/skaldr/compute.py): derived values (legend, TOC, subtotals, footer).
+- [`src/skaldr/render.py`](src/skaldr/render.py) + [`components/`](src/skaldr/components): Jinja rendering.
+- [`src/skaldr/styles.css`](src/skaldr/styles.css): the single tokenised stylesheet.

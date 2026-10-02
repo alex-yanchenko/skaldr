@@ -105,7 +105,7 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     explicit = [block.id for block in anchored if block.id is not None]
     duplicate = next((anchor for anchor in explicit if explicit.count(anchor) > 1), None)
     if duplicate is not None:
-        raise ReportError(f"duplicate anchor id '{duplicate}' — a heading/section id must be unique")
+        raise ReportError(f"duplicate anchor id '{duplicate}': a heading/section id must be unique")
 
     slugs: dict[int, str] = {}
     taken: set[str] = set(explicit)
