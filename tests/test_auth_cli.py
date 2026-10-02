@@ -326,7 +326,7 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  signed in to workspace (unnamed workspace) (keychain)\n"
-        "jira    signed in to https://example.atlassian.net as reader@example.com (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as (no display name) (keychain)\n"
     )
 
 
@@ -352,7 +352,7 @@ def test_status_names_credentials_from_the_environment(
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  access token from NOTION_ACCESS_TOKEN (environment)\n"
-        "jira    ci@example.com at https://example.atlassian.net (environment)\n"
+        "jira    JIRA_EMAIL, JIRA_API_TOKEN for https://example.atlassian.net (environment)\n"
     )
 
 

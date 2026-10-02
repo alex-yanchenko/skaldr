@@ -198,7 +198,7 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
         return "not signed in (run `skaldr auth jira`)"
     credentials = sign_in.credentials
     if sign_in.source == "environment":
-        return f"{credentials.email} at {credentials.site} (environment)"
+        return f"JIRA_EMAIL, JIRA_API_TOKEN for {credentials.site} (environment)"
     return f"signed in to {credentials.site} as {_person(credentials)} (keychain)"
 
 
@@ -207,7 +207,7 @@ def _workspace(credentials: NotionCredentials) -> str:
 
 
 def _person(credentials: JiraCredentials) -> str:
-    return printable(credentials.display_name or "") or credentials.email
+    return printable(credentials.display_name or "") or "(no display name)"
 
 
 def _required(answer: str, refusal: str) -> str:
