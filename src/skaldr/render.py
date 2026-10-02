@@ -92,6 +92,7 @@ def _environment() -> Environment:
     )
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
+    filters["paragraphs"] = compute.paragraphs
     filters["richtext"] = render_richtext
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
@@ -111,6 +112,7 @@ def _environment() -> Environment:
         case_tone=compute.case_tone,
         derived_card_tally=compute.derived_card_tally,
         delta_glyphs=compute.DELTA_GLYPHS,
+        badge_legend_subject=compute.BADGE_LEGEND_SUBJECT,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,

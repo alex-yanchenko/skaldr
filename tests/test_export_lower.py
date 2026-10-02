@@ -4,15 +4,26 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower import lower_report
-from skaldr.export.markup import MARK_GLYPH
-from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark, MarkScheme
+from skaldr.export.lower import lower_report, place_legend
+from skaldr.export.lower.context import with_bold_label
+from skaldr.export.markup import check_glyph, indicator_glyph, status_glyph, swimlane_glyph
+from skaldr.export.runs import (
+    Break,
+    CheckMark,
+    Chip,
+    ExportRich,
+    Gauge,
+    IndicatorMark,
+    StatusMark,
+    SwimlaneMark,
+)
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Column,
     Columns,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -26,15 +37,17 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
     ToneName,
+    capped_heading_level,
+    heading_of,
 )
-from skaldr.models import StatusState, TimelineState, parse_report
-from skaldr.richtext import Code, Link, Plain, Styled
-from tests.factories import API_BADGES, lowered, make_report
+from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
+from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
+from tests.factories import API_BADGES, lowered, make_flow, make_report, make_request
 
 API_LEGEND = Toggle(
     (Plain("Legend: badges used on this page"),),
     None,
-    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" the API"))),)),),
+    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" "), Plain("the API"))),)),),
 )
 
 
@@ -47,15 +60,78 @@ def test_a_report_lowers_to_its_title_and_body() -> None:
     )
 
 
-def test_a_block_with_no_markdown_form_yet_fails_naming_its_type() -> None:
-    with pytest.raises(ReportError, match=r"^a `flow` block has no Markdown export yet$"):
-        lowered([{"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}])
+@pytest.mark.parametrize(
+    ("block", "block_type"),
+    [
+        pytest.param({"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}, "flow", id="flow"),
+        pytest.param(
+            {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "A"}, {"label": "B"}]},
+            "fan",
+            id="fan",
+        ),
+        pytest.param(make_request(), "request", id="request"),
+        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    ],
+)
+def test_a_block_with_no_markdown_form_yet_fails_naming_its_type(
+    block: dict[str, Any], block_type: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        lowered([block])
+
+    assert str(raised.value) == f"a `{block_type}` block has no Markdown export yet"
+
+
+def test_a_walkthrough_step_with_no_sub_is_its_bold_label() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "d"}]}],
+    }
+
+    assert lowered([walkthrough]) == (
+        ListNode("number", (ListEntry(bold("Go"), children=(Paragraph((Plain("d"),)),)),)),
+    )
 
 
 def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:
     assert lowered([{"type": "text", "body": "run  `a  b`\nnow"}]) == (
         Paragraph((Plain("run "), Code("a  b"), Plain(" now"))),
     )
+
+
+@pytest.mark.parametrize(
+    ("item", "runs"),
+    [
+        pytest.param("[a\nb](https://e.com)", (Link((Plain("a b"),), "https://e.com"),), id="link-label"),
+        pytest.param("[a\nb](#count)", (AnchorLink((Plain("a b"),), "count"),), id="anchor-link-label"),
+        pytest.param("**a\nb**", (Styled("bold", (Plain("a b"),)),), id="styled"),
+        pytest.param("  x  ", (Plain("x"),), id="outer-spaces-trimmed"),
+        pytest.param("  `x`  ", (Code("x"),), id="outer-spaces-around-code-dropped"),
+        pytest.param("`x\ry`", (Code("x y"),), id="code-carriage-return"),
+        pytest.param("`x\r\ny`", (Code("x y"),), id="code-crlf"),
+        pytest.param("`x\n`", (Code("x "),), id="code-ending-in-a-line-break"),
+        pytest.param("`\n`", (Code(" "),), id="code-of-only-a-line-break"),
+    ],
+)
+def test_rich_text_lowers_onto_one_line(item: str, runs: Rich) -> None:
+    blocks = [{"type": "heading", "text": "Count"}, {"type": "list", "items": [item]}]
+
+    assert lowered(blocks) == (
+        Heading(2, (Plain("Count"),), "count"),
+        ListNode("bullet", (ListEntry(runs),)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param("Appendix\n", (Plain("Appendix"),), id="trailing-newline"),
+        pytest.param("  a \n b  ", (Plain("a b"),), id="inner-and-outer-whitespace"),
+        pytest.param(" \n ", (), id="only-whitespace"),
+    ],
+)
+def test_plain_text_is_trimmed_and_collapsed_to_one_line(text: str, runs: Rich) -> None:
+    assert plain(text) == runs
 
 
 def test_an_author_heading_id_becomes_the_anchor() -> None:
@@ -86,6 +162,36 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
     }
 
     assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(4, (Plain("Deep"),), "deep"))
+
+
+@pytest.mark.parametrize(
+    ("level", "capped"),
+    [
+        pytest.param(0, 1, id="below-the-range"),
+        pytest.param(1, 1, id="top"),
+        pytest.param(4, 4, id="the-cap"),
+        pytest.param(7, 4, id="past-the-cap"),
+    ],
+)
+def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:
+    assert capped_heading_level(level) == capped
+
+
+@pytest.mark.parametrize(
+    ("node", "heading"),
+    [
+        pytest.param(Heading(3, (Plain("H"),), "h"), Heading(3, (Plain("H"),), "h"), id="heading"),
+        pytest.param(
+            Toggle((Plain("T"),), 2, (Paragraph((Plain("x"),)),), "t"),
+            Heading(2, (Plain("T"),), "t"),
+            id="heading-toggle",
+        ),
+        pytest.param(Toggle((Plain("T"),), None, ()), None, id="plain-toggle"),
+        pytest.param(Paragraph((Plain("p"),)), None, id="paragraph"),
+    ],
+)
+def test_a_heading_or_a_heading_toggle_reads_as_a_heading(node: Node, heading: Heading | None) -> None:
+    assert heading_of(node) == heading
 
 
 def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
@@ -150,6 +256,32 @@ def test_the_badge_legend_comes_right_after_the_table_of_contents_when_the_page_
     )
 
 
+@pytest.mark.parametrize(
+    ("legend_at", "nodes"),
+    [
+        pytest.param(
+            None,
+            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
+            id="no-top-level-table-puts-it-first",
+        ),
+        pytest.param(
+            2,
+            [Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), API_LEGEND, Paragraph((Plain("table"),))],
+            id="right-before-the-first-top-level-table",
+        ),
+        pytest.param(
+            0,
+            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
+            id="table-first",
+        ),
+    ],
+)
+def test_the_badge_legend_goes_where_the_html_puts_it(legend_at: int | None, nodes: list[Node]) -> None:
+    blocks = [[Paragraph((Plain("a"),))], [Paragraph((Plain("b"),))], [Paragraph((Plain("table"),))]]
+
+    assert place_legend(blocks, [API_LEGEND], legend_at) == nodes
+
+
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:
     card = {
         "label": "Clean",
@@ -171,8 +303,10 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
                         *bold("Clean"),
                         Plain(": "),
                         Plain("9"),
-                        Plain(" (90.0%)"),
-                        Plain(" ▲ +1"),
+                        Plain(" "),
+                        Plain("(90.0%)"),
+                        Plain(" "),
+                        Plain("▲ +1"),
                         Plain(" "),
                         Chip("api", "blue"),
                     ),
@@ -192,7 +326,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         ),
         pytest.param(
             {"label": "Lag", "value": 3, "delta": {"label": "flat"}},
-            (*bold("Lag"), Plain(": "), Plain("3"), Plain(" flat")),
+            (*bold("Lag"), Plain(": "), Plain("3"), Plain(" "), Plain("flat")),
             id="delta-without-direction",
         ),
         pytest.param(
@@ -200,6 +334,8 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             (*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("▼ -8%", "green")),
             id="toned-delta-is-a-colored-chip",
         ),
+        pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
+        pytest.param({"label": "Empty", "value": ""}, bold("Empty"), id="empty-value-is-the-label-alone"),
     ],
 )
 def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
@@ -266,7 +402,7 @@ def test_a_derived_card_sums_its_tables_and_keeps_an_explicit_tone() -> None:
                 TableRow((TableCell((Plain("y"),)),)),
             ),
         ),
-        Paragraph((Chip("api", "blue"), Plain(" 1"))),
+        Paragraph((Chip("api", "blue"), Plain(" "), Plain("1"))),
     )
 
 
@@ -296,7 +432,8 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
             "bullet",
             (
                 ListEntry(
-                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" 50.0% (5 of 10)")), tone="warning"
+                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" "), Plain("50.0%")),
+                    tone="warning",
                 ),
             ),
         ),
@@ -355,13 +492,13 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
 
     assert lowered(blocks, badges=API_BADGES) == (
         API_LEGEND,
-        ListNode("bullet", (ListEntry((Mark("status", "blocked"), Plain(" "), Plain("Vendor"))),)),
+        ListNode("bullet", (ListEntry((StatusMark("blocked"), Plain(" "), Plain("Vendor"))),)),
         ListNode(
             "bullet",
             (
                 ListEntry(
                     (
-                        Mark("timeline", "done"),
+                        StatusMark("done"),
                         Plain(" "),
                         *bold("Mon"),
                         Plain(": "),
@@ -377,15 +514,41 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("state", "scheme"),
-    [
-        *(pytest.param(state, "status", id=f"status-{state}") for state in get_args(StatusState)),
-        *(pytest.param(state, "timeline", id=f"timeline-{state}") for state in get_args(TimelineState)),
-    ],
-)
-def test_every_state_a_block_allows_has_a_glyph(state: str, scheme: MarkScheme) -> None:
-    assert MARK_GLYPH[scheme][state]
+def test_a_state_glyph_is_a_coloured_emoji_because_markdown_has_no_css_class_to_colour_it() -> None:
+    assert {state: status_glyph(state) for state in get_args(StatusState)} == {
+        "done": "✅",
+        "current": "🔵",
+        "pending": "⚪",
+        "failed": "❌",
+        "blocked": "⛔",
+    }
+
+
+def test_a_swimlane_step_glyph_is_a_coloured_emoji_for_every_step_state() -> None:
+    assert {state: swimlane_glyph(state) for state in get_args(SwimlaneStepState)} == {
+        "done": "✅",
+        "current": "🔵",
+        "todo": "⚪",
+        "blocked": "⛔",
+        "deferred": "⏸️",
+    }
+
+
+def test_an_indicator_glyph_is_a_coloured_dot_for_every_tone() -> None:
+    assert {tone: indicator_glyph(tone) for tone in get_args(ToneLiteral)} == {
+        "neutral": "⚪",
+        "info": "🔵",
+        "success": "🟢",
+        "warning": "🟡",
+        "danger": "🔴",
+        "accent": "🟣",
+        "teal": "🟢",
+        "sky": "🔵",
+    }
+
+
+def test_a_check_glyph_is_a_tick_or_a_cross() -> None:
+    assert (check_glyph(checked=True), check_glyph(checked=False)) == ("✓", "✗")
 
 
 def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_alone() -> None:
@@ -401,10 +564,31 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
                 ListEntry(
                     (*bold("Fix"), Plain(": "), Plain("first")), children=(Paragraph((Plain("second"),)),)
                 ),
-                ListEntry((*bold("Gap"), Plain(": "))),
+                ListEntry(bold("Gap")),
             ),
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("label", "text", "runs"),
+    [
+        pytest.param("Site", plain("West"), (*bold("Site"), Plain(": "), Plain("West")), id="label-and-text"),
+        pytest.param(
+            "Site:",
+            plain("West"),
+            (*bold("Site"), Plain(": "), Plain("West")),
+            id="its-own-colon-is-not-doubled",
+        ),
+        pytest.param(":", plain("West"), (Plain("West"),), id="a-lone-colon-is-no-label"),
+        pytest.param(None, plain("West"), (Plain("West"),), id="no-label"),
+        pytest.param("Gap", (), bold("Gap"), id="no-text-leaves-no-dangling-colon"),
+    ],
+)
+def test_a_label_is_bold_and_joined_to_its_text_by_one_colon(
+    label: str | None, text: ExportRich, runs: ExportRich
+) -> None:
+    assert with_bold_label(label, text) == runs
 
 
 def test_a_badge_row_is_a_labelled_line_and_its_groups_are_labelled_bullets() -> None:
@@ -431,7 +615,11 @@ def test_a_badge_label_or_legend_with_a_line_break_stays_on_one_line() -> None:
         Toggle(
             (Plain("Legend: badges used on this page"),),
             None,
-            (ListNode("bullet", (ListEntry((Chip("a pi", "blue"), Plain(" the API, - folded "))),)),),
+            (
+                ListNode(
+                    "bullet", (ListEntry((Chip("a pi", "blue"), Plain(" "), Plain("the API, - folded"))),)
+                ),
+            ),
         ),
         Paragraph((Chip("a pi", "blue"),)),
     )
@@ -556,13 +744,13 @@ def _cells(*texts: str) -> tuple[TableCell, ...]:
 @pytest.mark.parametrize(
     ("value", "polarity", "cell"),
     [
-        pytest.param(True, "positive", TableCell((Mark("check", "yes"),), "success"), id="yes-is-good"),
-        pytest.param(False, "positive", TableCell((Mark("check", "no"),), "danger"), id="no-is-bad"),
+        pytest.param(True, "positive", TableCell((CheckMark(checked=True),), "success"), id="yes-is-good"),
+        pytest.param(False, "positive", TableCell((CheckMark(checked=False),), "danger"), id="no-is-bad"),
         pytest.param(
-            True, "negative", TableCell((Mark("check", "yes"),), "danger"), id="yes-on-a-risk-is-bad"
+            True, "negative", TableCell((CheckMark(checked=True),), "danger"), id="yes-on-a-risk-is-bad"
         ),
         pytest.param(
-            False, "negative", TableCell((Mark("check", "no"),), "success"), id="no-on-a-risk-is-good"
+            False, "negative", TableCell((CheckMark(checked=False),), "success"), id="no-on-a-risk-is-good"
         ),
     ],
 )
@@ -579,7 +767,7 @@ def test_a_comparison_colors_a_boolean_by_its_option_polarity(
     assert lowered([comparison]) == (
         Table(
             (TableCell(()), *_cells("A", "B")),
-            (TableRow((TableCell(bold("Risky")), cell, TableCell((Mark("check", "yes"),), "success"))),),
+            (TableRow((TableCell(bold("Risky")), cell, TableCell((CheckMark(checked=True),), "success"))),),
             header_column=True,
         ),
     )
@@ -659,24 +847,42 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
             (
                 TableCell((Plain("Lane"),)),
                 TableCell(
-                    (*bold("Plan"), Break(), *italic(plain("wk 1")), Break(), Plain("Q1"), Plain(" (5)"))
+                    (
+                        *bold("Plan"),
+                        Break(),
+                        *italic(plain("wk 1")),
+                        Break(),
+                        Plain("Q1"),
+                        Plain(" "),
+                        Plain("(5)"),
+                    )
                 ),
                 TableCell(bold("Ship")),
             ),
             (
                 TableRow(
                     (
-                        TableCell((*bold("Ops"), Plain(" (5)"))),
+                        TableCell((*bold("Ops"), Plain(" "), Plain("(5)"))),
                         TableCell(
-                            (Mark("swimlane", "done"), Plain(" "), *bold("1"), Plain(" Draft"), Plain(" (2)"))
+                            (
+                                SwimlaneMark("done"),
+                                Plain(" "),
+                                *bold("1"),
+                                Plain(" "),
+                                Plain("Draft"),
+                                Plain(" "),
+                                Plain("(2)"),
+                            )
                         ),
                         TableCell(
                             (
-                                Mark("swimlane", "blocked"),
+                                SwimlaneMark("blocked"),
                                 Plain(" "),
                                 *bold("2"),
-                                Plain(" Send"),
-                                Plain(" (3)"),
+                                Plain(" "),
+                                Plain("Send"),
+                                Plain(" "),
+                                Plain("(3)"),
                             )
                         ),
                     )
@@ -687,11 +893,13 @@ def test_a_swimlane_shows_a_group_total_once_where_the_group_starts() -> None:
         ),
         Paragraph(
             (
-                Mark("swimlane", "done"),
-                Plain(" done"),
+                SwimlaneMark("done"),
+                Plain(" "),
+                Plain("done"),
                 Plain(" · "),
-                Mark("swimlane", "blocked"),
-                Plain(" blocked"),
+                SwimlaneMark("blocked"),
+                Plain(" "),
+                Plain("blocked"),
             ),
             "muted",
         ),
@@ -735,24 +943,28 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
                         TableCell(bold("Ops")),
                         TableCell(
                             (
-                                Mark("swimlane", "todo"),
+                                SwimlaneMark("todo"),
                                 Plain(" "),
                                 *bold("1"),
-                                Plain(" Draft"),
+                                Plain(" "),
+                                Plain("Draft"),
                                 Plain(", A"),
                                 Break(),
-                                Mark("swimlane", "todo"),
+                                SwimlaneMark("todo"),
                                 Plain(" "),
                                 *bold("1"),
-                                Plain(" Redraft"),
+                                Plain(" "),
+                                Plain("Redraft"),
                                 Plain(", A"),
                                 Break(),
-                                Mark("swimlane", "deferred"),
+                                SwimlaneMark("deferred"),
                                 Plain(" "),
                                 Link((Plain("2"),), "https://e.com/2"),
-                                Plain(" Send"),
+                                Plain(" "),
+                                Plain("Send"),
                                 Plain(", B"),
-                                *italic(plain(" needs 1")),
+                                Plain(" "),
+                                *italic(plain("needs 1")),
                             )
                         ),
                     )
@@ -762,11 +974,13 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
         ),
         Paragraph(
             (
-                Mark("swimlane", "todo"),
-                Plain(" todo"),
+                SwimlaneMark("todo"),
+                Plain(" "),
+                Plain("todo"),
                 Plain(" · "),
-                Mark("swimlane", "deferred"),
-                Plain(" deferred"),
+                SwimlaneMark("deferred"),
+                Plain(" "),
+                Plain("deferred"),
             ),
             "muted",
         ),
@@ -791,14 +1005,18 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
         Table(
             _cells("Issue", "Units"),
             (
-                TableRow((TableCell((*bold("Ours"), Plain(" (2)"))), TableCell(())), emphasis="group"),
+                TableRow(
+                    (TableCell((*bold("Ours"), Plain(" "), Plain("(2)"))), TableCell(())), emphasis="group"
+                ),
                 TableRow(
                     (
                         TableCell((Plain("x"), Break(), Plain("of which "), Code("y"), Plain(": 1"))),
                         TableCell((Plain("2"),)),
                     )
                 ),
-                TableRow((TableCell((*bold("Theirs"), Plain(" (0)"))), TableCell(())), emphasis="group"),
+                TableRow(
+                    (TableCell((*bold("Theirs"), Plain(" "), Plain("(0)"))), TableCell(())), emphasis="group"
+                ),
                 TableRow((TableCell(italic(plain("none"))), TableCell(()))),
                 TableRow((TableCell(bold("Total")), TableCell(bold("2"))), emphasis="total"),
             ),
@@ -851,14 +1069,14 @@ def test_a_reconciled_table_shows_its_rollup_and_reconcile_line_which_the_footer
                 TableRow(
                     (
                         TableCell((Plain("x"), Plain(" "), Chip("api", "blue"))),
-                        TableCell((Mark("indicator", "warning"),), "warning"),
-                        TableCell((Plain("2"), Plain(" (20.0% of total)"))),
+                        TableCell((IndicatorMark("warning"),), "warning"),
+                        TableCell((Plain("2"), Plain(" "), Plain("(20.0% of total)"))),
                     ),
                     "danger",
                 ),
             ),
         ),
-        Paragraph((*bold("Owners"), Plain(": "), Chip("api", "blue"), Plain(" 1"))),
+        Paragraph((*bold("Owners"), Plain(": "), Chip("api", "blue"), Plain(" "), Plain("1"))),
         Paragraph((Plain("Reconciles: 2 + 8 clean = 10."),), "muted"),
         Paragraph((Plain("Reconciles: 2 + 8 clean = 10."),), "muted"),
     )

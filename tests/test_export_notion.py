@@ -1,17 +1,21 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
-from skaldr.export.runs import Break, Chip, ExportRich, Gauge, Mark
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
     Heading,
     ListEntry,
+    ListKind,
     ListNode,
+    Node,
     Paragraph,
     Quote,
     Table,
@@ -20,9 +24,30 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import BadgeColor, parse_report
+from skaldr.models import BadgeColorLiteral, parse_report
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
-from tests.factories import API_BADGES, heading_sections, lowered, make_report, notion_of
+from tests.factories import (
+    API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
+    heading_sections,
+    lowered,
+    make_report,
+    notion_of,
+)
+
+CHUNK_THAT_SPLITS_EVERY_SECTION = 100
+CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
+NESTING_TOO_DEEP_TO_PARSE = 100_000
+NOTION_CHIP_COLOR: dict[str, str] = {
+    "slate": "gray",
+    "blue": "blue",
+    "green": "green",
+    "amber": "yellow",
+    "red": "red",
+    "violet": "purple",
+    "teal": "green",
+    "sky": "blue",
+}
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
@@ -63,7 +88,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Plain(" "),
         AnchorLink((Plain("method"),), "method"),
         Break(),
-        Mark("status", "blocked"),
+        StatusMark("blocked"),
         Gauge(3, 10),
         Plain(" wow!"),
         *parse_rich("[img](https://e.com/x.png)"),
@@ -106,21 +131,35 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
     assert notion_of(blocks) == "- \\# not a heading\n> \\- not a list<br>\\# nor a heading<br>*Ops*\n"
 
 
-@pytest.mark.parametrize(
-    ("tone", "color"),
-    [
-        pytest.param("slate", "gray", id="slate"),
-        pytest.param("blue", "blue", id="blue"),
-        pytest.param("green", "green", id="green"),
-        pytest.param("amber", "yellow", id="amber"),
-        pytest.param("red", "red", id="red"),
-        pytest.param("violet", "purple", id="violet"),
-        pytest.param("teal", "green", id="teal"),
-        pytest.param("sky", "blue", id="sky"),
-    ],
-)
-def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColor, color: str) -> None:
+@pytest.mark.parametrize("tone", [pytest.param(tone, id=tone) for tone in get_args(BadgeColorLiteral)])
+def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColorLiteral) -> None:
+    color = NOTION_CHIP_COLOR.get(tone)
+
     assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
+
+
+def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_it() -> None:
+    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue_bg">`README.md`</span>'
+
+
+def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
+    assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
+        "<details>\n<summary>Legend: badges used on this page</summary>\n"
+        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
+        "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
+        "- **Lead**: **Ana**\n<empty-block/>\n"
+        "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
+        '- **Clean**: 9 (90.0%) <span color="green_bg">▲ +1</span> <span color="blue_bg">api</span>'
+        ' {color="green"}\n\tsince Monday {color="gray"}\n'
+        "- **Lag**: 3 days → flat\n"
+        '**Affects**: <span color="blue_bg">api</span> <span color="green_bg">ops</span>\n'
+        '- **Owners**: <span color="purple_bg">web</span>\n<empty-block/>\n'
+        "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
+        '- 🔵 **Mon**: Start <span color="blue_bg">api</span>\n\tkick-off\n- Later\n<empty-block/>\n'
+        '- **Zone**: ████░░░░░░ 42.9% {color="yellow"}\n'
+        'Jan to Dec {color="gray"}\n'
+        '- **Q1**: 25.0%, slow {color="red"}\n- **Rest**: 75.0%\n'
+    )
 
 
 def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> None:
@@ -332,9 +371,87 @@ def test_back_to_back_lists_of_one_kind_get_an_empty_block_between_them_so_they_
         {"type": "list", "style": "number", "items": ["b"]},
         {"type": "list", "style": "check", "items": ["c"]},
         {"type": "list", "items": ["d"]},
+        {"type": "list", "items": ["e"]},
     ]
 
-    assert notion_of(blocks) == "1. a\n<empty-block/>\n1. b\n- [ ] c\n<empty-block/>\n- d\n"
+    assert notion_of(blocks) == "1. a\n<empty-block/>\n1. b\n- [ ] c\n- d\n<empty-block/>\n- e\n"
+
+
+def _one_entry_list(kind: ListKind, text: str, children: tuple[Node, ...] = ()) -> ListNode:
+    return ListNode(kind, (ListEntry((Plain(text),), children=children),))
+
+
+@pytest.mark.parametrize(
+    ("nodes", "notion"),
+    [
+        pytest.param(
+            (_one_entry_list("check", "a"), _one_entry_list("bullet", "b")),
+            "- [ ] a\n- b\n",
+            id="check-then-bullet",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), _one_entry_list("number", "b")),
+            "- a\n1. b\n",
+            id="bullet-then-number",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), Paragraph(()), _one_entry_list("bullet", "b")),
+            "- a\n<empty-block/>\n- b\n",
+            id="an-empty-paragraph-between-writes-nothing",
+        ),
+        pytest.param(
+            (_one_entry_list("bullet", "a"), Paragraph((Plain("p"),)), _one_entry_list("bullet", "b")),
+            "- a\np\n- b\n",
+            id="a-paragraph-between-keeps-them-apart",
+        ),
+        pytest.param(
+            (
+                _one_entry_list(
+                    "bullet", "p", (_one_entry_list("number", "a"), _one_entry_list("number", "b"))
+                ),
+            ),
+            "- p\n\t1. a\n\t<empty-block/>\n\t1. b\n",
+            id="inside-a-list-entry",
+        ),
+        pytest.param(
+            (Callout("info", (_one_entry_list("check", "a"), _one_entry_list("check", "b"))),),
+            '<callout icon="💡" color="blue_bg">\n\t- [ ] a\n\t<empty-block/>\n\t- [ ] b\n</callout>\n',
+            id="inside-a-callout",
+        ),
+    ],
+)
+def test_an_empty_block_separates_only_lists_of_the_same_kind_that_notion_would_merge(
+    nodes: tuple[Node, ...], notion: str
+) -> None:
+    assert render_notion(nodes) == notion
+
+
+OPENING_THAT_RENDERS_NOTHING = (Paragraph(()), Heading(2, (Plain("A"),)), Paragraph((Plain("a"),)))
+SECTIONS_WITH_LISTS = (
+    _one_entry_list("bullet", "intro"),
+    Heading(2, (Plain("A"),)),
+    _one_entry_list("bullet", "a"),
+    _one_entry_list("bullet", "b"),
+    Toggle((Plain("B"),), 2, (Paragraph(()),)),
+    Heading(1, (Plain("C"),)),
+)
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        pytest.param(OPENING_THAT_RENDERS_NOTHING, id="opening-renders-nothing"),
+        pytest.param((), id="empty-body"),
+        pytest.param((Paragraph(()),), id="body-renders-nothing"),
+        pytest.param(SECTIONS_WITH_LISTS, id="sections-with-lists"),
+        pytest.param(lowered(heading_sections(4, "x = 1\n" * 20)), id="code-sections"),
+    ],
+)
+@pytest.mark.parametrize(
+    "limit", [pytest.param(limit, id=f"limit-{limit}") for limit in (1, 20, 400, 100000)]
+)
+def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: int) -> None:
+    assert "".join(chunk_notion(nodes, limit).chunks) == render_notion(nodes)
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
@@ -350,14 +467,19 @@ def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
-    ("first_chunk", "second_chunk", "left"),
+    ("first_chunk", "second_chunk", "remaining_pages"),
     [
-        pytest.param(100, None, ["page.md"], id="chunked-then-whole"),
-        pytest.param(100, 100000, ["page.00.md"], id="many-chunks-then-one"),
+        pytest.param(CHUNK_THAT_SPLITS_EVERY_SECTION, None, ["page.md"], id="chunked-then-whole"),
+        pytest.param(
+            CHUNK_THAT_SPLITS_EVERY_SECTION,
+            CHUNK_THAT_HOLDS_THE_WHOLE_PAGE,
+            ["page.00.md"],
+            id="many-chunks-then-one",
+        ),
     ],
 )
 def test_a_re_export_removes_only_the_pages_its_earlier_run_wrote(
-    tmp_path: Path, first_chunk: int, second_chunk: int | None, left: list[str]
+    tmp_path: Path, first_chunk: int, second_chunk: int | None, remaining_pages: list[str]
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(3, "w = 4\n" * 20)))
     export_notion(report, tmp_path, chunk=first_chunk)
@@ -367,11 +489,11 @@ def test_a_re_export_removes_only_the_pages_its_earlier_run_wrote(
     export_notion(report, tmp_path, chunk=second_chunk)
 
     assert sorted(path.name for path in tmp_path.iterdir()) == sorted(
-        [*left, "page.07.md", "page.09.md", EXPORT_MANIFEST]
+        [*remaining_pages, "page.07.md", "page.09.md", EXPORT_MANIFEST]
     )
     assert json.loads((tmp_path / EXPORT_MANIFEST).read_text(encoding="utf-8")) == {
         "title": "Test Report",
-        "files": left,
+        "files": remaining_pages,
     }
 
 
@@ -379,7 +501,7 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
     tmp_path: Path,
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(3, "w = 4\n" * 20)))
-    export_notion(report, tmp_path, chunk=100)
+    export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
 
     export_markdown(report, tmp_path)
 
@@ -390,15 +512,22 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
     "manifest",
     [
         pytest.param("not json", id="not-json"),
-        pytest.param("[" * 100000, id="nested-too-deep-to-parse"),
+        pytest.param("[" * NESTING_TOO_DEEP_TO_PARSE, id="nested-too-deep-to-parse"),
         pytest.param('["page.03.md"]', id="not-an-object"),
-        pytest.param('{"files": "page.03.md"}', id="files-not-a-list"),
-        pytest.param('{"files": [3, null]}', id="entries-not-names"),
-        pytest.param('{"files": ["README.md", "notes.txt"]}', id="names-skaldr-never-writes"),
-        pytest.param('{"files": ["../page.03.md", "sub/page.03.md"]}', id="paths-outside-the-folder"),
+        pytest.param('{"files": ["page.03.md"]}', id="no-title"),
+        pytest.param('{"title": "T", "files": ["page.03.md"], "pages": 1}', id="unknown-key"),
+        pytest.param('{"title": "T", "files": "page.03.md"}', id="files-not-a-list"),
+        pytest.param('{"title": "T", "files": [3, null]}', id="entries-not-names"),
+        pytest.param('{"title": "T", "files": ["page.03.md", 3]}', id="names-mixed-with-non-names"),
+        pytest.param('{"title": "T", "files": ["README.md", "notes.txt"]}', id="names-skaldr-never-writes"),
+        pytest.param(
+            '{"title": "T", "files": ["../page.03.md", "sub/page.03.md"]}', id="paths-outside-the-folder"
+        ),
     ],
 )
-def test_a_manifest_skaldr_did_not_write_deletes_nothing(tmp_path: Path, manifest: str) -> None:
+def test_a_manifest_skaldr_did_not_write_deletes_nothing_and_is_reported(
+    tmp_path: Path, manifest: str
+) -> None:
     out_dir = tmp_path / "out"
     (out_dir / "sub").mkdir(parents=True)
     kept = [out_dir / "page.03.md", out_dir / "README.md", out_dir / "notes.txt", tmp_path / "page.03.md"]
@@ -407,9 +536,86 @@ def test_a_manifest_skaldr_did_not_write_deletes_nothing(tmp_path: Path, manifes
         path.write_text("mine", encoding="utf-8")
     (out_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
 
+    result = export_notion(parse_report(make_report()), out_dir)
+
+    assert ([path.read_text(encoding="utf-8") for path in kept], result) == (
+        ["mine"] * len(kept),
+        ExportResult("Test Report", (out_dir / "page.md",), unreadable_manifest=True),
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("page.03.md.bak", id="extra-suffix"),
+        pytest.param("xpage.md", id="extra-prefix"),
+        pytest.param("page.1.md", id="one-digit"),
+        pytest.param("page.٠٣.md", id="non-ascii-digits"),
+        pytest.param("page.03.md\n", id="trailing-newline"),
+    ],
+)
+def test_a_manifest_naming_a_file_skaldr_never_writes_leaves_that_file_alone(
+    tmp_path: Path, name: str
+) -> None:
+    (tmp_path / name).write_text("mine", encoding="utf-8")
+    (tmp_path / EXPORT_MANIFEST).write_text(json.dumps({"title": "T", "files": [name]}), encoding="utf-8")
+
+    result = export_notion(parse_report(make_report()), tmp_path)
+
+    assert ((tmp_path / name).read_text(encoding="utf-8"), result.unreadable_manifest) == ("mine", True)
+
+
+def _leave_absent(_path: Path) -> None:
+    return None
+
+
+@pytest.mark.parametrize(
+    ("make_it_not_a_file", "expected_names"),
+    [
+        pytest.param(_leave_absent, [EXPORT_MANIFEST, "page.md"], id="deleted-by-hand"),
+        pytest.param(Path.mkdir, [EXPORT_MANIFEST, "page.03.md", "page.md"], id="replaced-by-a-folder"),
+    ],
+)
+def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
+    tmp_path: Path, make_it_not_a_file: Callable[[Path], object], expected_names: list[str]
+) -> None:
+    make_it_not_a_file(tmp_path / "page.03.md")
+    (tmp_path / EXPORT_MANIFEST).write_text('{"title": "T", "files": ["page.03.md"]}', encoding="utf-8")
+
+    result = export_notion(parse_report(make_report()), tmp_path)
+
+    assert (sorted(path.name for path in tmp_path.iterdir()), result) == (
+        sorted(expected_names),
+        ExportResult("Test Report", (tmp_path / "page.md",)),
+    )
+
+
+def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep me", encoding="utf-8")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "page.md").symlink_to(outside)
+    (out_dir / EXPORT_MANIFEST).symlink_to(outside)
+
     export_notion(parse_report(make_report()), out_dir)
 
-    assert [path.read_text(encoding="utf-8") for path in kept] == ["mine"] * len(kept)
+    assert (
+        outside.read_text(encoding="utf-8"),
+        (out_dir / "page.md").is_symlink(),
+        (out_dir / "page.md").read_text(encoding="utf-8"),
+        (out_dir / EXPORT_MANIFEST).is_symlink(),
+    ) == ("keep me", False, "Hello.\n", False)
+
+
+def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text("old", encoding="utf-8")
+    page.chmod(0o600)
+
+    export_notion(parse_report(make_report()), tmp_path)
+
+    assert (page.read_text(encoding="utf-8"), page.stat().st_mode & 0o777) == ("Hello.\n", 0o600)
 
 
 def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
@@ -425,7 +631,7 @@ def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
 
     monkeypatch.setattr(Path, "write_text", fail_on_the_third_page)
     with pytest.raises(OSError, match="disk full"):
-        export_notion(report, tmp_path, chunk=100)
+        export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
     monkeypatch.undo()
 
     export_notion(report, tmp_path)

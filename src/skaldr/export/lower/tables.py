@@ -2,11 +2,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
 from skaldr import compute, models
-from skaldr.export.inline import bold, italic, labelled, paragraphs, plain
-from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named
-from skaldr.export.runs import Break, ExportRich, Mark
+from skaldr.export.inline import bold, italic, plain
+from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, with_bold_label
+from skaldr.export.runs import Break, CheckMark, ExportRich, IndicatorMark, SwimlaneMark
 from skaldr.export.tree import Node, Paragraph, Table, TableCell, TableRow, ToneName
-from skaldr.richtext import Link
+from skaldr.richtext import Link, Plain
 
 Row = Mapping[str, Any]
 
@@ -26,7 +26,7 @@ def _blank_cells(count: int) -> tuple[TableCell, ...]:
 def _cell_text(value: object, lowering: Lowering) -> ExportRich:
     if value is None or value == "":
         return ()
-    return _lines(lowering.rich(part) for part in paragraphs(str(value)))
+    return _lines(lowering.rich(part) for part in compute.paragraphs(str(value)))
 
 
 def _badge_keys(raw: object) -> list[str]:
@@ -52,15 +52,17 @@ def _title_cell(block: models.Table, row: Row, value: object, lowering: Lowering
 
 
 def _number_cell(block: models.Table, column: models.Column, value: object) -> TableCell:
-    text = plain(compute.fmt(value)) if value is not None else ()
+    parts = [plain(compute.fmt(value)) if value is not None else ()]
     if column.pct_of_total and block.reconcile and isinstance(value, (int, float)):
-        text += plain(f" ({compute.pct(value, block.reconcile.total)} of total)")
-    return TableCell(text)
+        parts.append(plain(f"({compute.pct(value, block.reconcile.total)} of total)"))
+    return TableCell(spaced([part for part in parts if part]))
 
 
 def _indicator_cell(value: object) -> TableCell:
-    indicator = str(value or "").strip()
-    return TableCell((Mark("indicator", indicator),) if indicator else (), tone_named(indicator))
+    tone = tone_named(str(value or "").strip())
+    if tone is None or tone == "muted":
+        return TableCell(())
+    return TableCell((IndicatorMark(tone),), tone)
 
 
 def _row_tone(block: models.Table, row: Row, lowering: Lowering) -> ToneName | None:
@@ -97,7 +99,7 @@ def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
         group_rows = cast("list[dict[str, Any]]", group.rows)
         label = bold(group.name)
         if block.sum_key:
-            label += plain(f" ({compute.fmt(compute.col_sum(group_rows, block.sum_key))})")
+            label = spaced([label, plain(f"({compute.fmt(compute.col_sum(group_rows, block.sum_key))})")])
         rows.append(TableRow((TableCell(label), *_blank_cells(width - 1)), emphasis="group"))
         if group_rows:
             rows += [_table_row(block, row, lowering) for row in group_rows]
@@ -123,9 +125,9 @@ def _rollup(block: models.Table, lowering: Lowering) -> list[Node]:
     buckets = compute.table_rollup(block)
     if not buckets:
         return []
-    lead = labelled(block.rollup.label) if block.rollup and block.rollup.label else ()
-    counts = [(lowering.chip(bucket["key"]), *plain(f" {bucket['count']}")) for bucket in buckets]
-    return [Paragraph(lead + spaced(counts, " · "))]
+    counts = [spaced([(lowering.chip(bucket["key"]),), plain(str(bucket["count"]))]) for bucket in buckets]
+    label = block.rollup.label if block.rollup else None
+    return [Paragraph(with_bold_label(label, spaced(counts, " · ")))]
 
 
 def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:
@@ -144,7 +146,7 @@ def _comparison_cell(
 ) -> TableCell:
     if isinstance(cell, bool):
         good = cell != is_negative
-        return TableCell((Mark("check", "yes" if cell else "no"),), "success" if good else "danger")
+        return TableCell((CheckMark(cell),), "success" if good else "danger")
     if isinstance(cell, str):
         return TableCell(lowering.rich(cell))
     return TableCell(lowering.rich(cell.value), tone_named(cell.tone))
@@ -187,20 +189,21 @@ def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
 
 def _swim_step(block: models.Swimlane, step: models.SwimlaneStep, show_group: bool) -> ExportRich:
     number: ExportRich = (Link(plain(step.n), step.url),) if step.url else bold(step.n)
-    text: ExportRich = (Mark("swimlane", step.state), *plain(" "), *number, *plain(f" {step.label}"))
+    parts: list[ExportRich] = [(SwimlaneMark(step.state),), number, plain(step.label)]
     if step.value is not None:
-        text += plain(f" ({compute.fmt(step.value)})")
+        parts.append(plain(f"({compute.fmt(step.value)})"))
+    text = spaced([part for part in parts if part])
     group = block.step_group(step)
     if show_group and group:
         text += plain(f", {group}")
     needs = block.dependency_numbers(step)
     if needs:
-        text += italic(plain(f" needs {', '.join(needs)}"))
+        text += (Plain(" "), *italic(plain(f"needs {', '.join(needs)}")))
     return text
 
 
 def _with_total(text: ExportRich, totals: Mapping[str, float] | None, key: str) -> ExportRich:
-    return text + plain(f" ({compute.fmt(totals[key])})") if totals is not None else text
+    return spaced([text, plain(f"({compute.fmt(totals[key])})")]) if totals is not None else text
 
 
 def _groups_starting_at(block: models.Swimlane) -> dict[str, list[str]]:
@@ -249,7 +252,7 @@ def _lane_cells(block: models.Swimlane, lane_key: str) -> list[TableCell]:
 def _state_legend(states: Sequence[models.SwimlaneStepState]) -> list[Node]:
     if not states:
         return []
-    entries = [(Mark("swimlane", state), *plain(f" {state}")) for state in states]
+    entries = [spaced([(SwimlaneMark(state),), plain(state)]) for state in states]
     return [Paragraph(spaced(entries, " · "), "muted")]
 
 

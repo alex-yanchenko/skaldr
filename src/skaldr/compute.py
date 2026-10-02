@@ -12,7 +12,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Any, TypedDict
+from typing import Any, Final, TypedDict
 
 from skaldr.errors import ReportError
 from skaldr.models import (
@@ -151,6 +151,9 @@ def first_table_index(report: Report) -> int | None:
     return None
 
 
+BADGE_LEGEND_SUBJECT: Final = "badges used on this page"
+
+
 def used_badges(report: Report) -> list[tuple[str, Badge]]:
     """Declared badges that are actually referenced AND carry a legend, in declaration order (drives the
     legend). A badge with `legend: false` opts out — its chips still render, but it never lists."""
@@ -273,7 +276,7 @@ class SwimLayout(TypedDict):
 
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
-DELTA_GLYPHS: dict[DeltaDirection, str] = {"up": "▲", "down": "▼", "flat": "→"}
+DELTA_GLYPHS: Final[Mapping[DeltaDirection, str]] = {"up": "▲", "down": "▼", "flat": "→"}
 
 
 class SwimTotals(TypedDict):
@@ -590,6 +593,10 @@ def provenance_footer(report: Report) -> str | None:
         parts.append(f"updated {report.meta.updated}")
     parts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
     return " · ".join(parts) if parts else None
+
+
+def paragraphs(text: str) -> list[str]:
+    return [part.strip() for part in text.split("\n\n") if part.strip()]
 
 
 def fmt(value: Any) -> str:

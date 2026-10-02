@@ -16,7 +16,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
+from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -89,15 +89,23 @@ Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
 # a palette name only. An author may write either name wherever a tone or a badge colour is taken; these
 # maps normalise each input to its field's canonical spelling before the Literal validates, so a `tone:
 # green` (or a badge `tone: success`) just works instead of failing. teal/sky pass through unchanged.
-_PALETTE_TO_TONE = {
-    "slate": "neutral",
-    "blue": "info",
-    "green": "success",
-    "amber": "warning",
-    "red": "danger",
-    "violet": "accent",
+ToneLiteral = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"]
+BadgeColorLiteral = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
+TONE_BADGE_COLOR: Final[Mapping[ToneLiteral, BadgeColorLiteral]] = {
+    "neutral": "slate",
+    "info": "blue",
+    "success": "green",
+    "warning": "amber",
+    "danger": "red",
+    "accent": "violet",
+    "teal": "teal",
+    "sky": "sky",
 }
-_TONE_TO_PALETTE = {tone: palette for palette, tone in _PALETTE_TO_TONE.items()}
+BADGE_COLOR_TONE: Final[Mapping[BadgeColorLiteral, ToneLiteral]] = {
+    color: tone for tone, color in TONE_BADGE_COLOR.items()
+}
+_PALETTE_TO_TONE: Final[Mapping[str, str]] = dict(BADGE_COLOR_TONE.items())
+_TONE_TO_PALETTE: Final[Mapping[str, str]] = dict(TONE_BADGE_COLOR.items())
 
 
 def semantic_tone_name(name: str) -> str:
@@ -110,8 +118,8 @@ def _to_tone(value: Any) -> Any:
     return _PALETTE_TO_TONE.get(value, value) if isinstance(value, str) else value
 
 
-def badge_color_of(tone: str) -> "BadgeColor":
-    return cast("BadgeColor", _TONE_TO_PALETTE.get(tone, tone))
+def badge_color_of(tone: ToneLiteral) -> BadgeColorLiteral:
+    return TONE_BADGE_COLOR[tone]
 
 
 def _to_badge_color(value: Any) -> Any:
@@ -128,19 +136,13 @@ def _tone_names(tone_type: Any) -> tuple[str, ...]:
 
 # Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
 # colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
-Tone = Annotated[
-    Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
-    BeforeValidator(_to_tone),
-]
+Tone = Annotated[ToneLiteral, BeforeValidator(_to_tone)]
 RowTone = Annotated[
     Literal["muted", "danger"], BeforeValidator(_to_tone)
 ]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
 # Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
 _ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
-BadgeColor = Annotated[
-    Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"],
-    BeforeValidator(_to_badge_color),
-]
+BadgeColor = Annotated[BadgeColorLiteral, BeforeValidator(_to_badge_color)]
 _CALLOUT_TONES = ("info", "success", "warning", "danger")
 
 
@@ -302,9 +304,12 @@ def _any_item_checked(items: list["str | ListItem"]) -> bool:
     )
 
 
+ListStyle = Literal["bullet", "number", "check"]
+
+
 class ListBlock(_Block):
     type: Literal["list"]
-    style: Literal["bullet", "number", "check"] = Field(
+    style: ListStyle = Field(
         default="bullet",
         description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
         "(the ticks are ephemeral: a browser reload resets them).",
@@ -423,6 +428,10 @@ class Card(FrozenModel):
         "`of_matrix`.",
     )
 
+    @property
+    def derived(self) -> bool:
+        return self.of_matrix is not None or self.of_tables is not None
+
     def tone_with(self, badge: Badge) -> str:
         return self.tone or badge.tone
 
@@ -430,8 +439,7 @@ class Card(FrozenModel):
     def _shape(self) -> "Card":
         if self.of_matrix is not None and self.of_tables is not None:
             raise ValueError("a derived card counts a matrix (`of_matrix`) OR tables (`of_tables`), not both")
-        derived = self.of_matrix is not None or self.of_tables is not None
-        if derived:
+        if self.derived:
             # Derived card: the count and percentage come from the source, so authoring them is a
             # contradiction. The badge names which state to count and supplies the card's chip/label/tone.
             if self.badge is None:

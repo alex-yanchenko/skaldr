@@ -1,19 +1,18 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from typing_extensions import assert_never
 
 from skaldr.export.markup import (
     CALLOUT_ICON,
-    MarkerFamily,
     MarkupRuns,
     bang_cannot_open_an_image,
     bold_once,
     code_block_lines,
     escape_block_start,
     indent_lines,
-    list_marker_family,
     styled,
 )
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
@@ -22,6 +21,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Heading,
+    ListKind,
     ListNode,
     Node,
     Paragraph,
@@ -32,17 +32,18 @@ from skaldr.export.tree import (
     TableRow,
     Toggle,
     ToneName,
+    heading_of,
 )
-from skaldr.models import BadgeColor
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral
 
-NOTION_ESCAPED = frozenset("\\*~`$[]<>{}|^")
+NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
-SPACED_PLUS_AFTER_CODE = re.compile(r"` \+ ")
-FULL_WIDTH_PLUS = "\N{FULLWIDTH PLUS SIGN}"
-CHUNK_BOUNDARY_LEVEL = 2
-OPENING_SECTION_LABEL = "the opening section, before the first level 1 or 2 heading"
-EMPTY_BLOCK = "<empty-block/>"
-BLOCK_COLOR: dict[ToneName, str] = {
+SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
+FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
+CHUNK_BOUNDARY_LEVEL: Final = 2
+OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
+EMPTY_BLOCK: Final = "<empty-block/>"
+BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
     "muted": "gray",
     "info": "blue",
@@ -53,43 +54,36 @@ BLOCK_COLOR: dict[ToneName, str] = {
     "teal": "green",
     "sky": "blue",
 }
-CHIP_COLOR: dict[BadgeColor, str] = {
-    "slate": "gray",
-    "blue": "blue",
-    "green": "green",
-    "amber": "yellow",
-    "red": "red",
-    "violet": "purple",
-    "teal": "green",
-    "sky": "blue",
+CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
+    color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
 
 
-def _escape(text: str) -> str:
-    return "".join("\\" + character if character in NOTION_ESCAPED else character for character in text)
-
-
 class _NotionRuns(MarkupRuns):
-    def __init__(self) -> None:
-        super().__init__(_escape)
+    def escape(self, text: str, /) -> str:
+        return text.translate(NOTION_ESCAPES)
 
     def text(self, text: str, /) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
         return bang_cannot_open_an_image(
-            "".join(self.code(piece) if index % 2 else _escape(piece) for index, piece in enumerate(pieces))
+            "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
         )
 
+    def _piece(self, index: int, piece: str) -> str:
+        is_file_name = index % 2 == 1
+        return self.code(piece) if is_file_name else self.escape(piece)
+
     def code(self, text: str, /) -> str:
-        return _escape(text) if "`" in text else f"`{text}`"
+        return self.escape(text) if "`" in text else f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
 
     def placeholder(self, name: str, /) -> str:
-        return f'<span color="yellow_bg">{_escape("{{" + name + "}}")}</span>'
+        return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
 
     def chip(self, run: Chip, /) -> str:
-        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{_escape(run.label)}</span>'
+        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.text(run.label)}</span>'
 
 
 def notion_inline(runs: ExportRich) -> str:
@@ -100,8 +94,8 @@ def _block_text(runs: ExportRich) -> str:
     return escape_block_start(notion_inline(runs))
 
 
-def _color_attribute(tone: ToneName | None, suffix: str = "") -> str:
-    return f' color="{BLOCK_COLOR[tone]}{suffix}"' if tone else ""
+def _color_attribute(tone: ToneName, suffix: str = "") -> str:
+    return f' color="{BLOCK_COLOR[tone]}{suffix}"'
 
 
 def _trailing_color(tone: ToneName | None) -> str:
@@ -120,12 +114,15 @@ def _table_cell_text(cell: TableCell) -> str:
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(notion_inline(cell.text)))
 
 
+def _background_attribute(tone: ToneName | None) -> str:
+    return _color_attribute(tone, "_bg") if tone else ""
+
+
 def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName | None) -> list[str]:
     tagged = [
-        f"<td{_color_attribute(cell.tone, '_bg')}>{text}</td>"
-        for cell, text in zip(cells, texts, strict=True)
+        f"<td{_background_attribute(cell.tone)}>{text}</td>" for cell, text in zip(cells, texts, strict=True)
     ]
-    return [f"<tr{_color_attribute(tone, '_bg')}>", *_indent(tagged), "</tr>"]
+    return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
 
 
 def _body_row_lines(row: TableRow) -> list[str]:
@@ -146,18 +143,22 @@ def _table_lines(table: Table) -> list[str]:
     return [f"<table{attributes}>", *_indent(rows), "</table>"]
 
 
+def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
+    match kind:
+        case "bullet":
+            return "-"
+        case "number":
+            return f"{index}."
+        case "check":
+            return "- [x]" if checked else "- [ ]"
+        case _:
+            assert_never(kind)
+
+
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=1):
-        match node.kind:
-            case "bullet":
-                marker = "-"
-            case "number":
-                marker = f"{index}."
-            case "check":
-                marker = "- [x]" if entry.checked else "- [ ]"
-            case _:
-                assert_never(node.kind)
+        marker = _list_marker(node.kind, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))
     return lines
@@ -212,43 +213,41 @@ def _notion_lines(node: Node) -> list[str]:
             assert_never(node)
 
 
+def _list_kind(node: Node) -> ListKind | None:
+    return node.kind if isinstance(node, ListNode) else None
+
+
 def _notion_blocks(nodes: Sequence[Node]) -> list[str]:
     lines: list[str] = []
-    previous_family: MarkerFamily | None = None
+    previous_kind: ListKind | None = None
     for node in nodes:
         node_lines = _notion_lines(node)
         if not node_lines:
             continue
-        family = list_marker_family(node)
-        if family is not None and family == previous_family:
+        kind = _list_kind(node)
+        if kind is not None and kind == previous_kind:
             lines.append(EMPTY_BLOCK)
         lines += node_lines
-        previous_family = family
+        previous_kind = kind
     return lines
 
 
+def _page(lines: Sequence[str]) -> str:
+    return "\n".join(lines) + "\n"
+
+
 def render_notion(nodes: Sequence[Node]) -> str:
-    return "\n".join(_notion_blocks(nodes)) + "\n"
+    return _page(_notion_blocks(nodes))
 
 
-def _starts_a_chunk(node: Node) -> bool:
-    if isinstance(node, Heading):
-        return node.level <= CHUNK_BOUNDARY_LEVEL
-    return (
-        isinstance(node, Toggle)
-        and node.heading_level is not None
-        and node.heading_level <= CHUNK_BOUNDARY_LEVEL
-    )
+def _chunk_heading(node: Node) -> Heading | None:
+    heading = heading_of(node)
+    return heading if heading is not None and heading.level <= CHUNK_BOUNDARY_LEVEL else None
 
 
 def _section_label(section: Sequence[Node]) -> str:
-    match section[0] if section else None:
-        case Heading(level=level, text=title) if level <= CHUNK_BOUNDARY_LEVEL:
-            return f"{'#' * level} {export_visible_text(title)}"
-        case Toggle(heading_level=int(level), title=title) if level <= CHUNK_BOUNDARY_LEVEL:
-            return f"{'#' * level} {export_visible_text(title)}"
-        case _:
-            return OPENING_SECTION_LABEL
+    heading = _chunk_heading(section[0]) if section else None
+    return f"{'#' * heading.level} {export_visible_text(heading.text)}" if heading else OPENING_SECTION_LABEL
 
 
 @dataclass(frozen=True)
@@ -260,14 +259,17 @@ class NotionChunks:
 def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
     sections: list[list[Node]] = [[]]
     for node in nodes:
-        if _starts_a_chunk(node) and sections[-1]:
+        if _chunk_heading(node) is not None and sections[-1]:
             sections.append([])
         sections[-1].append(node)
     chunks: list[str] = []
     oversized: list[str] = []
     current_chunk = ""
     for section in sections:
-        text = render_notion(section)
+        lines = _notion_blocks(section)
+        if not lines:
+            continue
+        text = _page(lines)
         if len(text) > limit:
             oversized.append(_section_label(section))
         if current_chunk and len(current_chunk) + len(text) > limit:
@@ -276,4 +278,4 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
         current_chunk += text
     if current_chunk:
         chunks.append(current_chunk)
-    return NotionChunks(tuple(chunks), tuple(oversized))
+    return NotionChunks(tuple(chunks) or (render_notion(nodes),), tuple(oversized))

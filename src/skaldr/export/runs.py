@@ -1,16 +1,21 @@
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Protocol
 
-from skaldr.models import BadgeColor
+from typing_extensions import assert_never
+
+from skaldr.export.inline import one_line
+from skaldr.models import BadgeColor, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Run, RunWriter, VisibleText, write_run
-
-MarkScheme = Literal["status", "timeline", "swimlane", "indicator", "check"]
 
 
 @dataclass(frozen=True)
 class Chip:
     label: str
     tone: BadgeColor
+
+    @classmethod
+    def on_one_line(cls, label: str, tone: BadgeColor) -> "Chip":
+        return cls(one_line(label), tone)
 
 
 @dataclass(frozen=True)
@@ -19,9 +24,26 @@ class Break:
 
 
 @dataclass(frozen=True)
-class Mark:
-    scheme: MarkScheme
-    state: str
+class StatusMark:
+    state: StatusState
+
+
+@dataclass(frozen=True)
+class SwimlaneMark:
+    state: SwimlaneStepState
+
+
+@dataclass(frozen=True)
+class IndicatorMark:
+    tone: ToneLiteral
+
+
+@dataclass(frozen=True)
+class CheckMark:
+    checked: bool
+
+
+Mark = StatusMark | SwimlaneMark | IndicatorMark | CheckMark
 
 
 @dataclass(frozen=True)
@@ -50,7 +72,7 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
             return writer.chip(run)
         case Break():
             return writer.line_break()
-        case Mark():
+        case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark():
             return writer.mark(run)
         case Gauge():
             return writer.gauge(run)
@@ -62,6 +84,18 @@ def write_export_runs(runs: ExportRich, writer: ExportRunWriter) -> str:
     return "".join(_write_export_run(run, writer) for run in runs)
 
 
+def mark_name(mark: Mark) -> str:
+    match mark:
+        case StatusMark() | SwimlaneMark():
+            return mark.state
+        case IndicatorMark():
+            return mark.tone
+        case CheckMark():
+            return "yes" if mark.checked else "no"
+        case _:
+            assert_never(mark)
+
+
 class _ExportVisibleText(VisibleText):
     def chip(self, run: Chip, /) -> str:
         return run.label
@@ -70,7 +104,7 @@ class _ExportVisibleText(VisibleText):
         return " "
 
     def mark(self, run: Mark, /) -> str:
-        return run.state
+        return mark_name(run)
 
     def gauge(self, _run: Gauge, /) -> str:
         return ""

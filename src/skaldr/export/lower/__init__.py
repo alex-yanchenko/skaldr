@@ -1,9 +1,10 @@
 from collections.abc import Sequence
+from itertools import chain
 
 from skaldr import compute, models
 from skaldr.errors import ReportError
-from skaldr.export.inline import bold, italic, one_line, plain
-from skaldr.export.lower.context import MAX_HEADING_LEVEL, Lowering, lowering_for, tone_named
+from skaldr.export.inline import bold, italic, plain
+from skaldr.export.lower.context import Lowering, lowering_for, spaced, tone_named
 from skaldr.export.lower.prose import (
     lower_badge_row,
     lower_callout,
@@ -23,7 +24,6 @@ from skaldr.export.lower.prose import (
     lower_timeline,
 )
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
-from skaldr.export.runs import Chip
 from skaldr.export.tree import (
     Callout,
     Column,
@@ -37,6 +37,7 @@ from skaldr.export.tree import (
     TableOfContents,
     TocEntry,
     Toggle,
+    capped_heading_level,
 )
 
 SECTION_HEADING_LEVEL = 2
@@ -65,9 +66,7 @@ def _lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering, depth: 
 
 
 def _heading(block: models.Heading, lowering: Lowering, depth: int) -> list[Node]:
-    heading = Heading(
-        min(block.level + depth, MAX_HEADING_LEVEL), plain(block.text), lowering.anchor_of(block)
-    )
+    heading = Heading(capped_heading_level(block.level + depth), plain(block.text), lowering.anchor_of(block))
     subheading: list[Node] = [Paragraph(italic(lowering.rich(block.sub)), "muted")] if block.sub else []
     return [heading, *subheading]
 
@@ -87,7 +86,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.DefList():
             return lower_def_list(block, lowering)
         case models.Cards():
-            return lower_cards(block.items, lowering)
+            return lower_cards(block, lowering)
         case models.BadgeRow():
             return lower_badge_row(block, lowering)
         case models.Callout():
@@ -137,7 +136,7 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
 
 
 def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node]:
-    level = min(SECTION_HEADING_LEVEL + depth, MAX_HEADING_LEVEL)
+    level = capped_heading_level(SECTION_HEADING_LEVEL + depth)
     updated: list[Node] = (
         [Paragraph(italic(plain(f"updated {block.updated}")), "muted")] if block.updated else []
     )
@@ -169,27 +168,32 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:
-    text = bold(step.label)
-    if step.sub:
-        text += plain(" ") + italic(lowering.rich(step.sub))
-    return ListEntry(text, children=tuple(_lower_blocks(step.detail, lowering, depth)), tone=step.tone)
+    parts = [bold(step.label), italic(lowering.rich(step.sub or ""))]
+    return ListEntry(
+        spaced([part for part in parts if part]),
+        children=tuple(_lower_blocks(step.detail, lowering, depth)),
+        tone=step.tone,
+    )
 
 
-def _legend(report: models.Report) -> list[Node]:
-    used = compute.used_badges(report)
+def _legend(lowering: Lowering) -> list[Node]:
+    used = compute.used_badges(lowering.report)
     if not used:
         return []
     entries = tuple(
-        ListEntry((Chip(one_line(badge.label), badge.tone), *plain(f" {badge.legend}"))) for _, badge in used
+        ListEntry(spaced([(lowering.chip(key),), plain(f"{badge.legend}")])) for key, badge in used
     )
-    return [Toggle(plain("Legend: badges used on this page"), None, (ListNode("bullet", entries),))]
+    title = plain(f"Legend: {compute.BADGE_LEGEND_SUBJECT}")
+    return [Toggle(title, None, (ListNode("bullet", entries),))]
+
+
+def place_legend(
+    blocks: Sequence[Sequence[Node]], legend: Sequence[Node], legend_at: int | None
+) -> list[Node]:
+    split = legend_at or 0
+    return [*chain.from_iterable(blocks[:split]), *legend, *chain.from_iterable(blocks[split:])]
 
 
 def _blocks_with_the_legend(report: models.Report, lowering: Lowering) -> list[Node]:
-    legend_at = compute.first_table_index(report)
-    nodes = [] if legend_at is not None else _legend(report)
-    for index, block in enumerate(report.blocks):
-        if index == legend_at:
-            nodes += _legend(report)
-        nodes += _lower_block(block, lowering, depth=0)
-    return nodes
+    blocks = [_lower_block(block, lowering, depth=0) for block in report.blocks]
+    return place_legend(blocks, _legend(lowering), compute.first_table_index(report))
