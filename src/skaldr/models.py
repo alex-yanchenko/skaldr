@@ -30,8 +30,10 @@ import yaml
 from pydantic import (
     AfterValidator,
     BeforeValidator,
+    Discriminator,
     Field,
     StrictBool,
+    Tag,
     ValidationError,
     field_validator,
     model_validator,
@@ -90,6 +92,22 @@ _NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
 Number = Annotated[int | float, _NUMBER_GUARD]
 Count = Annotated[int, _NUMBER_GUARD]
 SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
+
+
+def _refuse_blank(message: str) -> AfterValidator:
+    def refuse(value: str) -> str:
+        if not value.strip():
+            raise ValueError(message)
+        return value
+
+    return AfterValidator(refuse)
+
+
+_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"minLength": 1, "pattern": r"\S"}
+NonBlank = Annotated[str, _refuse_blank("must not be blank"), Field(json_schema_extra=_NON_BLANK_JSON_SCHEMA)]
+NonBlankIfSet = Annotated[
+    str, _refuse_blank("must not be blank (omit it instead)"), Field(json_schema_extra=_NON_BLANK_JSON_SCHEMA)
+]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -257,7 +275,7 @@ class Meta(FrozenModel):
 
 class Heading(_Block):
     type: Literal["heading"]
-    text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
+    text: NonBlank = Field(description="Heading text; also the TOC entry at level 2.")
     level: Literal[2, 3, 4] = Field(
         default=2,
         description="Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
@@ -268,20 +286,12 @@ class Heading(_Block):
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
         "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
-    sub: str | None = Field(
+    sub: NonBlankIfSet | None = Field(
         default=None,
         description="Optional caption line under the heading, styled subordinate — a real subtitle "
         "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
         "stays the plain `text`).",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "Heading":
-        if not self.text.strip():
-            raise ValueError("heading text must not be blank")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("heading sub must not be blank (omit it instead)")
-        return self
 
 
 class Text(_Block):
@@ -294,7 +304,7 @@ _MAX_LIST_DEPTH = 4
 
 
 class ListItem(FrozenModel):
-    text: str = Field(min_length=1, description="The point's rich-text content.")
+    text: NonBlank = Field(description="The point's rich-text content.")
     checked: bool = Field(
         default=False,
         description="Only meaningful in a `style: check` list: renders the box ticked. Set it in the "
@@ -306,10 +316,21 @@ class ListItem(FrozenModel):
         description="Only meaningful in a `style: decision` list: marks the point a decision already "
         "taken. Left false, the point is an open question.",
     )
-    items: list["str | ListItem"] = Field(
+    items: list["ListPoint"] = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
     )
+
+
+def _list_point_kind(point: Any) -> str:
+    return "str" if isinstance(point, str) else "ListItem"
+
+
+ListPoint = Annotated[
+    Annotated[NonBlank, Tag("str")] | Annotated[ListItem, Tag("ListItem")],
+    Discriminator(_list_point_kind),
+]
+ListItem.model_rebuild()
 
 
 def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
@@ -352,7 +373,7 @@ class ListBlock(_Block):
         description="Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or "
         "`roman` (i, ii, iii). Nested lists keep it.",
     )
-    items: list[str | ListItem] = Field(
+    items: list[ListPoint] = Field(
         min_length=1,
         description="Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest "
         f"sub-points (nested lists inherit the parent's style; up to {_MAX_LIST_DEPTH} levels deep).",
@@ -397,7 +418,7 @@ class KeyValue(_Block):
 
 
 class DefItem(FrozenModel):
-    term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
+    term: NonBlank = Field(description="The label/term, rendered prominent (e.g. 'Action').")
     body: str = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
 
 
@@ -412,7 +433,7 @@ class DefList(_Block):
 
 
 class CardDelta(FrozenModel):
-    label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
+    label: NonBlank = Field(description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
     direction: DeltaDirection | None = Field(
         default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
     )
@@ -536,7 +557,7 @@ class BadgeLiteral(FrozenModel):
 
 
 class BadgeGroup(FrozenModel):
-    label: str = Field(min_length=1, description="Group label, shown in the row's gutter.")
+    label: NonBlank = Field(description="Group label, shown in the row's gutter.")
     items: list[BadgeRef | BadgeLiteral] = Field(
         min_length=1, description="Chips in this group: page-vocabulary refs or one-off label+tone pairs."
     )
@@ -616,7 +637,7 @@ class Meter(_Block):
 
 
 class RangeSegment(FrozenModel):
-    label: str = Field(min_length=1, description="Label shown inside the segment.")
+    label: NonBlank = Field(description="Label shown inside the segment.")
     span: Number = Field(
         description="Relative width (> 0). Spans are normalised across the segments, so only the "
         "ratios matter — [3, 1] and [30, 10] render identically."
@@ -624,16 +645,14 @@ class RangeSegment(FrozenModel):
     tone: Tone | None = Field(
         default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
     )
-    sub: str | None = Field(default=None, description="Optional rich-text sub-line under the label.")
+    sub: NonBlankIfSet | None = Field(
+        default=None, description="Optional rich-text sub-line under the label."
+    )
 
     @model_validator(mode="after")
     def _shape(self) -> "RangeSegment":
-        if not self.label.strip():
-            raise ValueError("range segment label must not be blank")
         if self.span <= 0:
             raise ValueError("segment 'span' must be greater than 0")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("range segment sub must not be blank (omit it instead)")
         return self
 
 
@@ -692,7 +711,7 @@ class Quote(_Block):
 
 class Note(_Block):
     type: Literal["note"]
-    body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
+    body: NonBlank = Field(description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
     icon: Icon | None = Field(
         default=None,
@@ -741,7 +760,7 @@ class Timeline(_Block):
 
 
 class FlowStep(FrozenModel):
-    label: str = Field(min_length=1, description="Short stage name — the node label.")
+    label: NonBlank = Field(description="Short stage name — the node label.")
     tone: Tone | None = Field(
         default=None, description="Optional tone accent for this node's border + number."
     )
@@ -759,12 +778,6 @@ class FlowStep(FrozenModel):
         default_factory=list,
         description="Declared badge keys (from the page `badges`) to chip onto this node.",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "FlowStep":
-        if not self.label.strip():
-            raise ValueError("flow step label must not be blank")
-        return self
 
 
 class Flow(_Block):
@@ -806,7 +819,7 @@ class Fan(_Block):
 
 
 class ChartSeries(FrozenModel):
-    label: str = Field(min_length=1, description="Series name — shown in the legend.")
+    label: NonBlank = Field(description="Series name — shown in the legend.")
     values: list[Number] = Field(
         min_length=1, description="One value per category, in the same order as `categories`."
     )
@@ -814,7 +827,7 @@ class ChartSeries(FrozenModel):
 
 
 class ChartSlice(FrozenModel):
-    label: str = Field(min_length=1, description="Slice name — shown in the legend.")
+    label: NonBlank = Field(description="Slice name — shown in the legend.")
     value: Number = Field(description="Slice magnitude (> 0); its share of the whole is derived.")
     tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
 
@@ -1290,7 +1303,7 @@ class ReferenceItem(FrozenModel):
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="Short id (ASCII letters, digits, _, -); cite it inline with [^key].",
     )
-    text: str = Field(min_length=1, description="Rich-text source description (e.g. a doc name + page).")
+    text: NonBlank = Field(description="Rich-text source description (e.g. a doc name + page).")
     url: str | None = Field(default=None, description="Optional link for the source (http/https/mailto).")
 
     @model_validator(mode="after")
@@ -1307,7 +1320,7 @@ class References(_Block):
 
 
 class ComparisonCell(FrozenModel):
-    value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
+    value: NonBlank = Field(description="Cell text (for a ✓/✗ pass a bare true/false instead).")
     tone: Tone | None = Field(default=None, description="Optional tone for the text.")
 
 
@@ -1317,7 +1330,7 @@ ComparisonValue = StrictBool | str | ComparisonCell
 
 
 class ComparisonRow(FrozenModel):
-    feature: str = Field(min_length=1, description="Row label — the attribute being compared.")
+    feature: NonBlank = Field(description="Row label — the attribute being compared.")
     values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
 
 
@@ -1363,11 +1376,9 @@ class Comparison(_Block):
 
 
 class MatrixCell(FrozenModel):
-    row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")
-    col: str = Field(
-        min_length=1, description="Which column this cell sits in — one of the block's `columns`."
-    )
-    badge: str | None = Field(
+    row: NonBlank = Field(description="Which row this cell sits in — one of the block's `rows`.")
+    col: NonBlank = Field(description="Which column this cell sits in — one of the block's `columns`.")
+    badge: NonBlankIfSet | None = Field(
         default=None,
         description="A declared badge key: its tone fills the cell and its label is the cell text. Use "
         "this OR `tone`, not both.",
@@ -1377,7 +1388,7 @@ class MatrixCell(FrozenModel):
         description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
         "badge — e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
     )
-    label: str | None = Field(
+    label: NonBlankIfSet | None = Field(
         default=None,
         description="Short text shown in the cell. With `badge` it overrides the badge's label; with "
         "`tone` it is the cell text; on its own it is plain text on an untinted cell.",
@@ -1385,27 +1396,21 @@ class MatrixCell(FrozenModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "MatrixCell":
-        if not self.row.strip():
-            raise ValueError("matrix cell row must not be blank")
-        if not self.col.strip():
-            raise ValueError("matrix cell col must not be blank")
-        if self.badge is not None and not self.badge.strip():
-            raise ValueError("matrix cell badge must not be blank (omit it instead)")
         if self.badge is not None and self.tone is not None:
             raise ValueError("a matrix cell takes `badge` or `tone`, not both")
         if self.badge is None and self.tone is None and self.label is None:
             raise ValueError(
                 "a matrix cell needs a `badge`, a `tone`, or a `label` (omit it for a blank cell)"
             )
-        if self.label is not None and not self.label.strip():
-            raise ValueError("matrix cell label must not be blank (omit it instead)")
         return self
 
 
 class Matrix(_Block):
     type: Literal["matrix"]
-    rows: list[str] = Field(min_length=1, description="Row labels, top to bottom (the row axis).")
-    columns: list[str] = Field(min_length=1, description="Column headers, left to right (the column axis).")
+    rows: list[NonBlank] = Field(min_length=1, description="Row labels, top to bottom (the row axis).")
+    columns: list[NonBlank] = Field(
+        min_length=1, description="Column headers, left to right (the column axis)."
+    )
     cells: list[MatrixCell] = Field(
         min_length=1,
         description="Filled cells, each naming a `row` + `col` from the axes. Omit a cell entirely for a "
@@ -1423,8 +1428,6 @@ class Matrix(_Block):
     def _shape(self) -> "Matrix":
         for axis, name in ((self.rows, "row"), (self.columns, "column")):
             stripped = [entry.strip() for entry in axis]
-            if any(not entry for entry in stripped):
-                raise ValueError(f"matrix {name} labels must not be blank")
             if len(set(stripped)) != len(stripped):
                 raise ValueError(f"matrix {name} labels must be unique")
         row_set, col_set = set(self.rows), set(self.columns)
@@ -1443,18 +1446,16 @@ class Matrix(_Block):
 
 
 class SwimlaneStep(FrozenModel):
-    lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
-    col: str = Field(
-        min_length=1,
+    lane: NonBlank = Field(description="Which lane this step sits in — one of the block's `lanes`.")
+    col: NonBlank = Field(
         description="Which column (sprint) this step sits in — one of the block's `columns`. Two steps "
         "sharing a lane/col stack in that cell.",
     )
-    n: str = Field(
-        min_length=1,
+    n: NonBlank = Field(
         description="The number shown in the step's cell — a free string ('1', '3a', 'R1'); skaldr never "
         "derives or renumbers it, so it reads exactly as written.",
     )
-    label: str = Field(min_length=1, description="Step label, shown beside the number.")
+    label: NonBlank = Field(description="Step label, shown beside the number.")
     group: str | None = Field(
         default=None,
         description="Which group (milestone) this step belongs to — one of the block's `groups` that covers "
@@ -1495,21 +1496,13 @@ class SwimlaneStep(FrozenModel):
     )
 
     @model_validator(mode="after")
-    def _non_blank(self) -> "SwimlaneStep":
-        if not self.lane.strip():
-            raise ValueError("swimlane step lane must not be blank")
-        if not self.col.strip():
-            raise ValueError("swimlane step col must not be blank")
-        if not self.n.strip():
-            raise ValueError("swimlane step n must not be blank")
-        if not self.label.strip():
-            raise ValueError("swimlane step label must not be blank")
+    def _url_scheme(self) -> "SwimlaneStep":
         _require_url_scheme(self.url, "swimlane step url")
         return self
 
 
 class SwimlaneLane(FrozenModel):
-    name: str = Field(min_length=1, description="Lane label shown in the row gutter.")
+    name: NonBlank = Field(description="Lane label shown in the row gutter.")
     id: str | None = Field(
         default=None,
         min_length=1,
@@ -1525,7 +1518,7 @@ class SwimlaneLane(FrozenModel):
 
 
 class SwimlaneColumn(FrozenModel):
-    name: str = Field(min_length=1, description="Column header label.")
+    name: NonBlank = Field(description="Column header label.")
     id: str | None = Field(
         default=None,
         min_length=1,
@@ -1534,16 +1527,10 @@ class SwimlaneColumn(FrozenModel):
         "and a group via `columns`; defaults to `name`. Set it to rename the header without touching "
         "every step/group.",
     )
-    sub: str | None = Field(
+    sub: NonBlankIfSet | None = Field(
         default=None,
         description="Optional secondary caption under the header (e.g. a delivery target or date range).",
     )
-
-    @model_validator(mode="after")
-    def _non_blank_sub(self) -> "SwimlaneColumn":
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("swimlane column sub must not be blank (omit it instead)")
-        return self
 
     @property
     def key(self) -> str:
@@ -1552,7 +1539,7 @@ class SwimlaneColumn(FrozenModel):
 
 
 class SwimlaneGroup(FrozenModel):
-    name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
+    name: NonBlank = Field(description="Group (milestone / delivery) name, shown on its cap.")
     color: BadgeColor = Field(
         description="Cap colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
         "Author-chosen, never auto-assigned: a group's colour carries meaning."
@@ -1574,7 +1561,6 @@ def _first_and_last_index(keys: Iterable[str | None]) -> dict[str, tuple[int, in
 
 
 MAX_SWIMLANE_LANES: Final = 8
-_SwimlaneBareName = Annotated[str, Field(min_length=1)]
 
 
 def _wrap_bare_names(value: Any) -> Any:
@@ -1610,7 +1596,7 @@ class Swimlane(_Block):
         "lanes",
         mode="before",
         json_schema_input_type=Annotated[
-            list[_SwimlaneBareName | SwimlaneLane], Field(min_length=1, max_length=MAX_SWIMLANE_LANES)
+            list[NonBlank | SwimlaneLane], Field(min_length=1, max_length=MAX_SWIMLANE_LANES)
         ],
     )
     @classmethod
@@ -1620,7 +1606,7 @@ class Swimlane(_Block):
     @field_validator(
         "columns",
         mode="before",
-        json_schema_input_type=Annotated[list[_SwimlaneBareName | SwimlaneColumn], Field(min_length=1)],
+        json_schema_input_type=Annotated[list[NonBlank | SwimlaneColumn], Field(min_length=1)],
     )
     @classmethod
     def _wrap_bare_column_names(cls, value: Any) -> Any:
@@ -1796,8 +1782,10 @@ class RequestVariable(FrozenModel):
         description="The token a reader fills, written `{{name}}` in the url, a header value or the "
         "body. ASCII letters, digits, _ and -.",
     )
-    label: str | None = Field(default=None, description="Field label above the input. Defaults to `name`.")
-    example: str | None = Field(
+    label: NonBlankIfSet | None = Field(
+        default=None, description="Field label above the input. Defaults to `name`."
+    )
+    example: NonBlankIfSet | None = Field(
         default=None,
         description="A sample value, prefilled into the input so the request can be run as it stands. "
         "On a `secret` it is placeholder text only and is never prefilled, since a prefilled secret "
@@ -1811,14 +1799,6 @@ class RequestVariable(FrozenModel):
         "from a tab they have filled in does capture it, in the form and in the command. The input is "
         "not masked, because the same value is shown in full in the command right below it.",
     )
-
-    @model_validator(mode="after")
-    def _shape(self) -> "RequestVariable":
-        if self.label is not None and not self.label.strip():
-            raise ValueError("request variable label must not be blank (omit it instead)")
-        if self.example is not None and not self.example.strip():
-            raise ValueError("request variable example must not be blank (omit it instead)")
-        return self
 
 
 class RequestResponse(FrozenModel):
@@ -1871,8 +1851,8 @@ def check_header_map(
 
 
 class RequestCase(FrozenModel):
-    label: str = Field(min_length=1, description="Tab label, and the case's heading when printed.")
-    value: str | None = Field(
+    label: NonBlank = Field(description="Tab label, and the case's heading when printed.")
+    value: NonBlankIfSet | None = Field(
         default=None,
         description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
         "which is what you want when the cases are resource names.",
@@ -1900,7 +1880,7 @@ class RequestCase(FrozenModel):
         "passes. A recorded status decides the tone by itself, so the two are never set together.",
     )
     response: RequestResponse = Field(description="What came back when you ran it.")
-    verdict: str | None = Field(
+    verdict: NonBlankIfSet | None = Field(
         default=None,
         description="Rich-text reading of this response: what you expected, what you got, what it "
         "means. The one part of the block a reader cannot work out for themselves.",
@@ -1908,12 +1888,6 @@ class RequestCase(FrozenModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "RequestCase":
-        if not self.label.strip():
-            raise ValueError("request case label must not be blank")
-        if self.value is not None and not self.value.strip():
-            raise ValueError("request case value must not be blank (omit it to use the label)")
-        if self.verdict is not None and not self.verdict.strip():
-            raise ValueError("request case verdict must not be blank (omit it instead)")
         if self.headers is not None and self.headers_add is not None:
             raise ValueError(
                 "a request case sets headers and headers_add together: headers replaces and "
@@ -1946,7 +1920,7 @@ class _RequestCore(FrozenModel):
     it produced. Shared by a standalone `request` and by a step of a `request_flow`, which differ only
     in where their variables come from."""
 
-    label: str = Field(min_length=1, description="What the call is for, shown in the header.")
+    label: NonBlank = Field(description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
         default=None, description="The HTTP method. Required unless the call runs a `command`."
     )
@@ -1964,7 +1938,7 @@ class _RequestCore(FrozenModel):
         "that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them "
         "with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
     )
-    command_note: str | None = Field(
+    command_note: NonBlankIfSet | None = Field(
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
@@ -1974,7 +1948,7 @@ class _RequestCore(FrozenModel):
         description="Request headers as a map, in the order they should read. A value may carry "
         "`{{variable}}` tokens.",
     )
-    body: str | None = Field(
+    body: NonBlankIfSet | None = Field(
         default=None,
         description="Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential "
         "can sit inside a JSON login payload without ever being written here.",
@@ -2040,10 +2014,6 @@ class _RequestCore(FrozenModel):
                         f"case '{case.label}' sets a value but the request declares no case_variable, "
                         "so there is nothing for it to fill"
                     )
-        if self.body is not None and not self.body.strip():
-            raise ValueError("request body must not be blank (omit it instead)")
-        if self.command_note is not None and not self.command_note.strip():
-            raise ValueError("request command_note must not be blank (omit it instead)")
         check_header_map(self.headers, "request header")
         if self.command is None:
             self._check_composed_call()
@@ -2190,7 +2160,7 @@ class RequestStep(_RequestCore):
 
 class RequestFlow(_VariableOwner, _Block):
     type: Literal["request_flow"]
-    label: str = Field(min_length=1, description="What the flow is for, shown in the block header.")
+    label: NonBlank = Field(description="What the flow is for, shown in the block header.")
     steps: list[RequestStep] = Field(
         min_length=2,
         description="The calls in the order they run. A flow of one step is a `request`, so use that.",
@@ -2252,25 +2222,9 @@ class RequestFlow(_VariableOwner, _Block):
         return self
 
 
-def _refuse_blank(what: str) -> AfterValidator:
-    def refuse(value: str) -> str:
-        if not value.strip():
-            raise ValueError(f"{what} must not be blank")
-        return value
-
-    return AfterValidator(refuse)
-
-
-_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"pattern": r"\S"}
-
-
 class _ToggleBase(_Block):
     type: Literal["toggle"]
-    title: Annotated[str, _refuse_blank("toggle title")] = Field(
-        min_length=1,
-        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
-        description="Summary label shown on the collapsible.",
-    )
+    title: NonBlank = Field(description="Summary label shown on the collapsible.")
     collapsed: bool = Field(
         default=True,
         description="Whether the toggle starts collapsed, as a section does. Set false to open it.",
@@ -2295,11 +2249,7 @@ class Toggle(_ToggleBase):
 
 
 class Tab(FrozenModel):
-    label: Annotated[str, _refuse_blank("tab label")] = Field(
-        min_length=1,
-        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
-        description="The tab's label in the strip, and its heading on paper.",
-    )
+    label: NonBlank = Field(description="The tab's label in the strip, and its heading on paper.")
     tone: Tone | None = Field(
         default=None,
         description="Optional tone: a coloured dot before the label, the way a request case shows its "
@@ -2367,7 +2317,7 @@ RequestLike = Request | RequestStep
 
 class Section(_Block):
     type: Literal["section"]
-    title: str = Field(description="Summary label shown on the collapsible.")
+    title: NonBlank = Field(description="Summary label shown on the collapsible.")
     id: str | None = Field(
         default=None,
         pattern=rf"^{ANCHOR_ID_PATTERN}$",
@@ -2392,7 +2342,7 @@ class Section(_Block):
 
 class Panel(_Block):
     type: Literal["panel"]
-    title: str = Field(min_length=1, description="Panel title, shown in the header band.")
+    title: NonBlank = Field(description="Panel title, shown in the header band.")
     blocks: list[FullWidthBlock] = Field(
         min_length=1,
         description="Blocks inside the panel — any block except another panel, section, grid, or "
@@ -2460,11 +2410,10 @@ def _check_span_sum(cells: Sequence[GridCell | InnerGridCell]) -> None:
 
 
 class WalkthroughStep(FrozenModel):
-    label: str = Field(
-        min_length=1,
+    label: NonBlank = Field(
         description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
     )
-    sub: str | None = Field(
+    sub: NonBlankIfSet | None = Field(
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(
@@ -2478,14 +2427,6 @@ class WalkthroughStep(FrozenModel):
         description="The step's detail (paragraphs, lists, code, callouts, tables, or a `grid` for a "
         "two-column step like Action | Script), rendered in the column beside the numbered title.",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "WalkthroughStep":
-        if not self.label.strip():
-            raise ValueError("walkthrough step label must not be blank")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("walkthrough step sub must not be blank (omit it instead)")
-        return self
 
 
 class Walkthrough(_Block):

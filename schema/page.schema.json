@@ -51,6 +51,7 @@
         "label": {
           "description": "Group label, shown in the row's gutter.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -423,6 +424,7 @@
         "label": {
           "description": "Delta text shown beside the value, e.g. '+12%' or '0.3s'.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -604,6 +606,7 @@
         "label": {
           "description": "Series name \u2014 shown in the legend.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -660,6 +663,7 @@
         "label": {
           "description": "Slice name \u2014 shown in the legend.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -942,6 +946,7 @@
         "value": {
           "description": "Cell text (for a \u2713/\u2717 pass a bare true/false instead).",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Value",
           "type": "string"
         },
@@ -981,6 +986,7 @@
         "feature": {
           "description": "Row label \u2014 the attribute being compared.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Feature",
           "type": "string"
         },
@@ -1017,6 +1023,7 @@
         "term": {
           "description": "The label/term, rendered prominent (e.g. 'Action').",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Term",
           "type": "string"
         },
@@ -1289,6 +1296,7 @@
         "label": {
           "description": "Short stage name \u2014 the node label.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -1646,6 +1654,7 @@
         "text": {
           "description": "Heading text; also the TOC entry at level 2.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -1677,6 +1686,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -2383,8 +2394,10 @@
         "items": {
           "description": "Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest sub-points (nested lists inherit the parent's style; up to 4 levels deep).",
           "items": {
-            "anyOf": [
+            "oneOf": [
               {
+                "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -2410,6 +2423,7 @@
         "text": {
           "description": "The point's rich-text content.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -2429,8 +2443,10 @@
           "default": [],
           "description": "Optional nested sub-points, rendered as an indented list in the parent's style.",
           "items": {
-            "anyOf": [
+            "oneOf": [
               {
+                "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -2511,6 +2527,8 @@
         "rows": {
           "description": "Row labels, top to bottom (the row axis).",
           "items": {
+            "minLength": 1,
+            "pattern": "\\S",
             "type": "string"
           },
           "minItems": 1,
@@ -2520,6 +2538,8 @@
         "columns": {
           "description": "Column headers, left to right (the column axis).",
           "items": {
+            "minLength": 1,
+            "pattern": "\\S",
             "type": "string"
           },
           "minItems": 1,
@@ -2566,18 +2586,22 @@
         "row": {
           "description": "Which row this cell sits in \u2014 one of the block's `rows`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Row",
           "type": "string"
         },
         "col": {
           "description": "Which column this cell sits in \u2014 one of the block's `columns`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Col",
           "type": "string"
         },
         "badge": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -2614,6 +2638,8 @@
         "label": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -2836,6 +2862,7 @@
         "body": {
           "description": "Rich-text aside; blank lines split paragraphs.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Body",
           "type": "string"
         },
@@ -2994,6 +3021,7 @@
         "title": {
           "description": "Panel title, shown in the header band.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },
@@ -3326,6 +3354,7 @@
         "label": {
           "description": "Label shown inside the segment.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3367,6 +3396,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3432,6 +3463,7 @@
         "text": {
           "description": "Rich-text source description (e.g. a doc name + page).",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -3539,6 +3571,7 @@
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3594,6 +3627,8 @@
         "command_note": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3615,6 +3650,8 @@
         "body": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3718,12 +3755,15 @@
         "label": {
           "description": "Tab label, and the case's heading when printed.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
         "value": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3806,6 +3846,8 @@
         "verdict": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3872,6 +3914,7 @@
         "label": {
           "description": "What the flow is for, shown in the block header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3960,6 +4003,7 @@
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -4015,6 +4059,8 @@
         "command_note": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4036,6 +4082,8 @@
         "body": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4097,6 +4145,8 @@
         "label": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4110,6 +4160,8 @@
         "example": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4186,6 +4238,8 @@
         },
         "title": {
           "description": "Summary label shown on the collapsible.",
+          "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },
@@ -4467,6 +4521,7 @@
             "anyOf": [
               {
                 "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -4485,6 +4540,7 @@
             "anyOf": [
               {
                 "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -4529,6 +4585,7 @@
         "name": {
           "description": "Column header label.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4550,6 +4607,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4573,6 +4632,7 @@
         "name": {
           "description": "Group (milestone / delivery) name, shown on its cap.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4615,6 +4675,7 @@
         "name": {
           "description": "Lane label shown in the row gutter.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4646,24 +4707,28 @@
         "lane": {
           "description": "Which lane this step sits in \u2014 one of the block's `lanes`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Lane",
           "type": "string"
         },
         "col": {
           "description": "Which column (sprint) this step sits in \u2014 one of the block's `columns`. Two steps sharing a lane/col stack in that cell.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Col",
           "type": "string"
         },
         "n": {
           "description": "The number shown in the step's cell \u2014 a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "N",
           "type": "string"
         },
         "label": {
           "description": "Step label, shown beside the number.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -5530,12 +5595,15 @@
         "label": {
           "description": "Step title \u2014 a few words to a short sentence; it wraps across lines, so it can be long.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {

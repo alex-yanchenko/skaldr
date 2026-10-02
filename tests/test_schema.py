@@ -28,10 +28,26 @@ def schema_errors(document: Any) -> list[str]:
     return [error.message for error in SCHEMA_VALIDATOR.iter_errors(document)]
 
 
+def _branch_the_discriminator_picks(error: ValidationError) -> list[ValidationError]:
+    schema = cast("dict[str, Any]", error.schema)
+    discriminator = schema.get("discriminator")
+    instance: object = error.instance
+    if discriminator is None or not isinstance(instance, dict):
+        return list(error.context)
+    instance = cast("dict[str, Any]", instance)
+    picked = discriminator["mapping"].get(instance.get(discriminator["propertyName"]))
+    branches = cast("list[dict[str, Any]]", error.validator_value)
+    return [
+        branch_error
+        for branch_error in error.context
+        if branches[cast("int", branch_error.relative_schema_path[0])].get("$ref") == picked
+    ]
+
+
 def _leaf_errors(errors: Iterable[ValidationError]) -> Iterator[ValidationError]:
     for error in errors:
         if error.context:
-            yield from _leaf_errors(error.context)
+            yield from _leaf_errors(_branch_the_discriminator_picks(error))
         else:
             yield error
 
@@ -94,15 +110,15 @@ def test_a_swimlane_in_either_documented_form_passes_both_the_build_and_the_sche
     assert schema_errors(document) == []
 
 
-def test_a_blank_bare_string_lane_is_refused_by_both_the_build_and_the_schema() -> None:
+def test_an_empty_bare_string_lane_is_refused_by_both_the_build_and_the_schema() -> None:
     document = make_report(blocks=[make_swimlane([SWIMLANE_STEP], lanes=["Product", ""])])
 
     with pytest.raises(ReportError) as raised:
         parse_report(document)
 
     assert (str(raised.value), schema_messages_at(document, ("blocks", 0, "lanes", 1))) == (
-        "invalid content data: blocks.0.swimlane.lanes.1.name: String should have at least 1 character",
-        {"'' should be non-empty", "'' is not of type 'object'"},
+        "invalid content data: blocks.0.swimlane.lanes.1.name: Value error, must not be blank",
+        {"'' should be non-empty", "'' does not match '\\\\S'", "'' is not of type 'object'"},
     )
 
 
@@ -207,6 +223,117 @@ def test_a_bounded_number_at_its_edge_passes_both_the_build_and_the_schema(block
     ],
 )
 def test_the_schema_refuses_an_out_of_range_number_as_the_build_does(
+    block: dict[str, Any],
+    location: str,
+    build_message: str,
+    schema_path: SchemaPath,
+    schema_messages: set[str],
+) -> None:
+    document = make_report(blocks=[block])
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(document)
+
+    assert (
+        str(raised.value),
+        SCHEMA_VALIDATOR.is_valid(document),
+        schema_messages_at(document, schema_path),
+    ) == (f"invalid content data: {location}: {build_message}", False, schema_messages)
+
+
+SPACES = "   "
+SPACES_REFUSED = "'   ' does not match '\\\\S'"
+SPACES_NOT_AN_OBJECT = "'   ' is not of type 'object'"
+EMPTY_REFUSED = {"'' should be non-empty", "'' does not match '\\\\S'"}
+TEXT_BODY = [{"type": "text", "body": "x"}]
+
+
+@pytest.mark.parametrize(
+    ("block", "location", "build_message", "schema_path", "schema_messages"),
+    [
+        pytest.param(
+            {"type": "section", "title": "", "blocks": TEXT_BODY},
+            "blocks.0.section.title",
+            "Value error, must not be blank",
+            ("blocks", 0, "title"),
+            EMPTY_REFUSED,
+            id="empty-section-title",
+        ),
+        pytest.param(
+            {"type": "section", "title": SPACES, "blocks": TEXT_BODY},
+            "blocks.0.section.title",
+            "Value error, must not be blank",
+            ("blocks", 0, "title"),
+            {SPACES_REFUSED},
+            id="blank-section-title",
+        ),
+        pytest.param(
+            {"type": "panel", "title": SPACES, "blocks": TEXT_BODY},
+            "blocks.0.panel.title",
+            "Value error, must not be blank",
+            ("blocks", 0, "title"),
+            {SPACES_REFUSED},
+            id="blank-panel-title",
+        ),
+        pytest.param(
+            {"type": "heading", "text": SPACES},
+            "blocks.0.heading.text",
+            "Value error, must not be blank",
+            ("blocks", 0, "text"),
+            {SPACES_REFUSED},
+            id="blank-heading-text",
+        ),
+        pytest.param(
+            {"type": "heading", "text": "H", "sub": SPACES},
+            "blocks.0.heading.sub",
+            "Value error, must not be blank (omit it instead)",
+            ("blocks", 0, "sub"),
+            {SPACES_REFUSED, f"{SPACES!r} is not of type 'null'"},
+            id="blank-heading-sub",
+        ),
+        pytest.param(
+            {"type": "list", "items": ["a", ""]},
+            "blocks.0.list.items.1.str",
+            "Value error, must not be blank",
+            ("blocks", 0, "items", 1),
+            {*EMPTY_REFUSED, "'' is not of type 'object'"},
+            id="empty-list-point",
+        ),
+        pytest.param(
+            {"type": "list", "items": ["a", SPACES]},
+            "blocks.0.list.items.1.str",
+            "Value error, must not be blank",
+            ("blocks", 0, "items", 1),
+            {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
+            id="blank-list-point",
+        ),
+        pytest.param(
+            {"type": "list", "items": [{"text": "a", "items": [SPACES]}]},
+            "blocks.0.list.items.0.ListItem.items.0.str",
+            "Value error, must not be blank",
+            ("blocks", 0, "items", 0, "items", 0),
+            {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
+            id="blank-nested-list-point",
+        ),
+        pytest.param(
+            {"type": "list", "items": [{"text": SPACES}]},
+            "blocks.0.list.items.0.ListItem.text",
+            "Value error, must not be blank",
+            ("blocks", 0, "items", 0, "text"),
+            {SPACES_REFUSED},
+            id="blank-list-item-text",
+        ),
+        pytest.param(
+            make_swimlane([SWIMLANE_STEP], lanes=["Product", SPACES]),
+            "blocks.0.swimlane.lanes.1.name",
+            "Value error, must not be blank",
+            ("blocks", 0, "lanes", 1),
+            {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
+            id="blank-bare-swimlane-lane",
+        ),
+    ],
+)
+def test_the_schema_refuses_blank_text_as_the_build_does(
     block: dict[str, Any],
     location: str,
     build_message: str,

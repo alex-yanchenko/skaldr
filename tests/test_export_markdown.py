@@ -590,12 +590,6 @@ def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
     assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
 
 
-def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
-    block = {"type": "list", "items": ["", "two"]}
-
-    assert markdown_of([block]) == "-\n- two\n"
-
-
 @pytest.mark.parametrize(
     ("kind", "markdown"),
     [

@@ -196,15 +196,25 @@ def test_badge_row_label_may_not_accompany_groups() -> None:
 
 
 @pytest.mark.parametrize(
-    "group",
+    ("group", "message"),
     [
-        pytest.param({"label": "Sev", "items": []}, id="empty-items"),
-        pytest.param({"label": "", "items": [{"label": "X", "tone": "blue"}]}, id="blank-label"),
+        pytest.param(
+            {"label": "Sev", "items": []},
+            "items: List should have at least 1 item after validation, not 0",
+            id="empty-items",
+        ),
+        pytest.param(
+            {"label": "", "items": [{"label": "X", "tone": "blue"}]},
+            "label: Value error, must not be blank",
+            id="blank-label",
+        ),
     ],
 )
-def test_badge_group_rejects_empty_items_and_blank_label(group: dict[str, object]) -> None:
-    with pytest.raises(ReportError, match=r"at least 1 (item|character)"):
+def test_badge_group_rejects_empty_items_and_blank_label(group: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[{"type": "badge_row", "groups": [group]}]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.badge_row.groups.0.{message}"
 
 
 def test_undeclared_badge_reference_inside_a_group_is_rejected() -> None:
@@ -472,7 +482,9 @@ def test_flow_requires_at_least_two_steps() -> None:
 def test_flow_step_label_must_not_be_blank() -> None:
     block = {"type": "flow", "steps": [{"label": "  "}, {"label": "B"}]}
 
-    with pytest.raises(ReportError, match=r"flow step label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.flow\.steps\.0\.label: Value error, must not be blank$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -862,9 +874,7 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
-    assert (
-        str(raised.value) == f"invalid content data: {location}: Value error, toggle title must not be blank"
-    )
+    assert str(raised.value) == f"invalid content data: {location}: Value error, must not be blank"
 
 
 @pytest.mark.parametrize(
@@ -1088,17 +1098,17 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
         ),
         pytest.param(
             make_tabs(make_tab("  ", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
             id="blank-label",
         ),
         pytest.param(
             make_tabs(make_tab("\t \n", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
             id="whitespace-label",
         ),
         pytest.param(
             make_tabs(make_tab("", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: String should have at least 1 character",
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
             id="empty-label",
         ),
         pytest.param(
@@ -1382,7 +1392,9 @@ def test_walkthrough_step_requires_at_least_one_detail_block() -> None:
 def test_walkthrough_step_label_must_not_be_blank() -> None:
     block = {"type": "walkthrough", "steps": [{"label": "  ", "detail": [{"type": "text", "body": "x"}]}]}
 
-    with pytest.raises(ReportError, match=r"walkthrough step label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.walkthrough\.steps\.0\.label: Value error, must not be blank$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -1941,7 +1953,9 @@ def test_range_segment_span_rejects_non_finite() -> None:
 
 
 def test_range_segment_label_must_not_be_blank() -> None:
-    with pytest.raises(ReportError, match=r"range segment label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.range\.segments\.0\.label: Value error, must not be blank$"
+    ):
         parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "   ", "span": 1}]}]))
 
 
@@ -2063,12 +2077,14 @@ def test_blank_heading_is_rejected() -> None:
 
 
 def test_blank_heading_sub_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"heading sub must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.heading\.sub: Value error, must not be blank \(omit it instead\)$"
+    ):
         parse_report(make_report(blocks=[{"type": "heading", "text": "Overview", "sub": "  "}]))
 
 
 @pytest.mark.parametrize(
-    ("block", "message"),
+    ("block", "location"),
     [
         (
             {
@@ -2077,24 +2093,28 @@ def test_blank_heading_sub_is_rejected() -> None:
                 "columns": [{"name": "S1", "sub": "  "}],
                 "steps": [{"lane": "Eng", "col": "S1", "n": "1", "label": "Build"}],
             },
-            "swimlane column sub must not be blank",
+            "blocks.0.swimlane.columns.0.sub",
         ),
         (
             {
                 "type": "walkthrough",
                 "steps": [{"label": "Step", "sub": "  ", "detail": [{"type": "text", "body": "x"}]}],
             },
-            "walkthrough step sub must not be blank",
+            "blocks.0.walkthrough.steps.0.sub",
         ),
         (
             {"type": "range", "segments": [{"label": "Q3", "span": 1, "sub": "  "}]},
-            "range segment sub must not be blank",
+            "blocks.0.range.segments.0.sub",
         ),
     ],
 )
-def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], message: str) -> None:
-    with pytest.raises(ReportError, match=message):
+def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        f"invalid content data: {location}: Value error, must not be blank (omit it instead)"
+    )
 
 
 def test_reconcile_without_handled_bucket_passes() -> None:
@@ -3014,25 +3034,33 @@ def test_matrix_undeclared_badge_is_rejected() -> None:
 
 def test_matrix_cell_blank_badge_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "badge": "  "}])
-    with pytest.raises(ReportError, match=r"matrix cell badge must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.matrix\.cells\.0\.badge: Value error, must not be blank \(omit it instead\)$",
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_cell_blank_label_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "  "}])
-    with pytest.raises(ReportError, match=r"matrix cell label must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.matrix\.cells\.0\.label: Value error, must not be blank \(omit it instead\)$",
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_cell_whitespace_row_is_rejected() -> None:
     block = _matrix([{"row": "  ", "col": "c1", "label": "x"}])
-    with pytest.raises(ReportError, match=r"matrix cell row must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.matrix\.cells\.0\.row: Value error, must not be blank$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_blank_axis_label_is_rejected() -> None:
     block = _matrix([{"row": "r2", "col": "c1", "label": "x"}], rows=["  ", "r2"])
-    with pytest.raises(ReportError, match=r"matrix row labels must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.matrix\.rows\.0: Value error, must not be blank$"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3313,7 +3341,9 @@ def test_swimlane_columns_must_be_unique() -> None:
 def test_swimlane_step_field_may_not_be_blank(field: str) -> None:
     step = {"lane": "A", "col": "C1", "n": "1", "label": "x", field: "  "}
     block = _swimlane(lanes=["A"], columns=["C1"], steps=[step])
-    with pytest.raises(ReportError, match=rf"swimlane step {field} must not be blank"):
+    with pytest.raises(
+        ReportError, match=rf"blocks\.0\.swimlane\.steps\.0\.{field}: Value error, must not be blank$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3968,7 +3998,10 @@ def test_a_command_note_on_a_request_that_builds_a_curl_is_rejected() -> None:
 
 
 def test_a_blank_command_note_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"command_note must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.request\.command_note: Value error, must not be blank \(omit it instead\)$",
+    ):
         parse_report(make_report(blocks=[make_command_request(command_note="   ")]))
 
 

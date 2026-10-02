@@ -23,6 +23,11 @@ the path, fix, re-run. Add an output flag and the check becomes a gate on that r
 --strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
 at all if the check fails.
 
+A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
+and labels the schema marks with `pattern: \S` must hold visible text. An empty or whitespace-only
+one fails the build at its path with `must not be blank`; an optional one left blank says `must not
+be blank (omit it instead)`, so leave the field out.
+
 ## `meta`
 
 ```yaml
