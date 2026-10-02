@@ -31,6 +31,7 @@ from tests.factories import (
     make_command_request,
     make_flow,
     make_grid,
+    make_label_table,
     make_reconciled_table,
     make_report,
     make_step,
@@ -3937,6 +3938,23 @@ def test_table_without_widths_keeps_default_colgroup() -> None:
     html = render_html(parse_report(make_report(blocks=[table])))
 
     assert '<colgroup><col><col style="width:10%"></colgroup>' in html
+
+
+@pytest.mark.parametrize(
+    ("count", "width"),
+    [
+        pytest.param(9, "10", id="nine-numbers-keep-the-default"),
+        pytest.param(10, "9.1", id="ten-numbers-scale-to-elevenths"),
+        pytest.param(12, "7.7", id="twelve-numbers-scale-to-thirteenths"),
+    ],
+)
+def test_number_columns_too_many_for_their_default_width_scale_down_beside_the_label(
+    count: int, width: str
+) -> None:
+    html = render_html(parse_report(make_report(blocks=[make_label_table(["number"] * count)])))
+
+    cols = f'<col style="width:{width}%">' * count
+    assert f"<colgroup><col>{cols}</colgroup>" in html
 
 
 def test_subrows_render_compactly_scoped_over_the_main_cell_padding() -> None:

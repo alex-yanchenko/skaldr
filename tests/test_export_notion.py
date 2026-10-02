@@ -7,7 +7,13 @@ import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
-from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
+from skaldr.export.notion import (
+    NOTION_DEFAULT_PAGE_WIDTH_PX,
+    NotionChunks,
+    chunk_notion,
+    notion_inline,
+    render_notion,
+)
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
@@ -49,6 +55,7 @@ from tests.factories import (
     heading_sections,
     lowered,
     make_command_request,
+    make_label_table,
     make_report,
     make_table,
     notion_of,
@@ -392,6 +399,26 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
         ),
         pytest.param(
             [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 3},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="101">\n\t\t<col width="304">\n'
+            '\t\t<col width="303">\n\t</colgroup>\n',
+            id="quotas-rounding-each-to-707-gain-the-missing-pixel",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="142">\n\t\t<col width="141">\n'
+            '\t\t<col width="425">\n\t</colgroup>\n',
+            id="quotas-rounding-each-to-709-lose-the-extra-pixel",
+        ),
+        pytest.param(
+            [
                 {"key": "a", "label": "A"},
                 {"key": "b", "label": "B", "tone": "danger"},
                 {"key": "c", "label": "C"},
@@ -449,6 +476,32 @@ def test_auto_columns_share_what_a_number_column_default_width_leaves() -> None:
         "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>10</td>\n\t</tr>\n"
         "</table>\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("count", "widths"),
+    [
+        pytest.param(9, [71] * 8 + [70] * 2, id="nine-numbers-share-tenths-with-the-label"),
+        pytest.param(10, [64] + [65] * 4 + [64] * 6, id="ten-numbers-share-elevenths-with-the-label"),
+        pytest.param(12, [55] * 6 + [54] * 7, id="twelve-numbers-share-thirteenths-with-the-label"),
+    ],
+)
+def test_number_columns_too_many_for_their_default_width_leave_the_label_a_positive_width(
+    count: int, widths: list[int]
+) -> None:
+    notion = notion_of([make_label_table(["number"] * count)])
+
+    cols = "".join(f'\t\t<col width="{width}">\n' for width in widths)
+    header = "".join(f"\t\t<td>**C{index}**</td>\n" for index in range(count))
+    cells = "\t\t<td>1</td>\n" * count
+    assert notion == (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"\t<colgroup>\n{cols}\t</colgroup>\n"
+        f"\t<tr>\n\t\t<td>**Label**</td>\n{header}\t</tr>\n"
+        f"\t<tr>\n\t\t<td>x</td>\n{cells}\t</tr>\n"
+        "</table>\n"
+    )
+    assert sum(widths) == NOTION_DEFAULT_PAGE_WIDTH_PX
 
 
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:

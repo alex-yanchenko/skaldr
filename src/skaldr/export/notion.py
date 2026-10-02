@@ -153,7 +153,7 @@ def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
     auto_count = shares.count(None)
     if auto_count == len(shares):
         return [None] * len(shares)
-    auto_share = max(0.0, 1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
+    auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
     weights = [auto_share if share is None else share for share in shares]
     return _apportioned(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
 

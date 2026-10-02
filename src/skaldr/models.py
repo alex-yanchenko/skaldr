@@ -1179,7 +1179,13 @@ class Table(_Block):
         weight_total = sum(column.width or 0 for column in columns)
         if weight_total:
             return tuple((column.width or 0) / weight_total for column in columns)
-        return tuple(DEFAULT_COLUMN_WIDTH_SHARES.get(column.kind) for column in columns)
+        defaults = [DEFAULT_COLUMN_WIDTH_SHARES.get(column.kind) for column in columns]
+        sized = [share for share in defaults if share is not None]
+        if not sized:
+            return tuple(defaults)
+        room_asked = sum(sized) + defaults.count(None) * max(sized)
+        scale = min(1.0, 1 / room_asked)
+        return tuple(None if share is None else share * scale for share in defaults)
 
     @property
     def title_badges(self) -> list[Column]:

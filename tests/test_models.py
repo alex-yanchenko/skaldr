@@ -48,6 +48,7 @@ from tests.factories import (
     make_command_request,
     make_flow,
     make_grid,
+    make_label_table,
     make_reconciled_table,
     make_report,
     make_request,
@@ -1959,6 +1960,32 @@ def test_a_table_gives_each_cell_column_its_width_share(
 
     assert isinstance(block, Table)
     assert block.column_width_shares == shares
+
+
+@pytest.mark.parametrize(
+    ("kinds", "shares"),
+    [
+        pytest.param(["number"] * 9, (None, *[0.1] * 9), id="nine-numbers-leave-the-label-one-default-width"),
+        pytest.param(["number"] * 10, (None, *[1 / 11] * 10), id="ten-numbers-scale-to-elevenths"),
+        pytest.param(["number"] * 12, (None, *[1 / 13] * 12), id="twelve-numbers-scale-to-thirteenths"),
+        pytest.param(["indicator"] * 13, (None, *[0.07] * 13), id="thirteen-indicators-still-fit"),
+        pytest.param(
+            ["indicator"] * 14, (None, *[1 / 15] * 14), id="fourteen-indicators-scale-to-fifteenths"
+        ),
+        pytest.param(
+            ["number"] * 8 + ["indicator"] * 2,
+            (None, *[0.1 / 1.04] * 8, *[0.07 / 1.04] * 2),
+            id="mixed-kinds-keep-the-label-as-wide-as-a-number-column",
+        ),
+    ],
+)
+def test_kind_defaults_scale_down_so_an_auto_column_keeps_one_default_width(
+    kinds: list[str], shares: tuple[float | None, ...]
+) -> None:
+    block = parse_report(make_report(blocks=[make_label_table(kinds)])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.column_width_shares == pytest.approx(shares)
 
 
 def test_a_table_column_takes_a_tone_and_a_palette_alias_names_the_same_tone() -> None:
