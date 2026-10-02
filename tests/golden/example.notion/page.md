@@ -285,6 +285,33 @@ pie
     "System defect" : 760
     "Vendor" : 400
 ```
+<table fit-page-width="true" header-row="true">
+	<tr>
+		<td>**Slice**</td>
+		<td>**Value**</td>
+		<td>**Share**</td>
+	</tr>
+	<tr color="green_bg">
+		<td>Fixed on floor</td>
+		<td>900</td>
+		<td>44%</td>
+	</tr>
+	<tr color="yellow_bg">
+		<td>System defect</td>
+		<td>760</td>
+		<td>37%</td>
+	</tr>
+	<tr color="red_bg">
+		<td>Vendor</td>
+		<td>400</td>
+		<td>19%</td>
+	</tr>
+	<tr>
+		<td>**Total**</td>
+		<td>**2,060**</td>
+		<td></td>
+	</tr>
+</table>
 ## Count methods compared
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>

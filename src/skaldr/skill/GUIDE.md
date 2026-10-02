@@ -936,13 +936,13 @@ case, where the page is shared as a URL an agent later has to read back.
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
 | `flow`, `fan` | a Mermaid diagram, plus a list of any step points or badges it can't show | the same |
-| `chart` | a Mermaid pie or xy chart over its data table; a stacked or several-series bar chart is the table alone | the same |
+| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `grid` | its cells one after another | native columns |
 | badges | bold labels | coloured chips |
-| tones on table cells, meters, cards, ranges, walkthrough steps | dropped | block and cell colours |
+| tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
 

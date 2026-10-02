@@ -1,7 +1,9 @@
 from collections.abc import Sequence
 from itertools import pairwise
+from typing import Final
 
 from skaldr import compute
+from skaldr.charts import chart_legend, donut_total, format_total
 from skaldr.export.inline import bold, one_line
 from skaldr.export.lower.context import Lowering, bullets, plain_cells, spaced, with_bold_label
 from skaldr.export.tree import (
@@ -20,6 +22,10 @@ from skaldr.export.tree import (
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
 from skaldr.richtext import visible_text
+
+SERIES_COLUMN: Final = "Series"
+DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
+TOTAL_LABEL: Final = "Total"
 
 
 def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") -> GraphNode:
@@ -67,18 +73,32 @@ def lower_fan(block: Fan, lowering: Lowering) -> list[Node]:
     return [Diagram(graph, _supplement([block.hub, *block.spokes], lowering))]
 
 
+def _donut_table(block: Chart) -> TableNode:
+    rows = tuple(
+        TableRow(plain_cells(item.label, compute.fmt(item.value), legend["note"] or ""), item.tone)
+        for item, legend in zip(block.slices, chart_legend(block), strict=True)
+    )
+    total = TableRow(plain_cells(TOTAL_LABEL, format_total(donut_total(block)), ""), emphasis="total")
+    return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total))
+
+
+def _mermaid_cannot_label_its_series(block: Chart) -> bool:
+    return block.stacked or len(block.series) > 1
+
+
 def lower_chart(block: Chart) -> list[Node]:
     title: list[Node] = [Paragraph(bold(block.title))] if block.title else []
     if block.variant == "donut":
-        return [*title, Diagram(PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices)))]
+        pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
+        return [*title, Diagram(pie, (_donut_table(block),))]
     table = TableNode(
-        plain_cells("Series", *block.categories),
+        plain_cells(SERIES_COLUMN, *block.categories),
         tuple(
             TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
             for series in block.series
         ),
     )
-    if block.stacked or (block.variant == "bar" and len(block.series) > 1):
+    if _mermaid_cannot_label_its_series(block):
         return [*title, table]
     chart = XYChart(
         "bar" if block.variant == "bar" else "line",

@@ -162,12 +162,51 @@ def test_a_fan_points_its_edges_the_way_it_says(direction: str, edges: tuple[Gra
     )
 
 
-def test_a_donut_is_a_pie_and_a_line_chart_keeps_its_table_with_series_tones() -> None:
+def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
     donut = {
         "type": "chart",
         "variant": "donut",
-        "slices": [{"label": "A", "value": 3}, {"label": "B", "value": 1}],
+        "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1.5}],
     }
+
+    assert lowered([donut]) == (
+        Diagram(
+            PieChart((PieSlice("A", 3), PieSlice("B", 1.5))),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "3", "67%"), "success"),
+                        TableRow(_cells("B", "1.5", "33%")),
+                        TableRow(_cells("Total", "4.5", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_titled_donut_writes_its_title_above_the_pie() -> None:
+    donut = {"type": "chart", "variant": "donut", "title": "Mix", "slices": [{"label": "A", "value": 1200}]}
+
+    assert lowered([donut]) == (
+        Paragraph(bold("Mix")),
+        Diagram(
+            PieChart((PieSlice("A", 1200),)),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "1,200", "100%")),
+                        TableRow(_cells("Total", "1,200", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> None:
     line = {
         "type": "chart",
         "variant": "line",
@@ -176,8 +215,7 @@ def test_a_donut_is_a_pie_and_a_line_chart_keeps_its_table_with_series_tones() -
         "series": [{"label": "x", "tone": "danger", "values": [1, 2]}],
     }
 
-    assert lowered([donut, line]) == (
-        Diagram(PieChart((PieSlice("A", 3), PieSlice("B", 1)))),
+    assert lowered([line]) == (
         Paragraph(bold("Open")),
         Diagram(
             XYChart("line", ("Q1", "Q2"), ((1, 2),)),
@@ -202,21 +240,29 @@ def test_an_untitled_single_series_bar_chart_is_a_bar_diagram_over_its_table() -
     )
 
 
+TWO_SERIES: list[dict[str, Any]] = [{"label": "x", "values": [1]}, {"label": "y", "values": [2]}]
+
+
 @pytest.mark.parametrize(
-    "stacked",
-    [pytest.param(True, id="stacked"), pytest.param(False, id="grouped-bars-would-overlap-in-mermaid")],
+    ("variant", "stacked", "series", "rows"),
+    [
+        pytest.param("bar", True, TWO_SERIES, [("x", "1"), ("y", "2")], id="stacked-bars"),
+        pytest.param(
+            "bar", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="grouped-bars-would-overlap-in-mermaid"
+        ),
+        pytest.param(
+            "line", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="lines-would-have-no-legend-in-mermaid"
+        ),
+        pytest.param("bar", True, TWO_SERIES[:1], [("x", "1")], id="stacked-single-bar"),
+    ],
 )
-def test_a_bar_chart_with_several_series_is_its_table_alone(stacked: bool) -> None:
-    chart = {
-        "type": "chart",
-        "variant": "bar",
-        "stacked": stacked,
-        "categories": ["Q1"],
-        "series": [{"label": "x", "values": [1]}, {"label": "y", "values": [2]}],
-    }
+def test_a_chart_with_several_series_or_stacked_bars_is_its_table_alone(
+    variant: str, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
+) -> None:
+    chart = {"type": "chart", "variant": variant, "stacked": stacked, "categories": ["Q1"], "series": series}
 
     assert lowered([chart]) == (
-        TableNode(_cells("Series", "Q1"), (TableRow(_cells("x", "1")), TableRow(_cells("y", "2")))),
+        TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),
     )
 
 

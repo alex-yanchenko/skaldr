@@ -245,6 +245,13 @@ pie
     "Vendor" : 400
 ```
 
+| Slice | Value | Share |
+| --- | --- | --- |
+| Fixed on floor | 900 | 44% |
+| System defect | 760 | 37% |
+| Vendor | 400 | 19% |
+| **Total** | **2,060** |  |
+
 ## Count methods compared
 
 |  | ★ Full cycle | Sampling | Continuous |
