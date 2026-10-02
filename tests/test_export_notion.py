@@ -214,6 +214,8 @@ def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
         pytest.param("# not a heading", "\\# not a heading", id="hash"),
         pytest.param("1. not a list", "1\\. not a list", id="ordered"),
         pytest.param("--- not a rule", "\\--- not a rule", id="rule"),
+        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
+        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:

@@ -469,6 +469,8 @@ def test_a_grid_becomes_its_cells_in_order() -> None:
         pytest.param("####### x", "####### x", id="seven-hashes-are-no-heading"),
         pytest.param("+++", "\\+++", id="plus-run"),
         pytest.param("1234567890. x", "1234567890. x", id="ten-digit-ordinal-is-no-list"),
+        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
+        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
