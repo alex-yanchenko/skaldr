@@ -995,16 +995,24 @@ def test_a_check_glyph_is_a_tick_or_a_cross() -> None:
 
 
 def test_a_decision_glyph_is_a_tick_for_decided_and_a_question_mark_for_open() -> None:
-    assert (decision_glyph(decided=True), decision_glyph(decided=False)) == ("✅", "❓")
+    assert (decision_glyph(decided=True), decision_glyph(decided=False)) == ("☑️", "❓")
 
 
-def test_a_numbered_list_keeps_its_start_and_its_nested_list_counts_from_one() -> None:
+def test_a_decided_glyph_differs_from_the_done_status_and_the_checked_glyphs() -> None:
+    assert decision_glyph(decided=True) not in {status_glyph("done"), check_glyph(checked=True)}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [pytest.param({}, id="numbering-left-out"), pytest.param({"numbering": "decimal"}, id="decimal")],
+)
+def test_a_decimal_list_keeps_its_start_and_its_nested_list_counts_from_one(options: dict[str, Any]) -> None:
     block = {
         "type": "list",
         "style": "number",
         "start": 3,
-        "numbering": "roman",
         "items": [{"text": "a", "items": ["b"]}],
+        **options,
     }
 
     assert lowered([block]) == (
@@ -1012,6 +1020,39 @@ def test_a_numbered_list_keeps_its_start_and_its_nested_list_counts_from_one() -
             "number",
             (ListEntry((Plain("a"),), children=(ListNode("number", (ListEntry((Plain("b"),)),)),)),),
             start=3,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("numbering", "labels"),
+    [
+        pytest.param("roman", ("iv. ", "v. ", "i. "), id="roman"),
+        pytest.param("letters", ("d. ", "e. ", "a. "), id="letters"),
+    ],
+)
+def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_list_starts_over(
+    numbering: str, labels: tuple[str, str, str]
+) -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 4,
+        "numbering": numbering,
+        "items": ["a", {"text": "b", "items": ["c"]}],
+    }
+    first, second, nested = labels
+
+    assert lowered([block]) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry((Plain(first), Plain("a"))),
+                ListEntry(
+                    (Plain(second), Plain("b")),
+                    children=(ListNode("bullet", (ListEntry((Plain(nested), Plain("c"))),)),),
+                ),
+            ),
         ),
     )
 
@@ -1526,6 +1567,7 @@ def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:
                 TableRow((TableCell(italic(plain("none"))), TableCell(()))),
                 TableRow(_cells("Total", "2"), emphasis="total"),
             ),
+            columns=(TableColumn(), TableColumn(share=0.1)),
         ),
     )
 
@@ -1546,6 +1588,7 @@ def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -
                 TableRow((TableCell((Plain("3"),)), TableCell((Plain("y"),)))),
                 TableRow(_cells("5", "Total"), emphasis="total"),
             ),
+            columns=(TableColumn(share=0.1), TableColumn()),
         ),
     )
 
@@ -1601,6 +1644,7 @@ def test_a_reconciled_table_shows_its_rollup_and_reconcile_line_which_the_footer
                     "danger",
                 ),
             ),
+            columns=(TableColumn(), TableColumn(share=0.07), TableColumn(share=0.1)),
         ),
         Paragraph((*bold("Owners"), Plain(": "), Chip("api", "blue"), Plain(" "), Plain("1"))),
         Paragraph((Plain("Reconciles: 2 + 8 clean = 10."),), "muted"),
@@ -1651,7 +1695,7 @@ def test_a_tinted_table_row_takes_the_tone_of_its_first_badge_key(
     [
         pytest.param(
             [{"key": "a", "label": "A", "width": 2}, {"key": "b", "label": "B", "tone": "green", "width": 4}],
-            (TableColumn(width=2), TableColumn("success", 4)),
+            (TableColumn(share=2 / 6), TableColumn("success", 4 / 6)),
             id="tones-and-widths",
         ),
         pytest.param(
@@ -1671,6 +1715,18 @@ def test_a_table_keeps_its_column_tones_and_widths_in_the_order_of_its_cells(
 
     assert lowered([table]) == (
         TableNode(_cells("A", "B"), (TableRow(_cells("x", "y")),), columns=table_columns),
+    )
+
+
+def test_a_number_column_carries_its_default_width_share_beside_an_auto_column() -> None:
+    table = make_table(
+        [{"key": "a", "label": "A"}, {"key": "b", "label": "B", "kind": "number"}], rows=[{"a": "x", "b": 10}]
+    )
+
+    assert lowered([table]) == (
+        TableNode(
+            _cells("A", "B"), (TableRow(_cells("x", "10")),), columns=(TableColumn(), TableColumn(share=0.1))
+        ),
     )
 
 
@@ -1779,7 +1835,13 @@ def test_a_blank_indicator_cell_is_empty_and_untoned() -> None:
         rows=[{"a": "x", "risk": " "}],
     )
 
-    assert lowered([table]) == (TableNode(_cells("Issue", "Risk"), (TableRow(_cells("x", "")),)),)
+    assert lowered([table]) == (
+        TableNode(
+            _cells("Issue", "Risk"),
+            (TableRow(_cells("x", "")),),
+            columns=(TableColumn(), TableColumn(share=0.07)),
+        ),
+    )
 
 
 def test_a_rollup_without_a_label_is_its_counts_alone() -> None:
@@ -1811,5 +1873,6 @@ def test_a_grouped_table_with_nothing_to_sum_labels_each_group_by_name_alone() -
                 TableRow(_cells("Ours", ""), emphasis="group"),
                 TableRow(_cells("x", "2")),
             ),
+            columns=(TableColumn(), TableColumn(share=0.1)),
         ),
     )

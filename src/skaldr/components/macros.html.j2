@@ -64,8 +64,7 @@
 {% set title_key = b.title_key %}
 {% set sum_key = b.sum_key %}
 <div class="table-wrap"><table class="rep">
-{% set width_total = cell_cols | selectattr("width") | map(attribute="width") | sum %}
-<colgroup>{% for c in cell_cols %}<col{% if c.tone %} class="tint {{ c.tone }}"{% endif %}{% if c.width %} style="width:{{ (c.width / width_total * 100) | round(1) }}%"{% elif c.kind == "number" %} style="width:10%"{% elif c.kind == "indicator" %} style="width:7%"{% endif %}>{% endfor %}</colgroup>
+<colgroup>{% for c in cell_cols %}{% set share = b.column_width_shares[loop.index0] %}<col{% if c.tone %} class="tint {{ c.tone }}"{% endif %}{% if share is not none %} style="width:{{ (share * 100) | round(1) if c.width else (share * 100) | round | int }}%"{% endif %}>{% endfor %}</colgroup>
 <thead><tr>{% for c in cell_cols %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% if b.groups is not none %}

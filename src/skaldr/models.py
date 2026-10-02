@@ -172,6 +172,7 @@ StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+DEFAULT_COLUMN_WIDTH_SHARES: Final[Mapping[ColumnKind, float]] = {"number": 0.1, "indicator": 0.07}
 ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
 ChartVariant = Literal["bar", "line", "donut"]
 FlowStyle = Literal["arrow", "steps"]
@@ -318,6 +319,7 @@ def _any_item_flagged(items: list["str | ListItem"], flagged: Callable[["ListIte
 
 ListStyle = Literal["bullet", "number", "check", "decision"]
 ListNumbering = Literal["decimal", "letters", "roman"]
+LARGEST_LIST_START: Final = 999_999_999
 
 
 class ListBlock(_Block):
@@ -331,6 +333,7 @@ class ListBlock(_Block):
     start: Count | None = Field(
         default=None,
         ge=1,
+        le=LARGEST_LIST_START,
         description="Only in a `style: number` list: the number the first point carries (default 1). "
         "Nested lists count from 1.",
     )
@@ -1161,6 +1164,14 @@ class Table(_Block):
         """Columns that get their own <td>, in declared order — everything except title-placement
         badge columns (whose chip rides under the row title). The render's single source of order."""
         return [c for c in self.columns if not (c.kind == "badge" and c.placement == "title")]
+
+    @cached_property
+    def column_width_shares(self) -> tuple[float | None, ...]:
+        columns = self.cell_columns
+        weight_total = sum(column.width or 0 for column in columns)
+        if weight_total:
+            return tuple((column.width or 0) / weight_total for column in columns)
+        return tuple(DEFAULT_COLUMN_WIDTH_SHARES.get(column.kind) for column in columns)
 
     @property
     def title_badges(self) -> list[Column]:

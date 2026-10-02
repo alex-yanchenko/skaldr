@@ -1,6 +1,9 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Final
+from typing import Final, Literal
+
+from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
@@ -46,30 +49,54 @@ def _marked(mark: Mark, text: ExportRich) -> ExportRich:
     return (mark, Plain(" "), *text)
 
 
+TextNumbering = Literal["letters", "roman"]
+
+
+@dataclass(frozen=True)
+class _ListShape:
+    style: models.ListStyle
+    text_numbering: TextNumbering | None
+
+
+def _text_numbering(numbering: models.ListNumbering | None) -> TextNumbering | None:
+    match numbering:
+        case "letters" | "roman":
+            return numbering
+        case "decimal" | None:
+            return None
+        case _:
+            assert_never(numbering)
+
+
 def lower_list(block: models.ListBlock, lowering: Lowering) -> list[Node]:
-    return [_list_node(block.items, block.style, lowering, block.start or 1)]
+    shape = _ListShape(block.style, _text_numbering(block.numbering))
+    return [_list_node(block.items, shape, lowering, block.start or 1)]
 
 
-def _list_kind(style: models.ListStyle) -> ListKind:
-    return "bullet" if style == "decision" else style
+def _list_kind(shape: _ListShape) -> ListKind:
+    if shape.style == "decision" or shape.text_numbering is not None:
+        return "bullet"
+    return shape.style
 
 
 def _list_node(
-    items: Sequence[str | models.ListItem], style: models.ListStyle, lowering: Lowering, start: int = 1
+    items: Sequence[str | models.ListItem], shape: _ListShape, lowering: Lowering, start: int = 1
 ) -> ListNode:
-    return ListNode(_list_kind(style), tuple(_list_entry(item, style, lowering) for item in items), start)
+    entries = tuple(
+        _list_entry(item, shape, lowering, index) for index, item in enumerate(items, start=start)
+    )
+    return ListNode(_list_kind(shape), entries, start if shape.text_numbering is None else 1)
 
 
-def _entry_text(text: str, style: models.ListStyle, decided: bool, lowering: Lowering) -> ExportRich:
-    rich = lowering.rich(text)
-    return _marked(DecisionMark(decided), rich) if style == "decision" else rich
-
-
-def _list_entry(item: str | models.ListItem, style: models.ListStyle, lowering: Lowering) -> ListEntry:
-    if isinstance(item, str):
-        return ListEntry(_entry_text(item, style, False, lowering))
-    children: tuple[Node, ...] = (_list_node(item.items, style, lowering),) if item.items else ()
-    return ListEntry(_entry_text(item.text, style, item.decided, lowering), item.checked, children)
+def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Lowering, index: int) -> ListEntry:
+    listed = models.ListItem(text=item) if isinstance(item, str) else item
+    text = lowering.rich(listed.text)
+    if shape.style == "decision":
+        text = _marked(DecisionMark(listed.decided), text)
+    elif shape.text_numbering is not None:
+        text = (Plain(f"{compute.list_label(index, shape.text_numbering)}. "), *text)
+    children: tuple[Node, ...] = (_list_node(listed.items, shape, lowering),) if listed.items else ()
+    return ListEntry(text, listed.checked, children)
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:

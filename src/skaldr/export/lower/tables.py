@@ -127,10 +127,11 @@ def _rollup(block: models.Table, lowering: Lowering) -> list[Node]:
 
 
 def _table_columns(block: models.Table) -> tuple[TableColumn, ...]:
-    columns = block.cell_columns
-    if all(column.tone is None and column.width is None for column in columns):
-        return ()
-    return tuple(TableColumn(column.tone, column.width) for column in columns)
+    columns = tuple(
+        TableColumn(column.tone, share)
+        for column, share in zip(block.cell_columns, block.column_width_shares, strict=True)
+    )
+    return () if all(column == TableColumn() for column in columns) else columns
 
 
 def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:

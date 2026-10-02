@@ -54,7 +54,7 @@ class TableRow:
 @dataclass(frozen=True)
 class TableColumn:
     tone: ToneName | None = None
-    width: int | None = None
+    share: float | None = None
 
 
 @dataclass(frozen=True)

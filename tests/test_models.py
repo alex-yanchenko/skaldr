@@ -648,15 +648,32 @@ def test_a_list_option_outside_its_style_is_rejected(options: dict[str, Any], me
     assert str(raised.value) == f"invalid content data: blocks.0.list: Value error, {message}"
 
 
-def test_a_list_start_below_one_is_rejected() -> None:
-    block = {"type": "list", "style": "number", "start": 0, "items": ["a"]}
+@pytest.mark.parametrize(
+    ("start", "message"),
+    [
+        pytest.param(0, "Input should be greater than or equal to 1", id="below-one"),
+        pytest.param(
+            1_000_000_000,
+            "Input should be less than or equal to 999999999",
+            id="past-the-nine-digits-a-markdown-list-marker-holds",
+        ),
+    ],
+)
+def test_a_list_start_out_of_range_is_rejected(start: int, message: str) -> None:
+    block = {"type": "list", "style": "number", "start": start, "items": ["a"]}
 
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
-    assert str(raised.value) == (
-        "invalid content data: blocks.0.list.start: Input should be greater than or equal to 1"
-    )
+    assert str(raised.value) == f"invalid content data: blocks.0.list.start: {message}"
+
+
+def test_a_list_start_of_nine_digits_is_accepted() -> None:
+    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a"]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(type="list", style="number", start=999_999_999, items=["a"])
 
 
 def test_def_list_parses_to_whole_model() -> None:
@@ -1898,6 +1915,43 @@ def test_table_column_widths_are_read_onto_every_column() -> None:
 
     assert isinstance(block, Table)
     assert [column.width for column in block.columns] == [2, 4]
+
+
+@pytest.mark.parametrize(
+    ("columns", "shares"),
+    [
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 2},
+                {"key": "b", "label": "B", "kind": "number", "width": 4},
+            ],
+            (2 / 6, 4 / 6),
+            id="weights-over-the-kind-defaults",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A"},
+                {"key": "b", "label": "B", "kind": "number"},
+                {"key": "c", "label": "C", "kind": "indicator"},
+            ],
+            (None, 0.1, 0.07),
+            id="kind-defaults-beside-an-auto-column",
+        ),
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "t", "label": "", "kind": "badge"}], (None,), id="all-auto"
+        ),
+    ],
+)
+def test_a_table_gives_each_cell_column_its_width_share(
+    columns: list[dict[str, Any]], shares: tuple[float | None, ...]
+) -> None:
+    values = {"a": "x", "b": 10, "c": "", "t": ""}
+    table = make_table(columns, rows=[{column["key"]: values[column["key"]] for column in columns}])
+
+    block = parse_report(make_report(blocks=[table])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.column_width_shares == shares
 
 
 def test_a_table_column_takes_a_tone_and_a_palette_alias_names_the_same_tone() -> None:

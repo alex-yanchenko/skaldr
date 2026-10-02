@@ -1,3 +1,4 @@
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -48,7 +49,7 @@ FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
-NOTION_TABLE_WIDTH: Final = 708
+NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -138,17 +139,35 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     return _row_lines(row.cells, texts, tone)
 
 
-def _width_attribute(width: int | None, total_width: int) -> str:
-    return f' width="{round(width / total_width * NOTION_TABLE_WIDTH)}"' if width else ""
+def _apportioned(weights: Sequence[float], total: int) -> list[int]:
+    quotas = [weight / sum(weights) * total for weight in weights]
+    widths = [math.floor(quota) for quota in quotas]
+    by_remainder = sorted(range(len(quotas)), key=lambda index: widths[index] - quotas[index])
+    for index in by_remainder[: total - sum(widths)]:
+        widths[index] += 1
+    return widths
+
+
+def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
+    shares = [column.share for column in columns]
+    auto_count = shares.count(None)
+    if auto_count == len(shares):
+        return [None] * len(shares)
+    auto_share = max(0.0, 1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
+    weights = [auto_share if share is None else share for share in shares]
+    return _apportioned(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
+
+
+def _width_attribute(width: int | None) -> str:
+    return "" if width is None else f' width="{width}"'
 
 
 def _colgroup_lines(columns: Sequence[TableColumn]) -> list[str]:
     if not columns:
         return []
-    total_width = sum(column.width or 0 for column in columns)
     cols = [
-        f"<col{_background_attribute(column.tone)}{_width_attribute(column.width, total_width)}>"
-        for column in columns
+        f"<col{_background_attribute(column.tone)}{_width_attribute(width)}>"
+        for column, width in zip(columns, _column_widths(columns), strict=True)
     ]
     return ["<colgroup>", *_indent(cols), "</colgroup>"]
 
@@ -158,9 +177,9 @@ def _table_lines(table: TableNode) -> list[str]:
     if table.header_column:
         attributes.append('header-column="true"')
     header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
-    rows = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
-    rows += [line for row in table.rows for line in _body_row_lines(table, row)]
-    return [f"<table {' '.join(attributes)}>", *_indent(rows), "</table>"]
+    lines = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
+    lines += [line for row in table.rows for line in _body_row_lines(table, row)]
+    return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
 def _list_marker(kind: ListKind, index: int, checked: bool) -> str:

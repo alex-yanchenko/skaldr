@@ -13,6 +13,7 @@ dependencies = [
     "markupsafe>=2.1",
     "pydantic>=2.13.4",
     "pyyaml>=6.0",
+    "roman>=5.2",
     "typing-extensions>=4.6",
 ]
 keywords = ["report", "html", "yaml", "components", "jinja"]

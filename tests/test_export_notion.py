@@ -372,6 +372,26 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
         ),
         pytest.param(
             [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 1},
+            ],
+            '\t<colgroup>\n\t\t<col width="236">\n\t\t<col width="236">\n'
+            '\t\t<col width="236">\n\t</colgroup>\n',
+            id="equal-thirds-sum-to-the-page-width",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 6},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 1},
+            ],
+            '\t<colgroup>\n\t\t<col width="531">\n\t\t<col width="89">\n'
+            '\t\t<col width="88">\n\t</colgroup>\n',
+            id="the-leftover-pixel-goes-to-the-first-largest-remainder",
+        ),
+        pytest.param(
+            [
                 {"key": "a", "label": "A"},
                 {"key": "b", "label": "B", "tone": "danger"},
                 {"key": "c", "label": "C"},
@@ -396,6 +416,37 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
         f"{colgroup}"
         "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>z</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_single_weighted_column_takes_the_whole_page_width() -> None:
+    table = make_table([{"key": "a", "label": "A", "width": 3}], rows=[{"a": "x"}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="708">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_auto_columns_share_what_a_number_column_default_width_leaves() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A"},
+            {"key": "b", "label": "B"},
+            {"key": "c", "label": "C", "kind": "number"},
+        ],
+        rows=[{"a": "x", "b": "y", "c": 10}],
+    )
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="319">\n\t\t<col width="318">\n\t\t<col width="71">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>10</td>\n\t</tr>\n"
         "</table>\n"
     )
 
@@ -465,6 +516,7 @@ def test_a_grouped_table_bolds_its_group_rows_and_its_totals_row_as_a_whole() ->
 
     assert notion_of([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="637">\n\t\t<col width="71">\n\t</colgroup>\n'
         "\t<tr>\n\t\t<td>**Issue**</td>\n\t\t<td>**Units**</td>\n\t</tr>\n"
         '\t<tr color="gray_bg">\n\t\t<td>**Ours (2)**</td>\n\t\t<td></td>\n\t</tr>\n'
         "\t<tr>\n\t\t<td>x</td>\n\t\t<td>2</td>\n\t</tr>\n"
@@ -507,11 +559,18 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
     ("options", "notion"),
     [
         pytest.param({"start": 9}, "9. c\n10. d\n\t1. e\n", id="start-counts-on-and-a-nested-list-from-one"),
-        pytest.param({"numbering": "letters"}, "1. c\n2. d\n\t1. e\n", id="letters-are-written-decimal"),
-        pytest.param({"numbering": "roman"}, "1. c\n2. d\n\t1. e\n", id="roman-is-written-decimal"),
+        pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
+        pytest.param(
+            {"numbering": "letters"}, "- a. c\n- b. d\n\t- a. e\n", id="letters-are-bullets-led-by-the-letter"
+        ),
+        pytest.param(
+            {"start": 4, "numbering": "roman"},
+            "- iv. c\n- v. d\n\t- i. e\n",
+            id="roman-is-bullets-led-by-the-numeral-from-the-start",
+        ),
     ],
 )
-def test_a_numbered_list_counts_from_its_start_in_decimal(options: dict[str, object], notion: str) -> None:
+def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], notion: str) -> None:
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert notion_of([block]) == notion
@@ -532,7 +591,25 @@ def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout()
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
     block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
 
-    assert notion_of([block]) == "- ❓ open\n- ✅ done\n"
+    assert notion_of([block]) == "- ❓ open\n- ☑️ done\n"
+
+
+def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
+    blocks = [
+        {
+            "type": "list",
+            "style": "decision",
+            "items": [
+                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
+            ],
+        },
+        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
+        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
+    ]
+
+    assert notion_of(blocks) == (
+        "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n- ✅ rolled out\n"
+    )
 
 
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:

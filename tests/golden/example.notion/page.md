@@ -90,6 +90,13 @@ flowchart LR
 	- <span color="red_bg">Vendor</span> Depends on the vendor to resolve.
 </details>
 <table fit-page-width="true" header-row="true">
+	<colgroup>
+		<col width="196">
+		<col width="49">
+		<col width="71">
+		<col width="196">
+		<col width="196">
+	</colgroup>
 	<tr>
 		<td>**Discrepancy**</td>
 		<td>**Risk**</td>
@@ -157,7 +164,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 <table fit-page-width="true" header-row="true">
 	<colgroup>
 		<col width="177">
-		<col width="88">
+		<col width="89">
 		<col color="yellow_bg" width="88">
 		<col width="354">
 	</colgroup>
@@ -207,13 +214,13 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 	Lead with the reconciliation gate — it is the one number leadership tracks.
 </callout>
 ### Re-count procedure, from step iv
-4. Freeze inbound moves in the overflow aisles.
-5. Re-scan every bin with the widened reader.
-	1. Start with the aisles that held the 260 skipped units.
-6. Re-run reconciliation and compare against the first count.
+- iv. Freeze inbound moves in the overflow aisles.
+- v. Re-scan every bin with the widened reader.
+	- i. Start with the aisles that held the 260 skipped units.
+- vi. Re-run reconciliation and compare against the first count.
 ### Decisions
-- ✅ De-duplicate on the pallet ID and keep the most recent scan.
-- ✅ Hold the vendor line until a corrected ASN arrives.
+- ☑️ De-duplicate on the pallet ID and keep the most recent scan.
+- ☑️ Hold the vendor line until a corrected ASN arrives.
 - ❓ Whether overflow aisles get a count window of their own.
 ## Rollout
 - ✅ **2026-06-30**: Initial full count

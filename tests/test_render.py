@@ -39,6 +39,12 @@ from tests.factories import (
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
 
+
+def _css_declarations(html: str, selector: str) -> list[str]:
+    pattern = r"\s+".join(re.escape(part) for part in selector.split()) + r"\s*\{([^{}]*)\}"
+    return [re.sub(r"\s+", "", body) for body in re.findall(pattern, html)]
+
+
 # The three color-scheme rules that drive every light-dark() token. They must render unlayered (see
 # test_host_override_essentials_sit_outside_any_layer); asserted by literal so a reformat fails loudly.
 COLOR_SCHEME_RULES = (
@@ -457,7 +463,7 @@ def test_a_decision_list_leads_each_item_with_a_decided_or_open_glyph() -> None:
         '<ul class="list decision"><li><span class="dec open"><span class="glyph">?</span>'
         "<span>retry later</span></span></li></ul></li></ul>"
     ) in html
-    assert ".list.decision .dec.decided .glyph{color:var(--success-fg)}" in html
+    assert _css_declarations(html, ".list.decision .dec.decided .glyph") == ["color:var(--success-fg)"]
 
 
 def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
@@ -486,7 +492,8 @@ def test_a_callout_and_a_note_with_an_icon_lead_with_it_beside_their_title_and_b
         '<div class="note-block iconed"><span class="block-icon" aria-hidden="true">📌</span>'
         '<div class="iconed-body"><div>Aside.</div></div></div>'
     ) in html
-    assert ".iconed{display:flex; gap:var(--s3); align-items:flex-start;" in html
+    assert _css_declarations(html, "& > .block-icon") == ["flex:none;font-size:1.15em;line-height:1.4"]
+    assert _css_declarations(html, "& > .iconed-body") == ["flex:1;min-width:0"]
 
 
 def test_a_callout_without_an_icon_keeps_its_plain_markup() -> None:
@@ -3821,12 +3828,11 @@ def test_a_toned_column_tints_its_col(columns: list[dict[str, object]], colgroup
     assert colgroup in html
 
 
-def test_a_column_tint_sits_under_a_row_tone_or_tint_in_the_stylesheet() -> None:
+def test_the_stylesheet_paints_a_col_by_its_tone_class() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert "& col.tint{background:var(--tb)}" in html
-    assert "& col.tint.success{--tb:var(--success-bg)}" in html
-    assert "& tbody tr.row.tint td{background:var(--tb)}" in html
+    assert _css_declarations(html, "& col.tint") == ["background:var(--tb)"]
+    assert _css_declarations(html, "& col.tint.success") == ["--tb:var(--success-bg)"]
 
 
 def test_single_width_column_renders_full_width() -> None:

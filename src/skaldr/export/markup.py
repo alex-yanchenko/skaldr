@@ -172,7 +172,7 @@ def check_glyph(checked: bool) -> str:
 def decision_glyph(decided: bool) -> str:
     match decided:
         case True:
-            return "✅"
+            return "☑️"
         case False:
             return "❓"
         case _:

@@ -482,13 +482,18 @@ def test_a_check_list_becomes_a_task_list() -> None:
         pytest.param(
             {"start": 9}, "9. c\n10. d\n    1. e\n", id="start-counts-on-and-a-nested-list-from-one"
         ),
-        pytest.param({"numbering": "letters"}, "1. c\n2. d\n   1. e\n", id="letters-are-written-decimal"),
-        pytest.param({"numbering": "roman"}, "1. c\n2. d\n   1. e\n", id="roman-is-written-decimal"),
+        pytest.param({"numbering": "decimal"}, "1. c\n2. d\n   1. e\n", id="decimal-is-native"),
+        pytest.param(
+            {"numbering": "letters"}, "- a. c\n- b. d\n  - a. e\n", id="letters-are-bullets-led-by-the-letter"
+        ),
+        pytest.param(
+            {"start": 4, "numbering": "roman"},
+            "- iv. c\n- v. d\n  - i. e\n",
+            id="roman-is-bullets-led-by-the-numeral-from-the-start",
+        ),
     ],
 )
-def test_a_numbered_list_starts_at_its_start_and_writes_decimal_markers(
-    options: dict[str, object], markdown: str
-) -> None:
+def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], markdown: str) -> None:
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert markdown_of([block]) == markdown
@@ -497,7 +502,25 @@ def test_a_numbered_list_starts_at_its_start_and_writes_decimal_markers(
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
     block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
 
-    assert markdown_of([block]) == "- ❓ open\n- ✅ done\n"
+    assert markdown_of([block]) == "- ❓ open\n- ☑️ done\n"
+
+
+def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
+    blocks = [
+        {
+            "type": "list",
+            "style": "decision",
+            "items": [
+                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
+            ],
+        },
+        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
+        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
+    ]
+
+    assert markdown_of(blocks) == (
+        "- ☑️ region\n  - ❓ failover\n  - ☑️ zone\n\n* [x] shipped\n* [ ] tested\n\n- ✅ rolled out\n"
+    )
 
 
 def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
