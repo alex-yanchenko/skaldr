@@ -846,7 +846,8 @@ link instead.
 - **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
   The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
-  `by` must name a `badge` column.
+  `by` must name a `badge` column, and each row counts under one badge, so a rollup over an in-cell
+  badge column whose cells hold a list of keys is rejected.
 - **`tint_by`** — `<badge-column-key>` — faintly tints each row by the tone of the badge in that
   column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
   skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
