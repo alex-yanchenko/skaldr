@@ -199,8 +199,8 @@
    border read the same palette colour name. #}
 {% macro derived_card(c) %}
 {% set b = badges[c.badge] %}
-{% set count, total = derived_card_tally(c, matrix_tallies, table_tallies) %}
-<div class="card {{ c.tone_with(b) }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
+{% set count, total = derived_card_tally(c, c.badge, matrix_tallies, table_tallies) %}
+<div class="card {{ c.tone or b.tone }}"><span class="chip {{ b.tone }} cbadge">{{ c.label or b.label }}</span><div class="n">{{ count | fmt }}<span class="pct">{{ pct(count, total) }}</span></div>{% if c.note %}<div class="note">{{ c.note }}</div>{% endif %}</div>
 {% endmacro %}
 
 {% macro variable_slots(text, quoting="none") %}{% for literal, name in variable_parts(text) %}{{ literal }}{% if name %}<span class="rq-slot" data-rq-slot="{{ name }}" data-rq-quote="{{ quoting }}">&lsaquo;{{ name }}&rsaquo;</span>{% endif %}{% endfor %}{% endmacro %}

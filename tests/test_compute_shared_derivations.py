@@ -3,6 +3,8 @@ from typing import Any
 import pytest
 
 from skaldr.compute import (
+    DerivedCardTally,
+    MatrixCellDisplay,
     derived_card_tally,
     matrix_cell_display,
     matrix_tallies,
@@ -10,7 +12,7 @@ from skaldr.compute import (
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Cards, Comparison, MatrixCell, Swimlane, Table, parse_report
+from skaldr.models import Card, Cards, Comparison, MatrixCell, Swimlane, Table, parse_report
 from tests.factories import API_BADGES, make_report
 
 
@@ -91,12 +93,19 @@ def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
     cards = report.blocks[0]
     assert isinstance(cards, Cards)
 
-    assert [
-        derived_card_tally(card, matrix_tallies(report), table_tallies(report)) for card in cards.items
-    ] == [
-        (1, 2),
-        (2, 3),
+    matrices, tables = matrix_tallies(report), table_tallies(report)
+
+    assert [derived_card_tally(card, "API", matrices, tables) for card in cards.items] == [
+        DerivedCardTally(counted=1, total=2),
+        DerivedCardTally(counted=2, total=3),
     ]
+
+
+def test_a_derived_card_takes_the_semantic_twin_of_its_badge_colour_unless_it_sets_a_tone() -> None:
+    badge = parse_report(make_report(badges=API_BADGES)).badges["API"]
+    cards = [Card(badge="API", of_matrix="m"), Card(badge="API", of_matrix="m", tone="danger")]
+
+    assert [card.tone_with(badge) for card in cards] == ["info", "danger"]
 
 
 def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_column() -> None:
@@ -261,8 +270,8 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
     ]
 
     assert [matrix_cell_display(cell, badges) for cell in cells] == [
-        ("blue", "api"),
-        ("blue", "yes"),
-        ("amber", ""),
-        (None, "n/a"),
+        MatrixCellDisplay(tone="blue", text="api"),
+        MatrixCellDisplay(tone="blue", text="yes"),
+        MatrixCellDisplay(tone="amber", text=""),
+        MatrixCellDisplay(tone=None, text="n/a"),
     ]

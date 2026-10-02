@@ -1,26 +1,33 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, TypeGuard, get_args
+from typing import TypeGuard
 
 from skaldr import compute
 from skaldr.export.inline import bold, one_line, plain, rich_line
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
-from skaldr.models import AnyBlock, BadgeLiteral, BadgeRef, Report, iter_reference_items, semantic_tone_name
+from skaldr.models import (
+    TONE_BADGE_COLOR,
+    AnyBlock,
+    BadgeLiteral,
+    BadgeRef,
+    Report,
+    ToneLiteral,
+    iter_reference_items,
+)
 from skaldr.richtext import Plain, Rich, RichContext
 
-TONE_NAMES: Final[frozenset[str]] = frozenset(get_args(ToneName))
+
+def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
+    return isinstance(value, str) and value in TONE_BADGE_COLOR
 
 
-def _is_tone(name: str) -> TypeGuard[ToneName]:
-    return name in TONE_NAMES
+def tone_of(value: object) -> ToneLiteral | None:
+    return value if _is_tone(value) else None
 
 
-def tone_named(name: str | None) -> ToneName | None:
-    if not name:
-        return None
-    tone = semantic_tone_name(name)
-    return tone if _is_tone(tone) else None
+def tone_named(value: object) -> ToneName | None:
+    return "muted" if value == "muted" else tone_of(value)
 
 
 @dataclass(frozen=True)

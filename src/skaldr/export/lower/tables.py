@@ -4,7 +4,7 @@ from typing import Any, cast
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, with_bold_label
+from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, tone_of, with_bold_label
 from skaldr.export.runs import Break, CheckMark, ExportRich, IndicatorMark, SwimlaneMark
 from skaldr.export.tree import Node, Paragraph, Table, TableCell, TableRow, ToneName
 from skaldr.richtext import Link, Plain
@@ -55,18 +55,16 @@ def _number_cell(block: models.Table, column: models.Column, value: object) -> T
 
 
 def _indicator_cell(value: object) -> TableCell:
-    tone = tone_named(str(value or "").strip())
-    if tone is None or tone == "muted":
-        return TableCell(())
-    return TableCell((IndicatorMark(tone),), tone)
+    tone = tone_of(str(value or "").strip())
+    return TableCell((IndicatorMark(tone),), tone) if tone else TableCell(())
 
 
 def _row_tone(block: models.Table, row: Row, lowering: Lowering) -> ToneName | None:
-    raw_tone = row.get("tone")
-    if isinstance(raw_tone, str) and raw_tone:
-        return tone_named(raw_tone)
+    explicit_tone = row.get("tone")
+    if explicit_tone:
+        return tone_named(explicit_tone)
     tint_key = block.row_tint_key(row)
-    return tone_named(lowering.report.badges[tint_key].tone) if tint_key else None
+    return models.BADGE_COLOR_TONE[lowering.report.badges[tint_key].tone] if tint_key else None
 
 
 def _table_row(block: models.Table, row: Row, lowering: Lowering) -> TableRow:
@@ -146,7 +144,7 @@ def _comparison_cell(
         return TableCell((CheckMark(cell),), "success" if good else "danger")
     if isinstance(cell, str):
         return TableCell(lowering.rich(cell))
-    return TableCell(lowering.rich(cell.value), tone_named(cell.tone))
+    return TableCell(lowering.rich(cell.value), cell.tone)
 
 
 def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]:
@@ -175,8 +173,9 @@ def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]
 def _matrix_cell(cell: models.MatrixCell | None, lowering: Lowering) -> TableCell:
     if cell is None:
         return TableCell(())
-    tone, text = compute.matrix_cell_display(cell, lowering.report.badges)
-    return TableCell(plain(text), tone_named(tone))
+    display = compute.matrix_cell_display(cell, lowering.report.badges)
+    tone = models.BADGE_COLOR_TONE[display.tone] if display.tone else None
+    return TableCell(plain(display.text), tone)
 
 
 def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:

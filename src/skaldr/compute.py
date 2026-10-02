@@ -12,13 +12,14 @@ import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Any, Final, TypedDict
+from typing import Any, Final, NamedTuple, TypedDict
 
 from skaldr.errors import ReportError
 from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
     Badge,
+    BadgeColorLiteral,
     Card,
     CaseTone,
     DeltaDirection,
@@ -679,15 +680,24 @@ def table_tallies(report: Report) -> dict[str, DerivedTally]:
     return tallies
 
 
+class DerivedCardTally(NamedTuple):
+    counted: int
+    total: int
+
+
 def derived_card_tally(
-    card: Card, matrix_tallies: Mapping[str, DerivedTally], table_tallies: Mapping[str, DerivedTally]
-) -> tuple[int, int]:
-    badge = card.badge or ""
+    card: Card,
+    badge: str,
+    matrix_tallies: Mapping[str, DerivedTally],
+    table_tallies: Mapping[str, DerivedTally],
+) -> DerivedCardTally:
     if card.of_matrix:
         tally = matrix_tallies[card.of_matrix]
-        return tally["counts"].get(badge, 0), tally["total"]
+        return DerivedCardTally(tally["counts"].get(badge, 0), tally["total"])
     tallies = [table_tallies[table_id] for table_id in card.of_tables or []]
-    return sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
+    return DerivedCardTally(
+        sum(tally["counts"].get(badge, 0) for tally in tallies), sum(tally["total"] for tally in tallies)
+    )
 
 
 def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
@@ -698,11 +708,16 @@ def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
     return [[lookup.get((row, col)) for col in block.columns] for row in block.rows]
 
 
-def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> tuple[str | None, str]:
+class MatrixCellDisplay(NamedTuple):
+    tone: BadgeColorLiteral | None
+    text: str
+
+
+def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> MatrixCellDisplay:
     if cell.badge:
         badge = badges[cell.badge]
-        return badge.tone, cell.label or badge.label
-    return cell.tone, cell.label or ""
+        return MatrixCellDisplay(badge.tone, cell.label or badge.label)
+    return MatrixCellDisplay(cell.tone, cell.label or "")
 
 
 HTTP_REASONS = {

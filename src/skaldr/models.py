@@ -109,10 +109,6 @@ _PALETTE_TO_TONE: Final[Mapping[str, str]] = dict(BADGE_COLOR_TONE.items())
 _TONE_TO_PALETTE: Final[Mapping[str, str]] = dict(TONE_BADGE_COLOR.items())
 
 
-def semantic_tone_name(name: str) -> str:
-    return _PALETTE_TO_TONE.get(name, name)
-
-
 def _to_tone(value: Any) -> Any:
     """Normalise a palette colour name to its semantic tone twin (green → success); pass anything else
     through unchanged (semantic names, teal/sky, non-strings)."""
@@ -433,8 +429,8 @@ class Card(FrozenModel):
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
 
-    def tone_with(self, badge: Badge) -> str:
-        return self.tone or badge.tone
+    def tone_with(self, badge: Badge) -> ToneLiteral:
+        return self.tone or BADGE_COLOR_TONE[badge.tone]
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":

@@ -4,7 +4,7 @@ from itertools import chain
 from skaldr import compute, models
 from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import Lowering, lowering_for, spaced, tone_named
+from skaldr.export.lower.context import Lowering, lowering_for, spaced
 from skaldr.export.lower.prose import (
     lower_badge_row,
     lower_callout,
@@ -157,8 +157,7 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
     cell_nodes: list[tuple[Node, ...]] = []
     for cell in block.cells:
         children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
-        tone = tone_named(cell.tone)
-        cell_nodes.append((Callout(tone, children),) if tone else children)
+        cell_nodes.append((Callout(cell.tone, children),) if cell.tone else children)
     if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
         return [node for children in cell_nodes for node in children]
     ratios = _column_ratios([cell.span for cell in block.cells])

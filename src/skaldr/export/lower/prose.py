@@ -4,7 +4,7 @@ from typing import Final
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
-from skaldr.export.lower.context import Lowering, bullets, spaced, tone_named, with_bold_label
+from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
@@ -84,9 +84,10 @@ def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
     return [bullets(_card(card, lowering) for card in block.items)]
 
 
-def _derived_card(card: models.Card, badge_key: str, lowering: Lowering) -> ExportRich:
-    badge = lowering.report.badges[badge_key]
-    count, total = compute.derived_card_tally(card, lowering.matrix_tallies, lowering.table_tallies)
+def _derived_card(card: models.Card, badge_key: str, badge: models.Badge, lowering: Lowering) -> ExportRich:
+    count, total = compute.derived_card_tally(
+        card, badge_key, lowering.matrix_tallies, lowering.table_tallies
+    )
     return (
         Chip.on_one_line(card.label or badge.label, badge.tone),
         *plain(f": {compute.fmt(count)} ({compute.pct(count, total)})"),
@@ -103,10 +104,10 @@ def _card_note(card: models.Card) -> tuple[Node, ...]:
 
 
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
-    if card.derived and card.badge:
+    if card.derived and card.badge is not None:
         badge = lowering.report.badges[card.badge]
-        tone = tone_named(card.tone_with(badge))
-        return ListEntry(_derived_card(card, card.badge, lowering), children=_card_note(card), tone=tone)
+        text = _derived_card(card, card.badge, badge, lowering)
+        return ListEntry(text, children=_card_note(card), tone=card.tone_with(badge))
     parts: list[ExportRich] = [plain(compute.fmt(card.value))]
     if card.of and isinstance(card.value, int | float):
         parts.append(plain(f"({compute.pct(card.value, card.of)})"))
