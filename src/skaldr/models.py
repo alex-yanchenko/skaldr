@@ -1512,6 +1512,13 @@ class Swimlane(_Block):
                 spans[group] = (spans[group][0], index) if group in spans else (index, index)
         return MappingProxyType(spans)
 
+    @cached_property
+    def column_spans(self) -> Mapping[str, tuple[int, int]]:
+        spans: dict[str, tuple[int, int]] = {}
+        for index, (column, _) in enumerate(self.subcolumns()):
+            spans[column] = (spans[column][0], index) if column in spans else (index, index)
+        return MappingProxyType(spans)
+
     def step_group(self, step: SwimlaneStep) -> str | None:
         """The group a step resolves to: its explicit `group`, else the sole group covering its column,
         else None (an ungrouped column)."""

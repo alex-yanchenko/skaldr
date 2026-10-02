@@ -181,6 +181,24 @@ def test_a_swimlane_group_spans_its_first_and_last_subcolumn() -> None:
     }
 
 
+def test_a_swimlane_column_spans_its_first_and_last_segment() -> None:
+    steps = [
+        {"lane": "Ops", "col": "Plan", "n": "1", "label": "a", "group": "A"},
+        {"lane": "Ops", "col": "Build", "n": "2", "label": "b", "group": "B"},
+        {"lane": "Ops", "col": "Ship", "n": "3", "label": "c"},
+    ]
+    groups = [
+        {"name": "A", "color": "blue", "columns": ["Plan", "Build"]},
+        {"name": "B", "color": "amber", "columns": ["Build"]},
+    ]
+
+    assert parsed_block(Swimlane, make_swimlane(steps, groups=groups)).column_spans == {
+        "Plan": (0, 0),
+        "Build": (1, 2),
+        "Ship": (3, 3),
+    }
+
+
 @pytest.mark.parametrize(
     ("polarity", "negative"),
     [

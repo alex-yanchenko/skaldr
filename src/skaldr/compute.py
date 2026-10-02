@@ -355,8 +355,8 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
 
     def column_span(col: str) -> tuple[int, int]:
         """Grid lines spanning every sub-column of `col` (a column split across groups has several)."""
-        indices = [index for index, (segment_col, _) in enumerate(subcols) if segment_col == col]
-        return col_lines(indices[0])[0], col_lines(indices[-1])[1]
+        first, last = block.column_spans[col]
+        return col_lines(first)[0], col_lines(last)[1]
 
     subcol_out: list[SwimSubcol] = []
     for index, (col, group_name) in enumerate(subcols):

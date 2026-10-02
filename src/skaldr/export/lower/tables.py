@@ -1,4 +1,3 @@
-from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Final, cast
 
@@ -230,17 +229,16 @@ def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) 
 
 
 def _split_columns(block: models.Swimlane) -> set[str]:
-    groups_per_column = Counter(column for column, _ in block.subcolumns())
-    return {column for column, count in groups_per_column.items() if count > 1}
+    return {column for column, (first, last) in block.column_spans.items() if last > first}
 
 
 def _lane_cells(block: models.Swimlane, lane_key: str, split: set[str]) -> list[TableCell]:
     cells: list[TableCell] = []
     for column in block.columns:
+        first, last = block.column_spans[column.key]
         steps = [
             step
-            for sub_column, group in block.subcolumns()
-            if sub_column == column.key
+            for sub_column, group in block.subcolumns()[first : last + 1]
             for step in block.steps_at(lane_key, sub_column, group)
         ]
         cells.append(
