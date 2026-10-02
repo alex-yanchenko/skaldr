@@ -118,6 +118,12 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 - **Zone C**: █████████░ 85.0%
 - **Overflow**: ░░░░░░░░░░ 4.0%
 
+| Zone | Counted | Variance | Note |
+| --- | --- | --- | --- |
+| Zone A | 3,100 | 0 | Matched the system count. |
+| Zone B | 2,760 | 12 | Two mislabeled bins, re-scanned. |
+| Overflow | 120 | 260 | Skipped by the `bin > 12` rule. |
+
 **Affects**: **inventory** **scan-app** **DC-West**
 
 ## Verification

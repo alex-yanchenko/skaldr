@@ -38,6 +38,7 @@ from skaldr.export.tree import (
     Quote,
     Tab,
     TableCell,
+    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -1642,6 +1643,34 @@ def test_a_tinted_table_row_takes_the_tone_of_its_first_badge_key(
     assert lowered([table], badges=badges) == (
         API_LEGEND,
         TableNode(_cells("A", ""), (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone),)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("columns", "table_columns"),
+    [
+        pytest.param(
+            [{"key": "a", "label": "A", "width": 2}, {"key": "b", "label": "B", "tone": "green", "width": 4}],
+            (TableColumn(width=2), TableColumn("success", 4)),
+            id="tones-and-widths",
+        ),
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "b", "label": "B", "tone": "warning"}],
+            (TableColumn(), TableColumn("warning")),
+            id="a-tone-alone",
+        ),
+        pytest.param([{"key": "a", "label": "A"}, {"key": "b", "label": "B"}], (), id="neither"),
+    ],
+)
+def test_a_table_keeps_its_column_tones_and_widths_in_the_order_of_its_cells(
+    columns: list[dict[str, Any]], table_columns: tuple[TableColumn, ...]
+) -> None:
+    table = make_table(
+        [*columns, {"key": "t", "label": "", "kind": "badge"}], rows=[{"a": "x", "b": "y", "t": ""}]
+    )
+
+    assert lowered([table]) == (
+        TableNode(_cells("A", "B"), (TableRow(_cells("x", "y")),), columns=table_columns),
     )
 
 

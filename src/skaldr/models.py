@@ -872,6 +872,12 @@ class Column(FrozenModel):
         description="Proportional width weight (1-6); set it on every in-cell column, or none. A "
         "`title`-placement badge column takes no width (it rides under the title).",
     )
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone that faintly tints the whole column. A row `tone` or a `tint_by` "
+        "row tint paints over it. A `title`-placement badge column takes no tone (it rides under the "
+        "title).",
+    )
 
 
 class Handled(FrozenModel):
@@ -1104,14 +1110,15 @@ class Table(_Block):
         placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
         if placement_misuse:
             raise ValueError(f"column(s) {placement_misuse}: placement 'cell' is only for badge columns")
-        title_badge_widths = [
-            c.key
-            for c in self.columns
-            if c.kind == "badge" and c.placement == "title" and c.width is not None
-        ]
+        title_badge_widths = [c.key for c in self.title_badges if c.width is not None]
         if title_badge_widths:
             raise ValueError(
                 f"badge column(s) {title_badge_widths} can't take a width (they ride under the title)"
+            )
+        title_badge_tones = [c.key for c in self.title_badges if c.tone is not None]
+        if title_badge_tones:
+            raise ValueError(
+                f"badge column(s) {title_badge_tones} can't take a tone (they ride under the title)"
             )
         # in-cell columns get their own <td>: everything except title-placement badge chips.
         widthed = [c for c in self.cell_columns if c.width is not None]

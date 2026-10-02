@@ -3795,6 +3795,40 @@ def test_table_column_widths_render_proportional_colgroup() -> None:
     assert '<colgroup><col style="width:33.3%"><col style="width:66.7%"></colgroup>' in html
 
 
+@pytest.mark.parametrize(
+    ("columns", "colgroup"),
+    [
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "b", "label": "B", "kind": "number", "tone": "success"}],
+            '<colgroup><col><col class="tint success" style="width:10%"></colgroup>',
+            id="beside-the-default-widths",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 2},
+                {"key": "b", "label": "B", "kind": "number", "tone": "success", "width": 4},
+            ],
+            '<colgroup><col style="width:33.3%"><col class="tint success" style="width:66.7%"></colgroup>',
+            id="beside-weighted-widths",
+        ),
+    ],
+)
+def test_a_toned_column_tints_its_col(columns: list[dict[str, object]], colgroup: str) -> None:
+    table = make_table(columns, rows=[{"a": "x", "b": 10}])
+
+    html = render_html(parse_report(make_report(blocks=[table])))
+
+    assert colgroup in html
+
+
+def test_a_column_tint_sits_under_a_row_tone_or_tint_in_the_stylesheet() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert "& col.tint{background:var(--tb)}" in html
+    assert "& col.tint.success{--tb:var(--success-bg)}" in html
+    assert "& tbody tr.row.tint td{background:var(--tb)}" in html
+
+
 def test_single_width_column_renders_full_width() -> None:
     table = make_table([{"key": "a", "label": "A", "kind": "text", "width": 3}], rows=[{"a": "x"}])
     html = render_html(parse_report(make_report(blocks=[table])))

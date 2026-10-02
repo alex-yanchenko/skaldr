@@ -170,7 +170,7 @@ or to keep a small block from stretching across the whole page.
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
+| `table` | The workhorse (see below) | `columns` (each `{key, label, kind?, width?, tone?}`), `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
@@ -838,6 +838,7 @@ link instead.
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
   It's all-or-none — set `width` on every in-cell column or none. A `placement: title` badge takes
   no width (it rides under the title); a `placement: cell` badge is a normal column and does.
+- **Column tone.** A column may set `tone` (any tone name, or its palette alias) to tint the whole column faintly, for example a variance column that needs the reader's eye: `{ key: variance, label: "Variance", kind: number, tone: warning }`. The header and group bands stay untinted. A row `tone` or a `tint_by` row tint paints over the column tint, so a flagged row reads as one unbroken band. A `placement: title` badge column takes no tone.
 - **Every row supplies every column key and nothing else** (plus an optional `subrows`, and an
   optional `tone: muted | danger`). A row `tone` emphasises the whole row: `muted` dims and strikes
   it (a rejected/superseded row), `danger` tints it red (a bad row).
@@ -965,6 +966,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `grid` | its cells one after another | native columns |
 | badges | bold labels | coloured chips |
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
+| a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours and widths, in the same proportions as the HTML |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
 

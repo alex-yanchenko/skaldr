@@ -482,6 +482,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
 		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
 		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
+		& col.tint{background:var(--tb)}
+		& col.tint.neutral{--tb:var(--neutral-bg)} & col.tint.info{--tb:var(--info-bg)}
+		& col.tint.success{--tb:var(--success-bg)} & col.tint.warning{--tb:var(--warning-bg)}
+		& col.tint.danger{--tb:var(--danger-bg)} & col.tint.accent{--tb:var(--accent-bg)}
+		& col.tint.teal{--tb:var(--teal-bg)} & col.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}
@@ -1124,6 +1129,35 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <h2 id="count-progress">Count progress</h2>
 
 <div class="meter"><span class="m-label">Zone A</span><div class="track"><div class="fill info" style="width:100.0%"></div></div><span class="m-val">100.0%</span><span class="m-label">Zone B</span><div class="track"><div class="fill success" style="width:92.0%"></div></div><span class="m-val">92.0%</span><span class="m-label">Zone C</span><div class="track"><div class="fill warning" style="width:85.0%"></div></div><span class="m-val">85.0%</span><span class="m-label">Overflow</span><div class="track"><div class="fill danger" style="width:4.0%"></div></div><span class="m-val">4.0%</span></div>
+
+<div class="table-wrap"><table class="rep">
+<colgroup><col style="width:25.0%"><col style="width:12.5%"><col class="tint warning" style="width:12.5%"><col style="width:50.0%"></colgroup>
+<thead><tr><th>Zone</th><th class="num">Counted</th><th class="num">Variance</th><th>Note</th></tr></thead>
+<tbody>
+<tr class="row">
+<td class="title">Zone A
+</td>
+<td class="num">3,100</td>
+<td class="num">0</td>
+<td>Matched the system count.</td>
+</tr>
+<tr class="row">
+<td class="title">Zone B
+</td>
+<td class="num">2,760</td>
+<td class="num">12</td>
+<td>Two mislabeled bins, re-scanned.</td>
+</tr>
+<tr class="row danger">
+<td class="title">Overflow
+</td>
+<td class="num">120</td>
+<td class="num">260</td>
+<td>Skipped by the <code>bin &gt; 12</code> rule.</td>
+</tr>
+</tbody>
+</table></div>
+
 
 <div class="badge-row"><span class="label">Affects:</span><span class="chip teal">inventory</span><span class="chip sky">scan-app</span><span class="chip violet">DC-West</span></div>
 <h2 id="verification">Verification</h2>

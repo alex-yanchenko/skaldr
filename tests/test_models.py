@@ -12,6 +12,7 @@ from skaldr.models import (
     BadgeColorLiteral,
     Callout,
     Cards,
+    Column,
     DefItem,
     DefList,
     Fan,
@@ -1897,6 +1898,43 @@ def test_table_column_widths_are_read_onto_every_column() -> None:
 
     assert isinstance(block, Table)
     assert [column.width for column in block.columns] == [2, 4]
+
+
+def test_a_table_column_takes_a_tone_and_a_palette_alias_names_the_same_tone() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A", "tone": "info"},
+            {"key": "b", "label": "B", "kind": "number", "tone": "green"},
+            {"key": "c", "label": "C", "kind": "badge", "placement": "cell", "tone": "teal"},
+        ],
+        rows=[{"a": "x", "b": 10, "c": "K"}],
+    )
+
+    badges = {"K": {"label": "k", "tone": "blue", "legend": False}}
+
+    block = parse_report(make_report(blocks=[table], badges=badges)).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.columns == [
+        Column(key="a", label="A", tone="info"),
+        Column(key="b", label="B", kind="number", tone="success"),
+        Column(key="c", label="C", kind="badge", placement="cell", tone="teal"),
+    ]
+
+
+def test_a_title_placement_badge_column_cannot_take_a_tone() -> None:
+    table = make_table(
+        [{"key": "a", "label": "A"}, {"key": "t", "label": "", "kind": "badge", "tone": "info"}],
+        rows=[{"a": "x", "t": ""}],
+    )
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[table]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.table: Value error, "
+        "badge column(s) ['t'] can't take a tone (they ride under the title)"
+    )
 
 
 def test_table_mixed_widths_are_rejected() -> None:

@@ -466,6 +466,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
 		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
 		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
+		& col.tint{background:var(--tb)}
+		& col.tint.neutral{--tb:var(--neutral-bg)} & col.tint.info{--tb:var(--info-bg)}
+		& col.tint.success{--tb:var(--success-bg)} & col.tint.warning{--tb:var(--warning-bg)}
+		& col.tint.danger{--tb:var(--danger-bg)} & col.tint.accent{--tb:var(--accent-bg)}
+		& col.tint.teal{--tb:var(--teal-bg)} & col.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}

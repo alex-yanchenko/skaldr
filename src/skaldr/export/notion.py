@@ -30,6 +30,7 @@ from skaldr.export.tree import (
     Paragraph,
     Quote,
     TableCell,
+    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -47,6 +48,7 @@ FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
+NOTION_TABLE_WIDTH: Final = 708
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -136,12 +138,27 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     return _row_lines(row.cells, texts, tone)
 
 
+def _width_attribute(width: int | None, total_width: int) -> str:
+    return f' width="{round(width / total_width * NOTION_TABLE_WIDTH)}"' if width else ""
+
+
+def _colgroup_lines(columns: Sequence[TableColumn]) -> list[str]:
+    if not columns:
+        return []
+    total_width = sum(column.width or 0 for column in columns)
+    cols = [
+        f"<col{_background_attribute(column.tone)}{_width_attribute(column.width, total_width)}>"
+        for column in columns
+    ]
+    return ["<colgroup>", *_indent(cols), "</colgroup>"]
+
+
 def _table_lines(table: TableNode) -> list[str]:
     attributes = ['fit-page-width="true"', 'header-row="true"']
     if table.header_column:
         attributes.append('header-column="true"')
     header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
-    rows = _row_lines(table.header, header_texts, None)
+    rows = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
     rows += [line for row in table.rows for line in _body_row_lines(table, row)]
     return [f"<table {' '.join(attributes)}>", *_indent(rows), "</table>"]
 

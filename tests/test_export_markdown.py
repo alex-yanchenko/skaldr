@@ -344,6 +344,19 @@ def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
     assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **x** | y |\n"
 
 
+def test_a_table_drops_column_tones_and_widths_markdown_cannot_show() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "a", "label": "A", "width": 1},
+            {"key": "b", "label": "B", "tone": "info", "width": 3},
+        ],
+        "rows": [{"a": "x", "b": "y"}],
+    }
+
+    assert markdown_of([table]) == "| A | B |\n| --- | --- |\n| x | y |\n"
+
+
 def test_a_comparison_bolds_its_feature_column_and_leaves_the_header_to_the_pipe_table() -> None:
     comparison = {
         "type": "comparison",

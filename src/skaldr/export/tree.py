@@ -52,10 +52,17 @@ class TableRow:
 
 
 @dataclass(frozen=True)
+class TableColumn:
+    tone: ToneName | None = None
+    width: int | None = None
+
+
+@dataclass(frozen=True)
 class TableNode:
     header: tuple[TableCell, ...]
     rows: tuple[TableRow, ...]
     header_column: bool = False
+    columns: tuple[TableColumn, ...] = ()
 
 
 @dataclass(frozen=True)

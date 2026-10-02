@@ -50,6 +50,7 @@ from tests.factories import (
     lowered,
     make_command_request,
     make_report,
+    make_table,
     notion_of,
 )
 
@@ -352,6 +353,49 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
         "\t\t<td>\\- leading dash</td>\n"
         "\t\t<td>1 + 1 and a+b</td>\n"
         "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("columns", "colgroup"),
+    [
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "tone": "success", "width": 2},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="118">\n\t\t<col color="green_bg" width="236">\n'
+            '\t\t<col width="354">\n\t</colgroup>\n',
+            id="widths-in-the-html-ratio-and-a-tone",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A"},
+                {"key": "b", "label": "B", "tone": "danger"},
+                {"key": "c", "label": "C"},
+            ],
+            '\t<colgroup>\n\t\t<col>\n\t\t<col color="red_bg">\n\t\t<col>\n\t</colgroup>\n',
+            id="a-tone-alone",
+        ),
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}, {"key": "c", "label": "C"}],
+            "",
+            id="no-colgroup-without-a-tone-or-width",
+        ),
+    ],
+)
+def test_column_tones_and_widths_become_a_notion_colgroup(
+    columns: list[dict[str, object]], colgroup: str
+) -> None:
+    table = make_table(columns, rows=[{"a": "x", "b": "y", "c": "z"}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"{colgroup}"
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>z</td>\n\t</tr>\n"
         "</table>\n"
     )
 

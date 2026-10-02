@@ -154,6 +154,38 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 - **Zone B**: █████████░ 92.0% {color="green"}
 - **Zone C**: █████████░ 85.0% {color="yellow"}
 - **Overflow**: ░░░░░░░░░░ 4.0% {color="red"}
+<table fit-page-width="true" header-row="true">
+	<colgroup>
+		<col width="177">
+		<col width="88">
+		<col color="yellow_bg" width="88">
+		<col width="354">
+	</colgroup>
+	<tr>
+		<td>**Zone**</td>
+		<td>**Counted**</td>
+		<td>**Variance**</td>
+		<td>**Note**</td>
+	</tr>
+	<tr>
+		<td>Zone A</td>
+		<td>3,100</td>
+		<td>0</td>
+		<td>Matched the system count.</td>
+	</tr>
+	<tr>
+		<td>Zone B</td>
+		<td>2,760</td>
+		<td>12</td>
+		<td>Two mislabeled bins, re-scanned.</td>
+	</tr>
+	<tr color="red_bg">
+		<td>Overflow</td>
+		<td>120</td>
+		<td>260</td>
+		<td>Skipped by the `bin > 12` rule.</td>
+	</tr>
+</table>
 **Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
 ## Verification
 - ✅ Reconciliation gate passes (10,000 = 10,000).

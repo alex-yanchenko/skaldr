@@ -821,6 +821,29 @@
           "default": null,
           "description": "Proportional width weight (1-6); set it on every in-cell column, or none. A `title`-placement badge column takes no width (it rides under the title).",
           "title": "Width"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent",
+                "teal",
+                "sky"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone that faintly tints the whole column. A row `tone` or a `tint_by` row tint paints over it. A `title`-placement badge column takes no tone (it rides under the title).",
+          "title": "Tone"
         }
       },
       "required": [

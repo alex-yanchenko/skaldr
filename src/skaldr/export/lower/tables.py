@@ -5,7 +5,7 @@ from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, tone_of, with_bold_label
 from skaldr.export.runs import Break, CheckMark, ExportRich, ExportRun, IndicatorMark, SwimlaneMark
-from skaldr.export.tree import Node, Paragraph, TableCell, TableNode, TableRow, ToneName
+from skaldr.export.tree import Node, Paragraph, TableCell, TableColumn, TableNode, TableRow, ToneName
 from skaldr.richtext import Link, Plain
 
 Row = Mapping[str, Any]
@@ -126,13 +126,19 @@ def _rollup(block: models.Table, lowering: Lowering) -> list[Node]:
     return [Paragraph(with_bold_label(label, spaced(counts, " · ")))]
 
 
+def _table_columns(block: models.Table) -> tuple[TableColumn, ...]:
+    columns = block.cell_columns
+    if all(column.tone is None and column.width is None for column in columns):
+        return ()
+    return tuple(TableColumn(column.tone, column.width) for column in columns)
+
+
 def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:
     rows = _table_body(block, lowering)
     if block.totals:
         rows.append(_totals_row(block, block.totals.column))
-    nodes: list[Node] = [
-        TableNode(plain_cells(*(column.label for column in block.cell_columns)), tuple(rows))
-    ]
+    header = plain_cells(*(column.label for column in block.cell_columns))
+    nodes: list[Node] = [TableNode(header, tuple(rows), columns=_table_columns(block))]
     nodes += _rollup(block, lowering)
     if block.reconcile:
         nodes.append(Paragraph(plain(compute.reconcile_line(block)), "muted"))

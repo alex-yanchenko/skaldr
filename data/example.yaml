@@ -148,6 +148,16 @@ blocks:
       - { label: "Zone B", value: 92, max: 100, tone: success }
       - { label: "Zone C", value: 85, max: 100, tone: warning }
       - { label: "Overflow", value: 4, max: 100, tone: danger }
+  - type: table
+    columns:
+      - { key: zone, label: "Zone", width: 2 }
+      - { key: counted, label: "Counted", kind: number, width: 1 }
+      - { key: variance, label: "Variance", kind: number, width: 1, tone: warning }
+      - { key: note, label: "Note", kind: rich, width: 4 }
+    rows:
+      - [Zone A, 3100, 0, "Matched the system count."]
+      - [Zone B, 2760, 12, "Two mislabeled bins, re-scanned."]
+      - { zone: Overflow, counted: 120, variance: 260, note: "Skipped by the `bin > 12` rule.", tone: danger }
   - type: badge_row
     label: "Affects:"
     items:
