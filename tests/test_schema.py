@@ -1,12 +1,15 @@
 from collections.abc import Iterable, Iterator
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 import pytest
+import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
 from skaldr.errors import ReportError
-from skaldr.models import Report, parse_report
-from tests.factories import make_cell, make_grid, make_report, make_request, make_table
+from skaldr.models import Report, load_report, package_path, parse_report
+from tests.conftest import REPO_ROOT
+from tests.factories import make_cell, make_grid, make_report, make_request, make_swimlane, make_table
 
 
 class DocumentValidator(Protocol):
@@ -53,6 +56,54 @@ def schema_keys(node: object) -> Iterator[str]:
 
 def test_the_generated_schema_is_a_valid_draft_2020_12_schema() -> None:
     Draft202012Validator.check_schema(SCHEMA)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param(REPO_ROOT / "data" / "example.yaml", id="repo-example"),
+        pytest.param(package_path("skill") / "example.yaml", id="guide-example"),
+    ],
+)
+def test_an_example_document_passes_the_generated_schema(path: Path) -> None:
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    load_report(path)
+    assert schema_errors(document) == []
+
+
+SWIMLANE_STEP = {"lane": "Product", "col": "Sprint 1", "n": "1", "label": "Spec"}
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(make_swimlane([SWIMLANE_STEP]), id="bare-string-lanes-and-columns"),
+        pytest.param(
+            make_swimlane([SWIMLANE_STEP], lanes=[{"name": "Product"}], columns=[{"name": "Sprint 1"}]),
+            id="named-lanes-and-columns",
+        ),
+    ],
+)
+def test_a_swimlane_in_either_documented_form_passes_both_the_build_and_the_schema(
+    block: dict[str, Any],
+) -> None:
+    document = make_report(blocks=[block])
+
+    parse_report(document)
+    assert schema_errors(document) == []
+
+
+def test_a_blank_bare_string_lane_is_refused_by_both_the_build_and_the_schema() -> None:
+    document = make_report(blocks=[make_swimlane([SWIMLANE_STEP], lanes=["Product", ""])])
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(document)
+
+    assert (str(raised.value), schema_messages_at(document, ("blocks", 0, "lanes", 1))) == (
+        "invalid content data: blocks.0.swimlane.lanes.1.name: String should have at least 1 character",
+        {"'' should be non-empty", "'' is not of type 'object'"},
+    )
 
 
 def test_every_numeric_bound_in_the_schema_is_a_json_schema_keyword() -> None:

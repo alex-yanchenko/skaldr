@@ -1573,11 +1573,21 @@ def _first_and_last_index(keys: Iterable[str | None]) -> dict[str, tuple[int, in
     return spans
 
 
+MAX_SWIMLANE_LANES: Final = 8
+_SwimlaneBareName = Annotated[str, Field(min_length=1)]
+
+
+def _wrap_bare_names(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    return [{"name": item} if isinstance(item, str) else item for item in cast("list[object]", value)]
+
+
 class Swimlane(_Block):
     type: Literal["swimlane"]
     lanes: list[SwimlaneLane] = Field(
         min_length=1,
-        max_length=8,
+        max_length=MAX_SWIMLANE_LANES,
         description="Lanes, in row order (top to bottom). A bare string is shorthand for `{name: …}`; "
         "use `{id, name}` to give a stable reference key. Capped at 8 — more rows than that stop "
         "reading as a matrix; split into two swimlanes instead.",
@@ -1596,13 +1606,25 @@ class Swimlane(_Block):
         min_length=1, description="Steps placed on the lane/column grid; the sequence reads as a staircase."
     )
 
-    @field_validator("lanes", "columns", mode="before")
+    @field_validator(
+        "lanes",
+        mode="before",
+        json_schema_input_type=Annotated[
+            list[_SwimlaneBareName | SwimlaneLane], Field(min_length=1, max_length=MAX_SWIMLANE_LANES)
+        ],
+    )
     @classmethod
-    def _wrap_bare_names(cls, value: Any) -> Any:
-        """A bare string lane/column is shorthand for `{name: <string>}` (key defaults to the name)."""
-        if not isinstance(value, list):
-            return value
-        return [{"name": item} if isinstance(item, str) else item for item in cast("list[object]", value)]
+    def _wrap_bare_lane_names(cls, value: Any) -> Any:
+        return _wrap_bare_names(value)
+
+    @field_validator(
+        "columns",
+        mode="before",
+        json_schema_input_type=Annotated[list[_SwimlaneBareName | SwimlaneColumn], Field(min_length=1)],
+    )
+    @classmethod
+    def _wrap_bare_column_names(cls, value: Any) -> Any:
+        return _wrap_bare_names(value)
 
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]

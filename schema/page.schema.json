@@ -4464,7 +4464,15 @@
         "lanes": {
           "description": "Lanes, in row order (top to bottom). A bare string is shorthand for `{name: \u2026}`; use `{id, name}` to give a stable reference key. Capped at 8 \u2014 more rows than that stop reading as a matrix; split into two swimlanes instead.",
           "items": {
-            "$ref": "#/$defs/SwimlaneLane"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/SwimlaneLane"
+              }
+            ]
           },
           "maxItems": 8,
           "minItems": 1,
@@ -4474,7 +4482,15 @@
         "columns": {
           "description": "Columns, left to right \u2014 the sprint / phase axis. A bare string is shorthand for `{name: \u2026}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
           "items": {
-            "$ref": "#/$defs/SwimlaneColumn"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/SwimlaneColumn"
+              }
+            ]
           },
           "minItems": 1,
           "title": "Columns",
