@@ -1,12 +1,13 @@
-import html
 import re
-from collections.abc import Mapping
+import unicodedata
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
+from itertools import takewhile
 from typing import Final, Literal
 from xml.etree.ElementTree import Element, tostring
 
-from latex2mathml.commands import MATRICES
+from latex2mathml.commands import MATRICES, NEWENVIRONMENT
 from latex2mathml.converter import convert_to_element
 from latex2mathml.tokenizer import tokenize
 from webcolors import names, normalize_hex
@@ -15,11 +16,11 @@ from skaldr.errors import ReportError
 
 MathDisplay = Literal["inline", "block"]
 NOTION_EQUATION_FENCE: Final = "$$"
-ENVIRONMENT_OPENING: Final = r"\begin{"
+ENVIRONMENT_OPENING = re.compile(r"\\begin\{([^{}]+)\}")
 KNOWN_ENVIRONMENTS: Final = frozenset(command.removeprefix("\\") for command in MATRICES)
-NEW_ENVIRONMENT = re.compile(r"\\newenvironment\{([^{}]+)\}")
 COLOUR_ATTRIBUTES: Final = frozenset({"mathcolor", "mathbackground", "border-color"})
-CSS_COLOUR_NAMES: Final = frozenset(names("css3"))
+CSS_COLOUR_KEYWORDS_BEYOND_CSS3: Final = frozenset({"rebeccapurple", "transparent", "currentcolor"})
+CSS_COLOUR_NAMES: Final = frozenset(names("css3")) | CSS_COLOUR_KEYWORDS_BEYOND_CSS3
 MATHML_ATTRIBUTES: Final = frozenset(
     {
         "accent",
@@ -90,7 +91,13 @@ REQUIRED_PARTS: Final[Mapping[str, RequiredParts]] = {
     "msubsup": _TWO_SCRIPTS,
     "munderover": _TWO_SCRIPTS,
 }
-CONVERTER_HEX_ENTITY = re.compile(r"&#x[0-9A-Fa-f]+;")
+CONVERTER_HEX_ENTITY = re.compile(r"&#x([0-9A-Fa-f]+);")
+REPLACEMENT_CHARACTER: Final = "\N{REPLACEMENT CHARACTER}"
+LAST_CODE_POINT: Final = 0x10FFFF
+SURROGATES: Final = range(0xD800, 0xE000)
+ARABIC_NONCHARACTERS: Final = range(0xFDD0, 0xFDF0)
+PLANE_END_NONCHARACTER_BITS: Final = 0xFFFE
+CONTROL_CHARACTERS_A_PAGE_KEEPS: Final = frozenset({"\t", "\n"})
 
 
 @cache
@@ -138,16 +145,30 @@ def _refuse_attributes_outside_mathml(element: Element, expression: str) -> None
 
 
 def _refuse_unknown_environment(expression: str) -> None:
-    defined = KNOWN_ENVIRONMENTS | frozenset(NEW_ENVIRONMENT.findall(expression))
-    for token in tokenize(expression):
-        if not token.startswith(ENVIRONMENT_OPENING):
+    tokens = list(tokenize(expression))
+    defined = KNOWN_ENVIRONMENTS | _newly_defined_environments(tokens)
+    for token in tokens:
+        opening = ENVIRONMENT_OPENING.fullmatch(token)
+        if opening is None:
             continue
-        environment = token.removeprefix(ENVIRONMENT_OPENING).removesuffix("}")
+        environment = opening.group(1)
         if environment not in defined:
             raise ReportError(
                 f"math expression '{expression}' opens the {environment} environment, which latex2mathml "
                 f"does not define: use one of {', '.join(sorted(KNOWN_ENVIRONMENTS))}"
             )
+
+
+def _newly_defined_environments(tokens: Sequence[str]) -> frozenset[str]:
+    return frozenset(
+        _braced_argument(tokens[index + 1 :]) for index, token in enumerate(tokens) if token == NEWENVIRONMENT
+    )
+
+
+def _braced_argument(following: Sequence[str]) -> str:
+    if not following or following[0] != "{":
+        return "".join(following[:1])
+    return "".join(takewhile(lambda token: token != "}", following[1:]))
 
 
 def _refuse_unknown_colour(element: Element, expression: str) -> None:
@@ -193,4 +214,20 @@ def _decode_converter_entities(element: Element) -> None:
 
 
 def _decoded(text: str) -> str:
-    return CONVERTER_HEX_ENTITY.sub(lambda match: html.unescape(match.group(0)), text)
+    return CONVERTER_HEX_ENTITY.sub(lambda match: _character_a_page_can_hold(int(match.group(1), 16)), text)
+
+
+def _character_a_page_can_hold(code_point: int) -> str:
+    if code_point > LAST_CODE_POINT or code_point in SURROGATES or _is_noncharacter(code_point):
+        return REPLACEMENT_CHARACTER
+    character = chr(code_point)
+    if unicodedata.category(character) == "Cc" and character not in CONTROL_CHARACTERS_A_PAGE_KEEPS:
+        return REPLACEMENT_CHARACTER
+    return character
+
+
+def _is_noncharacter(code_point: int) -> bool:
+    return (
+        code_point in ARABIC_NONCHARACTERS
+        or code_point & PLANE_END_NONCHARACTER_BITS == PLANE_END_NONCHARACTER_BITS
+    )

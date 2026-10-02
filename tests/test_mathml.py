@@ -43,6 +43,11 @@ CONVERTER_PREFIX = "latex2mathml cannot convert it ("
         pytest.param(r"a\,b", '<mrow><mi>a</mi><mspace width="0.167em" /><mi>b</mi></mrow>', id="thin-space"),
         pytest.param(r"\$", "<mrow><mi>$</mi></mrow>", id="escaped-dollar"),
         pytest.param(r"\text{\foo}", "<mrow><mtext>\\foo</mtext></mrow>", id="backslash-inside-text"),
+        pytest.param(
+            r"\text{\begin{foo}}",
+            "<mrow><mtext>\\begin{foo</mtext><mi>}</mi></mrow>",
+            id="environment-opening-inside-text",
+        ),
         pytest.param("a<b", "<mrow><mi>a</mi><mo>&lt;</mo><mi>b</mi></mrow>", id="less-than-is-escaped"),
     ],
 )
@@ -90,6 +95,25 @@ def test_a_hex_entity_the_author_typed_decodes_like_the_converters_own() -> None
         pytest.param(r"\unicode{xFFFFFFFFFFFF}", "\N{REPLACEMENT CHARACTER}", id="too-large-for-a-c-int"),
         pytest.param(r"\unicode{xD800}", "\N{REPLACEMENT CHARACTER}", id="lone-surrogate"),
         pytest.param(r"\unicode{x0}", "\N{REPLACEMENT CHARACTER}", id="nul"),
+        pytest.param(
+            r"\unicode{x80}", "\N{REPLACEMENT CHARACTER}", id="c1-control-kept-from-the-cp1252-remap"
+        ),
+        pytest.param(r"\unicode{x1}", "\N{REPLACEMENT CHARACTER}", id="c0-control"),
+        pytest.param(r"\unicode{xD}", "\N{REPLACEMENT CHARACTER}", id="carriage-return"),
+        pytest.param(r"\unicode{x7F}", "\N{REPLACEMENT CHARACTER}", id="delete"),
+        pytest.param(r"\unicode{x9F}", "\N{REPLACEMENT CHARACTER}", id="last-c1-control"),
+        pytest.param(r"\unicode{xFFFE}", "\N{REPLACEMENT CHARACTER}", id="noncharacter-ending-fffe"),
+        pytest.param(r"\unicode{x10FFFF}", "\N{REPLACEMENT CHARACTER}", id="noncharacter-ending-ffff"),
+        pytest.param(r"\unicode{xFDD0}", "\N{REPLACEMENT CHARACTER}", id="first-arabic-noncharacter"),
+        pytest.param(r"\unicode{xFDEF}", "\N{REPLACEMENT CHARACTER}", id="last-arabic-noncharacter"),
+        pytest.param(r"\unicode{x9}", "\t", id="tab"),
+        pytest.param(r"\unicode{xA0}", "\N{NO-BREAK SPACE}", id="first-code-point-after-the-c1-controls"),
+        pytest.param(
+            r"\unicode{xFDF0}",
+            "\N{ARABIC LIGATURE SALLA USED AS KORANIC STOP SIGN ISOLATED FORM}",
+            id="after-the-arabic-noncharacters",
+        ),
+        pytest.param(r"\unicode{x10FFFD}", "\U0010fffd", id="last-assignable-code-point"),
     ],
 )
 def test_a_unicode_code_point_decodes_and_one_no_page_can_hold_becomes_the_replacement_character(
@@ -154,6 +178,33 @@ def test_an_environment_latex2mathml_defines_converts(expression: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("expression", "markup"),
+    [
+        pytest.param(
+            r"\newenvironment {pair}{\left(}{\right)} \begin{pair} x \end{pair}",
+            '<mrow><mo stretchy="true" fence="true" form="prefix">(</mo><mi>x</mi>'
+            '<mo stretchy="true" fence="true" form="postfix">)</mo></mrow>',
+            id="space-before-the-name",
+        ),
+        pytest.param(
+            r"\newenvironment{ pair }{(}{)} \begin{pair} x \end{pair}",
+            '<mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow>',
+            id="spaces-around-the-name",
+        ),
+        pytest.param(
+            r"\newenvironment{p air}{(}{)} \begin{pair} x \end{pair}",
+            '<mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow>',
+            id="space-inside-the-name",
+        ),
+    ],
+)
+def test_an_environment_defined_with_spaces_in_its_newenvironment_converts(
+    expression: str, markup: str
+) -> None:
+    assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
+
+
+@pytest.mark.parametrize(
     ("expression", "colour"),
     [
         pytest.param(r"\color{simga} x", "simga", id="misspelt-name"),
@@ -186,6 +237,19 @@ def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: s
         ),
         pytest.param(r"\color{#f00} x", '<mstyle mathcolor="#f00"><mi>x</mi></mstyle>', id="short-hex"),
         pytest.param(r"\color{#00AA00} x", '<mstyle mathcolor="#00AA00"><mi>x</mi></mstyle>', id="long-hex"),
+        pytest.param(
+            r"\color{rebeccapurple} x",
+            '<mstyle mathcolor="rebeccapurple"><mi>x</mi></mstyle>',
+            id="css-colour-level-4-name",
+        ),
+        pytest.param(
+            r"\color{transparent} x", '<mstyle mathcolor="transparent"><mi>x</mi></mstyle>', id="transparent"
+        ),
+        pytest.param(
+            r"\color{currentColor} x",
+            '<mstyle mathcolor="currentColor"><mi>x</mi></mstyle>',
+            id="current-colour",
+        ),
         pytest.param(
             r"\fcolorbox{navy}{#eee}{x}",
             '<mpadded mathbackground="#eee" border-color="navy"><mtext>x</mtext></mpadded>',
@@ -388,6 +452,24 @@ def test_a_root_missing_a_part_fails(stub_converter: Callable[[Element], None]) 
     assert str(raised.value) == (
         r"math expression 'x' has a root missing a part: \sqrt[n]{x} takes an index and a radicand"
     )
+
+
+@pytest.mark.parametrize(
+    "tag", [pytest.param("msubsup", id="msubsup"), pytest.param("munderover", id="munderover")]
+)
+def test_a_two_script_form_with_only_two_parts_fails(
+    stub_converter: Callable[[Element], None], tag: str
+) -> None:
+    root = Element("math")
+    scripted = SubElement(root, tag)
+    SubElement(scripted, "mi").text = "x"
+    SubElement(scripted, "mi").text = "a"
+    stub_converter(root)
+
+    with pytest.raises(ReportError) as raised:
+        mathml("x", "inline")
+
+    assert str(raised.value) == f"math expression 'x' has {SCRIPT_MISSING_A_PART}"
 
 
 @pytest.mark.parametrize(
