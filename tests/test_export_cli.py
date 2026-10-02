@@ -195,6 +195,24 @@ def test_the_cli_warns_when_an_earlier_export_manifest_cannot_be_read(
     )
 
 
+def test_the_cli_fails_and_keeps_a_page_md_it_did_not_write(
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, make_report())
+    export_dir.mkdir()
+    (export_dir / "page.md").write_text("my own notes\n", encoding="utf-8")
+
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
+
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err, (export_dir / "page.md").read_text(encoding="utf-8")) == (
+        "",
+        f"error: refusing to overwrite {export_dir / 'page.md'}, which is not on the {EXPORT_MANIFEST} "
+        "list of files skaldr wrote; move it away or choose another --export-dir\n",
+        "my own notes\n",
+    )
+
+
 def test_the_cli_reports_a_section_too_long_for_the_chunk(
     tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

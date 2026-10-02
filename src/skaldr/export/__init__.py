@@ -5,6 +5,7 @@ from typing import Annotated, Final, Literal, get_args
 
 from pydantic import StringConstraints, ValidationError
 
+from skaldr.errors import ReportError
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
@@ -61,11 +62,29 @@ def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
     replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
 
 
+def _refuse_to_overwrite_pages_skaldr_did_not_write(
+    out_dir: Path, names: Collection[str], earlier: _EarlierExport
+) -> None:
+    foreign = [
+        out_dir / name
+        for name in sorted(names)
+        if name not in earlier.pages and ((out_dir / name).exists() or (out_dir / name).is_symlink())
+    ]
+    if not foreign:
+        return
+    which, pronoun = ("which is", "it") if len(foreign) == 1 else ("which are", "them")
+    raise ReportError(
+        f"refusing to overwrite {', '.join(map(str, foreign))}, {which} not on the {EXPORT_MANIFEST} list "
+        f"of files skaldr wrote; move {pronoun} away or choose another --export-dir"
+    )
+
+
 def _export_pages(
     out_dir: Path, title: str, pages: Mapping[str, str], oversized_sections: tuple[str, ...] = ()
 ) -> ExportResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
+    _refuse_to_overwrite_pages_skaldr_did_not_write(out_dir, pages.keys(), earlier)
     _write_manifest(out_dir, title, earlier.pages | set(pages))
     written: list[Path] = []
     for name, text in pages.items():

@@ -5,6 +5,7 @@ from typing import get_args
 
 import pytest
 
+from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import (
@@ -40,6 +41,7 @@ from skaldr.export.tree import (
 from skaldr.models import (
     AnyBlock,
     BadgeColorLiteral,
+    Report,
     load_report,
     parse_report,
     walk_blocks,
@@ -1054,6 +1056,74 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
 @pytest.mark.parametrize(
     "manifest",
     [
+        pytest.param(None, id="first-export"),
+        pytest.param('{"title": "T", "files": ["page.03.md"]}', id="manifest-lists-other-pages"),
+        pytest.param("not json", id="unreadable-manifest"),
+    ],
+)
+@pytest.mark.parametrize(
+    "export",
+    [pytest.param(export_markdown, id="markdown"), pytest.param(export_notion, id="notion")],
+)
+def test_an_export_refuses_to_overwrite_a_page_the_manifest_does_not_list_and_writes_nothing(
+    tmp_path: Path, manifest: str | None, export: Callable[[Report, Path], ExportResult]
+) -> None:
+    (tmp_path / "page.md").write_text("my own notes\n", encoding="utf-8")
+    if manifest is not None:
+        (tmp_path / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+    before = folder_texts(tmp_path)
+
+    with pytest.raises(ReportError) as refused:
+        export(parse_report(make_report()), tmp_path)
+
+    assert (str(refused.value), folder_texts(tmp_path)) == (
+        f"refusing to overwrite {tmp_path / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
+        "files skaldr wrote; move it away or choose another --export-dir",
+        before,
+    )
+
+
+def test_a_chunked_export_refuses_to_overwrite_numbered_pages_its_earlier_run_did_not_write(
+    tmp_path: Path,
+) -> None:
+    shorter = parse_report(make_report(blocks=heading_sections(2, "w = 4\n" * 20)))
+    export_notion(shorter, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
+    (tmp_path / "page.06.md").write_text("mine", encoding="utf-8")
+    (tmp_path / "page.07.md").write_text("also mine", encoding="utf-8")
+    before = folder_texts(tmp_path)
+    longer = parse_report(make_report(blocks=heading_sections(8, "w = 4\n" * 20)))
+
+    with pytest.raises(ReportError) as refused:
+        export_notion(longer, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
+
+    assert (str(refused.value), folder_texts(tmp_path)) == (
+        f"refusing to overwrite {tmp_path / 'page.06.md'}, {tmp_path / 'page.07.md'}, which are not on the "
+        f"{EXPORT_MANIFEST} list of files skaldr wrote; move them away or choose another --export-dir",
+        before,
+    )
+
+
+def test_an_export_refuses_a_dangling_symlink_where_its_page_goes(tmp_path: Path) -> None:
+    (tmp_path / "page.md").symlink_to(tmp_path / "missing.md")
+
+    with pytest.raises(ReportError) as refused:
+        export_markdown(parse_report(make_report()), tmp_path)
+
+    assert (
+        str(refused.value),
+        (tmp_path / "page.md").is_symlink(),
+        sorted(path.name for path in tmp_path.iterdir()),
+    ) == (
+        f"refusing to overwrite {tmp_path / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
+        "files skaldr wrote; move it away or choose another --export-dir",
+        True,
+        ["page.md"],
+    )
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
         pytest.param("not json", id="not-json"),
         pytest.param("[" * NESTING_TOO_DEEP_TO_PARSE, id="nested-too-deep-to-parse"),
         pytest.param('["page.03.md"]', id="not-an-object"),
@@ -1135,7 +1205,8 @@ def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
 
 def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp_path: Path) -> None:
     outside = tmp_path / "outside.txt"
-    outside.write_text("keep me", encoding="utf-8")
+    manifest_listing_the_page = '{"title": "T", "files": ["page.md"]}'
+    outside.write_text(manifest_listing_the_page, encoding="utf-8")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     (out_dir / "page.md").symlink_to(outside)
@@ -1148,13 +1219,14 @@ def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp
         (out_dir / "page.md").is_symlink(),
         (out_dir / "page.md").read_text(encoding="utf-8"),
         (out_dir / EXPORT_MANIFEST).is_symlink(),
-    ) == ("keep me", False, "Hello.\n", False)
+    ) == (manifest_listing_the_page, False, "Hello.\n", False)
 
 
 def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:
     page = tmp_path / "page.md"
     page.write_text("old", encoding="utf-8")
     page.chmod(0o600)
+    (tmp_path / EXPORT_MANIFEST).write_text('{"title": "T", "files": ["page.md"]}', encoding="utf-8")
 
     export_notion(parse_report(make_report()), tmp_path)
 
