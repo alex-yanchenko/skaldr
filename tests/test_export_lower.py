@@ -23,7 +23,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
-from tests.factories import lowered, make_report
+from tests.factories import lowered, make_cell, make_flow, make_grid, make_report
 
 
 def test_a_report_lowers_to_its_title_and_body() -> None:
@@ -35,9 +35,33 @@ def test_a_report_lowers_to_its_title_and_body() -> None:
     )
 
 
-def test_a_block_with_no_markdown_form_yet_fails_naming_its_type() -> None:
-    with pytest.raises(ReportError, match=r"^a `flow` block has no Markdown export yet$"):
-        lowered([{"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}])
+@pytest.mark.parametrize(
+    ("block", "block_type"),
+    [
+        pytest.param({"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}, "flow", id="flow"),
+        pytest.param({"type": "def_list", "items": [{"term": "a", "body": "b"}]}, "def_list", id="def-list"),
+        pytest.param(make_grid([make_cell(6)]), "grid", id="grid"),
+        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    ],
+)
+def test_a_block_with_no_markdown_form_yet_fails_naming_its_type(
+    block: dict[str, Any], block_type: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        lowered([block])
+
+    assert str(raised.value) == f"a `{block_type}` block has no Markdown export yet"
+
+
+def test_a_walkthrough_step_with_no_sub_is_its_bold_label() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "d"}]}],
+    }
+
+    assert lowered([walkthrough]) == (
+        ListNode("number", (ListEntry(bold("Go"), children=(Paragraph((Plain("d"),)),)),)),
+    )
 
 
 def test_rich_text_keeps_the_spaces_inside_a_code_span() -> None:

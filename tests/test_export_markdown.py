@@ -13,6 +13,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListKind,
     ListNode,
+    Node,
     Paragraph,
     Quote,
     TableOfContents,
@@ -21,7 +22,7 @@ from skaldr.export.tree import (
     ToneName,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Rich, Run, Styled, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
 from tests.factories import make_report, markdown_of
 
 
@@ -43,32 +44,30 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
     )
 
 
-def test_inline_runs_become_markdown() -> None:
-    runs: Rich = (
-        Citation("a", 1, "https://example.com/a b"),
-        Plain(" "),
-        Citation("b", 2),
-        Plain(" "),
-        Placeholder("owner"),
-        Plain(" "),
-        Styled("strike", (Plain("old"),)),
-        Plain(" "),
-        Link((Plain("paren"),), "https://example.com/(x)>"),
-        Plain(" "),
-        AnchorLink((Plain("method"),), "method"),
-        Plain(" "),
-        AnchorLink((Plain("gone"),), "nowhere"),
-        Plain(" see!"),
-        Link((Plain("img"),), "https://e.com/x.png"),
-    )
-    nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph(runs)]
+@pytest.mark.parametrize(
+    ("run", "written"),
+    [
+        pytest.param(
+            Citation("a", 1, "https://example.com/a b"),
+            r"[\[1\]](https://example.com/a%20b)",
+            id="citation-with-url",
+        ),
+        pytest.param(Citation("b", 2), r"\[2\]", id="citation-without-url"),
+        pytest.param(Placeholder("owner"), "`{{owner}}`", id="placeholder"),
+        pytest.param(Styled("strike", (Plain("old"),)), "~~old~~", id="strike"),
+        pytest.param(
+            Link((Plain("paren"),), "https://example.com/(x)>"),
+            "[paren](https://example.com/%28x%29%3E)",
+            id="link-with-parens",
+        ),
+        pytest.param(AnchorLink((Plain("method"),), "method"), "[method](#how-we-count)", id="anchor-link"),
+        pytest.param(AnchorLink((Plain("gone"),), "nowhere"), "gone", id="anchor-link-to-no-heading"),
+    ],
+)
+def test_an_inline_run_becomes_markdown(run: Run, written: str) -> None:
+    nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph((run,))]
 
-    assert render_markdown(nodes) == (
-        "## How we count\n\n"
-        r"[\[1\]](https://example.com/a%20b) \[2\] `{{owner}}` ~~old~~ "
-        "[paren](https://example.com/%28x%29%3E) "
-        "[method](#how-we-count) gone see\\![img](https://e.com/x.png)\n"
-    )
+    assert render_markdown(nodes) == f"## How we count\n\n{written}\n"
 
 
 @pytest.mark.parametrize(
@@ -170,6 +169,10 @@ def test_styled_text_keeps_surrounding_spaces_outside_its_markers() -> None:
         pytest.param("--- not a rule", "\\--- not a rule", id="rule"),
         pytest.param("=== not an underline", "\\=== not an underline", id="setext"),
         pytest.param("-5 degrees", "-5 degrees", id="negative-number"),
+        pytest.param("> not a quote", "\\> not a quote", id="quote"),
+        pytest.param("####### x", "####### x", id="seven-hashes-are-no-heading"),
+        pytest.param("+++", "\\+++", id="plus-run"),
+        pytest.param("1234567890. x", "1234567890. x", id="ten-digit-ordinal-is-no-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
@@ -201,6 +204,32 @@ def test_nested_list_children_indent_to_the_content_column_of_their_marker() -> 
     }
 
     assert markdown_of([block]) == "1. parent\n   1. child\n   2. mid\n      1. leaf\n"
+
+
+def test_a_two_digit_ordinal_indents_its_children_one_column_further() -> None:
+    block = {"type": "list", "style": "number", "items": [*"abcdefghi", {"text": "j", "items": ["child"]}]}
+
+    assert markdown_of([block]) == (
+        "1. a\n2. b\n3. c\n4. d\n5. e\n6. f\n7. g\n8. h\n9. i\n10. j\n    1. child\n"
+    )
+
+
+def test_an_alternate_ordinal_marker_indents_its_children_to_its_content() -> None:
+    blocks = [
+        {"type": "list", "style": "number", "items": ["a"]},
+        {"type": "list", "style": "number", "items": [{"text": "b", "items": ["child"]}]},
+    ]
+
+    assert markdown_of(blocks) == "1. a\n\n1) b\n   1. child\n"
+
+
+def test_a_walkthrough_step_with_no_sub_is_its_bold_label_over_its_detail() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "d"}]}],
+    }
+
+    assert markdown_of([walkthrough]) == "1. **Go**\n\n   d\n"
 
 
 def test_a_check_list_becomes_a_task_list() -> None:
@@ -276,16 +305,28 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
     assert markdown_of(blocks) == "- a\n\n* b\n\n- [ ] c\n\n1. d\n\n1) e\n"
 
 
-def test_block_nodes_become_markdown_blocks() -> None:
-    nodes = [
-        Callout("info", (ListNode("bullet", ()),)),
-        Callout("warning", (Paragraph((Plain("careful"),)),)),
-        Quote(((Plain("said"),),)),
-        Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
-        ListNode("bullet", (ListEntry((Plain("card"),), children=(Paragraph((Plain("note"),)),)),)),
-    ]
-
-    assert render_markdown(nodes) == "> 💡\n\n> ⚠️ careful\n\n> said\n\n**Legend**\n\nx\n\n- card\n\n  note\n"
+@pytest.mark.parametrize(
+    ("node", "markdown"),
+    [
+        pytest.param(Callout("info", (ListNode("bullet", ()),)), "> 💡\n", id="callout-with-nothing-to-say"),
+        pytest.param(
+            Callout("warning", (Paragraph((Plain("careful"),)),)), "> ⚠️ careful\n", id="callout-paragraph"
+        ),
+        pytest.param(Quote(((Plain("said"),),)), "> said\n", id="quote"),
+        pytest.param(
+            Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
+            "**Legend**\n\nx\n",
+            id="toggle-without-heading",
+        ),
+        pytest.param(
+            ListNode("bullet", (ListEntry((Plain("card"),), children=(Paragraph((Plain("note"),)),)),)),
+            "- card\n\n  note\n",
+            id="list-entry-with-a-paragraph",
+        ),
+    ],
+)
+def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> None:
+    assert render_markdown([node]) == markdown
 
 
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
@@ -336,6 +377,16 @@ def test_a_repeated_heading_skips_a_slug_another_heading_already_took() -> None:
     ]
 
     assert github_heading_slugs(nodes) == {"a": "foo", "b": "foo-1", "c": "foo-2"}
+
+
+def test_github_slugs_count_headings_nested_in_callouts_and_list_entries() -> None:
+    nodes = [
+        Heading(2, (Plain("Same"),), "top"),
+        Callout("info", (Heading(3, (Plain("Same"),), "in-callout"),)),
+        ListNode("bullet", (ListEntry((Plain("x"),), children=(Heading(3, (Plain("Same"),), "in-entry"),)),)),
+    ]
+
+    assert github_heading_slugs(nodes) == {"top": "same", "in-callout": "same-1", "in-entry": "same-2"}
 
 
 def test_github_slugs_number_repeats_in_document_order_across_every_heading() -> None:
