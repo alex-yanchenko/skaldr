@@ -21,6 +21,9 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Diagram,
+    Graph,
+    GraphNode,
     Heading,
     ListEntry,
     ListKind,
@@ -28,17 +31,95 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Tab,
     TableCell,
     TableNode,
     TableOfContents,
     TableRow,
+    Tabs,
     TocEntry,
     Toggle,
     ToneName,
 )
-from skaldr.models import parse_report
+from skaldr.models import load_report, parse_report
 from skaldr.richtext import AnchorLink, Citation, Link, Placeholder, Plain, Run, Styled, parse_rich
-from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, make_report, markdown_of
+from tests.conftest import REPO_ROOT
+from tests.factories import (
+    API_BADGES,
+    BADGE_AND_STATE_BLOCKS,
+    folder_texts,
+    make_command_request,
+    make_report,
+    markdown_of,
+)
+
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
+
+
+def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
+    export_markdown(load_report(EXAMPLE), tmp_path)
+
+    assert folder_texts(tmp_path) == folder_texts(MARKDOWN_GOLDEN)
+
+
+def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {"label": "control", "tone": "success", "response": {"body": "none"}},
+    ]
+    request = make_command_request(cases=cases, command="list-tiers")
+
+    assert markdown_of([request]) == (
+        "**Tier mappings on the partner API**\n\n"
+        "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n"
+        "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("tone", "title"),
+    [
+        pytest.param("success", "**✅ t**", id="success"),
+        pytest.param("info", "**💡 t**", id="info-matches-its-callout"),
+        pytest.param("warning", "**⚠️ t**", id="warning"),
+        pytest.param("danger", "**🛑 t**", id="danger"),
+        pytest.param("neutral", "**t**", id="neutral-has-no-icon"),
+        pytest.param(None, "**t**", id="no-tone"),
+    ],
+)
+def test_a_tab_title_carries_the_icon_of_its_case_tone(tone: ToneName | None, title: str) -> None:
+    assert (
+        render_markdown([Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))]) == f"{title}\n\nz\n"
+    )
+
+
+def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [{"label": "Scan", "points": ["by aisle"]}, {"label": "Fix"}],
+    }
+
+    assert markdown_of([flow]) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan"]\n'
+        '    s2["Fix"]\n'
+        "    s1 --> s2\n"
+        "```\n"
+        "\n"
+        "- **Scan**\n"
+        "  - by aisle\n"
+    )
+
+
+def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+
+    assert render_markdown([diagram, Paragraph((Plain("after"),))]) == (
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\n\nafter\n'
+    )
 
 
 def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: Path) -> None:

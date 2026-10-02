@@ -68,6 +68,16 @@ already have — the reliable way to a shareable PDF. (Printing a published Arti
 a sandboxed frame the browser flattens to a snapshot, so the print CSS never applies.) `--pdf` needs
 a Chrome/Chromium/Edge on the machine; set `SKALDR_BROWSER` to point at one if it isn't auto-found.
 
+**Markdown for another tool.** `--export` writes the document as Markdown instead of HTML, to `out/<name>.<target>/page.md` or to the folder `--export-dir` names:
+
+```bash
+skaldr report.yaml --export markdown               # GitHub-flavored Markdown for a README, a PR body or a wiki
+skaldr report.yaml --export notion                 # Notion-flavored Markdown for a Notion page
+skaldr report.yaml --export notion --chunk 20000   # page.00.md, page.01.md, … of at most 20000 characters each; a longer section stays whole
+```
+
+Every block has a Markdown form. Flows, fans, donut charts, and unstacked bar or line charts with one series become Mermaid diagrams, which GitHub and Notion both draw. A chart drawn as a diagram keeps its data table under it, and a donut's table lists each slice's value and share and the total. A chart with several series, or a stacked bar chart, is its data table alone. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and coloured table cells. A Notion page takes its title from the page itself, so the Notion export holds the body only, while the GitHub-flavored file starts with the title as its heading. The folder keeps a `.skaldr-export.json` list of the files skaldr wrote there, and a re-export removes only those an earlier run wrote and this one no longer needs. skaldr only writes the files; it never calls Notion.
+
 There are no styling flags — everything is in the content file.
 
 ## Sign in to Notion and Jira

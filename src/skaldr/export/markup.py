@@ -24,6 +24,7 @@ CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "teal": "💡",
     "sky": "💡",
 }
+TAB_TONES: Final[frozenset[ToneName]] = frozenset({"success", "info", "warning", "danger"})
 GAUGE_CELLS: Final = 10
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
@@ -93,6 +94,10 @@ def encode_url(url: str) -> str:
 def gauge_bar(value: float, maximum: float) -> str:
     filled = max(0, min(GAUGE_CELLS, math.floor(value / maximum * GAUGE_CELLS + 0.5)))
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
+
+
+def tab_icon(tone: ToneName | None) -> str | None:
+    return CALLOUT_ICON[tone] if tone in TAB_TONES else None
 
 
 def status_glyph(state: StatusState) -> str:

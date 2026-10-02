@@ -90,6 +90,10 @@ def heading_sections(count: int, body: str) -> list[dict[str, Any]]:
     ]
 
 
+def folder_texts(folder: Path) -> dict[str, str]:
+    return {path.name: path.read_text(encoding="utf-8") for path in sorted(folder.iterdir())}
+
+
 def write_report(directory: Path, data: dict[str, Any]) -> Path:
     path = directory / "doc.yaml"
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")

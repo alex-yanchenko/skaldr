@@ -763,16 +763,36 @@ def case_tone(case: RequestCase) -> CaseTone:
     return case.tone or status_tone(case.response)
 
 
-def recorded_body(body: str) -> str:
-    if "\n" in body.strip():
-        return body
+class ResponseCaption(NamedTuple):
+    label: str
+    shows_status: bool
+
+
+def response_caption(core: RequestLike, response: RequestResponse) -> ResponseCaption:
+    runs_command = core.command is not None
+    return ResponseCaption(
+        "Recorded output" if runs_command else "Recorded response",
+        shows_status=not runs_command or response.status is not None,
+    )
+
+
+class RecordedBody(NamedTuple):
+    text: str
+    is_json: bool
+
+
+def read_recorded_body(body: str) -> RecordedBody:
     try:
         parsed = json.loads(body)
     except ValueError:
-        return body
-    if not isinstance(parsed, (dict, list)):
-        return body
-    return json.dumps(parsed, indent=2, ensure_ascii=False)
+        return RecordedBody(body, is_json=False)
+    if "\n" in body.strip() or not isinstance(parsed, dict | list):
+        return RecordedBody(body, is_json=True)
+    return RecordedBody(json.dumps(parsed, indent=2, ensure_ascii=False), is_json=True)
+
+
+def recorded_body(body: str) -> str:
+    return read_recorded_body(body).text
 
 
 def case_value(block: RequestLike, case: RequestCase) -> str | None:

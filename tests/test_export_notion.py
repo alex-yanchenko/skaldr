@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
 
@@ -11,6 +11,9 @@ from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, rend
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
+    Diagram,
+    Graph,
+    GraphNode,
     Heading,
     ListEntry,
     ListKind,
@@ -18,23 +21,40 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Tab,
     TableCell,
     TableNode,
     TableRow,
+    Tabs,
     Toggle,
     ToneName,
 )
-from skaldr.models import BadgeColorLiteral, parse_report
+from skaldr.models import (
+    AnyBlock,
+    BadgeColorLiteral,
+    Grid,
+    InnerGrid,
+    Panel,
+    Section,
+    Walkthrough,
+    load_report,
+    parse_report,
+)
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, parse_rich
+from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    folder_texts,
     heading_sections,
     lowered,
+    make_command_request,
     make_report,
     notion_of,
 )
 
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
@@ -181,6 +201,8 @@ def test_block_nodes_become_notion_blocks() -> None:
         Quote(((Plain("said"),),)),
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
         Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
+        Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
+        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
     ]
 
     assert render_notion(nodes) == (
@@ -192,6 +214,119 @@ def test_block_nodes_become_notion_blocks() -> None:
         "> said\n"
         "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
         '## Shut {toggle="true"}\n\ty\n'
+        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
+    )
+
+
+def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
+    seen: set[str] = set()
+    for block in blocks:
+        seen.add(block.type)
+        if isinstance(block, Section | Panel):
+            seen |= _block_types_in(block.blocks)
+        if isinstance(block, Grid | InnerGrid):
+            for cell in block.cells:
+                seen |= _block_types_in(cell.blocks)
+        if isinstance(block, Walkthrough):
+            for step in block.steps:
+                seen |= _block_types_in(step.detail)
+    return seen
+
+
+def _every_block_type() -> set[str]:
+    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
+
+
+def test_the_export_fixture_uses_every_block_type() -> None:
+    assert _block_types_in(load_report(EXAMPLE).blocks) == _every_block_type()
+
+
+def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
+    export_notion(load_report(EXAMPLE), tmp_path)
+
+    assert folder_texts(tmp_path) == folder_texts(NOTION_GOLDEN)
+
+
+def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [{"label": "Scan", "tone": "info"}, {"label": 'Say "hi"', "note": "then **stop**"}],
+    }
+
+    assert notion_of([flow]) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan"]:::info\n'
+        '    s2["Say #quot;hi#quot;<br>then stop"]\n'
+        "    s1 --> s2\n"
+        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
+        "```\n"
+    )
+
+
+def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
+        {"label": "control", "tone": "info", "response": {"body": "none"}},
+    ]
+    request = make_command_request(cases=cases, command="list-tiers")
+
+    assert notion_of([request]) == (
+        "**Tier mappings on the partner API**\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n'
+        "\t\tfinding\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```json\n\t\t[]\n\t\t```\n"
+        "\t</tab>\n"
+        '\t<tab icon="💡">\n'
+        "\t\tcontrol\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t</tab>\n"
+        "</tabs>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("title", "written"),
+    [
+        pytest.param("1. expired token", "1\\. expired token", id="ordinal-is-not-a-list"),
+        pytest.param("# 404 path", "\\# 404 path", id="hash-is-not-a-heading"),
+    ],
+)
+def test_a_tab_title_that_starts_like_a_block_stays_text(title: str, written: str) -> None:
+    tabs = Tabs((Tab((Plain(title),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{written}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+@pytest.mark.parametrize(
+    ("tone", "opening"),
+    [
+        pytest.param("success", '<tab icon="✅">', id="success"),
+        pytest.param("info", '<tab icon="💡">', id="info"),
+        pytest.param("warning", '<tab icon="⚠️">', id="warning"),
+        pytest.param("danger", '<tab icon="🛑">', id="danger"),
+        pytest.param("neutral", "<tab>", id="neutral-has-no-icon"),
+        pytest.param(None, "<tab>", id="no-tone"),
+    ],
+)
+def test_a_notion_tab_carries_the_icon_of_its_case_tone(tone: ToneName | None, opening: str) -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t{opening}\n\t\tt\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+
+    assert render_notion([diagram, Paragraph((Plain("after"),))]) == (
+        '```mermaid\nflowchart LR\n    s1["A"]\n```\nafter\n'
     )
 
 

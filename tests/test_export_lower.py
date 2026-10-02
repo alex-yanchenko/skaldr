@@ -2,7 +2,6 @@ from typing import Any, get_args
 
 import pytest
 
-from skaldr.errors import ReportError
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
@@ -21,6 +20,10 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    Diagram,
+    Graph,
+    GraphEdge,
+    GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
@@ -29,24 +32,29 @@ from skaldr.export.tree import (
     LoweredDocument,
     Node,
     Paragraph,
+    PieChart,
+    PieSlice,
     Quote,
+    Tab,
     TableCell,
     TableNode,
     TableOfContents,
     TableRow,
+    Tabs,
     TocEntry,
     Toggle,
     ToneName,
+    XYChart,
     capped_heading_level,
     heading_of,
 )
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
-from skaldr.richtext import AnchorLink, Code, Link, Plain, Rich, Styled
+from skaldr.richtext import AnchorLink, Citation, Code, Link, Plain, Rich, Styled
 from tests.factories import (
     API_BADGES,
     lowered,
     make_cell,
-    make_flow,
+    make_command_request,
     make_grid,
     make_report,
     make_request,
@@ -69,26 +77,450 @@ def test_a_report_lowers_to_its_title_and_body() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("block", "block_type"),
-    [
-        pytest.param({"type": "flow", "steps": [{"label": "a"}, {"label": "b"}]}, "flow", id="flow"),
-        pytest.param(
-            {"type": "fan", "hub": {"label": "H"}, "spokes": [{"label": "A"}, {"label": "B"}]},
-            "fan",
-            id="fan",
+def test_a_flow_step_label_with_a_line_break_stays_one_mermaid_label() -> None:
+    flow = {"type": "flow", "numbered": False, "steps": [{"label": "one\nthree"}, {"label": "two"}]}
+
+    assert lowered([flow]) == (
+        Diagram(
+            Graph("LR", (GraphNode("s1", "one three"), GraphNode("s2", "two")), (GraphEdge("s1", "s2"),))
         ),
-        pytest.param(make_request(), "request", id="request"),
-        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    )
+
+
+def test_a_numbered_looping_flow_is_a_top_to_bottom_graph_with_a_dashed_return() -> None:
+    flow = {
+        "type": "flow",
+        "style": "steps",
+        "loop": True,
+        "steps": [{"label": "Scan", "tone": "info", "note": "by **aisle**"}, {"label": "Fix"}],
+    }
+
+    assert lowered([flow]) == (
+        Diagram(
+            Graph(
+                "TB",
+                (GraphNode("s1", "1: Scan", "by aisle", "info"), GraphNode("s2", "2: Fix")),
+                (GraphEdge("s1", "s2"), GraphEdge("s2", "s1", dashed=True)),
+            )
+        ),
+    )
+
+
+def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {"label": "Scan", "note": "first", "points": ["by aisle"], "badges": ["API"]},
+            {"label": "Fix"},
+        ],
+    }
+
+    assert lowered([flow], badges=API_BADGES) == (
+        API_LEGEND,
+        Diagram(
+            Graph("LR", (GraphNode("s1", "Scan", "first"), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
+            (
+                ListNode(
+                    "bullet",
+                    (
+                        ListEntry(
+                            (*bold("Scan"), Plain(": "), Plain("first"), Plain(" "), Chip("api", "blue")),
+                            children=(ListNode("bullet", (ListEntry((Plain("by aisle"),)),)),),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("note", "visible", "runs"),
+    [
+        pytest.param(
+            "see [doc](https://e.com/d)",
+            "see doc",
+            (Plain("see "), Link((Plain("doc"),), "https://e.com/d")),
+            id="web-link",
+        ),
+        pytest.param(
+            "see [count](#count)",
+            "see count",
+            (Plain("see "), AnchorLink((Plain("count"),), "count")),
+            id="anchor",
+        ),
+        pytest.param(
+            "per [^sop]", "per [1]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"
+        ),
+        pytest.param(
+            "**[doc](https://e.com/d)**",
+            "doc",
+            (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
+            id="link-inside-bold",
+        ),
     ],
 )
-def test_a_block_with_no_markdown_form_yet_fails_naming_its_type(
-    block: dict[str, Any], block_type: str
+def test_a_flow_lists_a_step_whose_note_links_somewhere_so_the_link_keeps_its_target(
+    note: str, visible: str, runs: Rich
 ) -> None:
-    with pytest.raises(ReportError) as raised:
-        lowered([block])
+    flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
+    references = {"type": "references", "items": [{"key": "sop", "text": "SOP", "url": "https://e.com/sop"}]}
 
-    assert str(raised.value) == f"a `{block_type}` block has no Markdown export yet"
+    diagrams = [
+        node
+        for node in lowered([{"type": "heading", "text": "Count"}, flow, references])
+        if isinstance(node, Diagram)
+    ]
+
+    assert diagrams == [
+        Diagram(
+            Graph("LR", (GraphNode("s1", "Scan", visible), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
+            (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("direction", "edges"),
+    [
+        pytest.param("in", (GraphEdge("s1", "hub"), GraphEdge("s2", "hub")), id="in"),
+        pytest.param("out", (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")), id="out"),
+    ],
+)
+def test_a_fan_points_its_edges_the_way_it_says(direction: str, edges: tuple[GraphEdge, ...]) -> None:
+    fan = {
+        "type": "fan",
+        "direction": direction,
+        "hub": {"label": "Hub"},
+        "spokes": [{"label": "A", "points": ["one"]}, {"label": "B"}],
+    }
+
+    assert lowered([fan]) == (
+        Diagram(
+            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges),
+            (
+                ListNode(
+                    "bullet",
+                    (ListEntry(bold("A"), children=(ListNode("bullet", (ListEntry((Plain("one"),)),)),)),),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1.5}],
+    }
+
+    assert lowered([donut]) == (
+        Diagram(
+            PieChart((PieSlice("A", 3), PieSlice("B", 1.5))),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "3", "67%"), "success"),
+                        TableRow(_cells("B", "1.5", "33%")),
+                        TableRow(_cells("Total", "4.5", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_donut_total_is_written_with_the_precision_of_its_values() -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": "A", "value": 12.25}, {"label": "B", "value": 3.5}],
+    }
+
+    assert lowered([donut]) == (
+        Diagram(
+            PieChart((PieSlice("A", 12.25), PieSlice("B", 3.5))),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "12.25", "78%")),
+                        TableRow(_cells("B", "3.5", "22%")),
+                        TableRow(_cells("Total", "15.75", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_titled_donut_writes_its_title_above_the_pie() -> None:
+    donut = {"type": "chart", "variant": "donut", "title": "Mix", "slices": [{"label": "A", "value": 1200}]}
+
+    assert lowered([donut]) == (
+        Paragraph(bold("Mix")),
+        Diagram(
+            PieChart((PieSlice("A", 1200),)),
+            (
+                TableNode(
+                    _cells("Slice", "Value", "Share"),
+                    (
+                        TableRow(_cells("A", "1,200", "100%")),
+                        TableRow(_cells("Total", "1,200", ""), emphasis="total"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> None:
+    line = {
+        "type": "chart",
+        "variant": "line",
+        "title": "Open",
+        "categories": ["Q1", "Q2"],
+        "series": [{"label": "x", "tone": "danger", "values": [1, 2]}],
+    }
+
+    assert lowered([line]) == (
+        Paragraph(bold("Open")),
+        Diagram(
+            XYChart("line", ("Q1", "Q2"), ((1, 2),)),
+            (TableNode(_cells("Series", "Q1", "Q2"), (TableRow(_cells("x", "1", "2"), "danger"),)),),
+        ),
+    )
+
+
+def test_an_untitled_single_series_bar_chart_is_a_bar_diagram_over_its_table() -> None:
+    chart = {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["Q1"],
+        "series": [{"label": "x", "values": [4]}],
+    }
+
+    assert lowered([chart]) == (
+        Diagram(
+            XYChart("bar", ("Q1",), ((4,),)),
+            (TableNode(_cells("Series", "Q1"), (TableRow(_cells("x", "4")),)),),
+        ),
+    )
+
+
+TWO_SERIES: list[dict[str, Any]] = [{"label": "x", "values": [1]}, {"label": "y", "values": [2]}]
+
+
+@pytest.mark.parametrize(
+    ("variant", "stacked", "series", "rows"),
+    [
+        pytest.param("bar", True, TWO_SERIES, [("x", "1"), ("y", "2")], id="stacked-bars"),
+        pytest.param(
+            "bar", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="grouped-bars-would-overlap-in-mermaid"
+        ),
+        pytest.param(
+            "line", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="lines-would-have-no-legend-in-mermaid"
+        ),
+        pytest.param("bar", True, TWO_SERIES[:1], [("x", "1")], id="stacked-single-bar"),
+    ],
+)
+def test_a_chart_with_several_series_or_stacked_bars_is_its_table_alone(
+    variant: str, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
+) -> None:
+    chart = {"type": "chart", "variant": variant, "stacked": stacked, "categories": ["Q1"], "series": series}
+
+    assert lowered([chart]) == (
+        TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),
+    )
+
+
+def test_a_request_with_one_case_shows_its_label_note_status_and_verdict() -> None:
+    request = make_command_request(
+        command_note="needs the vault",
+        cases=[{"label": "all", "verdict": "fine", "response": {"status": 200, "body": "ok"}}],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Tier mappings on the partner API")),
+        Paragraph(italic(plain("all"))),
+        CodeBlock(request["command"], "bash"),
+        Paragraph(italic((Plain("needs the vault"),)), "muted"),
+        Paragraph((*bold("Recorded output"), Plain(": "), Plain("200 OK"))),
+        CodeBlock("ok", ""),
+        Callout("success", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
+    )
+
+
+READ_WIDGETS = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://{{host}}/widgets'"
+
+
+def test_a_request_lists_its_labelled_variables_and_shows_a_case_with_no_status_line() -> None:
+    request = make_request(
+        variables=[{"name": "host", "label": "API host", "example": "api.example.com"}],
+        cases=[{"label": "one", "response": {"headers": {"content-type": "text/plain"}, "body": "ok"}}],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Read an endpoint")),
+        Paragraph(bold("Values you supply")),
+        ListNode(
+            "bullet",
+            (ListEntry((Code("{{host}}"), Plain(" "), Plain("API host: for example api.example.com"))),),
+        ),
+        Paragraph(italic(plain("one"))),
+        CodeBlock(READ_WIDGETS, "bash"),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("no status line"))),
+        CodeBlock("content-type: text/plain\n\nok", "http"),
+    )
+
+
+def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
+    request = make_request(
+        variables=[],
+        url="https://api.example.com/widgets",
+        cases=[
+            {"label": "missing", "verdict": "a **gap**", "response": {"status": 404, "body": "{}"}},
+            {"label": "found", "response": {"status": 200, "body": "[]"}},
+        ],
+    )
+    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://api.example.com/widgets'"
+
+    assert lowered([request]) == (
+        Paragraph(bold("Read an endpoint")),
+        Tabs(
+            (
+                Tab(
+                    (Plain("missing"),),
+                    (
+                        CodeBlock(command, "bash"),
+                        Paragraph((*bold("Recorded response"), Plain(": "), Plain("404 Not Found"))),
+                        CodeBlock("{}", "json"),
+                        Callout(
+                            "warning",
+                            (Paragraph((*bold("Verdict"), Plain(": "), Plain("a "), *bold("gap"))),),
+                        ),
+                    ),
+                    "warning",
+                ),
+                Tab(
+                    (Plain("found"),),
+                    (
+                        CodeBlock(command, "bash"),
+                        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
+                        CodeBlock("[]", "json"),
+                    ),
+                    "success",
+                ),
+            )
+        ),
+    )
+
+
+def test_a_request_with_several_cases_is_tabs() -> None:
+    request = make_command_request(
+        command="list",
+        cases=[
+            {"label": "a", "tone": "warning", "response": {"body": "x"}},
+            {"label": "b", "tone": "success", "response": {"body": "y"}},
+        ],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Tier mappings on the partner API")),
+        Tabs(
+            (
+                Tab(
+                    (Plain("a"),),
+                    (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("x", "")),
+                    "warning",
+                ),
+                Tab(
+                    (Plain("b"),),
+                    (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("y", "")),
+                    "success",
+                ),
+            )
+        ),
+    )
+
+
+def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_value() -> None:
+    flow = {
+        "type": "request_flow",
+        "label": "Token then read",
+        "variables": [
+            {"name": "host", "example": "api.example.com"},
+            {"name": "key", "secret": True, "example": "do-not-print"},
+            {"name": "who"},
+        ],
+        "steps": [
+            {
+                "label": "Get token",
+                "method": "POST",
+                "url": "https://{{host}}/t",
+                "headers": {"X-Key": "{{key}}", "X-Who": "{{who}}"},
+                "captures": [{"name": "token", "source": "body"}, {"name": "expires", "source": "body"}],
+                "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
+            },
+            {
+                "label": "Read",
+                "method": "GET",
+                "url": "https://{{host}}/r",
+                "headers": {"Authorization": "Bearer {{token}}", "X-Expires": "{{expires}}"},
+                "cases": [
+                    {
+                        "label": "one",
+                        "response": {
+                            "status": 200,
+                            "headers": {"content-type": ["application/json", "charset=utf-8"]},
+                            "body": "{}",
+                        },
+                    }
+                ],
+            },
+        ],
+    }
+
+    assert lowered([flow]) == (
+        Paragraph(bold("Token then read")),
+        Paragraph(bold("Values you supply")),
+        ListNode(
+            "bullet",
+            (
+                ListEntry((Code("{{host}}"), Plain(" "), Plain("host: for example api.example.com"))),
+                ListEntry((Code("{{key}}"), Plain(" "), Plain("key: a secret, supply your own"))),
+                ListEntry((Code("{{who}}"), Plain(" "), Plain("who: supply a value"))),
+            ),
+        ),
+        Paragraph(
+            (
+                *bold("Step 1 of 2: Get token"),
+                Plain(", captures "),
+                Code("token"),
+                Plain(", "),
+                Code("expires"),
+            )
+        ),
+        Paragraph(italic(plain("one"))),
+        CodeBlock(
+            "curl -i -X POST \\\n  -H 'X-Key: {{key}}' \\\n  -H 'X-Who: {{who}}' \\\n  'https://{{host}}/t'",
+            "bash",
+        ),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
+        CodeBlock("{}", "json"),
+        Paragraph(bold("Step 2 of 2: Read")),
+        Paragraph(italic(plain("one"))),
+        CodeBlock(
+            "curl -i -X GET \\\n  -H 'Authorization: Bearer {{token}}' \\\n  -H 'X-Expires: {{expires}}' \\\n"
+            "  'https://{{host}}/r'",
+            "bash",
+        ),
+        Paragraph((*bold("Recorded response"), Plain(": "), Plain("200 OK"))),
+        CodeBlock("content-type: application/json\ncontent-type: charset=utf-8\n\n{}", "http"),
+    )
 
 
 def test_a_walkthrough_step_with_no_sub_is_its_bold_label() -> None:
