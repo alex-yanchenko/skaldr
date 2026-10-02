@@ -181,7 +181,9 @@ def _legend(lowering: Lowering) -> list[Node]:
     if not used:
         return []
     entries = tuple(
-        ListEntry(spaced([(lowering.chip(key),), plain(f"{badge.legend}")])) for key, badge in used
+        ListEntry(spaced([(lowering.chip(key),), plain(badge.legend)]))
+        for key, badge in used
+        if badge.legend is not False
     )
     title = plain(f"Legend: {compute.BADGE_LEGEND_SUBJECT}")
     return [Toggle(title, None, (ListNode("bullet", entries),))]

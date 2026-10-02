@@ -1,3 +1,4 @@
+import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -85,7 +86,7 @@ def encode_url(url: str) -> str:
 
 
 def gauge_bar(value: float, maximum: float) -> str:
-    filled = max(0, min(GAUGE_CELLS, round(value / maximum * GAUGE_CELLS)))
+    filled = max(0, min(GAUGE_CELLS, math.floor(value / maximum * GAUGE_CELLS + 0.5)))
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
 
 
