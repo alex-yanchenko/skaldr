@@ -22,6 +22,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    Divider,
     Graph,
     GraphEdge,
     GraphNode,
@@ -60,7 +61,10 @@ from tests.factories import (
     make_grid,
     make_report,
     make_request,
+    make_tab,
     make_table,
+    make_tabs,
+    make_toggle,
 )
 
 API_LEGEND = Toggle(
@@ -596,7 +600,24 @@ def test_a_heading_sub_is_a_muted_italic_line_under_it() -> None:
     )
 
 
-def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -> None:
+def test_a_level_four_heading_keeps_its_level_and_anchor() -> None:
+    assert lowered([{"type": "heading", "level": 4, "text": "Bin detail"}]) == (
+        Heading(4, (Plain("Bin detail"),), "bin-detail"),
+    )
+
+
+def test_a_level_four_heading_inside_a_section_moves_down_to_level_five() -> None:
+    section = {
+        "type": "section",
+        "title": "Open",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "text": "Deep", "level": 4}],
+    }
+
+    assert lowered([section]) == (Heading(2, (Plain("Open"),), "open"), Heading(5, (Plain("Deep"),), "deep"))
+
+
+def test_an_open_section_is_a_heading_and_a_level_three_heading_inside_it_moves_to_level_four() -> None:
     section = {
         "type": "section",
         "title": "Open",
@@ -612,8 +633,9 @@ def test_an_open_section_is_a_heading_and_nesting_never_goes_past_level_four() -
     [
         pytest.param(0, 1, id="below-the-range"),
         pytest.param(1, 1, id="top"),
-        pytest.param(4, 4, id="the-cap"),
-        pytest.param(7, 4, id="past-the-cap"),
+        pytest.param(5, 5, id="below-the-cap"),
+        pytest.param(6, 6, id="the-cap"),
+        pytest.param(7, 6, id="past-the-cap"),
     ],
 )
 def test_a_heading_level_is_capped_to_what_the_writer_supports(level: int, capped: HeadingLevel) -> None:
@@ -1278,6 +1300,94 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
             ),
         ),
     )
+
+
+def test_a_collapsed_toggle_is_a_plain_toggle_with_no_heading_or_anchor() -> None:
+    toggle = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}]}
+
+    assert lowered([toggle]) == (Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),)),)
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "collapsed": False,
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+
+    assert lowered([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
+
+
+def test_a_heading_in_a_top_level_toggle_keeps_its_level_and_anchor() -> None:
+    toggle = make_toggle({"type": "heading", "level": 3, "text": "Deep", "id": "deep"})
+
+    assert lowered([toggle]) == (Toggle((Plain("More"),), None, (Heading(3, (Plain("Deep"),), "deep"),)),)
+
+
+def test_a_heading_in_a_toggle_inside_a_section_moves_down_with_the_section_and_keeps_its_anchor() -> None:
+    toggle = make_toggle({"type": "heading", "level": 3, "text": "Deep", "id": "deep"})
+    section = {"type": "section", "title": "Open", "collapsed": False, "blocks": [toggle]}
+
+    assert lowered([section]) == (
+        Heading(2, (Plain("Open"),), "open"),
+        Toggle((Plain("More"),), None, (Heading(4, (Plain("Deep"),), "deep"),)),
+    )
+
+
+RAW_COUNTS_TOGGLE = make_toggle({"type": "text", "body": "x"}, title="Raw counts")
+RAW_COUNTS_TOGGLE_NODE = Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),))
+
+
+@pytest.mark.parametrize(
+    ("block", "nodes"),
+    [
+        pytest.param(
+            make_grid([make_cell(6, [RAW_COUNTS_TOGGLE])]), (RAW_COUNTS_TOGGLE_NODE,), id="grid-cell"
+        ),
+        pytest.param(
+            make_tabs(make_tab("Floor", RAW_COUNTS_TOGGLE), make_tab("System")),
+            (
+                Tabs(
+                    (
+                        Tab((Plain("Floor"),), (RAW_COUNTS_TOGGLE_NODE,)),
+                        Tab((Plain("System"),), (Paragraph((Plain("System"),)),)),
+                    )
+                ),
+            ),
+            id="tab",
+        ),
+    ],
+)
+def test_a_toggle_inside_a_grid_cell_or_a_tab_lowers_like_a_top_level_toggle(
+    block: dict[str, Any], nodes: tuple[Node, ...]
+) -> None:
+    assert lowered([block]) == nodes
+
+
+def test_a_tabs_block_is_the_tabs_node_requests_use_with_each_tab_tone() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "blocks": [{"type": "heading", "level": 3, "text": "Scan"}]},
+        ],
+    }
+
+    assert lowered([block]) == (
+        Tabs(
+            (
+                Tab((Plain("Floor"),), (Paragraph((Plain("a"),)),), "warning"),
+                Tab((Plain("System"),), (Heading(3, (Plain("Scan"),), "scan"),)),
+            )
+        ),
+    )
+
+
+def test_a_divider_lowers_to_a_divider_node_between_its_neighbours() -> None:
+    blocks = [{"type": "text", "body": "a"}, {"type": "divider"}, {"type": "text", "body": "b"}]
+
+    assert lowered(blocks) == (Paragraph((Plain("a"),)), Divider(), Paragraph((Plain("b"),)))
 
 
 def _cells(*texts: str) -> tuple[TableCell, ...]:

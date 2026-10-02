@@ -26,7 +26,10 @@ from tests.factories.report_factory import (
     make_section,
     make_step,
     make_swimlane,
+    make_tab,
     make_table,
+    make_tabs,
+    make_toggle,
 )
 
 __all__ = [
@@ -51,7 +54,10 @@ __all__ = [
     "make_section",
     "make_step",
     "make_swimlane",
+    "make_tab",
     "make_table",
+    "make_tabs",
+    "make_toggle",
     "markdown_of",
     "notion_of",
     "parsed_block",

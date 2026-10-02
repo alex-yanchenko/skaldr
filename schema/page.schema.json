@@ -1074,6 +1074,36 @@
       "title": "DefList",
       "type": "object"
     },
+    "Divider": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "divider",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Divider",
+      "type": "object"
+    },
     "Fact": {
       "additionalProperties": false,
       "properties": {
@@ -1383,6 +1413,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -1400,8 +1431,10 @@
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
-                "timeline": "#/$defs/Timeline"
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -1455,6 +1488,9 @@
                 "$ref": "#/$defs/Note"
               },
               {
+                "$ref": "#/$defs/Divider"
+              },
+              {
                 "$ref": "#/$defs/Image"
               },
               {
@@ -1480,6 +1516,12 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -1605,10 +1647,11 @@
         },
         "level": {
           "default": 2,
-          "description": "Heading level: 2 (major heading) or 3 (sub-heading).",
+          "description": "Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
           "enum": [
             2,
-            3
+            3,
+            4
           ],
           "title": "Level",
           "type": "integer"
@@ -1778,6 +1821,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -1794,8 +1838,10 @@
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
-                "timeline": "#/$defs/Timeline"
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -1849,6 +1895,9 @@
                 "$ref": "#/$defs/Note"
               },
               {
+                "$ref": "#/$defs/Divider"
+              },
+              {
                 "$ref": "#/$defs/Image"
               },
               {
@@ -1874,6 +1923,12 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
               }
             ]
           },
@@ -1910,6 +1965,178 @@
         "blocks"
       ],
       "title": "InnerGridCell",
+      "type": "object"
+    },
+    "InnerToggle": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "toggle",
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "description": "Summary label shown on the collapsible.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Title",
+          "type": "string"
+        },
+        "collapsed": {
+          "default": true,
+          "description": "Whether the toggle starts collapsed, as a section does. Set false to open it.",
+          "title": "Collapsed",
+          "type": "boolean"
+        },
+        "blocks": {
+          "description": "Blocks inside a toggle in a grid cell, a walkthrough step's detail or a tab: any block except a section, panel, grid, walkthrough, request or request_flow. It may hold another toggle or a tabs block.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
+                "meter": "#/$defs/Meter",
+                "note": "#/$defs/Note",
+                "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
+                "references": "#/$defs/References",
+                "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
+                "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/DefList"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
+                "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "blocks"
+      ],
+      "title": "InnerToggle",
       "type": "object"
     },
     "JiraTarget": {
@@ -2733,6 +2960,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -2751,8 +2979,10 @@
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
-                "timeline": "#/$defs/Timeline"
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/Toggle"
               },
               "propertyName": "type"
             },
@@ -2806,6 +3036,9 @@
                 "$ref": "#/$defs/Note"
               },
               {
+                "$ref": "#/$defs/Divider"
+              },
+              {
                 "$ref": "#/$defs/Image"
               },
               {
@@ -2831,6 +3064,12 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/Toggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
               },
               {
                 "$ref": "#/$defs/Request"
@@ -3942,6 +4181,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -3960,8 +4200,10 @@
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
-                "timeline": "#/$defs/Timeline"
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/Toggle"
               },
               "propertyName": "type"
             },
@@ -4015,6 +4257,9 @@
                 "$ref": "#/$defs/Note"
               },
               {
+                "$ref": "#/$defs/Divider"
+              },
+              {
                 "$ref": "#/$defs/Image"
               },
               {
@@ -4040,6 +4285,12 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/Toggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
               },
               {
                 "$ref": "#/$defs/Request"
@@ -4431,6 +4682,174 @@
       "title": "SwimlaneStep",
       "type": "object"
     },
+    "Tab": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "The tab's label in the strip, and its heading on paper.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Label",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent",
+                "teal",
+                "sky"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone: a coloured dot before the label, the way a request case shows its outcome. Omit it for a plain label.",
+          "title": "Tone"
+        },
+        "blocks": {
+          "description": "Blocks shown while the tab is chosen: any block a toggle in a grid cell holds, including a toggle or another tabs block, and never a request or request_flow.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
+                "meter": "#/$defs/Meter",
+                "note": "#/$defs/Note",
+                "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
+                "references": "#/$defs/References",
+                "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
+                "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/DefList"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
+                "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "blocks"
+      ],
+      "title": "Tab",
+      "type": "object"
+    },
     "Table": {
       "additionalProperties": false,
       "properties": {
@@ -4574,6 +4993,47 @@
         "columns"
       ],
       "title": "Table",
+      "type": "object"
+    },
+    "Tabs": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "tabs",
+          "title": "Type",
+          "type": "string"
+        },
+        "tabs": {
+          "description": "The tabs, in strip order; the first starts chosen. Two to 24, with distinct labels. Every tab prints, each under its label.",
+          "items": {
+            "$ref": "#/$defs/Tab"
+          },
+          "maxItems": 24,
+          "minItems": 2,
+          "title": "Tabs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "tabs"
+      ],
+      "title": "Tabs",
       "type": "object"
     },
     "TargetOverride": {
@@ -4740,6 +5200,186 @@
       "title": "TimelineItem",
       "type": "object"
     },
+    "Toggle": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "toggle",
+          "title": "Type",
+          "type": "string"
+        },
+        "title": {
+          "description": "Summary label shown on the collapsible.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Title",
+          "type": "string"
+        },
+        "collapsed": {
+          "default": true,
+          "description": "Whether the toggle starts collapsed, as a section does. Set false to open it.",
+          "title": "Collapsed",
+          "type": "boolean"
+        },
+        "blocks": {
+          "description": "Blocks inside a toggle at the top level, in a section, in a panel or in another such toggle: any block a section holds, including a request or request_flow.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "badge_row": "#/$defs/BadgeRow",
+                "callout": "#/$defs/Callout",
+                "cards": "#/$defs/Cards",
+                "chart": "#/$defs/Chart",
+                "code": "#/$defs/Code",
+                "comparison": "#/$defs/Comparison",
+                "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
+                "fact_strip": "#/$defs/FactStrip",
+                "fan": "#/$defs/Fan",
+                "flow": "#/$defs/Flow",
+                "heading": "#/$defs/Heading",
+                "image": "#/$defs/Image",
+                "key_value": "#/$defs/KeyValue",
+                "list": "#/$defs/ListBlock",
+                "matrix": "#/$defs/Matrix",
+                "meter": "#/$defs/Meter",
+                "note": "#/$defs/Note",
+                "quote": "#/$defs/Quote",
+                "range": "#/$defs/Range",
+                "references": "#/$defs/References",
+                "request": "#/$defs/Request",
+                "request_flow": "#/$defs/RequestFlow",
+                "status_list": "#/$defs/StatusList",
+                "swimlane": "#/$defs/Swimlane",
+                "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
+                "text": "#/$defs/Text",
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/Toggle"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Heading"
+              },
+              {
+                "$ref": "#/$defs/Text"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/FactStrip"
+              },
+              {
+                "$ref": "#/$defs/KeyValue"
+              },
+              {
+                "$ref": "#/$defs/DefList"
+              },
+              {
+                "$ref": "#/$defs/Cards"
+              },
+              {
+                "$ref": "#/$defs/BadgeRow"
+              },
+              {
+                "$ref": "#/$defs/Callout"
+              },
+              {
+                "$ref": "#/$defs/StatusList"
+              },
+              {
+                "$ref": "#/$defs/Meter"
+              },
+              {
+                "$ref": "#/$defs/Range"
+              },
+              {
+                "$ref": "#/$defs/Table"
+              },
+              {
+                "$ref": "#/$defs/Code"
+              },
+              {
+                "$ref": "#/$defs/Quote"
+              },
+              {
+                "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
+              },
+              {
+                "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Timeline"
+              },
+              {
+                "$ref": "#/$defs/Flow"
+              },
+              {
+                "$ref": "#/$defs/Fan"
+              },
+              {
+                "$ref": "#/$defs/Chart"
+              },
+              {
+                "$ref": "#/$defs/Comparison"
+              },
+              {
+                "$ref": "#/$defs/Matrix"
+              },
+              {
+                "$ref": "#/$defs/Swimlane"
+              },
+              {
+                "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/Toggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
+              },
+              {
+                "$ref": "#/$defs/Request"
+              },
+              {
+                "$ref": "#/$defs/RequestFlow"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "blocks"
+      ],
+      "title": "Toggle",
+      "type": "object"
+    },
     "Totals": {
       "additionalProperties": false,
       "properties": {
@@ -4860,6 +5500,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -4877,8 +5518,10 @@
                 "status_list": "#/$defs/StatusList",
                 "swimlane": "#/$defs/Swimlane",
                 "table": "#/$defs/Table",
+                "tabs": "#/$defs/Tabs",
                 "text": "#/$defs/Text",
-                "timeline": "#/$defs/Timeline"
+                "timeline": "#/$defs/Timeline",
+                "toggle": "#/$defs/InnerToggle"
               },
               "propertyName": "type"
             },
@@ -4932,6 +5575,9 @@
                 "$ref": "#/$defs/Note"
               },
               {
+                "$ref": "#/$defs/Divider"
+              },
+              {
                 "$ref": "#/$defs/Image"
               },
               {
@@ -4957,6 +5603,12 @@
               },
               {
                 "$ref": "#/$defs/References"
+              },
+              {
+                "$ref": "#/$defs/InnerToggle"
+              },
+              {
+                "$ref": "#/$defs/Tabs"
               },
               {
                 "$ref": "#/$defs/InnerGrid"
@@ -5006,6 +5658,7 @@
             "code": "#/$defs/Code",
             "comparison": "#/$defs/Comparison",
             "def_list": "#/$defs/DefList",
+            "divider": "#/$defs/Divider",
             "fact_strip": "#/$defs/FactStrip",
             "fan": "#/$defs/Fan",
             "flow": "#/$defs/Flow",
@@ -5027,8 +5680,10 @@
             "status_list": "#/$defs/StatusList",
             "swimlane": "#/$defs/Swimlane",
             "table": "#/$defs/Table",
+            "tabs": "#/$defs/Tabs",
             "text": "#/$defs/Text",
             "timeline": "#/$defs/Timeline",
+            "toggle": "#/$defs/Toggle",
             "walkthrough": "#/$defs/Walkthrough"
           },
           "propertyName": "type"
@@ -5083,6 +5738,9 @@
             "$ref": "#/$defs/Note"
           },
           {
+            "$ref": "#/$defs/Divider"
+          },
+          {
             "$ref": "#/$defs/Image"
           },
           {
@@ -5108,6 +5766,12 @@
           },
           {
             "$ref": "#/$defs/References"
+          },
+          {
+            "$ref": "#/$defs/Toggle"
+          },
+          {
+            "$ref": "#/$defs/Tabs"
           },
           {
             "$ref": "#/$defs/Request"

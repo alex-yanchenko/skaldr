@@ -36,7 +36,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic.config import JsonDict
 from pydantic_core import PydanticCustomError
+from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
@@ -255,8 +257,9 @@ class Meta(FrozenModel):
 class Heading(_Block):
     type: Literal["heading"]
     text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
-    level: Literal[2, 3] = Field(
-        default=2, description="Heading level: 2 (major heading) or 3 (sub-heading)."
+    level: Literal[2, 3, 4] = Field(
+        default=2,
+        description="Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
     )
     id: str | None = Field(
         default=None,
@@ -680,6 +683,10 @@ class Note(_Block):
         description="Optional single emoji shown at the head of the note, in place of the default note "
         "icon in the Markdown exports.",
     )
+
+
+class Divider(_Block):
+    type: Literal["divider"]
 
 
 class Image(_Block):
@@ -1888,9 +1895,16 @@ class RequestCase(FrozenModel):
         return self
 
 
-MAX_REQUEST_CASES = 24
-"""How many cases one call may record. The stylesheet pairs a radio with its label by position, and
-writes that many pairs, so a case past this one would render without its label ever lighting up."""
+MAX_STRIP_LABELS = 24
+"""How many labels one tab strip may carry: a call's cases, or a tabs block's tabs. The stylesheet pairs
+a radio with its label by position, and writes that many pairs, so a label past this one would render
+without ever lighting up."""
+
+
+def _check_distinct_strip_labels(labels: Iterable[str], refusal: str) -> None:
+    repeated = sorted(label for label, count in Counter(labels).items() if count > 1)
+    if repeated:
+        raise ValueError(f"{refusal}: {', '.join(repeated)}")
 
 
 class _RequestCore(FrozenModel):
@@ -1979,13 +1993,10 @@ class _RequestCore(FrozenModel):
 
     @model_validator(mode="after")
     def _core_shape(self) -> "_RequestCore":
-        labels = [case.label for case in self.cases]
-        duplicated = {label for label in labels if labels.count(label) > 1}
-        if duplicated:
-            raise ValueError(f"request repeats a case label: {', '.join(sorted(duplicated))}")
-        if len(self.cases) > MAX_REQUEST_CASES:
+        _check_distinct_strip_labels((case.label for case in self.cases), "request repeats a case label")
+        if len(self.cases) > MAX_STRIP_LABELS:
             raise ValueError(
-                f"a request records at most {MAX_REQUEST_CASES} cases, and this one has "
+                f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
                 f"{len(self.cases)} — split it into blocks a reader can take in"
             )
         if self.case_variable is None:
@@ -2207,7 +2218,82 @@ class RequestFlow(_VariableOwner, _Block):
         return self
 
 
-_Leaf = (
+def _refuse_blank(what: str) -> AfterValidator:
+    def refuse(value: str) -> str:
+        if not value.strip():
+            raise ValueError(f"{what} must not be blank")
+        return value
+
+    return AfterValidator(refuse)
+
+
+_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"pattern": r"\S"}
+
+
+class _ToggleBase(_Block):
+    type: Literal["toggle"]
+    title: Annotated[str, _refuse_blank("toggle title")] = Field(
+        min_length=1,
+        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
+        description="Summary label shown on the collapsible.",
+    )
+    collapsed: bool = Field(
+        default=True,
+        description="Whether the toggle starts collapsed, as a section does. Set false to open it.",
+    )
+
+
+class InnerToggle(_ToggleBase):
+    blocks: list["InnerBlock"] = Field(
+        min_length=1,
+        description="Blocks inside a toggle in a grid cell, a walkthrough step's detail or a tab: any block "
+        "except a section, panel, grid, walkthrough, request or request_flow. It may hold another toggle "
+        "or a tabs block.",
+    )
+
+
+class Toggle(_ToggleBase):
+    blocks: list["FullWidthBlock"] = Field(
+        min_length=1,
+        description="Blocks inside a toggle at the top level, in a section, in a panel or in another such "
+        "toggle: any block a section holds, including a request or request_flow.",
+    )
+
+
+class Tab(FrozenModel):
+    label: Annotated[str, _refuse_blank("tab label")] = Field(
+        min_length=1,
+        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
+        description="The tab's label in the strip, and its heading on paper.",
+    )
+    tone: Tone | None = Field(
+        default=None,
+        description="Optional tone: a coloured dot before the label, the way a request case shows its "
+        "outcome. Omit it for a plain label.",
+    )
+    blocks: list["InnerBlock"] = Field(
+        min_length=1,
+        description="Blocks shown while the tab is chosen: any block a toggle in a grid cell holds, "
+        "including a toggle or another tabs block, and never a request or request_flow.",
+    )
+
+
+class Tabs(_Block):
+    type: Literal["tabs"]
+    tabs: list[Tab] = Field(
+        min_length=2,
+        max_length=MAX_STRIP_LABELS,
+        description=f"The tabs, in strip order; the first starts chosen. Two to {MAX_STRIP_LABELS}, with "
+        "distinct labels. Every tab prints, each under its label.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Tabs":
+        _check_distinct_strip_labels((tab.label for tab in self.tabs), "tabs repeat a label")
+        return self
+
+
+_Simple = (
     Heading
     | Text
     | ListBlock
@@ -2224,6 +2310,7 @@ _Leaf = (
     | Code
     | Quote
     | Note
+    | Divider
     | Image
     | Timeline
     | Flow
@@ -2234,8 +2321,12 @@ _Leaf = (
     | Swimlane
     | References
 )
+_Leaf = _Simple | InnerToggle | Tabs
 InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
-FullWidthBlock = Annotated[_Leaf | Request | RequestFlow, Field(discriminator="type")]
+InnerToggle.model_rebuild()
+Tab.model_rebuild()
+FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Field(discriminator="type")]
+Toggle.model_rebuild()
 RequestLike = Request | RequestStep
 
 
@@ -2377,19 +2468,69 @@ class Walkthrough(_Block):
 
 
 Block = Annotated[
-    _Leaf | Request | RequestFlow | Section | Grid | Walkthrough | Panel, Field(discriminator="type")
+    _Simple | Toggle | Tabs | Request | RequestFlow | Section | Grid | Walkthrough | Panel,
+    Field(discriminator="type"),
 ]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
+AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
+
+
+def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+    match block:
+        case Section() | Panel() | Toggle() | InnerToggle():
+            return block.blocks
+        case Grid() | InnerGrid():
+            return [inner for cell in block.cells for inner in cell.blocks]
+        case Walkthrough():
+            return [inner for step in block.steps for inner in step.detail]
+        case Tabs():
+            return [inner for tab in block.tabs for inner in tab.blocks]
+        case (
+            Heading()
+            | Text()
+            | ListBlock()
+            | FactStrip()
+            | KeyValue()
+            | DefList()
+            | Cards()
+            | BadgeRow()
+            | Callout()
+            | StatusList()
+            | Meter()
+            | Range()
+            | Table()
+            | Code()
+            | Quote()
+            | Note()
+            | Divider()
+            | Image()
+            | Timeline()
+            | Flow()
+            | Fan()
+            | Chart()
+            | Comparison()
+            | Matrix()
+            | Swimlane()
+            | References()
+            | Request()
+            | RequestFlow()
+        ):
+            return ()
+        case _:
+            assert_never(block)
+
+
+def walk_blocks(blocks: Sequence[AnyBlock]) -> Iterator[AnyBlock]:
+    for block in blocks:
+        yield block
+        yield from walk_blocks(child_blocks(block))
 
 
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
     """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, (Request, RequestFlow)):
             yield block
-        elif isinstance(block, (Section, Panel)):
-            yield from iter_requests(block.blocks)
 
 
 def unresolvable_request_variables(blocks: Sequence[AnyBlock]) -> set[str]:
@@ -2411,16 +2552,8 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
-    for block in blocks:
-        if isinstance(block, (Section, Panel)):
-            yield from iter_referenced_badge_keys(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_referenced_badge_keys(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_referenced_badge_keys(step.detail)
-        elif isinstance(block, BadgeRow):
+    for block in walk_blocks(blocks):
+        if isinstance(block, BadgeRow):
             for item in (*block.items, *(i for group in block.groups for i in group.items)):
                 if isinstance(item, BadgeRef):
                     yield item.key
@@ -2458,65 +2591,33 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
     """Every reference item in the block tree (recursing into sections and grids), in document
     order. One source for both the derived numbering and the global key-uniqueness check."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, References):
             yield from block.items
-        elif isinstance(block, (Section, Panel)):
-            yield from iter_reference_items(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_reference_items(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_reference_items(step.detail)
 
 
 def iter_matrices(blocks: Sequence[AnyBlock]) -> Iterator[Matrix]:
     """Every matrix in the block tree (recursing into containers), in document order — for the derived
     cell tallies and the matrix-id uniqueness / `of_matrix` reference checks."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Matrix):
             yield block
-        elif isinstance(block, (Section, Panel)):
-            yield from iter_matrices(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_matrices(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_matrices(step.detail)
 
 
 def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     """Every table in the block tree (recursing into containers), in document order — for the derived
     row tallies and the table-id uniqueness / `of_tables` reference checks."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Table):
             yield block
-        elif isinstance(block, (Section, Panel)):
-            yield from iter_tables(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_tables(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_tables(step.detail)
 
 
 def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
     """Every card in the block tree (recursing into containers), in document order — for the
     `of_matrix`/`of_tables` reference checks and the derived-value computation."""
-    for block in blocks:
+    for block in walk_blocks(blocks):
         if isinstance(block, Cards):
             yield from block.items
-        elif isinstance(block, (Section, Panel)):
-            yield from iter_cards(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from iter_cards(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from iter_cards(step.detail)
 
 
 class Report(FrozenModel):

@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, get_args
 
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from skaldr import compute
 from skaldr.errors import ReportError
 from skaldr.models import (
+    MAX_STRIP_LABELS,
     TONE_BADGE_COLOR,
     BadgeColorLiteral,
     Callout,
@@ -15,11 +17,16 @@ from skaldr.models import (
     Column,
     DefItem,
     DefList,
+    Divider,
     Fan,
     Flow,
     FlowStep,
+    FullWidthBlock,
     Grid,
     Group,
+    Heading,
+    InnerBlock,
+    InnerToggle,
     ListBlock,
     ListItem,
     Matrix,
@@ -32,9 +39,12 @@ from skaldr.models import (
     RequestFlow,
     Section,
     Swimlane,
+    Tab,
     Table,
+    Tabs,
     Text,
     Timeline,
+    Toggle,
     ToneLiteral,
     Walkthrough,
     WalkthroughStep,
@@ -42,6 +52,7 @@ from skaldr.models import (
     load_report,
     parse_report,
     read_text_file,
+    walk_blocks,
 )
 from tests.factories import (
     make_cell,
@@ -52,8 +63,12 @@ from tests.factories import (
     make_reconciled_table,
     make_report,
     make_request,
+    make_section,
     make_step,
+    make_tab,
     make_table,
+    make_tabs,
+    make_toggle,
 )
 
 
@@ -709,6 +724,501 @@ def test_panel_parses_to_whole_model() -> None:
 def test_panel_with_no_blocks_is_rejected() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.panel\.blocks"):
         parse_report(make_report(blocks=[{"type": "panel", "title": "Empty", "blocks": []}]))
+
+
+def test_a_toggle_parses_to_whole_model_starting_collapsed() -> None:
+    block = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Toggle(
+        type="toggle", title="Raw counts", collapsed=True, blocks=[Text(type="text", body="x")]
+    )
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [make_toggle()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [make_toggle()]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [make_toggle()])]), id="grid-cell"),
+        pytest.param(
+            make_grid([make_cell(6, [make_grid([make_cell(3, [make_toggle()])])])]), id="inner-grid-cell"
+        ),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [make_toggle()]}]},
+            id="walkthrough-detail",
+        ),
+        pytest.param(make_toggle(make_toggle()), id="another-toggle"),
+    ],
+)
+def test_a_toggle_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_toggle_with_no_blocks_is_rejected() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "toggle", "title": "Empty", "blocks": []}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.toggle.blocks: "
+        "List should have at least 1 item after validation, not 0"
+    )
+
+
+def test_a_toggle_in_a_grid_cell_parses_to_the_inner_toggle_holding_leaf_blocks() -> None:
+    grid = parse_report(make_report(blocks=[make_grid([make_cell(6, [make_toggle()])])])).blocks[0]
+
+    assert isinstance(grid, Grid)
+    assert grid.cells[0].blocks == [
+        InnerToggle(type="toggle", title="More", collapsed=True, blocks=[Text(type="text", body="x")])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(make_toggle(title="  "), "blocks.0.toggle.title", id="toggle"),
+        pytest.param(
+            make_grid([make_cell(6, [make_toggle(title="\t")])]),
+            "blocks.0.grid.cells.0.blocks.0.toggle.title",
+            id="inner-toggle",
+        ),
+    ],
+)
+def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert (
+        str(raised.value) == f"invalid content data: {location}: Value error, toggle title must not be blank"
+    )
+
+
+@pytest.mark.parametrize(
+    ("definition", "field", "schema"),
+    [
+        pytest.param(
+            "Toggle",
+            "title",
+            {
+                "description": "Summary label shown on the collapsible.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Title",
+                "type": "string",
+            },
+            id="toggle-title",
+        ),
+        pytest.param(
+            "InnerToggle",
+            "title",
+            {
+                "description": "Summary label shown on the collapsible.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Title",
+                "type": "string",
+            },
+            id="inner-toggle-title",
+        ),
+        pytest.param(
+            "Tab",
+            "label",
+            {
+                "description": "The tab's label in the strip, and its heading on paper.",
+                "minLength": 1,
+                "pattern": r"\S",
+                "title": "Label",
+                "type": "string",
+            },
+            id="tab-label",
+        ),
+    ],
+)
+def test_the_schema_refuses_a_blank_toggle_title_or_tab_label_as_the_build_does(
+    definition: str, field: str, schema: dict[str, object]
+) -> None:
+    assert Report.model_json_schema()["$defs"][definition]["properties"][field] == schema
+
+
+def _union_tags(union: object) -> str:
+    return ", ".join(
+        f"'{get_args(model.model_fields['type'].annotation)[0]}'" for model in get_args(get_args(union)[0])
+    )
+
+
+def test_a_toggle_where_a_section_block_can_go_refuses_a_section_inside_it() -> None:
+    inner_section = {"type": "section", "title": "S", "blocks": [{"type": "text", "body": "x"}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_toggle(inner_section)]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
+        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+    )
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(make_toggle(make_request()), id="top-level"),
+        pytest.param({"type": "section", "title": "S", "blocks": [make_toggle(make_flow())]}, id="section"),
+        pytest.param(
+            {"type": "panel", "title": "P", "blocks": [make_toggle(make_command_request())]}, id="panel"
+        ),
+        pytest.param(make_toggle(make_toggle(make_request())), id="toggle-in-a-toggle"),
+    ],
+)
+def test_a_toggle_where_a_section_block_can_go_holds_a_request(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_request(), make_toggle(make_request())]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
+        "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
+        "sharing one would share those values; give one of them an `id`"
+    )
+
+
+def _in_a_grid_cell_toggle(block: dict[str, Any]) -> dict[str, Any]:
+    return make_grid([make_cell(6, [make_toggle(block)])])
+
+
+def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
+    return make_tabs(make_tab("Floor", block), make_tab("System"))
+
+
+@pytest.mark.parametrize(
+    ("container", "location"),
+    [
+        pytest.param(
+            _in_a_grid_cell_toggle, "blocks.0.grid.cells.0.blocks.0.toggle.blocks.0", id="inner-toggle"
+        ),
+        pytest.param(_in_a_tab, "blocks.0.tabs.tabs.0.blocks.0", id="tab"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("refused", "tag"),
+    [
+        pytest.param(make_section("s"), "section", id="section"),
+        pytest.param(
+            {"type": "panel", "title": "P", "blocks": [{"type": "text", "body": "x"}]}, "panel", id="panel"
+        ),
+        pytest.param(make_grid([make_cell(6)]), "grid", id="grid"),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [{"type": "text", "body": "x"}]}]},
+            "walkthrough",
+            id="walkthrough",
+        ),
+        pytest.param(make_request(), "request", id="request"),
+        pytest.param(make_flow(), "request_flow", id="request-flow"),
+    ],
+)
+def test_a_toggle_in_a_cell_and_a_tab_refuse_every_block_wider_than_a_leaf(
+    container: Callable[[dict[str, Any]], dict[str, Any]], location: str, refused: dict[str, Any], tag: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[container(refused)]))
+
+    assert str(raised.value) == (
+        f"invalid content data: {location}: Input tag '{tag}' found using 'type' does not match any of the "
+        f"expected tags: {_union_tags(InnerBlock)}"
+    )
+
+
+def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
+    row = {"type": "badge_row", "items": [{"key": "OPS"}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [make_toggle(row)]}]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
+        "(add them to the badges map)"
+    )
+
+
+def test_a_tabs_block_parses_to_whole_model() -> None:
+    block = make_tabs(make_tab("Floor", tone="amber"), make_tab("System"))
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == Tabs(
+        type="tabs",
+        tabs=[
+            Tab(label="Floor", tone="warning", blocks=[Text(type="text", body="Floor")]),
+            Tab(label="System", tone=None, blocks=[Text(type="text", body="System")]),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [make_tabs()]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [make_tabs()]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [make_tabs()])]), id="grid-cell"),
+        pytest.param(
+            make_grid([make_cell(6, [make_grid([make_cell(3, [make_tabs()])])])]), id="inner-grid-cell"
+        ),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [make_tabs()]}]},
+            id="walkthrough-detail",
+        ),
+        pytest.param(make_toggle(make_tabs()), id="toggle"),
+        pytest.param(make_tabs(make_tab("Outer", make_tabs()), make_tab("Other")), id="another-tabs-block"),
+    ],
+)
+def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        pytest.param(
+            make_tabs(make_tab("Only")),
+            "invalid content data: blocks.0.tabs.tabs: List should have at least 2 items after validation, "
+            "not 1",
+            id="one-tab",
+        ),
+        pytest.param(
+            make_tabs(*(make_tab(f"t{number}") for number in range(MAX_STRIP_LABELS + 1))),
+            f"invalid content data: blocks.0.tabs.tabs: List should have at most {MAX_STRIP_LABELS} items "
+            f"after validation, not {MAX_STRIP_LABELS + 1}",
+            id="past-the-cap",
+        ),
+        pytest.param(
+            make_tabs(make_tab("Floor"), make_tab("Floor")),
+            "invalid content data: blocks.0.tabs: Value error, tabs repeat a label: Floor",
+            id="repeated-label",
+        ),
+        pytest.param(
+            make_tabs(
+                make_tab("System"),
+                make_tab("Floor"),
+                make_tab("System"),
+                make_tab("Vendor"),
+                make_tab("Floor"),
+            ),
+            "invalid content data: blocks.0.tabs: Value error, tabs repeat a label: Floor, System",
+            id="several-repeated-labels",
+        ),
+        pytest.param(
+            make_tabs(make_tab("  ", {"type": "text", "body": "x"}), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            id="blank-label",
+        ),
+        pytest.param(
+            make_tabs(make_tab("\t \n", {"type": "text", "body": "x"}), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            id="whitespace-label",
+        ),
+        pytest.param(
+            make_tabs(make_tab("", {"type": "text", "body": "x"}), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should have at least 1 character",
+            id="empty-label",
+        ),
+        pytest.param(
+            make_tabs(make_tab("Floor", tone="purple"), make_tab("System")),
+            "invalid content data: blocks.0.tabs.tabs.0.tone: Input should be 'neutral', 'info', "
+            "'success', 'warning', 'danger', 'accent', 'teal' or 'sky'",
+            id="unknown-tone",
+        ),
+    ],
+)
+def test_a_tabs_block_refuses_a_malformed_tab_set(block: dict[str, Any], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == message
+
+
+def test_a_tabs_block_at_the_strip_cap_is_accepted() -> None:
+    labels = [f"t{number}" for number in range(MAX_STRIP_LABELS)]
+
+    parsed = parse_report(make_report(blocks=[make_tabs(*(make_tab(label) for label in labels))])).blocks[0]
+
+    assert isinstance(parsed, Tabs)
+    assert [tab.label for tab in parsed.tabs] == labels
+
+
+def test_a_request_repeating_several_case_labels_names_each_once_in_sorted_order() -> None:
+    labels = ("b", "a", "b", "c", "a")
+    cases = [{"label": label, "response": {"status": 200, "body": "[]"}} for label in labels]
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_request(cases=cases)]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.request: Value error, request repeats a case label: a, b"
+    )
+
+
+_DUPLICATE_MATRIX = {
+    "type": "matrix",
+    "id": "dup",
+    "rows": ["r1"],
+    "columns": ["c1"],
+    "cells": [{"row": "r1", "col": "c1", "label": "x"}],
+}
+_GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": "ghost"}]}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(make_toggle, id="toggle"),
+        pytest.param(_in_a_grid_cell_toggle, id="inner-toggle"),
+        pytest.param(_in_a_tab, id="tab"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("beside", "nested", "message"),
+    [
+        pytest.param(
+            _DUPLICATE_MATRIX,
+            _DUPLICATE_MATRIX,
+            "invalid content data: Value error, matrix id(s) used more than once: ['dup'] — matrix ids "
+            "must be unique",
+            id="matrix-id",
+        ),
+        pytest.param(
+            _rollup_table("dup"),
+            _rollup_table("dup"),
+            "invalid content data: Value error, table id(s) used more than once: ['dup'] — table ids must "
+            "be unique",
+            id="table-id",
+        ),
+        pytest.param(
+            {"type": "text", "body": "x"},
+            _GHOST_MATRIX_CARD,
+            "invalid content data: Value error, card of_matrix 'ghost' names no matrix with that id",
+            id="card-matrix-reference",
+        ),
+    ],
+)
+def test_a_reference_check_reaches_into_every_toggle_and_tab(
+    container: Callable[[dict[str, Any]], dict[str, Any]],
+    beside: dict[str, Any],
+    nested: dict[str, Any],
+    message: str,
+) -> None:
+    badges = {"HAVE": {"label": "H", "tone": "green", "legend": "x"}}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(badges=badges, blocks=[beside, container(nested)]))
+
+    assert str(raised.value) == message
+
+
+def test_walk_blocks_visits_every_block_depth_first_in_document_order() -> None:
+    blocks = [
+        {
+            "type": "section",
+            "title": "S",
+            "blocks": [make_toggle({"type": "divider"}), {"type": "text", "body": "a"}],
+        },
+        make_grid(
+            [
+                make_cell(3, [make_tabs(make_tab("A", {"type": "note", "body": "n"}), make_tab("B"))]),
+                make_cell(3, [make_grid([make_cell(6, [{"type": "quote", "body": "q"}])])]),
+            ]
+        ),
+        {
+            "type": "walkthrough",
+            "steps": [{"label": "Go", "detail": [make_toggle({"type": "code", "content": "c"})]}],
+        },
+        {"type": "panel", "title": "P", "blocks": [make_flow()]},
+    ]
+
+    report = parse_report(make_report(blocks=blocks))
+
+    assert [block.type for block in walk_blocks(report.blocks)] == [
+        "section",
+        "toggle",
+        "divider",
+        "text",
+        "grid",
+        "tabs",
+        "note",
+        "text",
+        "grid",
+        "quote",
+        "walkthrough",
+        "toggle",
+        "code",
+        "panel",
+        "request_flow",
+    ]
+
+
+def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:
+    row = {"type": "badge_row", "items": [{"key": "OPS"}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_tabs(make_tab("Floor", row), make_tab("System"))]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
+        "(add them to the badges map)"
+    )
+
+
+def test_a_level_four_heading_parses_to_whole_model() -> None:
+    report = parse_report(make_report(blocks=[{"type": "heading", "level": 4, "text": "Bin detail"}]))
+
+    assert report.blocks[0] == Heading(type="heading", text="Bin detail", level=4)
+
+
+def test_a_heading_below_level_four_is_rejected() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "heading", "level": 5, "text": "Too deep"}]))
+
+    assert str(raised.value) == "invalid content data: blocks.0.heading.level: Input should be 2, 3 or 4"
+
+
+def test_a_divider_parses_to_a_block_with_no_fields_of_its_own() -> None:
+    report = parse_report(make_report(blocks=[{"type": "divider"}]))
+
+    assert report.blocks[0] == Divider(type="divider")
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [{"type": "divider"}]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [{"type": "divider"}]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [{"type": "divider"}])]), id="grid-cell"),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [{"type": "divider"}]}]},
+            id="walkthrough-detail",
+        ),
+    ],
+)
+def test_a_divider_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_divider_refuses_a_field_it_does_not_have() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "divider", "text": "or"}]))
+
+    assert str(raised.value) == "invalid content data: blocks.0.divider.text: Extra inputs are not permitted"
 
 
 def test_badge_legend_false_parses_as_a_legend_optout() -> None:
