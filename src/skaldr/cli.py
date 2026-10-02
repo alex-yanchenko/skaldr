@@ -176,8 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         "--export",
         choices=EXPORT_TARGETS,
         help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
-        "(tabs, callouts, columns, toggles, colored table cells) to paste or send through the Notion MCP; "
-        "`markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
+        "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
     )
     parser.add_argument(
         "--export-dir",
@@ -188,9 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         "--chunk",
         type=int,
         metavar="N",
-        help="with --export notion: split the page into files of at most N characters, each after the "
-        "first starting at a level 1 or 2 heading, for a tool or a paste box that caps its input size. A "
-        "single section longer than N stays whole.",
+        help="with --export notion: split the page into files of at most N characters, counted in Unicode "
+        "code points rather than bytes, each after the first starting at a level 1 or 2 heading, for a tool "
+        "or a paste box that caps its input size. A single section longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
