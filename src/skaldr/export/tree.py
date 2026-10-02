@@ -6,7 +6,7 @@ from skaldr.models import ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 ListKind = Literal["bullet", "number", "check"]
-HeadingLevel = Literal[1, 2, 3, 4]
+HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 
 
@@ -87,6 +87,11 @@ class Callout:
 class Quote:
     lines: tuple[ExportRich, ...]
     cite: ExportRich = ()
+
+
+@dataclass(frozen=True)
+class Divider:
+    pass
 
 
 @dataclass(frozen=True)
@@ -189,6 +194,7 @@ Node = (
     | DisplayMath
     | Callout
     | Quote
+    | Divider
     | Toggle
     | Columns
     | Tabs
@@ -228,6 +234,13 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
         case Diagram():
             return node.supplement
         case (
-            Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Quote() | TableOfContents()
+            Heading()
+            | Paragraph()
+            | TableNode()
+            | CodeBlock()
+            | DisplayMath()
+            | Quote()
+            | Divider()
+            | TableOfContents()
         ):
             return ()

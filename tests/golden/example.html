@@ -12,7 +12,7 @@
      script changes, that test fails until the hash below is updated. The third hash is the --live
      reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count — Discrepancies &amp; Fixes</title>
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
@@ -124,6 +124,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
+	h4:not(.rq-case-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
 	   heading's own weight/size so it reads as a subtitle, not part of the title. */
 	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;
@@ -415,6 +416,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	/* note: a quiet set-apart aside — softer than a callout, for speaker notes / narration / asides. */
 	.note-block{border-inline-start:2px solid var(--line); padding:2px 0 2px 14px; margin-block:var(--s4); color:var(--muted); font-size:13.5px}
 	.note-block .note-block-title{font-weight:600; color:var(--ink); margin-block-end:var(--s1)}
+
+	hr.divider{border:0; border-block-start:1px solid var(--line); margin-block:var(--s6); height:0}
 
 	.code{margin-block:var(--s4); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;
 		background:var(--code-bg); box-shadow:var(--shadow);
@@ -728,7 +731,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rlink{color:var(--muted); text-decoration:none}
 		& .rlink:hover{color:var(--accent-fg)}}
 
-	details.section{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow); scroll-margin-top:var(--hdr-h);
+	details.section,details.toggle{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow); scroll-margin-top:var(--hdr-h);
 		& > summary{cursor:pointer; padding:var(--s3) var(--s4); font-weight:650; font-size:14px;
 			list-style:none; display:flex; align-items:center; gap:var(--s2)}
 		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);
@@ -828,7 +831,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rq-lock{font-size:9.5px; padding:1px 5px; border-radius:var(--r-xs);
 			background:var(--warning-bg); color:var(--warning-fg)}
 		& input{min-width:0; font-family:var(--mono); font-size:12.5px; padding:6px 9px;
-			border:1px solid var(--rule); border-radius:var(--r-sm); background:var(--surface); color:var(--ink)}
+			border:1px solid var(--rule); border-radius:var(--r-sm); background:var(--surface); color:var(--ink)}}
+
+	.rq,.tabs{
 		/* One strip with shared edges, so a selection reads as part of the control rather than a loose
 		   tag. It only has to hold one line: a generated container query per block turns it into a rail
 		   below the width its own labels need. */
@@ -876,17 +881,25 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			background:var(--neutral-fg)}
 		& .rq-dot.success{background:var(--success-fg)} & .rq-dot.warning{background:var(--warning-fg)}
 		& .rq-dot.danger{background:var(--danger-fg)} & .rq-dot.info{background:var(--info-fg)}
+		& .rq-dot.accent{background:var(--accent-fg)} & .rq-dot.teal{background:var(--teal-fg)}
+		& .rq-dot.sky{background:var(--sky-fg)}
 		/* One radio per case, each immediately before its own pane, so `:checked +` picks the pane
 		   without an index to keep in step. The strip is ordered above them rather than placed there,
 		   which is what lets the pair stay adjacent. */
 		& .rq-cases{display:flex; flex-direction:column}
-		& .rq-step-body{container-type:inline-size}
 		& .rq-tabs{order:-1}
 		& .rq-pick{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
 		& .rq-pick:focus-visible + .rq-case{outline:2px solid var(--info-fg); outline-offset:-2px}
 		& .rq-case{display:none; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4)}
 		& .rq-pick:checked + .rq-case{display:flex}
-		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}
+		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}}
+
+	.tabs{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4);
+		background:var(--surface); box-shadow:var(--shadow); container-type:inline-size;
+		& .rq-pick:checked + .rq-case{display:block}}
+
+	.rq{
+		& .rq-step-body{container-type:inline-size}
 		& .rq-pane{border:1px solid var(--line); border-radius:var(--r-inner); overflow:hidden; break-inside:avoid}
 		& .rq-pane-hd{display:flex; gap:var(--s3); justify-content:space-between; align-items:center;
 			flex-wrap:wrap; padding:6px var(--s3); background:var(--panel); border-bottom:1px solid var(--line);
@@ -969,8 +982,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   heading, because a tab must not hide evidence. The form and the copy button are interactive
 		   and drop out; the command stays, since that is what a reader reproduces the call from. */
 		.rq .rq-case{display:flex}
-		.rq .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); break-after:avoid}
-		.rq .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}
+		.tabs .rq-case{display:block}
+		:is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); break-after:avoid}
+		:is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}
 		.rq .rq-vars input{border:0; padding-inline:0}
 		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
 		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}
@@ -1025,9 +1039,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	}
 }
 
-@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 394px){.rq1{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq1 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq1 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq1 .rq-case{grid-row:1; grid-column:2}}
-@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 .rq-case{grid-row:1; grid-column:2}}</style>
+@container (width < 283px){.tb0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.tb0 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.tb0 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.tb0 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 630px){.rq0{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq0 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq0 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq0 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 394px){.rq1{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq1 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq1 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq1 > .rq-case{grid-row:1; grid-column:2}}
+@container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 > .rq-case{grid-row:1; grid-column:2}}</style>
 <script>
 /* Apply the saved theme before first paint so a remembered choice causes no flash. Width is not
    persisted — it is a per-view reader control that resets to the default cap on reload. */
@@ -1172,7 +1187,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <ul class="list check"><li><label class="chk"><input type="checkbox" checked><span>Confirm the <code>bin &gt; 12</code> scan rule with the site lead.</span></label></li><li><label class="chk"><input type="checkbox"><span>Ship the 9-digit bin-code widening behind the scan flag.</span></label><ul class="list check"><li><label class="chk"><input type="checkbox"><span>Stage on the pilot aisle first.</span></label></li><li><label class="chk"><input type="checkbox"><span>Watch the mis-scan rate for one shift before widening.</span></label></li></ul></li><li><label class="chk"><input type="checkbox"><span>Re-run the count and re-verify reconciliation.</span></label></li></ul>
 
+<h4 id="sign-off-and-rollback">Sign-off and rollback</h4>
+
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
+
+<hr class="divider">
 
 <div class="note-block iconed"><span class="block-icon" aria-hidden="true">🎤</span><div class="iconed-body"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div></div>
 
@@ -1217,7 +1236,9 @@ ORDER BY n DESC;
 </div></div>
 
 <details class="section" id="appendix-discrepancy-reason-raw-counts"><summary>Appendix — discrepancy-reason raw counts<span class="upd">updated 18 Jul 2026</span></summary><div class="section-body"><ul class="list"><li>Double-count (same-window re-scan): 340</li><li>Double-count (bin &gt; 12 skip): 260</li><li>Mislabeled bin code (9-digit truncation): 500</li><li>Short shipment (vendor): 400</li></ul>
-<p class="text muted">Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.</p></div></details>
+<p class="text muted">Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.</p><details class="toggle"><summary>How the raw counts were pulled</summary><div class="section-body"><p class="text">One pass over the scan-stage audit log for cycle <code>Q3-2026</code>, grouped by the reason code each scanner attached.</p><ul class="list"><li>Scans with no reason code count as matched.</li><li>A pallet scanned in two aisles counts once, under its first aisle.</li></ul>
+</div></details>
+</div></details>
 
 <h2 id="counts-at-a-glance">Counts at a glance</h2>
 
@@ -1263,6 +1284,25 @@ ORDER BY n DESC;
 </table></div>
 
 
+<div class="tabs"><div class="rq-cases tb0" role="group" aria-label="Tabs">
+<input type="radio" class="rq-pick" name="tb0" id="tb0_0" checked>
+<section class="rq-case">
+<h4 class="rq-case-hd">Floor</h4>
+<ul class="list"><li>Re-label the Zone B bins the scanner misread.</li><li>Recount Zone C by hand before sign-off.</li></ul>
+</section>
+<input type="radio" class="rq-pick" name="tb0" id="tb0_1">
+<section class="rq-case">
+<h4 class="rq-case-hd">System</h4>
+<p class="text">Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.</p></section>
+<input type="radio" class="rq-pick" name="tb0" id="tb0_2">
+<section class="rq-case">
+<h4 class="rq-case-hd">Vendor</h4>
+<div class="callout danger"><div>Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.</div></div>
+</section>
+<div class="rq-tabs"><label for="tb0_0"><span class="rq-dot warning"></span>Floor</label><label for="tb0_1"><span class="rq-dot info"></span>System</label><label for="tb0_2"><span class="rq-dot danger"></span>Vendor</label></div>
+</div>
+</div>
+
 <h2 id="where-the-count-comes-from">Where the count comes from</h2>
 
 <div class="fan in">
@@ -1292,7 +1332,7 @@ assert sum(counted) == expected
 </div>
 </div>
 <div class="rq-cases rq0" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq0" id="rq0-0" checked>
+<input type="radio" class="rq-pick" name="rq0" id="rq0_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">a bin that balances</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1313,7 +1353,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>Expected and counted agree, so the bin needs no recount.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq0" id="rq0-1">
+<input type="radio" class="rq-pick" name="rq0" id="rq0_1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">an overflow bin</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1334,7 +1374,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A 24-unit gap on a bin flagged <code>overflow: true</code>. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq0" id="rq0-2">
+<input type="radio" class="rq-pick" name="rq0" id="rq0_2">
 <section class="rq-case" data-rq-case="2">
 <h4 class="rq-case-hd">a bin the token cannot read</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins/<span class="rq-slot" data-rq-slot="bin" data-rq-quote="none">&lsaquo;bin&rsaquo;</span>
@@ -1351,7 +1391,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq0-0"><span class="rq-dot success"></span>a bin that balances</label><label for="rq0-1"><span class="rq-dot success"></span>an overflow bin</label><label for="rq0-2"><span class="rq-dot warning"></span>a bin the token cannot read</label></div>
+<div class="rq-tabs"><label for="rq0_0"><span class="rq-dot success"></span>a bin that balances</label><label for="rq0_1"><span class="rq-dot success"></span>an overflow bin</label><label for="rq0_2"><span class="rq-dot warning"></span>a bin the token cannot read</label></div>
 </div>
 
 </section>
@@ -1361,7 +1401,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">Every overflow bin in one warehouse</span></div>
 <div class="rq-cases rq1" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq1" id="rq1-0" checked>
+<input type="radio" class="rq-pick" name="rq1" id="rq1_0" checked>
 <section class="rq-case" data-rq-case="0" data-rq-command>
 <h4 class="rq-case-hd">NW-04, the finding</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
@@ -1380,7 +1420,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 ]</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Two overflow bins short, 26 units between them, matching the manual-path queue.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq1" id="rq1-1">
+<input type="radio" class="rq-pick" name="rq1" id="rq1_1">
 <section class="rq-case" data-rq-case="1" data-rq-command>
 <h4 class="rq-case-hd">NW-02, the control</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
@@ -1395,7 +1435,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 ]</pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq1-0"><span class="rq-dot warning"></span>NW-04, the finding</label><label for="rq1-1"><span class="rq-dot success"></span>NW-02, the control</label></div>
+<div class="rq-tabs"><label for="rq1_0"><span class="rq-dot warning"></span>NW-04, the finding</label><label for="rq1_1"><span class="rq-dot success"></span>NW-02, the control</label></div>
 </div>
 
 </section>
@@ -1418,7 +1458,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 1 of 2</span><span class="rq-step-t">Exchange the API key for a session token</span><span class="rq-cap" data-rq-capture="session_token" data-rq-json="$.token" data-rq-secret>captures session_token</span></div>
 <div class="rq-step-body"><div class="rq-cases rq2">
-<input type="radio" class="rq-pick" name="rq2" id="rq2-0" checked>
+<input type="radio" class="rq-pick" name="rq2" id="rq2_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">200</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">POST https://wms.example.com/v2/sessions
@@ -1444,7 +1484,7 @@ Content-Type: application/json
 <div class="rq-handoff"><span class="rq-bar"></span>session_token<span class="rq-bar"></span></div><section class="rq-step">
 <div class="rq-step-hd"><span class="rq-step-n">step 2 of 2</span><span class="rq-step-t">Read the bins that did not balance</span></div>
 <div class="rq-step-body"><div class="rq-cases rq3" role="group" aria-label="Recorded cases">
-<input type="radio" class="rq-pick" name="rq3" id="rq3-0" checked>
+<input type="radio" class="rq-pick" name="rq3" id="rq3_0" checked>
 <section class="rq-case" data-rq-case="0">
 <h4 class="rq-case-hd">with the token</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1466,7 +1506,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 </pre></div>
 <div class="rq-verdict success"><span class="rq-vlbl">Verdict</span><span>The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.</span></div>
 </section>
-<input type="radio" class="rq-pick" name="rq3" id="rq3-1">
+<input type="radio" class="rq-pick" name="rq3" id="rq3_1">
 <section class="rq-case" data-rq-case="1">
 <h4 class="rq-case-hd">once the token has expired</h4>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">GET https://wms.example.com/v2/warehouses/<span class="rq-slot" data-rq-slot="warehouse" data-rq-quote="none">&lsaquo;warehouse&rsaquo;</span>/bins?status=variance
@@ -1485,7 +1525,7 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 }</pre></div>
 <div class="rq-verdict warning"><span class="rq-vlbl">Verdict</span><span>Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.</span></div>
 </section>
-<div class="rq-tabs"><label for="rq3-0"><span class="rq-dot success"></span>with the token</label><label for="rq3-1"><span class="rq-dot warning"></span>once the token has expired</label></div>
+<div class="rq-tabs"><label for="rq3_0"><span class="rq-dot success"></span>with the token</label><label for="rq3_1"><span class="rq-dot warning"></span>once the token has expired</label></div>
 </div>
 </div>
 </section>
@@ -1823,6 +1863,40 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 			}
 		});
 	});
+})();
+</script><script>
+(function () {
+	function picksAround(target) {
+		var picks = [];
+		for (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {
+			var pick = pane.previousElementSibling;
+			if (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);
+		}
+		return picks;
+	}
+	function revealHashTarget() {
+		var id;
+		try {
+			id = decodeURIComponent(location.hash.slice(1));
+		} catch (error) {
+			return;
+		}
+		var target = id && document.getElementById(id);
+		if (!target) return;
+		var picks = picksAround(target);
+		if (!picks.length) return;
+		picks.forEach(function (pick) {
+			pick.checked = true;
+			pick.dispatchEvent(new Event("change", { bubbles: true }));
+		});
+		target.scrollIntoView();
+	}
+	window.addEventListener("hashchange", revealHashTarget);
+	document.addEventListener("click", function (event) {
+		var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+		if (link && link.hash === location.hash) revealHashTarget();
+	});
+	revealHashTarget();
 })();
 </script></body>
 </html>

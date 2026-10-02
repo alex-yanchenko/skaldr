@@ -8,6 +8,8 @@ import pytest
 from skaldr.compute import (
     DELTA_GLYPHS,
     HTTP_REASONS,
+    Strip,
+    StripLabel,
     anchor_slugs,
     command_for,
     first_table_index,
@@ -21,6 +23,7 @@ from skaldr.compute import (
     request_wire,
     single_quoted,
     status_line,
+    strip_registry,
     swimlane_layout,
     table_rollup,
     toc_entries,
@@ -37,7 +40,18 @@ from skaldr.models import (
     Table,
     parse_report,
 )
-from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
+from tests.factories import (
+    make_cell,
+    make_command_request,
+    make_flow,
+    make_grid,
+    make_reconciled_table,
+    make_report,
+    make_tab,
+    make_table,
+    make_tabs,
+    make_toggle,
+)
 
 
 def _swimlane(**overrides: object) -> Swimlane:
@@ -810,6 +824,48 @@ def test_toc_includes_sections_interleaved_in_document_order() -> None:
         ("overview", "Overview"),
         ("appendix", "Appendix"),
         ("wrap-up", "Wrap-up"),
+    ]
+
+
+@pytest.mark.parametrize("level", [pytest.param(3, id="level-3"), pytest.param(4, id="level-4")])
+def test_a_sub_heading_gets_an_anchor_but_no_toc_entry(level: int) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "toc": True},
+            blocks=[
+                {"type": "heading", "text": "Overview"},
+                {"type": "heading", "level": level, "text": "Bins"},
+            ],
+        )
+    )
+    slugs = anchor_slugs(report)
+
+    assert (sorted(slugs.values()), toc_entries(report, slugs)) == (
+        ["bins", "overview"],
+        [("overview", "Overview")],
+    )
+
+
+def test_the_strip_registry_names_every_tab_strip_and_case_strip_in_document_order() -> None:
+    cases = [
+        {"label": "a", "tone": "warning", "response": {"body": "x"}},
+        {"label": "b", "tone": "success", "response": {"body": "y"}},
+    ]
+    inner = make_tabs(make_tab("Inner", tone="info"), make_tab("Other"))
+    blocks = [
+        make_tabs(make_tab("Outer", inner), make_tab("Second")),
+        make_command_request(cases=cases),
+        make_toggle(make_flow()),
+    ]
+
+    strips = strip_registry(parse_report(make_report(blocks=blocks)))
+
+    assert list(strips.values()) == [
+        Strip("tb0", (StripLabel("Outer", None), StripLabel("Second", None))),
+        Strip("tb1", (StripLabel("Inner", "info"), StripLabel("Other", None))),
+        Strip("rq0", (StripLabel("a", "warning"), StripLabel("b", "success"))),
+        Strip("rq1", (StripLabel("one", "success"),)),
+        Strip("rq2", (StripLabel("one", "success"),)),
     ]
 
 

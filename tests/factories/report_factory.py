@@ -55,6 +55,23 @@ def make_cell(span: Any, blocks: list[dict[str, Any]] | None = None) -> dict[str
     return {"span": span, "blocks": blocks if blocks is not None else [{"type": "text", "body": "x"}]}
 
 
+def make_toggle(*blocks: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    return {
+        "type": "toggle",
+        "title": "More",
+        "blocks": list(blocks) or [{"type": "text", "body": "x"}],
+        **overrides,
+    }
+
+
+def make_tab(label: str, *blocks: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    return {"label": label, "blocks": list(blocks) or [{"type": "text", "body": label}], **overrides}
+
+
+def make_tabs(*tabs: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "tabs", "tabs": list(tabs) or [make_tab("Floor"), make_tab("System")]}
+
+
 def make_table(columns: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     return {"type": "table", "columns": columns, **overrides}
 

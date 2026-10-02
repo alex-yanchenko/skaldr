@@ -147,8 +147,12 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
   - [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
 
-* **Owner**: Inventory Ops — **@site-lead** signs off each fix.
-* **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+#### Sign-off and rollback
+
+- **Owner**: Inventory Ops — **@site-lead** signs off each fix.
+- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+
+---
 
 > 🎤 **For the read-out**
 >
@@ -244,6 +248,13 @@ function pickWinner(a, b) {
 
 Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.
 
+**How the raw counts were pulled**
+
+One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
+
+- Scans with no reason code count as matched.
+- A pallet scanned in two aisles counts once, under its first aisle.
+
 ## Counts at a glance
 
 **Clean vs discrepant units by zone**
@@ -304,6 +315,19 @@ pie
 | **Zone B** | Floor | Floor | System |  |
 | **Zone C** | Floor | System | n/a |  |
 | **Overflow** | Vendor | Vendor |  |  |
+
+**⚠️ Floor**
+
+- Re-label the Zone B bins the scanner misread.
+- Recount Zone C by hand before sign-off.
+
+**💡 System**
+
+Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
+
+**🛑 Vendor**
+
+> 🛑 Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
 
 ## Where the count comes from
 

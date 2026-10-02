@@ -31,6 +31,7 @@ from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swi
 from skaldr.export.tree import (
     Callout,
     Columns,
+    Divider,
     GridColumn,
     Heading,
     ListEntry,
@@ -38,7 +39,9 @@ from skaldr.export.tree import (
     LoweredDocument,
     Node,
     Paragraph,
+    Tab,
     TableOfContents,
+    Tabs,
     TocEntry,
     Toggle,
     capped_heading_level,
@@ -109,6 +112,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_quote(block, lowering)
         case models.Note():
             return lower_note(block, lowering)
+        case models.Divider():
+            return [Divider()]
         case models.Image():
             return lower_image(block)
         case models.Timeline():
@@ -135,6 +140,17 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_request_flow(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
+        case models.Toggle() | models.InnerToggle():
+            return _toggle(block, lowering, depth)
+        case models.Tabs():
+            return [
+                Tabs(
+                    tuple(
+                        Tab(plain(tab.label), tuple(_lower_blocks(tab.blocks, lowering, depth)), tab.tone)
+                        for tab in block.tabs
+                    )
+                )
+            ]
         case models.Panel():
             return [
                 Callout(
@@ -161,6 +177,13 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]
     return [Heading(level, plain(block.title), anchor), *children]
+
+
+def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth: int) -> list[Node]:
+    children = _lower_blocks(block.blocks, lowering, depth)
+    if block.collapsed:
+        return [Toggle(plain(block.title), None, tuple(children))]
+    return [Paragraph(bold(block.title)), *children]
 
 
 def _column_ratios(spans: Sequence[int]) -> list[int]:

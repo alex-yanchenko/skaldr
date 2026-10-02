@@ -20,7 +20,6 @@ from skaldr.mathml import mathml
 from skaldr.models import (
     Heading,
     Report,
-    RequestLike,
     Section,
     ToneLiteral,
     iter_requests,
@@ -164,10 +163,10 @@ def _render(
     def anchor_id(block: Heading | Section) -> str:
         return slugs[id(block)]
 
-    groups = compute.request_groups(report)
+    strips = compute.strip_registry(report)
 
-    def case_group(core: RequestLike) -> str:
-        return groups[id(core)]
+    def strip_of(owner: compute.StripOwner) -> compute.Strip:
+        return strips[id(owner)]
 
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
@@ -184,7 +183,7 @@ def _render(
     globals_ = cast("dict[str, Any]", env.globals)
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
-    globals_["case_group"] = case_group
+    globals_["strip_of"] = strip_of
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references
@@ -194,12 +193,13 @@ def _render(
     return env.get_template(template).render(
         meta=report.meta,
         blocks=report.blocks,
-        styles=package_text("styles.css") + "\n" + compute.case_strip_rules(report, groups),
+        styles=package_text("styles.css") + "\n" + compute.strip_rules(strips.values()),
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
         first_table_index=compute.first_table_index(report),
         has_requests=any(iter_requests(report.blocks)),
+        has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
     )

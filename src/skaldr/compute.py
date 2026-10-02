@@ -12,7 +12,7 @@ import math
 import re
 import string
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, Final, NamedTuple, TypedDict
 
 import roman
@@ -27,14 +27,12 @@ from skaldr.models import (
     Card,
     CaseTone,
     DeltaDirection,
-    Grid,
     Heading,
-    InnerGrid,
     ListNumbering,
     Matrix,
     MatrixCell,
-    Panel,
     Report,
+    Request,
     RequestCapture,
     RequestCase,
     RequestFlow,
@@ -44,13 +42,14 @@ from skaldr.models import (
     Swimlane,
     SwimlaneStepState,
     Table,
-    Walkthrough,
+    Tabs,
+    ToneLiteral,
     col_sum,
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
-    iter_requests,
     iter_tables,
+    walk_blocks,
 )
 
 __all__ = [
@@ -82,20 +81,9 @@ def _slugify(text: str) -> str:
 def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
     """Headings (any level, nested) and sections, in document order — the blocks that carry an anchor
     id and can appear in the TOC. A section yields itself, then its inner headings."""
-    for block in blocks:
-        if isinstance(block, Heading):
+    for block in walk_blocks(blocks):
+        if isinstance(block, (Heading, Section)):
             yield block
-        elif isinstance(block, Section):
-            yield block
-            yield from _iter_anchored(block.blocks)
-        elif isinstance(block, Panel):
-            yield from _iter_anchored(block.blocks)
-        elif isinstance(block, (Grid, InnerGrid)):
-            for cell in block.cells:
-                yield from _iter_anchored(cell.blocks)
-        elif isinstance(block, Walkthrough):
-            for step in block.steps:
-                yield from _iter_anchored(step.detail)
 
 
 def reference_numbers(report: Report) -> dict[str, int]:
@@ -905,27 +893,6 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
     return " \\\n".join(parts)
 
 
-def request_groups(report: Report) -> dict[int, str]:
-    """`id(request or step) -> the radio group name that selects its cases`.
-
-    One name per set of cases, numbered in document order rather than derived from a label, because
-    it has to be unique across the page and safe in an `id` attribute, and a label is neither."""
-    groups: dict[int, str] = {}
-    for core in iter_request_cores(report):
-        groups[id(core)] = f"rq{len(groups)}"
-    return groups
-
-
-def iter_request_cores(report: Report) -> Iterator[RequestLike]:
-    """Every call on the page that records cases, in document order. A flow holds no cases itself, so
-    it contributes its steps rather than itself."""
-    for block in iter_requests(report.blocks):
-        if isinstance(block, RequestFlow):
-            yield from block.steps
-        else:
-            yield block
-
-
 CASE_LABEL_CHAR = 7.3
 """Advance width of one monospace character at the strip's 12px, in px. The labels are the only thing
 whose width has to be known before the page renders, and a monospace face makes that a count."""
@@ -937,41 +904,86 @@ CASE_STRIP_SLACK = 1.08
 """Margin for a fallback monospace face whose characters run wider than the one measured."""
 
 
-def case_strip_width(core: RequestLike) -> int:
-    """The width this call's label strip needs to sit on one line, rounded up to a whole px.
+def strip_width(labels: Iterable[str]) -> int:
+    """The width a label strip needs to sit on one line, rounded up to a whole px.
 
     A strip is honest only while it fits that line: its selected label and the rule beneath form one
     mark pointing at the pane. Wrapped, the rule can only sit under the last row, so a selection in an
     earlier row points at nothing. Below this width the strip becomes a rail instead, which has no row
     to wrap out of."""
-    labels = sum(len(case.label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for case in core.cases)
-    return math.ceil(labels * CASE_STRIP_SLACK) + 32
+    width = sum(len(label) * CASE_LABEL_CHAR + CASE_LABEL_CHROME for label in labels)
+    return math.ceil(width * CASE_STRIP_SLACK) + 32
 
 
-def case_strip_rules(report: Report, groups: dict[int, str]) -> str:
-    """A container query per call that records more than one case, at the width its own labels need.
+class StripLabel(NamedTuple):
+    label: str
+    tone: ToneLiteral | None
+
+
+class Strip(NamedTuple):
+    name: str
+    labels: tuple[StripLabel, ...]
+
+
+StripOwner = RequestLike | Tabs
+
+
+def _strip_owners(report: Report) -> Iterator[tuple[str, StripOwner]]:
+    for block in walk_blocks(report.blocks):
+        if isinstance(block, Tabs):
+            yield "tb", block
+        elif isinstance(block, Request):
+            yield "rq", block
+        elif isinstance(block, RequestFlow):
+            for step in block.steps:
+                yield "rq", step
+
+
+def _strip_labels(owner: StripOwner) -> tuple[StripLabel, ...]:
+    if isinstance(owner, Tabs):
+        return tuple(StripLabel(tab.label, tab.tone) for tab in owner.tabs)
+    return tuple(StripLabel(case.label, case_tone(case)) for case in owner.cases)
+
+
+def strip_registry(report: Report) -> dict[int, Strip]:
+    """`id(tabs block, request or step) -> its strip`, in document order.
+
+    One radio group name per strip, numbered rather than derived from a label, because it has to be
+    unique across the page and safe in an `id` attribute, and a label is neither."""
+    numbered: Counter[str] = Counter()
+    strips: dict[int, Strip] = {}
+    for prefix, owner in _strip_owners(report):
+        strips[id(owner)] = Strip(f"{prefix}{numbered[prefix]}", _strip_labels(owner))
+        numbered[prefix] += 1
+    return strips
+
+
+def strip_rules(strips: Iterable[Strip]) -> str:
+    """A container query per strip of more than one label, at the width its own labels need.
 
     A query condition takes a literal rather than a custom property, so the threshold cannot ride on
-    the element as a variable and each call contributes its own rule. `groups` is the same map the
-    markup names its radios from, so a rule and the strip it shapes cannot drift apart."""
-    rules: list[str] = []
-    for core in iter_request_cores(report):
-        if len(core.cases) < 2:
-            continue
-        name = groups[id(core)]
-        rules.append(
-            f"@container (width < {case_strip_width(core)}px){{"
-            f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
-            f"gap:0 var(--s3)}}"
-            f".{name} .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
-            f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
-            f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
-            f".{name} .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
-            f"white-space:normal; overflow:visible; text-overflow:clip}}"
-            f".{name} .rq-case{{grid-row:1; grid-column:2}}"
-            "}"
-        )
-    return "\n".join(rules)
+    the element as a variable and each strip contributes its own rule. The strips are the same ones
+    the markup names its radios from, so a rule and the strip it shapes cannot drift apart."""
+    return "\n".join(
+        rail_rule(strip.name, strip_width(label.label for label in strip.labels))
+        for strip in strips
+        if len(strip.labels) > 1
+    )
+
+
+def rail_rule(name: str, width: int) -> str:
+    return (
+        f"@container (width < {width}px){{"
+        f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
+        f"gap:0 var(--s3)}}"
+        f".{name} > .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+        f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
+        f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
+        f".{name} > .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+        f"white-space:normal; overflow:visible; text-overflow:clip}}"
+        f".{name} > .rq-case{{grid-row:1; grid-column:2}}"
+        "}"
+    )
 
 
 def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:

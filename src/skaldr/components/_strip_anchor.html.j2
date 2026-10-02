@@ -1,0 +1,35 @@
+<script>
+(function () {
+	function picksAround(target) {
+		var picks = [];
+		for (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {
+			var pick = pane.previousElementSibling;
+			if (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);
+		}
+		return picks;
+	}
+	function revealHashTarget() {
+		var id;
+		try {
+			id = decodeURIComponent(location.hash.slice(1));
+		} catch (error) {
+			return;
+		}
+		var target = id && document.getElementById(id);
+		if (!target) return;
+		var picks = picksAround(target);
+		if (!picks.length) return;
+		picks.forEach(function (pick) {
+			pick.checked = true;
+			pick.dispatchEvent(new Event("change", { bubbles: true }));
+		});
+		target.scrollIntoView();
+	}
+	window.addEventListener("hashchange", revealHashTarget);
+	document.addEventListener("click", function (event) {
+		var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
+		if (link && link.hash === location.hash) revealHashTarget();
+	});
+	revealHashTarget();
+})();
+</script>

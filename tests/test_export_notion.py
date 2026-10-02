@@ -22,6 +22,7 @@ from skaldr.export.tree import (
     Graph,
     GraphNode,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListKind,
     ListNode,
@@ -39,13 +40,9 @@ from skaldr.export.tree import (
 from skaldr.models import (
     AnyBlock,
     BadgeColorLiteral,
-    Grid,
-    InnerGrid,
-    Panel,
-    Section,
-    Walkthrough,
     load_report,
     parse_report,
+    walk_blocks,
 )
 from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, ScriptText, parse_rich
 from tests.conftest import REPO_ROOT
@@ -59,6 +56,7 @@ from tests.factories import (
     make_label_table,
     make_report,
     make_table,
+    make_toggle,
     notion_of,
 )
 
@@ -272,6 +270,77 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
     )
 
 
+def test_a_toggle_is_a_details_block_with_its_content_tab_indented_at_every_depth() -> None:
+    inner = {"type": "toggle", "title": "Inner", "blocks": [{"type": "text", "body": "y"}]}
+    toggle = {"type": "toggle", "title": "Raw counts", "blocks": [{"type": "text", "body": "x"}, inner]}
+
+    assert notion_of([toggle]) == (
+        "<details>\n<summary>Raw counts</summary>\n\tx\n"
+        "\t<details>\n\t<summary>Inner</summary>\n\t\ty\n\t</details>\n</details>\n"
+    )
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content_rather_than_a_details_block() -> None:
+    toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts", collapsed=False)
+
+    assert notion_of([toggle]) == "**Raw counts**\nx\n"
+
+
+def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_case_does() -> None:
+    block = {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "tone": "accent", "blocks": [{"type": "text", "body": "b"}]},
+            {"label": "Vendor", "blocks": [{"type": "divider"}]},
+        ],
+    }
+
+    assert notion_of([block]) == (
+        '<tabs>\n\t<tab icon="⚠️">\n\t\tFloor\n\t\ta\n\t</tab>\n'
+        "\t<tab>\n\t\tSystem\n\t\tb\n\t</tab>\n"
+        "\t<tab>\n\t\tVendor\n\t\t---\n\t</tab>\n</tabs>\n"
+    )
+
+
+def test_a_level_four_heading_is_four_hashes() -> None:
+    assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
+
+
+def test_a_heading_deeper_than_notion_heading_4_is_written_as_heading_4() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+        ],
+    }
+
+    assert notion_of([section]) == "## Appendix\n#### Zone C\n#### Bin 12\n"
+
+
+@pytest.mark.parametrize(
+    ("level", "line"),
+    [
+        pytest.param(4, "#### Deep", id="heading-4"),
+        pytest.param(5, "#### Deep", id="heading-5"),
+        pytest.param(6, "#### Deep", id="heading-6"),
+    ],
+)
+def test_a_heading_node_past_level_four_is_written_at_the_deepest_level_notion_takes(
+    level: HeadingLevel, line: str
+) -> None:
+    assert render_notion([Heading(level, (Plain("Deep"),))]) == f"{line}\n"
+
+
+def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
+    blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
+
+    assert notion_of(blocks) == "Above\n---\nBelow\n"
+
+
 def test_block_nodes_become_notion_blocks() -> None:
     nodes = [
         Paragraph((Plain("muted"),), "muted"),
@@ -300,18 +369,7 @@ def test_block_nodes_become_notion_blocks() -> None:
 
 
 def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
-    seen: set[str] = set()
-    for block in blocks:
-        seen.add(block.type)
-        if isinstance(block, Section | Panel):
-            seen |= _block_types_in(block.blocks)
-        if isinstance(block, Grid | InnerGrid):
-            for cell in block.cells:
-                seen |= _block_types_in(cell.blocks)
-        if isinstance(block, Walkthrough):
-            for step in block.steps:
-                seen |= _block_types_in(step.detail)
-    return seen
+    return {block.type for block in walk_blocks(blocks)}
 
 
 def _every_block_type() -> set[str]:

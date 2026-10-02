@@ -164,7 +164,7 @@ or to keep a small block from stretching across the whole page.
 
 | `type` | Purpose | Key fields |
 |---|---|---|
-| `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
+| `heading` | Section structure (feeds the TOC at level 2; levels 3 and 4 get an anchor but no TOC entry) | `text`, `level?: 2\|3\|4` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
 | `list` | Bulleted, numbered, checkbox, or decision points (nestable) | `style: bullet\|number\|check\|decision`, `items[]`: each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true`; in a `decision` list an item sets `decided: true` for a decision taken and leaves it out for an open question; a `number` list takes `start?` (the first number, 1 to 999999999, default 1) and `numbering?: decimal\|letters\|roman` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
@@ -181,6 +181,7 @@ or to keep a small block from stretching across the whole page.
 | `math` | A display equation, written in LaTeX and rendered as MathML | `expression` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
+| `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -194,6 +195,8 @@ or to keep a small block from stretching across the whole page.
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card — one per "slide" in a deck-style doc | `title`, `blocks[]` |
+| `toggle` | Collapsible group for anywhere a block can go, with no TOC entry or anchor | `title`, `collapsed?` (default true), `blocks[]` |
+| `tabs` | Several panes shown one at a time, chosen from the label strip a multi-case `request` uses | `tabs: [{label, tone?, blocks[]}]` (2 to 24 tabs, distinct labels) |
 | `grid` | Side-by-side layout (6 columns) | `cells: [{span: 1-6, blocks[]}]` |
 | `walkthrough` | Numbered steps, each with a detail column (see below) | `steps: [{label, sub?, tone?, detail: [blocks]}]`, `step_span?` — a step's `detail` may include a `grid` for a two-column step (Action \| Script) |
 
@@ -233,6 +236,17 @@ for an appendix or detail-on-demand; for a doc meant to be **read through** (a w
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
+
+A `toggle` is the collapsible for everywhere a `section` cannot go: inside a section, a panel, a grid cell or a walkthrough step's detail, as well as at the top level. It looks like a section's collapse but gets no TOC entry and no anchor, so use it to tuck away detail rather than to mark a region. It starts collapsed like a section (`collapsed: false` opens it). What it holds depends on where it sits. At the top level, in a section, in a panel or in another such toggle it holds whatever a section holds, including a `request` or `request_flow`. In a grid cell, a walkthrough step's detail or a tab it holds any block except a section, panel, grid, walkthrough, request or request_flow. A toggle may hold another toggle, and a heading inside one still gets its anchor.
+
+A `tabs` block shows one of its panes at a time, chosen from the same label strip a multi-case `request` uses, so choosing a tab needs no script and a strip too wide for its container turns into a rail. The first tab starts chosen. A tab's optional `tone` puts a coloured dot before its label; leave it out for a plain label. A tabs block goes wherever a toggle goes. A tab holds what a toggle in a grid cell holds, including a toggle or another tabs block, and never a `request` or `request_flow`: a request draws its cases with the same strip and the same pane class, so the rules that lay out a tab's pane would override the layout of a request's case panes inside it. On paper every tab prints, each under its own label, so a tab never hides content from a PDF. A same-page `[…](#id)` link to a heading inside a tab that is not chosen opens that tab, and every tab around it, before the page scrolls to the heading. It does so again when the reader follows the same link a second time after choosing another tab.
+
+```yaml
+- type: tabs
+  tabs:
+    - { label: "Floor", tone: warning, blocks: [{ type: text, body: "Recount Zone C by hand." }] }
+    - { label: "System", blocks: [{ type: text, body: "Rescan the truncated bins." }] }
+```
 
 Lists: `start` and `numbering` belong to a `style: number` list, `checked` to a `style: check` list, and `decided` to a `style: decision` list; anywhere else the build fails. A nested list keeps the numbering and counts from 1. A decision list shows a tick for a decision taken and a question mark for one still open, so a record of what was settled and what is still open reads at a glance.
 
@@ -971,8 +985,12 @@ case, where the page is shared as a URL an agent later has to read back.
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs |
+| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | native tabs, with the same icon on a tab whose tone has one |
 | a collapsed `section` | a heading with its content below | a toggle heading |
+| `toggle` | its bold title with its content below | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
+| `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |
 | `grid` | its cells one after another | native columns |
+| `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
 | badges | bold labels | coloured chips |
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |

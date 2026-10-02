@@ -209,8 +209,10 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 	- [ ] Stage on the pilot aisle first.
 	- [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
+#### Sign-off and rollback
 - **Owner**: Inventory Ops — **@site-lead** signs off each fix.
 - **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+---
 <callout icon="🎤" color="gray_bg">
 	**For the read-out**
 	Lead with the reconciliation gate — it is the one number leadership tracks.
@@ -283,6 +285,12 @@ function pickWinner(a, b) {
 	- Mislabeled bin code (9-digit truncation): 500
 	- Short shipment (vendor): 400
 	Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units. {color="gray"}
+	<details>
+	<summary>How the raw counts were pulled</summary>
+		One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
+		- Scans with no reason code count as matched.
+		- A pallet scanned in two aisles counts once, under its first aisle.
+	</details>
 ## Counts at a glance
 **Clean vs discrepant units by zone**
 <table fit-page-width="true" header-row="true">
@@ -441,6 +449,23 @@ pie
 		<td></td>
 	</tr>
 </table>
+<tabs>
+	<tab icon="⚠️">
+		Floor
+		- Re-label the Zone B bins the scanner misread.
+		- Recount Zone C by hand before sign-off.
+	</tab>
+	<tab icon="💡">
+		System
+		Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
+	</tab>
+	<tab icon="🛑">
+		Vendor
+		<callout icon="🛑" color="red_bg">
+			Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+		</callout>
+	</tab>
+</tabs>
 ## Where the count comes from
 ```mermaid
 flowchart LR

@@ -9,6 +9,7 @@ from typing_extensions import assert_never
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    DIVIDER_LINE,
     MarkupRuns,
     body_cell_texts,
     code_block_lines,
@@ -26,6 +27,7 @@ from skaldr.export.tree import (
     Columns,
     Diagram,
     DisplayMath,
+    Divider,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -256,6 +258,8 @@ class _MarkdownWriter:
                 return self.callout_lines(node)
             case Quote():
                 return self.quote_lines(node)
+            case Divider():
+                return [DIVIDER_LINE]
             case Toggle():
                 if node.heading_level is not None:
                     return self.titled(self.heading_line(node.heading_level, node.title), node.children)

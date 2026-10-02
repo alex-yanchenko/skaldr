@@ -61,6 +61,7 @@ from tests.factories import (
     folder_texts,
     make_command_request,
     make_report,
+    make_toggle,
     markdown_of,
 )
 
@@ -674,6 +675,78 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
 )
 def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> None:
     assert render_markdown([node]) == markdown
+
+
+def test_a_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "blocks": [
+            {"type": "text", "body": "x"},
+            {"type": "toggle", "title": "Inner", "blocks": [{"type": "text", "body": "y"}]},
+        ],
+    }
+
+    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n\n**Inner**\n\ny\n"
+
+
+def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+    toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts", collapsed=False)
+
+    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n"
+
+
+def _authored_tabs() -> dict[str, object]:
+    return {
+        "type": "tabs",
+        "tabs": [
+            {"label": "Floor", "tone": "warning", "blocks": [{"type": "text", "body": "a"}]},
+            {"label": "System", "tone": "accent", "blocks": [{"type": "text", "body": "b"}]},
+            {"label": "Vendor", "blocks": [{"type": "text", "body": "c"}]},
+        ],
+    }
+
+
+def test_authored_tabs_are_bold_titled_parts_led_by_the_icon_a_request_case_tone_gets() -> None:
+    assert markdown_of([_authored_tabs()]) == "**⚠️ Floor**\n\na\n\n**System**\n\nb\n\n**Vendor**\n\nc\n"
+
+
+def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug() -> None:
+    blocks = [
+        {"type": "heading", "level": 4, "text": "Bin detail", "id": "bins"},
+        {"type": "text", "body": "See [bins](#bins)."},
+    ]
+
+    assert markdown_of(blocks) == "#### Bin detail\n\nSee [bins](#bin-detail).\n"
+
+
+def test_level_three_and_four_headings_inside_a_section_stay_one_level_apart() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+        ],
+    }
+
+    assert markdown_of([section]) == "## Appendix\n\n#### Zone C\n\n##### Bin 12\n"
+
+
+def test_a_divider_stands_apart_from_the_paragraph_above_so_it_is_never_a_setext_underline() -> None:
+    blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
+
+    assert markdown_of(blocks) == "Above\n\n---\n\nBelow\n"
+
+
+def test_a_divider_in_a_walkthrough_step_stands_apart_inside_the_list_entry() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "a"}, {"type": "divider"}]}],
+    }
+
+    assert markdown_of([walkthrough]) == "1. **Go**\n\n   a\n\n   ---\n"
 
 
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
