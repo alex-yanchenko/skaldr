@@ -1243,6 +1243,9 @@ class Comparison(_Block):
             )
         return self
 
+    def is_negative(self, index: int) -> bool:
+        return self.polarity is not None and self.polarity[index] == "negative"
+
 
 class MatrixCell(FrozenModel):
     row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")

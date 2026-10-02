@@ -136,7 +136,7 @@
 
 {% macro comparison(b) %}
 <table class="cmp"><thead><tr><th></th>{% for opt in b.options %}<th{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ opt }}</th>{% endfor %}</tr></thead>
-<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, (b.polarity[loop.index0] == 'negative') if b.polarity else false) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for row in b.rows %}<tr><td class="feat">{{ row.feature }}</td>{% for cell in row.values %}<td{% if loop.index0 == b.highlight %} class="hl"{% endif %}>{{ cmp_cell(cell, b.is_negative(loop.index0)) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
 {% endmacro %}
 
 {% macro references(b) %}

@@ -157,14 +157,18 @@ def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]
             for index, option in enumerate(block.options)
         ),
     )
-    polarity = block.polarity or []
-    rows: list[TableRow] = []
-    for row in block.rows:
-        row_cells = [TableCell(bold(row.feature))]
-        for index, cell in enumerate(row.values):
-            is_negative = index < len(polarity) and polarity[index] == "negative"
-            row_cells.append(_comparison_cell(cell, is_negative, lowering))
-        rows.append(TableRow(tuple(row_cells)))
+    rows = [
+        TableRow(
+            (
+                TableCell(bold(row.feature)),
+                *(
+                    _comparison_cell(cell, block.is_negative(index), lowering)
+                    for index, cell in enumerate(row.values)
+                ),
+            )
+        )
+        for row in block.rows
+    ]
     return [Table(header, tuple(rows), header_column=True)]
 
 

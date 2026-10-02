@@ -1,5 +1,7 @@
 from typing import Any
 
+import pytest
+
 from skaldr.compute import (
     derived_card_tally,
     matrix_cell_display,
@@ -8,7 +10,7 @@ from skaldr.compute import (
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Cards, MatrixCell, Swimlane, Table, parse_report
+from skaldr.models import Cards, Comparison, MatrixCell, Swimlane, Table, parse_report
 from tests.factories import API_BADGES, make_report
 
 
@@ -212,6 +214,28 @@ def test_a_swimlane_group_spans_its_first_and_last_subcolumn() -> None:
     assert isinstance(swimlane, Swimlane)
 
     assert swimlane.group_spans == {"A": (0, 1), "B": (2, 2)}
+
+
+@pytest.mark.parametrize(
+    ("polarity", "negative"),
+    [
+        pytest.param(None, [False, False], id="no-polarity-is-all-positive"),
+        pytest.param(["negative", "positive"], [True, False], id="per-option"),
+    ],
+)
+def test_a_comparison_option_is_negative_only_when_its_polarity_says_so(
+    polarity: list[str] | None, negative: list[bool]
+) -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "rows": [{"feature": "Risky", "values": [True, False]}],
+        **({"polarity": polarity} if polarity else {}),
+    }
+    comparison = parse_report(make_report(blocks=[block])).blocks[0]
+    assert isinstance(comparison, Comparison)
+
+    assert [comparison.is_negative(index) for index in range(len(comparison.options))] == negative
 
 
 def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> None:
