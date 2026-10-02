@@ -120,7 +120,7 @@ blocks:
   # … more blocks
 ```
 
-Top level is `version` · `meta` · optional `badges` · `blocks` — nothing else. Every block
+Top level is `version` · `meta` · optional `badges` · `blocks` · optional `publish`, nothing else. Every block
 carries a `type` discriminator; the model is a pydantic discriminated union, so an unknown
 type, a field from the wrong block, or an unknown key each fails with a precise
 `blocks.3.items.2.value`-style error before anything renders.

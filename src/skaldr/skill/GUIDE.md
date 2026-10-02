@@ -12,9 +12,10 @@ version: 1          # required, integer
 meta: { ... }       # page header + options
 badges: { ... }     # optional: your tag/status vocabulary
 blocks: [ ... ]     # the ordered content
+publish: { ... }    # optional: where the document publishes (see below)
 ```
 
-Top level is exactly `version`, `meta`, optional `badges`, `blocks` — nothing else. Every block
+Top level is `version`, `meta`, optional `badges`, `blocks` and an optional `publish` (see *Where it publishes* below), nothing else. Every block
 is a mapping with a `type` discriminator. **Validation is strict:** an unknown block type, a
 field that doesn't belong to that block, an unknown top-level key, or a value of the wrong shape
 each fails the build with a precise path — e.g. `error: invalid content data: blocks.3.items.2.value:
