@@ -94,9 +94,9 @@ def test_a_bang_ending_text_is_escaped_even_with_nothing_after_it() -> None:
     assert markdown_of([{"type": "text", "body": "Done!"}]) == "Done\\!\n"
 
 
-def test_a_backslash_in_a_link_target_is_percent_encoded_so_it_stays_in_the_url() -> None:
-    assert render_markdown([Paragraph((Link((Plain("x"),), "https://e.com/a\\"),))]) == (
-        "[x](https://e.com/a%5C)\n"
+def test_a_backslash_in_a_link_target_stays_a_backslash_like_the_html_href() -> None:
+    assert render_markdown([Paragraph((Link((Plain("x"),), "https://e.com/a\\b"),))]) == (
+        "[x](https://e.com/a\\\\b)\n"
     )
 
 
