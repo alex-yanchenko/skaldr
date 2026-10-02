@@ -1,5 +1,7 @@
 import html
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import cache
 from typing import Final, Literal
 from xml.etree.ElementTree import Element, tostring
@@ -47,7 +49,39 @@ MATHML_ATTRIBUTES: Final = frozenset(
     }
 )
 TOKEN_ELEMENTS: Final = frozenset({"mi", "mo", "mn"})
-FRACTION_PARTS: Final = 2
+
+
+@dataclass(frozen=True)
+class RequiredParts:
+    count: int
+    missing: str
+
+
+_FRACTION: Final = RequiredParts(
+    2, r"a fraction missing a part: \frac, \dfrac, \cfrac and \binom each take two, as in \frac{a}{b}"
+)
+_STACK: Final = RequiredParts(
+    2,
+    r"a stacked expression missing a part: \overset, \underset and \stackrel each take two, "
+    r"as in \overset{a}{b}",
+)
+_ROOT: Final = RequiredParts(2, r"a root missing a part: \sqrt[n]{x} takes an index and a radicand")
+_SCRIPT_MISSING_A_PART: Final = (
+    "a subscript or superscript missing a part: a script attaches to what comes before it, as in x_i, "
+    "or to an empty {} as in {}_a"
+)
+_ONE_SCRIPT: Final = RequiredParts(2, _SCRIPT_MISSING_A_PART)
+_TWO_SCRIPTS: Final = RequiredParts(3, _SCRIPT_MISSING_A_PART)
+REQUIRED_PARTS: Final[Mapping[str, RequiredParts]] = {
+    "mfrac": _FRACTION,
+    "mover": _STACK,
+    "munder": _STACK,
+    "mroot": _ROOT,
+    "msub": _ONE_SCRIPT,
+    "msup": _ONE_SCRIPT,
+    "msubsup": _TWO_SCRIPTS,
+    "munderover": _TWO_SCRIPTS,
+}
 CONVERTER_HEX_ENTITY = re.compile(r"&#x[0-9A-Fa-f]+;")
 
 
@@ -59,7 +93,7 @@ def mathml(expression: str, display: MathDisplay) -> str:
         _decode_converter_entities(element)
         _refuse_attributes_outside_mathml(element, expression)
         _refuse_unknown_command(element, expression)
-        _refuse_fraction_with_one_part(element, expression)
+        _refuse_element_missing_a_part(element, expression)
     return tostring(root, encoding="unicode")
 
 
@@ -102,12 +136,10 @@ def _refuse_unknown_command(element: Element, expression: str) -> None:
         )
 
 
-def _refuse_fraction_with_one_part(element: Element, expression: str) -> None:
-    if element.tag == "mfrac" and len(element) < FRACTION_PARTS:
-        raise ReportError(
-            f"math expression '{expression}' has a fraction with one part: \\frac, \\dfrac, \\cfrac and "
-            r"\binom each take two, as in \frac{a}{b}"
-        )
+def _refuse_element_missing_a_part(element: Element, expression: str) -> None:
+    parts = REQUIRED_PARTS.get(element.tag)
+    if parts is not None and len(element) < parts.count:
+        raise ReportError(f"math expression '{expression}' has {parts.missing}")
 
 
 def _decode_converter_entities(element: Element) -> None:

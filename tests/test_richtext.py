@@ -263,9 +263,9 @@ def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None
         ),
         pytest.param(
             r"\frac{a}",
-            r"math expression '\frac{a}' has a fraction with one part: \frac, \dfrac, \cfrac and "
+            r"math expression '\frac{a}' has a fraction missing a part: \frac, \dfrac, \cfrac and "
             r"\binom each take two, as in \frac{a}{b}",
-            id="fraction-with-one-part",
+            id="fraction-missing-a-part",
         ),
     ],
 )

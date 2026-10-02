@@ -248,23 +248,86 @@ def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> No
     )
 
 
+FRACTION_MISSING_A_PART = (
+    r"a fraction missing a part: \frac, \dfrac, \cfrac and \binom each take two, as in \frac{a}{b}"
+)
+STACK_MISSING_A_PART = (
+    r"a stacked expression missing a part: \overset, \underset and \stackrel each take two, "
+    r"as in \overset{a}{b}"
+)
+SCRIPT_MISSING_A_PART = (
+    "a subscript or superscript missing a part: a script attaches to what comes before it, as in x_i, "
+    "or to an empty {} as in {}_a"
+)
+
+
 @pytest.mark.parametrize(
-    "expression",
+    ("expression", "missing"),
     [
-        pytest.param(r"\frac{a}", id="frac"),
-        pytest.param(r"\dfrac{a}", id="dfrac"),
-        pytest.param(r"\cfrac{a}", id="cfrac"),
-        pytest.param(r"\binom{a}", id="binom"),
+        pytest.param(r"\frac{a}", FRACTION_MISSING_A_PART, id="frac"),
+        pytest.param(r"\dfrac{a}", FRACTION_MISSING_A_PART, id="dfrac"),
+        pytest.param(r"\cfrac{a}", FRACTION_MISSING_A_PART, id="cfrac"),
+        pytest.param(r"\binom{a}", FRACTION_MISSING_A_PART, id="binom"),
+        pytest.param(r"\overset{a}", STACK_MISSING_A_PART, id="overset"),
+        pytest.param(r"\underset{a}", STACK_MISSING_A_PART, id="underset"),
+        pytest.param(r"x + \stackrel{a}", STACK_MISSING_A_PART, id="stackrel"),
+        pytest.param(r"\displaystyle_a", SCRIPT_MISSING_A_PART, id="subscript-on-a-style-switch"),
+        pytest.param(r"\displaystyle^a", SCRIPT_MISSING_A_PART, id="superscript-on-a-style-switch"),
+        pytest.param(r"\small_{a}^{b}", SCRIPT_MISSING_A_PART, id="both-scripts-on-a-size-switch"),
+        pytest.param(r"x\limits", SCRIPT_MISSING_A_PART, id="limits-after-no-operator"),
     ],
 )
-def test_a_fraction_with_one_part_fails(expression: str) -> None:
+def test_an_expression_missing_a_part_fails_naming_what_lacks_it(expression: str, missing: str) -> None:
     with pytest.raises(ReportError) as raised:
         mathml(expression, "block")
 
+    assert str(raised.value) == f"math expression '{expression}' has {missing}"
+
+
+def test_a_root_missing_a_part_fails(stub_converter: Callable[[Element], None]) -> None:
+    root = Element("math")
+    SubElement(SubElement(root, "mroot"), "mi").text = "x"
+    stub_converter(root)
+
+    with pytest.raises(ReportError) as raised:
+        mathml("x", "inline")
+
     assert str(raised.value) == (
-        f"math expression '{expression}' has a fraction with one part: \\frac, \\dfrac, \\cfrac and "
-        r"\binom each take two, as in \frac{a}{b}"
+        r"math expression 'x' has a root missing a part: \sqrt[n]{x} takes an index and a radicand"
     )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        pytest.param(r"\sum\limits_{i}^{n} a_i", id="limits-with-both-scripts"),
+        pytest.param(r"\sum\limits_{i} a_i", id="limits-with-a-subscript"),
+        pytest.param(r"\int\limits_0^1 f", id="integral-limits"),
+        pytest.param(r"\sum\nolimits_a^b", id="nolimits"),
+        pytest.param(r"\sideset{_a^b}{_c^d}\sum", id="sideset"),
+        pytest.param(r"\sideset{}{}\sum", id="empty-sideset"),
+        pytest.param(r"\xrightarrow[a]{b}", id="arrow-with-both-labels"),
+        pytest.param(r"\xleftarrow[a]{}", id="arrow-with-an-empty-label"),
+        pytest.param(r"{}^{a}x", id="script-on-an-empty-group"),
+        pytest.param("{}_a", id="subscript-on-an-empty-group"),
+        pytest.param("f'", id="prime"),
+        pytest.param("f''", id="double-prime"),
+        pytest.param("f'''_a", id="triple-prime-with-a-subscript"),
+        pytest.param("f'^2", id="prime-with-a-superscript"),
+        pytest.param(r"\sum_{\substack{i<n\\j<m}} a_{ij}", id="substack"),
+        pytest.param(r"\overset{a}{b} \underset{c}{d} \stackrel{e}{f}", id="stacks"),
+        pytest.param(r"\overset{}{} \underset{a}{}", id="stacks-with-empty-parts"),
+        pytest.param(r"\overbrace{a}^{b} \underbrace{c}_{d}", id="braces-with-labels"),
+        pytest.param(r"\sqrt[3]{x} \root 3 \of y \sqrt[3]{}", id="roots"),
+        pytest.param(r"\lim_{x\to 0} \max_x \operatorname*{arg\,max}_x", id="operator-limits"),
+        pytest.param(r"\mathop{x}\limits^a_b", id="mathop-limits"),
+        pytest.param(r"x_a^b x^b_a x_{} a^{}", id="scripts-in-either-order-and-empty"),
+        pytest.param(r"\frac{}{} a \over b a \atop b a \choose b", id="fractions"),
+        pytest.param(r"x \pmod{n}_a", id="script-after-a-modulus"),
+    ],
+)
+def test_a_scripted_or_stacked_form_with_every_part_converts(expression: str) -> None:
+    assert mathml(expression, "block").startswith('<math xmlns="http://www.w3.org/1998/Math/MathML"')
 
 
 @pytest.mark.parametrize(
