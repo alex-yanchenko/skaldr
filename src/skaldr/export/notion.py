@@ -1,6 +1,7 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from typing_extensions import assert_never
 
@@ -29,12 +30,12 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Rich, visible_text, write_runs
 
-NOTION_ESCAPED = frozenset("\\*~`$[]<>{}|^")
+NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
-CHUNK_BOUNDARY_LEVEL = 2
-OPENING_SECTION_LABEL = "the opening section, before the first level 1 or 2 heading"
-EMPTY_BLOCK = "<empty-block/>"
-BLOCK_COLOR: dict[ToneName, str] = {
+CHUNK_BOUNDARY_LEVEL: Final = 2
+OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
+EMPTY_BLOCK: Final = "<empty-block/>"
+BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
     "muted": "gray",
     "info": "blue",
@@ -48,7 +49,7 @@ BLOCK_COLOR: dict[ToneName, str] = {
 
 
 def _escape(text: str) -> str:
-    return "".join("\\" + character if character in NOTION_ESCAPED else character for character in text)
+    return text.translate(NOTION_ESCAPES)
 
 
 class _NotionRuns(MarkupRuns):

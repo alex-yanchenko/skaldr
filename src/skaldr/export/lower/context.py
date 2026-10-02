@@ -2,12 +2,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from skaldr import compute
-from skaldr.export.inline import paragraphs, rich_line
+from skaldr.export.inline import rich_line
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, ToneName
 from skaldr.models import AnyBlock, Report, iter_reference_items
 from skaldr.richtext import Plain, Rich, RichContext
-
-MAX_HEADING_LEVEL = 4
 
 
 @dataclass(frozen=True)
@@ -19,7 +17,7 @@ class Lowering:
         return rich_line(text, self.rich_context)
 
     def prose(self, text: str, tone: ToneName | None = None) -> tuple[Node, ...]:
-        return tuple(Paragraph(self.rich(part), tone) for part in paragraphs(text))
+        return tuple(Paragraph(self.rich(part), tone) for part in compute.paragraphs(text))
 
     def anchor_of(self, block: AnyBlock) -> str | None:
         return self.anchors.get(id(block))

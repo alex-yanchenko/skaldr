@@ -27,7 +27,7 @@
 {# A rich/text table cell: a blank line is a paragraph break (like text.body); a single newline
    collapses. A one-paragraph cell renders inline, so single-line cells are unchanged. #}
 {% macro rich_cell(value) -%}
-{% set paras = value.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
+{% set paras = value | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
 {%- endmacro %}
 
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
@@ -93,7 +93,7 @@
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
 {% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 {% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " check" if style == "check" else "" }}">{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
-{% macro prose_paras(text) %}{% set paras = text.split("\n\n") | map("trim") | select | list %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">
@@ -278,7 +278,7 @@
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}{% if block.sub %}<span class="hsub">{{ block.sub | richtext }}</span>{% endif %}</h{{ block.level }}>
 {% elif block.type == "text" %}
-{% for para in block.body.split("\n\n") %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
+{% for para in block.body | paragraphs %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
 {{ rich_list(block.items, block.style) }}
 {% elif block.type == "fact_strip" %}

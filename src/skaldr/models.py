@@ -120,10 +120,8 @@ def _tone_names(tone_type: Any) -> tuple[str, ...]:
 
 # Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
 # colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
-Tone = Annotated[
-    Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"],
-    BeforeValidator(_to_tone),
-]
+ToneLiteral = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"]
+Tone = Annotated[ToneLiteral, BeforeValidator(_to_tone)]
 RowTone = Annotated[
     Literal["muted", "danger"], BeforeValidator(_to_tone)
 ]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
@@ -293,9 +291,12 @@ def _any_item_checked(items: list["str | ListItem"]) -> bool:
     )
 
 
+ListStyle = Literal["bullet", "number", "check"]
+
+
 class ListBlock(_Block):
     type: Literal["list"]
-    style: Literal["bullet", "number", "check"] = Field(
+    style: ListStyle = Field(
         default="bullet",
         description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
         "(the ticks are ephemeral: a browser reload resets them).",

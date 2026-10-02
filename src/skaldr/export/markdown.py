@@ -1,6 +1,8 @@
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
+from typing import Final
 
 from typing_extensions import assert_never
 
@@ -20,6 +22,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Heading,
+    HeadingLevel,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -32,19 +35,26 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Rich, visible_text, write_runs
 
-MARKDOWN_ESCAPED = frozenset("\\*_`[]<>~")
+MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
-GITHUB_SLUG_DROPPED = re.compile(r"[^\w\- ]")
+
+
+def _dash(use_alternate_markers: bool) -> str:
+    return "*" if use_alternate_markers else "-"
 
 
 def _escape(text: str) -> str:
-    escaped = "".join("\\" + character if character in MARKDOWN_ESCAPED else character for character in text)
-    return ENTITY_LOOKALIKE.sub(r"\\&", escaped)
+    return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
+
+
+def _kept_in_a_github_slug(character: str) -> bool:
+    category = unicodedata.category(character)
+    return character in " -" or category[0] in "LMN" or category == "Pc"
 
 
 def github_slug(text: str) -> str:
-    return GITHUB_SLUG_DROPPED.sub("", text.lower()).replace(" ", "-")
+    return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
 
 
 class _MarkdownRuns(MarkupRuns):
@@ -117,12 +127,12 @@ class _MarkdownWriter:
     def block_text(self, runs: Rich) -> str:
         return escape_block_start(self.inline(runs))
 
-    def heading_line(self, level: int, runs: Rich) -> str:
+    def heading_line(self, level: HeadingLevel, runs: Rich) -> str:
         text = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), self.inline(runs))
         return f"{'#' * level} {text}"
 
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
-        dash = "*" if use_alternate_markers else "-"
+        dash = _dash(use_alternate_markers)
         lines: list[str] = []
         for index, entry in enumerate(node.entries, start=1):
             match node.kind:
@@ -135,15 +145,16 @@ class _MarkdownWriter:
                     marker, width = f"{dash} [{'x' if entry.checked else ' '}]", len(dash) + 1
                 case _:
                     assert_never(node.kind)
-            lines.append(f"{marker} {self.block_text(entry.text)}".rstrip())
-            lines += self.entry_children(entry, width)
+            line = f"{marker} {self.block_text(entry.text)}".rstrip()
+            lines.append(line)
+            lines += self.entry_children(entry, width, after_a_bare_marker=line == marker)
         return lines
 
-    def entry_children(self, entry: ListEntry, width: int) -> list[str]:
+    def entry_children(self, entry: ListEntry, width: int, after_a_bare_marker: bool) -> list[str]:
         children = self.blocks(entry.children)
         if not children:
             return []
-        gap = [] if isinstance(entry.children[0], ListNode) else [""]
+        gap = [] if after_a_bare_marker or isinstance(entry.children[0], ListNode) else [""]
         return gap + indent_lines(children, " " * width)
 
     def titled(self, title: str, children: Sequence[Node]) -> list[str]:
@@ -165,7 +176,7 @@ class _MarkdownWriter:
         return _quoted(_joined([[part] for part in parts]))
 
     def toc_lines(self, node: TableOfContents, use_alternate_markers: bool) -> list[str]:
-        dash = "*" if use_alternate_markers else "-"
+        dash = _dash(use_alternate_markers)
         entries = [
             (self.runs.heading_slugs.get(entry.anchor), self.inline(entry.title)) for entry in node.entries
         ]

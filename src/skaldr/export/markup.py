@@ -1,15 +1,20 @@
 import re
-from collections.abc import Callable, Sequence
-from typing import Literal
+from collections.abc import Callable, Mapping, Sequence
+from typing import Final, Literal
+from urllib.parse import quote
 
 from skaldr.export.tree import CodeBlock, ListKind, ListNode, Node, ToneName
 from skaldr.richtext import Citation, StyleName
 
 MarkerFamily = Literal["dash", "ordinal"]
-MARKER_FAMILY: dict[ListKind, MarkerFamily] = {"bullet": "dash", "check": "dash", "number": "ordinal"}
+MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
+    "bullet": "dash",
+    "check": "dash",
+    "number": "ordinal",
+}
 
-STYLE_MARKER: dict[StyleName, str] = {"bold": "**", "italic": "*", "strike": "~~"}
-CALLOUT_ICON: dict[ToneName, str] = {
+STYLE_MARKER: Final[Mapping[StyleName, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
+CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
     "warning": "⚠️",
@@ -23,7 +28,7 @@ CALLOUT_ICON: dict[ToneName, str] = {
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
-URL_UNSAFE = {" ": "%20", "(": "%28", ")": "%29", "<": "%3C", ">": "%3E", "\\": "\\\\"}
+URL_SAFE_CHARACTERS: Final = "/:?#[]@!$&'*+,;=%~"
 
 
 def _wrap_marker(marker: str, inner: str) -> str:
@@ -43,9 +48,16 @@ def _longest_backtick_run(text: str) -> int:
     return max((len(run) for run in BACKTICK_RUN.findall(text)), default=0)
 
 
+def _commonmark_would_strip_a_space_from_each_end(text: str) -> bool:
+    return text.startswith(" ") and text.endswith(" ") and bool(text.strip(" "))
+
+
 def code_span(text: str) -> str:
     ticks = "`" * (_longest_backtick_run(text) + 1)
-    padding = " " if text.startswith("`") or text.endswith("`") else ""
+    needs_padding = (
+        text.startswith("`") or text.endswith("`") or _commonmark_would_strip_a_space_from_each_end(text)
+    )
+    padding = " " if needs_padding else ""
     return f"{ticks}{padding}{text}{padding}{ticks}"
 
 
@@ -64,7 +76,7 @@ def bang_cannot_open_an_image(escaped_text: str) -> str:
 
 
 def encode_url(url: str) -> str:
-    return "".join(URL_UNSAFE.get(character, character) for character in url)
+    return quote(url, safe=URL_SAFE_CHARACTERS)
 
 
 def list_marker_family(node: Node) -> MarkerFamily | None:
