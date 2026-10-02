@@ -172,7 +172,7 @@ class _MarkdownWriter:
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)
         lines: list[str] = []
-        for index, entry in enumerate(node.entries, start=1):
+        for index, entry in enumerate(node.entries, start=node.start):
             match node.kind:
                 case "bullet":
                     marker, width = dash, len(dash) + 1

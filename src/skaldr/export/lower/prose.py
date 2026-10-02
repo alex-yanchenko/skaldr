@@ -1,11 +1,11 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import PurePosixPath
 from typing import Final
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, StatusMark
+from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -47,16 +47,29 @@ def _marked(mark: Mark, text: ExportRich) -> ExportRich:
 
 
 def lower_list(block: models.ListBlock, lowering: Lowering) -> list[Node]:
-    return [ListNode(block.style, tuple(_list_entry(item, block.style, lowering) for item in block.items))]
+    return [_list_node(block.items, block.style, lowering, block.start or 1)]
 
 
-def _list_entry(item: str | models.ListItem, kind: ListKind, lowering: Lowering) -> ListEntry:
+def _list_kind(style: models.ListStyle) -> ListKind:
+    return "bullet" if style == "decision" else style
+
+
+def _list_node(
+    items: Sequence[str | models.ListItem], style: models.ListStyle, lowering: Lowering, start: int = 1
+) -> ListNode:
+    return ListNode(_list_kind(style), tuple(_list_entry(item, style, lowering) for item in items), start)
+
+
+def _entry_text(text: str, style: models.ListStyle, decided: bool, lowering: Lowering) -> ExportRich:
+    rich = lowering.rich(text)
+    return _marked(DecisionMark(decided), rich) if style == "decision" else rich
+
+
+def _list_entry(item: str | models.ListItem, style: models.ListStyle, lowering: Lowering) -> ListEntry:
     if isinstance(item, str):
-        return ListEntry(lowering.rich(item))
-    children: tuple[Node, ...] = ()
-    if item.items:
-        children = (ListNode(kind, tuple(_list_entry(child, kind, lowering) for child in item.items)),)
-    return ListEntry(lowering.rich(item.text), item.checked, children)
+        return ListEntry(_entry_text(item, style, False, lowering))
+    children: tuple[Node, ...] = (_list_node(item.items, style, lowering),) if item.items else ()
+    return ListEntry(_entry_text(item.text, style, item.decided, lowering), item.checked, children)
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:

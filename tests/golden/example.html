@@ -266,6 +266,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.list.check .chk{display:flex; gap:var(--s2); align-items:baseline; cursor:pointer}
 	.list.check .chk input{flex:none; margin:0; translate:0 2px; accent-color:var(--accent-fg); cursor:pointer}
 	.list.check .chk input:checked + span{color:var(--muted); text-decoration:line-through}
+	.list.decision{list-style:none; padding-inline-start:0}
+	.list.decision .decision{padding-inline-start:calc(1.2em + var(--s2))}
+	.list.decision .dec{display:flex; gap:var(--s2); align-items:baseline}
+	.list.decision .dec .glyph{flex:none; width:1.2em; text-align:center; font-weight:700; color:var(--warning-fg)}
+	.list.decision .dec.decided .glyph{color:var(--success-fg)}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
@@ -1129,6 +1134,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
 
 <div class="note-block"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div>
+
+<h3 id="re-count-procedure-from-step-iv">Re-count procedure, from step iv</h3>
+
+<ol class="list" start="4" type="i"><li>Freeze inbound moves in the overflow aisles.</li><li>Re-scan every bin with the widened reader.<ol class="list" type="i"><li>Start with the aisles that held the 260 skipped units.</li></ol></li><li>Re-run reconciliation and compare against the first count.</li></ol>
+
+<h3 id="decisions">Decisions</h3>
+
+<ul class="list decision"><li><span class="dec decided"><span class="glyph">✓</span><span>De-duplicate on the pallet ID and keep the most recent scan.</span></span></li><li><span class="dec decided"><span class="glyph">✓</span><span>Hold the vendor line until a corrected ASN arrives.</span></span></li><li><span class="dec open"><span class="glyph">?</span><span>Whether overflow aisles get a count window of their own.</span></span></li></ul>
 
 <h2 id="rollout">Rollout</h2>
 

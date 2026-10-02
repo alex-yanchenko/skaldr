@@ -13,7 +13,7 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -278,6 +278,11 @@ class ListItem(FrozenModel):
         "YAML to record durable progress (an agent editing its plan marks items done here); a reader "
         "clicking a box in the browser is ephemeral and does not persist.",
     )
+    decided: bool = Field(
+        default=False,
+        description="Only meaningful in a `style: decision` list: marks the point a decision already "
+        "taken. Left false, the point is an open question.",
+    )
     items: list["str | ListItem"] = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
@@ -294,14 +299,15 @@ def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
             _check_list_depth(item.items, depth + 1)
 
 
-def _any_item_checked(items: list["str | ListItem"]) -> bool:
-    """Whether any item (at any depth) sets `checked` — used to reject the flag outside a check list."""
+def _any_item_flagged(items: list["str | ListItem"], flagged: Callable[["ListItem"], bool]) -> bool:
     return any(
-        isinstance(item, ListItem) and (item.checked or _any_item_checked(item.items)) for item in items
+        isinstance(item, ListItem) and (flagged(item) or _any_item_flagged(item.items, flagged))
+        for item in items
     )
 
 
-ListStyle = Literal["bullet", "number", "check"]
+ListStyle = Literal["bullet", "number", "check", "decision"]
+ListNumbering = Literal["decimal", "letters", "roman"]
 
 
 class ListBlock(_Block):
@@ -309,7 +315,19 @@ class ListBlock(_Block):
     style: ListStyle = Field(
         default="bullet",
         description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
-        "(the ticks are ephemeral: a browser reload resets them).",
+        "(the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a "
+        "decision taken (`decided: true`) or an open question.",
+    )
+    start: Count | None = Field(
+        default=None,
+        ge=1,
+        description="Only in a `style: number` list: the number the first point carries (default 1). "
+        "Nested lists count from 1.",
+    )
+    numbering: ListNumbering | None = Field(
+        default=None,
+        description="Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or "
+        "`roman` (i, ii, iii). Nested lists keep it.",
     )
     items: list[str | ListItem] = Field(
         min_length=1,
@@ -323,9 +341,15 @@ class ListBlock(_Block):
         return self
 
     @model_validator(mode="after")
-    def _checked_only_in_check_style(self) -> "ListBlock":
-        if self.style != "check" and _any_item_checked(self.items):
+    def _options_only_in_their_style(self) -> "ListBlock":
+        if self.style != "number" and self.start is not None:
+            raise ValueError("`start` is only valid in a `style: number` list")
+        if self.style != "number" and self.numbering is not None:
+            raise ValueError("`numbering` is only valid in a `style: number` list")
+        if self.style != "check" and _any_item_flagged(self.items, lambda item: item.checked):
             raise ValueError("`checked` is only valid in a `style: check` list")
+        if self.style != "decision" and _any_item_flagged(self.items, lambda item: item.decided):
+            raise ValueError("`decided` is only valid in a `style: decision` list")
         return self
 
 

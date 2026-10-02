@@ -5,11 +5,12 @@ import pytest
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
-from skaldr.export.markup import check_glyph, indicator_glyph, status_glyph, swimlane_glyph
+from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
     Break,
     CheckMark,
     Chip,
+    DecisionMark,
     ExportRich,
     Gauge,
     IndicatorMark,
@@ -990,6 +991,53 @@ def test_an_indicator_glyph_is_a_coloured_dot_for_every_tone() -> None:
 
 def test_a_check_glyph_is_a_tick_or_a_cross() -> None:
     assert (check_glyph(checked=True), check_glyph(checked=False)) == ("✓", "✗")
+
+
+def test_a_decision_glyph_is_a_tick_for_decided_and_a_question_mark_for_open() -> None:
+    assert (decision_glyph(decided=True), decision_glyph(decided=False)) == ("✅", "❓")
+
+
+def test_a_numbered_list_keeps_its_start_and_its_nested_list_counts_from_one() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 3,
+        "numbering": "roman",
+        "items": [{"text": "a", "items": ["b"]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "number",
+            (ListEntry((Plain("a"),), children=(ListNode("number", (ListEntry((Plain("b"),)),)),)),),
+            start=3,
+        ),
+    )
+
+
+def test_a_decision_list_is_a_bullet_list_led_by_a_decision_mark_at_every_level() -> None:
+    block = {
+        "type": "list",
+        "style": "decision",
+        "items": ["open", {"text": "done", "decided": True, "items": ["sub"]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "bullet",
+            (
+                ListEntry((DecisionMark(decided=False), Plain(" "), Plain("open"))),
+                ListEntry(
+                    (DecisionMark(decided=True), Plain(" "), Plain("done")),
+                    children=(
+                        ListNode(
+                            "bullet", (ListEntry((DecisionMark(decided=False), Plain(" "), Plain("sub"))),)
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
 
 
 def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_alone() -> None:

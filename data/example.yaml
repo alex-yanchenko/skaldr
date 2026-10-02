@@ -183,6 +183,28 @@ blocks:
   - type: note
     title: "For the read-out"
     body: "Lead with the reconciliation gate — it is the one number leadership tracks."
+  - type: heading
+    level: 3
+    text: "Re-count procedure, from step iv"
+  - type: list
+    style: number
+    start: 4
+    numbering: roman
+    items:
+      - "Freeze inbound moves in the overflow aisles."
+      - text: "Re-scan every bin with the widened reader."
+        items:
+          - "Start with the aisles that held the 260 skipped units."
+      - "Re-run reconciliation and compare against the first count."
+  - type: heading
+    level: 3
+    text: "Decisions"
+  - type: list
+    style: decision
+    items:
+      - { text: "De-duplicate on the pallet ID and keep the most recent scan.", decided: true }
+      - { text: "Hold the vendor line until a corrected ASN arrives.", decided: true }
+      - "Whether overflow aisles get a count window of their own."
 
   - type: heading
     text: "Rollout"

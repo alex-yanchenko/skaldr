@@ -1,6 +1,7 @@
 {# Block renderers. `render_block` dispatches on the discriminated `type`; `badges` is a global. #}
 
 {% set STATUS_GLYPHS = {"done": "✓", "current": "◐", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
+{% set LIST_NUMBERING_TYPES = {"letters": "a", "roman": "i"} %}
 
 {% macro chip_item(item) %}
 {% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
@@ -88,8 +89,8 @@
    of a line), so it wraps together with its node — no arrow ever dangles at a line break. #}
 {# Detail bullets under a node — shared by flow (both styles) and fan, like chip_keys. #}
 {% macro step_points(s) %}{% if s.points %}<ul class="pts">{% for p in s.points %}<li>{{ p | richtext }}</li>{% endfor %}</ul>{% endif %}{% endmacro %}
-{% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
-{% macro rich_list(items, style) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " check" if style == "check" else "" }}">{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
+{% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% set decided = false if item is string else item.decided %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% elif style == "decision" %}<span class="dec {{ "decided" if decided else "open" }}"><span class="glyph">{{ "✓" if decided else "?" }}</span><span>{{ text | richtext }}</span></span>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro rich_list(items, style, numbering=none, start=none) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " " ~ style if style in ("check", "decision") else "" }}"{% if start %} start="{{ start }}"{% endif %}{% if numbering in LIST_NUMBERING_TYPES %} type="{{ LIST_NUMBERING_TYPES[numbering] }}"{% endif %}>{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style, numbering) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
 {% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
@@ -277,7 +278,7 @@
 {% elif block.type == "text" %}
 {% for para in block.body | paragraphs %}<p class="text{% if block.muted %} muted{% endif %}">{{ para | richtext }}</p>{% endfor %}
 {% elif block.type == "list" %}
-{{ rich_list(block.items, block.style) }}
+{{ rich_list(block.items, block.style, block.numbering, block.start) }}
 {% elif block.type == "fact_strip" %}
 <div class="facts">{% for f in block.facts %}<span class="fact"><span class="k">{{ f.label }}</span><span>{{ f.value }}</span></span>{% endfor %}</div>
 {% elif block.type == "key_value" %}

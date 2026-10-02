@@ -160,7 +160,7 @@ def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
 
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
-    for index, entry in enumerate(node.entries, start=1):
+    for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node.kind, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))

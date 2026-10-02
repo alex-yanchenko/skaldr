@@ -160,7 +160,7 @@ or to keep a small block from stretching across the whole page.
 |---|---|---|
 | `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
-| `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
+| `list` | Bulleted, numbered, checkbox, or decision points (nestable) | `style: bullet\|number\|check\|decision`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true`; in a `decision` list an item sets `decided: true` for a decision taken and leaves it out for an open question; a `number` list takes `start?` (the first number, default 1) and `numbering?: decimal\|letters\|roman` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
 | `def_list` | Labelled list — prominent term + rich body (e.g. Action/Expected/Say) | `items: [{term, body}]` |
@@ -226,6 +226,21 @@ for an appendix or detail-on-demand; for a doc meant to be **read through** (a w
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
+
+Lists: `start` and `numbering` belong to a `style: number` list, `checked` to a `style: check` list, and `decided` to a `style: decision` list; anywhere else the build fails. A nested list keeps the numbering and counts from 1. A decision list shows a tick for a decision taken and a question mark for one still open, so a record of what was settled and what is still open reads at a glance.
+
+```yaml
+- type: list
+  style: number
+  start: 4             # continues a procedure: iv, v, vi
+  numbering: roman
+  items: ["Freeze inbound moves.", "Re-scan every bin.", "Re-run reconciliation."]
+- type: list
+  style: decision
+  items:
+    - { text: "Keep the most recent scan.", decided: true }
+    - "Whether overflow aisles get their own count window."   # open
+```
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
@@ -939,6 +954,9 @@ case, where the page is shared as a URL an agent later has to read back.
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges or note links and citations it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a `number` list's `start` | the first marker is the start number, which GitHub honours | numbered items counting from the start number |
+| a `number` list's `numbering: letters\|roman` | a decimal list (Markdown has no letter or roman markers) | a decimal list (Notion-flavored Markdown has no numbering style) |
+| a `decision` list | a bullet list whose items start with ✅ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `grid` | its cells one after another | native columns |

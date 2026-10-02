@@ -405,6 +405,61 @@ def test_bullet_list_has_no_checkboxes() -> None:
     assert 'type="checkbox"' not in html  # only a check-style list emits inputs
 
 
+@pytest.mark.parametrize(
+    ("options", "opening"),
+    [
+        pytest.param({}, '<ol class="list">', id="default"),
+        pytest.param({"start": 3}, '<ol class="list" start="3">', id="start"),
+        pytest.param({"numbering": "decimal"}, '<ol class="list">', id="decimal-is-the-default"),
+        pytest.param({"numbering": "letters"}, '<ol class="list" type="a">', id="letters"),
+        pytest.param({"numbering": "roman", "start": 4}, '<ol class="list" start="4" type="i">', id="roman"),
+    ],
+)
+def test_a_numbered_list_opens_at_its_start_in_its_numbering(
+    options: dict[str, object], opening: str
+) -> None:
+    block = {"type": "list", "style": "number", "items": ["a"], **options}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert f"{opening}<li>a</li></ol>" in html
+
+
+def test_a_nested_numbered_list_keeps_the_numbering_and_counts_from_one() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 3,
+        "numbering": "letters",
+        "items": [{"text": "a", "items": ["b"]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ol class="list" start="3" type="a"><li>a<ol class="list" type="a"><li>b</li></ol></li></ol>' in html
+    )
+
+
+def test_a_decision_list_leads_each_item_with_a_decided_or_open_glyph() -> None:
+    block = {
+        "type": "list",
+        "style": "decision",
+        "items": ["which region", {"text": "use the queue", "decided": True, "items": ["retry later"]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ul class="list decision">'
+        '<li><span class="dec open"><span class="glyph">?</span><span>which region</span></span></li>'
+        '<li><span class="dec decided"><span class="glyph">✓</span><span>use the queue</span></span>'
+        '<ul class="list decision"><li><span class="dec open"><span class="glyph">?</span>'
+        "<span>retry later</span></span></li></ul></li></ul>"
+    ) in html
+    assert ".list.decision .dec.decided .glyph{color:var(--success-fg)}" in html
+
+
 def test_def_list_renders_terms_and_rich_multi_paragraph_bodies() -> None:
     block = {
         "type": "def_list",

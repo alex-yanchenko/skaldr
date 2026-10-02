@@ -144,6 +144,19 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 >
 > Lead with the reconciliation gate — it is the one number leadership tracks.
 
+### Re-count procedure, from step iv
+
+4. Freeze inbound moves in the overflow aisles.
+5. Re-scan every bin with the widened reader.
+   1. Start with the aisles that held the 260 skipped units.
+6. Re-run reconciliation and compare against the first count.
+
+### Decisions
+
+- ✅ De-duplicate on the pallet ID and keep the most recent scan.
+- ✅ Hold the vendor line until a corrected ASN arrives.
+- ❓ Whether overflow aisles get a count window of their own.
+
 ## Rollout
 
 - ✅ **2026-06-30**: Initial full count

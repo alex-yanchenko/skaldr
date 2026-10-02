@@ -7,7 +7,16 @@ from urllib.parse import quote
 
 from typing_extensions import assert_never
 
-from skaldr.export.runs import CheckMark, Chip, Gauge, IndicatorMark, Mark, StatusMark, SwimlaneMark
+from skaldr.export.runs import (
+    CheckMark,
+    Chip,
+    DecisionMark,
+    Gauge,
+    IndicatorMark,
+    Mark,
+    StatusMark,
+    SwimlaneMark,
+)
 from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, StyleName
@@ -160,6 +169,16 @@ def check_glyph(checked: bool) -> str:
             assert_never(checked)
 
 
+def decision_glyph(decided: bool) -> str:
+    match decided:
+        case True:
+            return "✅"
+        case False:
+            return "❓"
+        case _:
+            assert_never(decided)
+
+
 def mark_glyph(mark: Mark) -> str:
     match mark:
         case StatusMark():
@@ -170,6 +189,8 @@ def mark_glyph(mark: Mark) -> str:
             return indicator_glyph(mark.tone)
         case CheckMark():
             return check_glyph(mark.checked)
+        case DecisionMark():
+            return decision_glyph(mark.decided)
         case _:
             assert_never(mark)
 

@@ -10,6 +10,7 @@ from skaldr.export.runs import (
     Break,
     CheckMark,
     Chip,
+    DecisionMark,
     ExportRich,
     ExportRun,
     Gauge,
@@ -288,9 +289,13 @@ def test_visible_text_reads_a_line_break_as_a_space_and_every_mark_kind_as_its_w
         CheckMark(checked=True),
         Plain(" "),
         CheckMark(checked=False),
+        Plain(" "),
+        DecisionMark(decided=True),
+        Plain(" "),
+        DecisionMark(decided=False),
     )
 
-    assert export_visible_text(runs) == "todo info yes no"
+    assert export_visible_text(runs) == "todo info yes no decided open"
 
 
 def test_a_total_row_of_plain_cells_is_written_bold() -> None:
@@ -456,6 +461,30 @@ def test_a_check_list_becomes_a_task_list() -> None:
     block = {"type": "list", "style": "check", "items": [{"text": "done", "checked": True}, "open"]}
 
     assert markdown_of([block]) == "- [x] done\n- [ ] open\n"
+
+
+@pytest.mark.parametrize(
+    ("options", "markdown"),
+    [
+        pytest.param(
+            {"start": 9}, "9. c\n10. d\n    1. e\n", id="start-counts-on-and-a-nested-list-from-one"
+        ),
+        pytest.param({"numbering": "letters"}, "1. c\n2. d\n   1. e\n", id="letters-are-written-decimal"),
+        pytest.param({"numbering": "roman"}, "1. c\n2. d\n   1. e\n", id="roman-is-written-decimal"),
+    ],
+)
+def test_a_numbered_list_starts_at_its_start_and_writes_decimal_markers(
+    options: dict[str, object], markdown: str
+) -> None:
+    block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
+
+    assert markdown_of([block]) == markdown
+
+
+def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
+
+    assert markdown_of([block]) == "- ❓ open\n- ✅ done\n"
 
 
 def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:

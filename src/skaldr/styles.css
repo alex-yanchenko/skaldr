@@ -250,6 +250,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.list.check .chk{display:flex; gap:var(--s2); align-items:baseline; cursor:pointer}
 	.list.check .chk input{flex:none; margin:0; translate:0 2px; accent-color:var(--accent-fg); cursor:pointer}
 	.list.check .chk input:checked + span{color:var(--muted); text-decoration:line-through}
+	.list.decision{list-style:none; padding-inline-start:0}
+	.list.decision .decision{padding-inline-start:calc(1.2em + var(--s2))}
+	.list.decision .dec{display:flex; gap:var(--s2); align-items:baseline}
+	.list.decision .dec .glyph{flex:none; width:1.2em; text-align:center; font-weight:700; color:var(--warning-fg)}
+	.list.decision .dec.decided .glyph{color:var(--success-fg)}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}

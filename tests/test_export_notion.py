@@ -459,6 +459,26 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
     assert notion_of([block]) == "- parent\n\t- child\n\t- mid\n\t\t- leaf\n"
 
 
+@pytest.mark.parametrize(
+    ("options", "notion"),
+    [
+        pytest.param({"start": 9}, "9. c\n10. d\n\t1. e\n", id="start-counts-on-and-a-nested-list-from-one"),
+        pytest.param({"numbering": "letters"}, "1. c\n2. d\n\t1. e\n", id="letters-are-written-decimal"),
+        pytest.param({"numbering": "roman"}, "1. c\n2. d\n\t1. e\n", id="roman-is-written-decimal"),
+    ],
+)
+def test_a_numbered_list_counts_from_its_start_in_decimal(options: dict[str, object], notion: str) -> None:
+    block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
+
+    assert notion_of([block]) == notion
+
+
+def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
+
+    assert notion_of([block]) == "- ❓ open\n- ✅ done\n"
+
+
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:
     blocks = [
         {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "raw"}]},

@@ -585,6 +585,79 @@ def test_checked_nested_in_a_non_check_style_list_is_rejected() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_a_numbered_list_takes_a_start_and_a_numbering() -> None:
+    block = {"type": "list", "style": "number", "start": 3, "numbering": "roman", "items": ["c"]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(type="list", style="number", start=3, numbering="roman", items=["c"])
+
+
+def test_a_decision_list_item_carries_a_decided_flag_defaulting_false() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "chosen", "decided": True}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.blocks[0] == ListBlock(
+        type="list",
+        style="decision",
+        items=["open", ListItem(text="chosen", decided=True)],
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        pytest.param(
+            {"style": "bullet", "start": 2, "items": ["a"]},
+            "`start` is only valid in a `style: number` list",
+            id="start-on-a-bullet-list",
+        ),
+        pytest.param(
+            {"style": "check", "numbering": "letters", "items": ["a"]},
+            "`numbering` is only valid in a `style: number` list",
+            id="numbering-on-a-check-list",
+        ),
+        pytest.param(
+            {"style": "decision", "numbering": "decimal", "items": ["a"]},
+            "`numbering` is only valid in a `style: number` list",
+            id="decimal-numbering-on-a-decision-list",
+        ),
+        pytest.param(
+            {"style": "number", "items": [{"text": "a", "decided": True}]},
+            "`decided` is only valid in a `style: decision` list",
+            id="decided-in-a-number-list",
+        ),
+        pytest.param(
+            {"style": "bullet", "items": [{"text": "a", "items": [{"text": "b", "decided": True}]}]},
+            "`decided` is only valid in a `style: decision` list",
+            id="decided-nested-in-a-bullet-list",
+        ),
+        pytest.param(
+            {"style": "decision", "items": [{"text": "a", "checked": True}]},
+            "`checked` is only valid in a `style: check` list",
+            id="checked-in-a-decision-list",
+        ),
+    ],
+)
+def test_a_list_option_outside_its_style_is_rejected(options: dict[str, Any], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "list", **options}]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.list: Value error, {message}"
+
+
+def test_a_list_start_below_one_is_rejected() -> None:
+    block = {"type": "list", "style": "number", "start": 0, "items": ["a"]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.list.start: Input should be greater than or equal to 1"
+    )
+
+
 def test_def_list_parses_to_whole_model() -> None:
     block = {"type": "def_list", "items": [{"term": "Action", "body": "Do it."}]}
 
