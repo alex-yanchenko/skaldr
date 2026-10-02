@@ -17,6 +17,8 @@ Service = Literal["notion", "jira"]
 Source = Literal["keychain", "environment"]
 
 NOTION_ENVIRONMENT = ("NOTION_ACCESS_TOKEN", "NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET")
+_NOTION_ACCESS_TOKEN = NOTION_ENVIRONMENT[0]
+_NOTION_CLIENT_ENVIRONMENT = NOTION_ENVIRONMENT[1:]
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
 _JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
 _SITE_SHAPE = "The Jira site must be an https URL like https://<site>.atlassian.net"
@@ -180,10 +182,22 @@ def _environment(name: str) -> str | None:
     return os.environ.get(name, "").strip() or None
 
 
+def _all_or_none_from_environment(names: tuple[str, ...]) -> tuple[str, ...] | None:
+    values = {name: _environment(name) for name in names}
+    missing = [name for name, value in values.items() if value is None]
+    if len(missing) == len(names):
+        return None
+    if missing:
+        raise AuthError(f"{', '.join(names)} go together; missing {', '.join(missing)}")
+    return tuple(value for value in values.values() if value is not None)
+
+
 def _notion_from_environment() -> NotionCredentials | None:
-    access_token, client_id, client_secret = map(_environment, NOTION_ENVIRONMENT)
+    access_token = _environment(_NOTION_ACCESS_TOKEN)
     if access_token is None:
         return None
+    client = _all_or_none_from_environment(_NOTION_CLIENT_ENVIRONMENT)
+    client_id, client_secret = (None, None) if client is None else client
     return NotionCredentials(
         client_id=client_id,
         client_secret=client_secret,
@@ -194,13 +208,10 @@ def _notion_from_environment() -> NotionCredentials | None:
 
 
 def _jira_from_environment() -> JiraCredentials | None:
-    values = [_environment(name) for name in JIRA_ENVIRONMENT]
-    missing = [name for name, value in zip(JIRA_ENVIRONMENT, values, strict=True) if value is None]
-    if len(missing) == len(JIRA_ENVIRONMENT):
+    values = _all_or_none_from_environment(JIRA_ENVIRONMENT)
+    if values is None:
         return None
     site, email, api_token = values
-    if site is None or email is None or api_token is None:
-        raise AuthError(f"{', '.join(JIRA_ENVIRONMENT)} go together; missing {', '.join(missing)}")
     try:
         return jira_credentials(site, email, api_token)
     except AuthError as exc:

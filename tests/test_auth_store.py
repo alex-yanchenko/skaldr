@@ -84,6 +84,27 @@ def test_blank_notion_variables_count_as_unset(monkeypatch: pytest.MonkeyPatch) 
     )
 
 
+@pytest.mark.parametrize(
+    ("variables", "missing"),
+    [
+        ({"NOTION_CLIENT_ID": "env-client"}, "NOTION_CLIENT_SECRET"),
+        ({"NOTION_CLIENT_ID": " ", "NOTION_CLIENT_SECRET": "env-secret"}, "NOTION_CLIENT_ID"),
+    ],
+    ids=["only the client id", "a blank client id"],
+)
+def test_a_notion_access_token_with_half_a_client_names_the_missing_variable(
+    monkeypatch: pytest.MonkeyPatch, variables: dict[str, str], missing: str
+) -> None:
+    monkeypatch.setenv("NOTION_ACCESS_TOKEN", "env-access")
+    for name, value in variables.items():
+        monkeypatch.setenv(name, value)
+
+    with pytest.raises(AuthError) as raised:
+        load_notion()
+
+    assert str(raised.value) == f"NOTION_CLIENT_ID, NOTION_CLIENT_SECRET go together; missing {missing}"
+
+
 def test_a_blank_notion_access_token_falls_back_to_the_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
     save_notion(make_notion_credentials())
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", "  ")
