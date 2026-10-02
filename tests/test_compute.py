@@ -12,6 +12,7 @@ from skaldr.compute import (
     command_for,
     first_table_index,
     fmt,
+    list_label,
     paragraphs,
     produced_names,
     provenance_footer,
@@ -27,7 +28,15 @@ from skaldr.compute import (
     variable_parts,
 )
 from skaldr.errors import ReportError
-from skaldr.models import DeltaDirection, Request, RequestFlow, Swimlane, Table, parse_report
+from skaldr.models import (
+    DeltaDirection,
+    ListNumbering,
+    Request,
+    RequestFlow,
+    Swimlane,
+    Table,
+    parse_report,
+)
 from tests.factories import make_cell, make_grid, make_reconciled_table, make_report, make_table
 
 
@@ -670,6 +679,28 @@ def test_swimlane_layout_groups_and_headers_use_column_ids_and_subs() -> None:
 )
 def test_paragraphs_split_on_blank_lines_and_drop_empty_ones(text: str, parts: list[str]) -> None:
     assert paragraphs(text) == parts
+
+
+@pytest.mark.parametrize(
+    ("index", "numbering", "label"),
+    [
+        pytest.param(4, "decimal", "4", id="decimal"),
+        pytest.param(1, "letters", "a", id="first-letter"),
+        pytest.param(4, "letters", "d", id="a-letter"),
+        pytest.param(26, "letters", "z", id="last-letter"),
+        pytest.param(27, "letters", "aa", id="letters-roll-over-to-two"),
+        pytest.param(52, "letters", "az", id="two-letters"),
+        pytest.param(703, "letters", "aaa", id="letters-roll-over-to-three"),
+        pytest.param(1, "roman", "i", id="first-roman"),
+        pytest.param(4, "roman", "iv", id="roman"),
+        pytest.param(3999, "roman", "mmmcmxcix", id="largest-roman"),
+        pytest.param(4000, "roman", "4000", id="roman-past-its-range-is-decimal"),
+    ],
+)
+def test_a_list_label_is_the_marker_a_browser_shows_for_that_numbering(
+    index: int, numbering: ListNumbering, label: str
+) -> None:
+    assert list_label(index, numbering) == label
 
 
 def test_fmt_variants() -> None:

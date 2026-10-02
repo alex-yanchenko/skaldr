@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
-from skaldr.models import ListStyle, ToneLiteral
+from skaldr.models import ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
-ListKind = ListStyle
+ListKind = Literal["bullet", "number", "check"]
 HeadingLevel = Literal[1, 2, 3, 4]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 
@@ -35,6 +35,7 @@ class ListEntry:
 class ListNode:
     kind: ListKind
     entries: tuple[ListEntry, ...]
+    start: int = 1
 
 
 @dataclass(frozen=True)
@@ -51,10 +52,17 @@ class TableRow:
 
 
 @dataclass(frozen=True)
+class TableColumn:
+    tone: ToneName | None = None
+    share: float | None = None
+
+
+@dataclass(frozen=True)
 class TableNode:
     header: tuple[TableCell, ...]
     rows: tuple[TableRow, ...]
     header_column: bool = False
+    columns: tuple[TableColumn, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,6 +75,7 @@ class CodeBlock:
 class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
+    icon: str | None = None
 
 
 @dataclass(frozen=True)

@@ -160,20 +160,20 @@ or to keep a small block from stretching across the whole page.
 |---|---|---|
 | `heading` | Section structure (feeds the TOC at level 2) | `text`, `level?: 2\|3` (default 2), `id?` (stable anchor), `sub?` (subordinate caption line) |
 | `text` | Prose paragraph(s) | `body`, `muted?` |
-| `list` | Bulleted, numbered, or checkbox points (nestable) | `style: bullet\|number\|check`, `items[]` — each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true` |
+| `list` | Bulleted, numbered, checkbox, or decision points (nestable) | `style: bullet\|number\|check\|decision`, `items[]`: each item a string or `{text, items:[…]}` to nest (≤4 deep); in a `check` list an item may set `checked: true`; in a `decision` list an item sets `decided: true` for a decision taken and leaves it out for an open question; a `number` list takes `start?` (the first number, 1 to 999999999, default 1) and `numbering?: decimal\|letters\|roman` |
 | `fact_strip` | One-line metadata row | `facts: [{label, value}]` (1–8) |
 | `key_value` | Vertical label/value metadata | `pairs: [{label, value}]` |
 | `def_list` | Labelled list — prominent term + rich body (e.g. Action/Expected/Say) | `items: [{term, body}]` |
 | `cards` | Headline numbers (a value may be author-set, or **derived** by counting a matrix / tables) | `items: [{label, value, of?, tone?, delta?, note?, badges?}]` OR a derived item `{badge, of_matrix \| of_tables, label?, tone?, note?}` |
 | `badge_row` | A standalone row of chips, flat or grouped | `label?` + `items: [{key} \| {label, tone}]`, OR `groups: [{label, items[]}]` |
-| `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body` |
+| `callout` | "Stop and look" note | `tone: info\|success\|warning\|danger`, `title?`, `body`, `icon?` (one emoji, e.g. `"🚧"`) |
 | `status_list` | Checks / steps | `items: [{state: done\|current\|pending\|failed\|blocked, text}]` |
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
-| `table` | The workhorse (see below) | `columns`, `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
+| `table` | The workhorse (see below) | `columns` (each `{key, label, kind?, width?, tone?}`), `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
-| `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
+| `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -226,6 +226,25 @@ for an appendix or detail-on-demand; for a doc meant to be **read through** (a w
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
+
+Lists: `start` and `numbering` belong to a `style: number` list, `checked` to a `style: check` list, and `decided` to a `style: decision` list; anywhere else the build fails. A nested list keeps the numbering and counts from 1. A decision list shows a tick for a decision taken and a question mark for one still open, so a record of what was settled and what is still open reads at a glance.
+
+In the example below, the numbered list continues a procedure whose first three steps came earlier, so its points read iv, v and vi. In the decision list, the first point is a decision taken and the second, with no `decided`, is still open.
+
+```yaml
+- type: list
+  style: number
+  start: 4
+  numbering: roman
+  items: ["Freeze inbound moves.", "Re-scan every bin.", "Re-run reconciliation."]
+- type: list
+  style: decision
+  items:
+    - { text: "Keep the most recent scan.", decided: true }
+    - "Whether overflow aisles get their own count window."
+```
+
+Icons: a `callout` or a `note` may set `icon` to one emoji, shown at the head of the block. It replaces the icon the Markdown exports otherwise pick from the tone. It must be exactly one emoji from the Unicode emoji list: a flag such as 🇺🇦, an emoji with a skin tone such as 👍🏽, a keycap such as 1️⃣ or a joined emoji such as 👩‍💻 each count as one. A symbol that has both a text and an emoji form, written without its emoji selector (⚠ for ⚠️, © for ©️), is stored in its emoji form. A letter, a digit, a word, a symbol that is not an emoji such as ✓, a skin tone or a single flag letter on its own, two emoji, or an emoji padded with spaces fail the build.
 
 Code diff mode: with `mode: diff`, skaldr reads the **first character of each line** — `+` marks an
 added line (green), `-` a removed line (red), anything else is context. You write the `+`/`-`
@@ -821,6 +840,7 @@ link instead.
   `width` weight (1–6): each takes `width / Σwidth` (e.g. `4` + `2` → two-thirds / one-third).
   It's all-or-none — set `width` on every in-cell column or none. A `placement: title` badge takes
   no width (it rides under the title); a `placement: cell` badge is a normal column and does.
+- **Column tone.** A column may set `tone` (any tone name, or its palette alias) to tint the whole column faintly, for example a variance column that needs the reader's eye: `{ key: variance, label: "Variance", kind: number, tone: warning }`. The header and group bands stay untinted. A row `tone` or a `tint_by` row tint paints over the column tint, so a flagged row reads as one unbroken band. A `placement: title` badge column takes no tone.
 - **Every row supplies every column key and nothing else** (plus an optional `subrows`, and an
   optional `tone: muted | danger`). A row `tone` emphasises the whole row: `muted` dims and strikes
   it (a rejected/superseded row), `danger` tints it red (a bad row).
@@ -939,11 +959,16 @@ case, where the page is shared as a URL an agent later has to read back.
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges or note links and citations it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
+| a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour | numbered items whose first marker is the start number (unverified in Notion) |
+| a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
+| a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `grid` | its cells one after another | native columns |
 | badges | bold labels | coloured chips |
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
+| a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | its caption only | its caption only |
 

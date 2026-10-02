@@ -10,6 +10,7 @@ from skaldr.export.runs import (
     Break,
     CheckMark,
     Chip,
+    DecisionMark,
     ExportRich,
     ExportRun,
     Gauge,
@@ -288,9 +289,13 @@ def test_visible_text_reads_a_line_break_as_a_space_and_every_mark_kind_as_its_w
         CheckMark(checked=True),
         Plain(" "),
         CheckMark(checked=False),
+        Plain(" "),
+        DecisionMark(decided=True),
+        Plain(" "),
+        DecisionMark(decided=False),
     )
 
-    assert export_visible_text(runs) == "todo info yes no"
+    assert export_visible_text(runs) == "todo info yes no decided open"
 
 
 def test_a_total_row_of_plain_cells_is_written_bold() -> None:
@@ -337,6 +342,19 @@ def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
     )
 
     assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **x** | y |\n"
+
+
+def test_a_table_drops_column_tones_and_widths_markdown_cannot_show() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "a", "label": "A", "width": 1},
+            {"key": "b", "label": "B", "tone": "info", "width": 3},
+        ],
+        "rows": [{"a": "x", "b": "y"}],
+    }
+
+    assert markdown_of([table]) == "| A | B |\n| --- | --- |\n| x | y |\n"
 
 
 def test_a_comparison_bolds_its_feature_column_and_leaves_the_header_to_the_pipe_table() -> None:
@@ -458,6 +476,53 @@ def test_a_check_list_becomes_a_task_list() -> None:
     assert markdown_of([block]) == "- [x] done\n- [ ] open\n"
 
 
+@pytest.mark.parametrize(
+    ("options", "markdown"),
+    [
+        pytest.param(
+            {"start": 9}, "9. c\n10. d\n    1. e\n", id="start-counts-on-and-a-nested-list-from-one"
+        ),
+        pytest.param({"numbering": "decimal"}, "1. c\n2. d\n   1. e\n", id="decimal-is-native"),
+        pytest.param(
+            {"numbering": "letters"}, "- a. c\n- b. d\n  - a. e\n", id="letters-are-bullets-led-by-the-letter"
+        ),
+        pytest.param(
+            {"start": 4, "numbering": "roman"},
+            "- iv. c\n- v. d\n  - i. e\n",
+            id="roman-is-bullets-led-by-the-numeral-from-the-start",
+        ),
+    ],
+)
+def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], markdown: str) -> None:
+    block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
+
+    assert markdown_of([block]) == markdown
+
+
+def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
+
+    assert markdown_of([block]) == "- ❓ open\n- ☑️ done\n"
+
+
+def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
+    blocks = [
+        {
+            "type": "list",
+            "style": "decision",
+            "items": [
+                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
+            ],
+        },
+        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
+        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
+    ]
+
+    assert markdown_of(blocks) == (
+        "- ☑️ region\n  - ❓ failover\n  - ☑️ zone\n\n* [x] shipped\n* [ ] tested\n\n- ✅ rolled out\n"
+    )
+
+
 def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
     block = {"type": "list", "style": "check", "items": [{"text": "parent", "items": ["child"]}]}
 
@@ -466,6 +531,12 @@ def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
 
 def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
     assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
+
+
+def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
+    block = {"type": "list", "items": ["", "two"]}
+
+    assert markdown_of([block]) == "-\n- two\n"
 
 
 @pytest.mark.parametrize(
@@ -553,6 +624,21 @@ def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
     callout = {"type": "callout", "tone": "warning", "title": "Heads up", "body": "one\n\ntwo"}
 
     assert markdown_of([callout]) == "> ⚠️ **Heads up**\n>\n> one\n>\n> two\n"
+
+
+def test_a_callout_and_a_note_icon_take_the_place_of_the_tone_icon() -> None:
+    blocks = [
+        {"type": "callout", "tone": "warning", "icon": "🚧", "title": "Heads up", "body": "one"},
+        {"type": "note", "icon": "📌", "body": "aside"},
+    ]
+
+    assert markdown_of(blocks) == "> 🚧 **Heads up**\n>\n> one\n\n> 📌 aside\n"
+
+
+def test_an_icon_leads_a_callout_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
+    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),), icon="🚀")
+
+    assert render_markdown([callout]) == "> 🚀\n>\n> - a\n"
 
 
 def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:

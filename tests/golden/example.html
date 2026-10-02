@@ -59,6 +59,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
 		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
 		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
+		--row-hover:light-dark(color-mix(in srgb, var(--ink) 3%, transparent), color-mix(in srgb, var(--ink) 5%, transparent));
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
 		--hdr:light-dark(#475569,#2c3543); --hdr-fg:#ffffff; --hdr-h:41px;
 		--neutral-fg:light-dark(#475569,#cbd5e1); --neutral-bg:light-dark(#f1f5f9,#2b3441);
@@ -218,6 +219,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
+	.iconed{display:flex; gap:var(--s3); align-items:flex-start;
+		& > .block-icon{flex:none; font-size:1.15em; line-height:1.4}
+		& > .iconed-body{flex:1; min-width:0}}
 
 	/* Blank-line paragraphs in set-apart prose (callout/quote bodies); table cells use td .cell-p. */
 	.prose-p + .prose-p{margin-block-start:var(--s3)}
@@ -266,6 +270,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.list.check .chk{display:flex; gap:var(--s2); align-items:baseline; cursor:pointer}
 	.list.check .chk input{flex:none; margin:0; translate:0 2px; accent-color:var(--accent-fg); cursor:pointer}
 	.list.check .chk input:checked + span{color:var(--muted); text-decoration:line-through}
+	.list.decision{list-style:none; padding-inline-start:0}
+	.list.decision .decision{padding-inline-start:calc(1.2em + var(--s2))}
+	.list.decision .dec{display:flex; gap:var(--s2); align-items:baseline}
+	.list.decision .dec .glyph{flex:none; width:1.2em; text-align:center; font-weight:700; color:var(--warning-fg)}
+	.list.decision .dec.decided .glyph{color:var(--success-fg)}
 
 	.tl{list-style:none; position:relative; padding-inline-start:26px; margin-block:var(--s4);
 		&::before{content:""; position:absolute; left:5px; top:6px; bottom:10px; width:2px; background:var(--line)}
@@ -458,10 +467,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			font-weight:700; font-size:13px; color:var(--ink); box-shadow:inset 0 -1px 0 var(--rule)}
 		& tr.group .st{float:right; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums}
 		& tbody td{padding:16px; border-block-end:1px solid var(--line); vertical-align:top}
-		& tbody tr.row:hover td{background:var(--hover)}
+		& tbody tr.row:hover td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
 		/* Row emphasis (reserved row key `tone`): muted = a struck, dimmed "rejected" row; danger = a
 		   red-tinted "bad" row. The strike sits on the title only — struck numbers read as edits. */
-		& tbody tr.row.muted{opacity:0.55}
+		& tbody tr.row.muted td{position:relative; background-color:var(--surface)}
+		& tbody tr.row.muted td::after{content:""; position:absolute; inset:0; background:var(--surface); opacity:0.45; pointer-events:none}
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
 		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
@@ -474,6 +484,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
 		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
 		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
+		& col.tint{background:var(--tb)}
+		& col.tint.neutral{--tb:var(--neutral-bg)} & col.tint.info{--tb:var(--info-bg)}
+		& col.tint.success{--tb:var(--success-bg)} & col.tint.warning{--tb:var(--warning-bg)}
+		& col.tint.danger{--tb:var(--danger-bg)} & col.tint.accent{--tb:var(--accent-bg)}
+		& col.tint.teal{--tb:var(--teal-bg)} & col.tint.sky{--tb:var(--sky-bg)}
 		& tr.empty td{color:var(--muted); font-style:italic; text-align:center; padding:18px 16px}
 		& td.title{font-weight:650}
 		& td.title .chip{margin-top:var(--s2)}
@@ -1064,7 +1079,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <div class="callout warning"><div class="title">Action needed before the next count</div><div>The <code>bin &gt; 12</code> scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.</div></div>
 
-<div class="callout info"><div>Counts below are per distinct discrepancy class, not per unit.</div></div>
+<div class="callout info iconed"><span class="block-icon" aria-hidden="true">📏</span><div class="iconed-body"><div>Counts below are per distinct discrepancy class, not per unit.</div></div></div>
 
 <h2 id="discrepancies-fixes">Discrepancies &amp; fixes</h2>
 
@@ -1117,6 +1132,35 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <div class="meter"><span class="m-label">Zone A</span><div class="track"><div class="fill info" style="width:100.0%"></div></div><span class="m-val">100.0%</span><span class="m-label">Zone B</span><div class="track"><div class="fill success" style="width:92.0%"></div></div><span class="m-val">92.0%</span><span class="m-label">Zone C</span><div class="track"><div class="fill warning" style="width:85.0%"></div></div><span class="m-val">85.0%</span><span class="m-label">Overflow</span><div class="track"><div class="fill danger" style="width:4.0%"></div></div><span class="m-val">4.0%</span></div>
 
+<div class="table-wrap"><table class="rep">
+<colgroup><col style="width:25.0%"><col style="width:12.5%"><col class="tint warning" style="width:12.5%"><col style="width:50.0%"></colgroup>
+<thead><tr><th>Zone</th><th class="num">Counted</th><th class="num">Variance</th><th>Note</th></tr></thead>
+<tbody>
+<tr class="row">
+<td class="title">Zone A
+</td>
+<td class="num">3,100</td>
+<td class="num">0</td>
+<td>Matched the system count.</td>
+</tr>
+<tr class="row">
+<td class="title">Zone B
+</td>
+<td class="num">2,760</td>
+<td class="num">12</td>
+<td>Two mislabeled bins, re-scanned.</td>
+</tr>
+<tr class="row danger">
+<td class="title">Overflow
+</td>
+<td class="num">120</td>
+<td class="num">260</td>
+<td>Skipped by the <code>bin &gt; 12</code> rule.</td>
+</tr>
+</tbody>
+</table></div>
+
+
 <div class="badge-row"><span class="label">Affects:</span><span class="chip teal">inventory</span><span class="chip sky">scan-app</span><span class="chip violet">DC-West</span></div>
 <h2 id="verification">Verification</h2>
 
@@ -1128,7 +1172,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
 
-<div class="note-block"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div>
+<div class="note-block iconed"><span class="block-icon" aria-hidden="true">🎤</span><div class="iconed-body"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div></div>
+
+<h3 id="re-count-procedure-from-step-iv">Re-count procedure, from step iv</h3>
+
+<ol class="list" start="4" type="i"><li>Freeze inbound moves in the overflow aisles.</li><li>Re-scan every bin with the widened reader.<ol class="list" type="i"><li>Start with the aisles that held the 260 skipped units.</li></ol></li><li>Re-run reconciliation and compare against the first count.</li></ol>
+
+<h3 id="decisions">Decisions</h3>
+
+<ul class="list decision"><li><span class="dec decided"><span class="glyph">✓</span><span>De-duplicate on the pallet ID and keep the most recent scan.</span></span></li><li><span class="dec decided"><span class="glyph">✓</span><span>Hold the vendor line until a corrected ASN arrives.</span></span></li><li><span class="dec open"><span class="glyph">?</span><span>Whether overflow aisles get a count window of their own.</span></span></li></ul>
 
 <h2 id="rollout">Rollout</h2>
 
