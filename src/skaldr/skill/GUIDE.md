@@ -174,6 +174,7 @@ or to keep a small block from stretching across the whole page.
 | `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration) — softer than a `callout` | `body`, `title?` |
+| `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -942,6 +943,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | a multi-case `request` | each case under a bold title | native tabs |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `grid` | its cells one after another | native columns |
+| `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
 | badges | bold labels | coloured chips |
 | tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
 | tones on flow and fan steps | Mermaid node colours | the same |

@@ -549,6 +549,21 @@ def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> Non
     assert render_markdown([node]) == markdown
 
 
+def test_a_divider_stands_apart_from_the_paragraph_above_so_it_is_never_a_setext_underline() -> None:
+    blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
+
+    assert markdown_of(blocks) == "Above\n\n---\n\nBelow\n"
+
+
+def test_a_divider_in_a_walkthrough_step_stands_apart_inside_the_list_entry() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Go", "detail": [{"type": "text", "body": "a"}, {"type": "divider"}]}],
+    }
+
+    assert markdown_of([walkthrough]) == "1. **Go**\n\n   a\n\n   ---\n"
+
+
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
     callout = {"type": "callout", "tone": "warning", "title": "Heads up", "body": "one\n\ntwo"}
 

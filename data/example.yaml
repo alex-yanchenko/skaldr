@@ -180,6 +180,7 @@ blocks:
     items:
       - { term: "Owner", body: "Inventory Ops — **@site-lead** signs off each fix." }
       - { term: "Rollback", body: "Re-disable the scan flag; the widened bins fall back to the 5-digit read." }
+  - type: divider
   - type: note
     title: "For the read-out"
     body: "Lead with the reconciliation gate — it is the one number leadership tracks."

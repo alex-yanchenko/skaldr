@@ -76,6 +76,11 @@ class Quote:
 
 
 @dataclass(frozen=True)
+class Divider:
+    pass
+
+
+@dataclass(frozen=True)
 class Toggle:
     title: ExportRich
     heading_level: HeadingLevel | None
@@ -174,6 +179,7 @@ Node = (
     | CodeBlock
     | Callout
     | Quote
+    | Divider
     | Toggle
     | Columns
     | Tabs
@@ -212,5 +218,5 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return tuple(child for tab in node.tabs for child in tab.children)
         case Diagram():
             return node.supplement
-        case Heading() | Paragraph() | TableNode() | CodeBlock() | Quote() | TableOfContents():
+        case Heading() | Paragraph() | TableNode() | CodeBlock() | Quote() | Divider() | TableOfContents():
             return ()

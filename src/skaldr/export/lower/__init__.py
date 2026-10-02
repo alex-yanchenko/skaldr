@@ -30,6 +30,7 @@ from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swi
 from skaldr.export.tree import (
     Callout,
     Columns,
+    Divider,
     GridColumn,
     Heading,
     ListEntry,
@@ -106,6 +107,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_quote(block, lowering)
         case models.Note():
             return lower_note(block, lowering)
+        case models.Divider():
+            return [Divider()]
         case models.Image():
             return lower_image(block)
         case models.Timeline():

@@ -140,6 +140,8 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 * **Owner**: Inventory Ops — **@site-lead** signs off each fix.
 * **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
+---
+
 > 📝 **For the read-out**
 >
 > Lead with the reconciliation gate — it is the one number leadership tracks.

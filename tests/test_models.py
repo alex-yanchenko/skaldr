@@ -14,6 +14,7 @@ from skaldr.models import (
     Cards,
     DefItem,
     DefList,
+    Divider,
     Fan,
     Flow,
     FlowStep,
@@ -617,6 +618,37 @@ def test_panel_parses_to_whole_model() -> None:
 def test_panel_with_no_blocks_is_rejected() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.panel\.blocks"):
         parse_report(make_report(blocks=[{"type": "panel", "title": "Empty", "blocks": []}]))
+
+
+def test_a_divider_parses_to_a_block_with_no_fields_of_its_own() -> None:
+    report = parse_report(make_report(blocks=[{"type": "divider"}]))
+
+    assert report.blocks[0] == Divider(type="divider")
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [{"type": "divider"}]}, id="section"),
+        pytest.param({"type": "panel", "title": "P", "blocks": [{"type": "divider"}]}, id="panel"),
+        pytest.param(make_grid([make_cell(6, [{"type": "divider"}])]), id="grid-cell"),
+        pytest.param(
+            {"type": "walkthrough", "steps": [{"label": "Go", "detail": [{"type": "divider"}]}]},
+            id="walkthrough-detail",
+        ),
+    ],
+)
+def test_a_divider_is_accepted_wherever_a_leaf_block_is(container: dict[str, Any]) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_divider_refuses_a_field_it_does_not_have() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "divider", "text": "or"}]))
+
+    assert str(raised.value) == "invalid content data: blocks.0.divider.text: Extra inputs are not permitted"
 
 
 def test_badge_legend_false_parses_as_a_legend_optout() -> None:

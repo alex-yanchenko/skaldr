@@ -21,6 +21,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    Divider,
     Graph,
     GraphEdge,
     GraphNode,
@@ -1176,6 +1177,12 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
             ),
         ),
     )
+
+
+def test_a_divider_lowers_to_a_divider_node_between_its_neighbours() -> None:
+    blocks = [{"type": "text", "body": "a"}, {"type": "divider"}, {"type": "text", "body": "b"}]
+
+    assert lowered(blocks) == (Paragraph((Plain("a"),)), Divider(), Paragraph((Plain("b"),)))
 
 
 def _cells(*texts: str) -> tuple[TableCell, ...]:

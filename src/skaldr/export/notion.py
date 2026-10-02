@@ -7,6 +7,7 @@ from typing_extensions import assert_never
 
 from skaldr.export.markup import (
     CALLOUT_ICON,
+    DIVIDER_LINE,
     MarkupRuns,
     bang_cannot_open_an_image,
     body_cell_texts,
@@ -23,6 +24,7 @@ from skaldr.export.tree import (
     CodeBlock,
     Columns,
     Diagram,
+    Divider,
     Heading,
     ListKind,
     ListNode,
@@ -217,6 +219,8 @@ def _notion_lines(node: Node) -> list[str]:
             return [opening, *_indent(_notion_blocks(node.children)), "</callout>"]
         case Quote():
             return [_quote_line(node)]
+        case Divider():
+            return [DIVIDER_LINE]
         case Toggle():
             return _toggle_lines(node)
         case Columns():

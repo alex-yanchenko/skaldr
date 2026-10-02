@@ -26,6 +26,7 @@ CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
 }
 TAB_TONES: Final[frozenset[ToneName]] = frozenset({"success", "info", "warning", "danger"})
 GAUGE_CELLS: Final = 10
+DIVIDER_LINE: Final = "---"
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")

@@ -627,6 +627,10 @@ class Note(_Block):
     title: str | None = Field(default=None, description="Optional label for the note.")
 
 
+class Divider(_Block):
+    type: Literal["divider"]
+
+
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
@@ -2148,6 +2152,7 @@ _Leaf = (
     | Code
     | Quote
     | Note
+    | Divider
     | Image
     | Timeline
     | Flow

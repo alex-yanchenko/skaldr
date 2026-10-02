@@ -192,6 +192,12 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
     )
 
 
+def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
+    blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
+
+    assert notion_of(blocks) == "Above\n---\nBelow\n"
+
+
 def test_block_nodes_become_notion_blocks() -> None:
     nodes = [
         Paragraph((Plain("muted"),), "muted"),

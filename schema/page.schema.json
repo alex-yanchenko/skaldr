@@ -1038,6 +1038,36 @@
       "title": "DefList",
       "type": "object"
     },
+    "Divider": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 6,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "divider",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Divider",
+      "type": "object"
+    },
     "Fact": {
       "additionalProperties": false,
       "properties": {
@@ -1347,6 +1377,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -1417,6 +1448,9 @@
               },
               {
                 "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
               },
               {
                 "$ref": "#/$defs/Image"
@@ -1742,6 +1776,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -1811,6 +1846,9 @@
               },
               {
                 "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
               },
               {
                 "$ref": "#/$defs/Image"
@@ -2644,6 +2682,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -2715,6 +2754,9 @@
               },
               {
                 "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
               },
               {
                 "$ref": "#/$defs/Image"
@@ -3853,6 +3895,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -3924,6 +3967,9 @@
               },
               {
                 "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
               },
               {
                 "$ref": "#/$defs/Image"
@@ -4771,6 +4817,7 @@
                 "code": "#/$defs/Code",
                 "comparison": "#/$defs/Comparison",
                 "def_list": "#/$defs/DefList",
+                "divider": "#/$defs/Divider",
                 "fact_strip": "#/$defs/FactStrip",
                 "fan": "#/$defs/Fan",
                 "flow": "#/$defs/Flow",
@@ -4841,6 +4888,9 @@
               },
               {
                 "$ref": "#/$defs/Note"
+              },
+              {
+                "$ref": "#/$defs/Divider"
               },
               {
                 "$ref": "#/$defs/Image"
@@ -4917,6 +4967,7 @@
             "code": "#/$defs/Code",
             "comparison": "#/$defs/Comparison",
             "def_list": "#/$defs/DefList",
+            "divider": "#/$defs/Divider",
             "fact_strip": "#/$defs/FactStrip",
             "fan": "#/$defs/Fan",
             "flow": "#/$defs/Flow",
@@ -4992,6 +5043,9 @@
           },
           {
             "$ref": "#/$defs/Note"
+          },
+          {
+            "$ref": "#/$defs/Divider"
           },
           {
             "$ref": "#/$defs/Image"

@@ -442,6 +442,26 @@ def test_panel_renders_a_titled_card_holding_its_blocks() -> None:
     assert '<p class="text">Point.</p></div></div>' in html
 
 
+def test_a_divider_is_a_rule_between_the_blocks_around_it() -> None:
+    blocks = [{"type": "text", "body": "Above."}, {"type": "divider"}, {"type": "text", "body": "Below."}]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert '<p class="text">Above.</p>\n<hr class="divider">\n\n<p class="text">Below.</p>' in html
+
+
+def test_a_divider_inside_a_panel_sits_in_the_panel_body() -> None:
+    panel = {
+        "type": "panel",
+        "title": "Deck",
+        "blocks": [{"type": "text", "body": "One."}, {"type": "divider"}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[panel])))
+
+    assert '<div class="panel-card-body"><p class="text">One.</p><hr class="divider">\n</div></div>' in html
+
+
 def test_walkthrough_step_detail_can_hold_a_two_column_grid() -> None:
     block = {
         "type": "walkthrough",

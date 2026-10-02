@@ -407,6 +407,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.note-block{border-inline-start:2px solid var(--line); padding:2px 0 2px 14px; margin-block:var(--s4); color:var(--muted); font-size:13.5px}
 	.note-block .note-block-title{font-weight:600; color:var(--ink); margin-block-end:var(--s1)}
 
+	hr.divider{border:0; border-block-start:1px solid var(--line); margin-block:var(--s6); height:0}
+
 	.code{margin-block:var(--s4); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;
 		background:var(--code-bg); box-shadow:var(--shadow);
 		& .code-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
@@ -1127,6 +1129,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <ul class="list check"><li><label class="chk"><input type="checkbox" checked><span>Confirm the <code>bin &gt; 12</code> scan rule with the site lead.</span></label></li><li><label class="chk"><input type="checkbox"><span>Ship the 9-digit bin-code widening behind the scan flag.</span></label><ul class="list check"><li><label class="chk"><input type="checkbox"><span>Stage on the pilot aisle first.</span></label></li><li><label class="chk"><input type="checkbox"><span>Watch the mis-scan rate for one shift before widening.</span></label></li></ul></li><li><label class="chk"><input type="checkbox"><span>Re-run the count and re-verify reconciliation.</span></label></li></ul>
 
 <dl class="deflist"><dt>Owner</dt><dd>Inventory Ops — <strong>@site-lead</strong> signs off each fix.</dd><dt>Rollback</dt><dd>Re-disable the scan flag; the widened bins fall back to the 5-digit read.</dd></dl>
+
+<hr class="divider">
 
 <div class="note-block"><div class="note-block-title">For the read-out</div><div>Lead with the reconciliation gate — it is the one number leadership tracks.</div></div>
 
