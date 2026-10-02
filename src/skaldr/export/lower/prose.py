@@ -1,7 +1,7 @@
 from pathlib import PurePosixPath
 
-from skaldr import models
-from skaldr.export.inline import bold, italic, one_line, paragraphs, plain
+from skaldr import compute, models
+from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced
 from skaldr.export.tree import (
     Callout,
@@ -78,7 +78,7 @@ def lower_code(block: models.Code) -> list[Node]:
 
 
 def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
-    lines = tuple(lowering.rich(part) for part in paragraphs(block.body))
+    lines = tuple(lowering.rich(part) for part in compute.paragraphs(block.body))
     return [Quote(lines, plain(block.cite) if block.cite else ())]
 
 

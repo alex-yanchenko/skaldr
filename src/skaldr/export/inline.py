@@ -48,7 +48,3 @@ def _trimmed(runs: Rich) -> Rich:
 
 def rich_line(text: str, context: RichContext) -> Rich:
     return _trimmed(tuple(map(_on_one_line, parse_rich(text, context))))
-
-
-def paragraphs(text: str) -> list[str]:
-    return [part.strip() for part in text.split("\n\n") if part.strip()]
