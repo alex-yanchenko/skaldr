@@ -10,9 +10,13 @@ it, and models must not import compute) so templates can reach it through this o
 import json
 import math
 import re
+import string
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, Final, NamedTuple, TypedDict
+
+import roman
+from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.models import (
@@ -24,6 +28,7 @@ from skaldr.models import (
     CaseTone,
     DeltaDirection,
     Heading,
+    ListNumbering,
     Matrix,
     MatrixCell,
     Report,
@@ -52,6 +57,7 @@ __all__ = [
     "col_sum",
     "first_table_index",
     "fmt",
+    "list_label",
     "matrix_grid",
     "matrix_tallies",
     "pct",
@@ -596,6 +602,30 @@ def fmt(value: Any) -> str:
         rounded = round(value, 4)
         return f"{rounded:,.0f}" if rounded.is_integer() else f"{rounded:,}"
     return str(value)
+
+
+LATIN_ALPHABET_SIZE: Final = len(string.ascii_lowercase)
+CSS_LOWER_ROMAN_RANGE: Final = range(1, 4000)
+
+
+def _letters_label(index: int) -> str:
+    label = ""
+    while index:
+        index, place = divmod(index - 1, LATIN_ALPHABET_SIZE)
+        label = string.ascii_lowercase[place] + label
+    return label
+
+
+def list_label(index: int, numbering: ListNumbering) -> str:
+    match numbering:
+        case "letters":
+            return _letters_label(index)
+        case "roman" if index in CSS_LOWER_ROMAN_RANGE:
+            return roman.toRoman(index).lower()
+        case "roman" | "decimal":
+            return str(index)
+        case _:
+            assert_never(numbering)
 
 
 def pct(value: float, of: float) -> str:

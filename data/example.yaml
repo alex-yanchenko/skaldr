@@ -91,6 +91,7 @@ blocks:
     body: "The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting."
   - type: callout
     tone: info
+    icon: "📏"
     body: "Counts below are per distinct discrepancy class, not per unit."
 
   - type: heading
@@ -147,6 +148,16 @@ blocks:
       - { label: "Zone B", value: 92, max: 100, tone: success }
       - { label: "Zone C", value: 85, max: 100, tone: warning }
       - { label: "Overflow", value: 4, max: 100, tone: danger }
+  - type: table
+    columns:
+      - { key: zone, label: "Zone", width: 2 }
+      - { key: counted, label: "Counted", kind: number, width: 1 }
+      - { key: variance, label: "Variance", kind: number, width: 1, tone: warning }
+      - { key: note, label: "Note", kind: rich, width: 4 }
+    rows:
+      - [Zone A, 3100, 0, "Matched the system count."]
+      - [Zone B, 2760, 12, "Two mislabeled bins, re-scanned."]
+      - { zone: Overflow, counted: 120, variance: 260, note: "Skipped by the `bin > 12` rule.", tone: danger }
   - type: badge_row
     label: "Affects:"
     items:
@@ -185,8 +196,31 @@ blocks:
       - { term: "Rollback", body: "Re-disable the scan flag; the widened bins fall back to the 5-digit read." }
   - type: divider
   - type: note
+    icon: "🎤"
     title: "For the read-out"
     body: "Lead with the reconciliation gate — it is the one number leadership tracks."
+  - type: heading
+    level: 3
+    text: "Re-count procedure, from step iv"
+  - type: list
+    style: number
+    start: 4
+    numbering: roman
+    items:
+      - "Freeze inbound moves in the overflow aisles."
+      - text: "Re-scan every bin with the widened reader."
+        items:
+          - "Start with the aisles that held the 260 skipped units."
+      - "Re-run reconciliation and compare against the first count."
+  - type: heading
+    level: 3
+    text: "Decisions"
+  - type: list
+    style: decision
+    items:
+      - { text: "De-duplicate on the pallet ID and keep the most recent scan.", decided: true }
+      - { text: "Hold the vendor line until a corrected ASN arrives.", decided: true }
+      - "Whether overflow aisles get a count window of their own."
 
   - type: heading
     text: "Rollout"

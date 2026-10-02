@@ -241,6 +241,19 @@
           "description": "Rich-text body.",
           "title": "Body",
           "type": "string"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional single emoji shown at the head of the callout, in place of the tone's default icon in the Markdown exports.",
+          "title": "Icon"
         }
       },
       "required": [
@@ -808,6 +821,29 @@
           "default": null,
           "description": "Proportional width weight (1-6); set it on every in-cell column, or none. A `title`-placement badge column takes no width (it rides under the title).",
           "title": "Width"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "info",
+                "success",
+                "warning",
+                "danger",
+                "accent",
+                "teal",
+                "sky"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tone that faintly tints the whole column. A row `tone` or a `tint_by` row tint paints over it. A `title`-placement badge column takes no tone (it rides under the title).",
+          "title": "Tone"
         }
       },
       "required": [
@@ -2288,14 +2324,48 @@
         },
         "style": {
           "default": "bullet",
-          "description": "Bulleted, numbered, or `check` \u2014 tickable checkboxes for a live checklist (the ticks are ephemeral: a browser reload resets them).",
+          "description": "Bulleted, numbered, or `check` \u2014 tickable checkboxes for a live checklist (the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a decision taken (`decided: true`) or an open question.",
           "enum": [
             "bullet",
             "number",
-            "check"
+            "check",
+            "decision"
           ],
           "title": "Style",
           "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "ge": 1,
+              "le": 999999999,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only in a `style: number` list: the number the first point carries (default 1). Nested lists count from 1.",
+          "title": "Start"
+        },
+        "numbering": {
+          "anyOf": [
+            {
+              "enum": [
+                "decimal",
+                "letters",
+                "roman"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or `roman` (i, ii, iii). Nested lists keep it.",
+          "title": "Numbering"
         },
         "items": {
           "description": "Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest sub-points (nested lists inherit the parent's style; up to 4 levels deep).",
@@ -2334,6 +2404,12 @@
           "default": false,
           "description": "Only meaningful in a `style: check` list: renders the box ticked. Set it in the YAML to record durable progress (an agent editing its plan marks items done here); a reader clicking a box in the browser is ephemeral and does not persist.",
           "title": "Checked",
+          "type": "boolean"
+        },
+        "decided": {
+          "default": false,
+          "description": "Only meaningful in a `style: decision` list: marks the point a decision already taken. Left false, the point is an open question.",
+          "title": "Decided",
           "type": "boolean"
         },
         "items": {
@@ -2725,6 +2801,19 @@
           "default": null,
           "description": "Optional label for the note.",
           "title": "Title"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional single emoji shown at the head of the note, in place of the default note icon in the Markdown exports.",
+          "title": "Icon"
         }
       },
       "required": [

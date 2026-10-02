@@ -7,7 +7,14 @@ import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.markup import CALLOUT_ICON
-from skaldr.export.notion import NotionChunks, chunk_notion, notion_inline, render_notion
+from skaldr.export.notion import (
+    NOTION_DEFAULT_PAGE_WIDTH_PX,
+    NotionChunks,
+    apportioned_pixels,
+    chunk_notion,
+    notion_inline,
+    render_notion,
+)
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
@@ -46,7 +53,9 @@ from tests.factories import (
     heading_sections,
     lowered,
     make_command_request,
+    make_label_table,
     make_report,
+    make_table,
     make_toggle,
     notion_of,
 )
@@ -414,6 +423,160 @@ def test_a_table_cell_of_code_plus_text_stays_a_cell_not_a_bullet() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("columns", "colgroup"),
+    [
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "tone": "success", "width": 2},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="118">\n\t\t<col color="green_bg" width="236">\n'
+            '\t\t<col width="354">\n\t</colgroup>\n',
+            id="widths-in-the-html-ratio-and-a-tone",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 1},
+            ],
+            '\t<colgroup>\n\t\t<col width="236">\n\t\t<col width="236">\n'
+            '\t\t<col width="236">\n\t</colgroup>\n',
+            id="equal-thirds-sum-to-the-page-width",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 6},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 1},
+            ],
+            '\t<colgroup>\n\t\t<col width="531">\n\t\t<col width="89">\n'
+            '\t\t<col width="88">\n\t</colgroup>\n',
+            id="the-leftover-pixel-goes-to-the-first-largest-remainder",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 3},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="101">\n\t\t<col width="304">\n'
+            '\t\t<col width="303">\n\t</colgroup>\n',
+            id="quotas-rounding-each-to-707-gain-the-missing-pixel",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A", "width": 1},
+                {"key": "b", "label": "B", "width": 1},
+                {"key": "c", "label": "C", "width": 3},
+            ],
+            '\t<colgroup>\n\t\t<col width="142">\n\t\t<col width="141">\n'
+            '\t\t<col width="425">\n\t</colgroup>\n',
+            id="quotas-rounding-each-to-709-lose-the-extra-pixel",
+        ),
+        pytest.param(
+            [
+                {"key": "a", "label": "A"},
+                {"key": "b", "label": "B", "tone": "danger"},
+                {"key": "c", "label": "C"},
+            ],
+            '\t<colgroup>\n\t\t<col>\n\t\t<col color="red_bg">\n\t\t<col>\n\t</colgroup>\n',
+            id="a-tone-alone",
+        ),
+        pytest.param(
+            [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}, {"key": "c", "label": "C"}],
+            "",
+            id="no-colgroup-without-a-tone-or-width",
+        ),
+    ],
+)
+def test_column_tones_and_widths_become_a_notion_colgroup(
+    columns: list[dict[str, object]], colgroup: str
+) -> None:
+    table = make_table(columns, rows=[{"a": "x", "b": "y", "c": "z"}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"{colgroup}"
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>z</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_single_weighted_column_takes_the_whole_page_width() -> None:
+    table = make_table([{"key": "a", "label": "A", "width": 3}], rows=[{"a": "x"}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="708">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_auto_columns_share_what_a_number_column_default_width_leaves() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "A"},
+            {"key": "b", "label": "B"},
+            {"key": "c", "label": "C", "kind": "number"},
+        ],
+        rows=[{"a": "x", "b": "y", "c": 10}],
+    )
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="319">\n\t\t<col width="318">\n\t\t<col width="71">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t\t<td>**C**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>x</td>\n\t\t<td>y</td>\n\t\t<td>10</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("count", "widths"),
+    [
+        pytest.param(9, [71] * 8 + [70] * 2, id="nine-numbers-share-tenths-with-the-label"),
+        pytest.param(10, [65] * 4 + [64] * 7, id="ten-numbers-share-elevenths-with-the-label"),
+        pytest.param(12, [55] * 6 + [54] * 7, id="twelve-numbers-share-thirteenths-with-the-label"),
+    ],
+)
+def test_number_columns_too_many_for_their_default_width_leave_the_label_a_positive_width(
+    count: int, widths: list[int]
+) -> None:
+    notion = notion_of([make_label_table(["number"] * count)])
+
+    cols = "".join(f'\t\t<col width="{width}">\n' for width in widths)
+    header = "".join(f"\t\t<td>**C{index}**</td>\n" for index in range(count))
+    cells = "\t\t<td>1</td>\n" * count
+    assert notion == (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"\t<colgroup>\n{cols}\t</colgroup>\n"
+        f"\t<tr>\n\t\t<td>**Label**</td>\n{header}\t</tr>\n"
+        f"\t<tr>\n\t\t<td>x</td>\n{cells}\t</tr>\n"
+        "</table>\n"
+    )
+    assert sum(widths) == NOTION_DEFAULT_PAGE_WIDTH_PX
+
+
+@pytest.mark.parametrize(
+    "shares",
+    [
+        pytest.param([0.1] * 10, id="written-as-tenths"),
+        pytest.param([1 - 0.1 * 9, *[0.1] * 9], id="first-share-carries-float-noise"),
+        pytest.param([*[0.1] * 9, 1 - 0.1 * 9], id="last-share-carries-float-noise"),
+    ],
+)
+def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_float_noise(
+    shares: list[float],
+) -> None:
+    assert apportioned_pixels(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
+
+
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)), TableCell(())),
@@ -479,6 +642,7 @@ def test_a_grouped_table_bolds_its_group_rows_and_its_totals_row_as_a_whole() ->
 
     assert notion_of([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col width="637">\n\t\t<col width="71">\n\t</colgroup>\n'
         "\t<tr>\n\t\t<td>**Issue**</td>\n\t\t<td>**Units**</td>\n\t</tr>\n"
         '\t<tr color="gray_bg">\n\t\t<td>**Ours (2)**</td>\n\t\t<td></td>\n\t</tr>\n'
         "\t<tr>\n\t\t<td>x</td>\n\t\t<td>2</td>\n\t</tr>\n"
@@ -515,6 +679,69 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
     }
 
     assert notion_of([block]) == "- parent\n\t- child\n\t- mid\n\t\t- leaf\n"
+
+
+@pytest.mark.parametrize(
+    ("options", "notion"),
+    [
+        pytest.param({"start": 9}, "9. c\n10. d\n\t1. e\n", id="start-counts-on-and-a-nested-list-from-one"),
+        pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
+        pytest.param(
+            {"numbering": "letters"}, "- a. c\n- b. d\n\t- a. e\n", id="letters-are-bullets-led-by-the-letter"
+        ),
+        pytest.param(
+            {"start": 4, "numbering": "roman"},
+            "- iv. c\n- v. d\n\t- i. e\n",
+            id="roman-is-bullets-led-by-the-numeral-from-the-start",
+        ),
+    ],
+)
+def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], notion: str) -> None:
+    block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
+
+    assert notion_of([block]) == notion
+
+
+def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:
+    blocks = [
+        {"type": "callout", "tone": "danger", "icon": "🔥", "body": "hot"},
+        {"type": "note", "icon": "📌", "title": "Aside", "body": "x"},
+    ]
+
+    assert notion_of(blocks) == (
+        '<callout icon="🔥" color="red_bg">\n\thot\n</callout>\n'
+        '<callout icon="📌" color="gray_bg">\n\t**Aside**\n\tx\n</callout>\n'
+    )
+
+
+def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
+    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
+
+    assert notion_of([block]) == "- ❓ open\n- ☑️ done\n"
+
+
+def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
+    block = {"type": "list", "items": ["", "two"]}
+
+    assert notion_of([block]) == "- \n- two\n"
+
+
+def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
+    blocks = [
+        {
+            "type": "list",
+            "style": "decision",
+            "items": [
+                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
+            ],
+        },
+        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
+        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
+    ]
+
+    assert notion_of(blocks) == (
+        "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n- ✅ rolled out\n"
+    )
 
 
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:

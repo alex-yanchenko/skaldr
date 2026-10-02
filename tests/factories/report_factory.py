@@ -76,6 +76,13 @@ def make_table(columns: list[dict[str, Any]], **overrides: Any) -> dict[str, Any
     return {"type": "table", "columns": columns, **overrides}
 
 
+def make_label_table(kinds: list[str]) -> dict[str, Any]:
+    columns: list[dict[str, Any]] = [{"key": "label", "label": "Label"}]
+    columns += [{"key": f"c{index}", "label": f"C{index}", "kind": kind} for index, kind in enumerate(kinds)]
+    row = {"label": "x"} | {f"c{index}": 1 if kind == "number" else "" for index, kind in enumerate(kinds)}
+    return make_table(columns, rows=[row])
+
+
 def make_swimlane(steps: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     return {
         "type": "swimlane",
