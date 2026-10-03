@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 import pytest
 from keyring.backend import KeyringBackend
+from keyring.backends import null
 from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
@@ -55,6 +56,14 @@ class PlaintextKeyring(InMemoryKeyring):
     __module__ = "keyrings.alt.file"
 
 
+class PlaintextKeyringSubclass(PlaintextKeyring):
+    pass
+
+
+class NullKeyringSubclass(null.Keyring):
+    pass
+
+
 class ReadRecordingKeyring(InMemoryKeyring):
     def __init__(self) -> None:
         super().__init__()
@@ -75,7 +84,7 @@ class WriteRefusingKeyring(InMemoryKeyring):
 def insecure_keyring_refusal(backend_name: str) -> str:
     return (
         f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "
-        "secrets in files skaldr cannot vouch for, and the null and fail backends store nothing. Choose a "
+        "secrets where skaldr cannot vouch for them, and the null and fail backends store nothing. Choose a "
         "secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's keyringrc.cfg, "
         "for example keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring or "
         "keyring.backends.SecretService.Keyring"

@@ -364,20 +364,13 @@ def test_auth_notion_refuses_a_blank_client(
     assert capsys.readouterr().err == f"error: {error}\n"
 
 
-@pytest.fixture
-def plaintext() -> PlaintextKeyring:
-    backend = PlaintextKeyring()
-    keyring.set_keyring(backend)
-    return backend
-
-
 @pytest.mark.parametrize(
     "client_in_environment", [False, True], ids=["client to prompt for", "client from the environment"]
 )
 def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_opening_the_browser(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    plaintext: PlaintextKeyring,
+    plaintext_keyring: PlaintextKeyring,
     client_in_environment: bool,
 ) -> None:
     if client_in_environment:
@@ -392,7 +385,7 @@ def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_o
             ["notion", "--port", str(port)], transport=fake_api({}, seen), open_browser=browser
         )
 
-    assert (exit_code, capsys.readouterr().err, browser.opened, seen, plaintext.entries) == (
+    assert (exit_code, capsys.readouterr().err, browser.opened, seen, plaintext_keyring.entries) == (
         1,
         f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
         [],
@@ -402,14 +395,16 @@ def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_o
 
 
 def test_auth_jira_refuses_an_insecure_keyring_before_asking_for_anything(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], plaintext: PlaintextKeyring
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    plaintext_keyring: PlaintextKeyring,
 ) -> None:
     refuse_prompts(monkeypatch)
     seen: list[httpx2.Request] = []
 
     exit_code = auth_cli.main(["jira"], transport=fake_api({}, seen))
 
-    assert (exit_code, capsys.readouterr().err, seen, plaintext.entries) == (
+    assert (exit_code, capsys.readouterr().err, seen, plaintext_keyring.entries) == (
         1,
         f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
         [],

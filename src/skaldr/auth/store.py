@@ -173,18 +173,15 @@ def refuse_an_unusable_keychain(service: Service) -> None:
         keyring.get_password(KEYCHAIN_SERVICE, service)
 
 
-def _refuse_an_insecure_keyring() -> None:
-    with _keychain_errors_as_auth_errors():
-        _refuse_an_insecure_backend(keyring.get_keyring())
-
-
 def _save(service: Service, credentials: BaseModel) -> None:
     _refuse_an_insecure_keyring()
     with _keychain_errors_as_auth_errors():
         keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
 
 
-def _refuse_an_insecure_backend(backend: KeyringBackend) -> None:
+def _refuse_an_insecure_keyring() -> None:
+    with _keychain_errors_as_auth_errors():
+        backend = keyring.get_keyring()
     candidates: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
     for candidate in candidates:
         insecure_base = _insecure_keyring_base(type(candidate))
@@ -192,7 +189,7 @@ def _refuse_an_insecure_backend(backend: KeyringBackend) -> None:
             name = _backend_name(type(candidate), insecure_base)
             raise AuthError(
                 f"skaldr will not save to the keyring backend {name}: the keyrings.alt backends store "
-                "secrets in files skaldr cannot vouch for, and the null and fail backends store nothing. "
+                "secrets where skaldr cannot vouch for them, and the null and fail backends store nothing. "
                 "Choose a secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's "
                 "keyringrc.cfg, for example keyring.backends.macOS.Keyring, "
                 "keyring.backends.Windows.WinVaultKeyring or keyring.backends.SecretService.Keyring"

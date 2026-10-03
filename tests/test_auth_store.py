@@ -29,7 +29,9 @@ from tests.factories.auth_factory import (
     SITES_OFF_JIRA_CLOUD,
     InMemoryKeyring,
     LockedKeyring,
+    NullKeyringSubclass,
     PlaintextKeyring,
+    PlaintextKeyringSubclass,
     ReadRecordingKeyring,
     assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
@@ -255,36 +257,28 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
         operation()
 
 
-class CustomPlaintextKeyring(PlaintextKeyring):
-    pass
-
-
-class QuietKeyring(null.Keyring):
-    pass
-
-
 INSECURE_BACKENDS = [
-    pytest.param(PlaintextKeyring(), "keyrings.alt.file.PlaintextKeyring", id="keyrings.alt plaintext"),
-    pytest.param(null.Keyring(), "keyring.backends.null.Keyring", id="null"),
-    pytest.param(fail.Keyring(), "keyring.backends.fail.Keyring", id="fail"),
+    pytest.param(PlaintextKeyring, "keyrings.alt.file.PlaintextKeyring", id="keyrings.alt plaintext"),
+    pytest.param(null.Keyring, "keyring.backends.null.Keyring", id="null"),
+    pytest.param(fail.Keyring, "keyring.backends.fail.Keyring", id="fail"),
     pytest.param(
-        CustomPlaintextKeyring(),
-        "tests.test_auth_store.CustomPlaintextKeyring (a keyrings.alt.file.PlaintextKeyring)",
+        PlaintextKeyringSubclass,
+        "tests.factories.auth_factory.PlaintextKeyringSubclass (a keyrings.alt.file.PlaintextKeyring)",
         id="a subclass of a keyrings.alt backend",
     ),
     pytest.param(
-        QuietKeyring(),
-        "tests.test_auth_store.QuietKeyring (a keyring.backends.null.Keyring)",
+        NullKeyringSubclass,
+        "tests.factories.auth_factory.NullKeyringSubclass (a keyring.backends.null.Keyring)",
         id="a subclass of the null backend",
     ),
 ]
 
 
-@pytest.mark.parametrize(("backend", "backend_name"), INSECURE_BACKENDS)
+@pytest.mark.parametrize(("backend_class", "backend_name"), INSECURE_BACKENDS)
 def test_saving_to_an_insecure_keyring_backend_is_refused_by_name(
-    backend: KeyringBackend, backend_name: str
+    backend_class: type[KeyringBackend], backend_name: str
 ) -> None:
-    keyring.set_keyring(backend)
+    keyring.set_keyring(backend_class())
 
     with pytest.raises(AuthError) as raised:
         save_jira(make_jira_credentials())
@@ -292,11 +286,11 @@ def test_saving_to_an_insecure_keyring_backend_is_refused_by_name(
     assert str(raised.value) == insecure_keyring_refusal(backend_name)
 
 
-@pytest.mark.parametrize(("backend", "backend_name"), INSECURE_BACKENDS)
+@pytest.mark.parametrize(("backend_class", "backend_name"), INSECURE_BACKENDS)
 def test_the_keychain_check_before_sign_in_refuses_an_insecure_backend_by_name(
-    backend: KeyringBackend, backend_name: str
+    backend_class: type[KeyringBackend], backend_name: str
 ) -> None:
-    keyring.set_keyring(backend)
+    keyring.set_keyring(backend_class())
 
     with pytest.raises(AuthError) as raised:
         refuse_an_unusable_keychain("notion")
