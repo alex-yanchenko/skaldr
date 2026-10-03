@@ -139,7 +139,7 @@ def _as_document(example: GuideExample) -> dict[str, Any]:
 
 
 def _top_level_keys_named_in(text: str) -> set[str]:
-    sentence = re.search(r"^Top level is (.+?)nothing else\.", text, re.MULTILINE | re.DOTALL)
+    sentence = re.search(r"^Top level is (.+?)nothing\s+else\.", text, re.MULTILINE | re.DOTALL)
     assert sentence is not None
     return set(re.findall(r"`(\w+)`", sentence.group(1)))
 

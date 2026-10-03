@@ -49,8 +49,9 @@ The page cannot poll for changes: its own CSP is `default-src 'none'`, which blo
 network request, and a `file://` page could not fetch its own source anyway. So `--live` reloads on
 a signal it already has, which is you looking at the tab.
 
-That's the whole tool: point it at a content file, get an HTML page, a PDF, or Markdown for GitHub or Notion (see `--export` below). A few more commands
-help you write the content file and share the result:
+That's the tool: point it at a content file, get an HTML page, a PDF, or Markdown for GitHub
+or Notion (see `--export` below). A few more commands help you write the content file and share
+the result:
 
 ```bash
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
@@ -82,7 +83,7 @@ There are no styling flags: everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
+`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes the extra and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
@@ -125,15 +126,26 @@ blocks:
   # … more blocks
 ```
 
-Top level is `version` · `meta` · optional `badges` · `blocks` · optional `publish`, nothing else. Every block
-carries a `type` discriminator; the model is a pydantic discriminated union, so an unknown
-type, a field from the wrong block, or an unknown key each fails with a precise
+Top level is `version` · `meta` · `blocks` · optional `badges` · optional `publish`, nothing
+else. Every block carries a `type` discriminator; the model is a pydantic discriminated union, so
+an unknown type, a field from the wrong block, or an unknown key each fails with a precise
 `blocks.3.items.2.value`-style error before anything renders.
 
-**Blocks:** for prose and metadata, `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` · `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`; for numbers and state, `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` · `chart` · `comparison` · `matrix` · `timeline`; for processes, `flow` (a directional pipeline in arrow or step style, with an optional loop) · `fan` · `swimlane` · `walkthrough`; for recorded calls a reader can re-run, `request` · `request_flow`; and for layout, `section` (collapsible) · `panel` · `toggle` · `tabs` · `grid` (a bounded 6-column layout, with optional per-cell emphasis panels). `skaldr --guide` describes each one. The `table` is the
-workhorse: typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
-`tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
-total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
+**Blocks:** `skaldr --guide` describes each one.
+
+- Prose and metadata: `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` ·
+  `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`
+- Numbers and state: `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` ·
+  `chart` · `comparison` · `matrix` · `timeline`
+- Processes: `flow` (a directional pipeline in arrow or step style, with an optional loop) ·
+  `fan` · `swimlane` · `walkthrough`
+- Recorded calls a reader can re-run: `request` · `request_flow`
+- Layout: `section` (collapsible) · `panel` · `toggle` · `tabs` · `grid` (a bounded 6-column
+  layout, with optional per-cell emphasis panels)
+
+The `table` is the workhorse: typed columns, grouped subtotals, sub-rows, colour-only `indicator`
+dots, row-level `tone`, and a `reconcile` block that hard-fails the build if the counts don't sum
+to a declared total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
 nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
 `~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`, `[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math` block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
 
