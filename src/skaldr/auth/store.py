@@ -23,7 +23,7 @@ _NOTION_ACCESS_TOKEN = NOTION_ENVIRONMENT[0]
 _NOTION_CLIENT_ENVIRONMENT = NOTION_ENVIRONMENT[1:]
 JIRA_ENVIRONMENT = ("JIRA_SITE", "JIRA_EMAIL", "JIRA_API_TOKEN")
 _JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
-_INSECURE_KEYRINGS = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
+_INSECURE_KEYRING_MODULES = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
 _SITE_SHAPE = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
@@ -164,33 +164,57 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
         raise AuthError(f"The system keychain is unavailable: {exc}") from exc
 
 
-def refuse_an_insecure_keyring() -> None:
+def refuse_an_unusable_keychain(service: Service) -> None:
+    _refuse_an_insecure_keyring()
+    with _keychain_errors_as_auth_errors():
+        keyring.get_password(KEYCHAIN_SERVICE, service)
+
+
+def _refuse_an_insecure_keyring() -> None:
     with _keychain_errors_as_auth_errors():
         _refuse_an_insecure_backend(keyring.get_keyring())
 
 
 def _save(service: Service, credentials: BaseModel) -> None:
-    refuse_an_insecure_keyring()
+    _refuse_an_insecure_keyring()
     with _keychain_errors_as_auth_errors():
         keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
 
 
 def _refuse_an_insecure_backend(backend: KeyringBackend) -> None:
-    chained: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
-    for candidate in chained:
-        module = type(candidate).__module__
-        if _is_an_insecure_keyring_module(module):
+    candidates: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
+    for candidate in candidates:
+        insecure_base = _insecure_keyring_base(type(candidate))
+        if insecure_base is not None:
+            name = _backend_name(type(candidate), insecure_base)
             raise AuthError(
-                f"The keyring backend {module}.{type(candidate).__qualname__} does not keep secrets in a "
-                "secure store, so skaldr will not save to it. Choose a secure backend with the "
-                "PYTHON_KEYRING_BACKEND environment variable or keyring's keyringrc.cfg, for example "
-                "keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring or "
-                "keyring.backends.SecretService.Keyring"
+                f"skaldr will not save to the keyring backend {name}: the keyrings.alt backends store "
+                "secrets in files skaldr cannot vouch for, and the null and fail backends store nothing. "
+                "Choose a secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's "
+                "keyringrc.cfg, for example keyring.backends.macOS.Keyring, "
+                "keyring.backends.Windows.WinVaultKeyring or keyring.backends.SecretService.Keyring"
             )
 
 
+def _insecure_keyring_base(backend_class: type) -> type | None:
+    return next(
+        (base for base in backend_class.__mro__ if _is_an_insecure_keyring_module(base.__module__)), None
+    )
+
+
+def _backend_name(backend_class: type, insecure_base: type) -> str:
+    name = _class_path(backend_class)
+    return name if backend_class is insecure_base else f"{name} (a {_class_path(insecure_base)})"
+
+
+def _class_path(backend_class: type) -> str:
+    return f"{backend_class.__module__}.{backend_class.__qualname__}"
+
+
 def _is_an_insecure_keyring_module(module: str) -> bool:
-    return any(module == insecure or module.startswith(f"{insecure}.") for insecure in _INSECURE_KEYRINGS)
+    return any(
+        module == insecure or module.startswith(f"{insecure}.") for insecure in _INSECURE_KEYRING_MODULES
+    )
 
 
 def _load_from_keychain(service: Service, model: type[CredentialsT]) -> CredentialsT | None:

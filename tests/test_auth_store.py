@@ -17,6 +17,7 @@ from skaldr.auth.store import (
     load_jira,
     load_notion,
     normalise_site,
+    refuse_an_unusable_keychain,
     save_jira,
     save_notion,
 )
@@ -252,8 +253,13 @@ def test_forget_deletes_the_entry_and_reports_whether_one_existed(keychain: InMe
 
 @pytest.mark.parametrize(
     "operation",
-    [lambda: save_notion(make_notion_credentials()), load_jira, lambda: forget("jira")],
-    ids=["save", "load", "forget"],
+    [
+        lambda: save_notion(make_notion_credentials()),
+        load_jira,
+        lambda: forget("jira"),
+        lambda: refuse_an_unusable_keychain("notion"),
+    ],
+    ids=["save", "load", "forget", "the check before sign-in"],
 )
 def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
     keyring.set_keyring(LockedKeyring())
@@ -262,22 +268,63 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
         operation()
 
 
-@pytest.mark.parametrize(
-    ("backend", "name"),
-    [
-        (PlaintextKeyring(), "keyrings.alt.file.PlaintextKeyring"),
-        (null.Keyring(), "keyring.backends.null.Keyring"),
-        (fail.Keyring(), "keyring.backends.fail.Keyring"),
-    ],
-    ids=["keyrings.alt plaintext", "null", "fail"],
-)
-def test_saving_to_an_insecure_keyring_backend_is_refused_by_name(backend: KeyringBackend, name: str) -> None:
+class CustomPlaintextKeyring(PlaintextKeyring):
+    pass
+
+
+class QuietKeyring(null.Keyring):
+    pass
+
+
+INSECURE_BACKENDS = [
+    pytest.param(PlaintextKeyring(), "keyrings.alt.file.PlaintextKeyring", id="keyrings.alt plaintext"),
+    pytest.param(null.Keyring(), "keyring.backends.null.Keyring", id="null"),
+    pytest.param(fail.Keyring(), "keyring.backends.fail.Keyring", id="fail"),
+    pytest.param(
+        CustomPlaintextKeyring(),
+        "tests.test_auth_store.CustomPlaintextKeyring (a keyrings.alt.file.PlaintextKeyring)",
+        id="a subclass of a keyrings.alt backend",
+    ),
+    pytest.param(
+        QuietKeyring(),
+        "tests.test_auth_store.QuietKeyring (a keyring.backends.null.Keyring)",
+        id="a subclass of the null backend",
+    ),
+]
+
+
+@pytest.mark.parametrize(("backend", "backend_name"), INSECURE_BACKENDS)
+def test_saving_to_an_insecure_keyring_backend_is_refused_by_name(
+    backend: KeyringBackend, backend_name: str
+) -> None:
     keyring.set_keyring(backend)
 
     with pytest.raises(AuthError) as raised:
         save_jira(make_jira_credentials())
 
-    assert str(raised.value) == insecure_keyring_refusal(name)
+    assert str(raised.value) == insecure_keyring_refusal(backend_name)
+
+
+@pytest.mark.parametrize(("backend", "backend_name"), INSECURE_BACKENDS)
+def test_the_keychain_check_before_sign_in_refuses_an_insecure_backend_by_name(
+    backend: KeyringBackend, backend_name: str
+) -> None:
+    keyring.set_keyring(backend)
+
+    with pytest.raises(AuthError) as raised:
+        refuse_an_unusable_keychain("notion")
+
+    assert str(raised.value) == insecure_keyring_refusal(backend_name)
+
+
+def test_the_keychain_check_before_sign_in_passes_a_working_keychain_and_changes_nothing(
+    keychain: InMemoryKeyring,
+) -> None:
+    save_jira(make_jira_credentials())
+
+    refuse_an_unusable_keychain("jira")
+
+    assert keychain.entries == {("skaldr", "jira"): make_jira_credentials().model_dump_json()}
 
 
 def test_a_refused_plaintext_keyring_receives_nothing() -> None:

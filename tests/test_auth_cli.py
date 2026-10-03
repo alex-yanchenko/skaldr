@@ -238,21 +238,42 @@ def test_auth_notion_refuses_a_client_secret_with_characters_outside_ascii(
     )
 
 
-def test_auth_notion_reports_a_keychain_it_cannot_save_to(
+def test_auth_notion_reports_a_locked_keychain_before_listening_or_opening_the_browser(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     notion_client_in_environment(monkeypatch)
     keyring.set_keyring(LockedKeyring())
     browser = FakeBrowser(approving)
+    seen: list[httpx2.Request] = []
 
-    exit_code = auth_cli.main(
-        ["notion", "--port", str(free_port())],
-        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
-        open_browser=browser,
+    with socket.create_server(("127.0.0.1", 0)) as blocker:
+        port = blocker.getsockname()[1]
+        exit_code = auth_cli.main(
+            ["notion", "--port", str(port)], transport=fake_api({}, seen), open_browser=browser
+        )
+
+    assert (exit_code, capsys.readouterr().err, browser.opened, seen) == (
+        1,
+        "error: The system keychain is unavailable: locked\n",
+        [],
+        [],
     )
 
-    assert (exit_code, browser.finished()) == (1, [200])
-    assert capsys.readouterr().err == "error: The system keychain is unavailable: locked\n"
+
+def test_auth_jira_reports_a_locked_keychain_before_asking_for_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keyring.set_keyring(LockedKeyring())
+    refuse_prompts(monkeypatch)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({}, seen))
+
+    assert (exit_code, capsys.readouterr().err, seen) == (
+        1,
+        "error: The system keychain is unavailable: locked\n",
+        [],
+    )
 
 
 @pytest.mark.parametrize(
@@ -276,16 +297,24 @@ def test_auth_notion_refuses_a_blank_client(
     assert capsys.readouterr().err == f"error: {error}\n"
 
 
+@pytest.fixture
+def plaintext() -> PlaintextKeyring:
+    backend = PlaintextKeyring()
+    keyring.set_keyring(backend)
+    return backend
+
+
 @pytest.mark.parametrize(
     "client_in_environment", [False, True], ids=["client to prompt for", "client from the environment"]
 )
 def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_opening_the_browser(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], client_in_environment: bool
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    plaintext: PlaintextKeyring,
+    client_in_environment: bool,
 ) -> None:
     if client_in_environment:
         notion_client_in_environment(monkeypatch)
-    plaintext = PlaintextKeyring()
-    keyring.set_keyring(plaintext)
     refuse_prompts(monkeypatch)
     browser = FakeBrowser(approving)
     seen: list[httpx2.Request] = []
@@ -306,10 +335,8 @@ def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_o
 
 
 def test_auth_jira_refuses_an_insecure_keyring_before_asking_for_anything(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], plaintext: PlaintextKeyring
 ) -> None:
-    plaintext = PlaintextKeyring()
-    keyring.set_keyring(plaintext)
     refuse_prompts(monkeypatch)
     seen: list[httpx2.Request] = []
 
