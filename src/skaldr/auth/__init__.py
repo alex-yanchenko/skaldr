@@ -46,7 +46,3 @@ class CaughtWithoutChaining(Generic[CaughtT]):
         if self._caught is None:
             raise AssertionError(f"no {self._caught_type.__name__} was caught")
         return self._caught
-
-
-def caught_without_chaining(caught_type: type[CaughtT]) -> CaughtWithoutChaining[CaughtT]:
-    return CaughtWithoutChaining(caught_type)

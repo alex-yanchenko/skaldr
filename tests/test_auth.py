@@ -1,6 +1,55 @@
 import pytest
 
-from skaldr.auth import printable_only
+from skaldr.auth import CaughtWithoutChaining, printable_only
+
+
+class SiteRefusedError(ValueError):
+    pass
+
+
+def test_caught_without_chaining_catches_the_named_type() -> None:
+    refused = ValueError("refused")
+
+    with CaughtWithoutChaining(ValueError) as caught:
+        raise refused
+
+    assert caught.error is refused
+
+
+def test_caught_without_chaining_catches_a_subclass_of_the_named_type() -> None:
+    refused = SiteRefusedError("refused")
+
+    with CaughtWithoutChaining(ValueError) as caught:
+        raise refused
+
+    assert caught.error is refused
+
+
+def test_caught_without_chaining_lets_an_unrelated_exception_through() -> None:
+    with pytest.raises(TypeError, match=r"^unrelated$"), CaughtWithoutChaining(ValueError):
+        raise TypeError("unrelated")
+
+
+def test_caught_without_chaining_has_no_error_when_nothing_was_raised() -> None:
+    with CaughtWithoutChaining(ValueError) as caught:
+        pass
+
+    with pytest.raises(AssertionError, match=r"^no ValueError was caught$"):
+        _ = caught.error
+
+
+def test_an_error_raised_after_the_block_carries_no_chain() -> None:
+    with CaughtWithoutChaining(ValueError) as caught:
+        raise ValueError("secret-value")
+
+    with pytest.raises(RuntimeError) as raised:
+        raise RuntimeError(f"refused: {type(caught.error).__name__}")
+
+    assert (str(raised.value), raised.value.__cause__, raised.value.__context__) == (
+        "refused: ValueError",
+        None,
+        None,
+    )
 
 
 @pytest.mark.parametrize(

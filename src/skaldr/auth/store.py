@@ -11,7 +11,7 @@ from keyring.errors import KeyringError, PasswordDeleteError
 from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
-from skaldr.auth import caught_without_chaining
+from skaldr.auth import CaughtWithoutChaining
 from skaldr.errors import AuthError
 
 KEYCHAIN_SERVICE = "skaldr"
@@ -83,7 +83,7 @@ def normalise_site(typed: str) -> str:
 def jira_credentials(
     site: str, email: str, api_token: str, display_name: str | None = None
 ) -> JiraCredentials:
-    with caught_without_chaining(ValidationError) as invalid:
+    with CaughtWithoutChaining(ValidationError) as invalid:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
     raise AuthError(invalid.error.errors(include_input=False)[0]["msg"])
 
@@ -222,7 +222,7 @@ def _load_from_keychain(service: Service, model: type[CredentialsT]) -> Credenti
         stored = keyring.get_password(KEYCHAIN_SERVICE, service)
     if stored is None:
         return None
-    with caught_without_chaining(ValidationError):
+    with CaughtWithoutChaining(ValidationError):
         return model.model_validate_json(stored)
     raise UnreadableEntryError(
         f"The keychain entry for {service} is unreadable; run `skaldr auth {service}` again"
@@ -261,6 +261,6 @@ def _jira_from_environment() -> JiraCredentials | None:
     values = _all_or_none_from_environment(JIRA_ENVIRONMENT)
     if values is None:
         return None
-    with caught_without_chaining(AuthError) as refused:
+    with CaughtWithoutChaining(AuthError) as refused:
         return jira_credentials(values[_JIRA_SITE], values[_JIRA_EMAIL], values[_JIRA_API_TOKEN])
     raise AuthError(f"{_JIRA_SITE}: {refused.error}")

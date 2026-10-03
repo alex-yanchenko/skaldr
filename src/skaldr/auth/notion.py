@@ -19,7 +19,7 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining, printable_only
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
 from skaldr.auth.store import NotionCredentials, save_notion
 from skaldr.errors import AuthError
 
@@ -177,7 +177,7 @@ def _basic_auth_with_json_body(
 
 
 def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
-    with caught_without_chaining(ValidationError) as invalid:
+    with CaughtWithoutChaining(ValidationError) as invalid:
         try:
             return _NotionToken.model_validate(request())
         except AuthlibBaseError as exc:

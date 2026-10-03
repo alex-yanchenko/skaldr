@@ -3,7 +3,7 @@ from http import HTTPStatus
 import httpx2
 from pydantic import BaseModel, Field, ValidationError
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining
 from skaldr.auth.store import JiraCredentials, jira_credentials
 from skaldr.errors import AuthError
 
@@ -35,7 +35,7 @@ def verify_jira_token(
         )
     if response.status_code != HTTPStatus.OK:
         raise AuthError(f"Jira answered HTTP {response.status_code} for {_MYSELF_PATH}")
-    with caught_without_chaining(ValidationError):
+    with CaughtWithoutChaining(ValidationError):
         user = _JiraUser.model_validate_json(response.content)
         return unverified.model_copy(update={"display_name": user.display_name})
     raise AuthError(f"Jira's {_MYSELF_PATH} answer is not a user record")
