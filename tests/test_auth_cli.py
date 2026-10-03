@@ -19,12 +19,15 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     PlaintextKeyring,
+    WriteRefusingKeyring,
     approving,
+    basic_auth_header,
     fake_api,
     free_port,
     insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
+    summarise,
 )
 
 SIGNED_IN_NOTION = make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
@@ -274,6 +277,53 @@ def test_auth_notion_reports_a_locked_keychain_before_listening_or_opening_the_b
         "error: The system keychain is unavailable: locked\n",
         [],
         [],
+    )
+
+
+NOTION_REVOKE_OF_THE_NEW_TOKEN = {
+    "method": "POST",
+    "url": "https://api.notion.com/v1/oauth/revoke",
+    "authorization": basic_auth_header("client-id", "client-secret"),
+    "content_type": "application/json",
+    "body": {"token": "new-access"},
+}
+
+
+@pytest.mark.parametrize(
+    ("revoke_status", "error"),
+    [
+        (200, "The system keychain is unavailable: denied"),
+        (
+            400,
+            "The system keychain is unavailable: denied. The token Notion just issued could not be saved, "
+            "and revoking it failed too (Notion did not revoke the token: HTTP 400), so remove the "
+            "connection in Notion under Settings, Connections",
+        ),
+    ],
+    ids=["the revoke succeeds", "the revoke fails too"],
+)
+def test_auth_notion_revokes_a_token_the_keychain_refuses_to_save(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], revoke_status: int, error: str
+) -> None:
+    notion_client_in_environment(monkeypatch)
+    keyring.set_keyring(WriteRefusingKeyring())
+    browser = FakeBrowser(approving)
+    seen: list[httpx2.Request] = []
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, TOKEN_RESPONSE),
+        "/v1/oauth/revoke": (revoke_status, {}),
+    }
+
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())], transport=fake_api(routes, seen), open_browser=browser
+    )
+
+    revokes = [summarise(request) for request in seen if request.url.path == "/v1/oauth/revoke"]
+    assert (exit_code, browser.finished(), revokes, capsys.readouterr().err) == (
+        1,
+        [200],
+        [NOTION_REVOKE_OF_THE_NEW_TOKEN],
+        f"error: {error}\n",
     )
 
 

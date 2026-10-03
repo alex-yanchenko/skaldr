@@ -127,8 +127,22 @@ def _sign_in_to_notion(
     credentials = sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
-    save_notion(credentials)
+    _save_or_revoke_notion(credentials, transport)
     print(f"Signed in to Notion workspace {_workspace(credentials)}. Saved to the keychain.")
+
+
+def _save_or_revoke_notion(credentials: NotionCredentials, transport: httpx2.BaseTransport | None) -> None:
+    try:
+        save_notion(credentials)
+    except AuthError as unsaved:
+        try:
+            revoke_notion_token(credentials, transport=transport)
+        except AuthError as unrevoked:
+            raise AuthError(
+                f"{unsaved}. The token Notion just issued could not be saved, and revoking it failed too "
+                f"({unrevoked}), so remove the connection in Notion under Settings, Connections"
+            ) from unsaved
+        raise
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:

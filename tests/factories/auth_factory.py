@@ -50,6 +50,12 @@ class PlaintextKeyring(InMemoryKeyring):
     __module__ = "keyrings.alt.file"
 
 
+class WriteRefusingKeyring(InMemoryKeyring):
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        raise KeyringError("denied")
+
+
 def insecure_keyring_refusal(backend_name: str) -> str:
     return (
         f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "
