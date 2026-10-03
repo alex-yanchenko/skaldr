@@ -12,6 +12,7 @@ from typing import TypedDict
 from markupsafe import Markup, escape
 from typing_extensions import assert_never
 
+from skaldr import compute
 from skaldr.models import Chart, Tone
 
 
@@ -163,7 +164,7 @@ def _donut_svg(chart: Chart) -> str:
             'transform="rotate(-90)"/>'
         )
         offset += dash
-    centre = escape(format_total(total))
+    centre = escape(compute.fmt(total))
     body.append(
         f'<text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7">{centre}</text>'
     )
@@ -173,11 +174,6 @@ def _donut_svg(chart: Chart) -> str:
         f'<svg viewBox="0 0 210 200" role="img" preserveAspectRatio="xMidYMid meet">'
         f'<g transform="translate({_D_CX},{_D_CY})">{inner}</g></svg>'
     )
-
-
-def format_total(value: float) -> str:
-    """Thousands-separated integer if whole, else one decimal — for the donut centre total."""
-    return f"{value:,.0f}" if value == int(value) else f"{value:,.1f}"
 
 
 def _svg(children: list[str]) -> str:

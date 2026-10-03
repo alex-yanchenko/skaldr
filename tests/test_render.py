@@ -43,6 +43,8 @@ from tests.factories import (
     make_table,
     make_tabs,
     make_toggle,
+    markdown_of,
+    notion_of,
 )
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
@@ -4579,6 +4581,36 @@ def test_chart_donut_renders_arcs_centre_total_and_derived_shares() -> None:
     # shares are derived, not authored, and shown in the legend
     assert '<i style="background:var(--success-fg)"></i>A 60%' in html
     assert '<i style="background:var(--danger-fg)"></i>B 40%' in html
+
+
+@pytest.mark.parametrize(
+    ("values", "total"),
+    [
+        pytest.param([1.25, 1233.31], "1,234.56", id="two-decimals"),
+        pytest.param([5.25, 5], "10.25", id="decimal-plus-whole"),
+        pytest.param([60, 40], "100", id="whole"),
+    ],
+)
+def test_a_donut_centre_total_reads_the_same_as_the_total_both_exports_write(
+    values: list[float], total: str
+) -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": f"S{index}", "value": value} for index, value in enumerate(values)],
+    }
+
+    centre = re.search(
+        r'<text class="c-total"[^>]*>([^<]*)</text>', render_html(parse_report(make_report(blocks=[donut])))
+    )
+    markdown_total = re.search(r"^\| \*\*Total\*\* \| \*\*([^*]*)\*\* \|", markdown_of([donut]), re.MULTILINE)
+    notion_total = re.search(r"<td>\*\*Total\*\*</td>\s*<td>\*\*([^*]*)\*\*</td>", notion_of([donut]))
+
+    assert tuple(match.group(1) if match else None for match in (centre, markdown_total, notion_total)) == (
+        total,
+        total,
+        total,
+    )
 
 
 def test_chart_escapes_author_category_labels() -> None:
