@@ -1,14 +1,16 @@
 import re
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
 from itertools import takewhile
-from typing import Final, Literal
+from typing import Final, Literal, TypeGuard
 from xml.etree.ElementTree import Element, tostring
 
+from latex2mathml import commands
 from latex2mathml.commands import MATRICES, NEWENVIRONMENT
-from latex2mathml.converter import convert_to_element
+from latex2mathml.converter import MOVABLE_LIMIT_TEXTS, OPERATORS, convert_to_element
+from latex2mathml.symbols_parser import SYMBOLS
 from latex2mathml.tokenizer import tokenize
 from webcolors import names, normalize_hex
 
@@ -58,6 +60,68 @@ MATHML_ATTRIBUTES: Final = frozenset(
     }
 )
 TOKEN_ELEMENTS: Final = frozenset({"mi", "mo", "mn"})
+LETTER_COMMAND = re.compile(r"\\[a-zA-Z]+\*?")
+FONT_PREFIX_NAMING_NO_COMMAND: Final = commands.MATH
+# external:latex2mathml its walker ends a \root index at a literal \of that no command table holds
+COMMANDS_OUTSIDE_LATEX2MATHML_TABLES: Final = frozenset({r"\of"})
+COMMANDS_DEFINING_A_COMMAND: Final = frozenset(
+    {commands.NEWCOMMAND, commands.DEF, commands.DECLAREMATHOPERATOR}
+)
+COMMANDS_TAKING_LITERAL_TEXT: Final = frozenset(
+    {
+        commands.CLAP,
+        commands.CLASS,
+        commands.COLOR,
+        commands.EMPH,
+        commands.FBOX,
+        commands.HBOX,
+        commands.HREF,
+        commands.LLAP,
+        commands.MBOX,
+        commands.RLAP,
+        commands.STYLE,
+        commands.TAG,
+        commands.TAGSTAR,
+        commands.TEXT,
+        commands.TEXTBF,
+        commands.TEXTCOLOR,
+        commands.TEXTIT,
+        commands.TEXTMD,
+        commands.TEXTNORMAL,
+        commands.TEXTRM,
+        commands.TEXTSF,
+        commands.TEXTTT,
+        commands.TEXTUP,
+        commands.VERB,
+    }
+)
+
+
+def _commands_latex2mathml_knows() -> frozenset[str]:
+    names = {
+        *SYMBOLS,
+        *OPERATORS,
+        *MOVABLE_LIMIT_TEXTS,
+        *COMMANDS_OUTSIDE_LATEX2MATHML_TABLES,
+        *(name for value in vars(commands).values() for name in _names_in_command_table(value)),
+    }
+    return frozenset(
+        name for name in names if LETTER_COMMAND.fullmatch(name) and name != FONT_PREFIX_NAMING_NO_COMMAND
+    )
+
+
+def _names_in_command_table(value: object) -> Iterator[str]:
+    if isinstance(value, str):
+        yield value
+    elif _is_command_table(value):
+        yield from (member for member in value if isinstance(member, str))
+
+
+def _is_command_table(value: object) -> TypeGuard[Iterable[object]]:
+    return isinstance(value, (tuple, dict))
+
+
+LATEX2MATHML_COMMANDS: Final = _commands_latex2mathml_knows()
 
 
 @dataclass(frozen=True)
@@ -104,7 +168,9 @@ CONTROL_CHARACTERS_A_PAGE_KEEPS: Final = frozenset({"\t", "\n"})
 def mathml(expression: str, display: MathDisplay) -> str:
     _refuse_notion_equation_fence(expression)
     root = _converted(expression, display)
-    _refuse_unknown_environment(expression)
+    tokens = tuple(tokenize(expression))
+    _refuse_unknown_environment(tokens, expression)
+    _refuse_unknown_command_token(tokens, expression)
     for element in root.iter():
         _decode_converter_entities(element)
         _refuse_attributes_outside_mathml(element, expression)
@@ -144,8 +210,7 @@ def _refuse_attributes_outside_mathml(element: Element, expression: str) -> None
             )
 
 
-def _refuse_unknown_environment(expression: str) -> None:
-    tokens = list(tokenize(expression))
+def _refuse_unknown_environment(tokens: Sequence[str], expression: str) -> None:
     defined = KNOWN_ENVIRONMENTS | _newly_defined_environments(tokens)
     for token in tokens:
         opening = ENVIRONMENT_OPENING.fullmatch(token)
@@ -190,13 +255,41 @@ def _is_css_colour(value: str) -> bool:
     return True
 
 
+def _refuse_unknown_command_token(tokens: Sequence[str], expression: str) -> None:
+    known = LATEX2MATHML_COMMANDS | _newly_defined_commands(tokens)
+    for index, token in enumerate(tokens):
+        if index > 0 and tokens[index - 1] in COMMANDS_TAKING_LITERAL_TEXT:
+            continue
+        if token == commands.BACKSLASH:
+            raise _unknown_command(expression, token + _first_character_after(tokens, index))
+        if LETTER_COMMAND.fullmatch(token) and token not in known:
+            raise _unknown_command(expression, token)
+
+
+def _newly_defined_commands(tokens: Sequence[str]) -> frozenset[str]:
+    return frozenset(
+        _braced_argument(tokens[index + 1 :])
+        for index, token in enumerate(tokens)
+        if token in COMMANDS_DEFINING_A_COMMAND
+    )
+
+
+def _first_character_after(tokens: Sequence[str], index: int) -> str:
+    following = tokens[index + 1 : index + 2]
+    return following[0][:1] if following else ""
+
+
 def _refuse_unknown_command(element: Element, expression: str) -> None:
     text = element.text or ""
     if element.tag in TOKEN_ELEMENTS and text.startswith("\\") and len(text) > 1:
-        raise ReportError(
-            f"math expression '{expression}' uses {text}, which latex2mathml does not know: check its "
-            r"spelling, or write \text{...} for literal text"
-        )
+        raise _unknown_command(expression, text)
+
+
+def _unknown_command(expression: str, command: str) -> ReportError:
+    return ReportError(
+        f"math expression '{expression}' uses {command}, which latex2mathml does not know: check its "
+        r"spelling, or write \text{...} for literal text"
+    )
 
 
 def _refuse_element_missing_a_part(element: Element, expression: str) -> None:

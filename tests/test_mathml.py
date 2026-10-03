@@ -393,6 +393,17 @@ def test_common_commands_emit_only_allowlisted_attributes(expression: str) -> No
         pytest.param(r"\simga", r"\simga", id="misspelt-greek-letter"),
         pytest.param(r"x + \unknown{y}", r"\unknown", id="unknown-command-with-an-argument"),
         pytest.param(r"\operatorname{\foo}", r"\foo", id="unknown-command-in-an-operator-name"),
+        pytest.param(r"\q", r"\q", id="one-letter-command"),
+        pytest.param(r"x + \q", r"\q", id="one-letter-command-after-a-term"),
+        pytest.param(r"\mathbbb{R}", r"\mathbbb", id="misspelt-font-on-a-letter"),
+        pytest.param(r"\mathbbm{1}", r"\mathbbm", id="misspelt-font-on-a-digit"),
+        pytest.param(r"\mathcolor{red}{x}", r"\mathcolor", id="command-latex2mathml-reads-as-a-font"),
+        pytest.param(r"\math{x}", r"\math", id="bare-font-prefix"),
+        pytest.param(r"a \< b", r"\<", id="backslash-before-a-symbol"),
+        pytest.param("x \\", "\\", id="trailing-backslash"),
+        pytest.param(r"\hspace{\simga}", r"\simga", id="unknown-command-as-a-width"),
+        pytest.param(r"\big\langl", r"\langl", id="unknown-command-as-a-delimiter"),
+        pytest.param(r"a \[ b", r"\[", id="escaped-bracket-the-converter-leaves-as-written"),
     ],
 )
 def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> None:
@@ -403,6 +414,30 @@ def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> No
         f"math expression '{expression}' uses {command}, which latex2mathml does not know: check its "
         r"spelling, or write \text{...} for literal text"
     )
+
+
+@pytest.mark.parametrize(
+    ("expression", "markup"),
+    [
+        pytest.param(
+            r"\newcommand{\R}{\mathbb{R}} \R", "<mi>\N{DOUBLE-STRUCK CAPITAL R}</mi>", id="newcommand"
+        ),
+        pytest.param(r"\newcommand\R{x} \R", "<mi>x</mi>", id="newcommand-without-braces"),
+        pytest.param(r"\def\R{x} \R", "<mi>x</mi>", id="def"),
+        pytest.param(r"\DeclareMathOperator{\Tr}{Tr} \Tr A", "<mo>Tr</mo><mi>A</mi>", id="math-operator"),
+        pytest.param(
+            r"\mathbb{RR}",
+            '<mrow><mi mathvariant="double-struck">R</mi><mi mathvariant="double-struck">R</mi></mrow>',
+            id="font-on-a-group",
+        ),
+        pytest.param(r"\textbf{\foo}", '<mtext mathvariant="bold">\\foo</mtext>', id="inside-bold-text"),
+        pytest.param(r"\verb|\foo|", '<mtext mathvariant="monospace">\\foo</mtext>', id="inside-verb"),
+    ],
+)
+def test_a_command_the_expression_defines_or_one_inside_literal_text_converts(
+    expression: str, markup: str
+) -> None:
+    assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
 
 
 FRACTION_MISSING_A_PART = (
