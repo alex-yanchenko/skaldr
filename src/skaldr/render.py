@@ -2,7 +2,7 @@
 
 The page carries its own skeleton (`<!doctype>`, `<meta charset>`, viewport), inlines all CSS,
 and uses system fonts only — so it renders anywhere with no external resources. Rich-text prose
-is a limited markdown subset (bold/italic/code/strike/links); everything else is escaped, so a
+is a limited markdown subset (see `skaldr --guide`, "Rich text"); everything else is escaped, so a
 content file can never smuggle in raw HTML.
 """
 
@@ -27,7 +27,6 @@ from skaldr.models import (
     Section,
     ToneLiteral,
     iter_requests,
-    load_report,
     package_text,
     unresolvable_request_variables,
 )
@@ -397,10 +396,3 @@ def render_report(
     html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     replace_file(out_path, html)
-
-
-def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
-    report = load_report(data_path)
-    source = data_path.read_text(encoding="utf-8")
-    render_report(report, out_path, embed=embed, source=source)
-    return report
