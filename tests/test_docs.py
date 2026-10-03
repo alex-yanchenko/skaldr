@@ -7,6 +7,7 @@ from typing import Any, get_args
 
 import pytest
 import yaml
+from jinja2 import Environment
 from markdown_it import MarkdownIt
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
@@ -90,7 +91,7 @@ def _yaml_examples(guide: str) -> list[GuideExample]:
     return [
         GuideExample(token.map[0] + 1 if token.map else 0, token.content)
         for token in fences
-        if token.info.strip().split(maxsplit=1)[:1] in ([info] for info in _YAML_INFO)
+        if (first := token.info.split(maxsplit=1)[:1]) and first[0] in _YAML_INFO
     ]
 
 
@@ -219,6 +220,47 @@ def test_the_skeleton_check_names_a_key_the_models_do_not_define(
 
 
 @pytest.mark.parametrize(
+    ("text", "as_document", "unknown"),
+    [
+        pytest.param(
+            "- type: cards\n  bogus_key: 1\n  items: [ ... ]\n",
+            _block_list,
+            [("blocks", 0, "cards", "bogus_key")],
+            id="cards",
+        ),
+        pytest.param(
+            "- type: grid\n  cells:\n    - { span: 2, bogus_key: 1, blocks: [ ... ] }\n",
+            _block_list,
+            [("blocks", 0, "grid", "cells", 0, "bogus_key")],
+            id="grid",
+        ),
+        pytest.param(
+            '- { key: access, label: "Access", bogus_key: 1 }\n',
+            _table_columns,
+            [("blocks", 0, "table", "columns", 0, "bogus_key")],
+            id="table-columns",
+        ),
+        pytest.param(
+            "columns:\n  - { id: s2, name: Sprint 2, bogus_key: 1 }\n",
+            _swimlane_fields,
+            [("blocks", 0, "swimlane", "columns", 0, "bogus_key")],
+            id="swimlane-columns",
+        ),
+    ],
+)
+def test_each_skeleton_adapter_carries_an_unknown_key_to_the_check(
+    text: str, as_document: Callable[[JsonValue], JsonValue], unknown: list[tuple[str | int, ...]]
+) -> None:
+    assert _unknown_keys(_skeleton_document(text, as_document)) == unknown
+
+
+def test_placeholder_keys_and_items_are_dropped_at_every_depth() -> None:
+    skeleton: JsonValue = {"...": None, "blocks": ["...", {"type": "grid", "cells": ["…"]}], "…": 1}
+
+    assert _without_placeholders(skeleton) == {"blocks": [{"type": "grid", "cells": []}]}
+
+
+@pytest.mark.parametrize(
     "example", [pytest.param(example, id=f"line-{example.line}") for example in _BUILDABLE]
 )
 def test_a_guide_example_builds_when_copied(example: GuideExample) -> None:
@@ -251,7 +293,8 @@ def test_the_skill_and_the_readme_name_both_export_targets(text: str) -> None:
 
 
 _EM_OR_EN_DASH = re.compile("[\N{EM DASH}\N{EN DASH}]")
-_TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|<!--.*?-->|/\*.*?\*/", re.DOTALL)
+_HTML_OR_CSS_COMMENT = re.compile(r"<!--.*?-->|/\*.*?\*/", re.DOTALL)
+_JINJA_COMMENT_TOKENS = ("comment_begin", "comment", "comment_end")
 
 _SHIPPED_PROSE = (
     "README.md",
@@ -302,19 +345,30 @@ def test_no_string_in_the_package_source_carries_an_em_or_en_dash() -> None:
     assert [hit for source in sources for hit in _string_literals_with_a_dash(source)] == []
 
 
-def _uncommented_lines_with_a_dash(template: str) -> list[str]:
-    text = _TEMPLATE_COMMENT.sub("", template)
-    return [line.strip() for line in text.splitlines() if _EM_OR_EN_DASH.search(line)]
+def _without_jinja_comments(template: str) -> str:
+    tokens = Environment().lexer.tokeniter(template, None)
+    return "".join(value for _, kind, value in tokens if kind not in _JINJA_COMMENT_TOKENS)
+
+
+def _uncommented_lines_with_a_dash(text: str) -> list[str]:
+    uncommented = _HTML_OR_CSS_COMMENT.sub("", text)
+    return [line.strip() for line in uncommented.splitlines() if _EM_OR_EN_DASH.search(line)]
+
+
+def _shipped_text(source: Path) -> str:
+    text = source.read_text(encoding="utf-8")
+    return _without_jinja_comments(text) if source.suffix == ".j2" else text
 
 
 def test_no_template_or_stylesheet_text_carries_an_em_or_en_dash() -> None:
     package = REPO_ROOT / "src" / "skaldr"
     sources = [*sorted((package / "components").glob("*.j2")), package / "styles.css"]
     hits = {
-        str(source.relative_to(REPO_ROOT)): _uncommented_lines_with_a_dash(source.read_text(encoding="utf-8"))
+        str(source.relative_to(REPO_ROOT)): _uncommented_lines_with_a_dash(_shipped_text(source))
         for source in sources
     }
 
+    assert {source.suffix for source in sources} == {".j2", ".css"}
     assert {path: lines for path, lines in hits.items() if lines} == {}
 
 
@@ -331,4 +385,4 @@ def test_no_template_or_stylesheet_text_carries_an_em_or_en_dash() -> None:
     ],
 )
 def test_the_template_guard_reads_text_and_skips_comments(template: str, hits: list[str]) -> None:
-    assert _uncommented_lines_with_a_dash(template) == hits
+    assert _uncommented_lines_with_a_dash(_without_jinja_comments(template)) == hits
