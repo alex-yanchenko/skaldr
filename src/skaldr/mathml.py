@@ -302,8 +302,6 @@ def _decode_converter_entities(element: Element) -> None:
     element.attrib = {name: _decoded(value) for name, value in element.attrib.items()}
     if element.text:
         element.text = _decoded(element.text)
-    if element.tail:
-        element.tail = _decoded(element.tail)
 
 
 def _decoded(text: str) -> str:
