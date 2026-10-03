@@ -15,6 +15,7 @@ from skaldr.mathml import refuse_invalid_math
 from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
 
 ANCHOR_PREFIX: Final = "#"
+MAX_NESTING: Final = 20
 PLACEHOLDER: Final = "placeholder"
 CITATION: Final = "citation"
 INLINE_MATH: Final = "inline_math"
@@ -27,6 +28,8 @@ SUBSCRIPT: Final = "subscript"
 SUPERSCRIPT: Final = "superscript"
 
 _REFERENCE_KEYS: Final = "reference_keys"
+_NESTING_LIMIT_REACHED: Final = "nesting_limit_reached"
+_NESTING_LIMIT_RULE: Final = "nesting_limit"
 _PLACEHOLDER_OPEN: Final = "{{"
 _PLACEHOLDER_CLOSE: Final = "}}"
 _PLACEHOLDER_NAME: Final = re.compile(REFERENCE_KEY_PATTERN)
@@ -116,6 +119,19 @@ def _attribute_token(attributes: str) -> str:
     return "{" + attributes.strip() + "}"
 
 
+def nested_too_deep() -> ReportError:
+    return ReportError(
+        f"rich text nests more than {MAX_NESTING} marks, links or [text]{{…}} spans inside one another: "
+        "flatten it"
+    )
+
+
+def _note_lookahead_past_the_nesting_limit(state: StateInline, silent: bool) -> bool:
+    if silent and state.level > MAX_NESTING:
+        state.env[_NESTING_LIMIT_REACHED] = True
+    return False
+
+
 def _colours_no_text(attributes: str) -> ReportError:
     return ReportError(
         f"the attribute list {_attribute_token(attributes)} follows no [text] it can color: the text "
@@ -188,6 +204,8 @@ def _stray_attribute_list(state: StateInline, silent: bool) -> bool:
     if silent or state.src[state.pos] != "]":
         return False
     attributes = _attribute_list_at(state, state.pos + 1)
+    if attributes is not None and state.env.get(_NESTING_LIMIT_REACHED):
+        raise nested_too_deep()
     if attributes is not None:
         raise _colours_no_text(attributes.group(1))
     return False
@@ -258,9 +276,10 @@ def _underline_pairs(state: StateInline) -> None:
 
 
 def _rich_markdown() -> MarkdownIt:
-    markdown = _RichMarkdown("zero")
+    markdown = _RichMarkdown("zero", {"maxNesting": MAX_NESTING + 1})
     markdown.enable(["escape", "backticks", "strikethrough", "emphasis", "link"])
     inline = markdown.inline.ruler
+    inline.before("text", _NESTING_LIMIT_RULE, _note_lookahead_past_the_nesting_limit)
     inline.before("backticks", INLINE_MATH, _inline_math)
     inline.before("link", CITATION, _citation)
     inline.before("link", "tinted_span", _tinted_span)

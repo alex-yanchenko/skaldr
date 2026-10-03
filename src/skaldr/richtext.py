@@ -14,6 +14,7 @@ from skaldr.richtext_syntax import (
     ANCHOR_PREFIX,
     CITATION,
     INLINE_MATH,
+    MAX_NESTING,
     PLACEHOLDER,
     SPAN_TONES,
     SUBSCRIPT,
@@ -22,6 +23,7 @@ from skaldr.richtext_syntax import (
     UNDERLINE_OPEN,
     SpanTones,
     inline_tokens,
+    nested_too_deep,
 )
 
 MarkerStyle = Literal["bold", "italic", "strike"]
@@ -109,17 +111,21 @@ class RichContext:
 
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
     rules = context if context is not None else RichContext()
-    runs, _ = _runs_until_close(inline_tokens(text, rules.reference_numbers or {}), 0, rules)
+    runs, _ = _runs_until_close(inline_tokens(text, rules.reference_numbers or {}), 0, rules, 0)
     return runs
 
 
-def _runs_until_close(tokens: Sequence[Token], start: int, rules: RichContext) -> tuple[Rich, int]:
+def _runs_until_close(
+    tokens: Sequence[Token], start: int, rules: RichContext, depth: int
+) -> tuple[Rich, int]:
     runs: list[Run] = []
     index = start
     while index < len(tokens) and tokens[index].nesting != -1:
         token = tokens[index]
         if token.nesting == 1:
-            inner, index = _runs_until_close(tokens, index + 1, rules)
+            if depth == MAX_NESTING:
+                raise nested_too_deep()
+            inner, index = _runs_until_close(tokens, index + 1, rules, depth + 1)
             runs.extend(_wrapped_runs(token, inner, rules))
         else:
             runs.append(_leaf_run(token, rules))

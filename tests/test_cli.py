@@ -567,6 +567,12 @@ def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
             "between $` and `$, as in $`x_i`$",
             id="subrow-label-in-a-group",
         ),
+        pytest.param(
+            [{"type": "text", "body": "*a " * 260 + "b" + "*" * 260}],
+            "blocks.0.body: rich text nests more than 20 marks, links or [text]{…} spans inside one "
+            "another: flatten it",
+            id="emphasis-nested-past-the-limit",
+        ),
     ],
 )
 def test_check_names_the_field_whose_rich_text_fails(

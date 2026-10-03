@@ -64,6 +64,50 @@ def test_every_text_the_page_and_the_export_parse_is_a_field_the_validation_pass
     assert sorted(text for text in parsed - validated if text) == []
 
 
+def _italics_nested(depth: int) -> Rich:
+    runs: Rich = (Styled("italic", (Plain("a b"),)),)
+    for _ in range(depth - 1):
+        runs = (Styled("italic", (Plain("a "), *runs)),)
+    return runs
+
+
+def test_marks_nest_up_to_the_nesting_limit() -> None:
+    assert parse_rich("*a " * 20 + "b" + "*" * 20) == _italics_nested(20)
+
+
+def test_colored_spans_nest_up_to_the_nesting_limit() -> None:
+    runs: Rich = (Plain("x"),)
+    for _ in range(20):
+        runs = (Tinted("info", None, runs),)
+
+    assert parse_rich("[" * 20 + "x" + "]{tone=info}" * 20) == runs
+
+
+def test_brackets_nested_past_the_limit_that_form_no_mark_stay_text() -> None:
+    text = "[" * 30 + "x" + "]" * 30
+
+    assert parse_rich(text) == (Plain(text),)
+
+
+@pytest.mark.parametrize("depth", [21, 260])
+@pytest.mark.parametrize(
+    ("opener", "closer"),
+    [
+        pytest.param("*a ", "*", id="italic"),
+        pytest.param("**a ", "**", id="bold"),
+        pytest.param("[*a ", "*](https://a.io)", id="italic-inside-a-link"),
+        pytest.param("[", "]{tone=info}", id="colored-span"),
+    ],
+)
+def test_marks_nested_past_the_limit_fail_naming_it(opener: str, closer: str, depth: int) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(opener * depth + "b" + closer * depth)
+
+    assert str(raised.value) == (
+        "rich text nests more than 20 marks, links or [text]{…} spans inside one another: flatten it"
+    )
+
+
 def test_rich_text_parses_into_runs() -> None:
     runs = parse_rich(
         "a **bold `x`** and ~~old **new**~~ see [the method](#method), "
