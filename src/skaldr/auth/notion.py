@@ -19,7 +19,7 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining, without_control_characters
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining, printable_only
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 
@@ -168,8 +168,8 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
 
 
 def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
-    code = without_control_characters(exc.error or "") or "(unnamed error)"
-    description = without_control_characters(exc.description or "")
+    code = printable_only(exc.error or "") or "(unnamed error)"
+    description = printable_only(exc.description or "")
     detail = f" ({description})" if description else ""
     return AuthError(f"Notion refused the sign-in: {code}{detail}")
 

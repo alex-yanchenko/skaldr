@@ -7,7 +7,7 @@ from typing import get_args
 
 import httpx2
 
-from skaldr.auth import without_control_characters
+from skaldr.auth import printable_only
 from skaldr.auth.jira import API_TOKENS_PAGE, verify_jira_token
 from skaldr.auth.notion import (
     DEFAULT_CALLBACK_PORT,
@@ -152,7 +152,13 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
     credentials = verify_jira_token(site, email, api_token, transport=transport)
     save_jira(credentials)
-    print(f"Signed in to Jira at {site}{_as_person(credentials)}. Saved to the keychain.")
+    display_name = _display_name(credentials)
+    signed_in = (
+        f"Signed in to Jira at {site}"
+        if display_name is None
+        else f"Signed in to Jira at {site} as {display_name}"
+    )
+    print(f"{signed_in}. Saved to the keychain.")
 
 
 def _print_status() -> int:
@@ -216,16 +222,18 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
     credentials = sign_in.credentials
     if sign_in.source == "environment":
         return f"JIRA_EMAIL, JIRA_API_TOKEN for {credentials.site} (environment)"
-    return f"signed in to {credentials.site}{_as_person(credentials)} (keychain)"
+    display_name = _display_name(credentials)
+    if display_name is None:
+        return f"signed in to {credentials.site} (keychain)"
+    return f"signed in to {credentials.site} as {display_name} (keychain)"
 
 
 def _workspace(credentials: NotionCredentials) -> str:
-    return without_control_characters(credentials.workspace_name or "") or "(unnamed workspace)"
+    return printable_only(credentials.workspace_name or "") or "(unnamed workspace)"
 
 
-def _as_person(credentials: JiraCredentials) -> str:
-    display_name = without_control_characters(credentials.display_name or "")
-    return f" as {display_name}" if display_name else ""
+def _display_name(credentials: JiraCredentials) -> str | None:
+    return printable_only(credentials.display_name or "") or None
 
 
 def _required(answer: str, refusal: str) -> str:

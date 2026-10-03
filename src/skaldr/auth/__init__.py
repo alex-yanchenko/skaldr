@@ -8,7 +8,7 @@ HTTP_TIMEOUT_SECONDS = 30.0
 CaughtT = TypeVar("CaughtT", bound=Exception)
 
 
-def without_control_characters(text: str) -> str:
+def printable_only(text: str) -> str:
     return "".join(character for character in text if character.isprintable())
 
 

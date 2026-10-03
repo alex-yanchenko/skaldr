@@ -234,8 +234,7 @@ def _environment(name: str) -> str | None:
 
 
 def _all_or_none_from_environment(names: Sequence[str]) -> Mapping[str, str] | None:
-    values = {name: _environment(name) for name in names}
-    present = {name: value for name, value in values.items() if value is not None}
+    present = {name: value for name in names if (value := _environment(name)) is not None}
     if not present:
         return None
     missing = [name for name in names if name not in present]
