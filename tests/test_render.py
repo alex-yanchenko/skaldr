@@ -89,7 +89,7 @@ def test_sales_example_renders_and_reconciles() -> None:
     html = render_html(report)
 
     assert html.startswith("<!doctype html>")
-    assert "Q3 Pipeline Review — West Region" in html
+    assert "Q3 Pipeline Review: West Region" in html
     assert "Reconciles: 120 = 120." in html
 
 

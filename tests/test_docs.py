@@ -256,6 +256,8 @@ _TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|<!--.*?-->|/\*.*?\*/", re.DOTALL)
 _SHIPPED_PROSE = (
     "README.md",
     "AGENTS.md",
+    "data/example.yaml",
+    "examples/sales-pipeline.yaml",
     "src/skaldr/skill/GUIDE.md",
     "src/skaldr/skill/SKILL.md",
     "src/skaldr/skill/example.yaml",
