@@ -5,7 +5,7 @@ The page is `version` + `meta` + author-declared `badges` + a flat, ordered `blo
 block, or an unknown top-level key each fails with a precise `blocks.3.items.2.value`-style path.
 
 No domain vocabulary is hardcoded here: tags/statuses live in `badges`, declared per report.
-The only fixed vocabularies are the design-system primitives — tones, badge colours, and the
+The only fixed vocabularies are the design-system primitives: tones, badge colours, and the
 state glyphs for status lists and timelines.
 """
 
@@ -130,7 +130,7 @@ def _to_badge_color(value: Any) -> Any:
 
 
 def _tone_names(tone_type: Any) -> tuple[str, ...]:
-    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator] —
+    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator]:
     for the manually-validated tones (table row + indicator cell) that aren't plain typed fields."""
     return get_args(get_args(tone_type)[0])
 
@@ -149,7 +149,7 @@ _CALLOUT_TONES = ("info", "success", "warning", "danger")
 
 def _to_callout_tone(value: Any) -> Any:
     """Normalise a palette alias to its semantic twin (blue→info), then reject a tone that isn't one of
-    the four callout meanings — naming both what was given and the allowed set, so the fix is obvious in
+    the four callout meanings, naming both what was given and the allowed set, so the fix is obvious in
     the error itself. A callout is a semantic 'stop and look' note, so teal/sky/accent/neutral (fine on
     cards/badges) have no callout look and are refused rather than silently mapped."""
     normalized = _to_tone(value)
@@ -313,7 +313,7 @@ class ListItem(FrozenModel):
 
 
 def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
-    """Reject list nesting deeper than `_MAX_LIST_DEPTH` — past that a bullet tree is unreadable and
+    """Reject list nesting deeper than `_MAX_LIST_DEPTH`: past that a bullet tree is unreadable and
     almost always a data-shape mistake. Depth 1 is the top-level list; each nested `items` is +1."""
     if depth > _MAX_LIST_DEPTH:
         raise ValueError(f"list nesting exceeds the maximum depth of {_MAX_LIST_DEPTH}")
@@ -497,7 +497,7 @@ class Card(FrozenModel):
             if self.badges:
                 raise ValueError("a derived card shows its own badge chip; don't also set `badges`")
             if self.delta is not None:
-                raise ValueError("a derived card has no `delta`: its value is a live count")
+                raise ValueError("a derived card has no `delta`; its value is a live count")
         else:
             if self.badge is not None:
                 raise ValueError(

@@ -325,12 +325,12 @@ def test_derived_card_with_an_undeclared_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_extra_badges_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"don't also set `badges`"):
+    with pytest.raises(ReportError, match=r"shows its own badge chip; don't also set `badges`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "badges": ["HAVE"]}))
 
 
 def test_derived_card_with_a_delta_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"a derived card has no `delta`"):
+    with pytest.raises(ReportError, match=r"a derived card has no `delta`; its value is a live count"):
         parse_report(
             _report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "delta": {"label": "+1"}})
         )
