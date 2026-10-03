@@ -145,9 +145,11 @@ an unknown type, a field from the wrong block, or an unknown key each fails with
 
 The `table` is the workhorse: typed columns, grouped subtotals, sub-rows, colour-only `indicator`
 dots, row-level `tone`, and a `reconcile` block that hard-fails the build if the counts don't sum
-to a declared total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
-nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
-`~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`, `[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math` block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
+to a declared total. Badges are declared once and chip onto table rows, **cards, timeline
+entries, and flow nodes** alike. Prose fields take a small markdown subset (`**bold**`,
+`*italic*`, `` `code` ``, `~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`,
+`[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math`
+block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
 
 Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/skaldr/skill/GUIDE.md)),
 [`data/example.yaml`](data/example.yaml) (a file exercising every block), and

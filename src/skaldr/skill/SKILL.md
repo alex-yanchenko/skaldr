@@ -47,9 +47,9 @@ fabrication, so honesty is on you.
    file exists. To validate without writing anything (e.g. over a glob), use
    `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
    report.yaml`.
-5. **Surface it, local-first.** A skaldr page can also be a live working doc: render once with `--live`, then `--if-stale` after each edit. (Not `--watch`: it
-   needs a process this harness reaps between turns.) Either way, hand over (or open) the rendered
-   file, private by default. Publish a
+5. **Surface it, local-first.** A skaldr page works as a live working doc: render once with
+   `--live`, then `--if-stale` after each edit. (Not `--watch`: it needs a process this harness
+   reaps between turns.) Either way, hand over the rendered file, private by default. Publish a
    claude.ai Artifact only if the user wants to share it, and only with non-sensitive data. Never
    put real customer, personal, or privileged content on a surface that leaves the machine. To
    publish, render with `skaldr report.yaml --embed -o report.html` and publish *that*: `--embed`
@@ -60,4 +60,4 @@ fabrication, so honesty is on you.
 `skaldr --extract-source <file|url>`; don't parse the HTML, since every render embeds its source.
 
 This file stays thin: version-specific detail lives in `skaldr --guide` and `skaldr --write-schema`,
-so it stays correct across upgrades without reinstalling the skill.
+so the guidance stays correct across upgrades without reinstalling the skill.
