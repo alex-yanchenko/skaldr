@@ -19,7 +19,7 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS, without_control_characters
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining, without_control_characters
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 
@@ -145,21 +145,23 @@ def _basic_auth_with_json_body(
 
 
 def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
-    try:
-        return _NotionToken.model_validate(request())
-    except AuthlibBaseError as exc:
-        if exc.error == "invalid_client":
-            raise AuthError(
-                "Notion refused the client ID or secret (invalid_client); copy both from the connection "
-                f"page at {INTEGRATIONS_PAGE} again"
-            ) from exc
-        raise _refused_sign_in(exc) from exc
-    except httpx2.HTTPError as exc:
-        raise _unreachable(exc) from exc
-    except ValidationError as exc:
-        fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
-    except json.JSONDecodeError as exc:
-        raise AuthError("Notion's token answer is not JSON") from exc
+    with caught_without_chaining(ValidationError) as invalid:
+        try:
+            return _NotionToken.model_validate(request())
+        except AuthlibBaseError as exc:
+            if exc.error == "invalid_client":
+                raise AuthError(
+                    "Notion refused the client ID or secret (invalid_client); copy both from the connection "
+                    f"page at {INTEGRATIONS_PAGE} again"
+                ) from exc
+            raise _refused_sign_in(exc) from exc
+        except httpx2.HTTPError as exc:
+            raise _unreachable(exc) from exc
+        except json.JSONDecodeError as exc:
+            raise AuthError("Notion's token answer is not JSON") from exc
+    fields = ", ".join(
+        ".".join(map(str, error["loc"])) for error in invalid.error.errors(include_input=False)
+    )
     raise AuthError(
         f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
     )

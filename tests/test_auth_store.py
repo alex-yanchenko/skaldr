@@ -31,10 +31,10 @@ from tests.factories.auth_factory import (
     LockedKeyring,
     PlaintextKeyring,
     ReadRecordingKeyring,
+    assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
-    rendered_traceback,
 )
 
 
@@ -208,24 +208,14 @@ def test_an_unreadable_keychain_entry_keeps_its_secret_out_of_the_traceback(
     with pytest.raises(AuthError) as raised:
         load()
 
-    error = raised.value
-    assert ("secret-access-value" in rendered_traceback(error), error.__cause__, error.__context__) == (
-        False,
-        None,
-        None,
-    )
+    assert_secret_not_in_error_chain(raised.value, "secret-access-value")
 
 
 def test_a_refused_site_keeps_its_password_out_of_the_traceback() -> None:
     with pytest.raises(AuthError) as raised:
         jira_credentials(SITE_WITH_A_PASSWORD, "e", "api-token")
 
-    error = raised.value
-    assert ("secret-password" in rendered_traceback(error), error.__cause__, error.__context__) == (
-        False,
-        None,
-        None,
-    )
+    assert_secret_not_in_error_chain(raised.value, "secret-password")
 
 
 def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_traceback(
@@ -238,12 +228,7 @@ def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_tr
     with pytest.raises(AuthError) as raised:
         load_jira()
 
-    error = raised.value
-    assert ("secret-password" in rendered_traceback(error), error.__cause__, error.__context__) == (
-        False,
-        None,
-        None,
-    )
+    assert_secret_not_in_error_chain(raised.value, "secret-password")
 
 
 def test_forget_deletes_the_entry_and_reports_whether_one_existed(keychain: InMemoryKeyring) -> None:

@@ -23,6 +23,11 @@ def rendered_traceback(error: BaseException) -> str:
     return "".join(traceback.format_exception(error))
 
 
+def assert_secret_not_in_error_chain(error: BaseException, secret: str) -> None:
+    secret_is_shown = secret in rendered_traceback(error)
+    assert (secret_is_shown, error.__cause__, error.__context__) == (False, None, None)
+
+
 class InMemoryKeyring(KeyringBackend):
     @properties.classproperty
     def priority(cls) -> float:
