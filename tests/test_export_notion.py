@@ -1133,22 +1133,24 @@ def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
     )
 
 
-def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp_path: Path) -> None:
-    outside = tmp_path / "outside.txt"
-    outside.write_text("keep me", encoding="utf-8")
+def test_a_page_name_that_is_a_symlink_gets_the_page_in_its_target_and_stays_a_link(tmp_path: Path) -> None:
+    page_target = tmp_path / "wiki" / "page.md"
+    manifest_target = tmp_path / "wiki" / "manifest.json"
+    page_target.parent.mkdir()
+    page_target.write_text("earlier page", encoding="utf-8")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    (out_dir / "page.md").symlink_to(outside)
-    (out_dir / EXPORT_MANIFEST).symlink_to(outside)
+    (out_dir / "page.md").symlink_to(page_target)
+    (out_dir / EXPORT_MANIFEST).symlink_to(manifest_target)
 
     export_notion(parse_report(make_report()), out_dir)
 
     assert (
-        outside.read_text(encoding="utf-8"),
+        page_target.read_text(encoding="utf-8"),
         (out_dir / "page.md").is_symlink(),
-        (out_dir / "page.md").read_text(encoding="utf-8"),
+        json.loads(manifest_target.read_text(encoding="utf-8")),
         (out_dir / EXPORT_MANIFEST).is_symlink(),
-    ) == ("keep me", False, "Hello.\n", False)
+    ) == ("Hello.\n", True, {"title": "Test Report", "files": ["page.md"]}, True)
 
 
 def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:
@@ -1165,14 +1167,14 @@ def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(4, "w = 4\n" * 20)))
-    write_text = Path.write_text
+    write_bytes = Path.write_bytes
 
-    def fail_on_the_third_page(path: Path, text: str, encoding: str | None = None) -> int:
+    def fail_on_the_third_page(path: Path, data: bytes) -> int:
         if path.name == "page.02.md":
             raise OSError("disk full")
-        return write_text(path, text, encoding=encoding)
+        return write_bytes(path, data)
 
-    monkeypatch.setattr(Path, "write_text", fail_on_the_third_page)
+    monkeypatch.setattr(Path, "write_bytes", fail_on_the_third_page)
     with pytest.raises(OSError, match="disk full"):
         export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
     monkeypatch.undo()

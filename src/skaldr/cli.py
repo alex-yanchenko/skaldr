@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 import time
 import urllib.request
@@ -23,6 +22,7 @@ from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_
 from skaldr.models import Report, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import extract_source, find_placeholders, render_html, render_report
+from skaldr.replace_file import replace_file, resolved_path
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
@@ -61,7 +61,7 @@ _PLAN_RULE_BLOCK = re.compile(
 
 def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
-    return Path(out_arg).resolve() if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+    return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
 def _run_auth(argv: list[str]) -> int:
@@ -237,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_schema:
         schema_path = Path(args.write_schema)
         schema_path.parent.mkdir(parents=True, exist_ok=True)
-        schema_path.write_text(json.dumps(Report.model_json_schema(), indent=2) + "\n", encoding="utf-8")
+        replace_file(schema_path, json.dumps(Report.model_json_schema(), indent=2) + "\n")
         print(f"OK  {schema_path}")
         return 0
 
@@ -296,18 +296,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("only one content file can be processed at a time (use --check to validate several)")
 
     data_path = Path(args.data[0]).resolve()
+    try:
+        out_path = _resolve_out_path(data_path, args.out)
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     if args.watch:
-        return _watch(
-            data_path,
-            _resolve_out_path(data_path, args.out),
-            embed=args.embed,
-            no_source=args.no_source,
-            live=args.live,
-        )
+        return _watch(data_path, out_path, embed=args.embed, no_source=args.no_source, live=args.live)
 
-    if args.if_stale and not _is_stale(data_path, _resolve_out_path(data_path, args.out), pdf=args.pdf):
-        print(f"up to date  {_resolve_out_path(data_path, args.out)}")
+    if args.if_stale and not _is_stale(data_path, out_path, pdf=args.pdf):
+        print(f"up to date  {out_path}")
         return 0
 
     if args.emit_json:
@@ -326,7 +325,6 @@ def main(argv: list[str] | None = None) -> int:
         # HTML first — it needs no browser, so a later PDF failure never costs the reader the HTML.
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
-            out_path = _resolve_out_path(data_path, args.out)
             source = None if args.no_source else data_path.read_text(encoding="utf-8")
             render_report(report, out_path, embed=args.embed, source=source, live=args.live)
             written.append(out_path)
@@ -542,12 +540,7 @@ def _skill_up_to_date(src: Path, dest_file: Path) -> bool:
 
 
 def _copy_skill(src: Path, dest_file: Path) -> None:
-    """Install one SKILL.md atomically: copy to a temp sibling, then `replace()` it into place — so a
-    concurrent reader never sees a half-written skill and a failed copy can't truncate the existing one
-    (the same temp-then-swap `_install_plan_rule` uses for CLAUDE.md)."""
-    tmp = dest_file.with_name(dest_file.name + ".skaldr-tmp")
-    shutil.copyfile(src, tmp)
-    tmp.replace(dest_file)
+    replace_file(dest_file, src.read_text(encoding="utf-8"))
 
 
 def install_skill(home: Path | None = None) -> int:
@@ -682,11 +675,7 @@ def _install_plan_rule(claude_dir: Path) -> Literal["added", "updated"]:
     existing = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     had_block = bool(_PLAN_RULE_BLOCK.search(existing))
     kept = _PLAN_RULE_BLOCK.sub("", existing).rstrip()
-    # Write atomically: `write_text` truncates at open(), so a mid-write failure (disk full) would
-    # otherwise wipe the user's hand-maintained CLAUDE.md. Write a sibling temp, then atomically swap.
-    tmp_path = md_path.with_suffix(md_path.suffix + ".skaldr-tmp")
-    tmp_path.write_text(f"{kept}\n\n{block}" if kept else block, encoding="utf-8")
-    tmp_path.replace(md_path)
+    replace_file(md_path, f"{kept}\n\n{block}" if kept else block)
     return "updated" if had_block else "added"
 
 

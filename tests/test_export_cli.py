@@ -111,6 +111,24 @@ def test_an_export_dir_that_cannot_be_written_reports_the_error_and_leaves_the_f
     assert blocker.read_text(encoding="utf-8") == "a file, not a folder"
 
 
+def test_a_symlinked_page_gets_the_export_in_its_target_and_stays_a_link(
+    tmp_path: Path, export_dir: Path
+) -> None:
+    data_path = write_report(tmp_path, make_report())
+    target = tmp_path / "wiki" / "page.md"
+    target.parent.mkdir()
+    target.write_text("earlier page", encoding="utf-8")
+    export_dir.mkdir()
+    (export_dir / "page.md").symlink_to(target)
+
+    assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 0
+
+    assert ((export_dir / "page.md").is_symlink(), target.read_text(encoding="utf-8")) == (
+        True,
+        "# Test Report\n\nHello.\n",
+    )
+
+
 @pytest.mark.parametrize(
     ("argv_tail", "message"),
     [

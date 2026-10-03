@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 from pathlib import Path
@@ -261,6 +262,22 @@ def test_write_schema_writes_current_schema(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert json.loads(schema_path.read_text(encoding="utf-8")) == Report.model_json_schema()
+
+
+def test_write_schema_writes_through_a_symlink_and_keeps_the_link(tmp_path: Path) -> None:
+    target = tmp_path / "shared" / "page.schema.json"
+    target.parent.mkdir()
+    target.write_text("{}", encoding="utf-8")
+    link = tmp_path / "page.schema.json"
+    link.symlink_to(target)
+
+    exit_code = main(["--write-schema", str(link)])
+
+    assert (exit_code, link.is_symlink(), json.loads(target.read_text(encoding="utf-8"))) == (
+        0,
+        True,
+        Report.model_json_schema(),
+    )
 
 
 def test_committed_schema_is_fresh() -> None:
@@ -1056,6 +1073,22 @@ def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a
         "",
         True,
         expected_page,
+    )
+
+
+def test_a_symlink_loop_at_the_output_path_fails_naming_that_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "loop1.html"
+    out_path.symlink_to(tmp_path / "loop2.html")
+    (tmp_path / "loop2.html").symlink_to(out_path)
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"error: [Errno {errno.ELOOP}] {os.strerror(errno.ELOOP)}: '{out_path}'\n",
     )
 
 
