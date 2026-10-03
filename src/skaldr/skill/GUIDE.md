@@ -26,6 +26,8 @@ at all if the check fails.
 
 `--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
 
+A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own.
+
 Every file skaldr writes (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) is written to a temporary file next to it and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, and an existing file keeps its permissions. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text.
 
 ## `meta`

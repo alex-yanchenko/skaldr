@@ -358,6 +358,81 @@ def test_checking_a_set_while_asking_for_one_render_is_refused_before_any_work(
     assert "OK" not in captured.out
 
 
+def _return_without_watching(*_args: object, **_kwargs: object) -> int:
+    return 0
+
+
+_NO_SOURCE_WITHOUT_A_PAGE = (
+    "--no-source shapes the HTML page, and this command writes none; add -o to write one, or drop --no-source"
+)
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        pytest.param(
+            ["{data}", "--watch", "--if-stale"],
+            "--watch re-renders on every save, so --if-stale has nothing to skip; drop one of them",
+            id="watch-if-stale",
+        ),
+        pytest.param(["--check", "{data}", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="check-no-source"),
+        pytest.param(
+            ["{data}", "--pdf", "{tmp}/x.pdf", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="pdf-no-source"
+        ),
+        pytest.param(
+            ["--emit-json", "{data}", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="emit-json-no-source"
+        ),
+        pytest.param(
+            ["--write-schema", "{tmp}/s.json", "--watch"],
+            "--write-schema runs on its own; drop --watch",
+            id="write-schema-watch",
+        ),
+        pytest.param(
+            ["--guide", "{data}"], "--guide runs on its own; drop the content file", id="guide-data"
+        ),
+        pytest.param(
+            ["--extract-source", "{tmp}/page.html", "-o", "{tmp}/x.html", "--no-source"],
+            "--extract-source runs on its own; drop --out, --no-source",
+            id="extract-source-out",
+        ),
+        pytest.param(
+            ["--install-skill", "--install-plan-rule"],
+            "--install-skill runs on its own; drop --install-plan-rule",
+            id="two-installs",
+        ),
+    ],
+)
+def test_a_flag_that_would_be_silently_ignored_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    message: str,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr("skaldr.cli._watch", _return_without_watching)
+    data_path = _write(tmp_path, make_report())
+    filled = [part.format(data=data_path, tmp=tmp_path) for part in argv]
+
+    with pytest.raises(SystemExit) as raised:
+        main(filled)
+
+    assert (raised.value.code, capsys.readouterr().err.splitlines()[-1].split(": error: ", 1)[1]) == (
+        2,
+        message,
+    )
+    assert sorted(tmp_path.iterdir()) == [data_path]
+
+
+def test_no_source_with_a_checked_render_writes_the_page_without_its_source(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main(["--check", str(data_path), "-o", str(out_path), "--no-source"]) == 0
+
+    assert out_path.read_text(encoding="utf-8") == render_html(parse_report(make_report()))
+
+
 @pytest.mark.parametrize(
     ("argv_tail", "expected"),
     [
