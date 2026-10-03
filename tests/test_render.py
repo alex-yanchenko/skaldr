@@ -4129,32 +4129,6 @@ def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
     assert '<tr class="row tint' not in html  # a toned row never carries a tint class
 
 
-def test_table_tint_by_a_cell_badge_list_uses_the_first_key_tone() -> None:
-    """tint_by may name a placement: cell badge column whose value is a LIST of keys; the row's tint
-    comes from the FIRST key's tone (a single row can't carry two tints)."""
-    table = make_table(
-        columns=[
-            {"key": "item", "label": "Item", "kind": "text"},
-            {"key": "tags", "label": "Tags", "kind": "badge", "placement": "cell"},
-        ],
-        rows=[{"item": "a", "tags": ["DONE", "PENDING"]}],
-        tint_by="tags",
-    )
-    report = parse_report(
-        make_report(
-            blocks=[table],
-            badges={
-                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
-                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
-            },
-        )
-    )
-
-    html = render_html(report)
-
-    assert '<tr class="row tint green">' in html  # first key DONE → success → green drives the tint
-
-
 def test_image_max_width_renders_style() -> None:
     src = "data:image/svg+xml,<svg/>"
     block = {"type": "image", "src": src, "alt": "a", "max_width": 400}

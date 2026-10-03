@@ -906,7 +906,8 @@ link instead.
   column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
   skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
   (`muted`/`danger`) wins over the tint. Must name a `badge` column — the same column can still show
-  its chip.
+  its chip. Each row takes one badge's tone, so a `tint_by` over an in-cell badge column whose cells
+  hold a list of keys is rejected, as a `rollup` over one is.
 - A group with an empty `rows: []` renders a "— none —" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 

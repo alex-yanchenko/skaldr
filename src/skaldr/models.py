@@ -1190,14 +1190,10 @@ class Table(_Block):
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.rollup.by not in badge_keys:
                 raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
-            located_rows = self._located_rows()
-            for loc, row in located_rows:
-                if isinstance(row[self.rollup.by], list):
-                    raise ValueError(
-                        f"rollup.by '{self.rollup.by}' counts each row under one badge, so its cells "
-                        f"can't hold a list of keys ({loc} holds {row[self.rollup.by]})"
-                    )
-            if not any(row[self.rollup.by].strip() for _, row in located_rows):
+            self._refuse_list_cells(
+                f"rollup.by '{self.rollup.by}' counts each row under one badge", self.rollup.by
+            )
+            if not any(row[self.rollup.by].strip() for _, row in self._located_rows()):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
                 )
@@ -1205,8 +1201,16 @@ class Table(_Block):
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.tint_by not in badge_keys:
                 raise ValueError(f"tint_by '{self.tint_by}' must be a badge column")
+            self._refuse_list_cells(f"tint_by '{self.tint_by}' tints each row by one badge", self.tint_by)
         self._reconcile()
         return self
+
+    def _refuse_list_cells(self, one_badge_per_row: str, key: str) -> None:
+        for loc, row in self._located_rows():
+            if isinstance(row[key], list):
+                raise ValueError(
+                    f"{one_badge_per_row}, so its cells can't hold a list of keys ({loc} holds {row[key]})"
+                )
 
     @property
     def cell_columns(self) -> list[Column]:

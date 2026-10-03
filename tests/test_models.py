@@ -1505,54 +1505,81 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
-@pytest.mark.parametrize(
-    ("rows", "located"),
-    [
-        pytest.param(
-            {"rows": [{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}]},
-            "rows.1 holds ['API', 'WEB']",
-            id="flat-table",
-        ),
-        pytest.param(
-            {
-                "groups": [
-                    {"name": "One", "rows": [{"item": "a", "tag": "API"}]},
-                    {"name": "Two", "rows": [{"item": "b", "tag": ["API", "WEB"]}]},
-                ]
-            },
-            "groups.1.rows.0 holds ['API', 'WEB']",
-            id="grouped-table",
-        ),
-        pytest.param(
-            {"rows": [{"item": "a", "tag": ["API"]}]},
-            "rows.0 holds ['API']",
-            id="one-key-list",
-        ),
-    ],
-)
+LIST_CELL_ROWS = [
+    pytest.param(
+        {"rows": [{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}]},
+        "rows.1 holds ['API', 'WEB']",
+        id="flat-table",
+    ),
+    pytest.param(
+        {
+            "groups": [
+                {"name": "One", "rows": [{"item": "a", "tag": "API"}]},
+                {"name": "Two", "rows": [{"item": "b", "tag": ["API", "WEB"]}]},
+            ]
+        },
+        "groups.1.rows.0 holds ['API', 'WEB']",
+        id="grouped-table",
+    ),
+    pytest.param(
+        {"rows": [{"item": "a", "tag": ["API"]}]},
+        "rows.0 holds ['API']",
+        id="one-key-list",
+    ),
+    pytest.param(
+        {"rows": [{"item": "a", "tag": ["", "WEB"]}]},
+        "rows.0 holds ['', 'WEB']",
+        id="blank-first-key",
+    ),
+]
+LIST_CELL_BADGES = {
+    "API": {"label": "API", "tone": "blue", "legend": "api work"},
+    "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
+}
+IN_CELL_TAG_COLUMNS = [
+    {"key": "item", "label": "I", "kind": "text"},
+    {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+]
+
+
+@pytest.mark.parametrize(("rows", "located"), LIST_CELL_ROWS)
 def test_rollup_by_an_in_cell_badge_column_holding_a_list_is_rejected(
     rows: dict[str, Any], located: str
 ) -> None:
-    badges = {
-        "API": {"label": "API", "tone": "blue", "legend": "api work"},
-        "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
-    }
-    table = make_table(
-        columns=[
-            {"key": "item", "label": "I", "kind": "text"},
-            {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
-        ],
-        rollup={"by": "tag"},
-        **rows,
-    )
+    table = make_table(columns=IN_CELL_TAG_COLUMNS, rollup={"by": "tag"}, **rows)
 
     with pytest.raises(ReportError) as excinfo:
-        parse_report(make_report(badges=badges, blocks=[table]))
+        parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
 
     assert str(excinfo.value) == (
         "invalid content data: blocks.0.table: Value error, rollup.by 'tag' counts each row under one "
         f"badge, so its cells can't hold a list of keys ({located})"
     )
+
+
+@pytest.mark.parametrize(("rows", "located"), LIST_CELL_ROWS)
+def test_tint_by_an_in_cell_badge_column_holding_a_list_is_rejected(
+    rows: dict[str, Any], located: str
+) -> None:
+    table = make_table(columns=IN_CELL_TAG_COLUMNS, tint_by="tag", **rows)
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.0.table: Value error, tint_by 'tag' tints each row by one "
+        f"badge, so its cells can't hold a list of keys ({located})"
+    )
+
+
+def test_tint_by_an_in_cell_badge_column_of_single_keys_is_allowed() -> None:
+    table = make_table(
+        columns=IN_CELL_TAG_COLUMNS,
+        tint_by="tag",
+        rows=[{"item": "a", "tag": "API"}, {"item": "b", "tag": ""}],
+    )
+
+    parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
 
 
 def test_tint_by_a_non_badge_column_is_rejected() -> None:
