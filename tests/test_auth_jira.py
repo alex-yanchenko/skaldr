@@ -88,7 +88,7 @@ def test_an_unexpected_status_is_named() -> None:
 
 @pytest.mark.parametrize(
     "body",
-    [{"accountId": "account-id", "emailAddress": "reader@example.com"}, b"<html>reader@example.com</html>"],
+    [{"accountId": "account-id", "emailAddress": "answer-only@example.com"}, b"<html>answer-only@example.com</html>"],
     ids=["no display name", "not json"],
 )
 def test_a_myself_answer_that_is_not_a_user_is_refused_without_its_content(body: object) -> None:
@@ -96,7 +96,7 @@ def test_a_myself_answer_that_is_not_a_user_is_refused_without_its_content(body:
         verify(fake_api({"/rest/api/3/myself": (200, body)}, []))
 
     assert str(raised.value) == "Jira's /rest/api/3/myself answer is not a user record"
-    assert_secret_not_in_error_chain(raised.value, "reader@example.com")
+    assert_secret_not_in_error_chain(raised.value, "answer-only@example.com")
 
 
 def test_an_unreachable_site_is_named() -> None:
