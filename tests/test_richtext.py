@@ -59,7 +59,19 @@ def test_brackets_nested_past_the_limit_that_form_no_mark_stay_text() -> None:
     assert parse_rich(text) == (Plain(text),)
 
 
-@pytest.mark.parametrize("depth", [MAX_NESTING + 1, 260])
+def test_a_stray_attribute_list_after_a_closed_deep_bracket_run_colors_nothing() -> None:
+    deep = "[" * (MAX_NESTING + 10) + "x" + "]" * (MAX_NESTING + 10)
+
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"{deep} ]{{tone=info}}")
+
+    assert str(raised.value) == (
+        "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+        "is not empty and holds no link"
+    )
+
+
+@pytest.mark.parametrize("depth", [MAX_NESTING + 1, MAX_NESTING + 10, 260])
 @pytest.mark.parametrize(
     ("opener", "closer"),
     [

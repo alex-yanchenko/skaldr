@@ -46,8 +46,6 @@ _UNDERLINE_RULE: Final = "underline"
 _IMAGE_AS_TYPED_RULE: Final = "image_as_typed"
 
 _REFERENCE_KEYS: Final = "reference_keys"
-_NESTING_LIMIT_REACHED: Final = "nesting_limit_reached"
-_NESTING_LIMIT_RULE: Final = "nesting_limit"
 _PLACEHOLDER_OPEN: Final = "{{"
 _PLACEHOLDER_CLOSE: Final = "}}"
 _PLACEHOLDER_NAME: Final = re.compile(REFERENCE_KEY_PATTERN)
@@ -169,9 +167,17 @@ def _image_as_typed(state: StateInline, silent: bool) -> bool:
     return True
 
 
-def _note_lookahead_past_the_nesting_limit(state: StateInline, silent: bool) -> bool:
-    if silent and state.level > MAX_NESTING:
-        state.env[_NESTING_LIMIT_REACHED] = True
+def _closes_brackets_nested_past_the_limit(source: str, close: int) -> bool:
+    depth = deepest_inside = 0
+    for open_position in range(close - 1, -1, -1):
+        if source[open_position] == "]":
+            depth += 1
+            deepest_inside = max(deepest_inside, depth)
+        elif source[open_position] == "[" and depth == 0:
+            depth_outside = source.count("[", 0, open_position) - source.count("]", 0, open_position)
+            return depth_outside + 1 + deepest_inside > MAX_NESTING
+        elif source[open_position] == "[":
+            depth -= 1
     return False
 
 
@@ -247,7 +253,7 @@ def _stray_attribute_list(state: StateInline, silent: bool) -> bool:
     if silent or state.src[state.pos] != "]":
         return False
     attributes = _attribute_list_at(state, state.pos + 1)
-    if attributes is not None and state.env.get(_NESTING_LIMIT_REACHED):
+    if attributes is not None and _closes_brackets_nested_past_the_limit(state.src, state.pos):
         raise nested_too_deep()
     if attributes is not None:
         raise _attribute_list_colors_no_text(attributes.group(1))
@@ -322,7 +328,6 @@ def _rich_markdown() -> MarkdownIt:
     markdown = _RichMarkdown("zero", {"maxNesting": MAX_NESTING + 1})
     markdown.enable([_ESCAPE_RULE, _BACKTICKS_RULE, _STRIKETHROUGH_RULE, _EMPHASIS_RULE, _LINK_RULE])
     inline = markdown.inline.ruler
-    inline.before(_TEXT_RULE, _NESTING_LIMIT_RULE, _note_lookahead_past_the_nesting_limit)
     inline.before(_BACKTICKS_RULE, INLINE_MATH, _inline_math)
     inline.before(_LINK_RULE, CITATION, _citation)
     inline.before(_LINK_RULE, _TINTED_SPAN_RULE, _tinted_span)
