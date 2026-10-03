@@ -6,7 +6,7 @@ from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 
 from skaldr import mathml as mathml_module
 from skaldr.errors import ReportError
-from skaldr.mathml import MATHML_ATTRIBUTES, MathDisplay, mathml
+from skaldr.mathml import MATHML_ATTRIBUTES, MATHML_ELEMENTS, MathDisplay, mathml
 
 MATH_OPEN = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">'
 CONVERTER_PREFIX = "latex2mathml cannot convert it ("
@@ -331,6 +331,44 @@ def test_an_attribute_on_the_mathml_allowlist_passes(
     stub_converter(_math_with_attribute(attribute))
 
     assert mathml("x", "inline") == f'<math><mi {attribute}="red">x</mi></math>'
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        pytest.param("semantics", id="semantics"),
+        pytest.param("annotation-xml", id="annotation-xml"),
+        pytest.param("mglyph", id="mglyph"),
+        pytest.param("script", id="script"),
+        pytest.param("svg", id="svg"),
+    ],
+)
+def test_an_element_outside_the_mathml_allowlist_fails(
+    stub_converter: Callable[[Element], None], tag: str
+) -> None:
+    root = Element("math")
+    SubElement(root, tag).text = "x"
+    stub_converter(root)
+
+    with pytest.raises(ReportError) as raised:
+        mathml("x", "inline")
+
+    assert str(raised.value) == (
+        f"math expression 'x' produces a {tag} element, which is not a MathML element skaldr renders"
+    )
+
+
+@pytest.mark.parametrize("tag", [pytest.param(name, id=name) for name in sorted(MATHML_ELEMENTS)])
+def test_an_element_on_the_mathml_allowlist_passes(
+    stub_converter: Callable[[Element], None], tag: str
+) -> None:
+    root = Element("math")
+    element = SubElement(root, tag)
+    for letter in "abc":
+        SubElement(element, "mi").text = letter
+    stub_converter(root)
+
+    assert mathml("x", "inline") == f"<math><{tag}><mi>a</mi><mi>b</mi><mi>c</mi></{tag}></math>"
 
 
 def test_the_allowlist_is_the_set_of_attributes_latex2mathml_emits() -> None:

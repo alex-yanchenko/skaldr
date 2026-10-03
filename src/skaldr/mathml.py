@@ -59,6 +59,33 @@ MATHML_ATTRIBUTES: Final = frozenset(
         "xmlns",
     }
 )
+MATHML_ELEMENTS: Final = frozenset(
+    {
+        "math",
+        "menclose",
+        "mfrac",
+        "mi",
+        "mn",
+        "mo",
+        "mover",
+        "mpadded",
+        "mphantom",
+        "mroot",
+        "mrow",
+        "mspace",
+        "msqrt",
+        "mstyle",
+        "msub",
+        "msubsup",
+        "msup",
+        "mtable",
+        "mtd",
+        "mtext",
+        "mtr",
+        "munder",
+        "munderover",
+    }
+)
 TOKEN_ELEMENTS: Final = frozenset({"mi", "mo", "mn"})
 LETTER_COMMAND = re.compile(r"\\[a-zA-Z]+\*?")
 FONT_PREFIX_NAMING_NO_COMMAND: Final = commands.MATH
@@ -173,6 +200,7 @@ def mathml(expression: str, display: MathDisplay) -> str:
     _refuse_unknown_command_token(tokens, expression)
     for element in root.iter():
         _decode_converter_entities(element)
+        _refuse_element_outside_mathml(element, expression)
         _refuse_attributes_outside_mathml(element, expression)
         _refuse_unknown_colour(element, expression)
         _refuse_unknown_command(element, expression)
@@ -198,6 +226,14 @@ def _refuse_notion_equation_fence(expression: str) -> None:
         raise ReportError(
             f"math expression '{expression}' holds $$, which ends a Notion equation early: "
             r"write \$\$ for literal dollars"
+        )
+
+
+def _refuse_element_outside_mathml(element: Element, expression: str) -> None:
+    if element.tag not in MATHML_ELEMENTS:
+        raise ReportError(
+            f"math expression '{expression}' produces a {element.tag} element, which is not a MathML "
+            "element skaldr renders"
         )
 
 

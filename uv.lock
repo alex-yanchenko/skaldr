@@ -895,7 +895,7 @@ requires-dist = [
     { name = "httpx2", marker = "extra == 'publish'", specifier = ">=2.13.1" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "keyring", marker = "extra == 'publish'", specifier = ">=25.7.0" },
-    { name = "latex2mathml", specifier = ">=3.81.1,<4" },
+    { name = "latex2mathml", specifier = "==3.81.1" },
     { name = "markupsafe", specifier = ">=2.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyyaml", specifier = ">=6.0" },
