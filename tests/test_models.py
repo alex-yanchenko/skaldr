@@ -2427,6 +2427,37 @@ def test_pct_of_total_without_reconcile_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+@pytest.mark.parametrize("kind", ["text", "rich", "badge", "indicator"])
+def test_pct_of_total_on_a_column_that_is_not_a_number_column_is_rejected(kind: str) -> None:
+    table = make_reconciled_table(
+        columns=[
+            {"key": "issue", "label": "Issue", "kind": "text"},
+            {"key": "count", "label": "Count", "kind": "number"},
+            {"key": "extra", "label": "Extra", "kind": kind, "pct_of_total": True},
+        ],
+        groups=[{"name": "Our side", "rows": [{"issue": "Dupes", "count": 10, "extra": ""}]}],
+    )
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[table]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.table: Value error, column(s) ['extra']: pct_of_total is only "
+        "for number columns"
+    )
+
+
+def test_pct_of_total_on_a_reconciled_number_column_is_accepted() -> None:
+    table = make_reconciled_table(
+        columns=[
+            {"key": "issue", "label": "Issue"},
+            {"key": "count", "label": "Count", "kind": "number", "pct_of_total": True},
+        ]
+    )
+
+    assert parse_report(make_report(blocks=[table])).blocks[0].model_dump(exclude_defaults=True) == table
+
+
 def test_totals_column_must_be_a_number_column() -> None:
     table = {
         "type": "table",

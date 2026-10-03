@@ -896,6 +896,7 @@ link instead.
   also shows its share of the reconcile total. `pct_of_total` is defined **only** against a
   `reconcile` total — it has no meaning against a plain `totals` sum, so a table that sets
   `pct_of_total` without a `reconcile` is rejected at build time (add a `reconcile`, or drop the flag).
+  It is also rejected on a column that is not a `number` column, which has no share to show.
 - **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
 - **`rollup`** — `{ by: <badge-column-key>, label? }` — adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).

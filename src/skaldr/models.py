@@ -1159,6 +1159,9 @@ class Table(_Block):
                 raise ValueError(f"{name}.column '{spec.column}' must be a number column")
         if self.reconcile is None and any(column.pct_of_total for column in self.columns):
             raise ValueError("pct_of_total requires a reconcile total")
+        pct_misuse = [c.key for c in self.columns if c.pct_of_total and c.kind != "number"]
+        if pct_misuse:
+            raise ValueError(f"column(s) {pct_misuse}: pct_of_total is only for number columns")
         placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
         if placement_misuse:
             raise ValueError(f"column(s) {placement_misuse}: placement 'cell' is only for badge columns")
