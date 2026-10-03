@@ -1,5 +1,6 @@
 import re
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
 from typing import get_args
 
@@ -7,7 +8,6 @@ import pytest
 
 from skaldr.compute import (
     DELTA_GLYPHS,
-    HTTP_REASONS,
     Strip,
     StripLabel,
     anchor_slugs,
@@ -18,6 +18,7 @@ from skaldr.compute import (
     paragraphs,
     produced_names,
     provenance_footer,
+    reason_phrase,
     reconcile_line,
     reference_numbers,
     request_wire,
@@ -1213,6 +1214,25 @@ def test_an_omitted_reason_phrase_is_filled_in_from_the_status() -> None:
     assert status_line(block.cases[0].response) == "503 Service Unavailable"
 
 
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        pytest.param(307, "307 Temporary Redirect", id="temporary-redirect"),
+        pytest.param(206, "206 Partial Content", id="partial-content"),
+        pytest.param(501, "501 Not Implemented", id="not-implemented"),
+        pytest.param(413, f"413 {HTTPStatus(413).phrase}", id="renamed-in-3-13-content-too-large"),
+        pytest.param(422, f"422 {HTTPStatus(422).phrase}", id="renamed-in-3-13-unprocessable"),
+        pytest.param(299, "299", id="unassigned"),
+    ],
+)
+def test_every_standard_status_gets_its_reason_phrase_and_an_unassigned_one_stays_bare(
+    status: int, expected: str
+) -> None:
+    block = _request_block(cases=[{"label": "one", "response": {"status": status, "body": "{}"}}])
+
+    assert status_line(block.cases[0].response) == expected
+
+
 def test_an_authored_reason_phrase_wins_over_the_standard_text() -> None:
     block = _request_block(
         cases=[{"label": "one", "response": {"status": 200, "reason": "Grand", "body": "{}"}}]
@@ -1289,13 +1309,47 @@ def test_produced_names_pairs_each_capture_with_the_step_that_makes_it() -> None
     assert produced_names(flow) == [(flow.steps[0].captures[0], 1)]
 
 
-def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:
-    """status_line fills a missing reason when the page is built; the pasted-response parser fills one
-    in the browser. Two tables that drift make the recorded pill and the live pill disagree."""
+_PHRASES_PYTHON_RENAMED: dict[int, frozenset[str]] = {
+    422: frozenset({"Unprocessable Entity", "Unprocessable Content"}),
+}
+
+
+def test_the_reason_table_in_the_browser_script_agrees_with_the_phrases_the_page_renders() -> None:
     script = Path("src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
     literal = re.search(r"var REASONS = \{(.*?)\};", script, re.DOTALL)
     assert literal is not None
 
     in_browser = {int(code): text for code, text in re.findall(r'(\d{3}):\s*"([^"]+)"', literal.group(1))}
+    disagreeing = {
+        code: text
+        for code, text in in_browser.items()
+        if text != reason_phrase(code)
+        and not {text, reason_phrase(code)} <= _PHRASES_PYTHON_RENAMED.get(code, frozenset[str]())
+    }
 
-    assert in_browser == HTTP_REASONS
+    assert (sorted(in_browser), disagreeing) == (
+        [
+            200,
+            201,
+            202,
+            204,
+            301,
+            302,
+            304,
+            400,
+            401,
+            403,
+            404,
+            405,
+            409,
+            410,
+            415,
+            422,
+            429,
+            500,
+            502,
+            503,
+            504,
+        ],
+        {},
+    )

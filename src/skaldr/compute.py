@@ -14,6 +14,7 @@ import string
 import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from http import HTTPStatus
 from typing import Any, Final, NamedTuple, TypedDict
 
 import roman
@@ -63,6 +64,7 @@ __all__ = [
     "matrix_tallies",
     "pct",
     "provenance_footer",
+    "reason_phrase",
     "reconcile_line",
     "reference_numbers",
     "swimlane_layout",
@@ -756,29 +758,11 @@ def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> Matrix
     return MatrixCellDisplay(cell.tone, cell.label or "")
 
 
-HTTP_REASONS = {
-    200: "OK",
-    201: "Created",
-    202: "Accepted",
-    204: "No Content",
-    301: "Moved Permanently",
-    302: "Found",
-    304: "Not Modified",
-    400: "Bad Request",
-    401: "Unauthorized",
-    403: "Forbidden",
-    404: "Not Found",
-    405: "Method Not Allowed",
-    409: "Conflict",
-    410: "Gone",
-    415: "Unsupported Media Type",
-    422: "Unprocessable Entity",
-    429: "Too Many Requests",
-    500: "Internal Server Error",
-    502: "Bad Gateway",
-    503: "Service Unavailable",
-    504: "Gateway Timeout",
-}
+def reason_phrase(status: int) -> str:
+    try:
+        return HTTPStatus(status).phrase
+    except ValueError:
+        return ""
 
 
 def status_line(response: RequestResponse) -> str:
@@ -786,7 +770,7 @@ def status_line(response: RequestResponse) -> str:
     falls back to the standard text for the code rather than rendering a bare number."""
     if response.status is None:
         return "no status line"
-    return f"{response.status} {response.reason or HTTP_REASONS.get(response.status, '')}".strip()
+    return f"{response.status} {response.reason or reason_phrase(response.status)}".strip()
 
 
 def status_tone(response: RequestResponse) -> CaseTone:
