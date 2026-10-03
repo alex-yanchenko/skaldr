@@ -15,11 +15,11 @@ blocks: [ ... ]     # the ordered content
 publish: { ... }    # optional: where the document publishes (see below)
 ```
 
-Top level is `version`, `meta`, optional `badges`, `blocks` and an optional `publish` (see *Where it publishes* below), nothing else. Every block
-is a mapping with a `type` discriminator. **Validation is strict:** an unknown block type, a
-field that doesn't belong to that block, an unknown top-level key, or a value of the wrong shape
-each fails the build with a precise path, e.g. `error: invalid content data: blocks.3.items.2.value:
-number column needs a numeric value`. Run `skaldr --check <file>` to validate without rendering; read
+Top level is `version`, `meta`, `blocks`, and optional `badges` and `publish` (see *Where it
+publishes* below), nothing else. Every block is a mapping with a `type` discriminator.
+**Validation is strict:** an unknown block type, a field that doesn't belong to that block, an
+unknown top-level key, or a value of the wrong shape each fails the build with a precise path,
+e.g. `error: invalid content data: blocks.3.items.2.value: number column needs a numeric value`. Run `skaldr --check <file>` to validate without rendering; read
 the path, fix, re-run. Add an output flag and the check becomes a gate on that render: `skaldr --check
 --strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
 at all if the check fails.
@@ -143,7 +143,8 @@ A placeholder **name is letters, digits, `_` or `-`** (`{{next-round}}` is fine;
 To show a literal `{{`, put it in a `` `code` `` span.
 
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
-- `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate you run before "final".
+- `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
+  you run before "final".
 
 > **Self-checking a rendered page?** Every render, full page and `--embed` fragment alike, **embeds its
 > own YAML source** (so `--extract-source` can recover it), which means any `{{…}}` or `[^ref]` in the
@@ -229,8 +230,8 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
   # rows / columns / cells …
 ```
 
-Images must be self-contained `data:` URIs: skaldr
-embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
+Images must be self-contained `data:` URIs. skaldr
+embeds images; it does not fetch or generate them. **Base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
 `section`, a `grid`, or a `walkthrough`. It **starts collapsed** (`collapsed: true` default), right
 for an appendix or detail-on-demand; for a doc meant to be **read through** (a weekly status doc), set
@@ -529,9 +530,9 @@ columns:
   - { id: s2, name: "Sprint 2", sub: "→ MVP demo" }   # id key, display name, sub-caption
 ```
 
-Step fields are explicit, and skaldr never derives or renumbers them: `lane` (a lane's key), `col` (a column's
-key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`), and `label`. Two steps in the
-same cell stack.
+Step fields are explicit, and skaldr never derives or renumbers them: `lane` (a lane's key), `col`
+(a column's key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`), and
+`label`. Two steps in the same cell stack.
 
 Give steps an optional numeric `value` (points, hours, cost, headcount: whatever the matrix measures)
 and skaldr auto-sums it into **totals that never drift by hand**: a footer row of per-column sums, a
@@ -541,8 +542,8 @@ without one counts as 0.
 
 A step may also carry an optional `url` (http/https/mailto, e.g. its Jira/GitHub ticket), which turns
 its number into a link, and a **`state`**: the same progress axis as `status_list` and `timeline`, in
-roadmap terms (`todo` for not-started, plus a `deferred`). The states are `done` (green), `current` (in progress, the
-raised blue badge), `todo` (**default**: planned, not started; a cool filled slate badge), `blocked`
+roadmap terms (`todo` for not-started, plus a `deferred`). The states are `done` (green),
+`current` (in progress, the raised blue badge), `todo` (**default**: planned, not started; a cool filled slate badge), `blocked`
 (waiting / on-hold: amber + a sharp dashed frame), and `deferred` (pushed out / post-MVP: a warm hollow
 badge that recedes). Colour rides on the number badge and the ticket's left edge; the label stays legible
 at every state (`deferred` recedes by hue, not by dimming). Reach for `deferred` for work
