@@ -105,7 +105,7 @@ class _NotionRuns(MarkupRuns):
         return self.code(piece) if is_file_name else self.escape(piece)
 
     def code(self, text: str, /) -> str:
-        return self.escape(text) if "`" in text else f"`{text}`"
+        return self.escape(text) if any(character in text for character in "`<") else f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label

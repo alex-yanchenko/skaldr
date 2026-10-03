@@ -614,6 +614,30 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
     )
 
 
+def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole() -> None:
+    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": "close with `</td></tr>` here"}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>close with \\</td\\>\\</tr\\> here</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param("a `List<int>` type", "a List\\<int\\> type", id="an-angle-bracket"),
+        pytest.param("inline `</callout>` code", "inline \\</callout\\> code", id="a-closing-tag"),
+        pytest.param("a `x > 1` test", "a `x > 1` test", id="no-opening-angle-bracket-stays-code"),
+        pytest.param("a `a|b` pipe", "a `a|b` pipe", id="no-angle-bracket-stays-code"),
+    ],
+)
+def test_code_holding_an_opening_angle_bracket_is_escaped_text_anywhere(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
 def test_a_single_weighted_column_takes_the_whole_page_width() -> None:
     table = make_table([{"key": "a", "label": "A", "width": 3}], rows=[{"a": "x"}])
 

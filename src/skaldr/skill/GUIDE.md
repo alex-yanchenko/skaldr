@@ -1000,6 +1000,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
 | `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
+| an inline `` `code` `` span holding a `<` or a backtick | inline code | the same text as plain prose, since Notion reads a tag inside inline code as markup and a closing `</td>` there ends a table cell early |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response. Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched.
