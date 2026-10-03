@@ -5,6 +5,7 @@ import subprocess
 from collections import Counter
 from collections.abc import Callable
 from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 from typing import get_args
@@ -2462,10 +2463,49 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert html.count(" checked>") == 1
 
 
+def _script_hash(body: str) -> str:
+    return base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+
+
+class _InlineScripts(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.bodies: list[str] = []
+        self._collecting = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script":
+            self._collecting = dict(attrs).get("type") != "application/yaml"
+            if self._collecting:
+                self.bodies.append("")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._collecting = False
+
+    def handle_data(self, data: str) -> None:
+        if self._collecting:
+            self.bodies[-1] += data
+
+
+def _inline_scripts(html: str) -> list[str]:
+    reader = _InlineScripts()
+    reader.feed(html)
+    reader.close()
+    return reader.bodies
+
+
+def test_inline_scripts_are_collected_whatever_their_attributes_and_the_yaml_source_is_skipped() -> None:
+    html = (
+        '<script>a()</script><script type="module">b()</script><script defer>c()</script>'
+        '<script type="application/yaml" id="skaldr-source">d: 1</script><script></script>'
+    )
+
+    assert _inline_scripts(html) == ["a()", "b()", "c()", ""]
+
+
 def _request_runtime_script(html: str) -> str:
-    """The inline script that drives a request block, picked out of the page's several."""
-    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-    return next(script for script in scripts if "data-rq-slot" in script)
+    return next(script for script in _inline_scripts(html) if "data-rq-slot" in script)
 
 
 def _cases(count: int) -> list[dict[str, object]]:
@@ -2922,12 +2962,10 @@ def test_every_inline_script_on_a_request_page_is_pinned_by_the_csp() -> None:
     assert csp is not None
     script_src = csp.group(1).split("script-src ", 1)[1].split(";", 1)[0]
 
-    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+    scripts = _inline_scripts(html)
+    unpinned = [body[:40] for body in scripts if f"'sha256-{_script_hash(body)}'" not in script_src]
 
-    assert any("data-rq-slot" in body for body in scripts)
-    for body in scripts:
-        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
-        assert f"'sha256-{digest}'" in script_src
+    assert (any("data-rq-slot" in body for body in scripts), unpinned) == (True, [])
 
 
 def test_render_without_source_embeds_no_block() -> None:
@@ -3018,9 +3056,9 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
     assert "'unsafe-inline'" not in script_src
     # Recompute each inline script's hash from the rendered output so a script edit that isn't
     # reflected in the CSP fails here (the browser would otherwise silently refuse the script).
-    for body in re.findall(r"<script>(.*?)</script>", html, re.DOTALL):
-        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
-        assert f"'sha256-{digest}'" in script_src
+    scripts = _inline_scripts(html)
+    assert len(scripts) == 2
+    assert [body[:40] for body in scripts if f"'sha256-{_script_hash(body)}'" not in script_src] == []
     # The policy must precede the inline scripts so it governs them.
     assert html.index("Content-Security-Policy") < html.index("<script>")
 
