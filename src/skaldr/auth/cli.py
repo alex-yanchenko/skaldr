@@ -138,7 +138,7 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
     credentials = verify_jira_token(site, email, api_token, transport=transport)
     save_jira(credentials)
-    print(f"Signed in to Jira at {site} as {_person(credentials)}. Saved to the keychain.")
+    print(f"Signed in to Jira at {site}{_as_person(credentials)}. Saved to the keychain.")
 
 
 def _print_status() -> int:
@@ -202,15 +202,16 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
     credentials = sign_in.credentials
     if sign_in.source == "environment":
         return f"JIRA_EMAIL, JIRA_API_TOKEN for {credentials.site} (environment)"
-    return f"signed in to {credentials.site} as {_person(credentials)} (keychain)"
+    return f"signed in to {credentials.site}{_as_person(credentials)} (keychain)"
 
 
 def _workspace(credentials: NotionCredentials) -> str:
     return without_control_characters(credentials.workspace_name or "") or "(unnamed workspace)"
 
 
-def _person(credentials: JiraCredentials) -> str:
-    return without_control_characters(credentials.display_name or "") or "(no display name)"
+def _as_person(credentials: JiraCredentials) -> str:
+    display_name = without_control_characters(credentials.display_name or "")
+    return f" as {display_name}" if display_name else ""
 
 
 def _required(answer: str, refusal: str) -> str:

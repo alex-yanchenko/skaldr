@@ -71,6 +71,23 @@ def test_auth_jira_verifies_the_token_and_saves_it(
     )
 
 
+@pytest.mark.parametrize(
+    "display_name", ["", "\x1b\x07\r\n"], ids=["empty", "nothing but control characters"]
+)
+def test_auth_jira_leaves_out_a_display_name_it_cannot_show(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], display_name: str
+) -> None:
+    answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
+    myself = {**MYSELF, "displayName": display_name}
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        "Signed in to Jira at https://example.atlassian.net. Saved to the keychain.\n",
+    )
+
+
 def test_auth_jira_prints_only_the_printable_part_of_the_display_name(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -402,7 +419,7 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  signed in to workspace (unnamed workspace) (keychain)\n"
-        "jira    signed in to https://example.atlassian.net as (no display name) (keychain)\n"
+        "jira    signed in to https://example.atlassian.net (keychain)\n"
     )
 
 
