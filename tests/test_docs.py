@@ -251,6 +251,7 @@ def test_the_skill_and_the_readme_name_both_export_targets(text: str) -> None:
 
 
 _EM_OR_EN_DASH = re.compile("[\N{EM DASH}\N{EN DASH}]")
+_TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|<!--.*?-->|/\*.*?\*/", re.DOTALL)
 
 _SHIPPED_PROSE = (
     "README.md",
@@ -297,3 +298,35 @@ def test_no_string_in_the_package_source_carries_an_em_or_en_dash() -> None:
     sources = sorted((REPO_ROOT / "src" / "skaldr").rglob("*.py"))
 
     assert [hit for source in sources for hit in _string_literals_with_a_dash(source)] == []
+
+
+def _uncommented_lines_with_a_dash(template: str) -> list[str]:
+    text = _TEMPLATE_COMMENT.sub("", template)
+    return [line.strip() for line in text.splitlines() if _EM_OR_EN_DASH.search(line)]
+
+
+def test_no_template_or_stylesheet_text_carries_an_em_or_en_dash() -> None:
+    package = REPO_ROOT / "src" / "skaldr"
+    sources = [*sorted((package / "components").glob("*.j2")), package / "styles.css"]
+    hits = {
+        str(source.relative_to(REPO_ROOT)): _uncommented_lines_with_a_dash(source.read_text(encoding="utf-8"))
+        for source in sources
+    }
+
+    assert {path: lines for path, lines in hits.items() if lines} == {}
+
+
+@pytest.mark.parametrize(
+    ("template", "hits"),
+    [
+        pytest.param("{# a \N{EM DASH} b #}<p>x</p>", [], id="jinja-comment"),
+        pytest.param("<!-- a \N{EM DASH} b -->", [], id="html-comment"),
+        pytest.param("/* a\n \N{EM DASH} b */ p{}", [], id="multi-line-css-comment"),
+        pytest.param(
+            '.x::before{content:"\N{EM DASH} "}', ['.x::before{content:"\N{EM DASH} "}'], id="css-text"
+        ),
+        pytest.param("<b>Legend \N{EN DASH} x</b>", ["<b>Legend \N{EN DASH} x</b>"], id="html-text"),
+    ],
+)
+def test_the_template_guard_reads_text_and_skips_comments(template: str, hits: list[str]) -> None:
+    assert _uncommented_lines_with_a_dash(template) == hits
