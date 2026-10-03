@@ -195,9 +195,7 @@ def parse_rich(text: str, context: RichContext | None = None) -> Rich:
         if "\x00" in url:
             raise _anchor_holding_markup(url)
         if url[1:] not in rules.anchor_ids:
-            raise ReportError(
-                f"rich text links to unknown anchor '{url}' — no heading or section has that id"
-            )
+            raise ReportError(f"rich text links to unknown anchor '{url}': no heading or section has that id")
         return stash.set_aside(AnchorLink(label, url[1:]))
 
     def link(match: re.Match[str]) -> str:
