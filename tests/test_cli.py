@@ -127,6 +127,26 @@ def test_extract_source_reports_an_unreadable_target(
     assert "could not read" in capsys.readouterr().err
 
 
+def test_extract_source_gives_up_on_a_url_that_stalls_naming_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, float | None]] = []
+
+    def stalled_urlopen(url: str, timeout: float | None = None) -> object:
+        calls.append((url, timeout))
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("skaldr.cli.urllib.request.urlopen", stalled_urlopen)
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err, calls) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: timed out\n",
+        [("https://pages.example.com/plan.html", 30)],
+    )
+
+
 def test_success_exit_code_and_summary(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report())
     out_path = tmp_path / "report.html"

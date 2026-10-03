@@ -32,6 +32,7 @@ from skaldr.render import (
 )
 from skaldr.replace_file import replace_file, resolved_path
 
+_FETCH_TIMEOUT_SECONDS = 30
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
 
@@ -182,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         "--extract-source",
         metavar="FILE|URL",
         help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
-        "and exit — recover the source without parsing the HTML. Exits non-zero if none is embedded.",
+        "and exit — recover the source without parsing the HTML. Exits non-zero if none is embedded, or if "
+        "a URL does not answer within 30 seconds.",
     )
     option(
         "--pdf",
@@ -502,7 +504,7 @@ def _extract_source(target: str) -> int:
     agent recovers it without parsing the HTML. Returns 1 if the page carries no embedded source."""
     try:
         if target.startswith(("http://", "https://")):
-            with urllib.request.urlopen(target) as response:
+            with urllib.request.urlopen(target, timeout=_FETCH_TIMEOUT_SECONDS) as response:
                 html = response.read().decode("utf-8")
         else:
             html = Path(target).read_text(encoding="utf-8")
