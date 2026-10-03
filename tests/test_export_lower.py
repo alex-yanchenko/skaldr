@@ -442,7 +442,7 @@ def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
             {"label": "found", "response": {"status": 200, "body": "[]"}},
         ],
     )
-    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://api.example.com/widgets'"
+    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  https://api.example.com/widgets"
 
     assert lowered([request]) == (
         Paragraph(bold("Read an endpoint")),

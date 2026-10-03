@@ -22,7 +22,6 @@ from skaldr.compute import (
     reconcile_line,
     reference_numbers,
     request_wire,
-    single_quoted,
     status_line,
     strip_registry,
     swimlane_layout,
@@ -1137,36 +1136,33 @@ def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail
 
 
 @pytest.mark.parametrize(
-    ("plain", "quoted"),
-    [
-        ("https://api.example.com/x", "'https://api.example.com/x'"),
-        ("it's", "'it'\\''s'"),
-        ("a;rm -rf ~", "'a;rm -rf ~'"),
-        ("", "''"),
-        ("'", "''\\'''"),
-        ("'lead", "''\\''lead'"),
-        ("trail'", "'trail'\\'''"),
-        ("a''b", "'a'\\'''\\''b'"),
-    ],
-    ids=["plain", "apostrophe", "metacharacters", "empty", "only", "leading", "trailing", "adjacent"],
-)
-def test_single_quoting_survives_a_shell_metacharacter(plain: str, quoted: str) -> None:
-    assert single_quoted(plain) == quoted
-
-
-@pytest.mark.parametrize(
     "payload",
-    ["'", "'lead", "trail'", "a''b", "x'; echo owned; '", "$(id)", "`id`", "a\nb"],
-    ids=["only", "leading", "trailing", "adjacent", "injection", "subshell", "backtick", "newline"],
+    ["'", "'lead", "trail'", "a''b", "x'; echo owned; '", "$(id)", "`id`", "a\nb", "a;rm -rf ~", "plain"],
+    ids=[
+        "only",
+        "leading",
+        "trailing",
+        "adjacent",
+        "injection",
+        "subshell",
+        "backtick",
+        "newline",
+        "metacharacters",
+        "safe",
+    ],
 )
-def test_a_single_quoted_word_is_one_shell_word_carrying_its_payload(payload: str) -> None:
-    """The quoted form must survive a real shell: one argument out, byte-identical to what went in."""
-    quoted = single_quoted(payload)
+def test_a_body_reaches_curl_as_one_word_carrying_its_payload(payload: str) -> None:
+    block = _request_block(method="POST", headers={}, body=payload)
+    command = command_for(block, block.cases[0])
 
-    assert (
-        subprocess.run(["bash", "-c", f"printf %s {quoted}"], capture_output=True, text=True).stdout
-        == payload
+    result = subprocess.run(
+        ["bash", "-c", f'curl() {{ printf %s "$5"; }}\n{command}'],
+        capture_output=True,
+        text=True,
+        check=False,
     )
+
+    assert (result.returncode, result.stdout, result.stderr) == (0, payload, "")
 
 
 @pytest.mark.parametrize(
@@ -1204,8 +1200,14 @@ def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
     command = command_for(block, block.cases[0])
 
     assert "-H 'Accept: application/json'" in command
-    assert "--data '{\"q\":\"it'\\''s\"}'" in command
+    assert '--data \'{"q":"it\'"\'"\'s"}\'' in command
     assert "'https://{{host}}/widgets'" in command
+
+
+def test_a_url_made_only_of_safe_characters_is_left_bare_in_the_command() -> None:
+    block = _request_block(url="https://api.example.com/widgets", headers={}, variables=[])
+
+    assert command_for(block, block.cases[0]) == "curl -i -X GET \\\n  https://api.example.com/widgets"
 
 
 def test_an_omitted_reason_phrase_is_filled_in_from_the_status() -> None:

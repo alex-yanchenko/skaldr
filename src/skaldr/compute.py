@@ -10,6 +10,7 @@ it, and models must not import compute) so templates can reach it through this o
 import json
 import math
 import re
+import shlex
 import string
 import unicodedata
 from collections import Counter
@@ -873,12 +874,6 @@ def request_wire(block: RequestLike, case: RequestCase) -> str:
     return resolve_case("\n".join(lines), block, case)
 
 
-def single_quoted(text: str) -> str:
-    """`text` as one single-quoted shell word. A single quote inside it closes the string, escapes
-    itself and reopens, which is the only way a POSIX shell takes a quote inside single quotes."""
-    return "'" + text.replace("'", "'\\''") + "'"
-
-
 def command_for(core: RequestLike, case: RequestCase) -> str:
     """The command shown under one call, every value written out, so it runs exactly as it is copied:
     the author's own `command` when there is one, else the curl built from the call's fields."""
@@ -888,12 +883,12 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
     call = core.composed_call()
     parts = [f"curl -i -X {call.method}"]
     parts += [
-        f"  -H {single_quoted(resolve_case(f'{name}: {value}', core, case))}"
+        f"  -H {shlex.quote(resolve_case(f'{name}: {value}', core, case))}"
         for name, value in request_headers(core, case).items()
     ]
     if core.body:
-        parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
-    parts.append(f"  {single_quoted(resolve_case(call.url, core, case))}")
+        parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
+    parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
 
 
