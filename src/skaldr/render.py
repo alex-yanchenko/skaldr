@@ -35,8 +35,8 @@ from skaldr.richtext import (
     RichContext,
     ScriptPosition,
     StyleName,
-    located_rich_text_error,
     parse_rich,
+    validate_rich_text_fields,
     write_runs,
 )
 
@@ -120,7 +120,6 @@ def _environment() -> Environment:
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
     filters["paragraphs"] = compute.paragraphs
-    filters["richtext"] = render_richtext
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
         pct=compute.pct,
@@ -171,15 +170,13 @@ def _render(
 
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
+    validate_rich_text_fields(report, RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids))
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
     # trailing references list reads it to give a cited key a backlink and skip one never cited.
     cited_references: set[str] = set()
 
     def richtext(text: str) -> Markup:
-        try:
-            return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
-        except ReportError as error:
-            raise located_rich_text_error(report, str(text), error) from error
+        return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
 
     filters = cast("dict[str, Any]", env.filters)
     filters["richtext"] = richtext

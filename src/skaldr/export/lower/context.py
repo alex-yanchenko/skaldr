@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import TypeGuard
 
 from skaldr import compute
-from skaldr.errors import ReportError
 from skaldr.export.inline import bold, one_line, plain, rich_line
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
@@ -16,7 +15,7 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
-from skaldr.richtext import Plain, Rich, RichContext, located_rich_text_error
+from skaldr.richtext import Plain, Rich, RichContext, validate_rich_text_fields
 
 
 def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
@@ -40,10 +39,7 @@ class Lowering:
     table_tallies: Mapping[str, compute.DerivedTally]
 
     def rich(self, text: str) -> Rich:
-        try:
-            return rich_line(text, self.rich_context)
-        except ReportError as error:
-            raise located_rich_text_error(self.report, text, error) from error
+        return rich_line(text, self.rich_context)
 
     def prose(self, text: str, tone: ToneName | None = None) -> tuple[Node, ...]:
         return tuple(Paragraph(self.rich(part), tone) for part in compute.paragraphs(text))
@@ -73,13 +69,15 @@ class Lowering:
 
 def lowering_for(report: Report) -> Lowering:
     anchors = compute.anchor_slugs(report)
+    rich_context = RichContext(
+        reference_numbers=compute.reference_numbers(report),
+        reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
+        anchor_ids=frozenset(anchors.values()),
+    )
+    validate_rich_text_fields(report, rich_context)
     return Lowering(
         report=report,
-        rich_context=RichContext(
-            reference_numbers=compute.reference_numbers(report),
-            reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
-            anchor_ids=frozenset(anchors.values()),
-        ),
+        rich_context=rich_context,
         anchors=anchors,
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),

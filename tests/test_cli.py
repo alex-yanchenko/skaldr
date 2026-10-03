@@ -525,6 +525,48 @@ def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
             "or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
             id="placeholder-in-a-second-paragraph",
         ),
+        pytest.param(
+            [
+                {"type": "code", "content": "write {{a b}} here"},
+                {"type": "callout", "tone": "info", "body": "{{a b}}"},
+            ],
+            "blocks.1.body: invalid placeholder '{{a b}}': a placeholder name is letters, digits, '_' "
+            "or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="an-earlier-plain-field-holding-the-same-text-is-not-blamed",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "comparison",
+                    "options": ["A", "B"],
+                    "rows": [{"feature": "f", "values": [True, "x [a]{tone=x}"]}],
+                }
+            ],
+            "blocks.0.rows.0.values.1: unknown tone 'x' in {tone=x}: a tone is one of neutral, info, "
+            "success, warning, danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, "
+            "violet",
+            id="comparison-cell",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "table",
+                    "columns": [
+                        {"key": "item", "label": "Item"},
+                        {"key": "n", "label": "N", "kind": "number"},
+                    ],
+                    "groups": [
+                        {
+                            "name": "G",
+                            "rows": [{"item": "a", "n": 1, "subrows": [{"label": "$` `$", "value": 1}]}],
+                        }
+                    ],
+                }
+            ],
+            "blocks.0.groups.0.rows.0.subrows.0.label: inline math $` `$ is empty: write an expression "
+            "between $` and `$, as in $`x_i`$",
+            id="subrow-label-in-a-group",
+        ),
     ],
 )
 def test_check_names_the_field_whose_rich_text_fails(
