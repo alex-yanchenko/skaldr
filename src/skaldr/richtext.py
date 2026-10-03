@@ -13,10 +13,15 @@ from skaldr.models import RICH_TEXT, Report, Table, ToneLiteral
 from skaldr.richtext_syntax import (
     ANCHOR_PREFIX,
     CITATION,
+    CODE_INLINE,
+    EM_OPEN,
     INLINE_MATH,
+    LINK_OPEN,
     MAX_NESTING,
     PLACEHOLDER,
     SPAN_TONES,
+    STRIKE_OPEN,
+    STRONG_OPEN,
     SUBSCRIPT,
     SUPERSCRIPT,
     TINT_OPEN,
@@ -94,9 +99,9 @@ Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | Scrip
 Rich = tuple[Run, ...]
 
 _STYLE_OPENERS: Final[Mapping[str, StyleName]] = {
-    "strong_open": "bold",
-    "em_open": "italic",
-    "s_open": "strike",
+    STRONG_OPEN: "bold",
+    EM_OPEN: "italic",
+    STRIKE_OPEN: "strike",
     UNDERLINE_OPEN: "underline",
 }
 _SCRIPT_TOKENS: Final[Mapping[str, ScriptPosition]] = {SUBSCRIPT: "subscript", SUPERSCRIPT: "superscript"}
@@ -134,7 +139,7 @@ def _runs_until_close(
 
 
 def _wrapped_runs(opener: Token, inner: Rich, rules: RichContext) -> Rich:
-    if opener.type == "link_open":
+    if opener.type == LINK_OPEN:
         return _link_runs(str(opener.attrs["href"]), inner, rules)
     if opener.type == TINT_OPEN:
         tones: SpanTones = opener.meta[SPAN_TONES]
@@ -153,7 +158,7 @@ def _link_runs(url: str, label: Rich, rules: RichContext) -> Rich:
 
 
 def _leaf_run(token: Token, rules: RichContext) -> Run:
-    if token.type == "code_inline":
+    if token.type == CODE_INLINE:
         return Code(token.content)
     if token.type == PLACEHOLDER:
         return Placeholder(token.content)

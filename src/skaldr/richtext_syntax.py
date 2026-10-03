@@ -20,14 +20,29 @@ PLACEHOLDER: Final = "placeholder"
 CITATION: Final = "citation"
 INLINE_MATH: Final = "inline_math"
 TINT_OPEN: Final = "tint_open"
-TINT_CLOSE: Final = "tint_close"
 SPAN_TONES: Final = "span_tones"
 UNDERLINE_OPEN: Final = "underline_open"
-UNDERLINE_CLOSE: Final = "underline_close"
 SUBSCRIPT: Final = "subscript"
 SUPERSCRIPT: Final = "superscript"
 LINK_OPEN: Final = "link_open"
+TEXT: Final = "text"
+CODE_INLINE: Final = "code_inline"
+STRONG_OPEN: Final = "strong_open"
+EM_OPEN: Final = "em_open"
+STRIKE_OPEN: Final = "s_open"
+
+_TINT_CLOSE: Final = "tint_close"
+_UNDERLINE_CLOSE: Final = "underline_close"
 _LINK_CLOSE: Final = "link_close"
+_LINK_RULE: Final = "link"
+_TEXT_RULE: Final = "text"
+_ESCAPE_RULE: Final = "escape"
+_BACKTICKS_RULE: Final = "backticks"
+_EMPHASIS_RULE: Final = "emphasis"
+_STRIKETHROUGH_RULE: Final = "strikethrough"
+_TINTED_SPAN_RULE: Final = "tinted_span"
+_STRAY_ATTRIBUTE_LIST_RULE: Final = "stray_attribute_list"
+_UNDERLINE_RULE: Final = "underline"
 _IMAGE_AS_TYPED_RULE: Final = "image_as_typed"
 
 _REFERENCE_KEYS: Final = "reference_keys"
@@ -100,9 +115,9 @@ def _citation(state: StateInline, silent: bool) -> bool:
 
 def _inline_math(state: StateInline, silent: bool) -> bool:
     start = state.pos
-    body = start + len(_MATH_OPEN)
     if silent or not state.src.startswith(_MATH_OPEN, start, state.posMax):
         return False
+    body = start + len(_MATH_OPEN)
     close = state.src.find("`", body, state.posMax)
     if close <= body or not state.src.startswith(_MATH_CLOSE, close, state.posMax):
         return False
@@ -116,10 +131,6 @@ def _inline_math(state: StateInline, silent: bool) -> bool:
     state.push(INLINE_MATH, "", 0).content = expression
     state.pos = close + len(_MATH_CLOSE)
     return True
-
-
-def _attribute_token(attributes: str) -> str:
-    return "{" + attributes.strip() + "}"
 
 
 def nested_too_deep() -> ReportError:
@@ -164,15 +175,15 @@ def _note_lookahead_past_the_nesting_limit(state: StateInline, silent: bool) -> 
     return False
 
 
-def _colours_no_text(attributes: str) -> ReportError:
+def _attribute_list_colors_no_text(attributes: str) -> ReportError:
     return ReportError(
-        f"the attribute list {_attribute_token(attributes)} follows no [text] it can color: the text "
+        "the attribute list {" + attributes.strip() + "} follows no [text] it can color: the text "
         "inside a [text]{…} span is not empty and holds no link"
     )
 
 
 def _span_tones(attributes: str) -> SpanTones:
-    token = _attribute_token(attributes)
+    token = "{" + attributes.strip() + "}"
     tones: dict[str, ToneLiteral] = {}
     for attribute in attributes.split():
         key, equals, value = attribute.partition("=")
@@ -217,17 +228,17 @@ def _tinted_span(state: StateInline, silent: bool) -> bool:
     if attributes is None:
         return False
     if label_end == start + 1:
-        raise _colours_no_text(attributes.group(1))
+        raise _attribute_list_colors_no_text(attributes.group(1))
     opener = state.push(TINT_OPEN, "span", 1)
     first_label_token = len(state.tokens)
     end = state.posMax
     state.pos, state.posMax = start + 1, label_end
     state.md.inline.tokenize(state)
     state.posMax = end
-    if any(token.type == "link_open" for token in state.tokens[first_label_token:]):
-        raise _colours_no_text(attributes.group(1))
+    if any(token.type == LINK_OPEN for token in state.tokens[first_label_token:]):
+        raise _attribute_list_colors_no_text(attributes.group(1))
     opener.meta[SPAN_TONES] = _span_tones(attributes.group(1))
-    state.push(TINT_CLOSE, "span", -1)
+    state.push(_TINT_CLOSE, "span", -1)
     state.pos = attributes.end()
     return True
 
@@ -239,7 +250,7 @@ def _stray_attribute_list(state: StateInline, silent: bool) -> bool:
     if attributes is not None and state.env.get(_NESTING_LIMIT_REACHED):
         raise nested_too_deep()
     if attributes is not None:
-        raise _colours_no_text(attributes.group(1))
+        raise _attribute_list_colors_no_text(attributes.group(1))
     return False
 
 
@@ -268,9 +279,9 @@ def _underline_delimiters(state: StateInline, silent: bool) -> bool:
         return False
     pairs, odd = divmod(scanned.length, 2)
     if odd:
-        state.push("text", "", 0).content = _UNDERLINE_MARKER
+        state.push(TEXT, "", 0).content = _UNDERLINE_MARKER
     for _ in range(pairs):
-        state.push("text", "", 0).content = _UNDERLINE_MARKER * 2
+        state.push(TEXT, "", 0).content = _UNDERLINE_MARKER * 2
         state.delimiters.append(
             Delimiter(
                 marker=ord(_UNDERLINE_MARKER),
@@ -297,7 +308,7 @@ def _pair_underlines(state: StateInline, delimiters: Sequence[Delimiter]) -> Non
     for opener in delimiters:
         if opener.marker == ord(_UNDERLINE_MARKER) and opener.end != -1:
             _become_underline_tag(state.tokens[opener.token], UNDERLINE_OPEN, 1)
-            _become_underline_tag(state.tokens[delimiters[opener.end].token], UNDERLINE_CLOSE, -1)
+            _become_underline_tag(state.tokens[delimiters[opener.end].token], _UNDERLINE_CLOSE, -1)
 
 
 def _underline_pairs(state: StateInline) -> None:
@@ -309,26 +320,26 @@ def _underline_pairs(state: StateInline) -> None:
 
 def _rich_markdown() -> MarkdownIt:
     markdown = _RichMarkdown("zero", {"maxNesting": MAX_NESTING + 1})
-    markdown.enable(["escape", "backticks", "strikethrough", "emphasis", "link"])
+    markdown.enable([_ESCAPE_RULE, _BACKTICKS_RULE, _STRIKETHROUGH_RULE, _EMPHASIS_RULE, _LINK_RULE])
     inline = markdown.inline.ruler
-    inline.before("text", _NESTING_LIMIT_RULE, _note_lookahead_past_the_nesting_limit)
-    inline.before("backticks", INLINE_MATH, _inline_math)
-    inline.before("link", CITATION, _citation)
-    inline.before("link", "tinted_span", _tinted_span)
-    inline.before("link", _IMAGE_AS_TYPED_RULE, _image_as_typed)
-    inline.at("link", _link_with_a_label_and_a_url)
-    inline.after("link", "stray_attribute_list", _stray_attribute_list)
-    inline.after("emphasis", PLACEHOLDER, _placeholder)
-    inline.after("emphasis", SUBSCRIPT, _script_rule("~", SUBSCRIPT, "~"))
-    inline.after("emphasis", SUPERSCRIPT, _script_rule("^", SUPERSCRIPT, "[^"))
-    inline.after("strikethrough", "underline", _underline_delimiters)
-    markdown.inline.ruler2.after("strikethrough", "underline", _underline_pairs)
+    inline.before(_TEXT_RULE, _NESTING_LIMIT_RULE, _note_lookahead_past_the_nesting_limit)
+    inline.before(_BACKTICKS_RULE, INLINE_MATH, _inline_math)
+    inline.before(_LINK_RULE, CITATION, _citation)
+    inline.before(_LINK_RULE, _TINTED_SPAN_RULE, _tinted_span)
+    inline.before(_LINK_RULE, _IMAGE_AS_TYPED_RULE, _image_as_typed)
+    inline.at(_LINK_RULE, _link_with_a_label_and_a_url)
+    inline.after(_LINK_RULE, _STRAY_ATTRIBUTE_LIST_RULE, _stray_attribute_list)
+    inline.after(_EMPHASIS_RULE, PLACEHOLDER, _placeholder)
+    inline.after(_EMPHASIS_RULE, SUBSCRIPT, _script_rule("~", SUBSCRIPT, "~"))
+    inline.after(_EMPHASIS_RULE, SUPERSCRIPT, _script_rule("^", SUPERSCRIPT, "[^"))
+    inline.after(_STRIKETHROUGH_RULE, _UNDERLINE_RULE, _underline_delimiters)
+    markdown.inline.ruler2.after(_STRIKETHROUGH_RULE, _UNDERLINE_RULE, _underline_pairs)
     return markdown
 
 
-RICH_MARKDOWN: Final = _rich_markdown()
+_RICH_MARKDOWN: Final = _rich_markdown()
 
 
 def inline_tokens(text: str, reference_keys: Collection[str] = ()) -> Sequence[Token]:
-    [inline] = RICH_MARKDOWN.parseInline(text, {_REFERENCE_KEYS: frozenset(reference_keys)})
+    [inline] = _RICH_MARKDOWN.parseInline(text, {_REFERENCE_KEYS: frozenset(reference_keys)})
     return inline.children or []

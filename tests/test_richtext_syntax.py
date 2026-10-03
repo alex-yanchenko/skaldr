@@ -2,15 +2,15 @@ import pytest
 from markdown_it.token import Token
 
 from skaldr.errors import ReportError
-from skaldr.richtext_syntax import SPAN_TONES, SpanTones, inline_tokens
+from skaldr.richtext_syntax import LINK_OPEN, SPAN_TONES, SpanTones, inline_tokens
 
 Shape = tuple[tuple[str, object], ...]
 REFERENCE_KEYS = frozenset({"sop"})
 
 
-def _payload(token: Token) -> object:
-    if token.type == "link_open":
-        return token.attrs["href"]
+def _payload(token: Token) -> str | SpanTones:
+    if token.type == LINK_OPEN:
+        return str(token.attrs["href"])
     return token.meta.get(SPAN_TONES, token.content)
 
 

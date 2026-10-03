@@ -3172,9 +3172,7 @@ def test_richtext_escapes_a_link_target_inside_its_href() -> None:
         ),
     ],
 )
-def test_richtext_crossed_emphasis_nests_inside_the_first_match_instead_of_interleaving_tags(
-    text: str, html: str
-) -> None:
+def test_richtext_crossed_emphasis_renders_well_nested_tags(text: str, html: str) -> None:
     assert str(render_richtext(text)) == html
 
 
