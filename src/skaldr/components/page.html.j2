@@ -5,6 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="{{ render_stamp_name }}" content="{{ render_stamp }}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The

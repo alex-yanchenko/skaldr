@@ -23,6 +23,8 @@ the path, fix, re-run. Add an output flag and the check becomes a gate on that r
 --strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
 at all if the check fails.
 
+`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
+
 Every file skaldr writes (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) is written to a temporary file next to it and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, and an existing file keeps its permissions. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text.
 
 ## `meta`

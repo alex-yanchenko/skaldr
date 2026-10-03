@@ -1,6 +1,7 @@
 import errno
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -8,8 +9,8 @@ import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ReportError
-from skaldr.models import Report, parse_report
-from skaldr.render import render_html, render_report
+from skaldr.models import Report, load_report, parse_report
+from skaldr.render import render_embed, render_html, render_report
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
@@ -1016,6 +1017,106 @@ def test_check_and_if_stale_are_the_plan_loop(tmp_path: Path, capsys: pytest.Cap
 
     assert main(["--check", str(data_path), "-o", str(out_path), "--if-stale"]) == 0
     assert out_path.stat().st_mtime_ns == first
+
+
+def _set_mtime(path: Path, seconds_ago: int) -> None:
+    moment = time.time() - seconds_ago
+    os.utime(path, (moment, moment))
+
+
+def test_the_live_plan_loop_keeps_the_reloader_through_every_if_stale_re_render(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), "--live"]) == 0
+    for body in ("first edit", "second edit"):
+        _set_mtime(out_path, 60)
+        _write(tmp_path, make_report(blocks=[{"type": "text", "body": body}]))
+        assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    edited = parse_report(make_report(blocks=[{"type": "text", "body": "second edit"}]))
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(edited, source=source, live=0)
+
+
+def test_if_stale_keeps_a_live_page_that_is_current_untouched(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), "--live", "500"]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
+
+
+@pytest.mark.parametrize(
+    ("first_render", "if_stale_render", "embed", "with_source", "live"),
+    [
+        pytest.param([], ["--embed"], True, True, None, id="to-embed"),
+        pytest.param([], ["--no-source"], False, False, None, id="to-no-source"),
+        pytest.param(["--no-source"], [], False, True, None, id="back-to-source"),
+        pytest.param(["--live"], ["--live", "500"], False, True, 500, id="to-another-interval"),
+        pytest.param([], ["--live"], False, True, 0, id="to-live"),
+    ],
+)
+def test_if_stale_re_renders_a_current_page_written_with_other_options(
+    tmp_path: Path,
+    first_render: list[str],
+    if_stale_render: list[str],
+    embed: bool,
+    with_source: bool,
+    live: int | None,
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), *first_render]) == 0
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale", *if_stale_render]) == 0
+
+    report = parse_report(make_report())
+    source = data_path.read_text(encoding="utf-8") if with_source else None
+    expected = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
+    assert out_path.read_text(encoding="utf-8") == expected
+
+
+def test_if_stale_re_renders_a_page_from_an_older_skaldr_and_keeps_its_live_interval(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    _set_mtime(data_path, 60)
+    out_path = tmp_path / "plan.html"
+    out_path.write_text('<!doctype html><html><body data-skaldr-live="300"></body></html>', encoding="utf-8")
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(
+        parse_report(make_report()), source=source, live=300
+    )
+
+
+def test_if_stale_re_renders_when_an_included_fragment_is_newer_than_the_page(tmp_path: Path) -> None:
+    part_path = tmp_path / "part.yaml"
+    part_path.write_text("type: text\nbody: version one\n", encoding="utf-8")
+    nested_path = tmp_path / "nested.yaml"
+    nested_path.write_text("- !include part.yaml\n", encoding="utf-8")
+    main_path = tmp_path / "main.yaml"
+    main_path.write_text("version: 1\nmeta:\n  title: T\nblocks: !include nested.yaml\n", encoding="utf-8")
+    out_path = tmp_path / "main.html"
+    assert main([str(main_path), "-o", str(out_path)]) == 0
+    for path, seconds_ago in ((main_path, 120), (nested_path, 120), (out_path, 60)):
+        _set_mtime(path, seconds_ago)
+    part_path.write_text("type: text\nbody: version two\n", encoding="utf-8")
+
+    assert main([str(main_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = main_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(load_report(main_path), source=source)
 
 
 @pytest.mark.parametrize(

@@ -19,9 +19,17 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
-from skaldr.models import Report, load_report, package_path, package_text
+from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
-from skaldr.render import extract_source, find_placeholders, render_html, render_report
+from skaldr.render import (
+    RecordedRender,
+    RenderOptions,
+    extract_source,
+    find_placeholders,
+    recorded_render,
+    render_html,
+    render_report,
+)
 from skaldr.replace_file import replace_file, resolved_path
 
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
@@ -156,9 +164,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--if-stale",
         action="store_true",
-        help="render only when the output is missing or older than the content file; otherwise print "
-        "'up to date' and exit 0. Makes an unconditional re-render after every edit free, so no watcher "
-        "process is needed.",
+        help="render only when the output is missing, older than the content file or any file it "
+        "!includes, or written with other --embed/--no-source/--live options; otherwise print 'up to date' "
+        "and exit 0. Without --live it keeps the reloader of a page rendered with --live, so `--live` once "
+        "and `--if-stale` after every edit keeps the page live. Makes an unconditional re-render after "
+        "every edit free, so no watcher process is needed.",
     )
     parser.add_argument(
         "--live",
@@ -305,9 +315,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.watch:
         return _watch(data_path, out_path, embed=args.embed, no_source=args.no_source, live=args.live)
 
-    if args.if_stale and not _is_stale(data_path, out_path, pdf=args.pdf):
-        print(f"up to date  {out_path}")
-        return 0
+    live: int | None = args.live
+    if args.if_stale:
+        recorded = _recorded_render(out_path)
+        if live is None and not args.embed and recorded is not None:
+            live = recorded.live
+        requested = RenderOptions(
+            embed=args.embed, live=None if args.embed else live, source=not args.no_source
+        )
+        if not _is_stale(data_path, out_path, requested, recorded, pdf=args.pdf):
+            print(f"up to date  {out_path}")
+            return 0
 
     if args.emit_json:
         try:
@@ -326,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
             source = None if args.no_source else data_path.read_text(encoding="utf-8")
-            render_report(report, out_path, embed=args.embed, source=source, live=args.live)
+            render_report(report, out_path, embed=args.embed, source=source, live=live)
             written.append(out_path)
         if args.pdf:
             # PDF prints the full page with every section expanded: the print CSS needs the whole
@@ -345,16 +363,38 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _is_stale(data_path: Path, out_path: Path, *, pdf: str | None = None) -> bool:
-    """Whether `out_path` needs rebuilding: missing, or older than the content file. A --pdf run is
-    always stale, since the PDF is a second output this comparison doesn't see."""
+def _recorded_render(out_path: Path) -> RecordedRender | None:
+    try:
+        return recorded_render(out_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _newest_content_mtime(data_path: Path) -> float | None:
+    try:
+        mtimes = [_mtime(path) for path in content_files(data_path)]
+    except ReportError:
+        return None
+    if any(mtime is None for mtime in mtimes):
+        return None
+    return max(mtime for mtime in mtimes if mtime is not None)
+
+
+def _is_stale(
+    data_path: Path,
+    out_path: Path,
+    requested: RenderOptions,
+    recorded: RecordedRender | None,
+    *,
+    pdf: str | None = None,
+) -> bool:
     if pdf:
         return True
     out_mtime = _mtime(out_path)
-    if out_mtime is None:
+    if out_mtime is None or recorded is None or recorded.options != requested:
         return True
-    data_mtime = _mtime(data_path)
-    return data_mtime is None or data_mtime > out_mtime
+    content_mtime = _newest_content_mtime(data_path)
+    return content_mtime is None or content_mtime > out_mtime
 
 
 def _render_once(

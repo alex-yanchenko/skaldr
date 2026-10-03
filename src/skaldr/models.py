@@ -2763,7 +2763,7 @@ def parse_report(data: Any) -> Report:
 _MAX_INCLUDE_DEPTH = 50
 
 
-def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
+def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: list[Path]) -> Any:
     """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
     of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
     so a fragment set can move as a unit. `ancestors` is the chain of files currently being loaded —
@@ -2778,6 +2778,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
         raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path} — likely a mistake")
     text = read_text_file(path)
+    loaded.append(resolved)
 
     class _IncludeLoader(yaml.SafeLoader):
         """SafeLoader subclass — `!include` scoped to this file's dir; keeps `yaml.load` safe."""
@@ -2790,7 +2791,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
             raise ReportError(f"!include in {path} needs a file path")
         if Path(target).is_absolute():
             raise ReportError(f"!include in {path} must be a relative path, not absolute: {target}")
-        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved))
+        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved), loaded)
 
     _IncludeLoader.add_constructor("!include", _construct_include)
     try:
@@ -2800,5 +2801,11 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
 
 
 def load_report(path: Path) -> Report:
-    data = _load_yaml_with_includes(path, ())
+    data = _load_yaml_with_includes(path, (), [])
     return parse_report(data)
+
+
+def content_files(path: Path) -> tuple[Path, ...]:
+    loaded: list[Path] = []
+    _load_yaml_with_includes(path, (), loaded)
+    return tuple(loaded)

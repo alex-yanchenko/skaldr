@@ -51,6 +51,7 @@ from skaldr.models import (
     Walkthrough,
     WalkthroughStep,
     badge_color_of,
+    content_files,
     load_report,
     parse_report,
     read_text_file,
@@ -2344,6 +2345,24 @@ def test_include_resolves_paths_relative_to_each_including_file(tmp_path: Path) 
     assert report.model_dump(mode="json")["blocks"] == [
         {"type": "text", "body": "deep", "muted": False, "span": None}
     ]
+
+
+def test_content_files_lists_the_file_and_every_fragment_it_includes_in_load_order(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "deep.yaml").write_text("- type: text\n  body: deep\n", encoding="utf-8")
+    (shared / "frag.yaml").write_text("!include deep.yaml\n", encoding="utf-8")
+    (tmp_path / "main.yaml").write_text(
+        "version: 1\nmeta:\n  title: T\nblocks: !include shared/frag.yaml\n", encoding="utf-8"
+    )
+
+    files = content_files(tmp_path / "main.yaml")
+
+    assert files == (
+        (tmp_path / "main.yaml").resolve(),
+        (shared / "frag.yaml").resolve(),
+        (shared / "deep.yaml").resolve(),
+    )
 
 
 def test_missing_include_target_is_a_report_error(tmp_path: Path) -> None:

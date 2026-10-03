@@ -7,15 +7,19 @@ content file can never smuggle in raw HTML.
 """
 
 import re
+from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
+from pydantic import NonNegativeInt, TypeAdapter, ValidationError
 
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
+from skaldr.frozen_model import FrozenModel
 from skaldr.mathml import mathml
 from skaldr.models import (
     Heading,
@@ -40,6 +44,66 @@ from skaldr.richtext import (
 )
 
 _HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
+
+RENDER_STAMP_NAME = "skaldr-render"
+_EMBED_TEMPLATE = "embed.html.j2"
+
+
+class RenderOptions(FrozenModel):
+    embed: bool
+    live: int | None
+    source: bool
+
+
+@dataclass(frozen=True)
+class RecordedRender:
+    options: RenderOptions | None
+    live: int | None
+
+
+class _RecordedRenderReader(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stamp: str | None = None
+        self.body_live: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "meta" and attributes.get("name") == RENDER_STAMP_NAME:
+            self.stamp = attributes.get("content")
+        elif tag == "body":
+            self.body_live = attributes.get("data-skaldr-live")
+
+
+_LIVE_INTERVAL: TypeAdapter[int] = TypeAdapter(NonNegativeInt)
+
+
+def _stamped_options(stamp: str | None) -> RenderOptions | None:
+    if stamp is None:
+        return None
+    try:
+        return RenderOptions.model_validate_json(stamp)
+    except ValidationError:
+        return None
+
+
+def _body_live(attribute: str | None) -> int | None:
+    if attribute is None:
+        return None
+    try:
+        return _LIVE_INTERVAL.validate_python(attribute)
+    except ValidationError:
+        return None
+
+
+def recorded_render(html: str) -> RecordedRender:
+    reader = _RecordedRenderReader()
+    reader.feed(html)
+    reader.close()
+    options = _stamped_options(reader.stamp)
+    if options is not None:
+        return RecordedRender(options, options.live)
+    return RecordedRender(None, _body_live(reader.body_live))
 
 
 class _HtmlRuns:
@@ -157,6 +221,7 @@ def _render(
     source: str | None = None,
     live: int | None = None,
 ) -> str:
+    stamp = RenderOptions(embed=template == _EMBED_TEMPLATE, live=live, source=source is not None)
     env = _environment()
     slugs = compute.anchor_slugs(report)
 
@@ -202,6 +267,8 @@ def _render(
         has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
+        render_stamp_name=RENDER_STAMP_NAME,
+        render_stamp=stamp.model_dump_json(),
     )
 
 
@@ -310,7 +377,7 @@ def render_embed(report: Report, *, source: str | None = None) -> str:
     inline JS), so it self-manages theme/width and stays `light-dark()` + `[data-theme]` aware.
     `source`, when given, is embedded so a shared Artifact carries its own recoverable YAML — the
     common case, since Artifacts are shared as URLs an agent then has to read back."""
-    return _render(report, "embed.html.j2", source=source)
+    return _render(report, _EMBED_TEMPLATE, source=source)
 
 
 def render_report(
