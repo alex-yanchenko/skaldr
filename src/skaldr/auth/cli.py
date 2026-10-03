@@ -14,6 +14,7 @@ from skaldr.auth.notion import (
     INTEGRATIONS_PAGE,
     redirect_uri_for,
     revoke_notion_token,
+    save_or_revoke_notion,
     sign_in_to_notion,
 )
 from skaldr.auth.store import (
@@ -29,7 +30,6 @@ from skaldr.auth.store import (
     notion_client_from_environment,
     refuse_an_unusable_keychain,
     save_jira,
-    save_notion,
     stored_notion,
 )
 from skaldr.errors import AuthError
@@ -127,22 +127,8 @@ def _sign_in_to_notion(
     credentials = sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
-    _save_or_revoke_notion(credentials, transport)
+    save_or_revoke_notion(credentials, transport=transport)
     print(f"Signed in to Notion workspace {_workspace(credentials)}. Saved to the keychain.")
-
-
-def _save_or_revoke_notion(credentials: NotionCredentials, transport: httpx2.BaseTransport | None) -> None:
-    try:
-        save_notion(credentials)
-    except AuthError as unsaved:
-        try:
-            revoke_notion_token(credentials, transport=transport)
-        except AuthError as unrevoked:
-            raise AuthError(
-                f"{unsaved}. The token Notion just issued could not be saved, and revoking it failed too "
-                f"({unrevoked}), so remove the connection in Notion under Settings, Connections"
-            ) from unsaved
-        raise
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:

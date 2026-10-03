@@ -20,7 +20,7 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, caught_without_chaining, printable_only
-from skaldr.auth.store import NotionCredentials
+from skaldr.auth.store import NotionCredentials, save_notion
 from skaldr.errors import AuthError
 
 INTEGRATIONS_PAGE = "https://www.notion.so/profile/integrations"
@@ -97,6 +97,38 @@ def revoke_notion_token(
             raise _unreachable(exc) from exc
     if response.status_code != HTTPStatus.OK:
         raise AuthError(f"Notion did not revoke the token: HTTP {response.status_code}")
+
+
+def save_or_revoke_notion(
+    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
+) -> None:
+    try:
+        save_notion(credentials)
+    except BaseException as unsaved:
+        try:
+            revoke_notion_token(credentials, transport=transport)
+        except AuthError as unrevoked:
+            raise AuthError(
+                _sentences(
+                    _save_failure(unsaved),
+                    "The token Notion just issued could not be saved, and revoking it failed too "
+                    f"({unrevoked}), so remove the connection in Notion under Settings, Connections",
+                )
+            ) from unsaved
+        if isinstance(unsaved, AuthError):
+            raise AuthError(_sentences(str(unsaved), "The token Notion issued has been revoked")) from unsaved
+        raise
+
+
+def _save_failure(unsaved: BaseException) -> str:
+    if isinstance(unsaved, AuthError):
+        return str(unsaved)
+    detail = f": {unsaved}" if str(unsaved) else ""
+    return f"Saving to the keychain failed ({type(unsaved).__name__}{detail})"
+
+
+def _sentences(*parts: str) -> str:
+    return " ".join(part if part.endswith(".") else f"{part}." for part in parts)
 
 
 def _oauth_client(

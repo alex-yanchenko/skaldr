@@ -75,10 +75,14 @@ class ReadRecordingKeyring(InMemoryKeyring):
         return super().get_password(service, username)
 
 
-class WriteRefusingKeyring(InMemoryKeyring):
+class WriteFailingKeyring(InMemoryKeyring):
+    def __init__(self, failure: BaseException) -> None:
+        super().__init__()
+        self.failure = failure
+
     @override
     def set_password(self, service: str, username: str, password: str) -> None:
-        raise KeyringError("denied")
+        raise self.failure
 
 
 def insecure_keyring_refusal(backend_name: str) -> str:
@@ -271,11 +275,23 @@ def fake_api(routes: dict[str, tuple[int, object]], seen: list[httpx2.Request]) 
     return httpx2.MockTransport(respond)
 
 
-def refusing_connections() -> httpx2.MockTransport:
+def refusing_connections(seen: list[httpx2.Request] | None = None) -> httpx2.MockTransport:
     def refuse(request: httpx2.Request) -> httpx2.Response:
+        if seen is not None:
+            seen.append(request)
         raise httpx2.ConnectError("connection refused", request=request)
 
     return httpx2.MockTransport(refuse)
+
+
+def revoke_request_for(access_token: str) -> dict[str, object]:
+    return {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/oauth/revoke",
+        "authorization": basic_auth_header("client-id", "client-secret"),
+        "content_type": "application/json",
+        "body": {"token": access_token},
+    }
 
 
 def summarise(request: httpx2.Request) -> dict[str, object]:
