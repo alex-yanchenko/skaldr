@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
@@ -171,7 +171,11 @@ def render_richtext(
     return Markup(write_runs(runs, _HtmlRuns(cited if cited is not None else set(), placeholders)))
 
 
-def _environment() -> Environment:
+def unhandled_block(block_type: str) -> NoReturn:
+    raise ReportError(f"no HTML template renders the block type '{block_type}'")
+
+
+def html_environment() -> Environment:
     env = Environment(
         loader=PackageLoader("skaldr", "components"),
         undefined=StrictUndefined,
@@ -208,6 +212,7 @@ def _environment() -> Environment:
         chart_legend=chart_legend,
         display_math=display_math,
         settings_menu_id=compute.SETTINGS_MENU_ID,
+        unhandled_block=unhandled_block,
     )
     return env
 
@@ -222,7 +227,7 @@ def _render(
     live: int | None = None,
 ) -> str:
     stamp = RenderOptions(embed=template == _EMBED_TEMPLATE, live=live, source=source is not None)
-    env = _environment()
+    env = html_environment()
     slugs = compute.anchor_slugs(report)
 
     def anchor_id(block: Heading | Section) -> str:

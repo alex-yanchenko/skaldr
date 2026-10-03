@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Callable
 from html import unescape
 from pathlib import Path
+from types import SimpleNamespace
 from typing import get_args
 
 import pytest
@@ -26,6 +27,7 @@ from skaldr.render import (
     extract_source,
     find_placeholders,
     hide_script_close,
+    html_environment,
     render_embed,
     render_html,
     render_richtext,
@@ -3412,6 +3414,17 @@ def test_a_citation_links_to_its_reference_even_when_a_heading_reads_like_its_id
     html = render_html(parse_report(make_report(blocks=blocks)))
 
     assert re.findall(r'id="(ref-a[^"]*)"', html) == ["ref-a-2", "ref-a"]
+
+
+def test_a_block_type_the_html_dispatch_does_not_handle_fails_instead_of_rendering_nothing() -> None:
+    page = html_environment().from_string(
+        '{% from "macros.html.j2" import render_block %}{{ render_block(block) }}'
+    )
+
+    with pytest.raises(ReportError) as raised:
+        page.render(block=SimpleNamespace(type="a_block_type_the_template_misses", span=None))
+
+    assert str(raised.value) == "no HTML template renders the block type 'a_block_type_the_template_misses'"
 
 
 def test_dangling_anchor_link_fails_the_whole_render() -> None:
