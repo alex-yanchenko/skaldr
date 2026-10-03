@@ -15,8 +15,8 @@ dependencies = [
     "pydantic>=2.13.4",
     "pyyaml>=6.0",
     "roman>=5.2",
+    "tinycss2>=1.5.1,<2",
     "typing-extensions>=4.6",
-    "webcolors>=25.10.0,<26",
 ]
 keywords = ["report", "html", "yaml", "components", "jinja"]
 classifiers = [

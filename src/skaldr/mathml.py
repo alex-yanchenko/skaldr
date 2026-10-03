@@ -12,7 +12,7 @@ from latex2mathml.commands import MATRICES, NEWENVIRONMENT
 from latex2mathml.converter import MOVABLE_LIMIT_TEXTS, OPERATORS, convert_to_element
 from latex2mathml.symbols_parser import SYMBOLS
 from latex2mathml.tokenizer import tokenize
-from webcolors import names, normalize_hex
+from tinycss2.color4 import parse_color
 
 from skaldr.errors import ReportError
 
@@ -21,8 +21,6 @@ NOTION_EQUATION_FENCE: Final = "$$"
 ENVIRONMENT_OPENING = re.compile(r"\\begin\{([^{}]+)\}")
 KNOWN_ENVIRONMENTS: Final = frozenset(command.removeprefix("\\") for command in MATRICES)
 COLOUR_ATTRIBUTES: Final = frozenset({"mathcolor", "mathbackground", "border-color"})
-CSS_COLOUR_KEYWORDS_BEYOND_CSS3: Final = frozenset({"rebeccapurple", "transparent", "currentcolor"})
-CSS_COLOUR_NAMES: Final = frozenset(names("css3")) | CSS_COLOUR_KEYWORDS_BEYOND_CSS3
 MATHML_ATTRIBUTES: Final = frozenset(
     {
         "accent",
@@ -274,21 +272,11 @@ def _braced_argument(following: Sequence[str]) -> str:
 
 def _refuse_unknown_colour(element: Element, expression: str) -> None:
     for name, value in element.attrib.items():
-        if name in COLOUR_ATTRIBUTES and not _is_css_colour(value):
+        if name in COLOUR_ATTRIBUTES and parse_color(value) is None:
             raise ReportError(
-                f"math expression '{expression}' sets the colour '{value}', which is neither a CSS colour "
-                "name nor a #rgb or #rrggbb value"
+                f"math expression '{expression}' sets the colour '{value}', which is not a CSS colour: write "
+                "a colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)"
             )
-
-
-def _is_css_colour(value: str) -> bool:
-    if value.lower() in CSS_COLOUR_NAMES:
-        return True
-    try:
-        normalize_hex(value)
-    except ValueError:
-        return False
-    return True
 
 
 def _refuse_unknown_command_token(tokens: Sequence[str], expression: str) -> None:

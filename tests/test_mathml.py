@@ -215,18 +215,21 @@ def test_an_environment_defined_with_spaces_in_its_newenvironment_converts(
         pytest.param(r"\textcolor{simga}{x}", "simga", id="text-colour"),
         pytest.param(r"\colorbox{simga}{x}", "simga", id="box-background"),
         pytest.param(r"\fcolorbox{simga}{red}{x}", "simga", id="box-border"),
-        pytest.param(r"\color{rgb(1,0,0)} x", "rgb(1,0,0)", id="function-notation"),
         pytest.param(r"\color{#ff} x", "#ff", id="two-digit-hex"),
         pytest.param(r'\color{red" onload="x}{y}', 'red" onload="x', id="value-holding-quotes"),
+        pytest.param(r"\color{red;x} y", "red;x", id="value-holding-a-declaration-end"),
+        pytest.param(r"\color{red blue} x", "red blue", id="two-colours"),
+        pytest.param(r"\color{var(--x)} y", "var(--x)", id="custom-property"),
+        pytest.param(r"\color{url(x)} y", "url(x)", id="url"),
     ],
 )
-def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: str, colour: str) -> None:
+def test_a_colour_css_does_not_parse_fails_naming_it(expression: str, colour: str) -> None:
     with pytest.raises(ReportError) as raised:
         mathml(expression, "block")
 
     assert str(raised.value) == (
-        f"math expression '{expression}' sets the colour '{colour}', which is neither a CSS colour name "
-        "nor a #rgb or #rrggbb value"
+        f"math expression '{expression}' sets the colour '{colour}', which is not a CSS colour: write a "
+        "colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)"
     )
 
 
@@ -259,9 +262,25 @@ def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: s
             '<mpadded mathbackground="#eee" border-color="navy"><mtext>x</mtext></mpadded>',
             id="box",
         ),
+        pytest.param(
+            r"\color{rgb(1,0,0)} x", '<mstyle mathcolor="rgb(1,0,0)"><mi>x</mi></mstyle>', id="rgb-function"
+        ),
+        pytest.param(
+            r"\color{hsl(120 50% 50%)} x",
+            '<mstyle mathcolor="hsl(120 50% 50%)"><mi>x</mi></mstyle>',
+            id="hsl-function",
+        ),
+        pytest.param(
+            r"\color{oklch(0.5 0.1 120)} x",
+            '<mstyle mathcolor="oklch(0.5 0.1 120)"><mi>x</mi></mstyle>',
+            id="colour-level-4-function",
+        ),
+        pytest.param(
+            r"\color{#aabbccdd} x", '<mstyle mathcolor="#aabbccdd"><mi>x</mi></mstyle>', id="hex-with-alpha"
+        ),
     ],
 )
-def test_a_css_colour_name_or_hex_value_converts(expression: str, markup: str) -> None:
+def test_a_css_colour_converts(expression: str, markup: str) -> None:
     assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
 
 
