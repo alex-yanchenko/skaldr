@@ -88,7 +88,10 @@ def test_an_unexpected_status_is_named() -> None:
 
 @pytest.mark.parametrize(
     "body",
-    [{"accountId": "account-id", "emailAddress": "answer-only@example.com"}, b"<html>answer-only@example.com</html>"],
+    [
+        {"accountId": "account-id", "emailAddress": "answer-only@example.com"},
+        b"<html>answer-only@example.com</html>",
+    ],
     ids=["no display name", "not json"],
 )
 def test_a_myself_answer_that_is_not_a_user_is_refused_without_its_content(body: object) -> None:
