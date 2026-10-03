@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Final, Literal, get_args
 
 from markdown_it import MarkdownIt
-from markdown_it.rules_inline import StateInline
+from markdown_it.rules_inline import StateInline, image, link
 from markdown_it.rules_inline.state_inline import Delimiter
 from markdown_it.token import Token
 from pydantic import TypeAdapter, ValidationError
@@ -26,6 +26,9 @@ UNDERLINE_OPEN: Final = "underline_open"
 UNDERLINE_CLOSE: Final = "underline_close"
 SUBSCRIPT: Final = "subscript"
 SUPERSCRIPT: Final = "superscript"
+LINK_OPEN: Final = "link_open"
+_LINK_CLOSE: Final = "link_close"
+_IMAGE_AS_TYPED_RULE: Final = "image_as_typed"
 
 _REFERENCE_KEYS: Final = "reference_keys"
 _NESTING_LIMIT_REACHED: Final = "nesting_limit_reached"
@@ -124,6 +127,35 @@ def nested_too_deep() -> ReportError:
         f"rich text nests more than {MAX_NESTING} marks, links or [text]{{…}} spans inside one another: "
         "flatten it"
     )
+
+
+def _link_with_a_label_and_a_url(state: StateInline, silent: bool) -> bool:
+    if silent:
+        return link(state, True)
+    start, pending = state.pos, state.pending
+    token_count, meta_count = len(state.tokens), len(state.tokens_meta)
+    if not link(state, False):
+        return False
+    opener_index = next(
+        index for index in range(token_count, len(state.tokens)) if state.tokens[index].type == LINK_OPEN
+    )
+    opener = state.tokens[opener_index]
+    has_label = state.tokens[opener_index + 1].type != _LINK_CLOSE
+    if opener.attrs.get("href") and "title" not in opener.attrs and has_label:
+        return True
+    del state.tokens[token_count:]
+    del state.tokens_meta[meta_count:]
+    state.pos, state.pending = start, pending
+    return False
+
+
+def _image_as_typed(state: StateInline, silent: bool) -> bool:
+    start = state.pos
+    if not image(state, True):
+        return False
+    if not silent:
+        state.pending += state.src[start : state.pos]
+    return True
 
 
 def _note_lookahead_past_the_nesting_limit(state: StateInline, silent: bool) -> bool:
@@ -283,6 +315,8 @@ def _rich_markdown() -> MarkdownIt:
     inline.before("backticks", INLINE_MATH, _inline_math)
     inline.before("link", CITATION, _citation)
     inline.before("link", "tinted_span", _tinted_span)
+    inline.before("link", _IMAGE_AS_TYPED_RULE, _image_as_typed)
+    inline.at("link", _link_with_a_label_and_a_url)
     inline.after("link", "stray_attribute_list", _stray_attribute_list)
     inline.after("emphasis", PLACEHOLDER, _placeholder)
     inline.after("emphasis", SUBSCRIPT, _script_rule("~", SUBSCRIPT, "~"))
