@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
+    Service,
     SignIn,
     forget,
     jira_credentials,
@@ -29,6 +30,7 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     PlaintextKeyring,
+    ReadRecordingKeyring,
     insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
@@ -325,6 +327,16 @@ def test_the_keychain_check_before_sign_in_passes_a_working_keychain_and_changes
     refuse_an_unusable_keychain("jira")
 
     assert keychain.entries == {("skaldr", "jira"): make_jira_credentials().model_dump_json()}
+
+
+@pytest.mark.parametrize("service", ["notion", "jira"])
+def test_the_keychain_check_before_sign_in_reads_exactly_the_services_entry(service: Service) -> None:
+    recording = ReadRecordingKeyring()
+    keyring.set_keyring(recording)
+
+    refuse_an_unusable_keychain(service)
+
+    assert recording.reads == [("skaldr", service)]
 
 
 def test_a_refused_plaintext_keyring_receives_nothing() -> None:

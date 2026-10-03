@@ -50,6 +50,17 @@ class PlaintextKeyring(InMemoryKeyring):
     __module__ = "keyrings.alt.file"
 
 
+class ReadRecordingKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads: list[tuple[str, str]] = []
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        self.reads.append((service, username))
+        return super().get_password(service, username)
+
+
 class WriteRefusingKeyring(InMemoryKeyring):
     @override
     def set_password(self, service: str, username: str, password: str) -> None:
