@@ -5,6 +5,7 @@ import pytest
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
+from skaldr.export.lower.prose import code_language
 from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
     Break,
@@ -1274,6 +1275,19 @@ def test_a_code_block_language_comes_from_its_label_or_mode(
     code: dict[str, Any], nodes: tuple[Node, ...]
 ) -> None:
     assert lowered([{"type": "code", **code}]) == nodes
+
+
+@pytest.mark.parametrize(
+    ("label", "language"),
+    [
+        pytest.param("Deploy.SH", "bash", id="an-upper-case-suffix"),
+        pytest.param("app.Py", "python", id="a-mixed-case-suffix"),
+        pytest.param(None, "", id="no-label"),
+        pytest.param("Makefile", "", id="no-suffix"),
+    ],
+)
+def test_a_code_language_ignores_the_case_of_the_label_suffix(label: str | None, language: str) -> None:
+    assert code_language(label) == language
 
 
 def test_a_quote_and_a_note_keep_their_text() -> None:

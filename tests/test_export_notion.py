@@ -87,6 +87,7 @@ def _section_text(title: str, body: str, rows: int) -> str:
         pytest.param("edit README.md first", "edit `README.md` first", id="markdown-file"),
         pytest.param("run scripts/setup.sh:12", "run `scripts/setup.sh:12`", id="shell-file-with-line"),
         pytest.param("see app.py", "see `app.py`", id="python-file"),
+        pytest.param("see app.py:10-20 now", "see `app.py:10-20` now", id="file-with-a-line-range"),
         pytest.param("`notes.md` stays one span", "`notes.md` stays one span", id="already-code"),
         pytest.param("a readme file", "a readme file", id="no-extension"),
     ],
