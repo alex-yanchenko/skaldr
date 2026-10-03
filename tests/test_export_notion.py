@@ -44,7 +44,7 @@ from skaldr.models import (
     parse_report,
     walk_blocks,
 )
-from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, ScriptText, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Code, Placeholder, Plain, ScriptText, parse_rich
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -615,13 +615,26 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
     )
 
 
-def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole() -> None:
-    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": "close with `</td></tr>` here"}])
+@pytest.mark.parametrize(
+    ("cell", "written"),
+    [
+        pytest.param(
+            "close with `</td></tr>` here",
+            "close with \\</td\\>\\</tr\\> here",
+            id="a-closing-tag-is-escaped-text",
+        ),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
+    ],
+)
+def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole(
+    cell: str, written: str
+) -> None:
+    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": cell}])
 
     assert notion_of([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>close with \\</td\\>\\</tr\\> here</td>\n\t</tr>\n"
+        f"\t<tr>\n\t\t<td>{written}</td>\n\t</tr>\n"
         "</table>\n"
     )
 
@@ -629,14 +642,23 @@ def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_
 @pytest.mark.parametrize(
     ("text", "notion"),
     [
-        pytest.param("a `List<int>` type", "a List\\<int\\> type", id="an-angle-bracket"),
+        pytest.param(
+            "[see `</span>` here]{tone=danger}",
+            '<span color="red">see \\</span\\> here</span>',
+            id="a-closing-tag-inside-a-colour-span",
+        ),
         pytest.param("inline `</callout>` code", "inline \\</callout\\> code", id="a-closing-tag"),
-        pytest.param("a `x > 1` test", "a `x > 1` test", id="no-opening-angle-bracket-stays-code"),
-        pytest.param("a `a|b` pipe", "a `a|b` pipe", id="no-angle-bracket-stays-code"),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
+        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag-stays-code"),
+        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket-stays-code"),
     ],
 )
-def test_code_holding_an_opening_angle_bracket_is_escaped_text_anywhere(text: str, notion: str) -> None:
+def test_code_holding_a_closing_tag_is_escaped_text_anywhere(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+def test_code_holding_a_backtick_is_escaped_text() -> None:
+    assert notion_inline((Code("a`b<i>"),)) == "a\\`b\\<i\\>"
 
 
 def test_a_single_weighted_column_takes_the_whole_page_width() -> None:

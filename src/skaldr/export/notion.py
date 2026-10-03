@@ -52,6 +52,7 @@ NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
+CLOSING_TAG_OPENER: Final = "</"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
 NOTION_LIST_START: Final = 1
@@ -105,7 +106,7 @@ class _NotionRuns(MarkupRuns):
         return self.code(piece) if is_file_name else self.escape(piece)
 
     def code(self, text: str, /) -> str:
-        return self.escape(text) if any(character in text for character in "`<") else f"`{text}`"
+        return self.escape(text) if "`" in text or CLOSING_TAG_OPENER in text else f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
