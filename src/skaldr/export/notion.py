@@ -48,7 +48,7 @@ from skaldr.export.tree import (
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
-NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^="})
+NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"

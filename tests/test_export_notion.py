@@ -121,6 +121,25 @@ def test_an_equals_sign_is_escaped_so_notion_reads_no_block_attribute(text: str,
     assert notion_inline(parse_rich(text)) == notion
 
 
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param("ship __init__ now", "ship \\_\\_init\\_\\_ now", id="a-dunder-name"),
+        pytest.param("a _private_ name", "a \\_private\\_ name", id="a-name-in-underscores"),
+        pytest.param("snake_case", "snake\\_case", id="an-underscore-inside-a-word"),
+        pytest.param("edit my_file.py", "edit `my_file.py`", id="a-file-name-is-code-and-escaped-once"),
+        pytest.param("see __init__.py", "see `__init__.py`", id="a-dunder-file-name-is-code"),
+        pytest.param(
+            "`a_b` via [x_y](https://e.com/a_b)",
+            "`a_b` via [x\\_y](https://e.com/a_b)",
+            id="code-and-link-url",
+        ),
+    ],
+)
+def test_an_underscore_is_escaped_so_notion_reads_no_emphasis(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
 def test_inline_runs_become_notion_spans() -> None:
     runs: ExportRich = (
         Citation("a", 1, "https://example.com/a (b)"),
