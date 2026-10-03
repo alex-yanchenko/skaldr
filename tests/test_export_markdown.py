@@ -780,6 +780,13 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
 
 
+def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+
+    assert markdown_of([section]) == "## Appendix\n\n> 📝 **Card**\n>\n> inside\n"
+
+
 def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
     row = {"type": "badge_row", "items": [{"key": "API"}]}
 

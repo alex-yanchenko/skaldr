@@ -823,6 +823,19 @@ def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_he
     assert notion_of(blocks) == '## Appendix {toggle="true"}\n\traw\n## Status\nnow\n'
 
 
+def test_a_panel_inside_a_section_becomes_a_callout_inside_the_toggle_heading() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+
+    assert notion_of([section]) == (
+        '## Appendix {toggle="true"}\n'
+        '\t<callout icon="📝" color="gray_bg">\n'
+        "\t\t**Card**\n"
+        "\t\tinside\n"
+        "\t</callout>\n"
+    )
+
+
 def test_chunks_split_only_at_a_top_level_heading_and_stay_under_the_limit() -> None:
     assert chunk_notion(lowered(heading_sections(4, "x = 1\n" * 20)), 400) == NotionChunks(
         (

@@ -4300,6 +4300,7 @@
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
+                "panel": "#/$defs/Panel",
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
@@ -4408,6 +4409,9 @@
               },
               {
                 "$ref": "#/$defs/RequestFlow"
+              },
+              {
+                "$ref": "#/$defs/Panel"
               }
             ]
           },
@@ -5402,6 +5406,7 @@
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
+                "panel": "#/$defs/Panel",
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
@@ -5510,6 +5515,9 @@
               },
               {
                 "$ref": "#/$defs/RequestFlow"
+              },
+              {
+                "$ref": "#/$defs/Panel"
               }
             ]
           },

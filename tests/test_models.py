@@ -42,6 +42,7 @@ from skaldr.models import (
     Request,
     RequestFlow,
     Section,
+    SectionBlock,
     Swimlane,
     Tab,
     Table,
@@ -940,7 +941,7 @@ def test_a_toggle_where_a_section_block_can_go_refuses_a_section_inside_it() -> 
 
     assert str(raised.value) == (
         "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
-        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+        f"match any of the expected tags: {_union_tags(SectionBlock)}"
     )
 
 
@@ -959,6 +960,40 @@ def test_a_toggle_where_a_section_block_can_go_holds_a_request(container: dict[s
     parsed = parse_report(make_report(blocks=[container])).blocks[0]
 
     assert parsed.model_dump(exclude_defaults=True) == container
+
+
+PANEL = {"type": "panel", "title": "P", "blocks": [{"type": "text", "body": "x"}]}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [PANEL]}, id="section"),
+        pytest.param(make_toggle(PANEL), id="top-level-toggle"),
+        pytest.param(
+            {"type": "section", "title": "S", "blocks": [make_toggle(PANEL)]}, id="toggle-in-a-section"
+        ),
+        pytest.param(
+            {"type": "panel", "title": "Outer", "blocks": [make_toggle(PANEL)]}, id="toggle-in-a-panel"
+        ),
+    ],
+)
+def test_a_panel_is_accepted_in_a_section_and_in_a_toggle_where_a_section_block_can_go(
+    container: dict[str, Any],
+) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_panel_directly_inside_a_panel_is_refused() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "panel", "title": "Outer", "blocks": [PANEL]}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.panel.blocks.0: Input tag 'panel' found using 'type' does not "
+        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+    )
 
 
 def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() -> None:

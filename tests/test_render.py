@@ -1125,6 +1125,19 @@ def test_section_gets_an_anchor_id_and_appears_in_the_toc() -> None:
     assert '<a href="#overview">Overview</a>' in html  # heading still linked, in order
 
 
+def test_a_panel_inside_a_section_renders_as_a_card_in_the_section_body() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    report = parse_report(make_report(blocks=[{"type": "section", "title": "Appendix", "blocks": [panel]}]))
+
+    html = render_html(report)
+
+    assert (
+        '<details class="section" id="appendix"><summary>Appendix</summary><div class="section-body">'
+        '<div class="panel-card"><div class="panel-card-hd">Card</div><div class="panel-card-body">'
+        '<p class="text">inside</p></div></div>\n</div></details>'
+    ) in html
+
+
 def test_section_and_its_inner_heading_both_get_anchor_ids() -> None:
     block = {
         "type": "section",

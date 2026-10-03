@@ -243,7 +243,8 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
 Images must be self-contained `data:` URIs — skaldr
 embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
-`section`, a `grid`, or a `walkthrough`. It **starts collapsed** (`collapsed: true` default) — right
+`section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one; a `panel` holds any block
+except a `section`, a `grid`, a `walkthrough` or a `panel` directly inside it. A section **starts collapsed** (`collapsed: true` default) — right
 for an appendix or detail-on-demand; for a doc meant to be **read through** (a weekly status doc), set
 `collapsed: false` so it opens expanded. Its optional `updated` shows a muted "updated <value>" stamp
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.

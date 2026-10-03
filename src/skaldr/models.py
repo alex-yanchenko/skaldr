@@ -2255,7 +2255,7 @@ class InnerToggle(_ToggleBase):
 
 
 class Toggle(_ToggleBase):
-    blocks: list["FullWidthBlock"] = Field(
+    blocks: list["SectionBlock"] = Field(
         min_length=1,
         description="Blocks inside a toggle at the top level, in a section, in a panel or in another such "
         "toggle: any block a section holds, including a request or request_flow.",
@@ -2325,7 +2325,6 @@ InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 InnerToggle.model_rebuild()
 Tab.model_rebuild()
 FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Field(discriminator="type")]
-Toggle.model_rebuild()
 RequestLike = Request | RequestStep
 
 
@@ -2348,7 +2347,7 @@ class Section(_Block):
         description="When this section was last revised; shown as a muted stamp in its header. A "
         "free-form label like the report date (author it — never auto-now).",
     )
-    blocks: list[FullWidthBlock] = Field(
+    blocks: list["SectionBlock"] = Field(
         min_length=1,
         description="Blocks in the section — any block except another section, grid, or walkthrough.",
     )
@@ -2363,6 +2362,12 @@ class Panel(_Block):
         "walkthrough. Unlike a `section`, a panel is always open — "
         "a titled framed card, one per 'slide' in a deck-style doc.",
     )
+
+
+SectionBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow | Panel, Field(discriminator="type")]
+Toggle.model_rebuild()
+Section.model_rebuild()
+Panel.model_rebuild()
 
 
 # Grid: a bounded side-by-side layout over a 6-column base.
