@@ -518,7 +518,10 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 "method": "POST",
                 "url": "https://{{host}}/t",
                 "headers": {"X-Key": "{{key}}", "X-Who": "{{who}}"},
-                "captures": [{"name": "token", "source": "body"}, {"name": "expires", "source": "body"}],
+                "captures": [
+                    {"name": "token", "json_path": "$.data.access_token"},
+                    {"name": "expires", "source": "body"},
+                ],
                 "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
             },
             {
@@ -556,8 +559,11 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 *bold("Step 1 of 2: Get token"),
                 Plain(", captures "),
                 Code("token"),
+                Plain(" from "),
+                Code("$.data.access_token"),
                 Plain(", "),
                 Code("expires"),
+                Plain(" from the whole response body"),
             )
         ),
         Paragraph(italic(plain("one"))),

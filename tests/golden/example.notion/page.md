@@ -623,7 +623,7 @@ The bin lookup above assumes you already hold a token. Getting one is its own ca
 **Values you supply**
 - `{{warehouse}}` warehouse code: for example NW-04
 - `{{api_key}}` API key: a secret, supply your own
-**Step 1 of 2: Exchange the API key for a session token**, captures `session_token`
+**Step 1 of 2: Exchange the API key for a session token**, captures `session_token` from `$.token`
 *200*
 ```bash
 curl -i -X POST \

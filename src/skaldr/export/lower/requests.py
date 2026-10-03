@@ -5,7 +5,15 @@ from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import ExportRich
 from skaldr.export.tree import Callout, CodeBlock, ListEntry, Node, Paragraph, Tab, Tabs
-from skaldr.models import Request, RequestCase, RequestFlow, RequestLike, RequestStep, RequestVariable
+from skaldr.models import (
+    Request,
+    RequestCapture,
+    RequestCase,
+    RequestFlow,
+    RequestLike,
+    RequestStep,
+    RequestVariable,
+)
 from skaldr.richtext import Code, Plain
 
 
@@ -68,9 +76,15 @@ def _variables(variables: Sequence[RequestVariable]) -> list[Node]:
     return [Paragraph(bold("Values you supply")), bullets(map(_variable_entry, variables))]
 
 
+def _capture_origin(capture: RequestCapture) -> ExportRich:
+    if capture.json_path is not None:
+        return (Code(capture.name), Plain(" from "), Code(capture.json_path))
+    return (Code(capture.name), Plain(" from the whole response body"))
+
+
 def _step_title(step: RequestStep, index: int, count: int) -> ExportRich:
     title = bold(f"Step {index} of {count}: {step.label}")
-    captures = spaced([(Code(capture.name),) for capture in step.captures], ", ")
+    captures = spaced([_capture_origin(capture) for capture in step.captures], ", ")
     return (*title, Plain(", captures "), *captures) if captures else title
 
 
