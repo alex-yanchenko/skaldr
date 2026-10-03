@@ -1950,17 +1950,26 @@ def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens
     )
 
 
-def test_three_equal_grid_cells_get_ratios_that_add_up_to_a_hundred() -> None:
+@pytest.mark.parametrize(
+    ("span", "bodies", "ratios"),
+    [
+        pytest.param(2, "abc", (34, 33, 33), id="three-cells-give-the-one-left-over-to-the-first"),
+        pytest.param(1, "abcdef", (17, 17, 17, 17, 16, 16), id="six-cells-spread-the-four-left-over"),
+    ],
+)
+def test_equal_grid_cells_get_largest_remainder_ratios_that_add_up_to_a_hundred(
+    span: int, bodies: str, ratios: tuple[int, ...]
+) -> None:
     grid = {
         "type": "grid",
-        "cells": [{"span": 2, "blocks": [{"type": "text", "body": body}]} for body in "abc"],
+        "cells": [{"span": span, "blocks": [{"type": "text", "body": body}]} for body in bodies],
     }
 
     assert lowered([grid]) == (
         Columns(
             tuple(
                 GridColumn(ratio, (Paragraph((Plain(body),)),))
-                for ratio, body in zip((33, 33, 34), "abc", strict=True)
+                for ratio, body in zip(ratios, bodies, strict=True)
             )
         ),
     )
