@@ -449,6 +449,24 @@ def test_emit_json_still_refuses_an_output_flag(tmp_path: Path, capsys: pytest.C
     assert "--emit-json only validates" in capsys.readouterr().err
 
 
+def test_emit_json_refuses_a_heading_id_used_twice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "heading", "text": "A", "id": "dup"}, {"type": "heading", "text": "B", "id": "dup"}]
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        (
+            "",
+            "error: invalid content data: Value error, heading/section id(s) used more than once: ['dup'] "
+            "— a heading/section id must be unique, at blocks.0.heading.id, blocks.1.heading.id\n",
+        ),
+    )
+
+
 def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
 

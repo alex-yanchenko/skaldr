@@ -142,9 +142,95 @@ def test_reconciliation_failure_names_the_delta() -> None:
         parse_report(make_report(blocks=[table]))
 
     assert str(excinfo.value) == (
-        "RECONCILIATION FAILED: handled (80) + count (10) = 90, but declared total is 100 "
-        "(off by -10). A category is wrong, double-counted, or missing."
+        "invalid content data: blocks.0.table: RECONCILIATION FAILED: handled (80) + count (10) = 90, but "
+        "declared total is 100 (off by -10). A category is wrong, double-counted, or missing."
     )
+
+
+def test_a_reconciliation_failure_names_its_table_and_keeps_the_other_errors_in_the_document() -> None:
+    balanced = make_reconciled_table()
+    off_by_ten = make_reconciled_table(
+        reconcile={"total": 100, "column": "count", "handled": {"label": "Clean", "value": 80}},
+    )
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(blocks=[balanced, off_by_ten, {"type": "heading", "text": "  "}]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.1.table: RECONCILIATION FAILED: handled (80) + count (10) = 90, but "
+        "declared total is 100 (off by -10). A category is wrong, double-counted, or missing.; "
+        "blocks.2.heading.text: Value error, must not be blank"
+    )
+
+
+def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
+    return make_tabs(make_tab("Floor", block), make_tab("System"))
+
+
+def test_an_undeclared_badge_key_is_refused_with_the_path_of_the_cell_that_names_it() -> None:
+    table = make_table(
+        [{"key": "item", "label": "I"}, {"key": "s", "label": "S", "kind": "badge", "placement": "cell"}],
+        groups=[{"name": "g", "rows": [{"item": "a", "s": "OK"}, {"item": "b", "s": ["OK", "NOPE"]}]}],
+    )
+    badges = {"OK": {"label": "Ok", "tone": "green", "legend": "fine"}}
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=badges, blocks=[_in_a_tab(table)]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['NOPE'] (add them to "
+        "the badges map), at blocks.0.tabs.tabs.0.blocks.0.table.groups.0.rows.1.s.1 ('NOPE')"
+    )
+
+
+_TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id="dup")
+
+
+@pytest.mark.parametrize(
+    ("blocks", "message"),
+    [
+        pytest.param(
+            [_TABLE_WITH_ID, _in_a_tab(_TABLE_WITH_ID)],
+            "table id(s) used more than once: ['dup'] — table ids must be unique, at blocks.0.table.id, "
+            "blocks.1.tabs.tabs.0.blocks.0.table.id",
+            id="table-id",
+        ),
+        pytest.param(
+            [
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+                _in_a_tab({"type": "references", "items": [{"key": "a", "text": "B"}]}),
+            ],
+            "reference key(s) declared more than once: ['a'], at blocks.0.references.items.0.key, "
+            "blocks.1.tabs.tabs.0.blocks.0.references.items.0.key",
+            id="reference-key",
+        ),
+        pytest.param(
+            [
+                {"type": "heading", "text": "A", "id": "dup"},
+                _in_a_tab({"type": "heading", "text": "B", "id": "dup"}),
+            ],
+            "heading/section id(s) used more than once: ['dup'] — a heading/section id must be unique, at "
+            "blocks.0.heading.id, blocks.1.tabs.tabs.0.blocks.0.heading.id",
+            id="heading-id-in-a-tab",
+        ),
+        pytest.param(
+            [
+                {"type": "heading", "text": "A", "id": "dup"},
+                {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
+            ],
+            "heading/section id(s) used more than once: ['dup'] — a heading/section id must be unique, at "
+            "blocks.0.heading.id, blocks.1.section.id",
+            id="heading-and-section-id",
+        ),
+    ],
+)
+def test_a_repeated_id_is_refused_naming_every_place_it_is_used(
+    blocks: list[dict[str, Any]], message: str
+) -> None:
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(blocks=blocks))
+
+    assert str(excinfo.value) == f"invalid content data: Value error, {message}"
 
 
 def test_undeclared_badge_reference_is_rejected() -> None:
@@ -1003,16 +1089,13 @@ def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() ->
     assert str(raised.value) == (
         "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
         "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
-        "sharing one would share those values; give one of them an `id`"
+        "sharing one would share those values; give one of them an `id`, at blocks.0.request, "
+        "blocks.1.toggle.blocks.0.request"
     )
 
 
 def _in_a_grid_cell_toggle(block: dict[str, Any]) -> dict[str, Any]:
     return make_grid([make_cell(6, [make_toggle(block)])])
-
-
-def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
-    return make_tabs(make_tab("Floor", block), make_tab("System"))
 
 
 @pytest.mark.parametrize(
@@ -1061,7 +1144,8 @@ def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
 
     assert str(raised.value) == (
         "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map)"
+        "(add them to the badges map), at blocks.0.section.blocks.0.toggle.blocks.0.badge_row.items.0.key "
+        "('OPS')"
     )
 
 
@@ -1195,11 +1279,13 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
 
 
 @pytest.mark.parametrize(
-    "container",
+    ("container", "inside"),
     [
-        pytest.param(make_toggle, id="toggle"),
-        pytest.param(_in_a_grid_cell_toggle, id="inner-toggle"),
-        pytest.param(_in_a_tab, id="tab"),
+        pytest.param(make_toggle, "blocks.1.toggle.blocks.0", id="toggle"),
+        pytest.param(
+            _in_a_grid_cell_toggle, "blocks.1.grid.cells.0.blocks.0.toggle.blocks.0", id="inner-toggle"
+        ),
+        pytest.param(_in_a_tab, "blocks.1.tabs.tabs.0.blocks.0", id="tab"),
     ],
 )
 @pytest.mark.parametrize(
@@ -1208,27 +1294,28 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
         pytest.param(
             _DUPLICATE_MATRIX,
             _DUPLICATE_MATRIX,
-            "invalid content data: Value error, matrix id(s) used more than once: ['dup'] — matrix ids "
-            "must be unique",
+            "matrix id(s) used more than once: ['dup'] — matrix ids must be unique, at blocks.0.matrix.id, "
+            "{inside}.matrix.id",
             id="matrix-id",
         ),
         pytest.param(
             _rollup_table("dup"),
             _rollup_table("dup"),
-            "invalid content data: Value error, table id(s) used more than once: ['dup'] — table ids must "
-            "be unique",
+            "table id(s) used more than once: ['dup'] — table ids must be unique, at blocks.0.table.id, "
+            "{inside}.table.id",
             id="table-id",
         ),
         pytest.param(
             {"type": "text", "body": "x"},
             _GHOST_MATRIX_CARD,
-            "invalid content data: Value error, card of_matrix 'ghost' names no matrix with that id",
+            "card of_matrix 'ghost' names no matrix with that id, at {inside}.cards.items.0.of_matrix",
             id="card-matrix-reference",
         ),
     ],
 )
 def test_a_reference_check_reaches_into_every_toggle_and_tab(
     container: Callable[[dict[str, Any]], dict[str, Any]],
+    inside: str,
     beside: dict[str, Any],
     nested: dict[str, Any],
     message: str,
@@ -1238,7 +1325,7 @@ def test_a_reference_check_reaches_into_every_toggle_and_tab(
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(badges=badges, blocks=[beside, container(nested)]))
 
-    assert str(raised.value) == message
+    assert str(raised.value) == f"invalid content data: Value error, {message.format(inside=inside)}"
 
 
 def test_walk_blocks_visits_every_block_depth_first_in_document_order() -> None:
@@ -1290,7 +1377,7 @@ def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:
 
     assert str(raised.value) == (
         "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map)"
+        "(add them to the badges map), at blocks.0.tabs.tabs.0.blocks.0.badge_row.items.0.key ('OPS')"
     )
 
 

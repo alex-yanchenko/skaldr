@@ -18,7 +18,6 @@ from typing import Any, Final, NamedTuple, TypedDict
 import roman
 from typing_extensions import assert_never
 
-from skaldr.errors import ReportError
 from skaldr.models import (
     VARIABLE_TOKEN,
     AnyBlock,
@@ -100,13 +99,9 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     """`id(block) -> slug` for every heading and section, in document order. One source for the
     heading/section `id` attribute, the TOC, and same-page `#link` targets so they can't drift. An
     author-set `id` is used verbatim (and reserved so a text-derived slug yields to it with a `-N`
-    suffix); a text-derived slug de-dups the same way. Duplicate author ids fail the build."""
+    suffix); a text-derived slug de-dups the same way. Duplicate author ids fail validation."""
     anchored = list(_iter_anchored(report.blocks))
     explicit = [block.id for block in anchored if block.id is not None]
-    duplicate = next((anchor for anchor in explicit if explicit.count(anchor) > 1), None)
-    if duplicate is not None:
-        raise ReportError(f"duplicate anchor id '{duplicate}' — a heading/section id must be unique")
-
     slugs: dict[int, str] = {}
     taken: set[str] = set(explicit)
     for block in anchored:

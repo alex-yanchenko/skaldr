@@ -1196,7 +1196,7 @@ class Table(_Block):
             self._refuse_list_cells(
                 f"rollup.by '{self.rollup.by}' counts each row under one badge", self.rollup.by
             )
-            if not any(row[self.rollup.by].strip() for _, row in self._located_rows()):
+            if not any(row[self.rollup.by].strip() for _, row in self.located_rows()):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
                 )
@@ -1209,7 +1209,7 @@ class Table(_Block):
         return self
 
     def _refuse_list_cells(self, one_badge_per_row: str, key: str) -> None:
-        for loc, row in self._located_rows():
+        for loc, row in self.located_rows():
             if isinstance(row[key], list):
                 raise ValueError(
                     f"{one_badge_per_row}, so its cells can't hold a list of keys ({loc} holds {row[key]})"
@@ -1240,7 +1240,7 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
-    def _located_rows(self) -> list[tuple[str, dict[str, Any]]]:
+    def located_rows(self) -> list[tuple[str, dict[str, Any]]]:
         if self.groups is not None:
             return [
                 (f"groups.{group_index}.rows.{row_index}", cast("dict[str, Any]", row))
@@ -2470,16 +2470,28 @@ Block = Annotated[
 AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
-def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
     match block:
         case Section() | Panel() | Toggle() | InnerToggle():
-            return block.blocks
+            return [(f"blocks.{index}", inner) for index, inner in enumerate(block.blocks)]
         case Grid() | InnerGrid():
-            return [inner for cell in block.cells for inner in cell.blocks]
+            return [
+                (f"cells.{cell_index}.blocks.{index}", inner)
+                for cell_index, cell in enumerate(block.cells)
+                for index, inner in enumerate(cell.blocks)
+            ]
         case Walkthrough():
-            return [inner for step in block.steps for inner in step.detail]
+            return [
+                (f"steps.{step_index}.detail.{index}", inner)
+                for step_index, step in enumerate(block.steps)
+                for index, inner in enumerate(step.detail)
+            ]
         case Tabs():
-            return [inner for tab in block.tabs for inner in tab.blocks]
+            return [
+                (f"tabs.{tab_index}.blocks.{index}", inner)
+                for tab_index, tab in enumerate(block.tabs)
+                for index, inner in enumerate(tab.blocks)
+            ]
         case (
             Heading()
             | Text()
@@ -2516,10 +2528,25 @@ def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
             assert_never(block)
 
 
+def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+    return [inner for _, inner in located_child_blocks(block)]
+
+
 def walk_blocks(blocks: Sequence[AnyBlock]) -> Iterator[AnyBlock]:
     for block in blocks:
         yield block
         yield from walk_blocks(child_blocks(block))
+
+
+def _walk_placed(placed: Iterable[tuple[str, AnyBlock]]) -> Iterator[tuple[str, AnyBlock]]:
+    for place, block in placed:
+        path = f"{place}.{block.type}"
+        yield path, block
+        yield from _walk_placed((f"{path}.{child}", inner) for child, inner in located_child_blocks(block))
+
+
+def walk_located_blocks(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, AnyBlock]]:
+    yield from _walk_placed((f"blocks.{index}", block) for index, block in enumerate(blocks))
 
 
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
@@ -2548,40 +2575,64 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
-    for block in walk_blocks(blocks):
-        if isinstance(block, BadgeRow):
-            for item in (*block.items, *(i for group in block.groups for i in group.items)):
+    for _, key in iter_located_badge_keys(blocks):
+        yield key
+
+
+def iter_located_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, str]]:
+    for path, block in walk_located_blocks(blocks):
+        yield from _badge_keys_in(path, block)
+
+
+def _badge_keys_from(path: str, keys: Sequence[str]) -> Iterator[tuple[str, str]]:
+    for index, key in enumerate(keys):
+        yield f"{path}.{index}", key
+
+
+def _badge_keys_in(path: str, block: AnyBlock) -> Iterator[tuple[str, str]]:
+    if isinstance(block, BadgeRow):
+        for index, item in enumerate(block.items):
+            if isinstance(item, BadgeRef):
+                yield f"{path}.items.{index}.key", item.key
+        for group_index, group in enumerate(block.groups):
+            for index, item in enumerate(group.items):
                 if isinstance(item, BadgeRef):
-                    yield item.key
-        elif isinstance(block, Cards):
-            for card in block.items:
-                yield from card.badges
-                if card.badge is not None:
-                    yield card.badge
-        elif isinstance(block, Timeline):
-            for item in block.items:
-                yield from item.badges
-        elif isinstance(block, Flow):
-            for step in block.steps:
-                yield from step.badges
-        elif isinstance(block, Fan):
-            yield from block.hub.badges
-            for spoke in block.spokes:
-                yield from spoke.badges
-        elif isinstance(block, Matrix):
-            for cell in block.cells:
-                if cell.badge is not None:
-                    yield cell.badge
-        elif isinstance(block, Table):
-            badge_columns = [column.key for column in block.columns if column.kind == "badge"]
-            for row in block.all_rows():
-                for key in badge_columns:
-                    value = row.get(key)
-                    # A cell badge may hold a list of keys; a title badge holds one. A blank string is
-                    # an opt-out (no chip on that row), not a reference.
-                    for candidate in _as_badge_list(value):
-                        if isinstance(candidate, str) and candidate.strip():
-                            yield candidate.strip()
+                    yield f"{path}.groups.{group_index}.items.{index}.key", item.key
+    elif isinstance(block, Cards):
+        for index, card in enumerate(block.items):
+            yield from _badge_keys_from(f"{path}.items.{index}.badges", card.badges)
+            if card.badge is not None:
+                yield f"{path}.items.{index}.badge", card.badge
+    elif isinstance(block, Timeline):
+        for index, item in enumerate(block.items):
+            yield from _badge_keys_from(f"{path}.items.{index}.badges", item.badges)
+    elif isinstance(block, Flow):
+        for index, step in enumerate(block.steps):
+            yield from _badge_keys_from(f"{path}.steps.{index}.badges", step.badges)
+    elif isinstance(block, Fan):
+        yield from _badge_keys_from(f"{path}.hub.badges", block.hub.badges)
+        for index, spoke in enumerate(block.spokes):
+            yield from _badge_keys_from(f"{path}.spokes.{index}.badges", spoke.badges)
+    elif isinstance(block, Matrix):
+        for index, cell in enumerate(block.cells):
+            if cell.badge is not None:
+                yield f"{path}.cells.{index}.badge", cell.badge
+    elif isinstance(block, Table):
+        badge_columns = [column.key for column in block.columns if column.kind == "badge"]
+        for row_path, row in block.located_rows():
+            for key in badge_columns:
+                yield from _badge_keys_in_cell(f"{path}.{row_path}.{key}", row.get(key))
+
+
+def _badge_keys_in_cell(path: str, value: Any) -> Iterator[tuple[str, str]]:
+    placed = (
+        [(f"{path}.{index}", key) for index, key in enumerate(cast("list[Any]", value))]
+        if isinstance(value, list)
+        else [(path, value)]
+    )
+    for place, candidate in placed:
+        if isinstance(candidate, str) and candidate.strip():
+            yield place, candidate.strip()
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
@@ -2606,14 +2657,6 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     for block in walk_blocks(blocks):
         if isinstance(block, Table):
             yield block
-
-
-def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
-    """Every card in the block tree (recursing into containers), in document order — for the
-    `of_matrix`/`of_tables` reference checks and the derived-value computation."""
-    for block in walk_blocks(blocks):
-        if isinstance(block, Cards):
-            yield from block.items
 
 
 class Report(FrozenModel):
@@ -2641,77 +2684,119 @@ class Report(FrozenModel):
 
     @model_validator(mode="after")
     def _validate_badge_references(self) -> "Report":
-        bad = sorted({key for key in iter_referenced_badge_keys(self.blocks) if key not in self.badges})
-        if bad:
-            raise ValueError(f"badge key(s) not declared in `badges`: {bad} (add them to the badges map)")
+        undeclared = [
+            (path, key) for path, key in iter_located_badge_keys(self.blocks) if key not in self.badges
+        ]
+        if undeclared:
+            keys = sorted({key for _, key in undeclared})
+            where = ", ".join(f"{path} ({key!r})" for path, key in undeclared)
+            raise ValueError(
+                f"badge key(s) not declared in `badges`: {keys} (add them to the badges map), at {where}"
+            )
         return self
+
+    def _located_blocks(self) -> list[tuple[str, AnyBlock]]:
+        return list(walk_located_blocks(self.blocks))
+
+    def _located_cards(self) -> Iterator[tuple[str, Card]]:
+        for path, block in self._located_blocks():
+            if isinstance(block, Cards):
+                for index, card in enumerate(block.items):
+                    yield f"{path}.items.{index}", card
 
     @model_validator(mode="after")
     def _validate_matrix_references(self) -> "Report":
-        counts = Counter(matrix.id for matrix in iter_matrices(self.blocks) if matrix.id is not None)
-        duplicates = sorted(mid for mid, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"matrix id(s) used more than once: {duplicates} — matrix ids must be unique")
-        for card in iter_cards(self.blocks):
-            if card.of_matrix is not None and card.of_matrix not in counts:
-                raise ValueError(f"card of_matrix '{card.of_matrix}' names no matrix with that id")
+        placed = [
+            (f"{path}.id", block.id)
+            for path, block in self._located_blocks()
+            if isinstance(block, Matrix) and block.id is not None
+        ]
+        _refuse_repeats(placed, "matrix id(s) used more than once: {repeated} — matrix ids must be unique")
+        matrix_ids = {matrix_id for _, matrix_id in placed}
+        for path, card in self._located_cards():
+            if card.of_matrix is not None and card.of_matrix not in matrix_ids:
+                raise ValueError(
+                    f"card of_matrix '{card.of_matrix}' names no matrix with that id, at {path}.of_matrix"
+                )
         return self
 
     @model_validator(mode="after")
     def _validate_table_references(self) -> "Report":
-        # A `of_tables` card counts a badge across the named tables' rollup columns, so each referenced
-        # table must both exist (by id, unique) AND declare a `rollup` (which names the column to count).
-        with_rollup: set[str] = set()
-        counts: Counter[str] = Counter()
-        for table in iter_tables(self.blocks):
-            if table.id is not None:
-                counts[table.id] += 1
-                if table.rollup is not None:
-                    with_rollup.add(table.id)
-        duplicates = sorted(tid for tid, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"table id(s) used more than once: {duplicates} — table ids must be unique")
-        for card in iter_cards(self.blocks):
-            for tid in card.of_tables or []:
-                if tid not in counts:
-                    raise ValueError(f"card of_tables references '{tid}', which names no table with that id")
-                if tid not in with_rollup:
+        tables = [
+            (f"{path}.id", block)
+            for path, block in self._located_blocks()
+            if isinstance(block, Table) and block.id is not None
+        ]
+        _refuse_repeats(
+            [(path, cast("str", table.id)) for path, table in tables],
+            "table id(s) used more than once: {repeated} — table ids must be unique",
+        )
+        rollups = {table.id: table.rollup is not None for _, table in tables}
+        for path, card in self._located_cards():
+            for index, tid in enumerate(card.of_tables or []):
+                where = f"{path}.of_tables.{index}"
+                if tid not in rollups:
                     raise ValueError(
-                        f"card of_tables references table '{tid}', which has no `rollup` — "
-                        "of_tables counts a badge using each table's rollup column, so it must declare one"
+                        f"card of_tables references '{tid}', which names no table with that id, at {where}"
+                    )
+                if not rollups[tid]:
+                    raise ValueError(
+                        f"card of_tables references table '{tid}', which has no `rollup` — of_tables counts "
+                        f"a badge using each table's rollup column, so it must declare one, at {where}"
                     )
         return self
 
     @model_validator(mode="after")
     def _validate_request_storage_keys_unique(self) -> "Report":
-        counts = Counter(block.id or block.label for block in iter_requests(self.blocks))
-        duplicates = sorted(key for key, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(
-                f"request block label(s) used more than once: {duplicates} — a label keys what a "
-                "reader's fields are remembered under while their tab is open, so two blocks sharing "
-                "one would share those values; give one of them an `id`"
-            )
+        _refuse_repeats(
+            [
+                (path, block.id or block.label)
+                for path, block in self._located_blocks()
+                if isinstance(block, (Request, RequestFlow))
+            ],
+            "request block label(s) used more than once: {repeated} — a label keys what a reader's fields "
+            "are remembered under while their tab is open, so two blocks sharing one would share those "
+            "values; give one of them an `id`",
+        )
         return self
 
     @model_validator(mode="after")
     def _validate_reference_keys_unique(self) -> "Report":
-        # A key must be globally unique: it becomes an HTML id, and the shared numbering assumes one
-        # source per key. This subsumes any within-block check, so `References` carries none.
-        counts = Counter(item.key for item in iter_reference_items(self.blocks))
-        duplicates = sorted(key for key, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"reference key(s) declared more than once: {duplicates}")
+        _refuse_repeats(
+            [
+                (f"{path}.items.{index}.key", item.key)
+                for path, block in self._located_blocks()
+                if isinstance(block, References)
+                for index, item in enumerate(block.items)
+            ],
+            "reference key(s) declared more than once: {repeated}",
+        )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_anchor_ids_unique(self) -> "Report":
+        _refuse_repeats(
+            [
+                (f"{path}.id", block.id)
+                for path, block in self._located_blocks()
+                if isinstance(block, (Heading, Section)) and block.id is not None
+            ],
+            "heading/section id(s) used more than once: {repeated} — a heading/section id must be unique",
+        )
         return self
 
 
+def _refuse_repeats(placed: Sequence[tuple[str, str]], refusal: str) -> None:
+    counts = Counter(value for _, value in placed)
+    repeated = sorted(value for value, count in counts.items() if count > 1)
+    if repeated:
+        where = ", ".join(path for path, value in placed if counts[value] > 1)
+        raise ValueError(f"{refusal.format(repeated=repeated)}, at {where}")
+
+
 def _format_validation_error(error: ValidationError) -> str:
-    issues = error.errors()
-    for issue in issues:
-        if issue["type"] == _RECONCILIATION_ERROR_TYPE:
-            return issue["msg"]
     lines: list[str] = []
-    for issue in issues:
+    for issue in error.errors():
         location = ".".join(str(part) for part in issue["loc"])
         lines.append(f"{location}: {issue['msg']}" if location else issue["msg"])
     return "invalid content data: " + "; ".join(lines)
