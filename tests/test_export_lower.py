@@ -237,6 +237,38 @@ def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
     )
 
 
+def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub", "points": ["owns the queue"], "badges": ["API"]},
+        "spokes": [{"label": "A", "points": ["one"]}, {"label": "B"}],
+    }
+
+    assert lowered([fan], badges=API_BADGES) == (
+        API_LEGEND,
+        Diagram(
+            Graph(
+                "LR",
+                (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
+                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+            ),
+            (
+                ListNode(
+                    "bullet",
+                    (
+                        ListEntry(
+                            (*bold("Hub"), Plain(" "), Chip("api", "blue")),
+                            children=(ListNode("bullet", (ListEntry((Plain("owns the queue"),)),)),),
+                        ),
+                        ListEntry(bold("A"), children=(ListNode("bullet", (ListEntry((Plain("one"),)),)),)),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("direction", "edges"),
     [
