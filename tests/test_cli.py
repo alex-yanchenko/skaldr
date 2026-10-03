@@ -483,6 +483,23 @@ def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     assert "2 unfilled placeholders: ticket, url" in captured.err  # plural + sorted
 
 
+def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = (
+        "Review [the PR](https://github.com/acme/repo/pull/{{pr}}) "
+        "and [ticket {{ticket}}](https://example.com/t)."
+    )
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": body}]))
+
+    exit_code = main(["--check", "--strict", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: 2 unfilled placeholders: pr, ticket\n\n1 file failed\n",
+    )
+
+
 @pytest.mark.parametrize(
     ("blocks", "message"),
     [
