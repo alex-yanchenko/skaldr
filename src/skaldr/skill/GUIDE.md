@@ -818,6 +818,8 @@ block after the prose that cites it, so each source gets a backlink to its citat
 when prose needs to cite sources; for a bare link inside a sentence use a `[text](url)` markdown
 link instead.
 
+A reference's `url`, like a swimlane step's, must be a well-formed `http`, `https` or `mailto` URL: one with no host (`https://`), a space in the host or a port past 65535 fails the build naming it. The page links to the URL exactly as you wrote it.
+
 ```yaml
 - type: text
   body: "Thresholds come from the Q2 audit [^audit]; method from the SOP [^sop]."

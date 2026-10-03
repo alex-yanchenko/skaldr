@@ -3600,6 +3600,48 @@ def test_references_rejects_url_with_a_disallowed_scheme() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+@pytest.mark.parametrize(
+    ("url", "reason"),
+    [
+        pytest.param("https://", "empty host", id="no-host"),
+        pytest.param("http://#frag", "empty host", id="fragment-only"),
+        pytest.param("https://exa mple.com", "invalid international domain name", id="space-in-host"),
+        pytest.param("https://[::1", "invalid IPv6 address", id="broken-ipv6"),
+        pytest.param("https://x.io:99999", "invalid port number", id="port-out-of-range"),
+    ],
+)
+def test_references_rejects_a_malformed_url(url: str, reason: str) -> None:
+    block = {"type": "references", "items": [{"key": "a", "text": "x", "url": url}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.references.items.0: "
+        f"Value error, 'url' {url!r} is not a valid URL ({reason})"
+    )
+
+
+def test_a_swimlane_step_url_that_is_malformed_is_refused() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "url": "https://"}],
+    )
+
+    with pytest.raises(ReportError, match=r"swimlane step url 'https://' is not a valid URL \(empty host\)"):
+        parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize("url", ["https://x.io", "mailto:ops@example.com", "http://x.io/a b"])
+def test_a_valid_url_is_kept_exactly_as_the_author_wrote_it(url: str) -> None:
+    block = {"type": "references", "items": [{"key": "a", "text": "x", "url": url}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.model_dump(mode="json")["blocks"][0]["items"][0]["url"] == url
+
+
 def test_references_requires_at_least_one_item() -> None:
     with pytest.raises(ReportError, match=r"blocks\.0\.references\.items.*at least 1"):
         parse_report(make_report(blocks=[{"type": "references", "items": []}]))
