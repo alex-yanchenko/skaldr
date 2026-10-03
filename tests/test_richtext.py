@@ -1,16 +1,11 @@
 import re
 import time
-from collections.abc import Callable
 
 import pytest
 from pydantic import ValidationError
 
-from skaldr import render
-from skaldr.compute import paragraphs
 from skaldr.errors import ReportError
-from skaldr.export import inline
-from skaldr.export.lower import lower_report
-from skaldr.models import ToneLiteral, load_report
+from skaldr.models import ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -27,41 +22,16 @@ from skaldr.richtext import (
     StyleName,
     Tinted,
     parse_rich,
-    rich_text_fields,
     visible_text,
     write_runs,
 )
-from tests.conftest import REPO_ROOT
+from skaldr.richtext_syntax import MAX_NESTING
 
 FULL_CONTEXT = RichContext(
     reference_numbers={"sop": 1},
     reference_urls={"sop": "https://example.com/sop"},
     anchor_ids=frozenset({"method"}),
 )
-
-
-def _recording_parse_rich(seen: set[str]) -> Callable[[str, RichContext | None], Rich]:
-    def parse(text: str, context: RichContext | None = None) -> Rich:
-        seen.add(text)
-        return parse_rich(text, context)
-
-    return parse
-
-
-@pytest.mark.parametrize("example", ["data/example.yaml", "examples/sales-pipeline.yaml"])
-def test_every_text_the_page_and_the_export_parse_is_a_field_the_validation_pass_checks(
-    monkeypatch: pytest.MonkeyPatch, example: str
-) -> None:
-    report = load_report(REPO_ROOT / example)
-    parsed: set[str] = set()
-    monkeypatch.setattr(render, "parse_rich", _recording_parse_rich(parsed))
-    monkeypatch.setattr(inline, "parse_rich", _recording_parse_rich(parsed))
-
-    render.render_html(report)
-    lower_report(report)
-
-    validated = {paragraph for _, text in rich_text_fields(report) for paragraph in paragraphs(text)}
-    assert sorted(text for text in parsed - validated if text) == []
 
 
 def _italics_nested(depth: int) -> Rich:
@@ -72,24 +42,24 @@ def _italics_nested(depth: int) -> Rich:
 
 
 def test_marks_nest_up_to_the_nesting_limit() -> None:
-    assert parse_rich("*a " * 20 + "b" + "*" * 20) == _italics_nested(20)
+    assert parse_rich("*a " * MAX_NESTING + "b" + "*" * MAX_NESTING) == _italics_nested(MAX_NESTING)
 
 
 def test_colored_spans_nest_up_to_the_nesting_limit() -> None:
     runs: Rich = (Plain("x"),)
-    for _ in range(20):
+    for _ in range(MAX_NESTING):
         runs = (Tinted("info", None, runs),)
 
-    assert parse_rich("[" * 20 + "x" + "]{tone=info}" * 20) == runs
+    assert parse_rich("[" * MAX_NESTING + "x" + "]{tone=info}" * MAX_NESTING) == runs
 
 
 def test_brackets_nested_past_the_limit_that_form_no_mark_stay_text() -> None:
-    text = "[" * 30 + "x" + "]" * 30
+    text = "[" * (MAX_NESTING + 10) + "x" + "]" * (MAX_NESTING + 10)
 
     assert parse_rich(text) == (Plain(text),)
 
 
-@pytest.mark.parametrize("depth", [21, 260])
+@pytest.mark.parametrize("depth", [MAX_NESTING + 1, 260])
 @pytest.mark.parametrize(
     ("opener", "closer"),
     [
@@ -104,7 +74,8 @@ def test_marks_nested_past_the_limit_fail_naming_it(opener: str, closer: str, de
         parse_rich(opener * depth + "b" + closer * depth)
 
     assert str(raised.value) == (
-        "rich text nests more than 20 marks, links or [text]{…} spans inside one another: flatten it"
+        f"rich text nests more than {MAX_NESTING} marks, links or [text]{{…}} spans inside one another: "
+        "flatten it"
     )
 
 

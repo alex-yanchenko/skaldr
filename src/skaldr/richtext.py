@@ -1,15 +1,12 @@
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import cache
-from typing import Any, Final, Literal, Protocol, cast, get_args, get_type_hints
+from typing import Final, Literal, Protocol
 
 from markdown_it.token import Token
-from pydantic import BaseModel
 from typing_extensions import assert_never
 
-from skaldr.compute import paragraphs
 from skaldr.errors import ReportError
-from skaldr.models import RICH_TEXT, Report, Table, ToneLiteral
+from skaldr.models import ToneLiteral
 from skaldr.richtext_syntax import (
     ANCHOR_PREFIX,
     CITATION,
@@ -271,62 +268,3 @@ class VisibleText:
 
 def visible_text(runs: Rich) -> str:
     return write_runs(runs, VisibleText())
-
-
-FieldPath = tuple[str, ...]
-_RICH_TABLE_COLUMN_KINDS: Final = frozenset({"text", "rich"})
-
-
-@cache
-def _field_hints(model: type[BaseModel]) -> Mapping[str, object]:
-    return get_type_hints(model, include_extras=True)
-
-
-def _holds_rich_text(hint: object) -> bool:
-    return any(argument is RICH_TEXT or _holds_rich_text(argument) for argument in get_args(hint))
-
-
-def _rich_table_cells(table: Table, path: FieldPath) -> Iterator[tuple[FieldPath, str]]:
-    keys = [column.key for column in table.columns if column.kind in _RICH_TABLE_COLUMN_KINDS]
-    row_sets = (
-        [((*path, "rows"), table.all_rows())]
-        if table.groups is None
-        else [
-            ((*path, "groups", str(index), "rows"), cast("list[dict[str, Any]]", group.rows))
-            for index, group in enumerate(table.groups)
-        ]
-    )
-    for rows_path, rows in row_sets:
-        for index, row in enumerate(rows):
-            row_path = (*rows_path, str(index))
-            yield from (((*row_path, key), str(row[key])) for key in keys if row.get(key) not in (None, ""))
-            for sub_index, subrow in enumerate(cast("list[dict[str, Any]]", row.get("subrows") or [])):
-                yield (*row_path, "subrows", str(sub_index), "label"), str(subrow["label"])
-
-
-def _rich_texts(value: object, path: FieldPath, rich: bool) -> Iterator[tuple[FieldPath, str]]:
-    if isinstance(value, str):
-        if rich:
-            yield path, value
-    elif isinstance(value, BaseModel):
-        if isinstance(value, Table):
-            yield from _rich_table_cells(value, path)
-        hints = _field_hints(type(value))
-        for name in type(value).model_fields:
-            yield from _rich_texts(getattr(value, name), (*path, name), _holds_rich_text(hints[name]))
-    elif isinstance(value, list):
-        for index, item in enumerate(cast("list[object]", value)):
-            yield from _rich_texts(item, (*path, str(index)), rich)
-
-
-def rich_text_fields(report: Report) -> Iterator[tuple[FieldPath, str]]:
-    return _rich_texts(report, (), False)
-
-
-def validate_rich_text_fields(report: Report, context: RichContext) -> None:
-    for path, text in rich_text_fields(report):
-        for paragraph in paragraphs(text):
-            try:
-                parse_rich(paragraph, context)
-            except ReportError as error:
-                raise ReportError(f"{'.'.join(path)}: {error}") from error

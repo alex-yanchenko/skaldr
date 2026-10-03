@@ -15,7 +15,7 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
-from skaldr.richtext import Plain, Rich, RichContext, validate_rich_text_fields
+from skaldr.richtext import Plain, Rich, RichContext
 
 
 def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
@@ -74,7 +74,7 @@ def lowering_for(report: Report) -> Lowering:
         reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
         anchor_ids=frozenset(anchors.values()),
     )
-    validate_rich_text_fields(report, rich_context)
+    compute.validate_rich_text_fields(report, rich_context)
     return Lowering(
         report=report,
         rich_context=rich_context,

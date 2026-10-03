@@ -14,6 +14,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -181,12 +182,24 @@ def _one_emoji(value: str) -> str:
 Icon = Annotated[str, AfterValidator(_one_emoji)]
 
 
+@dataclass(frozen=True)
 class RichTextMarker:
-    pass
+    split_into_paragraphs: bool
 
 
-RICH_TEXT: Final = RichTextMarker()
+RICH_TEXT: Final = RichTextMarker(split_into_paragraphs=False)
+RICH_PROSE: Final = RichTextMarker(split_into_paragraphs=True)
 RichText = Annotated[str, RICH_TEXT]
+RichProse = Annotated[str, RICH_PROSE]
+RICH_COLUMN_KINDS: Final = ("text", "rich")
+FieldPath = tuple[str, ...]
+MappedRow = dict[str, Any]
+
+
+def _mapped_rows(rows: object) -> list[MappedRow]:
+    return cast("list[MappedRow]", rows)
+
+
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
@@ -294,7 +307,7 @@ class Heading(_Block):
 
 class Text(_Block):
     type: Literal["text"]
-    body: RichText = Field(description="Rich-text prose; blank lines split paragraphs.")
+    body: RichProse = Field(description="Rich-text prose; blank lines split paragraphs.")
     muted: bool = Field(default=False, description="Render in the caption colour, for asides.")
 
 
@@ -408,7 +421,7 @@ class KeyValue(_Block):
 
 class DefItem(FrozenModel):
     term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
-    body: RichText = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
+    body: RichProse = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
 
 
 class DefList(_Block):
@@ -585,7 +598,7 @@ class Callout(_Block):
         "callout is semantic, so teal/sky/accent/neutral aren't callout tones — use a card/badge_row/note."
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
-    body: RichText = Field(description="Rich-text body.")
+    body: RichProse = Field(description="Rich-text body.")
     icon: Icon | None = Field(
         default=None,
         description="Optional single emoji shown at the head of the callout, in place of the tone's "
@@ -696,13 +709,13 @@ class Math(_Block):
 
 class Quote(_Block):
     type: Literal["quote"]
-    body: RichText = Field(description="Rich-text quotation.")
+    body: RichProse = Field(description="Rich-text quotation.")
     cite: str | None = Field(default=None, description="Optional attribution line.")
 
 
 class Note(_Block):
     type: Literal["note"]
-    body: RichText = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
+    body: RichProse = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
     icon: Icon | None = Field(
         default=None,
@@ -761,7 +774,7 @@ class FlowStep(FrozenModel):
         "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
     )
     points: list[RichText] = Field(
-        default_factory=list[RichText],
+        default_factory=list,
         description="Optional detail bullets (rich text) under the node, for when one line isn't enough. "
         "Render below the note. Best paired with style: steps — a few bullets crowd a compact arrow chip.",
     )
@@ -1137,7 +1150,7 @@ class Table(_Block):
     def _validate_table(self) -> "Table":
         if (self.groups is None) == (self.rows is None):
             raise ValueError("provide exactly one of 'groups' or 'rows'")
-        if not any(column.kind in ("text", "rich") for column in self.columns):
+        if not any(column.kind in RICH_COLUMN_KINDS for column in self.columns):
             raise ValueError("a table needs at least one text or rich column (it hosts the title + chips)")
         column_keys = [column.key for column in self.columns]
         if len(column_keys) != len(set(column_keys)):
@@ -1244,7 +1257,27 @@ class Table(_Block):
 
     @property
     def title_key(self) -> str:
-        return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
+        return next(
+            column.key for kind in RICH_COLUMN_KINDS for column in self.columns if column.kind == kind
+        )
+
+    def rich_cells(self) -> Iterator[tuple[FieldPath, str, RichTextMarker]]:
+        keys = [column.key for column in self.columns if column.kind in RICH_COLUMN_KINDS]
+        row_sets = (
+            [(("rows",), self.all_rows())]
+            if self.groups is None
+            else [
+                (("groups", str(index), "rows"), _mapped_rows(group.rows))
+                for index, group in enumerate(self.groups)
+            ]
+        )
+        for rows_path, rows in row_sets:
+            for index, row in enumerate(rows):
+                row_path = (*rows_path, str(index))
+                for key in keys:
+                    yield (*row_path, key), row[key], RICH_PROSE
+                for sub_index, subrow in enumerate(_mapped_rows(row.get("subrows") or [])):
+                    yield (*row_path, "subrows", str(sub_index), "label"), subrow["label"], RICH_TEXT
 
     @property
     def sum_key(self) -> str | None:

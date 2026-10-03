@@ -12,6 +12,20 @@ from skaldr.render import render_html, render_report
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
+_UNKNOWN_TONE_TEXT = "x [a]{tone=x}"
+_UNKNOWN_TONE_MESSAGE = (
+    "unknown tone 'x' in {tone=x}: a tone is one of neutral, info, success, warning, danger, accent, teal, "
+    "sky, or a palette name slate, blue, green, amber, red, violet"
+)
+
+
+def _note_table(**rows_or_groups: object) -> dict[str, object]:
+    return {
+        "type": "table",
+        "columns": [{"key": "item", "label": "Item"}, {"key": "note", "label": "Note"}],
+        **rows_or_groups,
+    }
+
 
 def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -> Path:
     path = tmp_path / name
@@ -573,6 +587,66 @@ def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
             "another: flatten it",
             id="emphasis-nested-past-the-limit",
         ),
+        pytest.param(
+            [{"type": "list", "items": ["{{a\n\nb}}"]}],
+            "blocks.0.items.0: invalid placeholder '{{a\n\nb}}': a placeholder name is letters, digits, "
+            "'_' or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="a-list-item-is-parsed-whole-across-a-blank-line",
+        ),
+        pytest.param(
+            [{"type": "flow", "steps": [{"label": "A", "points": [_UNKNOWN_TONE_TEXT]}, {"label": "B"}]}],
+            f"blocks.0.steps.0.points.0: {_UNKNOWN_TONE_MESSAGE}",
+            id="flow-step-point",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "fan",
+                    "hub": {"label": "H"},
+                    "spokes": [{"label": "S1"}, {"label": "S2", "points": ["ok", _UNKNOWN_TONE_TEXT]}],
+                }
+            ],
+            f"blocks.0.spokes.1.points.1: {_UNKNOWN_TONE_MESSAGE}",
+            id="fan-spoke-point",
+        ),
+        pytest.param(
+            [_note_table(rows=[{"item": "a", "note": "ok"}, {"item": "b", "note": _UNKNOWN_TONE_TEXT}])],
+            f"blocks.0.rows.1.note: {_UNKNOWN_TONE_MESSAGE}",
+            id="ungrouped-table-cell",
+        ),
+        pytest.param(
+            [
+                _note_table(
+                    groups=[
+                        {"name": "G1", "rows": [{"item": "a", "note": "ok"}]},
+                        {
+                            "name": "G2",
+                            "rows": [{"item": "b", "note": "ok"}, {"item": _UNKNOWN_TONE_TEXT, "note": ""}],
+                        },
+                    ]
+                )
+            ],
+            f"blocks.0.groups.1.rows.1.item: {_UNKNOWN_TONE_MESSAGE}",
+            id="second-group-second-row",
+        ),
+        pytest.param(
+            [
+                _note_table(
+                    rows=[
+                        {
+                            "item": "a",
+                            "note": "ok",
+                            "subrows": [
+                                {"label": "ok", "value": 1},
+                                {"label": _UNKNOWN_TONE_TEXT, "value": 2},
+                            ],
+                        }
+                    ]
+                )
+            ],
+            f"blocks.0.rows.0.subrows.1.label: {_UNKNOWN_TONE_MESSAGE}",
+            id="second-subrow",
+        ),
     ],
 )
 def test_check_names_the_field_whose_rich_text_fails(
@@ -583,6 +657,16 @@ def test_check_names_the_field_whose_rich_text_fails(
     exit_code = main(["--check", str(data_path)])
 
     assert (exit_code, capsys.readouterr().err) == (1, f"FAIL  {data_path}: {message}\n\n1 file failed\n")
+
+
+def test_check_passes_a_span_across_a_blank_line_in_a_list_item(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "list", "items": ["[a\n\nb]{tone=info}"]}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"OK    {data_path}\n")
 
 
 def test_check_strict_passes_when_no_placeholders_remain(
