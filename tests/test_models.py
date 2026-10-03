@@ -2347,6 +2347,34 @@ def test_include_resolves_paths_relative_to_each_including_file(tmp_path: Path) 
     ]
 
 
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        pytest.param(
+            make_report(meta={"title": "bad \ud800 title"}),
+            "invalid content data: meta.title: U+D800 is a lone surrogate, which a page cannot hold",
+            id="field",
+        ),
+        pytest.param(
+            make_report(blocks=[{"type": "text", "body": "ok"}, {"type": "list", "items": ["a", "\udfff"]}]),
+            "invalid content data: blocks.1.items.1: U+DFFF is a lone surrogate, which a page cannot hold",
+            id="list-item",
+        ),
+        pytest.param(
+            make_report(badges={"K\udc80": {"label": "L", "tone": "info", "legend": "x"}}),
+            "invalid content data: badges: the key 'K\\udc80' holds U+DC80, a lone surrogate, which a page "
+            "cannot hold",
+            id="mapping-key",
+        ),
+    ],
+)
+def test_a_lone_surrogate_is_refused_naming_where_it_sits(data: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(data)
+
+    assert str(raised.value) == message
+
+
 def test_content_files_lists_the_file_and_every_fragment_it_includes_in_load_order(tmp_path: Path) -> None:
     shared = tmp_path / "shared"
     shared.mkdir()

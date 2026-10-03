@@ -10,7 +10,7 @@ import yaml
 from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, parse_report
-from skaldr.render import render_embed, render_html, render_report
+from skaldr.render import render_embed, render_html
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
@@ -1143,15 +1143,59 @@ def test_a_code_point_no_page_can_hold_builds_as_the_replacement_character(
     ) in out_path.read_text(encoding="utf-8")
 
 
-def test_a_render_that_fails_while_writing_leaves_the_earlier_page_in_place(tmp_path: Path) -> None:
+_LONE_SURROGATE_ERROR = (
+    "invalid content data: meta.title: U+D800 is a lone surrogate, which a page cannot hold"
+)
+
+
+def _write_lone_surrogate_report(tmp_path: Path) -> Path:
+    data_path = tmp_path / "surrogate.yaml"
+    data_path.write_text('version: 1\nmeta: {title: "bad \\ud800 title"}\nblocks: []\n', encoding="utf-8")
+    return data_path
+
+
+def test_check_fails_a_lone_surrogate_naming_its_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: {_LONE_SURROGATE_ERROR}\n\n1 file failed\n",
+    )
+
+
+def test_a_render_of_a_lone_surrogate_fails_and_leaves_the_earlier_page_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
     out_path = tmp_path / "report.html"
     out_path.write_text("earlier page", encoding="utf-8")
-    report = parse_report(make_report(blocks=[{"type": "text", "body": "lone \ud800 surrogate"}]))
 
-    with pytest.raises(UnicodeEncodeError):
-        render_report(report, out_path)
+    exit_code = main([str(data_path), "-o", str(out_path)])
 
-    assert (out_path.read_text(encoding="utf-8"), sorted(tmp_path.iterdir())) == ("earlier page", [out_path])
+    assert (exit_code, capsys.readouterr().err, out_path.read_text(encoding="utf-8")) == (
+        1,
+        f"error: {_LONE_SURROGATE_ERROR}\n",
+        "earlier page",
+    )
+
+
+def test_an_export_of_a_lone_surrogate_fails_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
+    export_dir = tmp_path / "exported"
+
+    exit_code = main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)])
+
+    assert (exit_code, capsys.readouterr().err, export_dir.exists()) == (
+        1,
+        f"error: {_LONE_SURROGATE_ERROR}\n",
+        False,
+    )
 
 
 def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a_link(

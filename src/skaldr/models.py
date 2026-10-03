@@ -2750,7 +2750,39 @@ def read_text_file(path: Path) -> str:
         raise ReportError(f"could not read {path}: {err}") from err
 
 
+def _first_unencodable(text: str) -> str | None:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as err:
+        return f"U+{ord(text[err.start]):04X}"
+    return None
+
+
+def _refuse_unencodable_text(data: object, location: tuple[str, ...]) -> None:
+    where = ".".join(location)
+    prefix = f"invalid content data: {where}: " if where else "invalid content data: "
+    if isinstance(data, str):
+        code_point = _first_unencodable(data)
+        if code_point is not None:
+            raise ReportError(f"{prefix}{code_point} is a lone surrogate, which a page cannot hold")
+        return
+    if isinstance(data, Mapping):
+        for key, value in cast("Mapping[object, object]", data).items():
+            key_code_point = _first_unencodable(key) if isinstance(key, str) else None
+            if key_code_point is not None:
+                raise ReportError(
+                    f"{prefix}the key {key!r} holds {key_code_point}, a lone surrogate, "
+                    "which a page cannot hold"
+                )
+            _refuse_unencodable_text(value, (*location, str(key)))
+        return
+    if isinstance(data, list | tuple):
+        for index, item in enumerate(cast("Sequence[object]", data)):
+            _refuse_unencodable_text(item, (*location, str(index)))
+
+
 def parse_report(data: Any) -> Report:
+    _refuse_unencodable_text(data, ())
     try:
         return Report.model_validate(data)
     except ValidationError as err:
