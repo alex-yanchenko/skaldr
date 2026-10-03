@@ -1,15 +1,25 @@
+import unicodedata
 from types import TracebackType
 from typing import Generic, TypeVar
 
 from typing_extensions import Self
 
 HTTP_TIMEOUT_SECONDS = 30.0
+_JOINERS = frozenset({"\N{ZERO WIDTH NON-JOINER}", "\N{ZERO WIDTH JOINER}"})
 
 CaughtT = TypeVar("CaughtT", bound=Exception)
 
 
 def printable_only(text: str) -> str:
-    return "".join(character for character in text if character.isprintable())
+    return "".join(_shown(character) for character in text)
+
+
+def _shown(character: str) -> str:
+    if unicodedata.category(character) == "Zs":
+        return " "
+    if character in _JOINERS or character.isprintable():
+        return character
+    return ""
 
 
 class CaughtWithoutChaining(Generic[CaughtT]):
