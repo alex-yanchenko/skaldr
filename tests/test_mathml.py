@@ -1,12 +1,16 @@
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from functools import cache
 from xml.etree.ElementTree import Element, SubElement
 
 import pytest
+from latex2mathml.commands import MATRICES
+from latex2mathml.converter import convert_to_element
 from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 
 from skaldr import mathml as mathml_module
 from skaldr.errors import ReportError
-from skaldr.mathml import MATHML_ATTRIBUTES, MATHML_ELEMENTS, MathDisplay, mathml
+from skaldr.mathml import LATEX2MATHML_COMMANDS, MATHML_ATTRIBUTES, MATHML_ELEMENTS, MathDisplay, mathml
 
 MATH_OPEN = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">'
 CONVERTER_PREFIX = "latex2mathml cannot convert it ("
@@ -371,41 +375,59 @@ def test_an_element_on_the_mathml_allowlist_passes(
     assert mathml("x", "inline") == f"<math><{tag}><mi>a</mi><mi>b</mi><mi>c</mi></{tag}></math>"
 
 
-def test_the_allowlist_is_the_set_of_attributes_latex2mathml_emits() -> None:
-    assert sorted(MATHML_ATTRIBUTES) == [
-        "accent",
-        "border-color",
-        "columnalign",
-        "columnlines",
-        "columnspacing",
-        "depth",
-        "display",
-        "displaystyle",
-        "fence",
-        "form",
-        "height",
-        "largeop",
-        "linebreak",
-        "linethickness",
-        "lspace",
-        "mathbackground",
-        "mathcolor",
-        "mathsize",
-        "mathvariant",
-        "maxsize",
-        "minsize",
-        "movablelimits",
-        "notation",
-        "rowlines",
-        "rowspacing",
-        "rspace",
-        "scriptlevel",
-        "separator",
-        "stretchy",
-        "voffset",
-        "width",
-        "xmlns",
+@dataclass(frozen=True)
+class Emitted:
+    elements: frozenset[str]
+    attributes: frozenset[str]
+
+
+ARGUMENT_SHAPES = (
+    "{0}",
+    "{0}{{a}}{{b}}{{c}}",
+    "{0}{{red}}{{x}}",
+    "x {0} y",
+    "{0}{{1em}}{{2em}}",
+    "{0}[a]{{b}}",
+)
+PAGE_LEVEL_ATTRIBUTES = frozenset({"class", "href", "style"})
+
+
+def _every_command_and_environment_latex2mathml_converts() -> list[str]:
+    environments = [environment.removeprefix("\\") for environment in MATRICES]
+    return [
+        *(shape.format(command) for command in sorted(LATEX2MATHML_COMMANDS) for shape in ARGUMENT_SHAPES),
+        *(rf"\begin{{{name}}}{{c|c}} a & b \\ \hline c & d \end{{{name}}}" for name in environments),
+        r"x_a x^b x_a^b a \\ b",
     ]
+
+
+def _converted_or_none(expression: str) -> Element | None:
+    try:
+        return convert_to_element(expression, display="block")
+    except Exception:
+        return None
+
+
+@cache
+def _what_latex2mathml_emits() -> Emitted:
+    roots = [
+        root
+        for expression in _every_command_and_environment_latex2mathml_converts()
+        if (root := _converted_or_none(expression)) is not None
+    ]
+    elements = [element for root in roots for element in root.iter()]
+    return Emitted(
+        elements=frozenset(element.tag for element in elements),
+        attributes=frozenset(name for element in elements for name in element.attrib),
+    )
+
+
+def test_the_element_allowlist_is_every_element_latex2mathml_emits() -> None:
+    assert _what_latex2mathml_emits().elements == MATHML_ELEMENTS
+
+
+def test_the_attribute_allowlist_is_every_attribute_latex2mathml_emits_but_the_page_level_ones() -> None:
+    assert _what_latex2mathml_emits().attributes == MATHML_ATTRIBUTES | PAGE_LEVEL_ATTRIBUTES
 
 
 @pytest.mark.parametrize(
