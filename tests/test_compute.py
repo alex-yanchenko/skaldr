@@ -772,6 +772,66 @@ def test_anchor_slugs_uses_an_author_id_verbatim_and_yields_the_derived_slug_to_
     assert list(anchor_slugs(report).values()) == ["overview", "overview-2"]
 
 
+def test_anchor_slugs_yield_to_the_ids_the_page_itself_uses() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "Skaldr source"},
+                {"type": "heading", "text": "SC menu"},
+                {"type": "heading", "text": "Ref a"},
+                {"type": "heading", "text": "Fnref a"},
+                {"type": "heading", "text": "Ref b"},
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+            ],
+        )
+    )
+
+    assert list(anchor_slugs(report).values()) == [
+        "skaldr-source-2",
+        "sc-menu-2",
+        "ref-a-2",
+        "fnref-a-2",
+        "ref-b",
+    ]
+
+
+@pytest.mark.parametrize("author_id", ["skaldr-source", "sc-menu", "ref-a", "fnref-a"])
+def test_anchor_slugs_refuse_an_author_id_the_page_itself_uses(author_id: str) -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "A", "id": author_id},
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+            ],
+        )
+    )
+
+    with pytest.raises(ReportError) as raised:
+        anchor_slugs(report)
+
+    assert str(raised.value) == (
+        f"anchor id '{author_id}' is one the page itself uses (the source block, the settings menu, or a "
+        "reference and its citation); give the heading or section another id"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "slug"),
+    [
+        pytest.param("Über uns", "über-uns", id="accented-latin"),
+        pytest.param("日本語の見出し", "日本語の見出し", id="japanese"),
+        pytest.param("Ünïcödé — and ASCII 2", "ünïcödé-and-ascii-2", id="mixed"),
+        pytest.param("snake_case name", "snake-case-name", id="underscore"),
+        pytest.param("Über", "über", id="decomposed"),
+        pytest.param("!!!", "section", id="no-letters"),
+    ],
+)
+def test_anchor_slugs_keep_letters_and_digits_from_any_script(text: str, slug: str) -> None:
+    report = parse_report(make_report(blocks=[{"type": "heading", "text": text}]))
+
+    assert list(anchor_slugs(report).values()) == [slug]
+
+
 def test_anchor_slugs_rejects_a_duplicate_author_id() -> None:
     report = parse_report(
         make_report(

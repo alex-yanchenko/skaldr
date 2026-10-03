@@ -208,6 +208,7 @@ def _environment() -> Environment:
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,
+        settings_menu_id=compute.SETTINGS_MENU_ID,
     )
     return env
 
@@ -327,7 +328,7 @@ def source_block(source: str) -> Markup:
     hidden = hide_script_close(source)
     begin = _SOURCE_BEGIN if hidden == source else _SOURCE_BEGIN_ESCAPED
     return Markup(
-        '<script type="application/yaml" id="skaldr-source">\n'
+        f'<script type="application/yaml" id="{compute.SOURCE_BLOCK_ID}">\n'
         "# skaldr embeds this page's editable YAML source below, so an agent can recover it WITHOUT\n"
         "# reading the rendered HTML/CSS. Recover it with `skaldr --extract-source <file-or-url>`, or\n"
         "# read only the lines between the scissor markers. This block does not affect rendering.\n"

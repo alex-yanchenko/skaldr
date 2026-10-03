@@ -63,9 +63,6 @@ def _require_url_scheme(url: str | None, subject: str) -> None:
 # render.py; both derive from this one class so key-validation and marker-matching can't drift.
 REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 
-# An author-assigned heading/section anchor id: lowercase, hyphen-separated, same shape the auto-slug
-# produces (`_slugify` in compute.py) so a hand-written id and a generated one are indistinguishable
-# as a `#link` target, and no id can introduce a character the auto-slugger never would.
 ANCHOR_ID_PATTERN = SLUG_PATTERN
 
 

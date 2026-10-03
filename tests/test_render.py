@@ -3388,6 +3388,32 @@ def test_same_page_anchor_link_resolves_to_a_heading_id_in_a_full_render() -> No
     assert 'id="overview"' in html  # the heading it targets
 
 
+def test_an_anchor_link_reaches_a_heading_whose_text_is_not_ascii() -> None:
+    blocks = [
+        {"type": "heading", "text": "Über uns"},
+        {"type": "text", "body": "See [about us](#über-uns)."},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert (
+        re.findall(r'<h2 id="[^"]*">Über uns</h2>', html),
+        re.findall(r'<a href="#[^"]*">about us</a>', html),
+    ) == (['<h2 id="über-uns">Über uns</h2>'], ['<a href="#über-uns">about us</a>'])
+
+
+def test_a_citation_links_to_its_reference_even_when_a_heading_reads_like_its_id() -> None:
+    blocks = [
+        {"type": "heading", "text": "Ref a"},
+        {"type": "text", "body": "Claim.[^a]"},
+        {"type": "references", "items": [{"key": "a", "text": "A source."}]},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert re.findall(r'id="(ref-a[^"]*)"', html) == ["ref-a-2", "ref-a"]
+
+
 def test_dangling_anchor_link_fails_the_whole_render() -> None:
     blocks = [{"type": "text", "body": "[broken](#nope)"}]
 

@@ -11,6 +11,7 @@ import json
 import math
 import re
 import string
+import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, Final, NamedTuple, TypedDict
@@ -71,11 +72,23 @@ __all__ = [
     "used_badges",
 ]
 
-_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+_SLUG_STRIP = re.compile(r"[\W_]+")
+
+SOURCE_BLOCK_ID = "skaldr-source"
+SETTINGS_MENU_ID = "sc-menu"
 
 
 def _slugify(text: str) -> str:
-    return _SLUG_STRIP.sub("-", text.lower()).strip("-") or "section"
+    return _SLUG_STRIP.sub("-", unicodedata.normalize("NFC", text).lower()).strip("-") or "section"
+
+
+def _page_ids(report: Report) -> set[str]:
+    reference_ids = (
+        anchor
+        for item in iter_reference_items(report.blocks)
+        for anchor in (f"ref-{item.key}", f"fnref-{item.key}")
+    )
+    return {SOURCE_BLOCK_ID, SETTINGS_MENU_ID, *reference_ids}
 
 
 def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
@@ -106,9 +119,16 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     duplicate = next((anchor for anchor in explicit if explicit.count(anchor) > 1), None)
     if duplicate is not None:
         raise ReportError(f"duplicate anchor id '{duplicate}' — a heading/section id must be unique")
+    page_ids = _page_ids(report)
+    reserved = next((anchor for anchor in explicit if anchor in page_ids), None)
+    if reserved is not None:
+        raise ReportError(
+            f"anchor id '{reserved}' is one the page itself uses (the source block, the settings menu, or a "
+            "reference and its citation); give the heading or section another id"
+        )
 
     slugs: dict[int, str] = {}
-    taken: set[str] = set(explicit)
+    taken: set[str] = set(explicit) | page_ids
     for block in anchored:
         if block.id is not None:
             slugs[id(block)] = block.id
