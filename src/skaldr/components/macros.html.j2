@@ -220,7 +220,7 @@
 </div>
 {% endmacro %}
 
-{% macro verbatim_command(command) %}{% set grouped = "\n" in command %}<pre class="rq-cmd">{% if grouped %}<span class="rq-pipe" hidden>{ </span>{% endif %}{{ variable_slots(command) }}<span class="rq-pipe" hidden>{% if grouped %}{{ "\n}" }}{% endif %} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endmacro %}
+{% macro verbatim_command(command) %}<pre class="rq-cmd"><span class="rq-pipe" hidden>{{ "{\n" }}</span>{{ variable_slots(command) }}<span class="rq-pipe" hidden>{{ "\n}" }} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endmacro %}
 
 {% macro tab_strip(strip, aria_label) %}
 <div class="rq-cases {{ strip.name }}"{% if strip.labels | length > 1 %} role="group" aria-label="{{ aria_label }}"{% endif %}>

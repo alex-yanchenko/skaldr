@@ -702,8 +702,9 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
   so a case never sets both.
 - **`command_note`** says why the command is shaped the way it is. The `verdict` stays about what came
   back.
-- **"Copy + capture"** pipes the output to the clipboard. A multi-line command is wrapped in `{ … }`
-  first, so the capture takes all of it. Plain Copy is always the command byte for byte.
+- **"Copy + capture"** pipes the output to the clipboard. Every command, one line or many, is wrapped
+  in `{` and `}` on lines of their own first, so the capture takes the output of all of it, including
+  `a; b` and a line that ends in a `# comment`. Plain Copy is always the command byte for byte.
 
 **A verification document** (numbered claims a reader re-runs to check them for themselves) is a page
 of these blocks. Put each claim in its own `request`, with the finding as the first case and each

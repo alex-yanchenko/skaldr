@@ -1,9 +1,11 @@
 import base64
 import hashlib
 import re
+import subprocess
 from collections import Counter
 from collections.abc import Callable
 from html import unescape
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -4608,8 +4610,8 @@ def test_a_command_request_shows_the_command_verbatim_and_no_composed_request() 
     html = _command_page()
 
     assert _pane_text(html, "rq-cmd") == [
-        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
-        " | tee /dev/tty | pbcopy"
+        "{\nvault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
+        "\n} | tee /dev/tty | pbcopy"
     ]
     assert 'class="rq-wire"' not in html
     assert "curl -i -X" not in html
@@ -4619,10 +4621,38 @@ def test_a_multi_line_command_is_grouped_so_capture_takes_the_whole_output() -> 
     html = _command_page(command="cd /srv/partner\nvault-run -- fetch-tiers\n")
 
     assert _pane_text(html, "rq-cmd") == [
-        "{ cd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
+        "{\ncd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
     ]
     assert html.count('class="rq-pipe" hidden') == 2
     assert 'command.querySelectorAll(".rq-pipe")' in _request_runtime_script(html)
+
+
+@pytest.mark.parametrize(
+    ("command", "captured"),
+    [
+        pytest.param("echo first; echo second", "first\nsecond\n", id="sequence"),
+        pytest.param("echo first # print it", "first\n", id="trailing-comment"),
+        pytest.param("false || echo second", "second\n", id="or-list"),
+        pytest.param("echo first && echo second", "first\nsecond\n", id="and-list"),
+        pytest.param("echo first\necho second  # trailing comment\n", "first\nsecond\n", id="multi-line"),
+    ],
+)
+def test_copy_and_capture_pipes_every_line_of_output_the_command_prints(
+    tmp_path: Path, command: str, captured: str
+) -> None:
+    clipboard = tmp_path / "clipboard.txt"
+    clipboard.write_text("", encoding="utf-8")
+    [capture_text] = _pane_text(_command_page(command=command), "rq-cmd")
+    runnable = capture_text.replace("tee /dev/tty", "tee /dev/null").replace("pbcopy", f"cat > '{clipboard}'")
+
+    result = subprocess.run(["bash", "-c", runnable], capture_output=True, text=True, check=False)
+
+    assert (result.returncode, result.stdout, result.stderr, clipboard.read_text(encoding="utf-8")) == (
+        0,
+        "",
+        "",
+        captured,
+    )
 
 
 def test_only_a_command_case_is_marked_so_the_live_pane_drops_its_status_chip() -> None:
@@ -4655,9 +4685,10 @@ def test_each_case_of_a_command_request_shows_its_own_command() -> None:
     ]
     html = _command_page(cases=cases)
 
-    assert [text.split(" | tee")[0] for text in _pane_text(html, "rq-cmd")] == [
-        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
-        "vault-run -- fetch-regions",
+    assert _pane_text(html, "rq-cmd") == [
+        "{\nvault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
+        "\n} | tee /dev/tty | pbcopy",
+        "{\nvault-run -- fetch-regions\n} | tee /dev/tty | pbcopy",
     ]
 
 
