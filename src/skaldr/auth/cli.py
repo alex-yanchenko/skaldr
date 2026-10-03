@@ -34,6 +34,8 @@ from skaldr.auth.store import (
 )
 from skaldr.errors import AuthError
 
+_UNNAMED_WORKSPACE = "(unnamed workspace)"
+
 
 def main(
     argv: list[str],
@@ -128,7 +130,8 @@ def _sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
     save_or_revoke_notion(credentials, transport=transport)
-    print(f"Signed in to Notion workspace {_workspace(credentials)}. Saved to the keychain.")
+    workspace = _workspace_name(credentials) or _UNNAMED_WORKSPACE
+    print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
@@ -199,7 +202,7 @@ def _describe_notion(sign_in: SignIn[NotionCredentials] | None) -> str:
         return "not signed in (run `skaldr auth notion`)"
     if sign_in.source == "environment":
         return "access token from NOTION_ACCESS_TOKEN (environment)"
-    return f"signed in to workspace {_workspace(sign_in.credentials)} (keychain)"
+    return f"signed in to workspace {_workspace_name(sign_in.credentials) or _UNNAMED_WORKSPACE} (keychain)"
 
 
 def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
@@ -214,8 +217,8 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
     return f"signed in to {credentials.site} as {display_name} (keychain)"
 
 
-def _workspace(credentials: NotionCredentials) -> str:
-    return printable_only(credentials.workspace_name or "") or "(unnamed workspace)"
+def _workspace_name(credentials: NotionCredentials) -> str | None:
+    return printable_only(credentials.workspace_name or "") or None
 
 
 def _display_name(credentials: JiraCredentials) -> str | None:
