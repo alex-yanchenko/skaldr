@@ -1,6 +1,8 @@
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Final, cast
 
+from typing_extensions import assert_never
+
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, tone_of, with_bold_label
@@ -68,21 +70,26 @@ def _row_tone(block: models.Table, row: Row, lowering: Lowering) -> ToneName | N
     return models.BADGE_COLOR_TONE[lowering.report.badges[tint_key].tone] if tint_key else None
 
 
+def _body_cell(block: models.Table, column: models.Column, row: Row, lowering: Lowering) -> TableCell:
+    value = row.get(column.key)
+    if column.key == block.title_key:
+        return _title_cell(block, row, value, lowering)
+    match column.kind:
+        case "number":
+            return _number_cell(block, column, value)
+        case "indicator":
+            return _indicator_cell(value)
+        case "badge":
+            return TableCell(lowering.chips(block.badge_keys(row, column.key)))
+        case "text" | "rich":
+            return TableCell(_cell_text(value, lowering))
+        case _:
+            assert_never(column.kind)
+
+
 def _table_row(block: models.Table, row: Row, lowering: Lowering) -> TableRow:
-    row_cells: list[TableCell] = []
-    for column in block.cell_columns:
-        value = row.get(column.key)
-        if column.key == block.title_key:
-            row_cells.append(_title_cell(block, row, value, lowering))
-        elif column.kind == "number":
-            row_cells.append(_number_cell(block, column, value))
-        elif column.kind == "indicator":
-            row_cells.append(_indicator_cell(value))
-        elif column.kind == "badge":
-            row_cells.append(TableCell(lowering.chips(block.badge_keys(row, column.key))))
-        else:
-            row_cells.append(TableCell(_cell_text(value, lowering)))
-    return TableRow(tuple(row_cells), _row_tone(block, row, lowering))
+    row_cells = tuple(_body_cell(block, column, row, lowering) for column in block.cell_columns)
+    return TableRow(row_cells, _row_tone(block, row, lowering))
 
 
 def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
