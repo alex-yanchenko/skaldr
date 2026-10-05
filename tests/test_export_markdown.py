@@ -458,10 +458,7 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
     }
 
     assert markdown_of([swimlane]) == (
-        "| Lane | Plan<br>*wk 1* |\n"
-        "| --- | --- |\n"
-        "| **Ops (2)** | **1** Draft (2) |\n"
-        "| **Total** | **2** |\n"
+        "| Lane | Plan<br>*wk 1* |\n| --- | --- |\n| **Ops (2)** | **1** Draft (2) |\n| **Total** | **2** |\n"
     )
 
 
