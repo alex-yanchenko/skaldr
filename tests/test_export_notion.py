@@ -1829,24 +1829,72 @@ def _part_rows(chunk: str) -> list[str]:
     return re.findall(r"<td>(?:\*\*)?([ab] \d|group|total)(?:\*\*)?</td>", chunk)
 
 
-def test_a_group_row_starts_the_next_part_instead_of_ending_one() -> None:
-    rows = (_row("a 0"), _row("a 1"), _row("a 2"), _row("group", "group"), _row("b 0"), _row("b 1"))
-    single = len(render_notion([_table_with(rows[:1])]))
-    shell = len(render_notion([_table_with(())]))
-
-    split = chunk_notion([_table_with(rows)], single + 3 * (single - shell))
-
-    assert [_part_rows(chunk) for chunk in split.chunks] == [["a 0", "a 1", "a 2"], ["group", "b 0", "b 1"]]
+GROUP = _row("group", "group")
+TOTAL = _row("total", "total")
 
 
-def test_a_total_row_keeps_the_row_before_it() -> None:
-    rows = (_row("a 0"), _row("a 1"), _row("a 2"), _row("a 3"), _row("total", "total"))
-    single = len(render_notion([_table_with(rows[:1])]))
-    shell = len(render_notion([_table_with(())]))
+@pytest.mark.parametrize(
+    ("rows", "fitting", "parts"),
+    [
+        pytest.param(
+            (_row("a 0"), _row("a 1"), GROUP, _row("b 0"), _row("b 1")),
+            3,
+            [["a 0", "a 1"], ["group", "b 0", "b 1"]],
+            id="a-group-row-moves-to-the-next-part",
+        ),
+        pytest.param(
+            (_row("a 0"), GROUP, GROUP, _row("b 0")),
+            3,
+            [["a 0"], ["group", "group", "b 0"]],
+            id="consecutive-group-rows-move-together",
+        ),
+        pytest.param(
+            (_row("a 0"), _row("a 1"), _row("a 2"), _row("a 3"), TOTAL),
+            4,
+            [["a 0", "a 1", "a 2"], ["a 3", "total"]],
+            id="a-total-row-keeps-the-row-before-it",
+        ),
+        pytest.param(
+            (_row("a 0"), _row("a 1"), GROUP, _row("b 0"), TOTAL),
+            4,
+            [["a 0", "a 1"], ["group", "b 0", "total"]],
+            id="a-total-row-keeps-its-row-and-that-row-its-group",
+        ),
+        pytest.param(
+            (_row("a 0"), _row("a 1"), _row("a 2"), TOTAL, TOTAL),
+            4,
+            [["a 0", "a 1"], ["a 2", "total", "total"]],
+            id="consecutive-total-rows-keep-the-row-before-them",
+        ),
+    ],
+)
+def test_a_split_table_keeps_group_and_total_rows_with_their_rows(
+    rows: tuple[TableRow, ...], fitting: int, parts: list[list[str]]
+) -> None:
+    limit = len(render_notion([_table_with(rows[:fitting])]))
 
-    split = chunk_notion([_table_with(rows)], single + 3 * (single - shell))
+    split = chunk_notion([_table_with(rows)], limit)
 
-    assert [_part_rows(chunk) for chunk in split.chunks] == [["a 0", "a 1", "a 2"], ["a 3", "total"]]
+    assert [_part_rows(chunk) for chunk in split.chunks] == parts
+    assert split.oversized_sections == ()
+
+
+def test_a_table_with_no_rows_longer_than_the_chunk_stays_and_is_reported() -> None:
+    table = TableNode((TableCell((Plain("H" * 100),)),), ())
+
+    split = chunk_notion([Heading(2, (Plain("S"),)), table], 50)
+
+    assert split == NotionChunks((render_notion([Heading(2, (Plain("S"),)), table]),), ("## S",))
+
+
+def test_a_collapsed_toggle_heading_is_a_block_and_does_not_move_with_the_next_one() -> None:
+    toggle = Toggle((Plain("T"),), 3, (Paragraph((Plain("t" * 20),)),))
+    nodes = [Heading(2, (Plain("S"),)), toggle, Paragraph((Plain("p" * 40),))]
+    first = render_notion(nodes[:2])
+
+    split = chunk_notion(nodes, len(first) + 10)
+
+    assert split.chunks == (first, render_notion(nodes[2:]))
 
 
 def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() -> None:

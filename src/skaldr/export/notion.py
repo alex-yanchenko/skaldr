@@ -547,12 +547,20 @@ def _with_long_tables_split(nodes: Sequence[Node], limit: int, room: TableRoom) 
     return split
 
 
-def _rows_kept_with_the_next_part(rows: Sequence[TableRow], part: Sequence[int], next_row: TableRow) -> int:
-    last_row = rows[part[-1]]
-    return 1 if last_row.emphasis == "group" or next_row.emphasis == "total" else 0
+def _carried_row_count(rows: Sequence[TableRow], part: Sequence[int], next_row: TableRow) -> int:
+    count = 0
+    if next_row.emphasis == "total":
+        while count < len(part) and rows[part[len(part) - 1 - count]].emphasis == "total":
+            count += 1
+        count += 1
+    while count < len(part) and rows[part[len(part) - 1 - count]].emphasis == "group":
+        count += 1
+    return count
 
 
 def _table_parts(table: TableNode, limit: int, first_limit: int, room: TableRoom) -> list[TableNode]:
+    if not table.rows:
+        return [table]
     fixed = _with_its_widths_fixed(table, room)
     shell = _block_size(replace(fixed, rows=()), room)
     row_sizes = [_block_size(replace(fixed, rows=(row,)), room) - shell for row in fixed.rows]
@@ -562,7 +570,7 @@ def _table_parts(table: TableNode, limit: int, first_limit: int, room: TableRoom
         part = parts[-1]
         room_left = first_limit if len(parts) == 1 else limit
         if part and size + row_sizes[index] > room_left:
-            carried = _rows_kept_with_the_next_part(fixed.rows, part, row)
+            carried = _carried_row_count(fixed.rows, part, row)
             if len(part) > carried:
                 parts[-1] = part[: len(part) - carried]
                 parts.append(part[len(part) - carried :])
