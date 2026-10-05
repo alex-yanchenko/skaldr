@@ -11,6 +11,6 @@
 {% if used_badges and loop.index0 == first_table_index %}{{ m.legend(used_badges) }}{% endif %}
 {{ m.render_block(block) }}
 {% endfor %}
-{% if footer %}<div class="footer">{{ footer }}</div>{% endif %}
+{% if footer %}<div class="footer">{% if footer.source %}{{ footer.source | richtext }}{% if footer.facts %} · {% endif %}{% endif %}{{ footer.facts | join(" · ") }}</div>{% endif %}
 <div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>
 </div>

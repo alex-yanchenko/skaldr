@@ -95,7 +95,7 @@ NOTION_CHIP_COLOR: dict[str, str] = {
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
-    return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
+    return f"## {title}\n```plain text\n" + f"{body}\n" * rows + "```\n"
 
 
 @pytest.mark.parametrize(
@@ -287,11 +287,46 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
 
 
 def test_code_with_a_backtick_becomes_escaped_text_because_notion_has_no_longer_code_fence() -> None:
-    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```\nx\n```\n"
+    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```plain text\nx\n```\n"
 
 
 def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
-    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == "````\n```\ninner\n```\n````\n"
+    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == (
+        "````plain text\n```\ninner\n```\n````\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "fence"),
+    [
+        pytest.param(
+            {"content": "x"}, "```plain text", id="no-language-is-plain-text-not-notions-javascript"
+        ),
+        pytest.param({"content": "x", "lang": "shell"}, "```shell", id="an-authored-language"),
+        pytest.param({"label": "run.sh", "content": "x"}, "```bash", id="a-language-from-the-label"),
+    ],
+)
+def test_a_notion_code_fence_always_names_a_language(code: dict[str, Any], fence: str) -> None:
+    assert notion_of([{"type": "code", **code}]).splitlines()[-3] == fence
+
+
+def test_a_code_fence_inside_a_callout_also_says_plain_text() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 6, "tone": "info", "blocks": [{"type": "code", "content": "x"}]}],
+    }
+
+    assert (
+        notion_of([grid]) == '<callout icon="💡" color="blue_bg">\n\t```plain text\n\tx\n\t```\n</callout>\n'
+    )
+
+
+def test_the_notion_footer_shows_rich_text_from_the_source_and_plain_facts() -> None:
+    page = notion_of(
+        [{"type": "text", "body": "x"}], meta={"title": "T", "source": "see `app.ts`", "date": "5 Oct"}
+    )
+
+    assert page.splitlines()[-1] == 'see `app.ts` · 5 Oct {color="gray"}'
 
 
 @pytest.mark.parametrize(
@@ -523,7 +558,7 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
         "\t\tcontrol\n"
         "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
         "\t\t**Recorded output**\n"
-        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t\t```plain text\n\t\tnone\n\t\t```\n"
         "\t</tab>\n"
         "</tabs>\n"
     )
@@ -958,7 +993,7 @@ def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
     assert notion_of([swimlane]) == (
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Lane**</td>\n\t\t<td>**Plan<br>*wk 1*<br>Q1 (2)**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>⚪ **1** Draft (2)</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>**1** Draft (2)</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
         "</table>\n"
     )

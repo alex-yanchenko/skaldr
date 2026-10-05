@@ -4,7 +4,7 @@ import pytest
 
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
-from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
+from skaldr.export.lower.context import spaced, tone_named, tone_of, with_bold_label
 from skaldr.export.lower.prose import code_language
 from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
@@ -754,7 +754,31 @@ def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
 
     assert lowered(blocks, meta={"title": "T", "source": "SOP v2", "date": "1 Oct"}) == (
         Paragraph((Plain("aside"),), "muted"),
-        Paragraph((Plain("SOP v2 · 1 Oct"),), "muted"),
+        Paragraph((Plain("SOP v2"), Plain(" · "), Plain("1 Oct")), "muted"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("meta", "runs"),
+    [
+        pytest.param(
+            {"source": "commit `abc123` in `app.ts`"},
+            (Plain("commit "), Code("abc123"), Plain(" in "), Code("app.ts")),
+            id="the-source-is-rich-text",
+        ),
+        pytest.param(
+            {"source": "x", "date": "a `b` + c"},
+            (Plain("x"), Plain(" · "), Plain("a `b` + c")),
+            id="the-date-and-the-other-facts-stay-plain",
+        ),
+        pytest.param({"date": "1 Oct"}, (Plain("1 Oct"),), id="no-source"),
+        pytest.param({"source": " ", "date": "1 Oct"}, (Plain("1 Oct"),), id="a-blank-source-is-no-source"),
+    ],
+)
+def test_the_provenance_footer_reads_its_source_as_rich_text(meta: dict[str, str], runs: ExportRich) -> None:
+    assert lowered([{"type": "text", "body": "x"}], meta={"title": "T", **meta}) == (
+        Paragraph((Plain("x"),)),
+        Paragraph(runs, "muted"),
     )
 
 
@@ -1338,6 +1362,19 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
         ),
         pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
         pytest.param(
+            {"content": "gh run list", "lang": "shell"}, (CodeBlock("gh run list", "shell"),), id="lang"
+        ),
+        pytest.param(
+            {"label": "q.sql", "content": "x", "lang": "plain text"},
+            (Paragraph((Code("q.sql"),)), CodeBlock("x", "plain text")),
+            id="lang-wins-over-the-label-suffix",
+        ),
+        pytest.param(
+            {"content": "+a", "mode": "diff", "lang": "python"},
+            (CodeBlock("+a", "diff"),),
+            id="diff-mode-wins-over-lang",
+        ),
+        pytest.param(
             {"label": "run.sh\n# injected", "content": "x"},
             (Paragraph((Code("run.sh # injected"),)), CodeBlock("x", "")),
             id="label-stays-on-one-line",
@@ -1761,15 +1798,11 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
                         TableCell((Plain("Ops"),)),
                         TableCell(
                             (
-                                SwimlaneMark("todo"),
-                                Plain(" "),
                                 *bold("1"),
                                 Plain(" "),
                                 Plain("Draft"),
                                 Plain(", A"),
                                 Break(),
-                                SwimlaneMark("todo"),
-                                Plain(" "),
                                 *bold("1"),
                                 Plain(" "),
                                 Plain("Redraft"),
@@ -1790,18 +1823,86 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
             ),
             header_column=True,
         ),
-        Paragraph(
-            (
-                SwimlaneMark("todo"),
-                Plain(" "),
-                Plain("todo"),
-                Plain(" · "),
-                SwimlaneMark("deferred"),
-                Plain(" "),
-                Plain("deferred"),
+        Paragraph((SwimlaneMark("deferred"), Plain(" "), Plain("deferred")), "muted"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("states", "legend"),
+    [
+        pytest.param(["done", None], ("done",), id="one-marked-state-beside-unmarked-steps-is-explained"),
+        pytest.param(["done", "done"], (), id="one-state-on-every-step-needs-no-legend"),
+        pytest.param([None, None], (), id="no-marks-no-legend"),
+    ],
+)
+def test_the_export_legend_explains_every_glyph_that_differs_from_its_neighbours(
+    states: list[SwimlaneStepState | None], legend: tuple[SwimlaneStepState, ...]
+) -> None:
+    steps = [
+        {"lane": "Ops", "col": "Plan", "n": str(index), "label": "s", **({"state": state} if state else {})}
+        for index, state in enumerate(states)
+    ]
+    swimlane = {"type": "swimlane", "lanes": ["Ops"], "columns": [{"name": "Plan"}], "steps": steps}
+
+    nodes = lowered([swimlane])
+
+    expected = (
+        (
+            Paragraph(
+                spaced([spaced([(SwimlaneMark(state),), plain(state)]) for state in legend], " · "), "muted"
             ),
-            "muted",
+        )
+        if legend
+        else ()
+    )
+    assert nodes[1:] == expected
+
+
+def test_a_swimlane_step_with_no_state_has_no_glyph_and_an_explicit_todo_keeps_its_own() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan"}],
+        "steps": [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "Unset"},
+            {"lane": "Ops", "col": "Plan", "n": "2", "label": "Planned", "state": "todo"},
+            {"lane": "Ops", "col": "Plan", "n": "3", "label": "Shipped", "state": "done"},
+        ],
+    }
+
+    table, legend = lowered([swimlane])
+
+    assert isinstance(table, TableNode)
+    assert table.rows[0].cells[1] == TableCell(
+        (
+            *bold("1"),
+            Plain(" "),
+            Plain("Unset"),
+            Break(),
+            SwimlaneMark("todo"),
+            Plain(" "),
+            *bold("2"),
+            Plain(" "),
+            Plain("Planned"),
+            Break(),
+            SwimlaneMark("done"),
+            Plain(" "),
+            *bold("3"),
+            Plain(" "),
+            Plain("Shipped"),
+        )
+    )
+    assert legend == Paragraph(
+        (
+            SwimlaneMark("done"),
+            Plain(" "),
+            Plain("done"),
+            Plain(" · "),
+            SwimlaneMark("todo"),
+            Plain(" "),
+            Plain("todo"),
         ),
+        "muted",
     )
 
 
