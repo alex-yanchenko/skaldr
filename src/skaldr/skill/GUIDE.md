@@ -53,7 +53,7 @@ The files skaldr writes itself (the page, an export, the schema, an installed sk
 meta:
   title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"    # required
   subtitle: ["one line", "another"]                    # optional
-  source: "WMS export"           # optional; shown in the provenance footer
+  source: "WMS export"           # optional; shown in the provenance footer, rich text (`code`, links)
   date: "Q3 2026"                # optional; footer. Author it: skaldr never inserts "now"
   updated: "18 Jul 2026"         # optional; footer "updated <value>", a living-doc freshness stamp
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections

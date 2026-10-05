@@ -68,7 +68,6 @@ PLAIN_TEXT_FIELDS = frozenset(
         "MatrixCell.label",
         "Meta.title",
         "Meta.subtitle",
-        "Meta.source",
         "Meta.date",
         "Meta.updated",
         "MeterItem.label",

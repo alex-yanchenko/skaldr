@@ -4357,6 +4357,34 @@ def test_reconciled_table_inside_grid_reaches_the_footer() -> None:
     assert "Reconciles: 10 = 10." in html
 
 
+@pytest.mark.parametrize(
+    ("meta", "footer"),
+    [
+        pytest.param(
+            {"source": "commit `abc123` in **main**", "date": "5 Oct"},
+            '<div class="footer">commit <code>abc123</code> in <strong>main</strong> · 5 Oct</div>',
+            id="the-source-is-rich-text",
+        ),
+        pytest.param(
+            {"date": "a `b` <i>"},
+            '<div class="footer">a `b` &lt;i&gt;</div>',
+            id="the-other-facts-stay-escaped-plain-text",
+        ),
+    ],
+)
+def test_the_footer_reads_its_source_as_rich_text(meta: dict[str, str], footer: str) -> None:
+    html = render_html(parse_report(make_report(meta={"title": "T", **meta})))
+
+    assert footer in html
+
+
+def test_a_rich_text_mistake_in_the_source_names_the_field() -> None:
+    report = parse_report(make_report(meta={"title": "T", "source": "[x]{tone=nope}"}))
+
+    with pytest.raises(ReportError, match=r"^meta\.source: unknown tone 'nope'"):
+        render_html(report)
+
+
 def test_reconciled_table_in_nested_grid_reaches_the_footer() -> None:
     inner = make_grid([make_cell(6, [_reconciled()])])
     grid = make_grid([make_cell(6, [inner])])

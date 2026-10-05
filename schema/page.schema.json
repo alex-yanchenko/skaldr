@@ -2721,7 +2721,7 @@
             }
           ],
           "default": null,
-          "description": "Provenance; feeds the footer.",
+          "description": "Provenance, in rich text (`code` spans, links); feeds the footer.",
           "title": "Source"
         },
         "notion_width": {

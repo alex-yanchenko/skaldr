@@ -61,6 +61,7 @@ from skaldr.models import (
 from skaldr.richtext import RichContext, parse_rich
 
 __all__ = [
+    "Provenance",
     "anchor_slugs",
     "col_sum",
     "first_table_index",
@@ -619,13 +620,19 @@ def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
     return body
 
 
-def provenance_footer(report: Report) -> str | None:
+class Provenance(NamedTuple):
+    source: str | None
+    facts: tuple[str, ...]
+
+
+def provenance_footer(report: Report) -> Provenance | None:
     """Composed footer: meta source/date/updated + each reconciled table's 'Reconciles: …' line."""
-    parts = [part for part in (report.meta.source, report.meta.date) if part]
+    facts = [report.meta.date] if report.meta.date else []
     if report.meta.updated:
-        parts.append(f"updated {report.meta.updated}")
-    parts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
-    return " · ".join(parts) if parts else None
+        facts.append(f"updated {report.meta.updated}")
+    facts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
+    source = report.meta.source or None
+    return Provenance(source, tuple(facts)) if source or facts else None
 
 
 def paragraphs(text: str) -> list[str]:

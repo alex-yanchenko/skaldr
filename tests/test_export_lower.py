@@ -754,7 +754,30 @@ def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
 
     assert lowered(blocks, meta={"title": "T", "source": "SOP v2", "date": "1 Oct"}) == (
         Paragraph((Plain("aside"),), "muted"),
-        Paragraph((Plain("SOP v2 · 1 Oct"),), "muted"),
+        Paragraph((Plain("SOP v2"), Plain(" · "), Plain("1 Oct")), "muted"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("meta", "runs"),
+    [
+        pytest.param(
+            {"source": "commit `abc123` in `app.ts`"},
+            (Plain("commit "), Code("abc123"), Plain(" in "), Code("app.ts")),
+            id="the-source-is-rich-text",
+        ),
+        pytest.param(
+            {"source": "x", "date": "a `b` + c"},
+            (Plain("x"), Plain(" · "), Plain("a `b` + c")),
+            id="the-date-and-the-other-facts-stay-plain",
+        ),
+        pytest.param({"date": "1 Oct"}, (Plain("1 Oct"),), id="no-source"),
+    ],
+)
+def test_the_provenance_footer_reads_its_source_as_rich_text(meta: dict[str, str], runs: ExportRich) -> None:
+    assert lowered([{"type": "text", "body": "x"}], meta={"title": "T", **meta}) == (
+        Paragraph((Plain("x"),)),
+        Paragraph(runs, "muted"),
     )
 
 

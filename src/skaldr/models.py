@@ -296,7 +296,9 @@ class Badge(FrozenModel):
 class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
-    source: str | None = Field(default=None, description="Provenance; feeds the footer.")
+    source: RichText | None = Field(
+        default=None, description="Provenance, in rich text (`code` spans, links); feeds the footer."
+    )
     notion_width: NotionWidth = Field(
         default="normal",
         description="The Notion page width the Notion export sizes tables for: `normal` (default) leaves a "
