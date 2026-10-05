@@ -1054,11 +1054,11 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
 
 
 @pytest.mark.parametrize(
-    "manifest",
+    ("manifest", "reason"),
     [
-        pytest.param(None, id="first-export"),
-        pytest.param('{"title": "T", "files": ["page.03.md"]}', id="manifest-lists-other-pages"),
-        pytest.param("not json", id="unreadable-manifest"),
+        pytest.param(None, "", id="first-export"),
+        pytest.param('{"title": "T", "files": ["page.03.md"]}', "", id="manifest-lists-other-pages"),
+        pytest.param("not json", ", since that list could not be read", id="unreadable-manifest"),
     ],
 )
 @pytest.mark.parametrize(
@@ -1066,7 +1066,7 @@ def test_a_markdown_export_after_a_chunked_notion_one_in_the_same_folder_leaves_
     [pytest.param(export_markdown, id="markdown"), pytest.param(export_notion, id="notion")],
 )
 def test_an_export_refuses_to_overwrite_a_page_the_manifest_does_not_list_and_writes_nothing(
-    tmp_path: Path, manifest: str | None, export: Callable[[Report, Path], ExportResult]
+    tmp_path: Path, manifest: str | None, reason: str, export: Callable[[Report, Path], ExportResult]
 ) -> None:
     (tmp_path / "page.md").write_text("my own notes\n", encoding="utf-8")
     if manifest is not None:
@@ -1078,8 +1078,39 @@ def test_an_export_refuses_to_overwrite_a_page_the_manifest_does_not_list_and_wr
 
     assert (str(refused.value), folder_texts(tmp_path)) == (
         f"refusing to overwrite {tmp_path / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
-        "files skaldr wrote; move it away or choose another --export-dir",
+        f"files skaldr wrote{reason}; move it away or choose another --export-dir",
         before,
+    )
+
+
+def _file_texts(folder: Path) -> dict[str, str]:
+    return {path.name: path.read_text(encoding="utf-8") for path in folder.iterdir() if path.is_file()}
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        pytest.param(None, id="unlisted"),
+        pytest.param('{"title": "T", "files": ["page.md"]}', id="listed-by-an-earlier-export"),
+    ],
+)
+def test_an_export_refuses_a_folder_where_its_page_goes_and_writes_nothing(
+    tmp_path: Path, manifest: str | None
+) -> None:
+    (tmp_path / "page.md").mkdir()
+    (tmp_path / "page.md" / "inside.txt").write_text("mine", encoding="utf-8")
+    if manifest is not None:
+        (tmp_path / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+    before = _file_texts(tmp_path)
+
+    with pytest.raises(ReportError) as refused:
+        export_markdown(parse_report(make_report()), tmp_path)
+
+    assert (str(refused.value), _file_texts(tmp_path), folder_texts(tmp_path / "page.md")) == (
+        f"refusing to overwrite {tmp_path / 'page.md'}, which is a folder, not a page file; "
+        "move it away or choose another --export-dir",
+        before,
+        {"inside.txt": "mine"},
     )
 
 
@@ -1103,21 +1134,34 @@ def test_a_chunked_export_refuses_to_overwrite_numbered_pages_its_earlier_run_di
     )
 
 
-def test_an_export_refuses_a_dangling_symlink_where_its_page_goes(tmp_path: Path) -> None:
-    (tmp_path / "page.md").symlink_to(tmp_path / "missing.md")
+@pytest.mark.parametrize(
+    "target_text",
+    [pytest.param(None, id="dangling"), pytest.param("theirs", id="live")],
+)
+def test_an_export_refuses_a_symlink_where_its_page_goes_and_leaves_its_target_alone(
+    tmp_path: Path, target_text: str | None
+) -> None:
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    target = tmp_path / "target.md"
+    if target_text is not None:
+        target.write_text(target_text, encoding="utf-8")
+    (out_dir / "page.md").symlink_to(target)
 
     with pytest.raises(ReportError) as refused:
-        export_markdown(parse_report(make_report()), tmp_path)
+        export_markdown(parse_report(make_report()), out_dir)
 
     assert (
         str(refused.value),
-        (tmp_path / "page.md").is_symlink(),
-        sorted(path.name for path in tmp_path.iterdir()),
+        (out_dir / "page.md").is_symlink(),
+        sorted(path.name for path in out_dir.iterdir()),
+        target.read_text(encoding="utf-8") if target.exists() else None,
     ) == (
-        f"refusing to overwrite {tmp_path / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
+        f"refusing to overwrite {out_dir / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
         "files skaldr wrote; move it away or choose another --export-dir",
         True,
         ["page.md"],
+        target_text,
     )
 
 

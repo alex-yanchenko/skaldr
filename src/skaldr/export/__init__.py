@@ -1,3 +1,4 @@
+import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,21 +63,34 @@ def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
     replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
 
 
-def _refuse_to_overwrite_pages_skaldr_did_not_write(
+def _refusal(paths: Sequence[Path], what_they_are: str) -> ReportError:
+    which, pronoun = ("which is", "it") if len(paths) == 1 else ("which are", "them")
+    return ReportError(
+        f"refusing to overwrite {', '.join(map(str, paths))}, {which} {what_they_are}; "
+        f"move {pronoun} away or choose another --export-dir"
+    )
+
+
+def _is_folder(path: Path) -> bool:
+    return path.is_dir() and not path.is_symlink()
+
+
+def _is_taken_by_something_skaldr_did_not_write(path: Path, earlier: _EarlierExport) -> bool:
+    return path.name not in earlier.pages and os.path.lexists(path)
+
+
+def _refuse_to_overwrite_what_skaldr_did_not_write(
     out_dir: Path, names: Collection[str], earlier: _EarlierExport
 ) -> None:
-    foreign = [
-        out_dir / name
-        for name in sorted(names)
-        if name not in earlier.pages and ((out_dir / name).exists() or (out_dir / name).is_symlink())
-    ]
+    targets = [out_dir / name for name in sorted(names)]
+    folders = [path for path in targets if _is_folder(path)]
+    if folders:
+        raise _refusal(folders, "a folder, not a page file")
+    foreign = [path for path in targets if _is_taken_by_something_skaldr_did_not_write(path, earlier)]
     if not foreign:
         return
-    which, pronoun = ("which is", "it") if len(foreign) == 1 else ("which are", "them")
-    raise ReportError(
-        f"refusing to overwrite {', '.join(map(str, foreign))}, {which} not on the {EXPORT_MANIFEST} list "
-        f"of files skaldr wrote; move {pronoun} away or choose another --export-dir"
-    )
+    reason = ", since that list could not be read" if earlier.unreadable_manifest else ""
+    raise _refusal(foreign, f"not on the {EXPORT_MANIFEST} list of files skaldr wrote{reason}")
 
 
 def _export_pages(
@@ -84,7 +98,7 @@ def _export_pages(
 ) -> ExportResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
-    _refuse_to_overwrite_pages_skaldr_did_not_write(out_dir, pages.keys(), earlier)
+    _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, pages.keys(), earlier)
     _write_manifest(out_dir, title, earlier.pages | set(pages))
     written: list[Path] = []
     for name, text in pages.items():
