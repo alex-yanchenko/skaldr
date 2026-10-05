@@ -178,8 +178,8 @@ def test_an_undeclared_badge_key_is_refused_with_the_path_of_the_cell_that_names
         parse_report(make_report(badges=badges, blocks=[_in_a_tab(table)]))
 
     assert str(excinfo.value) == (
-        "invalid content data: Value error, badge key(s) not declared in `badges`: ['NOPE'] (add them to "
-        "the badges map), at blocks.0.tabs.tabs.0.blocks.0.table.groups.0.rows.1.s.1 ('NOPE')"
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['NOPE'], at "
+        "blocks.0.tabs.tabs.0.blocks.0.table.groups.0.rows.1.s.1 ('NOPE'); add them to the badges map"
     )
 
 
@@ -191,8 +191,8 @@ _TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id=
     [
         pytest.param(
             [_TABLE_WITH_ID, _in_a_tab(_TABLE_WITH_ID)],
-            "table id(s) used more than once: ['dup'] — table ids must be unique, at blocks.0.table.id, "
-            "blocks.1.tabs.tabs.0.blocks.0.table.id",
+            "table id(s) used more than once: ['dup'], at blocks.0.table.id, "
+            "blocks.1.tabs.tabs.0.blocks.0.table.id; table ids must be unique",
             id="table-id",
         ),
         pytest.param(
@@ -200,8 +200,8 @@ _TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id=
                 {"type": "references", "items": [{"key": "a", "text": "A"}]},
                 _in_a_tab({"type": "references", "items": [{"key": "a", "text": "B"}]}),
             ],
-            "reference key(s) declared more than once: ['a'], at blocks.0.references.items.0.key, "
-            "blocks.1.tabs.tabs.0.blocks.0.references.items.0.key",
+            "reference key(s) used more than once: ['a'], at blocks.0.references.items.0.key, "
+            "blocks.1.tabs.tabs.0.blocks.0.references.items.0.key; reference keys must be unique",
             id="reference-key",
         ),
         pytest.param(
@@ -209,8 +209,8 @@ _TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id=
                 {"type": "heading", "text": "A", "id": "dup"},
                 _in_a_tab({"type": "heading", "text": "B", "id": "dup"}),
             ],
-            "heading/section id(s) used more than once: ['dup'] — a heading/section id must be unique, at "
-            "blocks.0.heading.id, blocks.1.tabs.tabs.0.blocks.0.heading.id",
+            "heading/section id(s) used more than once: ['dup'], at blocks.0.heading.id, "
+            "blocks.1.tabs.tabs.0.blocks.0.heading.id; heading and section ids must be unique",
             id="heading-id-in-a-tab",
         ),
         pytest.param(
@@ -218,8 +218,8 @@ _TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id=
                 {"type": "heading", "text": "A", "id": "dup"},
                 {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
             ],
-            "heading/section id(s) used more than once: ['dup'] — a heading/section id must be unique, at "
-            "blocks.0.heading.id, blocks.1.section.id",
+            "heading/section id(s) used more than once: ['dup'], at blocks.0.heading.id, "
+            "blocks.1.section.id; heading and section ids must be unique",
             id="heading-and-section-id",
         ),
     ],
@@ -253,7 +253,10 @@ def test_padded_badge_key_on_a_card_is_still_rejected_as_undeclared() -> None:
 
     with pytest.raises(
         ReportError,
-        match=re.escape("badge key(s) not declared in `badges`: [' OPS '] (add them to the badges map)"),
+        match=re.escape(
+            "badge key(s) not declared in `badges`: [' OPS '], at blocks.0.cards.items.0.badges.0 (' OPS '); "
+            "add them to the badges map"
+        ),
     ):
         parse_report(make_report(badges=badges, blocks=[block]))
 
@@ -405,7 +408,7 @@ def test_card_badge_without_of_matrix_is_rejected() -> None:
 
 
 def test_derived_card_referencing_an_unknown_matrix_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"card of_matrix 'ghost' names no matrix with that id"):
+    with pytest.raises(ReportError, match=r"card of_matrix names 'ghost', which is not the id of any matrix"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "ghost"}))
 
 
@@ -465,18 +468,38 @@ def _report_with_of_tables_card(
     )
 
 
-def test_of_tables_referencing_an_unknown_table_is_rejected() -> None:
-    report = _report_with_of_tables_card({"badge": "HAVE", "of_tables": ["ghost"]}, [_rollup_table("tier1")])
-    with pytest.raises(ReportError, match=r"card of_tables references 'ghost', which names no table"):
-        parse_report(report)
+OF_TABLES_IN_A_TAB = "blocks.0.tabs.tabs.0.blocks.0.cards.items.0.of_tables"
 
 
-def test_of_tables_referencing_a_table_without_a_rollup_is_rejected() -> None:
-    report = _report_with_of_tables_card(
-        {"badge": "HAVE", "of_tables": ["tier1"]}, [_rollup_table("tier1", rollup=False)]
+@pytest.mark.parametrize(
+    ("tables", "message"),
+    [
+        pytest.param(
+            [_rollup_table("tier1")],
+            f"card of_tables names 'ghost', which is not the id of any table, at {OF_TABLES_IN_A_TAB}.1",
+            id="unknown-table",
+        ),
+        pytest.param(
+            [_rollup_table("tier1"), _rollup_table("ghost", rollup=False)],
+            f"card of_tables names 'ghost', which is a table with no `rollup`, at {OF_TABLES_IN_A_TAB}.1; "
+            "of_tables counts a badge with each table's rollup column, so the table must declare one",
+            id="table-without-a-rollup",
+        ),
+    ],
+)
+def test_an_of_tables_reference_that_cannot_be_counted_is_refused_at_its_path(
+    tables: list[dict[str, object]], message: str
+) -> None:
+    cards = {"type": "cards", "items": [{"badge": "HAVE", "of_tables": ["tier1", "ghost"]}]}
+    report = make_report(
+        blocks=[_in_a_tab(cards), *tables],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
     )
-    with pytest.raises(ReportError, match=r"references table 'tier1', which has no `rollup`"):
+
+    with pytest.raises(ReportError) as raised:
         parse_report(report)
+
+    assert str(raised.value) == f"invalid content data: Value error, {message}"
 
 
 def test_of_tables_and_of_matrix_together_are_rejected() -> None:
@@ -1087,10 +1110,10 @@ def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() ->
         parse_report(make_report(blocks=[make_request(), make_toggle(make_request())]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
-        "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
-        "sharing one would share those values; give one of them an `id`, at blocks.0.request, "
-        "blocks.1.toggle.blocks.0.request"
+        "invalid content data: Value error, request block label(s) used more than once: "
+        "['Read an endpoint'], at blocks.0.request, blocks.1.toggle.blocks.0.request; request labels must "
+        "be unique, because a label keys what a reader's fields are remembered under while their tab is "
+        "open: give one of them an `id`"
     )
 
 
@@ -1143,9 +1166,8 @@ def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
         parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [make_toggle(row)]}]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map), at blocks.0.section.blocks.0.toggle.blocks.0.badge_row.items.0.key "
-        "('OPS')"
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'], at "
+        "blocks.0.section.blocks.0.toggle.blocks.0.badge_row.items.0.key ('OPS'); add them to the badges map"
     )
 
 
@@ -1294,21 +1316,22 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
         pytest.param(
             _DUPLICATE_MATRIX,
             _DUPLICATE_MATRIX,
-            "matrix id(s) used more than once: ['dup'] — matrix ids must be unique, at blocks.0.matrix.id, "
-            "{inside}.matrix.id",
+            "matrix id(s) used more than once: ['dup'], at blocks.0.matrix.id, {inside}.matrix.id; "
+            "matrix ids must be unique",
             id="matrix-id",
         ),
         pytest.param(
             _rollup_table("dup"),
             _rollup_table("dup"),
-            "table id(s) used more than once: ['dup'] — table ids must be unique, at blocks.0.table.id, "
-            "{inside}.table.id",
+            "table id(s) used more than once: ['dup'], at blocks.0.table.id, {inside}.table.id; "
+            "table ids must be unique",
             id="table-id",
         ),
         pytest.param(
             {"type": "text", "body": "x"},
             _GHOST_MATRIX_CARD,
-            "card of_matrix 'ghost' names no matrix with that id, at {inside}.cards.items.0.of_matrix",
+            "card of_matrix names 'ghost', which is not the id of any matrix, at "
+            "{inside}.cards.items.0.of_matrix",
             id="card-matrix-reference",
         ),
     ],
@@ -1376,8 +1399,8 @@ def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:
         parse_report(make_report(blocks=[make_tabs(make_tab("Floor", row), make_tab("System"))]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map), at blocks.0.tabs.tabs.0.blocks.0.badge_row.items.0.key ('OPS')"
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'], at "
+        "blocks.0.tabs.tabs.0.blocks.0.badge_row.items.0.key ('OPS'); add them to the badges map"
     )
 
 
@@ -3887,14 +3910,19 @@ def test_references_rejects_duplicate_keys_within_a_block() -> None:
             {"key": "a", "text": "Clash"},
         ],
     }
-    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, reference key(s) used more than once: ['a'], at "
+        "blocks.0.references.items.0.key, blocks.0.references.items.2.key; reference keys must be unique"
+    )
 
 
 def test_references_rejects_a_key_reused_across_separate_blocks() -> None:
     first = {"type": "references", "items": [{"key": "a", "text": "First"}]}
     second = {"type": "references", "items": [{"key": "a", "text": "Clash"}]}
-    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+    with pytest.raises(ReportError, match=r"reference key\(s\) used more than once: \['a'\]"):
         parse_report(make_report(blocks=[first, second]))
 
 

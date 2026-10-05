@@ -461,8 +461,8 @@ def test_emit_json_refuses_a_heading_id_used_twice(
         1,
         (
             "",
-            "error: invalid content data: Value error, heading/section id(s) used more than once: ['dup'] "
-            "— a heading/section id must be unique, at blocks.0.heading.id, blocks.1.heading.id\n",
+            "error: invalid content data: Value error, heading/section id(s) used more than once: ['dup'], "
+            "at blocks.0.heading.id, blocks.1.heading.id; heading and section ids must be unique\n",
         ),
     )
 

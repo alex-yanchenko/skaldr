@@ -2691,15 +2691,16 @@ class Report(FrozenModel):
             keys = sorted({key for _, key in undeclared})
             where = ", ".join(f"{path} ({key!r})" for path, key in undeclared)
             raise ValueError(
-                f"badge key(s) not declared in `badges`: {keys} (add them to the badges map), at {where}"
+                f"badge key(s) not declared in `badges`: {keys}, at {where}; add them to the badges map"
             )
         return self
 
-    def _located_blocks(self) -> list[tuple[str, AnyBlock]]:
+    @cached_property
+    def located_blocks(self) -> list[tuple[str, AnyBlock]]:
         return list(walk_located_blocks(self.blocks))
 
     def _located_cards(self) -> Iterator[tuple[str, Card]]:
-        for path, block in self._located_blocks():
+        for path, block in self.located_blocks:
             if isinstance(block, Cards):
                 for index, card in enumerate(block.items):
                     yield f"{path}.items.{index}", card
@@ -2708,41 +2709,42 @@ class Report(FrozenModel):
     def _validate_matrix_references(self) -> "Report":
         placed = [
             (f"{path}.id", block.id)
-            for path, block in self._located_blocks()
+            for path, block in self.located_blocks
             if isinstance(block, Matrix) and block.id is not None
         ]
-        _refuse_repeats(placed, "matrix id(s) used more than once: {repeated} — matrix ids must be unique")
+        _refuse_repeats(placed, "matrix id(s)", "matrix ids must be unique")
         matrix_ids = {matrix_id for _, matrix_id in placed}
         for path, card in self._located_cards():
             if card.of_matrix is not None and card.of_matrix not in matrix_ids:
                 raise ValueError(
-                    f"card of_matrix '{card.of_matrix}' names no matrix with that id, at {path}.of_matrix"
+                    f"card of_matrix names '{card.of_matrix}', which is not the id of any matrix, at "
+                    f"{path}.of_matrix"
                 )
         return self
 
     @model_validator(mode="after")
     def _validate_table_references(self) -> "Report":
         tables = [
-            (f"{path}.id", block)
-            for path, block in self._located_blocks()
+            (f"{path}.id", block.id, block)
+            for path, block in self.located_blocks
             if isinstance(block, Table) and block.id is not None
         ]
         _refuse_repeats(
-            [(path, cast("str", table.id)) for path, table in tables],
-            "table id(s) used more than once: {repeated} — table ids must be unique",
+            [(path, table_id) for path, table_id, _ in tables], "table id(s)", "table ids must be unique"
         )
-        rollups = {table.id: table.rollup is not None for _, table in tables}
+        rollups = {table_id: table.rollup is not None for _, table_id, table in tables}
         for path, card in self._located_cards():
-            for index, tid in enumerate(card.of_tables or []):
+            for index, table_id in enumerate(card.of_tables or []):
                 where = f"{path}.of_tables.{index}"
-                if tid not in rollups:
+                if table_id not in rollups:
                     raise ValueError(
-                        f"card of_tables references '{tid}', which names no table with that id, at {where}"
+                        f"card of_tables names '{table_id}', which is not the id of any table, at {where}"
                     )
-                if not rollups[tid]:
+                if not rollups[table_id]:
                     raise ValueError(
-                        f"card of_tables references table '{tid}', which has no `rollup` — of_tables counts "
-                        f"a badge using each table's rollup column, so it must declare one, at {where}"
+                        f"card of_tables names '{table_id}', which is a table with no `rollup`, at {where}; "
+                        "of_tables counts a badge with each table's rollup column, so the table must "
+                        "declare one"
                     )
         return self
 
@@ -2751,12 +2753,12 @@ class Report(FrozenModel):
         _refuse_repeats(
             [
                 (path, block.id or block.label)
-                for path, block in self._located_blocks()
-                if isinstance(block, (Request, RequestFlow))
+                for path, block in self.located_blocks
+                if isinstance(block, Request | RequestFlow)
             ],
-            "request block label(s) used more than once: {repeated} — a label keys what a reader's fields "
-            "are remembered under while their tab is open, so two blocks sharing one would share those "
-            "values; give one of them an `id`",
+            "request block label(s)",
+            "request labels must be unique, because a label keys what a reader's fields are remembered "
+            "under while their tab is open: give one of them an `id`",
         )
         return self
 
@@ -2765,11 +2767,12 @@ class Report(FrozenModel):
         _refuse_repeats(
             [
                 (f"{path}.items.{index}.key", item.key)
-                for path, block in self._located_blocks()
+                for path, block in self.located_blocks
                 if isinstance(block, References)
                 for index, item in enumerate(block.items)
             ],
-            "reference key(s) declared more than once: {repeated}",
+            "reference key(s)",
+            "reference keys must be unique",
         )
         return self
 
@@ -2778,20 +2781,21 @@ class Report(FrozenModel):
         _refuse_repeats(
             [
                 (f"{path}.id", block.id)
-                for path, block in self._located_blocks()
-                if isinstance(block, (Heading, Section)) and block.id is not None
+                for path, block in self.located_blocks
+                if isinstance(block, Heading | Section) and block.id is not None
             ],
-            "heading/section id(s) used more than once: {repeated} — a heading/section id must be unique",
+            "heading/section id(s)",
+            "heading and section ids must be unique",
         )
         return self
 
 
-def _refuse_repeats(placed: Sequence[tuple[str, str]], refusal: str) -> None:
+def _refuse_repeats(placed: Sequence[tuple[str, str]], what: str, reason: str) -> None:
     counts = Counter(value for _, value in placed)
     repeated = sorted(value for value, count in counts.items() if count > 1)
     if repeated:
         where = ", ".join(path for path, value in placed if counts[value] > 1)
-        raise ValueError(f"{refusal.format(repeated=repeated)}, at {where}")
+        raise ValueError(f"{what} used more than once: {repeated}, at {where}; {reason}")
 
 
 def _format_validation_error(error: ValidationError) -> str:
