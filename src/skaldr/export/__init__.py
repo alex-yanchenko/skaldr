@@ -1,3 +1,4 @@
+import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -5,6 +6,7 @@ from typing import Annotated, Final, Literal, get_args
 
 from pydantic import StringConstraints, ValidationError
 
+from skaldr.errors import ReportError
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
@@ -61,17 +63,48 @@ def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
     replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
 
 
+def _refusal(paths: Sequence[Path], what_they_are: str) -> ReportError:
+    which, pronoun = ("which is", "it") if len(paths) == 1 else ("which are", "them")
+    return ReportError(
+        f"refusing to overwrite {', '.join(map(str, paths))}, {which} {what_they_are}; "
+        f"move {pronoun} away or choose another --export-dir"
+    )
+
+
+def _is_folder(path: Path) -> bool:
+    return path.is_dir() and not path.is_symlink()
+
+
+def _is_taken_by_something_skaldr_did_not_write(path: Path, earlier: _EarlierExport) -> bool:
+    return path.name not in earlier.pages and os.path.lexists(path)
+
+
+def _refuse_to_overwrite_what_skaldr_did_not_write(
+    out_dir: Path, names: Collection[str], earlier: _EarlierExport
+) -> None:
+    targets = [out_dir / name for name in sorted(names)]
+    folders = [path for path in targets if _is_folder(path)]
+    if folders:
+        raise _refusal(folders, "a folder, not a page file")
+    foreign = [path for path in targets if _is_taken_by_something_skaldr_did_not_write(path, earlier)]
+    if not foreign:
+        return
+    reason = ", since that list could not be read" if earlier.unreadable_manifest else ""
+    raise _refusal(foreign, f"not on the {EXPORT_MANIFEST} list of files skaldr wrote{reason}")
+
+
 def _export_pages(
     out_dir: Path, title: str, pages: Mapping[str, str], oversized_sections: tuple[str, ...] = ()
 ) -> ExportResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
-    _write_manifest(out_dir, title, earlier.pages | set(pages))
+    _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, pages.keys(), earlier)
     written: list[Path] = []
     for name, text in pages.items():
         path = out_dir / name
         replace_file(path, text)
         written.append(path)
+        _write_manifest(out_dir, title, earlier.pages | {page.name for page in written})
     for stale in sorted(earlier.pages - set(pages)):
         path = out_dir / stale
         if path.is_file():

@@ -21,6 +21,7 @@ from skaldr.export.tree import (
     TableNode,
     TableRow,
     XYChart,
+    XYChartMark,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
 from skaldr.richtext import (
@@ -120,11 +121,12 @@ def _mermaid_cannot_label_its_series(block: Chart) -> bool:
     return block.stacked or len(block.series) > 1
 
 
-def lower_chart(block: Chart) -> list[Node]:
-    title: list[Node] = [Paragraph(bold(block.title))] if block.title else []
-    if block.variant == "donut":
-        pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
-        return [*title, Diagram(pie, (_donut_table(block),))]
+def _donut(block: Chart) -> Diagram:
+    pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
+    return Diagram(pie, (_donut_table(block),))
+
+
+def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
     table = TableNode(
         plain_cells(SERIES_COLUMN, *block.categories),
         tuple(
@@ -133,10 +135,18 @@ def lower_chart(block: Chart) -> list[Node]:
         ),
     )
     if _mermaid_cannot_label_its_series(block):
-        return [*title, table]
-    chart = XYChart(
-        "bar" if block.variant == "bar" else "line",
-        tuple(block.categories),
-        tuple(tuple(series.values) for series in block.series),
-    )
-    return [*title, Diagram(chart, (table,))]
+        return table
+    chart = XYChart(mark, tuple(block.categories), tuple(tuple(series.values) for series in block.series))
+    return Diagram(chart, (table,))
+
+
+def lower_chart(block: Chart) -> list[Node]:
+    title: list[Node] = [Paragraph(bold(block.title))] if block.title else []
+    variant = block.variant
+    match variant:
+        case "donut":
+            return [*title, _donut(block)]
+        case "bar" | "line":
+            return [*title, _xy_chart(block, variant)]
+        case _:
+            assert_never(variant)

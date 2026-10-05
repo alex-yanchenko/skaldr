@@ -7,6 +7,7 @@ from skaldr.models import ToneLiteral
 ToneName = Literal[ToneLiteral, "muted"]
 ListKind = Literal["bullet", "number", "check"]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
+XYChartMark = Literal["bar", "line"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 
 
@@ -160,7 +161,7 @@ class PieChart:
 
 @dataclass(frozen=True)
 class XYChart:
-    mark: Literal["bar", "line"]
+    mark: XYChartMark
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
 

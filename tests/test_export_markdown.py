@@ -62,6 +62,8 @@ from tests.factories import (
     folder_texts,
     make_command_request,
     make_report,
+    make_tab,
+    make_tabs,
     make_toggle,
     markdown_of,
 )
@@ -925,6 +927,22 @@ def test_github_slugs_number_repeats_in_document_order_across_every_heading() ->
         "overview-2": "overview-2",
         "detail": "detail",
     }
+
+
+def test_a_link_reaches_a_heading_inside_a_tab_and_a_same_named_heading_after_it_is_numbered() -> None:
+    blocks = [
+        {"type": "text", "body": "jump to [scan](#scan) or [the second](#scan-2)"},
+        make_tabs(
+            make_tab("Floor", {"type": "heading", "level": 3, "text": "Scan"}),
+            make_tab("System", {"type": "text", "body": "sys"}),
+        ),
+        {"type": "heading", "text": "Scan"},
+    ]
+
+    assert markdown_of(blocks) == (
+        "jump to [scan](#scan) or [the second](#scan-1)\n\n"
+        "**Floor**\n\n### Scan\n\n**System**\n\nsys\n\n## Scan\n"
+    )
 
 
 def test_the_table_of_contents_and_anchor_links_point_at_github_slugs() -> None:

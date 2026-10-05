@@ -238,6 +238,38 @@ def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
     )
 
 
+def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub", "points": ["owns the queue"], "badges": ["API"]},
+        "spokes": [{"label": "A", "points": ["one"]}, {"label": "B"}],
+    }
+
+    assert lowered([fan], badges=API_BADGES) == (
+        API_LEGEND,
+        Diagram(
+            Graph(
+                "LR",
+                (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
+                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+            ),
+            (
+                ListNode(
+                    "bullet",
+                    (
+                        ListEntry(
+                            (*bold("Hub"), Plain(" "), Chip("api", "blue")),
+                            children=(ListNode("bullet", (ListEntry((Plain("owns the queue"),)),)),),
+                        ),
+                        ListEntry(bold("A"), children=(ListNode("bullet", (ListEntry((Plain("one"),)),)),)),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("direction", "edges"),
     [
@@ -519,7 +551,10 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 "method": "POST",
                 "url": "https://{{host}}/t",
                 "headers": {"X-Key": "{{key}}", "X-Who": "{{who}}"},
-                "captures": [{"name": "token", "source": "body"}, {"name": "expires", "source": "body"}],
+                "captures": [
+                    {"name": "token", "json_path": "$.data.access_token"},
+                    {"name": "expires", "source": "body"},
+                ],
                 "cases": [{"label": "one", "response": {"status": 200, "body": "{}"}}],
             },
             {
@@ -557,8 +592,11 @@ def test_a_request_flow_names_each_step_its_captures_and_never_shows_a_secret_va
                 *bold("Step 1 of 2: Get token"),
                 Plain(", captures "),
                 Code("token"),
+                Plain(" from "),
+                Code("$.data.access_token"),
                 Plain(", "),
                 Code("expires"),
+                Plain(" from the whole response body"),
             )
         ),
         Paragraph(italic(plain("one"))),
