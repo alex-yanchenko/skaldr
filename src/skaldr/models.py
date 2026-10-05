@@ -14,6 +14,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -179,6 +180,26 @@ def _one_emoji(value: str) -> str:
 
 
 Icon = Annotated[str, AfterValidator(_one_emoji)]
+
+
+@dataclass(frozen=True)
+class RichTextMarker:
+    split_into_paragraphs: bool
+
+
+RICH_TEXT: Final = RichTextMarker(split_into_paragraphs=False)
+RICH_PROSE: Final = RichTextMarker(split_into_paragraphs=True)
+RichText = Annotated[str, RICH_TEXT]
+RichProse = Annotated[str, RICH_PROSE]
+RICH_COLUMN_KINDS: Final = ("text", "rich")
+FieldPath = tuple[str, ...]
+MappedRow = dict[str, Any]
+
+
+def _mapped_rows(rows: object) -> list[MappedRow]:
+    return cast("list[MappedRow]", rows)
+
+
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
@@ -268,7 +289,7 @@ class Heading(_Block):
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
         "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
-    sub: str | None = Field(
+    sub: RichText | None = Field(
         default=None,
         description="Optional caption line under the heading, styled subordinate: a real subtitle "
         "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
@@ -286,7 +307,7 @@ class Heading(_Block):
 
 class Text(_Block):
     type: Literal["text"]
-    body: str = Field(description="Rich-text prose; blank lines split paragraphs.")
+    body: RichProse = Field(description="Rich-text prose; blank lines split paragraphs.")
     muted: bool = Field(default=False, description="Render in the caption colour, for asides.")
 
 
@@ -294,7 +315,7 @@ _MAX_LIST_DEPTH = 4
 
 
 class ListItem(FrozenModel):
-    text: str = Field(min_length=1, description="The point's rich-text content.")
+    text: RichText = Field(min_length=1, description="The point's rich-text content.")
     checked: bool = Field(
         default=False,
         description="Only meaningful in a `style: check` list: renders the box ticked. Set it in the "
@@ -306,7 +327,7 @@ class ListItem(FrozenModel):
         description="Only meaningful in a `style: decision` list: marks the point a decision already "
         "taken. Left false, the point is an open question.",
     )
-    items: list["str | ListItem"] = Field(
+    items: "list[RichText | ListItem]" = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
     )
@@ -354,7 +375,7 @@ class ListBlock(_Block):
         description="Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or "
         "`roman` (i, ii, iii). Nested lists keep it.",
     )
-    items: list[str | ListItem] = Field(
+    items: list[RichText | ListItem] = Field(
         min_length=1,
         description="Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest "
         f"sub-points (nested lists inherit the parent's style; up to {_MAX_LIST_DEPTH} levels deep).",
@@ -390,7 +411,7 @@ class FactStrip(_Block):
 
 class KVPair(FrozenModel):
     label: str = Field(description="Row label (muted).")
-    value: str = Field(description="Rich-text value.")
+    value: RichText = Field(description="Rich-text value.")
 
 
 class KeyValue(_Block):
@@ -400,7 +421,7 @@ class KeyValue(_Block):
 
 class DefItem(FrozenModel):
     term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
-    body: str = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
+    body: RichProse = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
 
 
 class DefList(_Block):
@@ -577,7 +598,7 @@ class Callout(_Block):
         "callout is semantic, so teal/sky/accent/neutral aren't callout tones; use a card/badge_row/note."
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
-    body: str = Field(description="Rich-text body.")
+    body: RichProse = Field(description="Rich-text body.")
     icon: Icon | None = Field(
         default=None,
         description="Optional single emoji shown at the head of the callout, in place of the tone's "
@@ -589,7 +610,7 @@ class StatusItem(FrozenModel):
     state: StatusState = Field(
         description="Step state, driving the glyph: done, current (in progress), pending, failed, blocked."
     )
-    text: str = Field(description="Rich-text label for the step.")
+    text: RichText = Field(description="Rich-text label for the step.")
 
 
 class StatusList(_Block):
@@ -626,7 +647,7 @@ class RangeSegment(FrozenModel):
     tone: Tone | None = Field(
         default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
     )
-    sub: str | None = Field(default=None, description="Optional rich-text sub-line under the label.")
+    sub: RichText | None = Field(default=None, description="Optional rich-text sub-line under the label.")
 
     @model_validator(mode="after")
     def _shape(self) -> "RangeSegment":
@@ -688,13 +709,13 @@ class Math(_Block):
 
 class Quote(_Block):
     type: Literal["quote"]
-    body: str = Field(description="Rich-text quotation.")
+    body: RichProse = Field(description="Rich-text quotation.")
     cite: str | None = Field(default=None, description="Optional attribution line.")
 
 
 class Note(_Block):
     type: Literal["note"]
-    body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
+    body: RichProse = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
     icon: Icon | None = Field(
         default=None,
@@ -727,7 +748,7 @@ class Image(_Block):
 class TimelineItem(FrozenModel):
     time: str | None = Field(default=None, description="Optional timestamp/label for the entry.")
     title: str = Field(description="Entry title.")
-    body: str | None = Field(default=None, description="Optional rich-text detail.")
+    body: RichText | None = Field(default=None, description="Optional rich-text detail.")
     state: TimelineState | None = Field(
         default=None, description="Optional dot state: done, current, pending."
     )
@@ -747,12 +768,12 @@ class FlowStep(FrozenModel):
     tone: Tone | None = Field(
         default=None, description="Optional tone accent for this node's border + number."
     )
-    note: str | None = Field(
+    note: RichText | None = Field(
         default=None,
         description="Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a "
         "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
     )
-    points: list[str] = Field(
+    points: list[RichText] = Field(
         default_factory=list,
         description="Optional detail bullets (rich text) under the node, for when one line isn't enough. "
         "Render below the note. Best paired with style: steps, since a few bullets crowd a compact "
@@ -1130,7 +1151,7 @@ class Table(_Block):
     def _validate_table(self) -> "Table":
         if (self.groups is None) == (self.rows is None):
             raise ValueError("provide exactly one of 'groups' or 'rows'")
-        if not any(column.kind in ("text", "rich") for column in self.columns):
+        if not any(column.kind in RICH_COLUMN_KINDS for column in self.columns):
             raise ValueError("a table needs at least one text or rich column (it hosts the title + chips)")
         column_keys = [column.key for column in self.columns]
         if len(column_keys) != len(set(column_keys)):
@@ -1237,7 +1258,27 @@ class Table(_Block):
 
     @property
     def title_key(self) -> str:
-        return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
+        return next(
+            column.key for kind in RICH_COLUMN_KINDS for column in self.columns if column.kind == kind
+        )
+
+    def rich_cells(self) -> Iterator[tuple[FieldPath, str, RichTextMarker]]:
+        keys = [column.key for column in self.columns if column.kind in RICH_COLUMN_KINDS]
+        row_sets = (
+            [(("rows",), self.all_rows())]
+            if self.groups is None
+            else [
+                (("groups", str(index), "rows"), _mapped_rows(group.rows))
+                for index, group in enumerate(self.groups)
+            ]
+        )
+        for rows_path, rows in row_sets:
+            for index, row in enumerate(rows):
+                row_path = (*rows_path, str(index))
+                for key in keys:
+                    yield (*row_path, key), row[key], RICH_PROSE
+                for sub_index, subrow in enumerate(_mapped_rows(row.get("subrows") or [])):
+                    yield (*row_path, "subrows", str(sub_index), "label"), subrow["label"], RICH_TEXT
 
     @property
     def sum_key(self) -> str | None:
@@ -1295,7 +1336,7 @@ class ReferenceItem(FrozenModel):
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="Short id (ASCII letters, digits, _, -); cite it inline with [^key].",
     )
-    text: str = Field(min_length=1, description="Rich-text source description (e.g. a doc name + page).")
+    text: RichText = Field(min_length=1, description="Rich-text source description (e.g. a doc name + page).")
     url: str | None = Field(default=None, description="Optional link for the source (http/https/mailto).")
 
     @model_validator(mode="after")
@@ -1312,13 +1353,13 @@ class References(_Block):
 
 
 class ComparisonCell(FrozenModel):
-    value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
+    value: RichText = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
     tone: Tone | None = Field(default=None, description="Optional tone for the text.")
 
 
 # A comparison cell is a bare bool (✓/✗), a bare string, or {value, tone} for toned text.
 # StrictBool (not bool) so a stray int like 0/1 fails loudly instead of silently rendering ✓/✗.
-ComparisonValue = StrictBool | str | ComparisonCell
+ComparisonValue = StrictBool | RichText | ComparisonCell
 
 
 class ComparisonRow(FrozenModel):
@@ -1885,7 +1926,7 @@ class RequestCase(FrozenModel):
         "passes. A recorded status decides the tone by itself, so the two are never set together.",
     )
     response: RequestResponse = Field(description="What came back when you ran it.")
-    verdict: str | None = Field(
+    verdict: RichText | None = Field(
         default=None,
         description="Rich-text reading of this response: what you expected, what you got, what it "
         "means. The one part of the block a reader cannot work out for themselves.",
@@ -1949,7 +1990,7 @@ class _RequestCore(FrozenModel):
         "that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them "
         "with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
     )
-    command_note: str | None = Field(
+    command_note: RichText | None = Field(
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
@@ -2449,7 +2490,7 @@ class WalkthroughStep(FrozenModel):
         min_length=1,
         description="Step title: a few words to a short sentence; it wraps across lines, so it can be long.",
     )
-    sub: str | None = Field(
+    sub: RichText | None = Field(
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(
