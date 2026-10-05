@@ -58,6 +58,7 @@ meta:
   updated: "18 Jul 2026"         # optional; footer "updated <value>", a living-doc freshness stamp
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
+  notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
 ```
 
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
@@ -65,7 +66,7 @@ for a page that leads by selling an idea (a proposal, an explainer) rather than 
 
 Page **width is not an authoring choice**: every page renders at the default cap, and the reader
 alone widens it (default / wide / full) from the corner menu on the rendered page. There is no
-`meta.width`; don't set one (it fails the build).
+`meta.width`; don't set one (it fails the build). `notion_width` touches only the Notion export: see Exporting as Markdown.
 
 ## `badges`: your vocabulary
 
@@ -1038,8 +1039,10 @@ case, where the page is shared as a URL an agent later has to read back.
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |
 | `grid` | its cells one after another | native columns |
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
-| badges | bold labels | coloured chips |
-| tones on table cells, meters, cards, ranges, walkthrough steps, chart series and slices | dropped | block and cell colours |
+| badges | bold labels | bold text in the badge's colour, or in the normal text colour inside a filled table cell, where the fill carries the colour; each badge colour has its own Notion colour, and since Notion has no teal or light blue, `teal` is brown and `sky` is pink there and everywhere else a colour reaches Notion (highlights, text colours, cell and column backgrounds) |
+| a table row's `tone` (including a `tint_by` tint, and a chart slice's or series' row in its data table) | dropped | the background of one cell: the first cell that holds a badge, or the row's first cell when none does; a cell's own `tone` wins in that cell; a `group` row is a full-width band |
+| tones on meters, cards, ranges and walkthrough steps | dropped | the item's bold label (and a walkthrough step's subtitle) in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge, including a derived card, leaves its colour to the badge, and an item with no label shows no colour |
+| tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
@@ -1050,7 +1053,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
-Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
 ## What you never write
 

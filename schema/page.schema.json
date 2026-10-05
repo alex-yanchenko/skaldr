@@ -2724,6 +2724,16 @@
           "description": "Provenance; feeds the footer.",
           "title": "Source"
         },
+        "notion_width": {
+          "default": "normal",
+          "description": "The Notion page width the Notion export sizes tables for: `normal` (default) leaves a table without author widths to Notion; `full` gives every table column widths that add up to 1,200 px, for a page switched to Full width.",
+          "enum": [
+            "normal",
+            "full"
+          ],
+          "title": "Notion Width",
+          "type": "string"
+        },
         "date": {
           "anyOf": [
             {
