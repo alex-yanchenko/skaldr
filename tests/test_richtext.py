@@ -1,4 +1,6 @@
 import re
+import timeit
+from functools import partial
 
 import pytest
 from pydantic import ValidationError
@@ -24,12 +26,70 @@ from skaldr.richtext import (
     visible_text,
     write_runs,
 )
+from skaldr.richtext_syntax import MAX_NESTING
 
 FULL_CONTEXT = RichContext(
     reference_numbers={"sop": 1},
     reference_urls={"sop": "https://example.com/sop"},
     anchor_ids=frozenset({"method"}),
 )
+
+
+def _italics_nested(depth: int) -> Rich:
+    runs: Rich = (Styled("italic", (Plain("a b"),)),)
+    for _ in range(depth - 1):
+        runs = (Styled("italic", (Plain("a "), *runs)),)
+    return runs
+
+
+def test_marks_nest_up_to_the_nesting_limit() -> None:
+    assert parse_rich("*a " * MAX_NESTING + "b" + "*" * MAX_NESTING) == _italics_nested(MAX_NESTING)
+
+
+def test_colored_spans_nest_up_to_the_nesting_limit() -> None:
+    runs: Rich = (Plain("x"),)
+    for _ in range(MAX_NESTING):
+        runs = (Tinted("info", None, runs),)
+
+    assert parse_rich("[" * MAX_NESTING + "x" + "]{tone=info}" * MAX_NESTING) == runs
+
+
+def test_brackets_nested_past_the_limit_that_form_no_mark_stay_text() -> None:
+    text = "[" * (MAX_NESTING + 10) + "x" + "]" * (MAX_NESTING + 10)
+
+    assert parse_rich(text) == (Plain(text),)
+
+
+def test_a_stray_attribute_list_after_a_closed_deep_bracket_run_colors_nothing() -> None:
+    deep = "[" * (MAX_NESTING + 10) + "x" + "]" * (MAX_NESTING + 10)
+
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"{deep} ]{{tone=info}}")
+
+    assert str(raised.value) == (
+        "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
+        "is not empty and holds no link"
+    )
+
+
+@pytest.mark.parametrize("depth", [MAX_NESTING + 1, MAX_NESTING + 10, 260])
+@pytest.mark.parametrize(
+    ("opener", "closer"),
+    [
+        pytest.param("*a ", "*", id="italic"),
+        pytest.param("**a ", "**", id="bold"),
+        pytest.param("[*a ", "*](https://a.io)", id="italic-inside-a-link"),
+        pytest.param("[", "]{tone=info}", id="colored-span"),
+    ],
+)
+def test_marks_nested_past_the_limit_fail_naming_it(opener: str, closer: str, depth: int) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(opener * depth + "b" + closer * depth)
+
+    assert str(raised.value) == (
+        f"rich text nests more than {MAX_NESTING} marks, links or [text]{{…}} spans inside one another: "
+        "flatten it"
+    )
 
 
 def test_rich_text_parses_into_runs() -> None:
@@ -66,25 +126,48 @@ def test_rich_text_parses_into_runs() -> None:
         ),
         pytest.param(
             "**a *b* c**",
-            (Plain("**a "), Styled("italic", (Plain("b"),)), Plain(" c**")),
-            id="bold-cannot-wrap-an-asterisk-so-only-the-italic-applies",
+            (Styled("bold", (Plain("a "), Styled("italic", (Plain("b"),)), Plain(" c"))),),
+            id="italic-inside-bold",
         ),
         pytest.param("**a** b", (Styled("bold", (Plain("a"),)), Plain(" b")), id="bold-is-not-two-italics"),
         pytest.param("{{ owner }}", (Placeholder("owner"),), id="spaced-placeholder"),
         pytest.param(
             "[**x**](https://e.com)",
-            (Link((Plain("**x**"),), "https://e.com"),),
-            id="emphasis-in-a-link-label-stays-literal",
+            (Link((Styled("bold", (Plain("x"),)),), "https://e.com"),),
+            id="emphasis-in-a-link-label",
         ),
         pytest.param(
             "[l](https://a.io/`c`)",
-            (Plain("[l](https://a.io/"), Code("c"), Plain(")")),
-            id="code-span-inside-a-url-is-not-a-link",
+            (Link((Plain("l"),), "https://a.io/`c`"),),
+            id="backticks-in-a-url-stay-part-of-the-url",
         ),
         pytest.param(
             "[l](https://a.io/[^sop])",
-            (Plain("[l](https://a.io/"), Citation("sop", 1, "https://example.com/sop"), Plain(")")),
-            id="citation-inside-a-url-is-not-a-link",
+            (Link((Plain("l"),), "https://a.io/[^sop]"),),
+            id="citation-syntax-in-a-url-stays-part-of-the-url",
+        ),
+        pytest.param(
+            "*a **b* c**",
+            (
+                Styled(
+                    "italic", (Plain("a "), Styled("italic", (Styled("italic", (Plain("b"),)), Plain(" c"))))
+                ),
+            ),
+            id="italic-crossing-bold-pairs-by-the-commonmark-delimiter-rules",
+        ),
+        pytest.param(
+            "_word_ snake_case a__init__b __init__",
+            (
+                Styled("italic", (Plain("word"),)),
+                Plain(" snake_case a__init__b "),
+                Styled("bold", (Plain("init"),)),
+            ),
+            id="underscores-emphasise-only-at-word-boundaries",
+        ),
+        pytest.param(
+            "C:\\~tmp~\\x a\\*b\\*",
+            (Plain("C:~tmp~\\x a*b*"),),
+            id="a-backslash-before-punctuation-escapes-it",
         ),
         pytest.param(
             "~~a *b~~ c*",
@@ -161,6 +244,11 @@ def test_inline_forms_parse_into_runs(text: str, runs: Rich) -> None:
             (Styled("underline", (Plain("i over i"),)),),
             id="two-increments-in-one-paragraph-read-as-an-underline",
         ),
+        pytest.param("~2~O", (ScriptText("subscript", "2"), Plain("O")), id="subscript-at-the-start"),
+        pytest.param("x~1.5~", (Plain("x"), ScriptText("subscript", "1.5")), id="decimal-subscript"),
+        pytest.param("x^a=b^", (Plain("x"), ScriptText("superscript", "a=b")), id="equals-in-a-superscript"),
+        pytest.param("x~A~", (Plain("x"), ScriptText("subscript", "A")), id="capital-subscript"),
+        pytest.param("e^π^", (Plain("e"), ScriptText("superscript", "π")), id="greek-letter-superscript"),
     ],
 )
 def test_underline_and_script_marks_parse_into_runs(text: str, runs: Rich) -> None:
@@ -181,16 +269,111 @@ def test_underline_and_script_marks_parse_into_runs(text: str, runs: Rich) -> No
         pytest.param("a ++ b ++ c", id="spaced-pluses"),
         pytest.param("++unclosed", id="unclosed-underline"),
         pytest.param("x++y++", id="underline-inside-a-word"),
+        pytest.param("++x++y", id="underline-closing-inside-a-word"),
+        pytest.param("a ++b++c", id="underline-closing-into-a-word"),
         pytest.param("~/code,~/notes", id="home-directory-paths"),
         pytest.param("http://host/~alice/x~bob", id="url-with-tildes"),
-        pytest.param("C:\\~tmp~\\x", id="windows-path-with-tildes"),
         pytest.param("(^|[^\\p{L}])", id="regex-with-carets"),
         pytest.param("cut ~5%~ of it", id="percent-inside-tildes"),
         pytest.param("2^a_b^ and x~a/b~", id="underscore-and-slash-inside-markers"),
+        pytest.param("x~a~~b", id="subscript-closer-followed-by-a-tilde"),
+        pytest.param("^^b^", id="superscript-opener-after-a-caret"),
     ],
 )
 def test_marker_characters_that_do_not_form_a_mark_stay_prose(text: str) -> None:
     assert parse_rich(text, FULL_CONTEXT) == (Plain(text),)
+
+
+def test_a_tilde_after_an_escaped_tilde_opens_no_subscript() -> None:
+    assert parse_rich("\\~~x~") == (Plain("~~x~"),)
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "**bold with *italic* inside**",
+            (Styled("bold", (Plain("bold with "), Styled("italic", (Plain("italic"),)), Plain(" inside"))),),
+            id="bold-holding-italic",
+        ),
+        pytest.param(
+            "[**bold** H~2~O ++u++](https://x.com)",
+            (
+                Link(
+                    (
+                        Styled("bold", (Plain("bold"),)),
+                        Plain(" H"),
+                        ScriptText("subscript", "2"),
+                        Plain("O "),
+                        Styled("underline", (Plain("u"),)),
+                    ),
+                    "https://x.com",
+                ),
+            ),
+            id="marks-inside-a-link-label",
+        ),
+        pytest.param(
+            "[a](https://en.wikipedia.org/wiki/Foo_(bar))",
+            (Link((Plain("a"),), "https://en.wikipedia.org/wiki/Foo_(bar)"),),
+            id="balanced-parentheses-in-a-link-url",
+        ),
+        pytest.param(
+            "the **`api`**s",
+            (Plain("the **"), Code("api"), Plain("**s")),
+            id="bold-whose-closer-is-not-right-flanking-stays-literal",
+        ),
+    ],
+)
+def test_marks_follow_commonmark_emphasis_and_link_rules(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("2 * 3 * 4", id="spaced-asterisks"),
+        pytest.param("a ** b ** c", id="spaced-double-asterisks"),
+        pytest.param("x**(y)**z", id="bold-closer-between-punctuation-and-a-letter"),
+        pytest.param("a ~~(b)~~c", id="strike-closer-between-punctuation-and-a-letter"),
+    ],
+)
+def test_markers_that_commonmark_does_not_pair_stay_prose(text: str) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == (Plain(text),)
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "Review [the PR](https://github.com/acme/repo/pull/{{pr}}) now",
+            (
+                Plain("Review [the PR](https://github.com/acme/repo/pull/"),
+                Placeholder("pr"),
+                Plain(") now"),
+            ),
+            id="placeholder-in-a-link-url",
+        ),
+        pytest.param(
+            "[ticket {{ticket}}](https://example.com/t)",
+            (Link((Plain("ticket "), Placeholder("ticket")), "https://example.com/t"),),
+            id="placeholder-in-a-link-label",
+        ),
+    ],
+)
+def test_a_placeholder_inside_a_link_stays_a_placeholder(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
+@pytest.mark.parametrize("whitespace", [pytest.param(" ", id="spaces"), pytest.param("\n", id="newlines")])
+def test_an_unclosed_placeholder_before_a_long_whitespace_run_parses_in_linear_time(whitespace: str) -> None:
+    short, long = "{{" + whitespace * 5_000, "{{" + whitespace * 20_000
+
+    assert parse_rich(long) == (Plain(long),)
+    assert _fastest_parse_seconds(long) < 8 * _fastest_parse_seconds(short)
+
+
+def _fastest_parse_seconds(text: str) -> float:
+    return min(timeit.repeat(partial(parse_rich, text), number=1, repeat=5))
 
 
 def test_a_subscript_cannot_hold_a_code_span() -> None:
@@ -275,6 +458,16 @@ def test_inline_math_that_cannot_render_fails_naming_the_expression(expression: 
         parse_rich(f"see $`{expression}`$ here")
 
     assert str(raised.value) == message
+
+
+@pytest.mark.parametrize("source", ["$` `$", "$`\t\n`$"])
+def test_inline_math_holding_only_whitespace_fails_as_empty(source: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(f"see {source} here")
+
+    assert str(raised.value) == (
+        f"inline math {source} is empty: write an expression between $` and `$, as in $`x_i`$"
+    )
 
 
 def test_raw_markup_inside_inline_math_stays_part_of_the_expression() -> None:
@@ -409,15 +602,21 @@ def test_brackets_and_braces_that_form_no_attribute_span_stay_prose(text: str) -
         ),
         pytest.param(
             "[a]{bg=}",
-            "unknown tone '' in {bg=}: a tone is one of neutral, info, success, warning, "
-            "danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, violet",
-            id="empty-tone",
+            "malformed attribute 'bg=' in {bg=}: write each attribute as key=value, "
+            "with no spaces around '='",
+            id="empty-value",
         ),
         pytest.param(
             "[a]{tone=bogus}",
             "unknown tone 'bogus' in {tone=bogus}: a tone is one of neutral, info, success, warning, "
             "danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, violet",
             id="bogus-tone",
+        ),
+        pytest.param(
+            "[a]{tone=a=b}",
+            "unknown tone 'a=b' in {tone=a=b}: a tone is one of neutral, info, success, warning, "
+            "danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, violet",
+            id="second-equals-sign-stays-in-the-value",
         ),
         pytest.param(
             "[a]{tone=info x=1}",
@@ -440,6 +639,18 @@ def test_brackets_and_braces_that_form_no_attribute_span_stay_prose(text: str) -
             "with no spaces around '='",
             id="spaces-around-the-equals-sign",
         ),
+        pytest.param(
+            "[a]{tone= info}",
+            "malformed attribute 'tone=' in {tone= info}: write each attribute as key=value, "
+            "with no spaces around '='",
+            id="space-after-the-equals-sign",
+        ),
+        pytest.param(
+            "[a]{bg=\tinfo}",
+            "malformed attribute 'bg=' in {bg=\tinfo}: write each attribute as key=value, "
+            "with no spaces around '='",
+            id="tab-after-the-equals-sign",
+        ),
     ],
 )
 def test_an_attribute_span_that_names_no_valid_tone_fails_naming_the_token(text: str, message: str) -> None:
@@ -460,9 +671,8 @@ def test_an_unknown_tone_keeps_the_validation_failure_as_its_cause() -> None:
     ("text", "token"),
     [
         pytest.param("[see [docs](https://x.io) now]{tone=info}", "{tone=info}", id="link-inside-the-span"),
-        pytest.param("[see [^nope] now]{bg=warning}", "{bg=warning}", id="unresolved-citation-inside"),
         pytest.param("[]{tone=info}", "{tone=info}", id="empty-text"),
-        pytest.param("[a [b] c]{ tone=danger bg=info }", "{tone=danger bg=info}", id="bracket-inside"),
+        pytest.param("a]{ tone=danger bg=info }", "{tone=danger bg=info}", id="no-opening-bracket"),
     ],
 )
 def test_an_attribute_list_that_colors_no_text_fails_naming_the_token(text: str, token: str) -> None:
@@ -471,46 +681,69 @@ def test_an_attribute_list_that_colors_no_text_fails_naming_the_token(text: str,
 
     assert str(raised.value) == (
         f"the attribute list {token} follows no [text] it can color: the text inside a [text]{{…}} span "
-        "is not empty and holds no link and no other [ or ]"
+        "is not empty and holds no link"
     )
 
 
 @pytest.mark.parametrize(
-    ("text", "token"),
+    ("text", "runs"),
     [
-        pytest.param("[a]{tone=info `c`}", "{tone=info …}", id="code-span"),
-        pytest.param("[a]{tone=info [^sop]}", "{tone=info …}", id="citation"),
-        pytest.param("[a]{bg=info $`x`$ tone=danger}", "{bg=info … tone=danger}", id="inline-math"),
-        pytest.param("[a]{tone=info [b]{tone=danger}}", "{tone=info …}", id="colored-span"),
+        pytest.param(
+            "[see [^nope] now]{bg=warning}",
+            (Tinted(None, "warning", (Plain("see [^nope] now"),)),),
+            id="unresolved-citation-inside",
+        ),
+        pytest.param(
+            "[a [b] c]{ tone=danger bg=info }",
+            (Tinted("danger", "info", (Plain("a [b] c"),)),),
+            id="balanced-brackets-inside",
+        ),
     ],
 )
-def test_an_attribute_list_holding_markup_fails_naming_the_token(text: str, token: str) -> None:
-    with pytest.raises(ReportError) as raised:
-        parse_rich(f"x {text} y", FULL_CONTEXT)
-
-    assert str(raised.value) == (
-        f"the attribute list {token} holds other markup, such as a `code` span, math, a [^citation] or a "
-        "colored [text]{…} span: an attribute list holds only key=value attributes, as in "
-        "{tone=info bg=warning}"
-    )
+def test_the_text_of_a_span_may_hold_balanced_brackets(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
 
 
 @pytest.mark.parametrize(
-    ("text", "token"),
+    ("text", "attribute", "token"),
     [
-        pytest.param("[a]{tone=info [b](u)}", "{tone=info [b](u)}", id="bare-target"),
-        pytest.param("[a]{tone=info [b](https://u.io)}", "{tone=info [b](https://u.io)}", id="web-link"),
-        pytest.param("[a]{tone=info [b](#method)}", "{tone=info [b](#method)}", id="anchor-link"),
-        pytest.param("[a]{tone=info [b](u) `c`}", "{tone=info [b](u) …}", id="link-and-a-code-span"),
+        pytest.param("[a]{tone=info `c`}", "`c`", "{tone=info `c`}", id="code-span"),
+        pytest.param("[a]{tone=info [^sop]}", "[^sop]", "{tone=info [^sop]}", id="citation"),
+        pytest.param(
+            "[a]{bg=info $`x`$ tone=danger}", "$`x`$", "{bg=info $`x`$ tone=danger}", id="inline-math"
+        ),
+        pytest.param("[a]{tone=info [b](u)}", "[b](u)", "{tone=info [b](u)}", id="bare-target"),
+        pytest.param(
+            "[a]{tone=info [b](https://u.io)}",
+            "[b](https://u.io)",
+            "{tone=info [b](https://u.io)}",
+            id="web-link",
+        ),
+        pytest.param(
+            "[a]{tone=info [b](#method)}", "[b](#method)", "{tone=info [b](#method)}", id="anchor-link"
+        ),
+        pytest.param(
+            "[a]{tone=info [b](u) `c`}", "[b](u)", "{tone=info [b](u) `c`}", id="link-and-a-code-span"
+        ),
     ],
 )
-def test_an_attribute_list_holding_a_link_fails_naming_the_link(text: str, token: str) -> None:
+def test_markup_inside_an_attribute_list_is_a_malformed_attribute_named_as_written(
+    text: str, attribute: str, token: str
+) -> None:
     with pytest.raises(ReportError) as raised:
         parse_rich(f"x {text} y", FULL_CONTEXT)
 
     assert str(raised.value) == (
-        f"the attribute list {token} holds a link: an attribute list holds only key=value attributes, "
-        "as in {tone=info bg=warning}"
+        f"malformed attribute '{attribute}' in {token}: write each attribute as key=value, "
+        "with no spaces around '='"
+    )
+
+
+def test_braces_holding_another_brace_are_no_attribute_list() -> None:
+    assert parse_rich("x [a]{tone=info [b]{tone=danger}} y", FULL_CONTEXT) == (
+        Plain("x [a]{tone=info "),
+        Tinted("danger", None, (Plain("b"),)),
+        Plain("} y"),
     )
 
 
@@ -548,9 +781,86 @@ def test_a_link_label_keeps_a_citation_and_a_code_span() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "[^sop](https://e.com)",
+            (Citation("sop", 1, "https://example.com/sop"), Plain("(https://e.com)")),
+            id="citation-then-parentheses",
+        ),
+        pytest.param(
+            "[a $`x](u) `$",
+            (Plain("[a "), InlineMath("x](u)")),
+            id="math-that-runs-past-the-bracket-leaves-no-link",
+        ),
+    ],
+)
+def test_a_citation_or_math_span_takes_its_brackets_before_a_link(text: str, runs: Rich) -> None:
+    assert parse_rich(text, FULL_CONTEXT) == runs
+
+
+@pytest.mark.parametrize(
+    ("text", "url"),
+    [
+        pytest.param("[a](<https://x.io/a b>)", "https://x.io/a b", id="angle-brackets-hold-a-space"),
+        pytest.param("[a](https://x.io/é)", "https://x.io/é", id="non-ascii"),
+        pytest.param("[a](https://x.io/a\\b)", "https://x.io/a\\b", id="backslash-before-a-letter"),
+    ],
+)
+def test_a_link_url_reaches_the_writers_as_written(text: str, url: str) -> None:
+    runs = parse_rich(text)
+
+    assert (runs, write_runs(runs, _TaggedRuns())) == ((Link((Plain("a"),), url),), f"<link:a|{url}>")
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "*[a](https://a.io)*",
+            (Styled("italic", (Link((Plain("a"),), "https://a.io"),)),),
+            id="link-inside-emphasis-found-by-lookahead",
+        ),
+        pytest.param(
+            "a **b** [x]() c *d*",
+            (
+                Plain("a "),
+                Styled("bold", (Plain("b"),)),
+                Plain(" [x]() c "),
+                Styled("italic", (Plain("d"),)),
+            ),
+            id="refused-link-between-text-and-marks",
+        ),
+        pytest.param(
+            "a [*x*]() b",
+            (Plain("a ["), Styled("italic", (Plain("x"),)), Plain("]() b")),
+            id="refused-link-whose-label-holds-a-mark",
+        ),
+        pytest.param(
+            'a *b [x](https://a.io "t") c*',
+            (Plain("a "), Styled("italic", (Plain('b [x](https://a.io "t") c'),))),
+            id="refused-link-inside-emphasis",
+        ),
+    ],
+)
+def test_a_refused_link_leaves_the_text_and_marks_around_it_intact(text: str, runs: Rich) -> None:
+    assert parse_rich(text) == runs
+
+
+@pytest.mark.parametrize(
     ("text", "context"),
     [
         pytest.param("[x](javascript:alert(1))", FULL_CONTEXT, id="disallowed-scheme"),
+        pytest.param("[x](javascript:alert('http://e.com'))", FULL_CONTEXT, id="allowed-scheme-inside-a-url"),
+        pytest.param("[x](ftp://h/?u=https://y.io)", FULL_CONTEXT, id="allowed-scheme-in-a-query"),
+        pytest.param("[x](data:text/html,#a)", FULL_CONTEXT, id="anchor-inside-a-data-url"),
+        pytest.param("[x]()", FULL_CONTEXT, id="empty-url"),
+        pytest.param("[](https://a.io)", FULL_CONTEXT, id="empty-label"),
+        pytest.param('[x](https://a.io "t")', FULL_CONTEXT, id="link-title"),
+        pytest.param("![alt](https://e.com/i.png)", FULL_CONTEXT, id="image"),
+        pytest.param("![**b** [^sop]](https://e.com/i.png)", FULL_CONTEXT, id="image-with-marks-in-its-alt"),
+        pytest.param("{tone=info} [unclosed", FULL_CONTEXT, id="attribute-list-then-an-unclosed-bracket"),
+        pytest.param("{tone=info}[a", FULL_CONTEXT, id="attribute-list-then-an-unclosed-label"),
         pytest.param("see [^nope]", FULL_CONTEXT, id="unknown-footnote"),
         pytest.param("see [^sop]", RichContext(), id="no-reference-numbers"),
         pytest.param("[x](#method)", RichContext(), id="anchor-without-an-anchor-set"),
@@ -566,14 +876,13 @@ def test_a_link_to_an_unknown_anchor_fails() -> None:
         parse_rich("[x](#nowhere)", FULL_CONTEXT)
 
 
-@pytest.mark.parametrize("text", ["[x](#method`y`)", "[x](#method[^sop])"])
-def test_an_anchor_link_whose_target_holds_a_code_span_or_citation_fails(text: str) -> None:
+@pytest.mark.parametrize("target", ["#method`y`", "#method[^sop]"])
+def test_an_anchor_link_target_is_read_as_written_and_fails_when_no_heading_has_it(target: str) -> None:
     with pytest.raises(ReportError) as raised:
-        parse_rich(text, FULL_CONTEXT)
+        parse_rich(f"[x]({target})", FULL_CONTEXT)
 
     assert str(raised.value) == (
-        "rich text links to the anchor '#method…', whose target holds a `code` span or [^citation]; "
-        "an anchor link targets a heading or section id"
+        f"rich text links to unknown anchor '{target}': no heading or section has that id"
     )
 
 
@@ -583,23 +892,37 @@ def test_a_malformed_placeholder_fails_naming_it(token: str) -> None:
         parse_rich(f"a {token} b")
 
 
-def test_a_placeholder_wrapped_around_other_markup_fails_without_leaking_the_sentinel() -> None:
-    with pytest.raises(ReportError, match=r"can't contain a link, `code` span") as raised:
-        parse_rich("wrap {{ `code` }} it")
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        pytest.param("wrap {{ `code` }} it", "{{`code`}}", id="code-span"),
+        pytest.param("wrap {{[x](https://y.com)}} it", "{{[x](https://y.com)}}", id="link"),
+    ],
+)
+def test_a_placeholder_wrapped_around_other_markup_fails_naming_it_as_written(text: str, token: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_rich(text)
 
-    assert "\x00" not in str(raised.value)
+    assert str(raised.value) == (
+        f"invalid placeholder '{token}': a placeholder name is letters, digits, '_' or '-' only "
+        "(a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)"
+    )
 
 
 @pytest.mark.parametrize(
-    "marker", [pytest.param("\x00", id="nul"), pytest.param("\x01", id="start-of-heading")]
+    ("marker", "shown"),
+    [
+        pytest.param("\x00", "\N{REPLACEMENT CHARACTER}", id="nul-becomes-the-replacement-character"),
+        pytest.param("\x01", "\x01", id="start-of-heading-stays"),
+    ],
 )
-def test_the_control_characters_the_parser_marks_with_are_dropped_from_the_input(marker: str) -> None:
+def test_control_characters_follow_commonmark(marker: str, shown: str) -> None:
     assert parse_rich(f"a{marker}b **c** [d](https://e.com) {marker}0{marker}") == (
-        Plain("ab "),
+        Plain(f"a{shown}b "),
         Styled("bold", (Plain("c"),)),
         Plain(" "),
         Link((Plain("d"),), "https://e.com"),
-        Plain(" 0"),
+        Plain(f" {shown}0{shown}"),
     )
 
 

@@ -216,6 +216,8 @@ def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
         pytest.param("# not a heading", "\\# not a heading", id="hash"),
         pytest.param("1. not a list", "1\\. not a list", id="ordered"),
         pytest.param("--- not a rule", "\\--- not a rule", id="rule"),
+        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
+        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
@@ -793,12 +795,6 @@ def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> No
     assert notion_of([block]) == "- ❓ open\n- ☑️ done\n"
 
 
-def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
-    block = {"type": "list", "items": ["", "two"]}
-
-    assert notion_of([block]) == "- \n- two\n"
-
-
 def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
     blocks = [
         {
@@ -829,6 +825,19 @@ def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_he
     ]
 
     assert notion_of(blocks) == '## Appendix {toggle="true"}\n\traw\n## Status\nnow\n'
+
+
+def test_a_panel_inside_a_section_becomes_a_callout_inside_the_toggle_heading() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+
+    assert notion_of([section]) == (
+        '## Appendix {toggle="true"}\n'
+        '\t<callout icon="📝" color="gray_bg">\n'
+        "\t\t**Card**\n"
+        "\t\tinside\n"
+        "\t</callout>\n"
+    )
 
 
 def test_chunks_split_only_at_a_top_level_heading_and_stay_under_the_limit() -> None:

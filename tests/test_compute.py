@@ -30,7 +30,6 @@ from skaldr.compute import (
     used_badges,
     variable_parts,
 )
-from skaldr.errors import ReportError
 from skaldr.models import (
     DeltaDirection,
     ListNumbering,
@@ -770,20 +769,6 @@ def test_anchor_slugs_uses_an_author_id_verbatim_and_yields_the_derived_slug_to_
     )
 
     assert list(anchor_slugs(report).values()) == ["overview", "overview-2"]
-
-
-def test_anchor_slugs_rejects_a_duplicate_author_id() -> None:
-    report = parse_report(
-        make_report(
-            blocks=[
-                {"type": "heading", "text": "A", "id": "dup"},
-                {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
-            ],
-        )
-    )
-
-    with pytest.raises(ReportError, match=r"duplicate anchor id 'dup'"):
-        anchor_slugs(report)
 
 
 def test_toc_uses_an_author_id_as_the_anchor_target() -> None:

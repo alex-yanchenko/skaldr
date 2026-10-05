@@ -34,12 +34,15 @@ from skaldr.models import (
     Matrix,
     MatrixCell,
     Meta,
+    Meter,
+    MeterItem,
     Note,
     Panel,
     Report,
     Request,
     RequestFlow,
     Section,
+    SectionBlock,
     Swimlane,
     Tab,
     Table,
@@ -139,9 +142,95 @@ def test_reconciliation_failure_names_the_delta() -> None:
         parse_report(make_report(blocks=[table]))
 
     assert str(excinfo.value) == (
-        "RECONCILIATION FAILED: handled (80) + count (10) = 90, but declared total is 100 "
-        "(off by -10). A category is wrong, double-counted, or missing."
+        "invalid content data: blocks.0.table: RECONCILIATION FAILED: handled (80) + count (10) = 90, but "
+        "declared total is 100 (off by -10). A category is wrong, double-counted, or missing."
     )
+
+
+def test_a_reconciliation_failure_names_its_table_and_keeps_the_other_errors_in_the_document() -> None:
+    balanced = make_reconciled_table()
+    off_by_ten = make_reconciled_table(
+        reconcile={"total": 100, "column": "count", "handled": {"label": "Clean", "value": 80}},
+    )
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(blocks=[balanced, off_by_ten, {"type": "heading", "text": "  "}]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.1.table: RECONCILIATION FAILED: handled (80) + count (10) = 90, but "
+        "declared total is 100 (off by -10). A category is wrong, double-counted, or missing.; "
+        "blocks.2.heading.text: String should match pattern '\\S'"
+    )
+
+
+def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
+    return make_tabs(make_tab("Floor", block), make_tab("System"))
+
+
+def test_an_undeclared_badge_key_is_refused_with_the_path_of_the_cell_that_names_it() -> None:
+    table = make_table(
+        [{"key": "item", "label": "I"}, {"key": "s", "label": "S", "kind": "badge", "placement": "cell"}],
+        groups=[{"name": "g", "rows": [{"item": "a", "s": "OK"}, {"item": "b", "s": ["OK", "NOPE"]}]}],
+    )
+    badges = {"OK": {"label": "Ok", "tone": "green", "legend": "fine"}}
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=badges, blocks=[_in_a_tab(table)]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['NOPE'], at "
+        "blocks.0.tabs.tabs.0.blocks.0.table.groups.0.rows.1.s.1 ('NOPE'); add them to the badges map"
+    )
+
+
+_TABLE_WITH_ID = make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id="dup")
+
+
+@pytest.mark.parametrize(
+    ("blocks", "message"),
+    [
+        pytest.param(
+            [_TABLE_WITH_ID, _in_a_tab(_TABLE_WITH_ID)],
+            "table id(s) used more than once: ['dup'], at blocks.0.table.id, "
+            "blocks.1.tabs.tabs.0.blocks.0.table.id; table ids must be unique",
+            id="table-id",
+        ),
+        pytest.param(
+            [
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+                _in_a_tab({"type": "references", "items": [{"key": "a", "text": "B"}]}),
+            ],
+            "reference key(s) used more than once: ['a'], at blocks.0.references.items.0.key, "
+            "blocks.1.tabs.tabs.0.blocks.0.references.items.0.key; reference keys must be unique",
+            id="reference-key",
+        ),
+        pytest.param(
+            [
+                {"type": "heading", "text": "A", "id": "dup"},
+                _in_a_tab({"type": "heading", "text": "B", "id": "dup"}),
+            ],
+            "heading/section id(s) used more than once: ['dup'], at blocks.0.heading.id, "
+            "blocks.1.tabs.tabs.0.blocks.0.heading.id; heading and section ids must be unique",
+            id="heading-id-in-a-tab",
+        ),
+        pytest.param(
+            [
+                {"type": "heading", "text": "A", "id": "dup"},
+                {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
+            ],
+            "heading/section id(s) used more than once: ['dup'], at blocks.0.heading.id, "
+            "blocks.1.section.id; heading and section ids must be unique",
+            id="heading-and-section-id",
+        ),
+    ],
+)
+def test_a_repeated_id_is_refused_naming_every_place_it_is_used(
+    blocks: list[dict[str, Any]], message: str
+) -> None:
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(blocks=blocks))
+
+    assert str(excinfo.value) == f"invalid content data: Value error, {message}"
 
 
 def test_undeclared_badge_reference_is_rejected() -> None:
@@ -164,7 +253,10 @@ def test_padded_badge_key_on_a_card_is_still_rejected_as_undeclared() -> None:
 
     with pytest.raises(
         ReportError,
-        match=re.escape("badge key(s) not declared in `badges`: [' OPS '] (add them to the badges map)"),
+        match=re.escape(
+            "badge key(s) not declared in `badges`: [' OPS '], at blocks.0.cards.items.0.badges.0 (' OPS '); "
+            "add them to the badges map"
+        ),
     ):
         parse_report(make_report(badges=badges, blocks=[block]))
 
@@ -196,15 +288,25 @@ def test_badge_row_label_may_not_accompany_groups() -> None:
 
 
 @pytest.mark.parametrize(
-    "group",
+    ("group", "message"),
     [
-        pytest.param({"label": "Sev", "items": []}, id="empty-items"),
-        pytest.param({"label": "", "items": [{"label": "X", "tone": "blue"}]}, id="blank-label"),
+        pytest.param(
+            {"label": "Sev", "items": []},
+            "items: List should have at least 1 item after validation, not 0",
+            id="empty-items",
+        ),
+        pytest.param(
+            {"label": "", "items": [{"label": "X", "tone": "blue"}]},
+            "label: String should have at least 1 character",
+            id="blank-label",
+        ),
     ],
 )
-def test_badge_group_rejects_empty_items_and_blank_label(group: dict[str, object]) -> None:
-    with pytest.raises(ReportError, match=r"at least 1 (item|character)"):
+def test_badge_group_rejects_empty_items_and_blank_label(group: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[{"type": "badge_row", "groups": [group]}]))
+
+    assert str(raised.value) == f"invalid content data: blocks.0.badge_row.groups.0.{message}"
 
 
 def test_undeclared_badge_reference_inside_a_group_is_rejected() -> None:
@@ -289,12 +391,12 @@ def test_derived_card_without_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_an_authored_value_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its value — don't set `value`"):
+    with pytest.raises(ReportError, match=r"computes its value; don't set `value`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "value": 5}))
 
 
 def test_derived_card_with_an_authored_of_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its percentage — don't set `of`"):
+    with pytest.raises(ReportError, match=r"computes its percentage; don't set `of`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "of": 10}))
 
 
@@ -306,7 +408,7 @@ def test_card_badge_without_of_matrix_is_rejected() -> None:
 
 
 def test_derived_card_referencing_an_unknown_matrix_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"card of_matrix 'ghost' names no matrix with that id"):
+    with pytest.raises(ReportError, match=r"card of_matrix names 'ghost', which is not the id of any matrix"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "ghost"}))
 
 
@@ -325,12 +427,12 @@ def test_derived_card_with_an_undeclared_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_extra_badges_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"don't also set `badges`"):
+    with pytest.raises(ReportError, match=r"shows its own badge chip; don't also set `badges`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "badges": ["HAVE"]}))
 
 
 def test_derived_card_with_a_delta_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"a derived card has no `delta`"):
+    with pytest.raises(ReportError, match=r"a derived card has no `delta`; its value is a live count"):
         parse_report(
             _report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "delta": {"label": "+1"}})
         )
@@ -366,18 +468,38 @@ def _report_with_of_tables_card(
     )
 
 
-def test_of_tables_referencing_an_unknown_table_is_rejected() -> None:
-    report = _report_with_of_tables_card({"badge": "HAVE", "of_tables": ["ghost"]}, [_rollup_table("tier1")])
-    with pytest.raises(ReportError, match=r"card of_tables references 'ghost', which names no table"):
-        parse_report(report)
+OF_TABLES_IN_A_TAB = "blocks.0.tabs.tabs.0.blocks.0.cards.items.0.of_tables"
 
 
-def test_of_tables_referencing_a_table_without_a_rollup_is_rejected() -> None:
-    report = _report_with_of_tables_card(
-        {"badge": "HAVE", "of_tables": ["tier1"]}, [_rollup_table("tier1", rollup=False)]
+@pytest.mark.parametrize(
+    ("tables", "message"),
+    [
+        pytest.param(
+            [_rollup_table("tier1")],
+            f"card of_tables names 'ghost', which is not the id of any table, at {OF_TABLES_IN_A_TAB}.1",
+            id="unknown-table",
+        ),
+        pytest.param(
+            [_rollup_table("tier1"), _rollup_table("ghost", rollup=False)],
+            f"card of_tables names 'ghost', which is a table with no `rollup`, at {OF_TABLES_IN_A_TAB}.1; "
+            "of_tables counts a badge with each table's rollup column, so the table must declare one",
+            id="table-without-a-rollup",
+        ),
+    ],
+)
+def test_an_of_tables_reference_that_cannot_be_counted_is_refused_at_its_path(
+    tables: list[dict[str, object]], message: str
+) -> None:
+    cards = {"type": "cards", "items": [{"badge": "HAVE", "of_tables": ["tier1", "ghost"]}]}
+    report = make_report(
+        blocks=[_in_a_tab(cards), *tables],
+        badges={"HAVE": {"label": "Have", "tone": "green", "legend": "x"}},
     )
-    with pytest.raises(ReportError, match=r"references table 'tier1', which has no `rollup`"):
+
+    with pytest.raises(ReportError) as raised:
         parse_report(report)
+
+    assert str(raised.value) == f"invalid content data: Value error, {message}"
 
 
 def test_of_tables_and_of_matrix_together_are_rejected() -> None:
@@ -472,7 +594,9 @@ def test_flow_requires_at_least_two_steps() -> None:
 def test_flow_step_label_must_not_be_blank() -> None:
     block = {"type": "flow", "steps": [{"label": "  "}, {"label": "B"}]}
 
-    with pytest.raises(ReportError, match=r"flow step label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.flow\.steps\.0\.label: String should match pattern '\\S'$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -862,9 +986,7 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
-    assert (
-        str(raised.value) == f"invalid content data: {location}: Value error, toggle title must not be blank"
-    )
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
 
 
 @pytest.mark.parametrize(
@@ -928,7 +1050,7 @@ def test_a_toggle_where_a_section_block_can_go_refuses_a_section_inside_it() -> 
 
     assert str(raised.value) == (
         "invalid content data: blocks.0.toggle.blocks.0: Input tag 'section' found using 'type' does not "
-        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+        f"match any of the expected tags: {_union_tags(SectionBlock)}"
     )
 
 
@@ -949,23 +1071,54 @@ def test_a_toggle_where_a_section_block_can_go_holds_a_request(container: dict[s
     assert parsed.model_dump(exclude_defaults=True) == container
 
 
+PANEL = {"type": "panel", "title": "P", "blocks": [{"type": "text", "body": "x"}]}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "section", "title": "S", "blocks": [PANEL]}, id="section"),
+        pytest.param(make_toggle(PANEL), id="top-level-toggle"),
+        pytest.param(
+            {"type": "section", "title": "S", "blocks": [make_toggle(PANEL)]}, id="toggle-in-a-section"
+        ),
+        pytest.param(
+            {"type": "panel", "title": "Outer", "blocks": [make_toggle(PANEL)]}, id="toggle-in-a-panel"
+        ),
+    ],
+)
+def test_a_panel_is_accepted_in_a_section_and_in_a_toggle_where_a_section_block_can_go(
+    container: dict[str, Any],
+) -> None:
+    parsed = parse_report(make_report(blocks=[container])).blocks[0]
+
+    assert parsed.model_dump(exclude_defaults=True) == container
+
+
+def test_a_panel_directly_inside_a_panel_is_refused() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[{"type": "panel", "title": "Outer", "blocks": [PANEL]}]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.panel.blocks.0: Input tag 'panel' found using 'type' does not "
+        f"match any of the expected tags: {_union_tags(FullWidthBlock)}"
+    )
+
+
 def test_two_requests_sharing_a_label_are_refused_when_one_sits_in_a_toggle() -> None:
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[make_request(), make_toggle(make_request())]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, request block label(s) used more than once: ['Read an endpoint'] "
-        "— a label keys what a reader's fields are remembered under while their tab is open, so two blocks "
-        "sharing one would share those values; give one of them an `id`"
+        "invalid content data: Value error, request block label(s) used more than once: "
+        "['Read an endpoint'], at blocks.0.request, blocks.1.toggle.blocks.0.request; request labels must "
+        "be unique, because a label keys what a reader's fields are remembered under while their tab is "
+        "open: give one of them an `id`"
     )
 
 
 def _in_a_grid_cell_toggle(block: dict[str, Any]) -> dict[str, Any]:
     return make_grid([make_cell(6, [make_toggle(block)])])
-
-
-def _in_a_tab(block: dict[str, Any]) -> dict[str, Any]:
-    return make_tabs(make_tab("Floor", block), make_tab("System"))
 
 
 @pytest.mark.parametrize(
@@ -1013,8 +1166,8 @@ def test_a_badge_used_only_inside_a_toggle_must_be_declared() -> None:
         parse_report(make_report(blocks=[{"type": "section", "title": "S", "blocks": [make_toggle(row)]}]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map)"
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'], at "
+        "blocks.0.section.blocks.0.toggle.blocks.0.badge_row.items.0.key ('OPS'); add them to the badges map"
     )
 
 
@@ -1088,12 +1241,12 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
         ),
         pytest.param(
             make_tabs(make_tab("  ", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should match pattern '\\S'",
             id="blank-label",
         ),
         pytest.param(
             make_tabs(make_tab("\t \n", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, tab label must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should match pattern '\\S'",
             id="whitespace-label",
         ),
         pytest.param(
@@ -1148,11 +1301,13 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
 
 
 @pytest.mark.parametrize(
-    "container",
+    ("container", "inside"),
     [
-        pytest.param(make_toggle, id="toggle"),
-        pytest.param(_in_a_grid_cell_toggle, id="inner-toggle"),
-        pytest.param(_in_a_tab, id="tab"),
+        pytest.param(make_toggle, "blocks.1.toggle.blocks.0", id="toggle"),
+        pytest.param(
+            _in_a_grid_cell_toggle, "blocks.1.grid.cells.0.blocks.0.toggle.blocks.0", id="inner-toggle"
+        ),
+        pytest.param(_in_a_tab, "blocks.1.tabs.tabs.0.blocks.0", id="tab"),
     ],
 )
 @pytest.mark.parametrize(
@@ -1161,27 +1316,29 @@ _GHOST_MATRIX_CARD = {"type": "cards", "items": [{"badge": "HAVE", "of_matrix": 
         pytest.param(
             _DUPLICATE_MATRIX,
             _DUPLICATE_MATRIX,
-            "invalid content data: Value error, matrix id(s) used more than once: ['dup'] — matrix ids "
-            "must be unique",
+            "matrix id(s) used more than once: ['dup'], at blocks.0.matrix.id, {inside}.matrix.id; "
+            "matrix ids must be unique",
             id="matrix-id",
         ),
         pytest.param(
             _rollup_table("dup"),
             _rollup_table("dup"),
-            "invalid content data: Value error, table id(s) used more than once: ['dup'] — table ids must "
-            "be unique",
+            "table id(s) used more than once: ['dup'], at blocks.0.table.id, {inside}.table.id; "
+            "table ids must be unique",
             id="table-id",
         ),
         pytest.param(
             {"type": "text", "body": "x"},
             _GHOST_MATRIX_CARD,
-            "invalid content data: Value error, card of_matrix 'ghost' names no matrix with that id",
+            "card of_matrix names 'ghost', which is not the id of any matrix, at "
+            "{inside}.cards.items.0.of_matrix",
             id="card-matrix-reference",
         ),
     ],
 )
 def test_a_reference_check_reaches_into_every_toggle_and_tab(
     container: Callable[[dict[str, Any]], dict[str, Any]],
+    inside: str,
     beside: dict[str, Any],
     nested: dict[str, Any],
     message: str,
@@ -1191,7 +1348,7 @@ def test_a_reference_check_reaches_into_every_toggle_and_tab(
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(badges=badges, blocks=[beside, container(nested)]))
 
-    assert str(raised.value) == message
+    assert str(raised.value) == f"invalid content data: Value error, {message.format(inside=inside)}"
 
 
 def test_walk_blocks_visits_every_block_depth_first_in_document_order() -> None:
@@ -1242,8 +1399,8 @@ def test_a_badge_used_only_inside_a_tab_must_be_declared() -> None:
         parse_report(make_report(blocks=[make_tabs(make_tab("Floor", row), make_tab("System"))]))
 
     assert str(raised.value) == (
-        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'] "
-        "(add them to the badges map)"
+        "invalid content data: Value error, badge key(s) not declared in `badges`: ['OPS'], at "
+        "blocks.0.tabs.tabs.0.blocks.0.badge_row.items.0.key ('OPS'); add them to the badges map"
     )
 
 
@@ -1382,7 +1539,9 @@ def test_walkthrough_step_requires_at_least_one_detail_block() -> None:
 def test_walkthrough_step_label_must_not_be_blank() -> None:
     block = {"type": "walkthrough", "steps": [{"label": "  ", "detail": [{"type": "text", "body": "x"}]}]}
 
-    with pytest.raises(ReportError, match=r"walkthrough step label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.walkthrough\.steps\.0\.label: String should match pattern '\\S'$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -1491,54 +1650,81 @@ def test_rollup_by_a_badge_column_no_row_populates_is_rejected() -> None:
         parse_report(make_report(blocks=[table]))
 
 
-@pytest.mark.parametrize(
-    ("rows", "located"),
-    [
-        pytest.param(
-            {"rows": [{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}]},
-            "rows.1 holds ['API', 'WEB']",
-            id="flat-table",
-        ),
-        pytest.param(
-            {
-                "groups": [
-                    {"name": "One", "rows": [{"item": "a", "tag": "API"}]},
-                    {"name": "Two", "rows": [{"item": "b", "tag": ["API", "WEB"]}]},
-                ]
-            },
-            "groups.1.rows.0 holds ['API', 'WEB']",
-            id="grouped-table",
-        ),
-        pytest.param(
-            {"rows": [{"item": "a", "tag": ["API"]}]},
-            "rows.0 holds ['API']",
-            id="one-key-list",
-        ),
-    ],
-)
+LIST_CELL_ROWS = [
+    pytest.param(
+        {"rows": [{"item": "a", "tag": "API"}, {"item": "b", "tag": ["API", "WEB"]}]},
+        "rows.1 holds ['API', 'WEB']",
+        id="flat-table",
+    ),
+    pytest.param(
+        {
+            "groups": [
+                {"name": "One", "rows": [{"item": "a", "tag": "API"}]},
+                {"name": "Two", "rows": [{"item": "b", "tag": ["API", "WEB"]}]},
+            ]
+        },
+        "groups.1.rows.0 holds ['API', 'WEB']",
+        id="grouped-table",
+    ),
+    pytest.param(
+        {"rows": [{"item": "a", "tag": ["API"]}]},
+        "rows.0 holds ['API']",
+        id="one-key-list",
+    ),
+    pytest.param(
+        {"rows": [{"item": "a", "tag": ["", "WEB"]}]},
+        "rows.0 holds ['', 'WEB']",
+        id="blank-first-key",
+    ),
+]
+LIST_CELL_BADGES = {
+    "API": {"label": "API", "tone": "blue", "legend": "api work"},
+    "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
+}
+IN_CELL_TAG_COLUMNS = [
+    {"key": "item", "label": "I", "kind": "text"},
+    {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
+]
+
+
+@pytest.mark.parametrize(("rows", "located"), LIST_CELL_ROWS)
 def test_rollup_by_an_in_cell_badge_column_holding_a_list_is_rejected(
     rows: dict[str, Any], located: str
 ) -> None:
-    badges = {
-        "API": {"label": "API", "tone": "blue", "legend": "api work"},
-        "WEB": {"label": "WEB", "tone": "green", "legend": "web work"},
-    }
-    table = make_table(
-        columns=[
-            {"key": "item", "label": "I", "kind": "text"},
-            {"key": "tag", "label": "", "kind": "badge", "placement": "cell"},
-        ],
-        rollup={"by": "tag"},
-        **rows,
-    )
+    table = make_table(columns=IN_CELL_TAG_COLUMNS, rollup={"by": "tag"}, **rows)
 
     with pytest.raises(ReportError) as excinfo:
-        parse_report(make_report(badges=badges, blocks=[table]))
+        parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
 
     assert str(excinfo.value) == (
         "invalid content data: blocks.0.table: Value error, rollup.by 'tag' counts each row under one "
         f"badge, so its cells can't hold a list of keys ({located})"
     )
+
+
+@pytest.mark.parametrize(("rows", "located"), LIST_CELL_ROWS)
+def test_tint_by_an_in_cell_badge_column_holding_a_list_is_rejected(
+    rows: dict[str, Any], located: str
+) -> None:
+    table = make_table(columns=IN_CELL_TAG_COLUMNS, tint_by="tag", **rows)
+
+    with pytest.raises(ReportError) as excinfo:
+        parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
+
+    assert str(excinfo.value) == (
+        "invalid content data: blocks.0.table: Value error, tint_by 'tag' tints each row by one "
+        f"badge, so its cells can't hold a list of keys ({located})"
+    )
+
+
+def test_tint_by_an_in_cell_badge_column_of_single_keys_is_allowed() -> None:
+    table = make_table(
+        columns=IN_CELL_TAG_COLUMNS,
+        tint_by="tag",
+        rows=[{"item": "a", "tag": "API"}, {"item": "b", "tag": ""}],
+    )
+
+    parse_report(make_report(badges=LIST_CELL_BADGES, blocks=[table]))
 
 
 def test_tint_by_a_non_badge_column_is_rejected() -> None:
@@ -1616,9 +1802,9 @@ def test_positional_row_preserves_a_list_cell_value() -> None:
         {"key": "name", "label": "N", "kind": "text"},
         {"key": "access", "label": "Access", "kind": "badge", "placement": "cell"},
     ]
-    table = Table.model_validate(make_table(columns=cols, rows=[["SOAXREF", ["WRITE", "READ"]]]))
+    table = Table.model_validate(make_table(columns=cols, rows=[["Supplier ledger", ["WRITE", "READ"]]]))
 
-    assert table.all_rows() == [{"name": "SOAXREF", "access": ["WRITE", "READ"]}]
+    assert table.all_rows() == [{"name": "Supplier ledger", "access": ["WRITE", "READ"]}]
 
 
 @pytest.mark.parametrize("row", [["x"], ["x", 1, "extra"]], ids=["too-few", "too-many"])
@@ -1941,7 +2127,9 @@ def test_range_segment_span_rejects_non_finite() -> None:
 
 
 def test_range_segment_label_must_not_be_blank() -> None:
-    with pytest.raises(ReportError, match=r"range segment label must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.range\.segments\.0\.label: String should match pattern '\\S'$"
+    ):
         parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "   ", "span": 1}]}]))
 
 
@@ -2058,17 +2246,17 @@ def test_badge_row_declared_key_passes() -> None:
 
 
 def test_blank_heading_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.heading\.text: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[{"type": "heading", "text": "   "}]))
 
 
 def test_blank_heading_sub_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"heading sub must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.heading\.sub: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[{"type": "heading", "text": "Overview", "sub": "  "}]))
 
 
 @pytest.mark.parametrize(
-    ("block", "message"),
+    ("block", "location"),
     [
         (
             {
@@ -2077,24 +2265,26 @@ def test_blank_heading_sub_is_rejected() -> None:
                 "columns": [{"name": "S1", "sub": "  "}],
                 "steps": [{"lane": "Eng", "col": "S1", "n": "1", "label": "Build"}],
             },
-            "swimlane column sub must not be blank",
+            "blocks.0.swimlane.columns.0.sub",
         ),
         (
             {
                 "type": "walkthrough",
                 "steps": [{"label": "Step", "sub": "  ", "detail": [{"type": "text", "body": "x"}]}],
             },
-            "walkthrough step sub must not be blank",
+            "blocks.0.walkthrough.steps.0.sub",
         ),
         (
             {"type": "range", "segments": [{"label": "Q3", "span": 1, "sub": "  "}]},
-            "range segment sub must not be blank",
+            "blocks.0.range.segments.0.sub",
         ),
     ],
 )
-def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], message: str) -> None:
-    with pytest.raises(ReportError, match=message):
+def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, object], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
 
 
 def test_reconcile_without_handled_bucket_passes() -> None:
@@ -2111,7 +2301,7 @@ def test_reconcile_without_handled_bucket_passes() -> None:
 def test_number_column_rejects_non_finite_value() -> None:
     table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "x", "count": float("inf")}]}])
 
-    with pytest.raises(ReportError, match=r"count: number column must be finite"):
+    with pytest.raises(ReportError, match=r"groups\.0\.rows\.0\.count: must be a finite number$"):
         parse_report(make_report(blocks=[table]))
 
 
@@ -2172,6 +2362,80 @@ def test_card_of_rejects_boolean() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def _comparison(**overrides: Any) -> dict[str, Any]:
+    return {
+        "type": "comparison",
+        "options": ["a", "b"],
+        "rows": [{"feature": "f", "values": [True, False]}],
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        pytest.param(
+            _comparison(highlight=True),
+            "blocks.0.comparison.highlight: Value error, must be a number, not a boolean",
+            id="highlight-true",
+        ),
+        pytest.param(
+            _comparison(highlight="1"),
+            "blocks.0.comparison.highlight: Input should be a valid integer",
+            id="highlight-numeric-string",
+        ),
+        pytest.param(
+            {"type": "meter", "items": [{"label": "m", "value": "5", "max": 10}]},
+            "blocks.0.meter.items.0.value.int: Input should be a valid integer; "
+            "blocks.0.meter.items.0.value.float: Input should be a valid number",
+            id="meter-value-numeric-string",
+        ),
+        pytest.param(
+            {"type": "list", "style": "number", "start": "4", "items": ["a"]},
+            "blocks.0.list.start: Input should be a valid integer",
+            id="list-start-numeric-string",
+        ),
+        pytest.param(
+            {"type": "text", "body": "x", "span": 2.0},
+            "blocks.0.text.span: Input should be a valid integer",
+            id="span-a-float",
+        ),
+        pytest.param(
+            {"type": "section", "title": "S", "collapsed": "no", "blocks": [{"type": "text", "body": "x"}]},
+            "blocks.0.section.collapsed: Input should be a valid boolean",
+            id="collapsed-yes-no-string",
+        ),
+        pytest.param(
+            {"type": "list", "style": "check", "items": [{"text": "a", "checked": 1}]},
+            "blocks.0.list.items.0.ListItem.checked: Input should be a valid boolean",
+            id="checked-an-integer",
+        ),
+        pytest.param(
+            make_reconciled_table(
+                reconcile={"total": "100", "column": "count", "handled": {"label": "Clean", "value": 90}}
+            ),
+            "blocks.0.table.reconcile.total: Input should be a valid integer",
+            id="reconcile-total-numeric-string",
+        ),
+    ],
+)
+def test_a_value_of_the_wrong_yaml_type_is_refused_rather_than_coerced(
+    block: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {message}"
+
+
+def test_yaml_numbers_fill_number_fields_without_changing_type() -> None:
+    block = {"type": "meter", "items": [{"label": "m", "value": 5, "max": 10.5}]}
+
+    assert parse_report(make_report(blocks=[block])).blocks[0] == Meter(
+        type="meter", items=[MeterItem(label="m", value=5, max=10.5)]
+    )
+
+
 def test_meter_rejects_non_finite_value() -> None:
     block = {"type": "meter", "items": [{"label": "x", "value": float("inf"), "max": 100}]}
 
@@ -2199,8 +2463,79 @@ def test_subrow_value_rejects_non_finite() -> None:
         reconcile={"total": 10, "column": "count"}, groups=[{"name": "g", "rows": [row]}]
     )
 
-    with pytest.raises(ReportError, match=r"subrows\.0\.value: number must be finite"):
+    with pytest.raises(ReportError, match=r"subrows\.0\.value: must be a finite number$"):
         parse_report(make_report(blocks=[table]))
+
+
+BEYOND_FLOAT_RANGE = 10**400
+NUMBER_OUT_OF_RANGE = "must be between -1e+300 and 1e+300"
+
+
+def _bar_chart(*values: float) -> dict[str, Any]:
+    return {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["a"],
+        "series": [{"label": f"s{index}", "values": [value]} for index, value in enumerate(values)],
+    }
+
+
+@pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(
+            make_reconciled_table(
+                groups=[{"name": "g", "rows": [{"issue": "x", "count": BEYOND_FLOAT_RANGE}]}]
+            ),
+            f"blocks.0.table: Value error, groups.0.rows.0.count: {NUMBER_OUT_OF_RANGE}",
+            id="table-number-cell-beyond-float-range",
+        ),
+        pytest.param(
+            make_reconciled_table(
+                reconcile={"total": 10, "column": "count"},
+                groups=[
+                    {
+                        "name": "g",
+                        "rows": [
+                            {
+                                "issue": "x",
+                                "count": 10,
+                                "subrows": [{"label": "a", "value": BEYOND_FLOAT_RANGE}],
+                            }
+                        ],
+                    }
+                ],
+            ),
+            f"blocks.0.table: Value error, groups.0.rows.0.subrows.0.value: {NUMBER_OUT_OF_RANGE}",
+            id="subrow-value-beyond-float-range",
+        ),
+        pytest.param(
+            _bar_chart(1e308, 1e308),
+            f"blocks.0.chart.series.0.values.0: Value error, {NUMBER_OUT_OF_RANGE}; "
+            f"blocks.0.chart.series.1.values.0: Value error, {NUMBER_OUT_OF_RANGE}",
+            id="chart-value-near-the-float-limit",
+        ),
+        pytest.param(
+            {"type": "chart", "variant": "donut", "slices": [{"label": "a", "value": 1e301}]},
+            f"blocks.0.chart.slices.0.value: Value error, {NUMBER_OUT_OF_RANGE}",
+            id="donut-slice-past-the-bound",
+        ),
+        pytest.param(
+            {"type": "cards", "items": [{"label": "x", "value": -BEYOND_FLOAT_RANGE}]},
+            f"blocks.0.cards.items.0.value.function-before[_reject_bool_and_non_finite(), "
+            f"union[int,float]]: Value error, {NUMBER_OUT_OF_RANGE}; "
+            "blocks.0.cards.items.0.value.str: Input should be a valid string",
+            id="card-value-below-the-negative-bound",
+        ),
+    ],
+)
+def test_a_number_beyond_the_shared_bound_is_refused_with_its_path(
+    block: dict[str, Any], location: str
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {location}"
 
 
 def test_table_requires_a_text_or_rich_column() -> None:
@@ -2231,6 +2566,37 @@ def test_pct_of_total_without_reconcile_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"pct_of_total requires a reconcile total"):
         parse_report(make_report(blocks=[table]))
+
+
+@pytest.mark.parametrize("kind", ["text", "rich", "badge", "indicator"])
+def test_pct_of_total_on_a_column_that_is_not_a_number_column_is_rejected(kind: str) -> None:
+    table = make_reconciled_table(
+        columns=[
+            {"key": "issue", "label": "Issue", "kind": "text"},
+            {"key": "count", "label": "Count", "kind": "number"},
+            {"key": "extra", "label": "Extra", "kind": kind, "pct_of_total": True},
+        ],
+        groups=[{"name": "Our side", "rows": [{"issue": "Dupes", "count": 10, "extra": ""}]}],
+    )
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[table]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.table: Value error, column(s) ['extra']: pct_of_total is only "
+        "for number columns"
+    )
+
+
+def test_pct_of_total_on_a_reconciled_number_column_is_accepted() -> None:
+    table = make_reconciled_table(
+        columns=[
+            {"key": "issue", "label": "Issue"},
+            {"key": "count", "label": "Count", "kind": "number", "pct_of_total": True},
+        ]
+    )
+
+    assert parse_report(make_report(blocks=[table])).blocks[0].model_dump(exclude_defaults=True) == table
 
 
 def test_totals_column_must_be_a_number_column() -> None:
@@ -2982,7 +3348,7 @@ def test_matrix_cell_unknown_col_is_rejected() -> None:
 
 def test_matrix_two_cells_at_the_same_position_are_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "a"}, {"row": "r1", "col": "c1", "label": "b"}])
-    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\) — at most one per cell"):
+    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\); at most one per cell"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3014,25 +3380,33 @@ def test_matrix_undeclared_badge_is_rejected() -> None:
 
 def test_matrix_cell_blank_badge_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "badge": "  "}])
-    with pytest.raises(ReportError, match=r"matrix cell badge must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.matrix\.cells\.0\.badge: String should match pattern '\\S'$",
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_cell_blank_label_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "  "}])
-    with pytest.raises(ReportError, match=r"matrix cell label must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.matrix\.cells\.0\.label: String should match pattern '\\S'$",
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_cell_whitespace_row_is_rejected() -> None:
     block = _matrix([{"row": "  ", "col": "c1", "label": "x"}])
-    with pytest.raises(ReportError, match=r"matrix cell row must not be blank"):
+    with pytest.raises(
+        ReportError, match=r"blocks\.0\.matrix\.cells\.0\.row: String should match pattern '\\S'$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_blank_axis_label_is_rejected() -> None:
     block = _matrix([{"row": "r2", "col": "c1", "label": "x"}], rows=["  ", "r2"])
-    with pytest.raises(ReportError, match=r"matrix row labels must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.matrix\.rows\.0: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3313,7 +3687,9 @@ def test_swimlane_columns_must_be_unique() -> None:
 def test_swimlane_step_field_may_not_be_blank(field: str) -> None:
     step = {"lane": "A", "col": "C1", "n": "1", "label": "x", field: "  "}
     block = _swimlane(lanes=["A"], columns=["C1"], steps=[step])
-    with pytest.raises(ReportError, match=rf"swimlane step {field} must not be blank"):
+    with pytest.raises(
+        ReportError, match=rf"blocks\.0\.swimlane\.steps\.0\.{field}: String should match pattern '\\S'$"
+    ):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3413,7 +3789,7 @@ def test_swimlane_step_in_a_split_column_must_name_its_group() -> None:
     )
     with pytest.raises(
         ReportError,
-        match=r"swimlane step in column 'C1' must name a group — that column is split across 2 groups",
+        match=r"swimlane step in column 'C1' must name a group: that column is split across 2 groups",
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -3530,14 +3906,19 @@ def test_references_rejects_duplicate_keys_within_a_block() -> None:
             {"key": "a", "text": "Clash"},
         ],
     }
-    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, reference key(s) used more than once: ['a'], at "
+        "blocks.0.references.items.0.key, blocks.0.references.items.2.key; reference keys must be unique"
+    )
 
 
 def test_references_rejects_a_key_reused_across_separate_blocks() -> None:
     first = {"type": "references", "items": [{"key": "a", "text": "First"}]}
     second = {"type": "references", "items": [{"key": "a", "text": "Clash"}]}
-    with pytest.raises(ReportError, match=r"reference key\(s\) declared more than once: \['a'\]"):
+    with pytest.raises(ReportError, match=r"reference key\(s\) used more than once: \['a'\]"):
         parse_report(make_report(blocks=[first, second]))
 
 
@@ -3968,7 +4349,10 @@ def test_a_command_note_on_a_request_that_builds_a_curl_is_rejected() -> None:
 
 
 def test_a_blank_command_note_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"command_note must not be blank"):
+    with pytest.raises(
+        ReportError,
+        match=r"blocks\.0\.request\.command_note: String should match pattern '\\S'$",
+    ):
         parse_report(make_report(blocks=[make_command_request(command_note="   ")]))
 
 

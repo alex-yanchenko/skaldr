@@ -1,6 +1,6 @@
 version: 1
 meta:
-  title: "Q3 Warehouse Inventory Count — Discrepancies & Fixes"
+  title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"
   subtitle: ["Reconciled review of the 10,000-unit cycle count."]
   source: "WMS export"
   date: "Q3 2026"
@@ -16,8 +16,8 @@ blocks:
   - type: text
     body: >-
       Of 10,000 counted units, most matched the system. This page reconciles the rest by cause and
-      proposes a fix for each. The counts **must** sum to the expected total or the build fails — see
-      the reconciliation line under the table.
+      proposes a fix for each. The counts **must** sum to the expected total or the build fails (see
+      the reconciliation line under the table).
   - type: cards
     items:
       - { label: "Matched cleanly", value: 8500, of: 10000, tone: success }
@@ -35,7 +35,7 @@ blocks:
       column: count
       handled: { label: "Matched cleanly", value: 8500 }
     groups:
-      - name: "Floor — fixable"
+      - name: "Floor: fixable"
         rows:
           - issue: "Double-counted units"
             tag: FLOOR

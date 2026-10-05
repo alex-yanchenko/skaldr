@@ -1,5 +1,6 @@
 import errno
 import json
+import re
 import secrets
 import socket
 import threading
@@ -18,8 +19,8 @@ from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
-from skaldr.auth import HTTP_TIMEOUT_SECONDS
-from skaldr.auth.store import NotionCredentials
+from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
+from skaldr.auth.store import NotionCredentials, save_notion
 from skaldr.errors import AuthError
 
 INTEGRATIONS_PAGE = "https://www.notion.so/profile/integrations"
@@ -36,6 +37,7 @@ _NO_IPV6_LOOPBACK = frozenset({errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT})
 _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
+_OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
 
 
 class _NotionToken(BaseModel):
@@ -97,6 +99,38 @@ def revoke_notion_token(
         raise AuthError(f"Notion did not revoke the token: HTTP {response.status_code}")
 
 
+def save_or_revoke_notion(
+    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
+) -> None:
+    try:
+        save_notion(credentials)
+    except BaseException as unsaved:
+        try:
+            revoke_notion_token(credentials, transport=transport)
+        except AuthError as unrevoked:
+            raise AuthError(
+                _sentences(
+                    _save_failure(unsaved),
+                    "The token Notion just issued could not be saved, and revoking it failed too "
+                    f"({unrevoked}), so remove the connection in Notion under Settings, Connections",
+                )
+            ) from unsaved
+        if isinstance(unsaved, AuthError):
+            raise AuthError(_sentences(str(unsaved), "The token Notion issued has been revoked")) from unsaved
+        raise
+
+
+def _save_failure(unsaved: BaseException) -> str:
+    if isinstance(unsaved, AuthError):
+        return str(unsaved)
+    detail = f": {unsaved}" if str(unsaved) else ""
+    return f"Saving to the keychain failed ({type(unsaved).__name__}{detail})"
+
+
+def _sentences(*parts: str) -> str:
+    return " ".join(part if part.endswith(".") else f"{part}." for part in parts)
+
+
 def _oauth_client(
     client_id: str,
     client_secret: str,
@@ -143,25 +177,33 @@ def _basic_auth_with_json_body(
 
 
 def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
-    try:
-        return _NotionToken.model_validate(request())
-    except AuthlibBaseError as exc:
-        if exc.error == "invalid_client":
-            raise AuthError(
-                "Notion refused the client ID or secret (invalid_client); copy both from the connection "
-                f"page at {INTEGRATIONS_PAGE} again"
-            ) from exc
-        detail = f" ({exc.description})" if exc.description else ""
-        raise AuthError(f"Notion refused the sign-in: {exc.error}{detail}") from exc
-    except httpx2.HTTPError as exc:
-        raise _unreachable(exc) from exc
-    except ValidationError as exc:
-        fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors(include_input=False))
-        raise AuthError(
-            f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise AuthError("Notion's token answer is not JSON") from exc
+    with CaughtWithoutChaining(ValidationError) as invalid:
+        try:
+            return _NotionToken.model_validate(request())
+        except AuthlibBaseError as exc:
+            if exc.error == "invalid_client":
+                raise AuthError(
+                    "Notion refused the client ID or secret (invalid_client); copy both from the connection "
+                    f"page at {INTEGRATIONS_PAGE} again"
+                ) from exc
+            raise _refused_sign_in(exc) from exc
+        except httpx2.HTTPError as exc:
+            raise _unreachable(exc) from exc
+        except json.JSONDecodeError as exc:
+            raise AuthError("Notion's token answer is not JSON") from exc
+    fields = ", ".join(
+        ".".join(map(str, error["loc"])) for error in invalid.error.errors(include_input=False)
+    )
+    raise AuthError(
+        f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
+    )
+
+
+def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
+    code = printable_only(exc.error or "") or "(unnamed error)"
+    description = printable_only(exc.description or "")
+    detail = f" ({description})" if description else ""
+    return AuthError(f"Notion refused the sign-in: {code}{detail}")
 
 
 def _unreachable(exc: httpx2.HTTPError) -> AuthError:
@@ -170,8 +212,11 @@ def _unreachable(exc: httpx2.HTTPError) -> AuthError:
 
 def _refuse_a_denied_consent(query: str) -> None:
     error = parse_qs(query).get("error")
-    if error:
+    if not error:
+        return
+    if _OAUTH_ERROR_CODE.fullmatch(error[0]):
         raise AuthError(f"Notion did not grant access: {error[0]}")
+    raise AuthError("Notion did not grant access")
 
 
 class _LoopbackServer(ThreadingHTTPServer):
@@ -267,9 +312,7 @@ def _answers_this_sign_in(query: str, state: str) -> bool:
     state_matches = received_state is not None and secrets.compare_digest(
         received_state[0].encode(), state.encode()
     )
-    if "code" in fields:
-        return state_matches
-    return "error" in fields and (state_matches or received_state is None)
+    return state_matches and ("code" in fields or "error" in fields)
 
 
 def _callback_handler_class(
