@@ -1679,6 +1679,83 @@ def test_a_normal_width_page_leaves_an_unsized_table_to_notion() -> None:
     assert "<colgroup>" not in render_notion([_two_column_table()], page_width="normal")
 
 
+def test_a_normal_width_page_sizes_a_table_in_a_grid_column_to_the_whole_page_as_before() -> None:
+    table = _two_column_table((TableColumn(share=0.3), TableColumn(share=0.7)))
+    grid = Columns((GridColumn(50, (table,)), GridColumn(50, ())))
+
+    assert '\t\t\t\t<col width="212">\n\t\t\t\t<col width="496">\n' in render_notion(
+        [grid], page_width="normal"
+    )
+
+
+def test_unsized_columns_beside_a_sized_one_share_the_rest_by_their_longest_text() -> None:
+    table = TableNode(
+        (TableCell((Plain("n"),)), TableCell((Plain("Short"),)), TableCell((Plain("x" * 60),))),
+        (),
+        columns=(TableColumn(share=0.1), TableColumn(), TableColumn()),
+    )
+
+    page = render_notion([table], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [120, 127, 953]
+
+
+def test_a_long_header_widens_its_column_as_much_as_long_body_text_does() -> None:
+    table = TableNode(
+        (TableCell((Plain("h" * 60),)), TableCell((Plain("b"),))),
+        ((TableRow((TableCell((Plain("a"),)), TableCell((Plain("b" * 60),)))),)),
+    )
+
+    page = render_notion([table], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [600, 600]
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(
+            ListNode("bullet", (ListEntry((Plain("e"),), children=(_two_column_table(),)),)), id="list"
+        ),
+        pytest.param(Callout("info", (_two_column_table(),)), id="callout"),
+        pytest.param(Toggle((Plain("t"),), None, (_two_column_table(),)), id="toggle"),
+        pytest.param(Tabs((Tab((Plain("t"),), (_two_column_table(),)),)), id="tabs"),
+        pytest.param(Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_two_column_table(),)), id="diagram"),
+    ],
+)
+def test_a_table_nested_in_any_block_is_sized_to_the_full_page(container: Node) -> None:
+    page = render_notion([container], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [141, 1059]
+
+
+def test_a_chunked_full_width_export_sizes_its_tables(tmp_path: Path) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "notion_width": "full"},
+            blocks=[
+                make_table(
+                    [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}], rows=[{"a": "x", "b": "y"}]
+                )
+            ],
+        )
+    )
+
+    export_notion(report, tmp_path, chunk=10_000)
+
+    assert '<col width="600">' in (tmp_path / "page.00.md").read_text(encoding="utf-8")
+
+
+def test_a_row_wider_than_its_header_reads_no_column_tone_past_the_last_column() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)),),
+        (TableRow((TableCell((Chip("x", "red"),)), TableCell((Chip("y", "red"),)))),),
+        columns=(TableColumn(tone="info"),),
+    )
+
+    assert '\t\t<td>**x**</td>\n\t\t<td><span color="red">**y**</span></td>\n' in render_notion([table])
+
+
 def test_the_document_meta_chooses_the_notion_page_width(tmp_path: Path) -> None:
     report = parse_report(
         make_report(

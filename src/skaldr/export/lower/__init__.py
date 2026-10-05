@@ -30,6 +30,7 @@ from skaldr.export.lower.prose import (
 from skaldr.export.lower.requests import lower_request, lower_request_flow
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
 from skaldr.export.tree import (
+    COLUMN_RATIO_TOTAL,
     Callout,
     Columns,
     Divider,
@@ -50,7 +51,6 @@ from skaldr.export.tree import (
 from skaldr.richtext import Plain
 
 SECTION_HEADING_LEVEL = 2
-COLUMN_RATIO_TOTAL = 100
 
 
 def lower_report(report: models.Report) -> LoweredDocument:

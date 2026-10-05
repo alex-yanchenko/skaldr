@@ -9,6 +9,7 @@ ListKind = Literal["bullet", "number", "check"]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
+COLUMN_RATIO_TOTAL: Final = 100
 
 
 @dataclass(frozen=True)

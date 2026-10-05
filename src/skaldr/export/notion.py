@@ -22,6 +22,7 @@ from skaldr.export.markup import (
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
 from skaldr.export.tree import (
+    COLUMN_RATIO_TOTAL,
     Callout,
     CodeBlock,
     Columns,
@@ -67,7 +68,6 @@ NOTION_PAGE_WIDTH_PX: Final[Mapping[NotionWidth, int]] = {
 NARROWEST_COLUMN_CHARACTERS: Final = 8
 NARROWEST_COLUMN_PX: Final = 64
 WIDEST_COLUMN_CHARACTERS: Final = 60
-WHOLE_COLUMN_RATIO: Final = 100
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -104,7 +104,9 @@ class TableRoom:
         return cls(NOTION_PAGE_WIDTH_PX[page_width], sizes_every_table=page_width == "full")
 
     def within(self, ratio: int) -> "TableRoom":
-        return replace(self, width=round(self.width * ratio / WHOLE_COLUMN_RATIO))
+        if not self.sizes_every_table:
+            return self
+        return replace(self, width=round(self.width * ratio / COLUMN_RATIO_TOTAL))
 
 
 def latex_text(text: str) -> str:
@@ -211,10 +213,14 @@ def _column_tones(table: TableNode) -> list[ToneName | None]:
     return [column.tone for column in table.columns] or [None] * len(table.header)
 
 
+def _in_a_toned_column(column_tones: Sequence[ToneName | None], index: int) -> bool:
+    return index < len(column_tones) and column_tones[index] is not None
+
+
 def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     band = (row.tone or "neutral") if row.emphasis == "group" else None
     cells = _row_tone_in_one_cell(row.cells, row.tone) if row.tone and band is None else row.cells
-    column_tones = _column_tones(table) + [None] * max(0, len(cells) - len(table.header))
+    column_tones = _column_tones(table)
     texts = body_cell_texts(
         table,
         row,
@@ -222,7 +228,7 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
             _table_cell_text(
                 cell,
                 inside_bold=is_emphasised_body_cell(table, row, index),
-                on_fill=band is not None or (cell.tone or column_tones[index]) is not None,
+                on_fill=band is not None or cell.tone is not None or _in_a_toned_column(column_tones, index),
             )
             for index, cell in enumerate(cells)
         ],
@@ -246,11 +252,22 @@ def _column_widths(table: TableNode, room: TableRoom) -> Sequence[int | None]:
         if not room.sizes_every_table:
             return [None] * len(shares)
         return _readable_widths([_content_weight(table, index) for index in range(len(shares))], room.width)
-    auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
-    weights = [auto_share if share is None else share for share in shares]
-    return (
-        _readable_widths(weights, room.width) if room.sizes_every_table else apportioned(weights, room.width)
-    )
+    if not room.sizes_every_table:
+        auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
+        return apportioned([auto_share if share is None else share for share in shares], room.width)
+    return _readable_widths(_shares_with_the_rest_by_text(table, shares), room.width)
+
+
+def _shares_with_the_rest_by_text(table: TableNode, shares: Sequence[float | None]) -> list[float]:
+    rest = max(0.0, 1 - sum(share or 0 for share in shares))
+    text_weights = {
+        index: _content_weight(table, index) for index, share in enumerate(shares) if share is None
+    }
+    text_total = sum(text_weights.values()) or 1
+    return [
+        share if share is not None else rest * text_weights[index] / text_total
+        for index, share in enumerate(shares)
+    ]
 
 
 def _readable_widths(weights: Sequence[float], width: int) -> list[int]:
