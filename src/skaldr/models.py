@@ -33,12 +33,12 @@ from pydantic import (
     Discriminator,
     Field,
     StrictBool,
+    StringConstraints,
     Tag,
     ValidationError,
     field_validator,
     model_validator,
 )
-from pydantic.config import JsonDict
 from pydantic_core import PydanticCustomError
 from typing_extensions import assert_never
 
@@ -102,20 +102,7 @@ Count = Annotated[int, _NUMBER_GUARD]
 SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
 
-def _refuse_blank(message: str) -> AfterValidator:
-    def refuse(value: str) -> str:
-        if not value.strip():
-            raise ValueError(message)
-        return value
-
-    return AfterValidator(refuse)
-
-
-_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"minLength": 1, "pattern": r"\S"}
-NonBlank = Annotated[str, _refuse_blank("must not be blank"), Field(json_schema_extra=_NON_BLANK_JSON_SCHEMA)]
-NonBlankIfSet = Annotated[
-    str, _refuse_blank("must not be blank (omit it instead)"), Field(json_schema_extra=_NON_BLANK_JSON_SCHEMA)
-]
+NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -294,7 +281,7 @@ class Heading(_Block):
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
         "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
-    sub: NonBlankIfSet | None = Field(
+    sub: NonBlank | None = Field(
         default=None,
         description="Optional caption line under the heading, styled subordinate — a real subtitle "
         "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
@@ -653,9 +640,7 @@ class RangeSegment(FrozenModel):
     tone: Tone | None = Field(
         default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
     )
-    sub: NonBlankIfSet | None = Field(
-        default=None, description="Optional rich-text sub-line under the label."
-    )
+    sub: NonBlank | None = Field(default=None, description="Optional rich-text sub-line under the label.")
 
     @model_validator(mode="after")
     def _shape(self) -> "RangeSegment":
@@ -1392,7 +1377,7 @@ class Comparison(_Block):
 class MatrixCell(FrozenModel):
     row: NonBlank = Field(description="Which row this cell sits in — one of the block's `rows`.")
     col: NonBlank = Field(description="Which column this cell sits in — one of the block's `columns`.")
-    badge: NonBlankIfSet | None = Field(
+    badge: NonBlank | None = Field(
         default=None,
         description="A declared badge key: its tone fills the cell and its label is the cell text. Use "
         "this OR `tone`, not both.",
@@ -1402,7 +1387,7 @@ class MatrixCell(FrozenModel):
         description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
         "badge — e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
     )
-    label: NonBlankIfSet | None = Field(
+    label: NonBlank | None = Field(
         default=None,
         description="Short text shown in the cell. With `badge` it overrides the badge's label; with "
         "`tone` it is the cell text; on its own it is plain text on an untinted cell.",
@@ -1541,7 +1526,7 @@ class SwimlaneColumn(FrozenModel):
         "and a group via `columns`; defaults to `name`. Set it to rename the header without touching "
         "every step/group.",
     )
-    sub: NonBlankIfSet | None = Field(
+    sub: NonBlank | None = Field(
         default=None,
         description="Optional secondary caption under the header (e.g. a delivery target or date range).",
     )
@@ -1796,10 +1781,10 @@ class RequestVariable(FrozenModel):
         description="The token a reader fills, written `{{name}}` in the url, a header value or the "
         "body. ASCII letters, digits, _ and -.",
     )
-    label: NonBlankIfSet | None = Field(
+    label: NonBlank | None = Field(
         default=None, description="Field label above the input. Defaults to `name`."
     )
-    example: NonBlankIfSet | None = Field(
+    example: NonBlank | None = Field(
         default=None,
         description="A sample value, prefilled into the input so the request can be run as it stands. "
         "On a `secret` it is placeholder text only and is never prefilled, since a prefilled secret "
@@ -1866,7 +1851,7 @@ def check_header_map(
 
 class RequestCase(FrozenModel):
     label: NonBlank = Field(description="Tab label, and the case's heading when printed.")
-    value: NonBlankIfSet | None = Field(
+    value: NonBlank | None = Field(
         default=None,
         description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
         "which is what you want when the cases are resource names.",
@@ -1894,7 +1879,7 @@ class RequestCase(FrozenModel):
         "passes. A recorded status decides the tone by itself, so the two are never set together.",
     )
     response: RequestResponse = Field(description="What came back when you ran it.")
-    verdict: NonBlankIfSet | None = Field(
+    verdict: NonBlank | None = Field(
         default=None,
         description="Rich-text reading of this response: what you expected, what you got, what it "
         "means. The one part of the block a reader cannot work out for themselves.",
@@ -1952,7 +1937,7 @@ class _RequestCore(FrozenModel):
         "that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them "
         "with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
     )
-    command_note: NonBlankIfSet | None = Field(
+    command_note: NonBlank | None = Field(
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
@@ -1962,7 +1947,7 @@ class _RequestCore(FrozenModel):
         description="Request headers as a map, in the order they should read. A value may carry "
         "`{{variable}}` tokens.",
     )
-    body: NonBlankIfSet | None = Field(
+    body: NonBlank | None = Field(
         default=None,
         description="Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential "
         "can sit inside a JSON login payload without ever being written here.",
@@ -2432,7 +2417,7 @@ class WalkthroughStep(FrozenModel):
     label: NonBlank = Field(
         description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
     )
-    sub: NonBlankIfSet | None = Field(
+    sub: NonBlank | None = Field(
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(

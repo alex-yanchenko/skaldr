@@ -159,7 +159,7 @@ def test_a_reconciliation_failure_names_its_table_and_keeps_the_other_errors_in_
     assert str(excinfo.value) == (
         "invalid content data: blocks.1.table: RECONCILIATION FAILED: handled (80) + count (10) = 90, but "
         "declared total is 100 (off by -10). A category is wrong, double-counted, or missing.; "
-        "blocks.2.heading.text: Value error, must not be blank"
+        "blocks.2.heading.text: String should match pattern '\\S'"
     )
 
 
@@ -297,7 +297,7 @@ def test_badge_row_label_may_not_accompany_groups() -> None:
         ),
         pytest.param(
             {"label": "", "items": [{"label": "X", "tone": "blue"}]},
-            "label: Value error, must not be blank",
+            "label: String should have at least 1 character",
             id="blank-label",
         ),
     ],
@@ -595,7 +595,7 @@ def test_flow_step_label_must_not_be_blank() -> None:
     block = {"type": "flow", "steps": [{"label": "  "}, {"label": "B"}]}
 
     with pytest.raises(
-        ReportError, match=r"blocks\.0\.flow\.steps\.0\.label: Value error, must not be blank$"
+        ReportError, match=r"blocks\.0\.flow\.steps\.0\.label: String should match pattern '\\S'$"
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -986,7 +986,7 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
-    assert str(raised.value) == f"invalid content data: {location}: Value error, must not be blank"
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
 
 
 @pytest.mark.parametrize(
@@ -1241,17 +1241,17 @@ def test_a_tabs_block_is_accepted_wherever_a_leaf_block_is(container: dict[str, 
         ),
         pytest.param(
             make_tabs(make_tab("  ", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should match pattern '\\S'",
             id="blank-label",
         ),
         pytest.param(
             make_tabs(make_tab("\t \n", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should match pattern '\\S'",
             id="whitespace-label",
         ),
         pytest.param(
             make_tabs(make_tab("", {"type": "text", "body": "x"}), make_tab("System")),
-            "invalid content data: blocks.0.tabs.tabs.0.label: Value error, must not be blank",
+            "invalid content data: blocks.0.tabs.tabs.0.label: String should have at least 1 character",
             id="empty-label",
         ),
         pytest.param(
@@ -1540,7 +1540,7 @@ def test_walkthrough_step_label_must_not_be_blank() -> None:
     block = {"type": "walkthrough", "steps": [{"label": "  ", "detail": [{"type": "text", "body": "x"}]}]}
 
     with pytest.raises(
-        ReportError, match=r"blocks\.0\.walkthrough\.steps\.0\.label: Value error, must not be blank$"
+        ReportError, match=r"blocks\.0\.walkthrough\.steps\.0\.label: String should match pattern '\\S'$"
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -2128,7 +2128,7 @@ def test_range_segment_span_rejects_non_finite() -> None:
 
 def test_range_segment_label_must_not_be_blank() -> None:
     with pytest.raises(
-        ReportError, match=r"blocks\.0\.range\.segments\.0\.label: Value error, must not be blank$"
+        ReportError, match=r"blocks\.0\.range\.segments\.0\.label: String should match pattern '\\S'$"
     ):
         parse_report(make_report(blocks=[{"type": "range", "segments": [{"label": "   ", "span": 1}]}]))
 
@@ -2246,14 +2246,12 @@ def test_badge_row_declared_key_passes() -> None:
 
 
 def test_blank_heading_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"must not be blank"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.heading\.text: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[{"type": "heading", "text": "   "}]))
 
 
 def test_blank_heading_sub_is_rejected() -> None:
-    with pytest.raises(
-        ReportError, match=r"blocks\.0\.heading\.sub: Value error, must not be blank \(omit it instead\)$"
-    ):
+    with pytest.raises(ReportError, match=r"blocks\.0\.heading\.sub: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[{"type": "heading", "text": "Overview", "sub": "  "}]))
 
 
@@ -2286,9 +2284,7 @@ def test_blank_sub_is_rejected_on_every_sub_bearing_block(block: dict[str, objec
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
-    assert str(raised.value) == (
-        f"invalid content data: {location}: Value error, must not be blank (omit it instead)"
-    )
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
 
 
 def test_reconcile_without_handled_bucket_passes() -> None:
@@ -3386,7 +3382,7 @@ def test_matrix_cell_blank_badge_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "badge": "  "}])
     with pytest.raises(
         ReportError,
-        match=r"blocks\.0\.matrix\.cells\.0\.badge: Value error, must not be blank \(omit it instead\)$",
+        match=r"blocks\.0\.matrix\.cells\.0\.badge: String should match pattern '\\S'$",
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -3395,7 +3391,7 @@ def test_matrix_cell_blank_label_is_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "  "}])
     with pytest.raises(
         ReportError,
-        match=r"blocks\.0\.matrix\.cells\.0\.label: Value error, must not be blank \(omit it instead\)$",
+        match=r"blocks\.0\.matrix\.cells\.0\.label: String should match pattern '\\S'$",
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -3403,14 +3399,14 @@ def test_matrix_cell_blank_label_is_rejected() -> None:
 def test_matrix_cell_whitespace_row_is_rejected() -> None:
     block = _matrix([{"row": "  ", "col": "c1", "label": "x"}])
     with pytest.raises(
-        ReportError, match=r"blocks\.0\.matrix\.cells\.0\.row: Value error, must not be blank$"
+        ReportError, match=r"blocks\.0\.matrix\.cells\.0\.row: String should match pattern '\\S'$"
     ):
         parse_report(make_report(blocks=[block]))
 
 
 def test_matrix_blank_axis_label_is_rejected() -> None:
     block = _matrix([{"row": "r2", "col": "c1", "label": "x"}], rows=["  ", "r2"])
-    with pytest.raises(ReportError, match=r"blocks\.0\.matrix\.rows\.0: Value error, must not be blank$"):
+    with pytest.raises(ReportError, match=r"blocks\.0\.matrix\.rows\.0: String should match pattern '\\S'$"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3692,7 +3688,7 @@ def test_swimlane_step_field_may_not_be_blank(field: str) -> None:
     step = {"lane": "A", "col": "C1", "n": "1", "label": "x", field: "  "}
     block = _swimlane(lanes=["A"], columns=["C1"], steps=[step])
     with pytest.raises(
-        ReportError, match=rf"blocks\.0\.swimlane\.steps\.0\.{field}: Value error, must not be blank$"
+        ReportError, match=rf"blocks\.0\.swimlane\.steps\.0\.{field}: String should match pattern '\\S'$"
     ):
         parse_report(make_report(blocks=[block]))
 
@@ -4355,7 +4351,7 @@ def test_a_command_note_on_a_request_that_builds_a_curl_is_rejected() -> None:
 def test_a_blank_command_note_is_rejected() -> None:
     with pytest.raises(
         ReportError,
-        match=r"blocks\.0\.request\.command_note: Value error, must not be blank \(omit it instead\)$",
+        match=r"blocks\.0\.request\.command_note: String should match pattern '\\S'$",
     ):
         parse_report(make_report(blocks=[make_command_request(command_note="   ")]))
 

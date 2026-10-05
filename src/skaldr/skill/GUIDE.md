@@ -36,9 +36,9 @@ in two places: it accepts an integral float such as `span: 2.0` where the build 
 states no bound on a number, while the build refuses one beyond 1e300 in either direction.
 
 A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
-and labels the schema marks with `pattern: \S` must hold visible text. An empty or whitespace-only
-one fails the build at its path with `must not be blank`; an optional one left blank says `must not
-be blank (omit it instead)`, so leave the field out.
+and labels the schema marks with `pattern: \S` must hold visible text. An empty one fails the build
+at its path with `String should have at least 1 character`, and a whitespace-only one with `String
+should match pattern '\S'`. To leave an optional one empty, leave the field out.
 
 ## `meta`
 

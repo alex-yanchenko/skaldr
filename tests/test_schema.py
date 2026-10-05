@@ -135,7 +135,7 @@ def test_an_empty_bare_string_lane_is_refused_by_both_the_build_and_the_schema()
         parse_report(document)
 
     assert (str(raised.value), schema_messages_at(document, ("blocks", 0, "lanes", 1))) == (
-        "invalid content data: blocks.0.swimlane.lanes.1.name: Value error, must not be blank",
+        "invalid content data: blocks.0.swimlane.lanes.1.name: String should have at least 1 character",
         {"'' should be non-empty", "'' does not match '\\\\S'", "'' is not of type 'object'"},
     )
 
@@ -286,6 +286,8 @@ def test_the_schema_refuses_an_out_of_range_number_as_the_build_does(
 
 
 SPACES = "   "
+BUILD_BLANK = "String should match pattern '\\S'"
+BUILD_EMPTY = "String should have at least 1 character"
 SPACES_REFUSED = "'   ' does not match '\\\\S'"
 SPACES_NOT_AN_OBJECT = "'   ' is not of type 'object'"
 EMPTY_REFUSED = {"'' should be non-empty", "'' does not match '\\\\S'"}
@@ -298,7 +300,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "section", "title": "", "blocks": TEXT_BODY},
             "blocks.0.section.title",
-            "Value error, must not be blank",
+            BUILD_EMPTY,
             ("blocks", 0, "title"),
             EMPTY_REFUSED,
             id="empty-section-title",
@@ -306,7 +308,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "section", "title": SPACES, "blocks": TEXT_BODY},
             "blocks.0.section.title",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "title"),
             {SPACES_REFUSED},
             id="blank-section-title",
@@ -314,7 +316,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "panel", "title": SPACES, "blocks": TEXT_BODY},
             "blocks.0.panel.title",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "title"),
             {SPACES_REFUSED},
             id="blank-panel-title",
@@ -322,7 +324,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "heading", "text": SPACES},
             "blocks.0.heading.text",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "text"),
             {SPACES_REFUSED},
             id="blank-heading-text",
@@ -330,7 +332,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "heading", "text": "H", "sub": SPACES},
             "blocks.0.heading.sub",
-            "Value error, must not be blank (omit it instead)",
+            BUILD_BLANK,
             ("blocks", 0, "sub"),
             {SPACES_REFUSED, f"{SPACES!r} is not of type 'null'"},
             id="blank-heading-sub",
@@ -338,7 +340,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "list", "items": ["a", ""]},
             "blocks.0.list.items.1.str",
-            "Value error, must not be blank",
+            BUILD_EMPTY,
             ("blocks", 0, "items", 1),
             {*EMPTY_REFUSED, "'' is not of type 'object'"},
             id="empty-list-point",
@@ -346,7 +348,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "list", "items": ["a", SPACES]},
             "blocks.0.list.items.1.str",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "items", 1),
             {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
             id="blank-list-point",
@@ -354,7 +356,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "list", "items": [{"text": "a", "items": [SPACES]}]},
             "blocks.0.list.items.0.ListItem.items.0.str",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "items", 0, "items", 0),
             {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
             id="blank-nested-list-point",
@@ -362,7 +364,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             {"type": "list", "items": [{"text": SPACES}]},
             "blocks.0.list.items.0.ListItem.text",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "items", 0, "text"),
             {SPACES_REFUSED},
             id="blank-list-item-text",
@@ -370,7 +372,7 @@ TEXT_BODY = [{"type": "text", "body": "x"}]
         pytest.param(
             make_swimlane([SWIMLANE_STEP], lanes=["Product", SPACES]),
             "blocks.0.swimlane.lanes.1.name",
-            "Value error, must not be blank",
+            BUILD_BLANK,
             ("blocks", 0, "lanes", 1),
             {SPACES_REFUSED, SPACES_NOT_AN_OBJECT},
             id="blank-bare-swimlane-lane",
