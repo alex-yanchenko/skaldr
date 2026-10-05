@@ -4572,6 +4572,29 @@ def test_chart_bar_renders_bars_gridlines_ticks_and_matching_legend() -> None:
     assert '<i style="background:var(--danger-fg)"></i>Failed' in html
 
 
+@pytest.mark.parametrize(
+    ("largest", "ticks"),
+    [
+        pytest.param(1500, ["0", "500", "1k", "1.5k", "2k"], id="thousands"),
+        pytest.param(1_000_000, ["0", "250k", "500k", "750k", "1M"], id="one-million"),
+        pytest.param(2_500_000, ["0", "1.25M", "2.5M", "3.75M", "5M"], id="millions"),
+        pytest.param(5_000_000_000, ["0", "1.25B", "2.5B", "3.75B", "5B"], id="billions"),
+        pytest.param(0.05, ["0", "0.0125", "0.025", "0.0375", "0.05"], id="fractions"),
+    ],
+)
+def test_chart_axis_ticks_use_k_m_and_b_for_large_values(largest: float, ticks: list[str]) -> None:
+    block = {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["A"],
+        "series": [{"label": "S", "values": [largest]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert re.findall(r'<text class="c-tick"[^>]*>([^<]*)</text>', html) == ticks
+
+
 def test_chart_bar_stacked_stacks_segments_cumulatively_on_the_baseline() -> None:
     block = {
         "type": "chart",
