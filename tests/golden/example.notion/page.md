@@ -157,7 +157,7 @@ flowchart LR
 	</tr>
 </table>
 **Discrepancies by owner**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
-Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
+Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 ## Count progress
 - **Zone A**: ██████████ 100.0% {color="blue"}
 - **Zone B**: █████████░ 92.0% {color="green"}
@@ -197,7 +197,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
 </table>
 **Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
 ## Verification
-- ✅ Reconciliation gate passes (10,000 = 10,000).
+- ✅ Reconciliation gate passes (10,000 \= 10,000).
 - ✅ De-dup validated on a 1,000-pallet sample.
 - 🔵 Overflow bins being re-counted by hand right now.
 - ⚪ Overflow re-scan scheduled for the next count.
@@ -701,4 +701,4 @@ content-type: application/json
 Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
 - \[1\] *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
 - \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
-WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000. {color="gray"}
+WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}

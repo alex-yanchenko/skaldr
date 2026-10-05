@@ -50,6 +50,7 @@ from skaldr.richtext import SCRIPT_HTML_TAG, ScriptPosition
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
 HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
+LARGEST_ORDERED_MARKER_NUMBER: Final = 999_999_999
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -188,7 +189,8 @@ class _MarkdownWriter:
                 case "bullet":
                     marker, width = dash, len(dash) + 1
                 case "number":
-                    marker = f"{index}{')' if use_alternate_markers else '.'}"
+                    number = min(index, LARGEST_ORDERED_MARKER_NUMBER)
+                    marker = f"{number}{')' if use_alternate_markers else '.'}"
                     width = len(marker) + 1
                 case "check":
                     marker, width = f"{dash} [{'x' if entry.checked else ' '}]", len(dash) + 1
