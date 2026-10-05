@@ -8,10 +8,9 @@ description: >-
   writeups, and especially ongoing status pages, plans, and trackers kept updated over time,
   anything with a flow/pipeline, comparison table, stat cards, charts, timeline, meters, callouts,
   footnoted sources, or where validated/derived numbers and per-section freshness beat free prose.
-  Prefer it over hand-building HTML, a raw markdown table, or plain prose for these. NOT for
-  prose-first content a markdown system renders (README, ADR narratives, PR/issue bodies, wiki
-  notes, commit messages) or a chat reply: keep those markdown. skaldr owns the design; you
-  describe what it says.
+  Prefer it over hand-building HTML, a raw markdown table, or plain prose for these. The same
+  document exports as Markdown for a README, a PR body, a wiki or Notion. NOT for prose you write
+  by hand, or a chat reply: keep those markdown. skaldr owns the design; you describe what it says.
 ---
 
 # Authoring a skaldr report
@@ -34,30 +33,31 @@ fabrication, so honesty is on you.
 
 ## Workflow
 
-1. **Load the current contract from the tool itself** (it matches the installed version, so trust
-   it over anything you remember):
+1. **Load the current contract from the tool itself** (it matches the installed version; trust it
+   over memory):
    - `skaldr --guide` for the authoring guide: every block, the rules, the `table`, and a complete
      example.
    - `skaldr --write-schema /tmp/skaldr.schema.json` for the exact fields and types.
 2. **Write the YAML** from real evidence, following the guide.
-3. **Render:** `skaldr report.yaml -o report.html`.
+3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion,
+   `skaldr report.yaml --export markdown` or `--export notion` writes the same document to
+   `out/<name>.<target>/page.md` instead.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = skaldr prints `OK` and the output
-   file exists. To validate without writing anything (e.g. before committing, or over a glob), use
+   file exists. To validate without writing anything (e.g. over a glob), use
    `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
    report.yaml`.
-5. **Surface it, local-first.** A skaldr page needn't be a one-shot deliverable. It can be a live
-   working doc: render once with `--live`, then `--if-stale` after each edit. (Not `--watch`: it
-   needs a process this harness reaps between turns.) Either way, hand over (or open) the rendered
-   file, private by default. Publish a
+5. **Surface it, local-first.** A skaldr page works as a live working doc: render once with
+   `--live`, then `--if-stale` after each edit. (Not `--watch`: it needs a process this harness
+   reaps between turns.) Either way, hand over the rendered file, private by default. Publish a
    claude.ai Artifact only if the user wants to share it, and only with non-sensitive data. Never
    put real customer, personal, or privileged content on a surface that leaves the machine. To
    publish, render with `skaldr report.yaml --embed -o report.html` and publish *that*: `--embed`
-   drops the `<html>`/`<head>`/`<body>` skeleton so it slots into the Artifact host cleanly (a full
-   document would double-wrap).
+   drops the `<html>`/`<head>`/`<body>` skeleton so it slots into the Artifact host without
+   double-wrapping.
 
 **Given a skaldr render (`.html` or artifact URL)?** Recover its YAML with
 `skaldr --extract-source <file|url>`; don't parse the HTML, since every render embeds its source.
 
-This file is intentionally thin and stable: the version-specific detail lives in `skaldr --guide`
-and `skaldr --write-schema`, so it stays correct across upgrades without reinstalling the skill.
+This file stays thin: version-specific detail lives in `skaldr --guide` and `skaldr --write-schema`,
+so the guidance stays correct across upgrades without reinstalling the skill.

@@ -1,5 +1,5 @@
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category. {color="gray"}
-Mixed audience — ops reads the impact, the floor team reads the fix. {color="gray"}
+Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray"}
 <table_of_contents/>
 - **Source**: WMS export
 - **Period**: Q3 2026
@@ -13,16 +13,16 @@ Mixed audience — ops reads the impact, the floor team reads the fix. {color="g
 - **Mode**: strict
 <empty-block/>
 - **Matched cleanly**: 8,500 (85.0%) <span color="green_bg">▲ +3%</span> {color="green"}
-- **Floor — fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span> {color="yellow"}
+- **Floor: fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span> {color="yellow"}
 	Miscounts + mislabeled bins we can correct. {color="gray"}
-- **Vendor — escalate**: 400 (4.0%) <span color="green_bg">▼ −90</span> <span color="red_bg">Vendor</span> {color="red"}
+- **Vendor: escalate**: 400 (4.0%) <span color="green_bg">▼ −90</span> <span color="red_bg">Vendor</span> {color="red"}
 - **Count status**: HEALTHY {color="purple"}
 - **Total units**: 10,000 {color="gray"}
 <empty-block/>
 - **Matched cleanly**: 85.0%, 8,500 units {color="green"}
 - **Floor-fixable**: 11.0%, 1,100 {color="yellow"}
 - **Vendor**: 4.0%, 400 {color="red"}
-The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
+The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 Zone C is <span color="red">behind schedule</span>, its recount is <span color="yellow_bg">due Friday</span>, and the <span color="purple"><span color="blue_bg">vendor lots</span></span> stay open until the supplier replies.
@@ -107,7 +107,7 @@ flowchart LR
 		<td>**Proposed fix**</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Floor — fixable (1,100)**</td>
+		<td>**Floor: fixable (1,100)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -128,7 +128,7 @@ flowchart LR
 		<td>Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log.</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Vendor — escalation (400)**</td>
+		<td>**Vendor: escalation (400)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -142,7 +142,7 @@ flowchart LR
 		<td>Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives.</td>
 	</tr>
 	<tr color="gray_bg">
-		<td>**Correctly counted — no action (0)**</td>
+		<td>**Correctly counted: no action (0)**</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -201,7 +201,7 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 - ✅ De-dup validated on a 1,000-pallet sample.
 - 🔵 Overflow bins being re-counted by hand right now.
 - ⚪ Overflow re-scan scheduled for the next count.
-- ❌ Vendor short-ship — blocked, cannot count.
+- ❌ Vendor short-ship: blocked, cannot count.
 - ⛔ Vendor escalation awaiting `OPS-1234` response.
 ### Follow-up checklist
 - [x] Confirm the `bin > 12` scan rule with the site lead.
@@ -210,12 +210,12 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 	- [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
 #### Sign-off and rollback
-- **Owner**: Inventory Ops — **@site-lead** signs off each fix.
+- **Owner**: Inventory Ops. **@site-lead** signs off each fix.
 - **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 ---
 <callout icon="🎤" color="gray_bg">
 	**For the read-out**
-	Lead with the reconciliation gate — it is the one number leadership tracks.
+	Lead with the reconciliation gate: it is the one number leadership tracks.
 </callout>
 ### Re-count procedure, from step iv
 - iv. Freeze inbound moves in the overflow aisles.
@@ -257,8 +257,8 @@ function pickWinner(a, b) {
 +  return a.code.localeCompare(b.code);
 }
 ```
-*Image: Fig 1 — discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
-> These bins are aggregate lots — we can't split `AGG-07` into individual SKUs from the dock scan alone.<br>*Floor lead, ticket OPS-1234*
+*Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
+> These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.<br>*Floor lead, ticket OPS-1234*
 ## At a glance
 <columns>
 	<column ratio="33">
@@ -278,7 +278,7 @@ function pickWinner(a, b) {
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
 </columns>
-## Appendix — discrepancy-reason raw counts {toggle="true"}
+## Appendix: discrepancy-reason raw counts {toggle="true"}
 	*updated 18 Jul 2026* {color="gray"}
 	- Double-count (same-window re-scan): 340
 	- Double-count (bin \> 12 skip): 260
@@ -484,7 +484,7 @@ flowchart LR
 1. **Freeze the aisle and pull the expected list** *before any scanning* {color="blue"}
 	Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
 	- One row per bin, with the expected quantity.
-	- Flag overflow bins (`bin > 12`) — they take the manual path.
+	- Flag overflow bins (`bin > 12`): they take the manual path.
 2. **Scan every bin twice, reconcile on the pallet ID** {color="purple"}
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 	`reconcile`
@@ -494,7 +494,7 @@ flowchart LR
 	```
 3. **Escalate anything that still won't balance** {color="yellow"}
 	<callout icon="⚠️" color="yellow_bg">
-		A residual gap is a vendor short-ship, not a miscount — open a ticket, don't force the numbers.
+		A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 	</callout>
 ## Pulling a bin from the WMS yourself
 The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in your browser tab and is never written back into this page.
@@ -699,6 +699,6 @@ content-type: application/json
 </callout>
 ## Sources
 Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
-- \[1\] *Warehouse Counting SOP*, rev. 7 — §3 Cycle vs sampling.
+- \[1\] *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
 - \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}

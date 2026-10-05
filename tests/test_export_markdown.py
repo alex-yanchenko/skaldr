@@ -3,6 +3,7 @@ from typing import get_args
 
 import pytest
 
+from skaldr.errors import ReportError
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
 from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
@@ -468,10 +469,24 @@ def test_a_grid_becomes_its_cells_in_order() -> None:
         pytest.param("####### x", "####### x", id="seven-hashes-are-no-heading"),
         pytest.param("+++", "\\+++", id="plus-run"),
         pytest.param("1234567890. x", "1234567890. x", id="ten-digit-ordinal-is-no-list"),
+        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
+        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
     assert markdown_of([{"type": "text", "body": body}]) == f"{line}\n"
+
+
+def test_rich_text_that_fails_to_export_names_its_field() -> None:
+    blocks = [{"type": "text", "body": "Intro."}, {"type": "list", "items": ["ok", "a [b]{tone=x} c"]}]
+
+    with pytest.raises(ReportError) as raised:
+        markdown_of(blocks)
+
+    assert str(raised.value) == (
+        "blocks.1.items.1: unknown tone 'x' in {tone=x}: a tone is one of neutral, info, success, warning, "
+        "danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, violet"
+    )
 
 
 def test_quote_lines_escape_a_leading_block_marker() -> None:
@@ -619,12 +634,6 @@ def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:
 
 def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
     assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
-
-
-def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
-    block = {"type": "list", "items": ["", "two"]}
-
-    assert markdown_of([block]) == "-\n- two\n"
 
 
 @pytest.mark.parametrize(
@@ -815,6 +824,13 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     }
 
     assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
+
+
+def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+
+    assert markdown_of([section]) == "## Appendix\n\n> 📝 **Card**\n>\n> inside\n"
 
 
 def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:

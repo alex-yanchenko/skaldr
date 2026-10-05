@@ -7,7 +7,7 @@ import pytest
 
 from skaldr.auth.notion import CALLBACK_THREAD_PREFIX
 from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
-from tests.factories.auth_factory import InMemoryKeyring
+from tests.factories.auth_factory import InMemoryKeyring, PlaintextKeyring
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,6 +23,13 @@ def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
     keyring.set_keyring(previous)
 
 
+@pytest.fixture
+def plaintext_keyring() -> PlaintextKeyring:
+    plaintext = PlaintextKeyring()
+    keyring.set_keyring(plaintext)
+    return plaintext
+
+
 @pytest.fixture(autouse=True)
 def no_callback_server_outlives_its_test() -> Iterator[None]:
     yield
@@ -33,9 +40,7 @@ def no_callback_server_outlives_its_test() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _disable_skill_sync(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
-    """`main()` runs an opportunistic skill sync against the real `~/.claude` on every invocation.
-    Disable it by default so a test that drives `main()` never reads or rewrites the developer's own
-    installed skills. The sync's own tests re-enable it (via `monkeypatch.delenv`) and drive it against
-    a tmp home explicitly."""
+def _no_skill_sync_touches_the_developers_own_claude_home(  # pyright: ignore[reportUnusedFunction]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("SKALDR_SKILL_SYNC", "0")
