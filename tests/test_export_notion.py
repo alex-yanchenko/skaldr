@@ -1298,6 +1298,32 @@ def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
     assert sorted(path.name for path in tmp_path.iterdir()) == [EXPORT_MANIFEST, "page.md"]
 
 
+def test_a_run_that_fails_partway_lists_only_the_pages_it_wrote_beside_the_earlier_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = parse_report(make_report(blocks=heading_sections(4, "w = 4\n" * 20)))
+    export_notion(report, tmp_path)
+    write_text = Path.write_text
+
+    def fail_on_the_second_page(path: Path, text: str, encoding: str | None = None) -> int:
+        if path.name == "page.01.md":
+            raise OSError("disk full")
+        return write_text(path, text, encoding=encoding)
+
+    monkeypatch.setattr(Path, "write_text", fail_on_the_second_page)
+    with pytest.raises(OSError, match="disk full"):
+        export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
+    monkeypatch.undo()
+
+    assert (
+        json.loads((tmp_path / EXPORT_MANIFEST).read_text(encoding="utf-8")),
+        sorted(path.name for path in tmp_path.iterdir()),
+    ) == (
+        {"title": "Test Report", "files": ["page.00.md", "page.md"]},
+        [EXPORT_MANIFEST, "page.00.md", "page.md"],
+    )
+
+
 def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: Path) -> None:
     report = parse_report(make_report(blocks=heading_sections(101, "v")))
 

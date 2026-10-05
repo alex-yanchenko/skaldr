@@ -99,12 +99,12 @@ def _export_pages(
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
     _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, pages.keys(), earlier)
-    _write_manifest(out_dir, title, earlier.pages | set(pages))
     written: list[Path] = []
     for name, text in pages.items():
         path = out_dir / name
         replace_file(path, text)
         written.append(path)
+        _write_manifest(out_dir, title, earlier.pages | {page.name for page in written})
     for stale in sorted(earlier.pages - set(pages)):
         path = out_dir / stale
         if path.is_file():
