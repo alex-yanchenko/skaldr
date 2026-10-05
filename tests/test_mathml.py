@@ -1,12 +1,23 @@
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from functools import cache
 from xml.etree.ElementTree import Element, SubElement
 
 import pytest
+from latex2mathml.commands import MATRICES
+from latex2mathml.converter import convert_to_element
 from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 
 from skaldr import mathml as mathml_module
 from skaldr.errors import ReportError
-from skaldr.mathml import MATHML_ATTRIBUTES, MathDisplay, mathml
+from skaldr.mathml import (
+    COMMANDS_TAKING_LITERAL_TEXT,
+    LATEX2MATHML_COMMANDS,
+    MATHML_ATTRIBUTES,
+    MATHML_ELEMENTS,
+    MathDisplay,
+    mathml,
+)
 
 MATH_OPEN = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">'
 CONVERTER_PREFIX = "latex2mathml cannot convert it ("
@@ -211,18 +222,31 @@ def test_an_environment_defined_with_spaces_in_its_newenvironment_converts(
         pytest.param(r"\textcolor{simga}{x}", "simga", id="text-colour"),
         pytest.param(r"\colorbox{simga}{x}", "simga", id="box-background"),
         pytest.param(r"\fcolorbox{simga}{red}{x}", "simga", id="box-border"),
-        pytest.param(r"\color{rgb(1,0,0)} x", "rgb(1,0,0)", id="function-notation"),
         pytest.param(r"\color{#ff} x", "#ff", id="two-digit-hex"),
         pytest.param(r'\color{red" onload="x}{y}', 'red" onload="x', id="value-holding-quotes"),
+        pytest.param(r"\color{red;x} y", "red;x", id="value-holding-a-declaration-end"),
+        pytest.param(r"\color{red blue} x", "red blue", id="two-colours"),
+        pytest.param(r"\color{var(--x)} y", "var(--x)", id="custom-property"),
+        pytest.param(r"\color{url(x)} y", "url(x)", id="url"),
+        pytest.param(r"\color{color()} x", "color()", id="colour-function-the-parser-raises-on"),
+        pytest.param(r"\color{color( )} x", "color( )", id="spaced-colour-function-the-parser-raises-on"),
+        pytest.param(r"\color{red/*x*/} y", "red/*x*/", id="css-comment"),
+        pytest.param(r"\color{/*x*/red} y", "/*x*/red", id="leading-css-comment"),
+        pytest.param(r"\color{rgb(1,0,0} x", "rgb(1,0,0", id="unterminated-function"),
+        pytest.param(r"\color{rgb(1,0,0))} x", "rgb(1,0,0))", id="extra-closing-parenthesis"),
+        pytest.param(r"\colorbox{rgb(255 0 0)}{x}", "rgb(25500)", id="box-drops-the-spaces"),
+        pytest.param(
+            r"\fcolorbox{oklch(0.6 0.2 30)}{red}{x}", "oklch(0.60.230)", id="box-border-drops-the-spaces"
+        ),
     ],
 )
-def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: str, colour: str) -> None:
+def test_a_colour_css_does_not_parse_fails_naming_it(expression: str, colour: str) -> None:
     with pytest.raises(ReportError) as raised:
         mathml(expression, "block")
 
     assert str(raised.value) == (
-        f"math expression '{expression}' sets the colour '{colour}', which is neither a CSS colour name "
-        "nor a #rgb or #rrggbb value"
+        f"math expression '{expression}' sets the colour '{colour}', which is not a CSS colour: write a "
+        "colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)"
     )
 
 
@@ -255,9 +279,35 @@ def test_a_colour_that_is_no_css_name_or_hex_value_fails_naming_it(expression: s
             '<mpadded mathbackground="#eee" border-color="navy"><mtext>x</mtext></mpadded>',
             id="box",
         ),
+        pytest.param(
+            r"\color{rgb(1,0,0)} x", '<mstyle mathcolor="rgb(1,0,0)"><mi>x</mi></mstyle>', id="rgb-function"
+        ),
+        pytest.param(
+            r"\color{hsl(120 50% 50%)} x",
+            '<mstyle mathcolor="hsl(120 50% 50%)"><mi>x</mi></mstyle>',
+            id="hsl-function",
+        ),
+        pytest.param(
+            r"\color{oklch(0.5 0.1 120)} x",
+            '<mstyle mathcolor="oklch(0.5 0.1 120)"><mi>x</mi></mstyle>',
+            id="colour-level-4-function",
+        ),
+        pytest.param(
+            r"\color{#aabbccdd} x", '<mstyle mathcolor="#aabbccdd"><mi>x</mi></mstyle>', id="hex-with-alpha"
+        ),
+        pytest.param(
+            r"\color{rgb(255 0 0 / 50%)} x",
+            '<mstyle mathcolor="rgb(255 0 0 / 50%)"><mi>x</mi></mstyle>',
+            id="space-and-slash-form",
+        ),
+        pytest.param(
+            r"\colorbox{rgb(255,0,0)}{x}",
+            '<mpadded mathbackground="rgb(255,0,0)"><mtext>x</mtext></mpadded>',
+            id="box-with-the-comma-form",
+        ),
     ],
 )
-def test_a_css_colour_name_or_hex_value_converts(expression: str, markup: str) -> None:
+def test_a_css_colour_converts(expression: str, markup: str) -> None:
     assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
 
 
@@ -333,41 +383,97 @@ def test_an_attribute_on_the_mathml_allowlist_passes(
     assert mathml("x", "inline") == f'<math><mi {attribute}="red">x</mi></math>'
 
 
-def test_the_allowlist_is_the_set_of_attributes_latex2mathml_emits() -> None:
-    assert sorted(MATHML_ATTRIBUTES) == [
-        "accent",
-        "border-color",
-        "columnalign",
-        "columnlines",
-        "columnspacing",
-        "depth",
-        "display",
-        "displaystyle",
-        "fence",
-        "form",
-        "height",
-        "largeop",
-        "linebreak",
-        "linethickness",
-        "lspace",
-        "mathbackground",
-        "mathcolor",
-        "mathsize",
-        "mathvariant",
-        "maxsize",
-        "minsize",
-        "movablelimits",
-        "notation",
-        "rowlines",
-        "rowspacing",
-        "rspace",
-        "scriptlevel",
-        "separator",
-        "stretchy",
-        "voffset",
-        "width",
-        "xmlns",
+@pytest.mark.parametrize(
+    "tag",
+    [
+        pytest.param("semantics", id="semantics"),
+        pytest.param("annotation-xml", id="annotation-xml"),
+        pytest.param("mglyph", id="mglyph"),
+        pytest.param("script", id="script"),
+        pytest.param("svg", id="svg"),
+    ],
+)
+def test_an_element_outside_the_mathml_allowlist_fails(
+    stub_converter: Callable[[Element], None], tag: str
+) -> None:
+    root = Element("math")
+    SubElement(root, tag).text = "x"
+    stub_converter(root)
+
+    with pytest.raises(ReportError) as raised:
+        mathml("x", "inline")
+
+    assert str(raised.value) == (
+        f"math expression 'x' produces a {tag} element, which is not a MathML element skaldr renders"
+    )
+
+
+@pytest.mark.parametrize("tag", [pytest.param(name, id=name) for name in sorted(MATHML_ELEMENTS)])
+def test_an_element_on_the_mathml_allowlist_passes(
+    stub_converter: Callable[[Element], None], tag: str
+) -> None:
+    root = Element("math")
+    element = SubElement(root, tag)
+    for letter in "abc":
+        SubElement(element, "mi").text = letter
+    stub_converter(root)
+
+    assert mathml("x", "inline") == f"<math><{tag}><mi>a</mi><mi>b</mi><mi>c</mi></{tag}></math>"
+
+
+@dataclass(frozen=True)
+class Emitted:
+    elements: frozenset[str]
+    attributes: frozenset[str]
+
+
+ARGUMENT_SHAPES = (
+    "{0}",
+    "{0}{{a}}{{b}}{{c}}",
+    "{0}{{red}}{{x}}",
+    "x {0} y",
+    "{0}{{1em}}{{2em}}",
+    "{0}[a]{{b}}",
+)
+PAGE_LEVEL_ATTRIBUTES = frozenset({"class", "href", "style"})
+
+
+def _every_command_and_environment_latex2mathml_converts() -> list[str]:
+    environments = [environment.removeprefix("\\") for environment in MATRICES]
+    return [
+        *(shape.format(command) for command in sorted(LATEX2MATHML_COMMANDS) for shape in ARGUMENT_SHAPES),
+        *(rf"\begin{{{name}}}{{c|c}} a & b \\ \hline c & d \end{{{name}}}" for name in environments),
+        r"x_a x^b x_a^b a \\ b",
     ]
+
+
+def _converted_or_none(expression: str) -> Element | None:
+    try:
+        return convert_to_element(expression, display="block")
+    except Exception:
+        return None
+
+
+@cache
+def _what_latex2mathml_emits() -> Emitted:
+    roots = [
+        root
+        for expression in _every_command_and_environment_latex2mathml_converts()
+        if (root := _converted_or_none(expression)) is not None
+    ]
+    elements = [element for root in roots for element in root.iter()]
+    return Emitted(
+        elements=frozenset(element.tag for element in elements),
+        attributes=frozenset(name for element in elements for name in element.attrib),
+    )
+
+
+def test_the_element_allowlist_is_every_element_latex2mathml_emits() -> None:
+    assert _what_latex2mathml_emits().elements == MATHML_ELEMENTS
+
+
+def test_the_attribute_allowlist_is_every_attribute_latex2mathml_emits_but_the_page_level_ones() -> None:
+    assert _what_latex2mathml_emits().attributes == MATHML_ATTRIBUTES | PAGE_LEVEL_ATTRIBUTES
 
 
 @pytest.mark.parametrize(
@@ -393,6 +499,18 @@ def test_common_commands_emit_only_allowlisted_attributes(expression: str) -> No
         pytest.param(r"\simga", r"\simga", id="misspelt-greek-letter"),
         pytest.param(r"x + \unknown{y}", r"\unknown", id="unknown-command-with-an-argument"),
         pytest.param(r"\operatorname{\foo}", r"\foo", id="unknown-command-in-an-operator-name"),
+        pytest.param(r"\q", r"\q", id="one-letter-command"),
+        pytest.param(r"x + \q", r"\q", id="one-letter-command-after-a-term"),
+        pytest.param(r"\mathbbb{R}", r"\mathbbb", id="misspelt-font-on-a-letter"),
+        pytest.param(r"\mathbbm{1}", r"\mathbbm", id="misspelt-font-on-a-digit"),
+        pytest.param(r"\mathcolor{red}{x}", r"\mathcolor", id="command-latex2mathml-reads-as-a-font"),
+        pytest.param(r"\math{x}", r"\math", id="bare-font-prefix"),
+        pytest.param(r"a \< b", r"\<", id="backslash-before-a-symbol"),
+        pytest.param("x \\", "\\", id="trailing-backslash"),
+        pytest.param(r"\12", r"\1", id="backslash-before-a-number"),
+        pytest.param(r"\hspace{\simga}", r"\simga", id="unknown-command-as-a-width"),
+        pytest.param(r"\big\langl", r"\langl", id="unknown-command-as-a-delimiter"),
+        pytest.param(r"a \[ b", r"\[", id="escaped-bracket-the-converter-leaves-as-written"),
     ],
 )
 def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> None:
@@ -403,6 +521,108 @@ def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> No
         f"math expression '{expression}' uses {command}, which latex2mathml does not know: check its "
         r"spelling, or write \text{...} for literal text"
     )
+
+
+@pytest.mark.parametrize(
+    ("expression", "markup"),
+    [
+        pytest.param(
+            r"\newcommand{\R}{\mathbb{R}} \R", "<mi>\N{DOUBLE-STRUCK CAPITAL R}</mi>", id="newcommand"
+        ),
+        pytest.param(r"\newcommand\R{x} \R", "<mi>x</mi>", id="newcommand-without-braces"),
+        pytest.param(r"\def\R{x} \R", "<mi>x</mi>", id="def"),
+        pytest.param(r"\DeclareMathOperator{\Tr}{Tr} \Tr A", "<mo>Tr</mo><mi>A</mi>", id="math-operator"),
+        pytest.param(
+            r"\mathbb{RR}",
+            '<mrow><mi mathvariant="double-struck">R</mi><mi mathvariant="double-struck">R</mi></mrow>',
+            id="font-on-a-group",
+        ),
+    ],
+)
+def test_a_command_the_expression_defines_converts(expression: str, markup: str) -> None:
+    assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
+
+
+@dataclass(frozen=True)
+class LiteralArgumentCase:
+    expression: str
+    outcome: str
+
+
+def _literal_text(command: str, markup: str) -> LiteralArgumentCase:
+    return LiteralArgumentCase(f"{command}{{\\foo}}", f"{MATH_OPEN}<mrow>{markup}</mrow></math>")
+
+
+def _literal_attribute_value(command: str, attribute: str) -> LiteralArgumentCase:
+    expression = f"{command}{{\\foo}}{{x}}"
+    return LiteralArgumentCase(
+        expression,
+        f"math expression '{expression}' sets the {attribute} attribute, which is not a MathML attribute "
+        r"skaldr renders: leave out \href, \class and \style",
+    )
+
+
+def _literal_colour(command: str) -> LiteralArgumentCase:
+    expression = f"{command}{{\\foo}}{{x}}"
+    return LiteralArgumentCase(
+        expression,
+        f"math expression '{expression}' sets the colour '\\foo', which is not a CSS colour: write a "
+        "colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)",
+    )
+
+
+LITERAL_ARGUMENT_CASES = {
+    r"\clap": _literal_text(
+        r"\clap", '<mpadded lspace="-0.5width" width="0px"><mtext>\\foo</mtext></mpadded>'
+    ),
+    r"\class": _literal_attribute_value(r"\class", "class"),
+    r"\color": _literal_colour(r"\color"),
+    r"\emph": _literal_text(r"\emph", '<mtext mathvariant="italic">\\foo</mtext>'),
+    r"\fbox": _literal_text(r"\fbox", '<menclose notation="box"><mtext>\\foo</mtext></menclose>'),
+    r"\hbox": _literal_text(
+        r"\hbox", '<mstyle displaystyle="false" scriptlevel="0"><mtext>\\foo</mtext></mstyle>'
+    ),
+    r"\href": _literal_attribute_value(r"\href", "href"),
+    r"\llap": _literal_text(r"\llap", '<mpadded lspace="-1width" width="0px"><mtext>\\foo</mtext></mpadded>'),
+    r"\mbox": _literal_text(
+        r"\mbox", '<mstyle displaystyle="false" scriptlevel="0"><mtext>\\foo</mtext></mstyle>'
+    ),
+    r"\rlap": _literal_text(r"\rlap", '<mpadded width="0px"><mtext>\\foo</mtext></mpadded>'),
+    r"\style": _literal_attribute_value(r"\style", "style"),
+    r"\tag": _literal_text(r"\tag", "<mtext>(\\foo)</mtext>"),
+    r"\tag*": _literal_text(r"\tag*", "<mtext>\\foo</mtext>"),
+    r"\text": _literal_text(r"\text", "<mtext>\\foo</mtext>"),
+    r"\textbf": _literal_text(r"\textbf", '<mtext mathvariant="bold">\\foo</mtext>'),
+    r"\textcolor": _literal_colour(r"\textcolor"),
+    r"\textit": _literal_text(r"\textit", '<mtext mathvariant="italic">\\foo</mtext>'),
+    r"\textmd": _literal_text(r"\textmd", "<mtext>\\foo</mtext>"),
+    r"\textnormal": _literal_text(r"\textnormal", "<mtext>\\foo</mtext>"),
+    r"\textrm": _literal_text(r"\textrm", "<mtext>\\foo</mtext>"),
+    r"\textsf": _literal_text(r"\textsf", '<mtext mathvariant="sans-serif">\\foo</mtext>'),
+    r"\texttt": _literal_text(r"\texttt", '<mtext mathvariant="monospace">\\foo</mtext>'),
+    r"\textup": _literal_text(r"\textup", "<mtext>\\foo</mtext>"),
+    r"\verb": LiteralArgumentCase(
+        r"\verb|\foo|", f'{MATH_OPEN}<mrow><mtext mathvariant="monospace">\\foo</mtext></mrow></math>'
+    ),
+}
+
+
+def _outcome(expression: str) -> str:
+    try:
+        return mathml(expression, "inline")
+    except ReportError as error:
+        return str(error)
+
+
+@pytest.mark.parametrize("command", [pytest.param(name, id=name) for name in sorted(LITERAL_ARGUMENT_CASES)])
+def test_a_command_inside_a_literal_argument_is_not_read_as_a_command(command: str) -> None:
+    case = LITERAL_ARGUMENT_CASES[command]
+
+    assert _outcome(case.expression) == case.outcome
+
+
+def test_every_command_taking_literal_text_has_a_literal_argument_case() -> None:
+    assert sorted(LITERAL_ARGUMENT_CASES) == sorted(COMMANDS_TAKING_LITERAL_TEXT)
 
 
 FRACTION_MISSING_A_PART = (

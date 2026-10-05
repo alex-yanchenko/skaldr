@@ -20,7 +20,8 @@ publishes* below), nothing else. Every block is a mapping with a `type` discrimi
 **Validation is strict:** an unknown block type, a field that doesn't belong to that block, an
 unknown top-level key, or a value of the wrong shape each fails the build with a precise path,
 e.g. `error: invalid content data: blocks.3.items.2.value: number column needs a numeric value`.
-A failed reconciliation is listed with the other block errors in the file. A page-wide check (an
+Text holding a lone surrogate, which only a YAML escape such as `"\ud800"` can produce and no page
+can hold, fails the same way with its path. A failed reconciliation is listed with the other block errors in the file. A page-wide check (an
 undeclared badge key, a repeated table, matrix, reference or heading id) runs once every block is
 valid and names each place involved after `at`. Run `skaldr --check <file>` to validate without
 rendering; read the path, fix, re-run. Add an output flag and the check becomes a gate on that
@@ -39,6 +40,12 @@ A heading's text, a section, panel or toggle title, a tab label, a list point, a
 and labels the schema marks with `pattern: \S` must hold visible text. An empty one fails the build
 at its path with `String should have at least 1 character`, and a whitespace-only one with `String
 should match pattern '\S'`. To leave an optional one empty, leave the field out.
+
+`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options or by another version of skaldr. A page it cannot read its options from, and content it cannot load, count as stale too, so the render runs and reports the problem. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
+
+A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own.
+
+The files skaldr writes itself (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) are written to a temporary file next to the file and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, a missing folder on the way to that target is created, and an existing file keeps its permissions. A read-only file is refused with an error naming it and left as it is. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text. The `--pdf` file is the exception: the headless browser writes it directly, so none of this applies to it.
 
 ## `meta`
 
@@ -118,12 +125,16 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 
 **Colour and highlight.** `[text]{tone=danger}` colours the text, `[text]{bg=warning}` highlights it, and `[text]{tone=danger bg=warning}` does both. The braces hold space-separated `key=value` attributes in either order, `tone` and `bg` at most once each, and each value is a tone or its palette name (see Colours & tones above). The bracketed text follows the rules of a link label: it may hold other marks, citations, blanks and balanced brackets (`[a [b] c]{tone=info}`), but not a link; a link inside, an empty `[]`, or a `]{tone=…}` with no opening `[` fails the build naming the attribute list. A span inside a link label works: `[[docs]{tone=info}](https://url)` is a link whose label is coloured. Braces right after `]` that hold `tone=` or `bg=` and no other brace are an attribute list, and its text is read exactly as written, so an unknown tone, an unknown attribute next to them, a repeated attribute, a space on either side of `=` (`{tone = info}`, `{tone= info}`), or anything that is not `key=value`, such as a code span, math or a citation inside the braces, fails the build naming that attribute. Anything else, like `arr[i]{n=3}`, `[a]{x=1}` or `[a] {tone=info}`, stays prose, and `[label](https://url)` is still a link, since nothing inside a link's URL is read as a span.
 
-**Math.** A single-backtick `` `code` `` span wrapped in dollars, `` $`\frac{a}{b}`$ ``, is inline LaTeX math (the expression holds no backtick, so `` $`x` and `y`$ `` is two code spans between dollars, and `` $` `$ `` fails the build as empty), and a `math` block (`{type: math, expression: '\sum_{i=1}^{n} x_i'}`) is display math on its own line. skaldr converts both to MathML when the page builds, so the page needs no script or font to show them. An expression the converter cannot read fails the build naming it, and so do an unknown command (a typo like `\simga`), a fraction, stack, root or script missing a part (`\frac{a}`, `\overset{a}`, `\displaystyle_a`), an environment latex2mathml does not define (`aligned`, `equation`, or a typo like `pmatrx`; `matrix`, `pmatrix`, `bmatrix`, `cases`, `array`, `split` and `align` are defined), a colour that is neither a CSS colour name nor a `#rgb` or `#rrggbb` value (`\color{simga}`), a command that sets an attribute MathML has no use for (`\href`, `\class`, `\style`), and `$$`, which would end the Notion export's equation early (write `\$\$` for literal dollars). A backslash inside `\text{…}` is literal text. An entity typed there shows as typed when it is a named entity (`&lt;`), a decimal one (`&#60;`), a hex one with a capital X (`&#X3C;`), or a hex one without its closing semicolon (`&#x3C`). A hex entity written `&#x3C;` decodes to its character, as `\unicode{x3C}` does, and shows as U+FFFD instead when its code point is past U+10FFFF, a surrogate (U+D800 to U+DFFF), a control character other than tab and newline (U+0000 to U+001F and U+007F to U+009F), or a noncharacter (U+FDD0 to U+FDEF, or one ending in FFFE or FFFF such as U+FFFE or U+10FFFF). A lone `$` in prose, like `costs $5`, stays text. In YAML, single-quote an expression so its backslashes reach skaldr unchanged.
+**Math.** A single-backtick `` `code` `` span wrapped in dollars, `` $`\frac{a}{b}`$ ``, is inline LaTeX math (the expression holds no backtick, so `` $`x` and `y`$ `` is two code spans between dollars, and `` $` `$ `` fails the build as empty), and a `math` block (`{type: math, expression: '\sum_{i=1}^{n} x_i'}`) is display math on its own line. skaldr converts both to MathML when the page builds, so the page needs no script or font to show them. An expression the converter cannot read fails the build naming it, and so do an unknown command (a typo like `\simga`, a misspelt font like `\mathbbb{R}`, a command latex2mathml lacks like `\mathcolor`, or a backslash before a character no command uses, like `\<`), a fraction, stack, root or script missing a part (`\frac{a}`, `\overset{a}`, `\displaystyle_a`), an environment latex2mathml does not define (`aligned`, `equation`, or a typo like `pmatrx`; `matrix`, `pmatrix`, `bmatrix`, `cases`, `array`, `split` and `align` are defined), a colour that CSS Color Level 4 does not parse, or that holds a CSS comment or an unclosed parenthesis (`\color{simga}`; a name like `red` or `rebeccapurple`, `transparent`, `currentColor`, a hex value like `#f00`, `#ff0000` or `#ff000080`, and a function like `rgb(255,0,0)`, `hsl(0 100% 50%)` or `oklch(0.6 0.2 30)` are all colours in `\color` and `\textcolor`; `\colorbox` and `\fcolorbox` drop the spaces, and everything after a `%`, from their colours, so give those two a name, a hex value, or the comma form `rgb(255,0,0)`), a command that sets an attribute MathML has no use for (`\href`, `\class`, `\style`), and `$$`, which would end the Notion export's equation early (write `\$\$` for literal dollars). A backslash inside `\text{…}` is literal text. An entity typed there shows as typed when it is a named entity (`&lt;`), a decimal one (`&#60;`), a hex one with a capital X (`&#X3C;`), or a hex one without its closing semicolon (`&#x3C`). A hex entity written `&#x3C;` decodes to its character, as `\unicode{x3C}` does, and shows as U+FFFD instead when its code point is past U+10FFFF, a surrogate (U+D800 to U+DFFF), a control character other than tab and newline (U+0000 to U+001F and U+007F to U+009F), or a noncharacter (U+FDD0 to U+FDEF, or one ending in FFFE or FFFF such as U+FFFE or U+10FFFF). A lone `$` in prose, like `costs $5`, stays text. In YAML, single-quote an expression so its backslashes reach skaldr unchanged.
 
 **Same-page anchor links.** `[label](#slug)` jumps to a heading or section on the same page. The
-`slug` is the heading text lowercased with non-alphanumerics turned to `-` (so `## Count pipeline` →
-`#count-pipeline`); duplicates get a `-2` suffix, matching the TOC. A `#slug` that names no heading or
-section **fails the build**, so a dangling in-page link never ships.
+`slug` is the heading text lowercased with every run of characters that are not letters, digits or
+combining marks turned to `-` (so `## Count pipeline` → `#count-pipeline`, and `## Über uns` →
+`#über-uns`; letters, digits and marks from any script are kept); duplicates get a `-2` suffix,
+matching the TOC. A slug that would equal an id the page itself uses (`skaldr-source`, `sc-menu`, or
+`ref-<key>` and `fnref-<key>` for a reference key) gets the suffix too, and an author `id` equal to
+one fails the build. A `#slug` that names no heading or section **fails the build**, so a dangling
+in-page link never ships.
 
 **Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL,
 never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a valid anchor and
@@ -726,8 +737,9 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
   so a case never sets both.
 - **`command_note`** says why the command is shaped the way it is. The `verdict` stays about what came
   back.
-- **"Copy + capture"** pipes the output to the clipboard. A multi-line command is wrapped in `{ … }`
-  first, so the capture takes all of it. Plain Copy is always the command byte for byte.
+- **"Copy + capture"** pipes the output to the clipboard. Every command, one line or many, is wrapped
+  in `{` and `}` on lines of their own first, so the capture takes the output of all of it, including
+  `a; b` and a line that ends in a `# comment`. Plain Copy is always the command byte for byte.
 
 **A verification document** (numbered claims a reader re-runs to check them for themselves) is a page
 of these blocks. Put each claim in its own `request`, with the finding as the first case and each
@@ -835,6 +847,8 @@ be unique across the whole page (an unknown key stays literal so a typo shows). 
 block after the prose that cites it, so each source gets a backlink to its citation. Reach for it
 when prose needs to cite sources; for a bare link inside a sentence use a `[text](url)` markdown
 link instead.
+
+A reference's `url`, like a swimlane step's, must be a well-formed `http`, `https` or `mailto` URL: one with no host (`https://`), any whitespace, a `mailto:` with no address, or a port past 65535 fails the build naming it. Write a space in a path as `%20`. The page links to the URL exactly as you wrote it.
 
 ```yaml
 - type: text
@@ -1012,7 +1026,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
 | a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
-| a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour | numbered items whose first marker is the start number (unverified in Notion) |
+| a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs |
@@ -1031,6 +1045,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
 | `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
+| an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is not split: it stays whole in a file of its own, and the command prints a warning naming it. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.

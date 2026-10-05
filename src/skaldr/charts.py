@@ -56,10 +56,13 @@ def _nice_max(value: float) -> float:
     return float(10 * magnitude)
 
 
+_TICK_UNITS: tuple[tuple[float, str], ...] = ((1e9, "B"), (1e6, "M"), (1e3, "k"))
+
+
 def _tick(value: float) -> str:
-    """Compact axis-tick text: 1500 → '1.5k', 2000 → '2k', 250 → '250'."""
-    if value >= 1000:
-        return f"{value / 1000:g}k"
+    for size, suffix in _TICK_UNITS:
+        if value >= size:
+            return f"{value / size:g}{suffix}"
     return f"{value:g}"
 
 

@@ -1,4 +1,5 @@
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,31 @@ def test_install_plan_rule_refreshes_the_block_in_place(
     assert refreshed.count("Working plans as live skaldr docs") == 1
 
 
+def test_install_plan_rule_writes_through_a_symlinked_claude_md_and_keeps_its_mode(tmp_path: Path) -> None:
+    (tmp_path / ".claude").mkdir()
+    dotfiles_copy = tmp_path / "dotfiles" / "CLAUDE.md"
+    dotfiles_copy.parent.mkdir()
+    dotfiles_copy.write_text("# My global rules\n", encoding="utf-8")
+    dotfiles_copy.chmod(0o600)
+    md_path = tmp_path / ".claude" / "CLAUDE.md"
+    md_path.symlink_to(dotfiles_copy)
+
+    assert install_plan_rule(home=tmp_path) == 0
+
+    rule = (package_path("skill") / "plan-rule.md").read_text(encoding="utf-8").rstrip()
+    assert (
+        md_path.is_symlink(),
+        dotfiles_copy.read_text(encoding="utf-8"),
+        stat.S_IMODE(dotfiles_copy.stat().st_mode),
+        sorted(path.name for path in (tmp_path / ".claude").iterdir()),
+    ) == (
+        True,
+        f"# My global rules\n\n{_PLAN_RULE_BEGIN}\n{rule}\n{_PLAN_RULE_END}\n",
+        0o600,
+        ["CLAUDE.md"],
+    )
+
+
 def test_install_plan_rule_places_existing_content_before_the_block(tmp_path: Path) -> None:
     # The managed block must be appended AFTER the user's own content, never prepended over it.
     (tmp_path / ".claude").mkdir()
@@ -347,14 +373,14 @@ def test_install_plan_rule_leaves_claude_md_intact_when_the_write_fails(
     (tmp_path / ".claude").mkdir()
     md_path = tmp_path / ".claude" / "CLAUDE.md"
     md_path.write_text("precious content\n", encoding="utf-8")
-    real_write_text = Path.write_text
+    real_write_bytes = Path.write_bytes
 
-    def failing_write_text(self: Path, *args: object, **kwargs: object) -> int:
-        if self.name.endswith(".skaldr-tmp"):
+    def failing_staged_write(self: Path, data: bytes) -> int:
+        if self.parent.name.startswith(".skaldr-write-"):
             raise OSError("No space left on device")
-        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_write_bytes(self, data)
 
-    monkeypatch.setattr(Path, "write_text", failing_write_text)
+    monkeypatch.setattr(Path, "write_bytes", failing_staged_write)
 
     rc = install_plan_rule(home=tmp_path)
 
@@ -452,6 +478,23 @@ def test_sync_refreshes_a_drifted_installed_skill(
     assert "refreshed the 'skaldr' skill" in capsys.readouterr().err  # announced on stderr
 
 
+def test_sync_keeps_the_mode_of_the_skill_it_refreshes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_sync(monkeypatch)
+    dest = _install(tmp_path)
+    dest.write_text("# stale\n", encoding="utf-8")
+    dest.chmod(0o600)
+
+    sync_installed_skills(home=tmp_path)
+
+    assert (dest.read_bytes(), stat.S_IMODE(dest.stat().st_mode), sorted(dest.parent.iterdir())) == (
+        _BUNDLED_SKALDR_SKILL,
+        0o600,
+        [dest],
+    )
+
+
 def test_sync_is_a_no_op_and_silent_when_already_up_to_date(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -525,7 +568,8 @@ def test_sync_never_raises_on_a_permission_error(tmp_path: Path, monkeypatch: py
     _enable_sync(monkeypatch)
     dest = _install(tmp_path)
     dest.write_text("# stale\n", encoding="utf-8")  # drifted → sync will try to rewrite
-    dest.parent.chmod(0o555)  # read-only dir → the atomic write can't create its temp file
+    dest.chmod(0o444)
+    dest.parent.chmod(0o555)
 
     try:
         sync_installed_skills(home=tmp_path)  # must swallow the PermissionError, not raise
@@ -560,7 +604,8 @@ def test_sync_isolates_a_failing_skill_from_the_rest(tmp_path: Path, monkeypatch
     reflect_file = tmp_path / ".claude" / "skills" / "skaldr-reflect" / "SKILL.md"  # later in the list
     (skaldr_dir / "SKILL.md").write_text("# stale\n", encoding="utf-8")
     reflect_file.write_text("# stale\n", encoding="utf-8")
-    skaldr_dir.chmod(0o555)  # skaldr's refresh will fail
+    (skaldr_dir / "SKILL.md").chmod(0o444)
+    skaldr_dir.chmod(0o555)
 
     try:
         sync_installed_skills(home=tmp_path)

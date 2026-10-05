@@ -5,6 +5,7 @@ import pytest
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
+from skaldr.export.lower.prose import code_language
 from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
     Break,
@@ -474,7 +475,7 @@ def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
             {"label": "found", "response": {"status": 200, "body": "[]"}},
         ],
     )
-    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://api.example.com/widgets'"
+    command = "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  https://api.example.com/widgets"
 
     assert lowered([request]) == (
         Paragraph(bold("Read an endpoint")),
@@ -1314,6 +1315,19 @@ def test_a_code_block_language_comes_from_its_label_or_mode(
     assert lowered([{"type": "code", **code}]) == nodes
 
 
+@pytest.mark.parametrize(
+    ("label", "language"),
+    [
+        pytest.param("Deploy.SH", "bash", id="an-upper-case-suffix"),
+        pytest.param("app.Py", "python", id="a-mixed-case-suffix"),
+        pytest.param(None, "", id="no-label"),
+        pytest.param("Makefile", "", id="no-suffix"),
+    ],
+)
+def test_a_code_language_ignores_the_case_of_the_label_suffix(label: str | None, language: str) -> None:
+    assert code_language(label) == language
+
+
 def test_a_quote_and_a_note_keep_their_text() -> None:
     blocks = [
         {"type": "quote", "body": "said\n\nagain", "cite": "Ops"},
@@ -1962,17 +1976,33 @@ def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens
     )
 
 
-def test_three_equal_grid_cells_get_ratios_that_add_up_to_a_hundred() -> None:
+@pytest.mark.parametrize(
+    ("spans", "ratios"),
+    [
+        pytest.param((2, 2, 2), (34, 33, 33), id="three-equal-cells-give-the-one-left-over-to-the-first"),
+        pytest.param((1,) * 6, (17, 17, 17, 17, 16, 16), id="six-equal-cells-spread-the-four-left-over"),
+        pytest.param(
+            (1, 1, 1, 3), (17, 17, 16, 50), id="unequal-cells-give-the-left-over-to-the-largest-remainders"
+        ),
+    ],
+)
+def test_grid_cells_get_largest_remainder_ratios_that_add_up_to_a_hundred(
+    spans: tuple[int, ...], ratios: tuple[int, ...]
+) -> None:
+    bodies = "abcdef"[: len(spans)]
     grid = {
         "type": "grid",
-        "cells": [{"span": 2, "blocks": [{"type": "text", "body": body}]} for body in "abc"],
+        "cells": [
+            {"span": span, "blocks": [{"type": "text", "body": body}]}
+            for span, body in zip(spans, bodies, strict=True)
+        ],
     }
 
     assert lowered([grid]) == (
         Columns(
             tuple(
                 GridColumn(ratio, (Paragraph((Plain(body),)),))
-                for ratio, body in zip((33, 33, 34), "abc", strict=True)
+                for ratio, body in zip(ratios, bodies, strict=True)
             )
         ),
     )

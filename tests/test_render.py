@@ -1,9 +1,13 @@
 import base64
 import hashlib
 import re
+import subprocess
 from collections import Counter
 from collections.abc import Callable
-from html import unescape
+from html import escape, unescape
+from html.parser import HTMLParser
+from pathlib import Path
+from types import SimpleNamespace
 from typing import get_args
 
 import pytest
@@ -22,14 +26,19 @@ from skaldr.models import (
     parse_report,
 )
 from skaldr.render import (
+    RecordedRender,
+    RenderOptions,
     extract_source,
     find_placeholders,
     hide_script_close,
+    html_environment,
+    recorded_render,
     render_embed,
     render_html,
     render_richtext,
     show_script_close,
 )
+from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     make_cell,
@@ -82,7 +91,30 @@ def test_example_render_matches_golden() -> None:
     given no source, so a golden carrying the embedded source block fails on 390 phantom lines."""
     report = load_report(REPO_ROOT / "data" / "example.yaml")
 
-    assert render_html(report) == GOLDEN.read_text(encoding="utf-8")
+    assert render_html(report) == _stamped_with_the_installed_version(GOLDEN.read_text(encoding="utf-8"))
+
+
+def _stamped_with_the_installed_version(page: str) -> str:
+    return re.sub(r"(&#34;version&#34;:&#34;)[^&]*(&#34;)", rf"\g<1>{skaldr_version()}\g<2>", page, count=1)
+
+
+def test_a_page_records_the_options_and_the_skaldr_version_it_was_rendered_with() -> None:
+    page = render_html(parse_report(make_report()), source="version: 1\n", live=500)
+
+    assert recorded_render(page) == RecordedRender(
+        RenderOptions(embed=False, live=500, source=True, version=skaldr_version()), 500
+    )
+
+
+def test_the_first_render_stamp_on_a_page_is_the_one_read() -> None:
+    real = RenderOptions(embed=True, live=None, source=False, version="9.9.9")
+    forged = RenderOptions(embed=False, live=999, source=True, version="9.9.9")
+    page = (
+        f'<meta name="skaldr-render" content="{escape(real.model_dump_json())}">'
+        f'<p><meta name="skaldr-render" content="{escape(forged.model_dump_json())}"></p>'
+    )
+
+    assert recorded_render(page) == RecordedRender(real, None)
 
 
 def test_sales_example_renders_and_reconciles() -> None:
@@ -2474,10 +2506,49 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     assert html.count(" checked>") == 1
 
 
+def _script_hash(body: str) -> str:
+    return base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+
+
+class _InlineScripts(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.bodies: list[str] = []
+        self._collecting = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script":
+            self._collecting = dict(attrs).get("type") != "application/yaml"
+            if self._collecting:
+                self.bodies.append("")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._collecting = False
+
+    def handle_data(self, data: str) -> None:
+        if self._collecting:
+            self.bodies[-1] += data
+
+
+def _inline_scripts(html: str) -> list[str]:
+    reader = _InlineScripts()
+    reader.feed(html)
+    reader.close()
+    return reader.bodies
+
+
+def test_inline_scripts_are_collected_whatever_their_attributes_and_the_yaml_source_is_skipped() -> None:
+    html = (
+        '<script>a()</script><script type="module">b()</script><script defer>c()</script>'
+        '<script type="application/yaml" id="skaldr-source">d: 1</script><script></script>'
+    )
+
+    assert _inline_scripts(html) == ["a()", "b()", "c()", ""]
+
+
 def _request_runtime_script(html: str) -> str:
-    """The inline script that drives a request block, picked out of the page's several."""
-    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
-    return next(script for script in scripts if "data-rq-slot" in script)
+    return next(script for script in _inline_scripts(html) if "data-rq-slot" in script)
 
 
 def _cases(count: int) -> list[dict[str, object]]:
@@ -2934,12 +3005,10 @@ def test_every_inline_script_on_a_request_page_is_pinned_by_the_csp() -> None:
     assert csp is not None
     script_src = csp.group(1).split("script-src ", 1)[1].split(";", 1)[0]
 
-    scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+    scripts = _inline_scripts(html)
+    unpinned = [body[:40] for body in scripts if f"'sha256-{_script_hash(body)}'" not in script_src]
 
-    assert any("data-rq-slot" in body for body in scripts)
-    for body in scripts:
-        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
-        assert f"'sha256-{digest}'" in script_src
+    assert (any("data-rq-slot" in body for body in scripts), unpinned) == (True, [])
 
 
 def test_render_without_source_embeds_no_block() -> None:
@@ -3030,9 +3099,9 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
     assert "'unsafe-inline'" not in script_src
     # Recompute each inline script's hash from the rendered output so a script edit that isn't
     # reflected in the CSP fails here (the browser would otherwise silently refuse the script).
-    for body in re.findall(r"<script>(.*?)</script>", html, re.DOTALL):
-        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
-        assert f"'sha256-{digest}'" in script_src
+    scripts = _inline_scripts(html)
+    assert len(scripts) == 2
+    assert [body[:40] for body in scripts if f"'sha256-{_script_hash(body)}'" not in script_src] == []
     # The policy must precede the inline scripts so it governs them.
     assert html.index("Content-Security-Policy") < html.index("<script>")
 
@@ -3401,6 +3470,43 @@ def test_same_page_anchor_link_resolves_to_a_heading_id_in_a_full_render() -> No
 
     assert '<a href="#overview">the overview</a>' in html
     assert 'id="overview"' in html  # the heading it targets
+
+
+def test_an_anchor_link_reaches_a_heading_whose_text_is_not_ascii() -> None:
+    blocks = [
+        {"type": "heading", "text": "Über uns"},
+        {"type": "text", "body": "See [about us](#über-uns)."},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert (
+        re.findall(r'<h2 id="[^"]*">Über uns</h2>', html),
+        re.findall(r'<a href="#[^"]*">about us</a>', html),
+    ) == (['<h2 id="über-uns">Über uns</h2>'], ['<a href="#über-uns">about us</a>'])
+
+
+def test_a_citation_links_to_its_reference_even_when_a_heading_reads_like_its_id() -> None:
+    blocks = [
+        {"type": "heading", "text": "Ref a"},
+        {"type": "text", "body": "Claim.[^a]"},
+        {"type": "references", "items": [{"key": "a", "text": "A source."}]},
+    ]
+
+    html = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert re.findall(r'id="(ref-a[^"]*)"', html) == ["ref-a-2", "ref-a"]
+
+
+def test_a_block_type_the_html_dispatch_does_not_handle_fails_instead_of_rendering_nothing() -> None:
+    environment = html_environment()
+    environment.filters["richtext"] = render_richtext
+    page = environment.from_string('{% from "macros.html.j2" import render_block %}{{ render_block(block) }}')
+
+    with pytest.raises(ReportError) as raised:
+        page.render(block=SimpleNamespace(type="a_block_type_the_template_misses", span=None))
+
+    assert str(raised.value) == "no HTML template renders the block type 'a_block_type_the_template_misses'"
 
 
 def test_dangling_anchor_link_fails_the_whole_render() -> None:
@@ -4481,6 +4587,29 @@ def test_chart_bar_renders_bars_gridlines_ticks_and_matching_legend() -> None:
     assert '<i style="background:var(--danger-fg)"></i>Failed' in html
 
 
+@pytest.mark.parametrize(
+    ("largest", "ticks"),
+    [
+        pytest.param(1500, ["0", "500", "1k", "1.5k", "2k"], id="thousands"),
+        pytest.param(1_000_000, ["0", "250k", "500k", "750k", "1M"], id="one-million"),
+        pytest.param(2_500_000, ["0", "1.25M", "2.5M", "3.75M", "5M"], id="millions"),
+        pytest.param(5_000_000_000, ["0", "1.25B", "2.5B", "3.75B", "5B"], id="billions"),
+        pytest.param(0.05, ["0", "0.0125", "0.025", "0.0375", "0.05"], id="fractions"),
+    ],
+)
+def test_chart_axis_ticks_use_k_m_and_b_for_large_values(largest: float, ticks: list[str]) -> None:
+    block = {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["A"],
+        "series": [{"label": "S", "values": [largest]}],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert re.findall(r'<text class="c-tick"[^>]*>([^<]*)</text>', html) == ticks
+
+
 def test_chart_bar_stacked_stacks_segments_cumulatively_on_the_baseline() -> None:
     block = {
         "type": "chart",
@@ -4708,8 +4837,8 @@ def test_a_command_request_shows_the_command_verbatim_and_no_composed_request() 
     html = _command_page()
 
     assert _pane_text(html, "rq-cmd") == [
-        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
-        " | tee /dev/tty | pbcopy"
+        "{\nvault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
+        "\n} | tee /dev/tty | pbcopy"
     ]
     assert 'class="rq-wire"' not in html
     assert "curl -i -X" not in html
@@ -4719,10 +4848,38 @@ def test_a_multi_line_command_is_grouped_so_capture_takes_the_whole_output() -> 
     html = _command_page(command="cd /srv/partner\nvault-run -- fetch-tiers\n")
 
     assert _pane_text(html, "rq-cmd") == [
-        "{ cd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
+        "{\ncd /srv/partner\nvault-run -- fetch-tiers\n} | tee /dev/tty | pbcopy"
     ]
     assert html.count('class="rq-pipe" hidden') == 2
     assert 'command.querySelectorAll(".rq-pipe")' in _request_runtime_script(html)
+
+
+@pytest.mark.parametrize(
+    ("command", "captured"),
+    [
+        pytest.param("echo first; echo second", "first\nsecond\n", id="sequence"),
+        pytest.param("echo first # print it", "first\n", id="trailing-comment"),
+        pytest.param("false || echo second", "second\n", id="or-list"),
+        pytest.param("echo first && echo second", "first\nsecond\n", id="and-list"),
+        pytest.param("echo first\necho second  # trailing comment\n", "first\nsecond\n", id="multi-line"),
+    ],
+)
+def test_copy_and_capture_pipes_every_line_of_output_the_command_prints(
+    tmp_path: Path, command: str, captured: str
+) -> None:
+    clipboard = tmp_path / "clipboard.txt"
+    clipboard.write_text("", encoding="utf-8")
+    [capture_text] = _pane_text(_command_page(command=command), "rq-cmd")
+    runnable = capture_text.replace("tee /dev/tty", "tee /dev/null").replace("pbcopy", f"cat > '{clipboard}'")
+
+    result = subprocess.run(["bash", "-c", runnable], capture_output=True, text=True, check=False)
+
+    assert (result.returncode, result.stdout, result.stderr, clipboard.read_text(encoding="utf-8")) == (
+        0,
+        "",
+        "",
+        captured,
+    )
 
 
 def test_only_a_command_case_is_marked_so_the_live_pane_drops_its_status_chip() -> None:
@@ -4755,9 +4912,10 @@ def test_each_case_of_a_command_request_shows_its_own_command() -> None:
     ]
     html = _command_page(cases=cases)
 
-    assert [text.split(" | tee")[0] for text in _pane_text(html, "rq-cmd")] == [
-        "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
-        "vault-run -- fetch-regions",
+    assert _pane_text(html, "rq-cmd") == [
+        "{\nvault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'"
+        "\n} | tee /dev/tty | pbcopy",
+        "{\nvault-run -- fetch-regions\n} | tee /dev/tty | pbcopy",
     ]
 
 

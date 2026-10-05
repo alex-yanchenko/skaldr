@@ -30,12 +30,14 @@ import emoji
 import yaml
 from pydantic import (
     AfterValidator,
+    AnyUrl,
     BeforeValidator,
     Discriminator,
     Field,
     StrictBool,
     StringConstraints,
     Tag,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -53,22 +55,37 @@ _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
 # links in render.py and reference `url`s here), so a `javascript:`/`data:text/html:` link can't ship.
 ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:")
+_LINK_URL: TypeAdapter[AnyUrl] = TypeAdapter(AnyUrl)
+
+
+def _url_defect(url: str) -> str | None:
+    if any(character.isspace() for character in url):
+        return "it holds whitespace"
+    try:
+        parsed = _LINK_URL.validate_python(url)
+    except ValidationError as err:
+        return err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
+    if parsed.scheme == "mailto" and not parsed.path:
+        return "it names no address"
+    return None
 
 
 def _require_url_scheme(url: str | None, subject: str) -> None:
     """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
     field so the gate (and message) can't drift; `subject` names the field in the error."""
-    if url is not None and not url.startswith(ALLOWED_URL_SCHEMES):
+    if url is None:
+        return
+    if not url.startswith(ALLOWED_URL_SCHEMES):
         raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
+    defect = _url_defect(url)
+    if defect is not None:
+        raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
 # render.py; both derive from this one class so key-validation and marker-matching can't drift.
 REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 
-# An author-assigned heading/section anchor id: lowercase, hyphen-separated, same shape the auto-slug
-# produces (`_slugify` in compute.py) so a hand-written id and a generated one are indistinguishable
-# as a `#link` target, and no id can introduce a character the auto-slugger never would.
 ANCHOR_ID_PATTERN = SLUG_PATTERN
 
 
@@ -2844,7 +2861,39 @@ def read_text_file(path: Path) -> str:
         raise ReportError(f"could not read {path}: {err}") from err
 
 
+def _first_unencodable(text: str) -> str | None:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as err:
+        return f"U+{ord(text[err.start]):04X}"
+    return None
+
+
+def _refuse_unencodable_text(data: object, location: tuple[str, ...]) -> None:
+    where = ".".join(location)
+    prefix = f"invalid content data: {where}: " if where else "invalid content data: "
+    if isinstance(data, str):
+        code_point = _first_unencodable(data)
+        if code_point is not None:
+            raise ReportError(f"{prefix}{code_point} is a lone surrogate, which a page cannot hold")
+        return
+    if isinstance(data, Mapping):
+        for key, value in cast("Mapping[object, object]", data).items():
+            key_code_point = _first_unencodable(key) if isinstance(key, str) else None
+            if key_code_point is not None:
+                raise ReportError(
+                    f"{prefix}the key {key!r} holds {key_code_point}, a lone surrogate, "
+                    "which a page cannot hold"
+                )
+            _refuse_unencodable_text(value, (*location, str(key)))
+        return
+    if isinstance(data, list | tuple):
+        for index, item in enumerate(cast("Sequence[object]", data)):
+            _refuse_unencodable_text(item, (*location, str(index)))
+
+
 def parse_report(data: Any) -> Report:
+    _refuse_unencodable_text(data, ())
     try:
         return Report.model_validate(data)
     except ValidationError as err:
@@ -2857,7 +2906,7 @@ def parse_report(data: Any) -> Report:
 _MAX_INCLUDE_DEPTH = 50
 
 
-def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
+def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: list[Path]) -> Any:
     """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
     of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
     so a fragment set can move as a unit. `ancestors` is the chain of files currently being loaded —
@@ -2872,6 +2921,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
         raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
     text = read_text_file(path)
+    loaded.append(resolved)
 
     class _IncludeLoader(yaml.SafeLoader):
         """SafeLoader subclass — `!include` scoped to this file's dir; keeps `yaml.load` safe."""
@@ -2884,7 +2934,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
             raise ReportError(f"!include in {path} needs a file path")
         if Path(target).is_absolute():
             raise ReportError(f"!include in {path} must be a relative path, not absolute: {target}")
-        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved))
+        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved), loaded)
 
     _IncludeLoader.add_constructor("!include", _construct_include)
     try:
@@ -2894,5 +2944,11 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
 
 
 def load_report(path: Path) -> Report:
-    data = _load_yaml_with_includes(path, ())
+    data = _load_yaml_with_includes(path, (), [])
     return parse_report(data)
+
+
+def content_files(path: Path) -> tuple[Path, ...]:
+    loaded: list[Path] = []
+    _load_yaml_with_includes(path, (), loaded)
+    return tuple(loaded)

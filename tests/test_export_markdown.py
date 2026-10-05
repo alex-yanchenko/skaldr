@@ -220,9 +220,19 @@ def test_a_backslash_in_a_link_target_stays_a_backslash_like_the_html_href() -> 
 @pytest.mark.parametrize(
     ("url", "written"),
     [
-        pytest.param("https://e.com/a?q=1#top", "https://e.com/a?q=1#top", id="plain-url"),
         pytest.param("https://e.com/a\n\n# Injected", "https://e.com/a%0A%0A#%20Injected", id="line-breaks"),
         pytest.param("https://e.com/\ta\r<b>", "https://e.com/%09a%0D%3Cb%3E", id="tab-cr-and-angles"),
+    ],
+)
+def test_a_link_target_holding_whitespace_is_percent_encoded(url: str, written: str) -> None:
+    assert render_markdown([Paragraph((Link((Plain("x"),), url),))]) == f"[x]({written})\n"
+
+
+@pytest.mark.parametrize(
+    ("url", "written"),
+    [
+        pytest.param("https://e.com/a?q=1#top", "https://e.com/a?q=1#top", id="plain-url"),
+        pytest.param("https://e.com/a<b>", "https://e.com/a%3Cb%3E", id="angles"),
     ],
 )
 def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(
@@ -571,6 +581,37 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert markdown_of([block]) == markdown
+
+
+@pytest.mark.parametrize(
+    ("blocks", "markdown"),
+    [
+        pytest.param(
+            [
+                {
+                    "type": "list",
+                    "style": "number",
+                    "start": 999_999_999,
+                    "items": ["a", {"text": "b", "items": ["c"]}],
+                }
+            ],
+            "999999999. a\n999999999. b\n           1. c\n",
+            id="items-past-nine-digits-repeat-the-largest-marker",
+        ),
+        pytest.param(
+            [
+                {"type": "list", "items": ["x"]},
+                {"type": "list", "style": "number", "start": 999_999_998, "items": ["a", "b", "c"]},
+            ],
+            "- x\n\n999999998. a\n999999999. b\n999999999. c\n",
+            id="the-last-nine-digit-marker-counts-on-and-the-next-repeats-it",
+        ),
+    ],
+)
+def test_a_numbered_list_never_writes_a_marker_longer_than_nine_digits(
+    blocks: list[dict[str, object]], markdown: str
+) -> None:
+    assert markdown_of(blocks) == markdown
 
 
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:

@@ -4,6 +4,7 @@ from itertools import chain
 from typing_extensions import assert_never
 
 from skaldr import compute, models
+from skaldr.export.apportion import apportioned
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, lowering_for, spaced
 from skaldr.export.lower.diagrams import lower_chart, lower_fan, lower_flow
@@ -48,6 +49,7 @@ from skaldr.export.tree import (
 )
 
 SECTION_HEADING_LEVEL = 2
+COLUMN_RATIO_TOTAL = 100
 
 
 def lower_report(report: models.Report) -> LoweredDocument:
@@ -186,12 +188,6 @@ def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth
     return [Paragraph(bold(block.title)), *children]
 
 
-def _column_ratios(spans: Sequence[int]) -> list[int]:
-    total = sum(spans)
-    ratios = [round(span / total * 100) for span in spans]
-    return [*ratios[:-1], 100 - sum(ratios[:-1])]
-
-
 def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int) -> list[Node]:
     cell_nodes: list[tuple[Node, ...]] = []
     for cell in block.cells:
@@ -199,7 +195,7 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
         cell_nodes.append((Callout(cell.tone, children),) if cell.tone else children)
     if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
         return [node for children in cell_nodes for node in children]
-    ratios = _column_ratios([cell.span for cell in block.cells])
+    ratios = apportioned([cell.span for cell in block.cells], COLUMN_RATIO_TOTAL)
     return [
         Columns(
             tuple(GridColumn(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True))

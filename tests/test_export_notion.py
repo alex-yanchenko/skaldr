@@ -7,11 +7,11 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
+from skaldr.export.apportion import apportioned
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
     NotionChunks,
-    apportioned_pixels,
     chunk_notion,
     notion_inline,
     render_notion,
@@ -46,7 +46,7 @@ from skaldr.models import (
     parse_report,
     walk_blocks,
 )
-from skaldr.richtext import AnchorLink, Citation, Placeholder, Plain, ScriptText, parse_rich
+from skaldr.richtext import AnchorLink, Citation, Code, Placeholder, Plain, ScriptText, parse_rich
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -57,6 +57,7 @@ from tests.factories import (
     make_command_request,
     make_label_table,
     make_report,
+    make_section,
     make_table,
     make_toggle,
     notion_of,
@@ -89,6 +90,7 @@ def _section_text(title: str, body: str, rows: int) -> str:
         pytest.param("edit README.md first", "edit `README.md` first", id="markdown-file"),
         pytest.param("run scripts/setup.sh:12", "run `scripts/setup.sh:12`", id="shell-file-with-line"),
         pytest.param("see app.py", "see `app.py`", id="python-file"),
+        pytest.param("see app.py:10-20 now", "see `app.py:10-20` now", id="file-with-a-line-range"),
         pytest.param("`notes.md` stays one span", "`notes.md` stays one span", id="already-code"),
         pytest.param("a readme file", "a readme file", id="no-extension"),
     ],
@@ -103,6 +105,75 @@ def test_notion_special_characters_are_escaped_in_text_but_not_in_code_or_link_u
     assert notion_inline(parse_rich(text)) == (
         r"cost \$5 \[x\] \<y\> \{z\} a\|b 2\^3 \~n c:\\d and `a|b [c]` via [x\|y](https://example.com/a_b?q=[1])"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param(
+            'mid line {color="red"} here', 'mid line \\{color\\="red"\\} here', id="a-block-color-attribute"
+        ),
+        pytest.param("a = b", "a \\= b", id="a-spaced-equals-sign"),
+        pytest.param(
+            "`x = 1` and [q](https://e.com/?a=1)",
+            "`x = 1` and [q](https://e.com/?a=1)",
+            id="code-and-link-url",
+        ),
+    ],
+)
+def test_an_equals_sign_is_escaped_so_notion_reads_no_block_attribute(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param("ship \\_\\_init\\_\\_ now", "ship \\_\\_init\\_\\_ now", id="a-dunder-name"),
+        pytest.param("a \\_private\\_ name", "a \\_private\\_ name", id="a-name-in-underscores"),
+        pytest.param("snake_case", "snake\\_case", id="an-underscore-inside-a-word"),
+        pytest.param("edit my_file.py", "edit `my_file.py`", id="a-file-name-is-code-and-escaped-once"),
+        pytest.param("see \\_\\_init\\_\\_.py", "see `__init__.py`", id="a-dunder-file-name-is-code"),
+        pytest.param("ship __init__ now", "ship **init** now", id="bare-double-underscores-are-bold"),
+        pytest.param("a _private_ name", "a *private* name", id="bare-single-underscores-are-italic"),
+        pytest.param(
+            "`a_b` via [x_y](https://e.com/a_b)",
+            "`a_b` via [x\\_y](https://e.com/a_b)",
+            id="code-and-link-url",
+        ),
+    ],
+)
+def test_an_underscore_is_escaped_so_notion_reads_no_emphasis(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("block", "notion"),
+    [
+        pytest.param(
+            make_table([{"key": "a", "label": "a_b"}], rows=[{"a": "x = \\_\\_init\\_\\_"}]),
+            '<table fit-page-width="true" header-row="true">\n'
+            "\t<tr>\n\t\t<td>**a\\_b**</td>\n\t</tr>\n"
+            "\t<tr>\n\t\t<td>x \\= \\_\\_init\\_\\_</td>\n\t</tr>\n"
+            "</table>\n",
+            id="a-table-cell-and-header",
+        ),
+        pytest.param({"type": "heading", "text": "a = _b_"}, "## a \\= \\_b\\_\n", id="a-heading"),
+        pytest.param(
+            make_toggle(title="x = _y_"),
+            "<details>\n<summary>x \\= \\_y\\_</summary>\n\tx\n</details>\n",
+            id="a-toggle-title",
+        ),
+        pytest.param(
+            make_section("s", title="x = _y_", collapsed=True),
+            '## x \\= \\_y\\_ {toggle="true"}\n\tx\n',
+            id="a-heading-toggle-title",
+        ),
+    ],
+)
+def test_an_equals_sign_and_an_underscore_are_escaped_in_every_notion_text_container(
+    block: dict[str, object], notion: str
+) -> None:
+    assert notion_of([block]) == notion
 
 
 def test_inline_runs_become_notion_spans() -> None:
@@ -166,7 +237,7 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
             id="color-around-highlight",
         ),
         pytest.param(
-            "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone=info\\}", id="no-span-stays-prose"
+            "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone\\=info\\}", id="no-span-stays-prose"
         ),
         pytest.param(
             "[[a]{tone=danger}](https://x.io)",
@@ -581,6 +652,52 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
     )
 
 
+@pytest.mark.parametrize(
+    ("cell", "written"),
+    [
+        pytest.param(
+            "close with `</td></tr>` here",
+            "close with \\</td\\>\\</tr\\> here",
+            id="a-closing-tag-is-escaped-text",
+        ),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
+    ],
+)
+def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole(
+    cell: str, written: str
+) -> None:
+    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": cell}])
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        f"\t<tr>\n\t\t<td>{written}</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "notion"),
+    [
+        pytest.param(
+            "[see `</span>` here]{tone=danger}",
+            '<span color="red">see \\</span\\> here</span>',
+            id="a-closing-tag-inside-a-colour-span",
+        ),
+        pytest.param("inline `</callout>` code", "inline \\</callout\\> code", id="a-closing-tag"),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
+        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag-stays-code"),
+        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket-stays-code"),
+    ],
+)
+def test_code_holding_a_closing_tag_is_escaped_text_anywhere(text: str, notion: str) -> None:
+    assert notion_inline(parse_rich(text)) == notion
+
+
+def test_code_holding_a_backtick_is_escaped_text() -> None:
+    assert notion_inline((Code("a`b<i>"),)) == "a\\`b\\<i\\>"
+
+
 def test_a_single_weighted_column_takes_the_whole_page_width() -> None:
     table = make_table([{"key": "a", "label": "A", "width": 3}], rows=[{"a": "x"}])
 
@@ -649,7 +766,7 @@ def test_number_columns_too_many_for_their_default_width_leave_the_label_a_posit
 def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_float_noise(
     shares: list[float],
 ) -> None:
-    assert apportioned_pixels(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
+    assert apportioned(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
 
 
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
@@ -759,7 +876,12 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
 @pytest.mark.parametrize(
     ("options", "notion"),
     [
-        pytest.param({"start": 9}, "9. c\n10. d\n\t1. e\n", id="start-counts-on-and-a-nested-list-from-one"),
+        pytest.param(
+            {"start": 9},
+            "- 9\\. c\n- 10\\. d\n\t1. e\n",
+            id="a-start-past-one-is-bullets-led-by-the-escaped-number-and-a-nested-list-is-native",
+        ),
+        pytest.param({"start": 1}, "1. c\n2. d\n\t1. e\n", id="a-start-of-one-is-native"),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
         pytest.param(
             {"numbering": "letters"}, "- a. c\n- b. d\n\t- a. e\n", id="letters-are-bullets-led-by-the-letter"
@@ -775,6 +897,22 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert notion_of([block]) == notion
+
+
+def test_a_numbered_list_past_nine_digits_keeps_every_number_as_text() -> None:
+    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a", "b"]}
+
+    assert notion_of([block]) == "- 999999999\\. a\n- 1000000000\\. b\n"
+
+
+def test_a_numbered_list_written_as_bullets_is_kept_apart_from_a_bullet_list_after_it() -> None:
+    blocks = [
+        {"type": "list", "style": "number", "start": 3, "items": ["three"]},
+        {"type": "list", "items": ["dot"]},
+        {"type": "list", "style": "number", "items": ["one"]},
+    ]
+
+    assert notion_of(blocks) == "- 3\\. three\n<empty-block/>\n- dot\n1. one\n"
 
 
 def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:
@@ -1256,23 +1394,25 @@ def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
     )
 
 
-def test_a_page_name_that_is_a_symlink_is_replaced_and_its_target_left_alone(tmp_path: Path) -> None:
-    outside = tmp_path / "outside.txt"
-    manifest_listing_the_page = '{"title": "T", "files": ["page.md"]}'
-    outside.write_text(manifest_listing_the_page, encoding="utf-8")
+def test_a_page_name_that_is_a_symlink_gets_the_page_in_its_target_and_stays_a_link(tmp_path: Path) -> None:
+    page_target = tmp_path / "wiki" / "page.md"
+    manifest_target = tmp_path / "wiki" / "manifest.json"
+    page_target.parent.mkdir()
+    page_target.write_text("earlier page", encoding="utf-8")
+    manifest_target.write_text('{"title": "T", "files": ["page.md"]}', encoding="utf-8")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    (out_dir / "page.md").symlink_to(outside)
-    (out_dir / EXPORT_MANIFEST).symlink_to(outside)
+    (out_dir / "page.md").symlink_to(page_target)
+    (out_dir / EXPORT_MANIFEST).symlink_to(manifest_target)
 
     export_notion(parse_report(make_report()), out_dir)
 
     assert (
-        outside.read_text(encoding="utf-8"),
+        page_target.read_text(encoding="utf-8"),
         (out_dir / "page.md").is_symlink(),
-        (out_dir / "page.md").read_text(encoding="utf-8"),
+        json.loads(manifest_target.read_text(encoding="utf-8")),
         (out_dir / EXPORT_MANIFEST).is_symlink(),
-    ) == (manifest_listing_the_page, False, "Hello.\n", False)
+    ) == ("Hello.\n", True, {"title": "Test Report", "files": ["page.md"]}, True)
 
 
 def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:
@@ -1290,14 +1430,14 @@ def test_a_run_that_fails_partway_still_lets_the_next_run_remove_what_it_wrote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(4, "w = 4\n" * 20)))
-    write_text = Path.write_text
+    write_bytes = Path.write_bytes
 
-    def fail_on_the_third_page(path: Path, text: str, encoding: str | None = None) -> int:
+    def fail_on_the_third_page(path: Path, data: bytes) -> int:
         if path.name == "page.02.md":
             raise OSError("disk full")
-        return write_text(path, text, encoding=encoding)
+        return write_bytes(path, data)
 
-    monkeypatch.setattr(Path, "write_text", fail_on_the_third_page)
+    monkeypatch.setattr(Path, "write_bytes", fail_on_the_third_page)
     with pytest.raises(OSError, match="disk full"):
         export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
     monkeypatch.undo()
@@ -1312,14 +1452,14 @@ def test_a_run_that_fails_partway_lists_only_the_pages_it_wrote_beside_the_earli
 ) -> None:
     report = parse_report(make_report(blocks=heading_sections(4, "w = 4\n" * 20)))
     export_notion(report, tmp_path)
-    write_text = Path.write_text
+    write_bytes = Path.write_bytes
 
-    def fail_on_the_second_page(path: Path, text: str, encoding: str | None = None) -> int:
+    def fail_on_the_second_page(path: Path, data: bytes) -> int:
         if path.name == "page.01.md":
             raise OSError("disk full")
-        return write_text(path, text, encoding=encoding)
+        return write_bytes(path, data)
 
-    monkeypatch.setattr(Path, "write_text", fail_on_the_second_page)
+    monkeypatch.setattr(Path, "write_bytes", fail_on_the_second_page)
     with pytest.raises(OSError, match="disk full"):
         export_notion(report, tmp_path, chunk=CHUNK_THAT_SPLITS_EVERY_SECTION)
     monkeypatch.undo()

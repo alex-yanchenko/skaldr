@@ -5,12 +5,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;3.1.0&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
      script-hash test in tests/test_render.py recomputes these from the rendered output: if a
-     script changes, that test fails until the hash below is updated. The third hash is the --live
-     reloader, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
+     script changes, that test fails until the hash below is updated. One of the hashes is the --live
+     reloader's, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
@@ -1403,7 +1404,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <input type="radio" class="rq-pick" name="rq1" id="rq1_0" checked>
 <section class="rq-case" data-rq-case="0" data-rq-command>
 <h4 class="rq-case-hd">NW-04, the finding</h4>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd"><span class="rq-pipe" hidden>{
+</span>vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden>
+} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its output here."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded output</span></div>
@@ -1422,7 +1425,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <input type="radio" class="rq-pick" name="rq1" id="rq1_1">
 <section class="rq-case" data-rq-case="1" data-rq-command>
 <h4 class="rq-case-hd">NW-02, the control</h4>
-<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden> | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
+<div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd"><span class="rq-pipe" hidden>{
+</span>vault-run --env prod -- sh -c &#39;curl -s -H &#34;Authorization: Bearer $WMS_TOKEN&#34; &#34;https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true&#34;&#39; | jq -c &#39;map({bin, gap: (.expected - .counted)})&#39;<span class="rq-pipe" hidden>
+} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre><p class="rq-cnote">The <code>jq</code> computes the gap per bin, so a bin the export double-counted shows up as a negative number.</p></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its output here."></textarea></div></div>
 <div class="rq-live" hidden></div>
 <div class="rq-pane"><div class="rq-pane-hd"><span>Recorded output</span></div>
@@ -1466,7 +1471,7 @@ Content-Type: application/json
 {&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="none">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}</pre></div><div class="rq-pane"><div class="rq-pane-hd"><span>Run this</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button><button type="button" class="rq-copy rq-catch" title="Adds a pipe so the output lands on your clipboard, ready to paste below">Copy + capture</button></span></div><pre class="rq-cmd">curl -i -X POST \
   -H &#39;Content-Type: application/json&#39; \
   --data &#39;{&#34;key&#34;:&#34;<span class="rq-slot" data-rq-slot="api_key" data-rq-quote="shell">&lsaquo;api_key&rsaquo;</span>&#34;,&#34;scope&#34;:&#34;inventory.read&#34;}&#39; \
-  &#39;https://wms.example.com/v2/sessions&#39;<span class="rq-pipe" hidden> \
+  https://wms.example.com/v2/sessions<span class="rq-pipe" hidden> \
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre></div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="Run the command, then paste its whole output here. Include the headers if you kept -i."></textarea></div></div>
 <div class="rq-live" hidden></div>

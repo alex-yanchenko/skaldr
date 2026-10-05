@@ -54,6 +54,7 @@ from skaldr.models import (
     Walkthrough,
     WalkthroughStep,
     badge_color_of,
+    content_files,
     load_report,
     parse_report,
     read_text_file,
@@ -884,6 +885,13 @@ def test_math_parses_to_whole_model() -> None:
             r"Value error, math expression '\simga' uses \simga, which latex2mathml does not know: "
             r"check its spelling, or write \text{...} for literal text",
             id="unknown-command",
+        ),
+        pytest.param(
+            r"\color{color()} x",
+            r"Value error, math expression '\color{color()} x' sets the colour 'color()', which is not a "
+            "CSS colour: write a colour name like red, a hex value like #ff0000, or a colour function like "
+            "rgb(255,0,0)",
+            id="colour-the-css-parser-raises-on",
         ),
     ],
 )
@@ -2712,6 +2720,52 @@ def test_include_resolves_paths_relative_to_each_including_file(tmp_path: Path) 
     ]
 
 
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        pytest.param(
+            make_report(meta={"title": "bad \ud800 title"}),
+            "invalid content data: meta.title: U+D800 is a lone surrogate, which a page cannot hold",
+            id="field",
+        ),
+        pytest.param(
+            make_report(blocks=[{"type": "text", "body": "ok"}, {"type": "list", "items": ["a", "\udfff"]}]),
+            "invalid content data: blocks.1.items.1: U+DFFF is a lone surrogate, which a page cannot hold",
+            id="list-item",
+        ),
+        pytest.param(
+            make_report(badges={"K\udc80": {"label": "L", "tone": "info", "legend": "x"}}),
+            "invalid content data: badges: the key 'K\\udc80' holds U+DC80, a lone surrogate, which a page "
+            "cannot hold",
+            id="mapping-key",
+        ),
+    ],
+)
+def test_a_lone_surrogate_is_refused_naming_where_it_sits(data: dict[str, object], message: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(data)
+
+    assert str(raised.value) == message
+
+
+def test_content_files_lists_the_file_and_every_fragment_it_includes_in_load_order(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "deep.yaml").write_text("- type: text\n  body: deep\n", encoding="utf-8")
+    (shared / "frag.yaml").write_text("!include deep.yaml\n", encoding="utf-8")
+    (tmp_path / "main.yaml").write_text(
+        "version: 1\nmeta:\n  title: T\nblocks: !include shared/frag.yaml\n", encoding="utf-8"
+    )
+
+    files = content_files(tmp_path / "main.yaml")
+
+    assert files == (
+        (tmp_path / "main.yaml").resolve(),
+        (shared / "frag.yaml").resolve(),
+        (shared / "deep.yaml").resolve(),
+    )
+
+
 def test_missing_include_target_is_a_report_error(tmp_path: Path) -> None:
     (tmp_path / "main.yaml").write_text(_MAIN_WITH_INCLUDE, encoding="utf-8")
 
@@ -3932,6 +3986,57 @@ def test_references_rejects_url_with_a_disallowed_scheme() -> None:
     block = {"type": "references", "items": [{"key": "a", "text": "x", "url": "javascript:alert(1)"}]}
     with pytest.raises(ReportError, match=r"'url' must be an http://, https://, or mailto: link"):
         parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize(
+    ("url", "reason"),
+    [
+        pytest.param("https://", "empty host", id="no-host"),
+        pytest.param("http://#frag", "empty host", id="fragment-only"),
+        pytest.param("https://exa mple.com", "it holds whitespace", id="space-in-host"),
+        pytest.param("https://exa<mple.com", "invalid international domain name", id="bad-host"),
+        pytest.param("https://[::1", "invalid IPv6 address", id="broken-ipv6"),
+        pytest.param("https://x.io:99999", "invalid port number", id="port-out-of-range"),
+        pytest.param("https://x.io/a b", "it holds whitespace", id="space-in-path"),
+        pytest.param("https://x.io/a\tb", "it holds whitespace", id="tab-in-path"),
+        pytest.param("https://x.io/\n\n# h", "it holds whitespace", id="newline"),
+        pytest.param("mailto:", "it names no address", id="bare-mailto"),
+        pytest.param("mailto:?subject=hi", "it names no address", id="mailto-with-only-a-query"),
+    ],
+)
+def test_references_rejects_a_malformed_url(url: str, reason: str) -> None:
+    block = {"type": "references", "items": [{"key": "a", "text": "x", "url": url}]}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.references.items.0: "
+        f"Value error, 'url' {url!r} is not a valid URL ({reason})"
+    )
+
+
+def test_a_swimlane_step_url_that_is_malformed_is_refused() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1"],
+        steps=[{"lane": "A", "col": "C1", "n": "1", "label": "x", "url": "https://"}],
+    )
+
+    with pytest.raises(ReportError, match=r"swimlane step url 'https://' is not a valid URL \(empty host\)"):
+        parse_report(make_report(blocks=[block]))
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://x.io", "mailto:ops@example.com", "mailto:ops@example.com?subject=hi", "http://x.io/a%20b"],
+)
+def test_a_valid_url_is_kept_exactly_as_the_author_wrote_it(url: str) -> None:
+    block = {"type": "references", "items": [{"key": "a", "text": "x", "url": url}]}
+
+    report = parse_report(make_report(blocks=[block]))
+
+    assert report.model_dump(mode="json")["blocks"][0]["items"][0]["url"] == url
 
 
 def test_references_requires_at_least_one_item() -> None:
