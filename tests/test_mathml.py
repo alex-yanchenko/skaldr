@@ -10,7 +10,14 @@ from latex2mathml.exceptions import MissingSuperScriptOrSubscriptError
 
 from skaldr import mathml as mathml_module
 from skaldr.errors import ReportError
-from skaldr.mathml import LATEX2MATHML_COMMANDS, MATHML_ATTRIBUTES, MATHML_ELEMENTS, MathDisplay, mathml
+from skaldr.mathml import (
+    COMMANDS_TAKING_LITERAL_TEXT,
+    LATEX2MATHML_COMMANDS,
+    MATHML_ATTRIBUTES,
+    MATHML_ELEMENTS,
+    MathDisplay,
+    mathml,
+)
 
 MATH_OPEN = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">'
 CONVERTER_PREFIX = "latex2mathml cannot convert it ("
@@ -500,6 +507,7 @@ def test_common_commands_emit_only_allowlisted_attributes(expression: str) -> No
         pytest.param(r"\math{x}", r"\math", id="bare-font-prefix"),
         pytest.param(r"a \< b", r"\<", id="backslash-before-a-symbol"),
         pytest.param("x \\", "\\", id="trailing-backslash"),
+        pytest.param(r"\12", r"\1", id="backslash-before-a-number"),
         pytest.param(r"\hspace{\simga}", r"\simga", id="unknown-command-as-a-width"),
         pytest.param(r"\big\langl", r"\langl", id="unknown-command-as-a-delimiter"),
         pytest.param(r"a \[ b", r"\[", id="escaped-bracket-the-converter-leaves-as-written"),
@@ -529,14 +537,92 @@ def test_an_unknown_command_fails_naming_it(expression: str, command: str) -> No
             '<mrow><mi mathvariant="double-struck">R</mi><mi mathvariant="double-struck">R</mi></mrow>',
             id="font-on-a-group",
         ),
-        pytest.param(r"\textbf{\foo}", '<mtext mathvariant="bold">\\foo</mtext>', id="inside-bold-text"),
-        pytest.param(r"\verb|\foo|", '<mtext mathvariant="monospace">\\foo</mtext>', id="inside-verb"),
     ],
 )
-def test_a_command_the_expression_defines_or_one_inside_literal_text_converts(
-    expression: str, markup: str
-) -> None:
+def test_a_command_the_expression_defines_converts(expression: str, markup: str) -> None:
     assert mathml(expression, "inline") == f"{MATH_OPEN}<mrow>{markup}</mrow></math>"
+
+
+@dataclass(frozen=True)
+class LiteralArgumentCase:
+    expression: str
+    outcome: str
+
+
+def _literal_text(command: str, markup: str) -> LiteralArgumentCase:
+    return LiteralArgumentCase(f"{command}{{\\foo}}", f"{MATH_OPEN}<mrow>{markup}</mrow></math>")
+
+
+def _literal_attribute_value(command: str, attribute: str) -> LiteralArgumentCase:
+    expression = f"{command}{{\\foo}}{{x}}"
+    return LiteralArgumentCase(
+        expression,
+        f"math expression '{expression}' sets the {attribute} attribute, which is not a MathML attribute "
+        r"skaldr renders: leave out \href, \class and \style",
+    )
+
+
+def _literal_colour(command: str) -> LiteralArgumentCase:
+    expression = f"{command}{{\\foo}}{{x}}"
+    return LiteralArgumentCase(
+        expression,
+        f"math expression '{expression}' sets the colour '\\foo', which is not a CSS colour: write a "
+        "colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)",
+    )
+
+
+LITERAL_ARGUMENT_CASES = {
+    r"\clap": _literal_text(
+        r"\clap", '<mpadded lspace="-0.5width" width="0px"><mtext>\\foo</mtext></mpadded>'
+    ),
+    r"\class": _literal_attribute_value(r"\class", "class"),
+    r"\color": _literal_colour(r"\color"),
+    r"\emph": _literal_text(r"\emph", '<mtext mathvariant="italic">\\foo</mtext>'),
+    r"\fbox": _literal_text(r"\fbox", '<menclose notation="box"><mtext>\\foo</mtext></menclose>'),
+    r"\hbox": _literal_text(
+        r"\hbox", '<mstyle displaystyle="false" scriptlevel="0"><mtext>\\foo</mtext></mstyle>'
+    ),
+    r"\href": _literal_attribute_value(r"\href", "href"),
+    r"\llap": _literal_text(r"\llap", '<mpadded lspace="-1width" width="0px"><mtext>\\foo</mtext></mpadded>'),
+    r"\mbox": _literal_text(
+        r"\mbox", '<mstyle displaystyle="false" scriptlevel="0"><mtext>\\foo</mtext></mstyle>'
+    ),
+    r"\rlap": _literal_text(r"\rlap", '<mpadded width="0px"><mtext>\\foo</mtext></mpadded>'),
+    r"\style": _literal_attribute_value(r"\style", "style"),
+    r"\tag": _literal_text(r"\tag", "<mtext>(\\foo)</mtext>"),
+    r"\tag*": _literal_text(r"\tag*", "<mtext>\\foo</mtext>"),
+    r"\text": _literal_text(r"\text", "<mtext>\\foo</mtext>"),
+    r"\textbf": _literal_text(r"\textbf", '<mtext mathvariant="bold">\\foo</mtext>'),
+    r"\textcolor": _literal_colour(r"\textcolor"),
+    r"\textit": _literal_text(r"\textit", '<mtext mathvariant="italic">\\foo</mtext>'),
+    r"\textmd": _literal_text(r"\textmd", "<mtext>\\foo</mtext>"),
+    r"\textnormal": _literal_text(r"\textnormal", "<mtext>\\foo</mtext>"),
+    r"\textrm": _literal_text(r"\textrm", "<mtext>\\foo</mtext>"),
+    r"\textsf": _literal_text(r"\textsf", '<mtext mathvariant="sans-serif">\\foo</mtext>'),
+    r"\texttt": _literal_text(r"\texttt", '<mtext mathvariant="monospace">\\foo</mtext>'),
+    r"\textup": _literal_text(r"\textup", "<mtext>\\foo</mtext>"),
+    r"\verb": LiteralArgumentCase(
+        r"\verb|\foo|", f'{MATH_OPEN}<mrow><mtext mathvariant="monospace">\\foo</mtext></mrow></math>'
+    ),
+}
+
+
+def _outcome(expression: str) -> str:
+    try:
+        return mathml(expression, "inline")
+    except ReportError as error:
+        return str(error)
+
+
+@pytest.mark.parametrize("command", [pytest.param(name, id=name) for name in sorted(LITERAL_ARGUMENT_CASES)])
+def test_a_command_inside_a_literal_argument_is_not_read_as_a_command(command: str) -> None:
+    case = LITERAL_ARGUMENT_CASES[command]
+
+    assert _outcome(case.expression) == case.outcome
+
+
+def test_every_command_taking_literal_text_has_a_literal_argument_case() -> None:
+    assert sorted(LITERAL_ARGUMENT_CASES) == sorted(COMMANDS_TAKING_LITERAL_TEXT)
 
 
 FRACTION_MISSING_A_PART = (
