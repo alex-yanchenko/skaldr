@@ -1,7 +1,7 @@
 # skaldr
 
 Turn **one YAML file** into **one polished, self-contained HTML report page**. You describe *what*
-the report says — findings, tables, a pipeline, the numbers — and skaldr owns *how* it looks:
+the report says (findings, tables, a pipeline, the numbers) and skaldr owns *how* it looks:
 layout, spacing, colour, light/dark, all decided once, here. No design work, no CSS, no drift.
 
 **See it →** [sales pipeline](https://alex-yanchenko.github.io/skaldr/) ·
@@ -27,7 +27,7 @@ skaldr report.yaml                 # → out/report.html
 skaldr report.yaml -o review.html  # choose the output path
 skaldr report.yaml --watch -o review.html  # re-render on every save (live edit→preview; Ctrl-C to stop)
 skaldr report.yaml --pdf report.pdf  # a ready-to-share PDF (drives a headless Chrome/Chromium)
-open review.html                   # a self-contained file — open it, host it, or share it
+open review.html                   # a self-contained file: open it, host it, or share it
 ```
 
 **Live preview without a watcher process.** `--watch` needs a process that stays alive, which an
@@ -49,22 +49,23 @@ The page cannot poll for changes: its own CSP is `default-src 'none'`, which blo
 network request, and a `file://` page could not fetch its own source anyway. So `--live` reloads on
 a signal it already has, which is you looking at the tab.
 
-That's the whole tool: point it at a content file, get an HTML page (or a PDF). A few more commands
-help you write the content file and share the result:
+That's the tool: point it at a content file, get an HTML page, a PDF, or Markdown for GitHub
+or Notion (see `--export` below). A few more commands help you write the content file and share
+the result:
 
 ```bash
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
-skaldr --check reports/*.yaml      # validate a whole set at once — for a pre-commit hook or CI
+skaldr --check reports/*.yaml      # validate a whole set at once, for a pre-commit hook or CI
 skaldr --check report.yaml -o report.html   # gate the render on the check: nothing reaches disk unless it passes
 skaldr --emit-json report.yaml     # print the normalised model as JSON on stdout (for tooling/agents)
 skaldr --extract-source report.html  # recover the YAML source embedded in a render (a file or an http(s) URL)
 ```
 
 For a **PDF**, use `--pdf` (above): it prints the page's print styling with a headless browser you
-already have — the reliable way to a shareable PDF. (Printing a published Artifact doesn't work: it's
+already have, which is the reliable way to a shareable PDF. (Printing a published Artifact doesn't work: it's
 a sandboxed frame the browser flattens to a snapshot, so the print CSS never applies.) `--pdf` needs
 a Chrome/Chromium/Edge on the machine; set `SKALDR_BROWSER` to point at one if it isn't auto-found.
 
@@ -78,14 +79,19 @@ skaldr report.yaml --export notion --chunk 20000   # page.00.md, page.01.md, …
 
 Every block has a Markdown form. Flows, fans, donut charts, and unstacked bar or line charts with one series become Mermaid diagrams, which GitHub and Notion both draw. A chart drawn as a diagram keeps its data table under it, and a donut's table lists each slice's value and share and the total. A chart with several series, or a stacked bar chart, is its data table alone. In GitHub-flavored Markdown a callout is a quote led by an icon, a tab or a collapsed section is a titled block of its content, and a badge is a bold label. The Notion form keeps what Notion has natively: tabs, toggles, columns, callouts and coloured table cells. A Notion page takes its title from the page itself, so the Notion export holds the body only, while the GitHub-flavored file starts with the title as its heading. The folder keeps a `.skaldr-export.json` list of the files skaldr wrote there, and a re-export removes only those an earlier run wrote and this one no longer needs. skaldr only writes the files; it never calls Notion.
 
-There are no styling flags — everything is in the content file.
+There are no styling flags: everything is in the content file.
 
 ## Sign in to Notion and Jira
 
-`skaldr auth` stores the credentials skaldr uses to talk to Notion and Jira. It needs the `publish` extra. The Homebrew formula includes it and runs on Apple silicon and Linux; on an Intel Mac, install with uv or pipx instead:
+`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, and a `publish` block in a content file is read and validated only. `skaldr auth` needs the `publish` extra. The Homebrew formula includes the extra and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
+```
+
+On an Intel Mac, add `--no-build-package cryptography` to the uv command, or `--pip-args='--only-binary=cryptography'` to the pipx one. The newest cryptography releases (49.0.0 onward) publish macOS wheels for Apple silicon only, so without the flag the installer builds cryptography from source, which needs a Rust toolchain and OpenSSL headers. With it, the resolver falls back to cryptography 48.0.1, the newest release with a macOS wheel that runs on Intel (`universal2`).
+
+```bash
 skaldr auth notion                  # OAuth in your browser, through your own Notion connection
 skaldr auth jira                    # your Atlassian account email and an API token
 skaldr auth status                  # who each service is signed in as, and where the credentials live
@@ -104,7 +110,7 @@ Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or
 ```yaml
 version: 1
 meta:
-  title: "Q3 Warehouse Inventory Count — Discrepancies & Fixes"
+  title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"
   subtitle: ["Reconciled review of the 10,000-unit cycle count."]
   source: "WMS export"          # optional; feeds the provenance footer
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
@@ -120,20 +126,30 @@ blocks:
   # … more blocks
 ```
 
-Top level is `version` · `meta` · optional `badges` · `blocks` — nothing else. Every block
-carries a `type` discriminator; the model is a pydantic discriminated union, so an unknown
-type, a field from the wrong block, or an unknown key each fails with a precise
+Top level is `version` · `meta` · `blocks` · optional `badges` · optional `publish`, nothing
+else. Every block carries a `type` discriminator; the model is a pydantic discriminated union, so
+an unknown type, a field from the wrong block, or an unknown key each fails with a precise
 `blocks.3.items.2.value`-style error before anything renders.
 
-**Blocks:** `heading` · `text` · `list` · `fact_strip` · `key_value` · `cards` · `badge_row` ·
-`callout` · `status_list` · `meter` · `table` · `code` · `quote` · `image` · `timeline` ·
-`flow` (a directional pipeline — arrow or step style, optional loop) · `section` (collapsible) ·
-`grid` (bounded 6-column layout, with optional per-cell emphasis panels). The `table` is the
-workhorse — typed columns, grouped subtotals, sub-rows, colour-only `indicator` dots, row-level
-`tone`, and a `reconcile` block that hard-fails the build if the counts don't sum to a declared
-total. Badges are declared once and chip onto table rows, **cards, timeline entries, and flow
-nodes** alike. Prose fields take a small markdown subset (`**bold**`, `*italic*`, `` `code` ``,
-`~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`, `[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math` block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
+**Blocks:** `skaldr --guide` describes each one.
+
+- Prose and metadata: `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` ·
+  `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`
+- Numbers and state: `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` ·
+  `chart` · `comparison` · `matrix` · `timeline`
+- Processes: `flow` (a directional pipeline in arrow or step style, with an optional loop) ·
+  `fan` · `swimlane` · `walkthrough`
+- Recorded calls a reader can re-run: `request` · `request_flow`
+- Layout: `section` (collapsible) · `panel` · `toggle` · `tabs` · `grid` (a bounded 6-column
+  layout, with optional per-cell emphasis panels)
+
+The `table` is the workhorse: typed columns, grouped subtotals, sub-rows, colour-only `indicator`
+dots, row-level `tone`, and a `reconcile` block that hard-fails the build if the counts don't sum
+to a declared total. Badges are declared once and chip onto table rows, **cards, timeline
+entries, and flow nodes** alike. Prose fields take a small markdown subset (`**bold**`,
+`*italic*`, `` `code` ``, `~~strike~~`, links) plus `++underline++`, `H~2~O` and `10^3^`,
+`[text]{tone=danger bg=warning}` colour and highlight, and `` $`x_i`$ `` inline math; a `math`
+block shows a display equation, rendered as MathML at build time. Raw HTML is never interpreted.
 
 Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/skaldr/skill/GUIDE.md)),
 [`data/example.yaml`](data/example.yaml) (a file exercising every block), and
@@ -141,14 +157,14 @@ Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/
 
 ## Guarantees
 
-- **One self-contained file** — inline CSS, system fonts, no external resources; the page
+- **One self-contained file:** inline CSS, system fonts, no external resources; the page
   carries its own `<!doctype>` + `<meta charset>` so it renders correctly from `file://`, any
   static host, or a claude.ai Artifact.
-- **Validation is the product** — structural mistakes fail the build with a field path, never
+- **Validation is the product:** structural mistakes fail the build with a field path, never
   reach the reader's eyes.
-- **Derived, not authored** — number formatting, percentages, subtotals, the legend, the TOC,
+- **Derived, not authored:** number formatting, percentages, subtotals, the legend, the TOC,
   and the provenance footer are all computed, so they can't drift from the data.
-- **Light & dark** — the palette follows the viewer's OS theme; a small corner menu lets the
+- **Light & dark:** the palette follows the viewer's OS theme; a small corner menu lets the
   reader switch theme and page width.
 
 ## Let an AI write it
@@ -167,7 +183,7 @@ live/recording cues) and drives the audience deck into the org's real brand temp
 ranked, actionable pain-points report for the maintainer. Each lands in its own `~/.claude/skills/<name>/`.
 
 **Skills keep themselves current.** After a `brew upgrade skaldr`, an installed skill refreshes itself
-the next time you run `skaldr` — no need to re-run `--install-skill`. It only ever refreshes a skill
+the next time you run `skaldr`, with no need to re-run `--install-skill`. It only ever refreshes a skill
 you already installed (never creates one), never touches a symlinked skill (a contributor's live-edit
 link), and never interferes with a render. Set `SKALDR_SKILL_SYNC=0` to turn the auto-refresh off.
 
@@ -176,8 +192,8 @@ link), and never interferes with a render. Set `SKALDR_SKILL_SYNC=0` to turn the
 with `--watch` so you can follow along). Delete that `skaldr:plan-rule` block to opt out; re-running
 it refreshes the block in place. `--install-skill` never touches `CLAUDE.md` on its own.
 
-Then in Claude Code (or Cowork), ask in plain language — *"make me a skaldr report on this data
-export: what's clean, what's broken, and the fix"* — and it writes the content file and renders the
+Then in Claude Code (or Cowork), ask in plain language (*"make me a skaldr report on this data
+export: what's clean, what's broken, and the fix"*) and it writes the content file and renders the
 page. The skill reads the current guide from the tool itself (`skaldr --guide`), so it stays correct
 across upgrades without reinstalling.
 
@@ -188,7 +204,7 @@ uv run skaldr data/example.yaml -o out/example.html   # run from a checkout
 uv run pytest                                          # tests
 ```
 
-- [`src/skaldr/models.py`](src/skaldr/models.py) — the content-file contract (pydantic).
-- [`src/skaldr/compute.py`](src/skaldr/compute.py) — derived values (legend, TOC, subtotals, footer).
-- [`src/skaldr/render.py`](src/skaldr/render.py) + [`components/`](src/skaldr/components) — Jinja rendering.
-- [`src/skaldr/styles.css`](src/skaldr/styles.css) — the single tokenised stylesheet.
+- [`src/skaldr/models.py`](src/skaldr/models.py): the content-file contract (pydantic).
+- [`src/skaldr/compute.py`](src/skaldr/compute.py): derived values (legend, TOC, subtotals, footer).
+- [`src/skaldr/render.py`](src/skaldr/render.py) + [`components/`](src/skaldr/components): Jinja rendering.
+- [`src/skaldr/styles.css`](src/skaldr/styles.css): the single tokenised stylesheet.

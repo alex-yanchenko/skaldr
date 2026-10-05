@@ -14,7 +14,7 @@
 
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
-<summary>Legend — {{ badge_legend_subject }}</summary>
+<summary>Legend: {{ badge_legend_subject }}</summary>
 <div class="section-body">
 <div class="legend-grid">
 {% for key, b in used_badges %}<div class="legend-row"><span class="chip {{ b.tone }}">{{ b.label }}</span><span class="meaning">{{ b.legend }}</span></div>
@@ -71,7 +71,7 @@
 {% for g in b.groups %}
 <tr class="group"><td colspan="{{ cell_cols | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
 {% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
-{% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">— none —</td></tr>{% endif %}
+{% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">none</td></tr>{% endif %}
 {% endfor %}
 {% else %}
 {% for row in b.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}

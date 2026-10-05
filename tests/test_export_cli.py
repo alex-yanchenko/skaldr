@@ -157,7 +157,7 @@ def test_the_cli_refuses_to_check_and_export_several_files(
 
     assert raised.value.code == 2
     assert (
-        "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export"
+        "an output flag renders one file: pass a single content file, or drop -o/--pdf/--embed/--export"
         in capsys.readouterr().err
     )
 
