@@ -53,13 +53,15 @@ The files skaldr writes itself (the page, an export, the schema, an installed sk
 meta:
   title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"    # required
   subtitle: ["one line", "another"]                    # optional
-  source: "WMS export"           # optional; shown in the provenance footer
+  source: "WMS export"           # optional; shown in the provenance footer, rich text (`code`, links)
   date: "Q3 2026"                # optional; footer. Author it: skaldr never inserts "now"
   updated: "18 Jul 2026"         # optional; footer "updated <value>", a living-doc freshness stamp
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
 ```
+
+`source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
 
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
@@ -149,6 +151,8 @@ Everything else is escaped and shown literally: there is no raw HTML.
 table cells. Every other prose field (`key_value` values, `list` items, `status_list`/`timeline`
 text, headings, labels) is single-line: a blank line there is just collapsed whitespace.
 
+**Lists inside a body.** In those same set-apart bodies, lines that start with `- `, `* `, `+ ` or a number and `. ` or `) ` (`1. `, `2) `) are a list, read with CommonMark's list rules (the same as GitHub): bulleted for `-`, `*` and `+`, numbered from the first item's number otherwise, and an item indented under another item is a nested list, up to 20 levels deep (deeper fails the build naming the field). A bulleted list, or a numbered one that starts at 1, can follow a line of text directly (`Two checks:` on the line above needs no blank line); a numbered list that starts at another number needs a blank line above it. A line right after an item continues that item, so leave a blank line before text that follows a list. A change of marker (`-` to `*`, `.` to `)`) starts a new list, and `\-` at the start of a line is a literal dash. skaldr adds one rule of its own: a list needs at least two items at the top level, so a single marked line stays text exactly as written, and `2024. was the year` or a lone `- note` is never a list.
+
 > **YAML gotcha:** a folded `>` block scalar turns blank lines into spaces *before skaldr sees them*,
 > so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:
 > ```yaml
@@ -214,7 +218,7 @@ or to keep a small block from stretching across the whole page.
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns` (each `{key, label, kind?, width?, tone?}`), `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
-| `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
+| `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff`, `lang?` |
 | `math` | A display equation, written in LaTeX and rendered as MathML | `expression` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
@@ -320,6 +324,8 @@ compute a diff. `mode: plain` (the default) renders the content verbatim with no
     +  total = sum(scan.count for scan in dedupe(scans))
        return total
 ```
+
+Code language: `lang` names the language the Markdown exports put on the code fence (`lang: shell`, `lang: python`, `lang: plain text`). Without it, a file name in `label` decides (`deploy.sh` is bash, `query.sql` is sql); with neither, the GitHub fence has no language and the Notion fence says `plain text`, since Notion shows a fence without a language as JavaScript. `mode: diff` always exports as `diff`. The HTML page shows code without highlighting either way.
 
 ## The `grid`
 
@@ -579,14 +585,17 @@ without one counts as 0.
 A step may also carry an optional `url` (http/https/mailto, e.g. its Jira/GitHub ticket), which turns
 its number into a link, and a **`state`**: the same progress axis as `status_list` and `timeline`, in
 roadmap terms (`todo` for not-started, plus a `deferred`). The states are `done` (green),
-`current` (in progress, the raised blue badge), `todo` (**default**: planned, not started; a cool
-filled slate badge), `blocked` (waiting / on-hold: amber + a sharp dashed frame), and `deferred`
+`current` (in progress, the raised blue badge), `todo` (planned, not started; a cool
+filled slate badge, which is also how the HTML draws a step with no `state`; the Markdown exports
+show a state glyph only for a step whose `state` is set), `blocked` (waiting / on-hold: amber + a sharp dashed frame), and `deferred`
 (pushed out / post-MVP: a warm hollow badge that recedes). Colour rides on the number badge and the
 ticket's left edge; the label stays legible at every state (`deferred` recedes by hue, not by
 dimming). Reach for `deferred` for work you've consciously parked, `blocked` for work stopped by a
 dependency (pair it with a `depends_on` marker). A step's `value` counts toward the totals in every
 state. skaldr auto-renders a small state legend under the grid whenever two or more states appear
-(a single-state swimlane needs none); you don't author it.
+(a single-state swimlane needs none); you don't author it. In the Markdown exports the legend lists
+the states that carry a glyph, and appears whenever two or more glyphs appear or some steps carry a
+glyph and others none.
 
 To record dependencies, give a step an `id` (a safe slug: letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the
@@ -603,7 +612,7 @@ room; the "needs" marker is the compact, readable form.)
     - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag", state: current }   # stacks with 3b
     - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Perf pass", state: deferred }   # parked / post-MVP
     - { lane: "QA", col: "Sprint 2", n: "2b", label: "Vendor sign-off", state: blocked }   # waiting on a dep
-    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }   # todo (default)
+    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }   # no state: drawn as todo
 ```
 
 ### Optional group (milestone) overlay
@@ -888,11 +897,13 @@ A reference's `url`, like a swimlane step's, must be a well-formed `http`, `http
   **defaults to `text`**, so a plain column is just `{key, label}`; only set `kind` for a non-text
   column (`rich`/`number`/`badge`/`indicator`). A
   `text`/`rich` cell may hold **multiple paragraphs**: separate them with a blank line (like a
-  `text` block's `body`) and they stack; a single newline collapses to a space. A
-  `badge` column defaults to `placement: title`: its value chips **under the row title** and the
-  column `label` is ignored. Set `placement: cell` to give the badge **its own labelled column**
-  instead, where the cell value is a badge key *or a list of keys* (several chips, wrapping). Reach
-  for it when the chip is a real column like "Access" or "Severity". An `indicator` column renders a
+  `text` block's `body`) and they stack; a single newline collapses to a space, unless the lines
+  form a list (see Lists inside a body). A
+  `badge` column with a non-blank `label` defaults to `placement: cell`: the badge gets **its own
+  labelled column**, where the cell value is a badge key *or a list of keys* (several chips,
+  wrapping), as for a real column like "Access" or "Severity". A badge column with a blank `label`
+  (`label: ""`) defaults to `placement: title`: its value chips **under the row title**. Set
+  `placement` to choose either one explicitly. An `indicator` column renders a
   colour-only **dot in its own cell** (the value is a tone name or blank), for orthogonal
   green/amber/red signals per row that each want an at-a-glance column.
 
@@ -1026,6 +1037,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges, or note links, citations, inline math, subscripts and superscripts it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a list inside a set-apart body | a Markdown list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number | a native list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number, since a Notion cell or quote holds only text; a list in a muted `text` body keeps the normal text colour |
 | a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
 | a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |

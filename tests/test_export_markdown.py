@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -329,6 +329,25 @@ def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, f
 
 
 @pytest.mark.parametrize(
+    ("code", "fence"),
+    [
+        pytest.param({"content": "x"}, "```", id="no-language-stays-a-bare-fence"),
+        pytest.param({"content": "x", "lang": "shell"}, "```shell", id="an-authored-language"),
+    ],
+)
+def test_a_github_code_fence_carries_the_authored_language(code: dict[str, Any], fence: str) -> None:
+    assert markdown_of([{"type": "code", **code}]) == f"{fence}\nx\n```\n"
+
+
+def test_the_github_footer_shows_rich_text_from_the_source_and_plain_facts() -> None:
+    page = markdown_of(
+        [{"type": "text", "body": "x"}], meta={"title": "T", "source": "see `app.ts`", "date": "5 Oct"}
+    )
+
+    assert page.splitlines()[-1] == "see `app.ts` · 5 Oct"
+
+
+@pytest.mark.parametrize(
     ("value", "maximum", "bar"),
     [
         pytest.param(5, 10, "█████░░░░░", id="half"),
@@ -447,10 +466,7 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
     }
 
     assert markdown_of([swimlane]) == (
-        "| Lane | Plan<br>*wk 1* |\n"
-        "| --- | --- |\n"
-        "| **Ops (2)** | ⚪ **1** Draft (2) |\n"
-        "| **Total** | **2** |\n"
+        "| Lane | Plan<br>*wk 1* |\n| --- | --- |\n| **Ops (2)** | **1** Draft (2) |\n| **Total** | **2** |\n"
     )
 
 
@@ -826,6 +842,28 @@ def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
     quote = {"type": "quote", "body": "first\n\nsecond", "cite": "Ops lead"}
 
     assert markdown_of([quote]) == "> first\n>\n> second\n>\n> *Ops lead*\n"
+
+
+def test_list_lines_in_a_callout_body_become_a_list_inside_the_quote() -> None:
+    callout = {"type": "callout", "tone": "info", "body": "Checks:\n- lint\n- test"}
+
+    assert markdown_of([callout]) == "> 💡 Checks:\n>\n> - lint\n> - test\n"
+
+
+def test_list_lines_in_a_quote_are_lines_led_by_their_marker() -> None:
+    quote = {"type": "quote", "body": "Said:\n- a\n- b"}
+
+    assert markdown_of([quote]) == "> Said:\n>\n> • a\n>\n> • b\n"
+
+
+def test_list_lines_in_a_table_cell_are_lines_led_by_their_marker() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "Steps:\n\n2. one\n3. two"}],
+    }
+
+    assert markdown_of([table]) == "| A |\n| --- |\n| Steps:<br>2. one<br>3. two |\n"
 
 
 def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:

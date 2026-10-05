@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -95,7 +95,7 @@ NOTION_CHIP_COLOR: dict[str, str] = {
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
-    return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
+    return f"## {title}\n```plain text\n" + f"{body}\n" * rows + "```\n"
 
 
 @pytest.mark.parametrize(
@@ -287,11 +287,46 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
 
 
 def test_code_with_a_backtick_becomes_escaped_text_because_notion_has_no_longer_code_fence() -> None:
-    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```\nx\n```\n"
+    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```plain text\nx\n```\n"
 
 
 def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
-    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == "````\n```\ninner\n```\n````\n"
+    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == (
+        "````plain text\n```\ninner\n```\n````\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "fence"),
+    [
+        pytest.param(
+            {"content": "x"}, "```plain text", id="no-language-is-plain-text-not-notions-javascript"
+        ),
+        pytest.param({"content": "x", "lang": "shell"}, "```shell", id="an-authored-language"),
+        pytest.param({"label": "run.sh", "content": "x"}, "```bash", id="a-language-from-the-label"),
+    ],
+)
+def test_a_notion_code_fence_always_names_a_language(code: dict[str, Any], fence: str) -> None:
+    assert notion_of([{"type": "code", **code}]).splitlines()[-3] == fence
+
+
+def test_a_code_fence_inside_a_callout_also_says_plain_text() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 6, "tone": "info", "blocks": [{"type": "code", "content": "x"}]}],
+    }
+
+    assert (
+        notion_of([grid]) == '<callout icon="💡" color="blue_bg">\n\t```plain text\n\tx\n\t```\n</callout>\n'
+    )
+
+
+def test_the_notion_footer_shows_rich_text_from_the_source_and_plain_facts() -> None:
+    page = notion_of(
+        [{"type": "text", "body": "x"}], meta={"title": "T", "source": "see `app.ts`", "date": "5 Oct"}
+    )
+
+    assert page.splitlines()[-1] == 'see `app.ts` · 5 Oct {color="gray"}'
 
 
 @pytest.mark.parametrize(
@@ -523,7 +558,7 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
         "\t\tcontrol\n"
         "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
         "\t\t**Recorded output**\n"
-        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t\t```plain text\n\t\tnone\n\t\t```\n"
         "\t</tab>\n"
         "</tabs>\n"
     )
@@ -958,7 +993,7 @@ def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
     assert notion_of([swimlane]) == (
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Lane**</td>\n\t\t<td>**Plan<br>*wk 1*<br>Q1 (2)**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>⚪ **1** Draft (2)</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>**1** Draft (2)</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
         "</table>\n"
     )
@@ -1619,6 +1654,82 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
     result = export_notion(report, tmp_path, chunk=1)
 
     assert [path.name for path in result.files] == [f"page.{index:03d}.md" for index in range(101)]
+
+
+@pytest.mark.parametrize(
+    ("block", "page"),
+    [
+        pytest.param(
+            {"type": "callout", "tone": "warning", "title": "List", "body": "- first with `code`\n- second"},
+            '<callout icon="⚠️" color="yellow_bg">\n'
+            "\t**List**\n\t- first with `code`\n\t- second\n</callout>\n",
+            id="callout-whose-body-is-a-list",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two\n\nAfter."}]},
+            "- **Why**\n\t- one\n\t- two\n\tAfter.\n",
+            id="definition-that-opens-with-a-list",
+        ),
+        pytest.param(
+            {"type": "quote", "body": "Said:\n\n2. b\n3. c"},
+            "> Said:<br>2\\. b<br>3\\. c\n",
+            id="quote-lines-carry-their-markers",
+        ),
+        pytest.param(
+            {"type": "text", "body": "Intro\n- a\n- b"},
+            "Intro\n- a\n- b\n",
+            id="text-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- a\n- b"}]},
+            "- **Why**: Intro.\n\t- a\n\t- b\n",
+            id="definition-with-a-paragraph-before-its-list",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "1. a\n2. b"},
+            '<callout icon="💡" color="blue_bg">\n\t1. a\n\t2. b\n</callout>\n',
+            id="a-numbered-list-from-one-is-native",
+        ),
+        pytest.param(
+            {"type": "text", "body": "3. a\n4. b"},
+            "- 3\\. a\n- 4\\. b\n",
+            id="a-numbered-list-from-three-keeps-its-numbers",
+        ),
+        pytest.param(
+            {"type": "text", "body": "- a\n- b\n\nOutro\n\n- c\n- d\n* e\n* f"},
+            "- a\n- b\nOutro\n- c\n- d\n<empty-block/>\n- e\n- f\n",
+            id="a-paragraph-between-lists-and-a-marker-change",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n- b\n  - x\n  - y"},
+            '<callout icon="💡" color="blue_bg">\n\t- a\n\t- b\n\t\t- x\n\t\t- y\n</callout>\n',
+            id="a-nested-list",
+        ),
+    ],
+)
+def test_list_lines_in_prose_become_notion_lists(block: dict[str, Any], page: str) -> None:
+    assert notion_of([block]) == page
+
+
+def test_list_lines_in_a_table_cell_are_bulleted_lines_since_a_notion_cell_holds_only_text() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "Steps:\n- one\n- two"}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>Steps:<br>• one<br>• two</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_nested_list_in_a_quote_is_led_by_a_hollow_bullet_line() -> None:
+    quote = {"type": "quote", "body": "- a\n- b\n  - x\n  - y"}
+
+    assert notion_of([quote]) == "> • a<br>• b<br>◦ x<br>◦ y\n"
 
 
 def _two_column_table(columns: tuple[TableColumn, ...] = ()) -> TableNode:

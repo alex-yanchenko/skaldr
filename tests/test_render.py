@@ -1657,6 +1657,50 @@ def test_swimlane_step_url_links_the_number_and_state_styles_the_ticket() -> Non
     assert '<div class="swim-tkt">' not in html
 
 
+def test_an_unset_swimlane_step_is_drawn_and_listed_as_todo_in_the_html() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b", "state": "done"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[swimlane])))
+
+    assert '<div class="swim-tkt todo">' in html
+    assert (
+        '<div class="swim-legend">'
+        '<span class="swim-leg"><span class="swim-leg-sw done"></span>done</span>'
+        '<span class="swim-leg"><span class="swim-leg-sw todo"></span>todo</span>'
+        "</div>" in html
+    )
+
+
+def test_a_labelled_badge_column_without_a_placement_is_its_own_html_column() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "name", "label": "View"},
+            {"key": "access", "label": "Access", "kind": "badge"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        "rows": [{"name": "One", "access": "WRITE", "status": "LIVE"}],
+    }
+    badges = {
+        "WRITE": {"label": "Write", "tone": "blue", "legend": "Read-write."},
+        "LIVE": {"label": "Live", "tone": "green", "legend": "In production."},
+    }
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[table])))
+
+    assert "<thead><tr><th>View</th><th>Access</th></tr></thead>" in html
+    assert '<td class="bc"><span class="chip blue">Write</span></td>' in html
+    assert '<div><span class="chip green">Live</span></div>' in html
+
+
 def test_swimlane_state_legend_renders_used_states_and_is_suppressed_when_single_state() -> None:
     """A swimlane with ≥2 states renders an auto legend of swatch+name for each used state (canonical
     order, used-only); a single-state grid renders no legend at all."""
@@ -2087,6 +2131,104 @@ def test_rich_cell_single_newline_is_not_a_paragraph_break() -> None:
     # one inline run (the newline collapses to a space at render); no paragraph wrapper
     assert "<td>Line one.\nLine two.</td>" in html
     assert '<p class="cell-p">' not in html
+
+
+@pytest.mark.parametrize(
+    ("detail", "cell"),
+    [
+        pytest.param(
+            "Steps:\n- `a`\n- b",
+            '<td><p class="cell-p">Steps:</p><ul class="list"><li><code>a</code></li><li>b</li></ul></td>',
+            id="bullets",
+        ),
+        pytest.param(
+            "2. b\n3. c", '<td><ol class="list" start="2"><li>b</li><li>c</li></ol></td>', id="numbers"
+        ),
+    ],
+)
+def test_a_rich_cell_holding_list_lines_renders_a_list(detail: str, cell: str) -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table(detail)])))
+
+    assert cell in html
+
+
+@pytest.mark.parametrize(
+    ("block", "body_html"),
+    [
+        pytest.param(
+            {"type": "callout", "tone": "warning", "body": "- first\n- second"},
+            '<div><ul class="list"><li>first</li><li>second</li></ul></div>',
+            id="callout-whose-body-is-a-list",
+        ),
+        pytest.param(
+            {"type": "note", "body": "Two checks:\n1. lint\n2. test"},
+            '<div><p class="prose-p">Two checks:</p><ol class="list"><li>lint</li><li>test</li></ol></div>',
+            id="note-with-an-intro-and-a-numbered-list",
+        ),
+        pytest.param(
+            {"type": "quote", "body": "3. three\n4. four"},
+            '<div><ol class="list" start="3"><li>three</li><li>four</li></ol></div>',
+            id="numbered-list-keeps-its-first-number",
+        ),
+        pytest.param(
+            {"type": "text", "body": "Intro\n- a\n- b"},
+            '<p class="text">Intro</p><ul class="list"><li>a</li><li>b</li></ul>',
+            id="text-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two"}]},
+            '<dd><ul class="list"><li>one</li><li>two</li></ul></dd>',
+            id="definition-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- one\n- two"}]},
+            '<dd><p class="prose-p">Intro.</p><ul class="list"><li>one</li><li>two</li></ul></dd>',
+            id="definition-body-with-a-paragraph-before-its-list",
+        ),
+        pytest.param(
+            {"type": "text", "muted": True, "body": "Intro\n- a\n- b"},
+            '<p class="text muted">Intro</p><ul class="list muted"><li>a</li><li>b</li></ul>',
+            id="muted-text-body",
+        ),
+        pytest.param(
+            {"type": "text", "body": "0. zero\n1. one"},
+            '<ol class="list" start="0"><li>zero</li><li>one</li></ol>',
+            id="a-numbered-list-from-zero",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n- b\n  - x\n  - y"},
+            '<div><ul class="list"><li>a</li><li>b<ul class="list"><li>x</li><li>y</li></ul></li></ul></div>',
+            id="a-nested-list",
+        ),
+    ],
+)
+def test_list_lines_in_a_prose_body_render_as_a_list(block: dict[str, object], body_html: str) -> None:
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert body_html in html
+
+
+def test_a_single_marked_line_in_a_prose_body_stays_text() -> None:
+    block = {"type": "callout", "tone": "info", "body": "- not a list on its own"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "<div>- not a list on its own</div>" in html
+
+
+def test_a_list_nested_too_deep_names_the_field() -> None:
+    body = "\n".join("  " * level + f"- n{level}" for level in range(21)) + "\n- tail"
+    block = {"type": "callout", "tone": "info", "body": body}
+
+    with pytest.raises(ReportError, match=r"^blocks\.0\.body: a list nests more than 20 levels deep"):
+        render_html(parse_report(make_report(blocks=[block])))
+
+
+def test_a_rich_text_mistake_inside_a_prose_list_item_names_the_field() -> None:
+    block = {"type": "callout", "tone": "info", "body": "- ok\n- [bad]{tone=nope}"}
+
+    with pytest.raises(ReportError, match=r"^blocks\.0\.body: unknown tone 'nope'"):
+        render_html(parse_report(make_report(blocks=[block])))
 
 
 def test_rich_cell_paragraph_breaks_work_in_the_title_cell_alongside_a_badge() -> None:
@@ -4355,6 +4497,34 @@ def test_reconciled_table_inside_grid_reaches_the_footer() -> None:
 
     assert '<div class="footer">' in html
     assert "Reconciles: 10 = 10." in html
+
+
+@pytest.mark.parametrize(
+    ("meta", "footer"),
+    [
+        pytest.param(
+            {"source": "commit `abc123` in **main**", "date": "5 Oct"},
+            '<div class="footer">commit <code>abc123</code> in <strong>main</strong> · 5 Oct</div>',
+            id="the-source-is-rich-text",
+        ),
+        pytest.param(
+            {"date": "a `b` <i>"},
+            '<div class="footer">a `b` &lt;i&gt;</div>',
+            id="the-other-facts-stay-escaped-plain-text",
+        ),
+    ],
+)
+def test_the_footer_reads_its_source_as_rich_text(meta: dict[str, str], footer: str) -> None:
+    html = render_html(parse_report(make_report(meta={"title": "T", **meta})))
+
+    assert footer in html
+
+
+def test_a_rich_text_mistake_in_the_source_names_the_field() -> None:
+    report = parse_report(make_report(meta={"title": "T", "source": "[x]{tone=nope}"}))
+
+    with pytest.raises(ReportError, match=r"^meta\.source: unknown tone 'nope'"):
+        render_html(report)
 
 
 def test_reconciled_table_in_nested_grid_reaches_the_footer() -> None:
