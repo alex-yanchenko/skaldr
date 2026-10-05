@@ -15,7 +15,7 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
-from skaldr.richtext import Plain, Rich, RichContext
+from skaldr.richtext import Plain, Rich, RichContext, Tinted
 
 
 def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
@@ -93,8 +93,16 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
     return runs
 
 
-def with_bold_label(label: str | None, text: ExportRich) -> ExportRich:
-    name = bold(one_line(label or "").removesuffix(":").rstrip())
+def toned(tone: ToneLiteral | None, runs: Rich) -> Rich:
+    return (Tinted(tone, None, runs),) if tone and runs else runs
+
+
+def holds_a_badge(text: ExportRich) -> bool:
+    return any(isinstance(run, Chip) for run in text)
+
+
+def with_bold_label(label: str | None, text: ExportRich, tone: ToneLiteral | None = None) -> ExportRich:
+    name = toned(tone, bold(one_line(label or "").removesuffix(":").rstrip()))
     return (*name, Plain(": "), *text) if name and text else name + text
 
 

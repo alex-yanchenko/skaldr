@@ -7,7 +7,7 @@ from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
-from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
+from skaldr.export.lower.context import Lowering, bullets, holds_a_badge, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
@@ -150,16 +150,16 @@ def _card_note(card: models.Card) -> tuple[Node, ...]:
 def _card(card: models.Card, lowering: Lowering) -> ListEntry:
     if card.derived and card.badge is not None:
         badge = lowering.report.badges[card.badge]
-        text = _derived_card(card, card.badge, badge, lowering)
-        return ListEntry(text, children=_card_note(card), tone=card.tone_with(badge))
+        return ListEntry(_derived_card(card, card.badge, badge, lowering), children=_card_note(card))
     parts: list[ExportRich] = [plain(compute.fmt(card.value))]
     if card.of and isinstance(card.value, int | float):
         parts.append(plain(f"({compute.pct(card.value, card.of)})"))
     if card.delta:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
-    text = with_bold_label(card.label, spaced([part for part in parts if part]))
-    return ListEntry(text, children=_card_note(card), tone=card.tone)
+    body = spaced([part for part in parts if part])
+    tone = None if holds_a_badge(body) else card.tone
+    return ListEntry(with_bold_label(card.label, body, tone), children=_card_note(card))
 
 
 def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
@@ -195,7 +195,7 @@ def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node
 def _meter_entry(item: models.MeterItem) -> ListEntry:
     gauge: ExportRich = (Gauge(item.value, item.max), Plain(" "))
     share = plain(compute.pct(item.value, item.max))
-    return ListEntry(with_bold_label(item.label, gauge + share), tone=item.tone)
+    return ListEntry(with_bold_label(item.label, gauge + share, item.tone))
 
 
 def lower_meter(block: models.Meter) -> list[Node]:
@@ -206,7 +206,7 @@ def _range_segment(segment: models.RangeSegment, total: float, lowering: Lowerin
     share = plain(compute.pct(segment.span, total))
     if segment.sub:
         share += (Plain(", "), *lowering.rich(segment.sub))
-    return ListEntry(with_bold_label(segment.label, share), tone=segment.tone)
+    return ListEntry(with_bold_label(segment.label, share, segment.tone))
 
 
 def _axis_ends(axis: models.RangeAxis | None) -> list[Node]:

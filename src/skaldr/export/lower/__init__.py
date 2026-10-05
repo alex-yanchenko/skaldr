@@ -6,7 +6,7 @@ from typing_extensions import assert_never
 from skaldr import compute, models
 from skaldr.export.apportion import apportioned
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import Lowering, lowering_for, spaced
+from skaldr.export.lower.context import Lowering, lowering_for, spaced, toned
 from skaldr.export.lower.diagrams import lower_chart, lower_fan, lower_flow
 from skaldr.export.lower.prose import (
     lower_badge_row,
@@ -47,6 +47,7 @@ from skaldr.export.tree import (
     Toggle,
     capped_heading_level,
 )
+from skaldr.richtext import Plain
 
 SECTION_HEADING_LEVEL = 2
 COLUMN_RATIO_TOTAL = 100
@@ -204,12 +205,9 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
 
 
 def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: int) -> ListEntry:
-    parts = [bold(step.label), italic(lowering.rich(step.sub or ""))]
-    return ListEntry(
-        spaced([part for part in parts if part]),
-        children=tuple(_lower_blocks(step.detail, lowering, depth)),
-        tone=step.tone,
-    )
+    sub = italic(lowering.rich(step.sub or ""))
+    title = bold(step.label) + ((Plain(" "), *sub) if sub else ())
+    return ListEntry(toned(step.tone, title), children=tuple(_lower_blocks(step.detail, lowering, depth)))
 
 
 def _legend(lowering: Lowering) -> list[Node]:

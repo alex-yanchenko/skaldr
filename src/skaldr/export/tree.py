@@ -29,7 +29,6 @@ class ListEntry:
     text: ExportRich
     checked: bool = False
     children: "tuple[Node, ...]" = ()
-    tone: ToneName | None = None
 
 
 @dataclass(frozen=True)

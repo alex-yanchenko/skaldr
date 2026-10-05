@@ -46,7 +46,17 @@ from skaldr.models import (
     parse_report,
     walk_blocks,
 )
-from skaldr.richtext import AnchorLink, Citation, Code, Placeholder, Plain, ScriptText, parse_rich
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    Placeholder,
+    Plain,
+    ScriptText,
+    Styled,
+    Tinted,
+    parse_rich,
+)
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -75,8 +85,8 @@ NOTION_CHIP_COLOR: dict[str, str] = {
     "amber": "yellow",
     "red": "red",
     "violet": "purple",
-    "teal": "green",
-    "sky": "blue",
+    "teal": "brown",
+    "sky": "pink",
 }
 
 
@@ -197,7 +207,7 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow_bg">api</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow">**api**</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 
@@ -233,7 +243,7 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
         pytest.param("[due]{bg=amber}", '<span color="yellow_bg">due</span>', id="highlight"),
         pytest.param(
             "[**now** a|b]{tone=accent bg=sky}",
-            '<span color="purple"><span color="blue_bg">**now** a\\|b</span></span>',
+            '<span color="purple"><span color="pink_bg">**now** a\\|b</span></span>',
             id="color-around-highlight",
         ),
         pytest.param(
@@ -308,30 +318,40 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
 def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColorLiteral) -> None:
     color = NOTION_CHIP_COLOR.get(tone)
 
-    assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
+    assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}">**a\\*b**</span>'
+
+
+def test_no_two_badge_colors_share_a_notion_color() -> None:
+    assert sorted(NOTION_CHIP_COLOR.values()) == sorted(set(NOTION_CHIP_COLOR.values()))
 
 
 def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_it() -> None:
-    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue_bg">`README.md`</span>'
+    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue">**`README.md`**</span>'
+
+
+def test_a_toned_title_is_coloured_text_and_the_rest_of_the_line_stays_plain() -> None:
+    entry = ListEntry((Tinted("info", None, (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
+
+    assert render_notion([ListNode("number", (entry,))]) == '1. <span color="blue">**Go**</span>: now\n'
 
 
 def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
     assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
-        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
+        '\t- <span color="blue">**api**</span> the API\n</details>\n'
         "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
         "- **Lead**: **Ana**\n<empty-block/>\n"
         "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
-        '- **Clean**: 9 (90.0%) <span color="green_bg">▲ +1</span> <span color="blue_bg">api</span>'
-        ' {color="green"}\n\tsince Monday {color="gray"}\n'
+        '- **Clean**: 9 (90.0%) <span color="green">**▲ +1**</span> <span color="blue">**api**</span>\n'
+        '\tsince Monday {color="gray"}\n'
         "- **Lag**: 3 days → flat\n"
-        '**Affects**: <span color="blue_bg">api</span> <span color="green_bg">ops</span>\n'
-        '- **Owners**: <span color="purple_bg">web</span>\n<empty-block/>\n'
+        '**Affects**: <span color="blue">**api**</span> <span color="brown">**ops**</span>\n'
+        '- **Owners**: <span color="purple">**web**</span>\n<empty-block/>\n'
         "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
-        '- 🔵 **Mon**: Start <span color="blue_bg">api</span>\n\tkick-off\n- Later\n<empty-block/>\n'
-        '- **Zone**: ████░░░░░░ 42.9% {color="yellow"}\n'
+        '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
+        '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
         'Jan to Dec {color="gray"}\n'
-        '- **Q1**: 25.0%, slow {color="red"}\n- **Rest**: 75.0%\n'
+        '- <span color="red">**Q1**</span>: 25.0%, slow\n- **Rest**: 75.0%\n'
     )
 
 
@@ -340,8 +360,8 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
 
     assert notion_of([row], badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
-        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
-        '<span color="blue_bg">api</span>\n'
+        '\t- <span color="blue">**api**</span> the API\n</details>\n'
+        '<span color="blue">**api**</span>\n'
     )
 
 
@@ -419,7 +439,7 @@ def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
 def test_block_nodes_become_notion_blocks() -> None:
     nodes = [
         Paragraph((Plain("muted"),), "muted"),
-        ListNode("number", (ListEntry((Plain("one"),), tone="warning"),)),
+        ListNode("number", (ListEntry((Plain("one"),)),)),
         ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),)))),
         Callout("info", (Paragraph((Plain("tip"),)),)),
         Quote(((Plain("said"),),)),
@@ -431,7 +451,7 @@ def test_block_nodes_become_notion_blocks() -> None:
 
     assert render_notion(nodes) == (
         'muted {color="gray"}\n'
-        '1. one {color="yellow"}\n'
+        "1. one\n"
         "- [x] done\n"
         "- [ ] open\n"
         '<callout icon="💡" color="blue_bg">\n\ttip\n</callout>\n'
@@ -769,12 +789,12 @@ def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_f
     assert apportioned(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
 
 
-def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
+def test_cell_tones_become_backgrounds_a_group_row_is_a_band_and_a_total_row_is_bold() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)), TableCell(())),
         (
             TableRow((TableCell((Plain("group"),)), TableCell(())), emphasis="group"),
-            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal")), "sky"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal"))),
             TableRow((TableCell((Plain("9"),)), TableCell(())), emphasis="total"),
         ),
         header_column=True,
@@ -784,10 +804,56 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Name**</td>\n\t\t<td></td>\n\t</tr>\n"
         '\t<tr color="gray_bg">\n\t\t<td>**group**</td>\n\t\t<td></td>\n\t</tr>\n'
-        '\t<tr color="blue_bg">\n'
-        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="green_bg">y</td>\n'
+        "\t<tr>\n"
+        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="brown_bg">y</td>\n'
         "\t</tr>\n"
         "\t<tr>\n\t\t<td>**9**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("cells", "lines"),
+    [
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Plain("b "), Chip("New", "violet")))),
+            ["<td>a</td>", '<td color="blue_bg">b <span color="purple">**New**</span></td>'],
+            id="the-cell-holding-the-badge",
+        ),
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Plain("b"),))),
+            ['<td color="blue_bg">a</td>', "<td>b</td>"],
+            id="the-first-cell-when-no-cell-holds-a-badge",
+        ),
+        pytest.param(
+            (TableCell((Chip("x", "red"),), "danger"), TableCell((Plain("b"),))),
+            ['<td color="red_bg"><span color="red">**x**</span></td>', "<td>b</td>"],
+            id="a-cell-tone-wins-over-the-row-tone",
+        ),
+    ],
+)
+def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ...], lines: list[str]) -> None:
+    table = TableNode((TableCell((Plain("A"),)), TableCell((Plain("B"),))), (TableRow(cells, "info"),))
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
+        "\t<tr>\n" + "".join(f"\t\t{line}\n" for line in lines) + "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
+    table = TableNode(
+        (TableCell((Plain("Name"),)),),
+        (TableRow((TableCell((Plain("x "), Chip("New", "violet"))),)),),
+        header_column=True,
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td>**x <span color="purple">New</span>**</td>\n\t</tr>\n'
         "</table>\n"
     )
 
@@ -1047,8 +1113,8 @@ def test_an_empty_paragraph_writes_no_line() -> None:
         pytest.param("warning", "yellow", id="warning"),
         pytest.param("danger", "red", id="danger"),
         pytest.param("accent", "purple", id="accent"),
-        pytest.param("teal", "green", id="teal"),
-        pytest.param("sky", "blue", id="sky"),
+        pytest.param("teal", "brown", id="teal"),
+        pytest.param("sky", "pink", id="sky"),
     ],
 )
 def test_every_tone_has_a_notion_block_color(tone: ToneName, color: str) -> None:

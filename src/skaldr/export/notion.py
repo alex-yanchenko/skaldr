@@ -1,6 +1,6 @@
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from typing_extensions import assert_never
@@ -15,6 +15,7 @@ from skaldr.export.markup import (
     code_block_lines,
     escape_block_start,
     indent_lines,
+    is_emphasised_body_cell,
     styled,
     tab_icon,
 )
@@ -68,8 +69,8 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "warning": "yellow",
     "danger": "red",
     "accent": "purple",
-    "teal": "green",
-    "sky": "blue",
+    "teal": "brown",
+    "sky": "pink",
 }
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
@@ -89,7 +90,10 @@ def latex_text(text: str) -> str:
     return "\\text{" + text.translate(LATEX_TEXT_ESCAPES) + "}"
 
 
+@dataclass(frozen=True)
 class _NotionRuns(MarkupRuns):
+    inside_bold: bool = False
+
     def escape(self, text: str, /) -> str:
         return text.translate(NOTION_ESCAPES)
 
@@ -113,7 +117,8 @@ class _NotionRuns(MarkupRuns):
         return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
 
     def chip(self, run: Chip, /) -> str:
-        return f'<span color="{CHIP_COLOR[run.tone]}_bg">{self.text(run.label)}</span>'
+        label = self.text(run.label)
+        return _colored_span(CHIP_COLOR[run.tone], label if self.inside_bold else styled("bold", label))
 
     def underline(self, inner: str, /) -> str:
         return f'<span underline="true">{inner}</span>'
@@ -132,8 +137,8 @@ def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 
-def notion_inline(runs: ExportRich) -> str:
-    return write_export_runs(runs, _NotionRuns())
+def notion_inline(runs: ExportRich, *, inside_bold: bool = False) -> str:
+    return write_export_runs(runs, _NotionRuns(inside_bold))
 
 
 def _block_text(runs: ExportRich) -> str:
@@ -156,8 +161,9 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
     return SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", text)
 
 
-def _table_cell_text(cell: TableCell) -> str:
-    return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(notion_inline(cell.text)))
+def _table_cell_text(cell: TableCell, *, inside_bold: bool) -> str:
+    text = notion_inline(cell.text, inside_bold=inside_bold)
+    return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 
 def _background_attribute(tone: ToneName | None) -> str:
@@ -171,10 +177,28 @@ def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName 
     return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
 
 
+def _holds_a_badge(cell: TableCell) -> bool:
+    return any(isinstance(run, Chip) for run in cell.text)
+
+
+def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[TableCell, ...]:
+    filled = next((index for index, cell in enumerate(cells) if _holds_a_badge(cell)), 0)
+    return tuple(
+        replace(cell, tone=cell.tone or tone) if index == filled else cell for index, cell in enumerate(cells)
+    )
+
+
 def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
-    texts = body_cell_texts(table, row, [_table_cell_text(cell) for cell in row.cells])
-    tone = "neutral" if row.tone is None and row.emphasis == "group" else row.tone
-    return _row_lines(row.cells, texts, tone)
+    emphasised = [is_emphasised_body_cell(table, row, index) for index in range(len(row.cells))]
+    texts = body_cell_texts(
+        table,
+        row,
+        [_table_cell_text(cell, inside_bold=bold) for cell, bold in zip(row.cells, emphasised, strict=True)],
+    )
+    if row.emphasis == "group":
+        return _row_lines(row.cells, texts, row.tone or "neutral")
+    cells = _row_tone_in_one_cell(row.cells, row.tone) if row.tone else row.cells
+    return _row_lines(cells, texts, None)
 
 
 def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
@@ -205,7 +229,7 @@ def _table_lines(table: TableNode) -> list[str]:
     attributes = ['fit-page-width="true"', 'header-row="true"']
     if table.header_column:
         attributes.append('header-column="true"')
-    header_texts = [styled("bold", _table_cell_text(cell)) for cell in table.header]
+    header_texts = [styled("bold", _table_cell_text(cell, inside_bold=True)) for cell in table.header]
     lines = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
     lines += [line for row in table.rows for line in _body_row_lines(table, row)]
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
@@ -235,7 +259,7 @@ def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node, index, entry.checked)
-        lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
+        lines.append(f"{marker} {_block_text(entry.text)}")
         lines += _indent(_notion_blocks(entry.children))
     return lines
 
