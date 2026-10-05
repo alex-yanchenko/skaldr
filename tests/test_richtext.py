@@ -1,5 +1,6 @@
 import re
-import time
+import timeit
+from functools import partial
 
 import pytest
 from pydantic import ValidationError
@@ -365,14 +366,14 @@ def test_a_placeholder_inside_a_link_stays_a_placeholder(text: str, runs: Rich) 
 
 @pytest.mark.parametrize("whitespace", [pytest.param(" ", id="spaces"), pytest.param("\n", id="newlines")])
 def test_an_unclosed_placeholder_before_a_long_whitespace_run_parses_in_linear_time(whitespace: str) -> None:
-    text = "{{" + whitespace * 5_000
+    short, long = "{{" + whitespace * 5_000, "{{" + whitespace * 20_000
 
-    started = time.perf_counter()
-    runs = parse_rich(text)
-    elapsed = time.perf_counter() - started
+    assert parse_rich(long) == (Plain(long),)
+    assert _fastest_parse_seconds(long) < 8 * _fastest_parse_seconds(short)
 
-    assert runs == (Plain(text),)
-    assert elapsed < 2
+
+def _fastest_parse_seconds(text: str) -> float:
+    return min(timeit.repeat(partial(parse_rich, text), number=1, repeat=5))
 
 
 def test_a_subscript_cannot_hold_a_code_span() -> None:
@@ -810,6 +811,40 @@ def test_a_link_url_reaches_the_writers_as_written(text: str, url: str) -> None:
     runs = parse_rich(text)
 
     assert (runs, write_runs(runs, _TaggedRuns())) == ((Link((Plain("a"),), url),), f"<link:a|{url}>")
+
+
+@pytest.mark.parametrize(
+    ("text", "runs"),
+    [
+        pytest.param(
+            "*[a](https://a.io)*",
+            (Styled("italic", (Link((Plain("a"),), "https://a.io"),)),),
+            id="link-inside-emphasis-found-by-lookahead",
+        ),
+        pytest.param(
+            "a **b** [x]() c *d*",
+            (
+                Plain("a "),
+                Styled("bold", (Plain("b"),)),
+                Plain(" [x]() c "),
+                Styled("italic", (Plain("d"),)),
+            ),
+            id="refused-link-between-text-and-marks",
+        ),
+        pytest.param(
+            "a [*x*]() b",
+            (Plain("a ["), Styled("italic", (Plain("x"),)), Plain("]() b")),
+            id="refused-link-whose-label-holds-a-mark",
+        ),
+        pytest.param(
+            'a *b [x](https://a.io "t") c*',
+            (Plain("a "), Styled("italic", (Plain('b [x](https://a.io "t") c'),))),
+            id="refused-link-inside-emphasis",
+        ),
+    ],
+)
+def test_a_refused_link_leaves_the_text_and_marks_around_it_intact(text: str, runs: Rich) -> None:
+    assert parse_rich(text) == runs
 
 
 @pytest.mark.parametrize(
