@@ -570,7 +570,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         )
     for heading in result.oversized_sections:
         print(
-            f"warning: section '{heading}' holds a block longer than --chunk {chunk}; that block stays whole",
+            f"warning: section '{heading}' holds a part that cannot be split to fit --chunk {chunk} "
+            "(one block, or a heading with the block after it); that part stays whole",
             file=sys.stderr,
         )
     for path in result.files:
