@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ReportError
+from skaldr.errors import PageFetchError, ReportError
 from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
@@ -32,6 +32,8 @@ from skaldr.replace_file import replace_file, resolved_path
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
+_FETCH_LIMIT_BYTES = 16 * 1024 * 1024
+_FETCH_CHUNK_BYTES = 64 * 1024
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
 
@@ -173,8 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         "--extract-source",
         metavar="FILE|URL",
         help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
-        "and exit — recover the source without parsing the HTML. Exits non-zero if none is embedded, or if "
-        "a URL does not answer within 30 seconds.",
+        "and exit, so the source is recovered without parsing the HTML. Exits non-zero if none is embedded. "
+        "A URL is downloaded in full within 30 seconds and up to 16 MB; a slower or larger page fails.",
     )
     option(
         "--pdf",
@@ -491,14 +493,28 @@ def _watch(
         return 0
 
 
+def _fetch_page(url: str) -> bytes:
+    deadline = time.monotonic() + _FETCH_TIMEOUT_SECONDS
+    received = bytearray()
+    with urllib.request.urlopen(url, timeout=_FETCH_TIMEOUT_SECONDS) as response:
+        while chunk := response.read(_FETCH_CHUNK_BYTES):
+            received += chunk
+            if len(received) > _FETCH_LIMIT_BYTES:
+                raise PageFetchError(f"the page is larger than {_FETCH_LIMIT_BYTES // (1024 * 1024)} MB")
+            if time.monotonic() > deadline:
+                raise PageFetchError(
+                    f"the page took longer than {_FETCH_TIMEOUT_SECONDS} seconds to download"
+                )
+    return bytes(received)
+
+
 def _extract_source(target: str) -> int:
     """Print the YAML source embedded in a rendered skaldr page — `target` is a local file or an
     http(s) URL. Reads the page (never into the caller's context) and prints only the source, so an
     agent recovers it without parsing the HTML. Returns 1 if the page carries no embedded source."""
     try:
         if target.startswith(("http://", "https://")):
-            with urllib.request.urlopen(target, timeout=_FETCH_TIMEOUT_SECONDS) as response:
-                html = response.read().decode("utf-8")
+            html = _fetch_page(target).decode("utf-8")
         else:
             html = Path(target).read_text(encoding="utf-8")
     except (OSError, ValueError) as err:

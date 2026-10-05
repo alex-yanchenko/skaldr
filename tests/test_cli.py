@@ -1,9 +1,11 @@
 import errno
+import itertools
 import json
 import os
 import re
 import stat
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -147,6 +149,72 @@ def test_extract_source_gives_up_on_a_url_that_stalls_naming_it(
         1,
         "error: could not read https://pages.example.com/plan.html: timed out\n",
         [("https://pages.example.com/plan.html", 30)],
+    )
+
+
+class _StreamedResponse:
+    def __init__(self, chunks: Iterator[bytes]) -> None:
+        self._chunks = chunks
+
+    def read(self, _size: int = -1) -> bytes:
+        return next(self._chunks, b"")
+
+    def __enter__(self) -> "_StreamedResponse":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+
+def _serve(monkeypatch: pytest.MonkeyPatch, chunks: Iterator[bytes]) -> None:
+    def urlopen(_url: str, timeout: float | None = None) -> _StreamedResponse:
+        assert timeout == 30
+        return _StreamedResponse(chunks)
+
+    monkeypatch.setattr("skaldr.cli.urllib.request.urlopen", urlopen)
+
+
+def test_extract_source_reads_a_page_streamed_in_chunks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    page = out_path.read_bytes()
+    _serve(monkeypatch, iter([page[:1000], page[1000:]]))
+    capsys.readouterr()
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, data_path.read_text(encoding="utf-8"))
+
+
+def test_extract_source_gives_up_when_the_whole_fetch_outlasts_its_deadline(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clock = iter(range(0, 1000, 10))
+    monkeypatch.setattr("skaldr.cli.time.monotonic", lambda: float(next(clock)))
+    _serve(monkeypatch, itertools.repeat(b"x"))
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: "
+        "the page took longer than 30 seconds to download\n",
+    )
+
+
+def test_extract_source_refuses_a_page_larger_than_its_cap(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _serve(monkeypatch, itertools.repeat(b"x" * 1024 * 1024))
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: the page is larger than 16 MB\n",
     )
 
 

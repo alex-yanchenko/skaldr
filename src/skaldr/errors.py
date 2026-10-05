@@ -8,3 +8,7 @@ class AuthError(Exception):
 
 class ReadOnlyFileError(PermissionError):
     pass
+
+
+class PageFetchError(OSError):
+    pass
