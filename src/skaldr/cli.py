@@ -223,8 +223,9 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         metavar="N",
         help="with --export notion: split the page into files of at most N characters, counted in Unicode "
-        "code points rather than bytes, each after the first starting at a level 1 or 2 heading, for a tool "
-        "or a paste box that caps its input size. A single section longer than N stays whole.",
+        "code points rather than bytes, for a tool or a paste box that caps its input size. Whole sections "
+        "go together where they fit; a longer section splits between its blocks, and a longer table into "
+        "tables that repeat its header. A single block longer than N stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -568,7 +569,11 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             file=sys.stderr,
         )
     for heading in result.oversized_sections:
-        print(f"warning: section '{heading}' is longer than --chunk {chunk} and stays whole", file=sys.stderr)
+        print(
+            f"warning: section '{heading}' holds a part that cannot be split to fit --chunk {chunk} "
+            "(one block, or a heading with the block after it); that part stays whole",
+            file=sys.stderr,
+        )
     for path in result.files:
         print(f"OK  {path}")
     return 0
