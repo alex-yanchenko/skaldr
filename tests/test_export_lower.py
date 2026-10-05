@@ -899,6 +899,11 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             id="a-toned-delta-keeps-its-own-colour-beside-the-coloured-label",
         ),
         pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
+        pytest.param(
+            {"label": " ", "value": 7, "tone": "danger"},
+            (Plain("7"),),
+            id="a-blank-label-has-nothing-to-colour",
+        ),
         pytest.param({"label": "Empty", "value": ""}, bold("Empty"), id="empty-value-is-the-label-alone"),
     ],
 )

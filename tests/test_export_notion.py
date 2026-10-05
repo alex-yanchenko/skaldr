@@ -898,6 +898,16 @@ def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
     )
 
 
+def test_a_badge_in_a_header_cell_is_bolded_once_with_the_header() -> None:
+    table = TableNode((TableCell((Chip("New", "violet"),)),), ())
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<tr>\n\t\t<td>**<span color="purple">New</span>**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
 def test_a_group_row_with_its_own_tone_keeps_that_background() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)),),
