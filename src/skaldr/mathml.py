@@ -9,7 +9,7 @@ from xml.etree.ElementTree import Element, tostring
 
 from latex2mathml import commands
 from latex2mathml.commands import MATRICES, NEWENVIRONMENT
-from latex2mathml.converter import MOVABLE_LIMIT_TEXTS, OPERATORS, convert_to_element
+from latex2mathml.converter import convert_to_element
 from latex2mathml.symbols_parser import SYMBOLS
 from latex2mathml.tokenizer import tokenize
 from tinycss2.color4 import parse_color
@@ -87,7 +87,7 @@ MATHML_ELEMENTS: Final = frozenset(
 )
 TOKEN_ELEMENTS: Final = frozenset({"mi", "mo", "mn"})
 LETTER_COMMAND = re.compile(r"\\[a-zA-Z]+\*?")
-FONT_PREFIX_NAMING_NO_COMMAND: Final = commands.MATH
+BARE_FONT_PREFIX: Final = commands.MATH
 # external:latex2mathml its walker ends a \root index at a literal \of that no command table holds
 COMMANDS_OUTSIDE_LATEX2MATHML_TABLES: Final = frozenset({r"\of"})
 COMMANDS_DEFINING_A_COMMAND: Final = frozenset(
@@ -123,31 +123,27 @@ COMMANDS_TAKING_LITERAL_TEXT: Final = frozenset(
 )
 
 
-def _commands_latex2mathml_knows() -> frozenset[str]:
+def _known_latex2mathml_commands() -> frozenset[str]:
     names = {
         *SYMBOLS,
-        *OPERATORS,
-        *MOVABLE_LIMIT_TEXTS,
         *COMMANDS_OUTSIDE_LATEX2MATHML_TABLES,
         *(name for value in vars(commands).values() for name in _names_in_command_table(value)),
     }
-    return frozenset(
-        name for name in names if LETTER_COMMAND.fullmatch(name) and name != FONT_PREFIX_NAMING_NO_COMMAND
-    )
+    return frozenset(name for name in names if LETTER_COMMAND.fullmatch(name) and name != BARE_FONT_PREFIX)
 
 
 def _names_in_command_table(value: object) -> Iterator[str]:
     if isinstance(value, str):
         yield value
     elif _is_command_table(value):
-        yield from (member for member in value if isinstance(member, str))
+        yield from value
 
 
-def _is_command_table(value: object) -> TypeGuard[Iterable[object]]:
+def _is_command_table(value: object) -> TypeGuard[Iterable[str]]:
     return isinstance(value, (tuple, dict))
 
 
-LATEX2MATHML_COMMANDS: Final = _commands_latex2mathml_knows()
+LATEX2MATHML_COMMANDS: Final = _known_latex2mathml_commands()
 
 
 @dataclass(frozen=True)
