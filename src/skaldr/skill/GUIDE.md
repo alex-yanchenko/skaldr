@@ -1036,7 +1036,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |
 | `grid` | its cells one after another | native columns |
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
-| badges | bold labels | bold text in the badge's colour; each badge colour has its own Notion colour, and since Notion has no teal or light blue, `teal` is brown and `sky` is pink |
+| badges | bold labels | bold text in the badge's colour; each badge colour has its own Notion colour, and since Notion has no teal or light blue, `teal` is brown and `sky` is pink there and everywhere else a colour reaches Notion (highlights, text colours, cell and column backgrounds) |
 | a table row's `tone` (including a `tint_by` tint, and a chart slice's or series' row in its data table) | dropped | the background of one cell: the first cell that holds a badge, or the row's first cell when none does; a cell's own `tone` wins in that cell; a `group` row is a full-width band |
 | tones on meters, cards, ranges and walkthrough steps | dropped | the item's bold label (and a walkthrough step's subtitle) in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge, including a derived card, leaves its colour to the badge, and an item with no label shows no colour |
 | tones on table cells and columns | dropped | cell and column backgrounds |
