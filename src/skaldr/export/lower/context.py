@@ -97,10 +97,6 @@ def toned(tone: ToneLiteral | None, runs: Rich) -> Rich:
     return (Tinted(tone, None, runs),) if tone and runs else runs
 
 
-def holds_a_badge(text: ExportRich) -> bool:
-    return any(isinstance(run, Chip) for run in text)
-
-
 def with_bold_label(label: str | None, text: ExportRich, tone: ToneLiteral | None = None) -> ExportRich:
     name = toned(tone, bold(one_line(label or "").removesuffix(":").rstrip()))
     return (*name, Plain(": "), *text) if name and text else name + text

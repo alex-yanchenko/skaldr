@@ -1038,7 +1038,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
 | badges | bold labels | bold text in the badge's colour; each badge colour has its own Notion colour, and since Notion has no teal or light blue, `teal` is brown and `sky` is pink |
 | a table row's `tone` (including a `tint_by` tint, and a chart slice's or series' row in its data table) | dropped | the background of one cell: the first cell that holds a badge, or the row's first cell when none does; a cell's own `tone` wins in that cell; a `group` row is a full-width band |
-| tones on meters, cards, ranges and walkthrough steps | dropped | the item's bold title in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge leaves its colour to the badge |
+| tones on meters, cards, ranges and walkthrough steps | dropped | the item's bold label (and a walkthrough step's subtitle) in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge, including a derived card, leaves its colour to the badge, and an item with no label shows no colour |
 | tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |

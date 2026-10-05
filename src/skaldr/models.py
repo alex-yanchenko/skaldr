@@ -533,9 +533,6 @@ class Card(FrozenModel):
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
 
-    def tone_with(self, badge: Badge) -> ToneLiteral:
-        return self.tone or BADGE_COLOR_TONE[badge.tone]
-
     @model_validator(mode="after")
     def _shape(self) -> "Card":
         if self.of_matrix is not None and self.of_tables is not None:

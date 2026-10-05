@@ -7,7 +7,7 @@ from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, one_line, plain
-from skaldr.export.lower.context import Lowering, bullets, holds_a_badge, spaced, with_bold_label
+from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
     Callout,
@@ -157,9 +157,10 @@ def _card(card: models.Card, lowering: Lowering) -> ListEntry:
     if card.delta:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
-    body = spaced([part for part in parts if part])
-    tone = None if holds_a_badge(body) else card.tone
-    return ListEntry(with_bold_label(card.label, body, tone), children=_card_note(card))
+    tone = None if card.badges else card.tone
+    return ListEntry(
+        with_bold_label(card.label, spaced([part for part in parts if part]), tone), children=_card_note(card)
+    )
 
 
 def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:

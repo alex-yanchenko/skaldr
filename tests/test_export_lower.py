@@ -895,8 +895,8 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         ),
         pytest.param(
             {"label": "Cost", "value": 5, "tone": "danger", "delta": {"label": "-8%", "tone": "success"}},
-            (*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("-8%", "green")),
-            id="a-chip-carries-the-colour-so-the-tone-colours-nothing",
+            (Tinted("danger", None, bold("Cost")), Plain(": "), Plain("5"), Plain(" "), Chip("-8%", "green")),
+            id="a-toned-delta-keeps-its-own-colour-beside-the-coloured-label",
         ),
         pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
         pytest.param({"label": "Empty", "value": ""}, bold("Empty"), id="empty-value-is-the-label-alone"),
@@ -906,7 +906,18 @@ def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRi
     assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
 
-def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() -> None:
+def test_a_toned_card_that_shows_a_badge_leaves_the_colour_to_the_badge() -> None:
+    card = {"label": "Cost", "value": 5, "tone": "danger", "badges": ["API"]}
+
+    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+        API_LEGEND,
+        ListNode(
+            "bullet", (ListEntry((*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)
+        ),
+    )
+
+
+def test_a_derived_card_counts_its_badge_in_a_matrix_and_leaves_its_colour_to_the_badge() -> None:
     blocks = [
         {"type": "cards", "items": [{"badge": "API", "of_matrix": "m", "note": "live"}]},
         {
@@ -940,7 +951,7 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() 
     )
 
 
-def test_a_derived_card_sums_its_tables_and_keeps_an_explicit_tone() -> None:
+def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> None:
     blocks = [
         {
             "type": "cards",

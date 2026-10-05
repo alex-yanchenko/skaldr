@@ -843,6 +843,46 @@ def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ..
     )
 
 
+@pytest.mark.parametrize(
+    ("row", "header_column", "line"),
+    [
+        pytest.param(
+            TableRow((TableCell((Plain("9"),)), TableCell((Chip("x", "red"),))), "warning", emphasis="total"),
+            False,
+            '\t<tr>\n\t\t<td>**9**</td>\n\t\t<td color="yellow_bg">**<span color="red">x</span>**</td>\n'
+            "\t</tr>\n",
+            id="a-toned-total-row-fills-its-badge-cell-and-bolds-it-once",
+        ),
+        pytest.param(
+            TableRow(
+                (TableCell((Plain("g "), Chip("x", "red"))), TableCell(())), "warning", emphasis="group"
+            ),
+            False,
+            '\t<tr color="yellow_bg">\n\t\t<td>**g <span color="red">x</span>**</td>\n'
+            "\t\t<td></td>\n\t</tr>\n",
+            id="a-group-row-holding-a-badge-stays-a-full-band",
+        ),
+        pytest.param(
+            TableRow((TableCell((Plain("a"),)), TableCell((Plain("b"),))), "info"),
+            True,
+            '\t<tr>\n\t\t<td color="blue_bg">**a**</td>\n\t\t<td>b</td>\n\t</tr>\n',
+            id="the-bold-header-column-cell-takes-the-fill",
+        ),
+    ],
+)
+def test_a_toned_row_fill_meets_bold_rows_and_columns(row: TableRow, header_column: bool, line: str) -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))), (row,), header_column=header_column
+    )
+    opening = '<table fit-page-width="true" header-row="true"' + (
+        ' header-column="true">' if header_column else ">"
+    )
+
+    assert render_notion([table]) == (
+        f"{opening}\n\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n{line}</table>\n"
+    )
+
+
 def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)),),

@@ -20,7 +20,7 @@ from skaldr.export.markup import (
     tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_runs
+from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -177,12 +177,8 @@ def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName 
     return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
 
 
-def _holds_a_badge(cell: TableCell) -> bool:
-    return any(isinstance(run, Chip) for run in cell.text)
-
-
 def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[TableCell, ...]:
-    filled = next((index for index, cell in enumerate(cells) if _holds_a_badge(cell)), 0)
+    filled = next((index for index, cell in enumerate(cells) if holds_a_chip(cell.text)), 0)
     return tuple(
         replace(cell, tone=cell.tone or tone) if index == filled else cell for index, cell in enumerate(cells)
     )

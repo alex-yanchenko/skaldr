@@ -12,7 +12,7 @@ Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray
 - **Method**: `full cycle count`
 - **Mode**: strict
 <empty-block/>
-- **Matched cleanly**: 8,500 (85.0%) <span color="green">**▲ +3%**</span>
+- <span color="green">**Matched cleanly**</span>: 8,500 (85.0%) <span color="green">**▲ +3%**</span>
 - **Floor: fixable**: 1,100 (11.0%) <span color="yellow">**Floor**</span>
 	Miscounts + mislabeled bins we can correct. {color="gray"}
 - **Vendor: escalate**: 400 (4.0%) <span color="green">**▼ −90**</span> <span color="red">**Vendor**</span>
