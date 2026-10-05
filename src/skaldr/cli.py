@@ -276,8 +276,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.write_schema:
         schema_path = Path(args.write_schema)
-        schema_path.parent.mkdir(parents=True, exist_ok=True)
-        replace_file(schema_path, json.dumps(Report.model_json_schema(), indent=2) + "\n")
+        try:
+            replace_file(schema_path, json.dumps(Report.model_json_schema(), indent=2) + "\n")
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         print(f"OK  {schema_path}")
         return 0
 

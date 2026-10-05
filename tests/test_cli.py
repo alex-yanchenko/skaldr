@@ -2,6 +2,7 @@ import errno
 import json
 import os
 import re
+import stat
 import time
 from pathlib import Path
 
@@ -300,6 +301,67 @@ def test_write_schema_writes_through_a_symlink_and_keeps_the_link(tmp_path: Path
         0,
         True,
         Report.model_json_schema(),
+    )
+
+
+def test_write_schema_keeps_the_mode_of_the_file_it_replaces(tmp_path: Path) -> None:
+    schema_path = tmp_path / "page.schema.json"
+    schema_path.write_text("{}", encoding="utf-8")
+    schema_path.chmod(0o600)
+
+    assert main(["--write-schema", str(schema_path)]) == 0
+
+    assert (
+        json.loads(schema_path.read_text(encoding="utf-8")),
+        stat.S_IMODE(schema_path.stat().st_mode),
+        sorted(tmp_path.iterdir()),
+    ) == (Report.model_json_schema(), 0o600, [schema_path])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a read-only file")
+def test_write_schema_refuses_a_read_only_file_naming_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    schema_path = tmp_path / "page.schema.json"
+    schema_path.write_text("{}", encoding="utf-8")
+    schema_path.chmod(0o444)
+
+    exit_code = main(["--write-schema", str(schema_path)])
+
+    assert (exit_code, capsys.readouterr().err, schema_path.read_text(encoding="utf-8")) == (
+        1,
+        f"error: [Errno {errno.EACCES}] the file is read-only, so skaldr leaves it as it is: "
+        f"'{schema_path}'\n",
+        "{}",
+    )
+
+
+def test_a_render_keeps_the_mode_of_the_page_it_replaces(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    out_path.write_text("earlier page", encoding="utf-8")
+    out_path.chmod(0o640)
+
+    assert main([str(data_path), "-o", str(out_path), "--no-source"]) == 0
+
+    assert (
+        out_path.read_text(encoding="utf-8"),
+        stat.S_IMODE(out_path.stat().st_mode),
+        sorted(tmp_path.iterdir()),
+    ) == (render_html(parse_report(make_report())), 0o640, [out_path, data_path])
+
+
+def test_a_render_into_a_symlink_whose_folder_is_missing_creates_the_folder(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    target = tmp_path / "published" / "deep" / "report.html"
+    link = tmp_path / "report.html"
+    link.symlink_to(target)
+
+    assert main([str(data_path), "-o", str(link), "--no-source"]) == 0
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (
+        True,
+        render_html(parse_report(make_report())),
     )
 
 

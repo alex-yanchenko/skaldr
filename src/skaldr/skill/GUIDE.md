@@ -28,7 +28,7 @@ at all if the check fails.
 
 A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own.
 
-Every file skaldr writes (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) is written to a temporary file next to it and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, and an existing file keeps its permissions. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text.
+The files skaldr writes itself (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) are written to a temporary file next to the file and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, a missing folder on the way to that target is created, and an existing file keeps its permissions. A read-only file is refused with an error naming it and left as it is. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text. The `--pdf` file is the exception: the headless browser writes it directly, so none of this applies to it.
 
 ## `meta`
 

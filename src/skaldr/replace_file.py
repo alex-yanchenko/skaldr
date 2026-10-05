@@ -4,15 +4,21 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from skaldr.errors import ReadOnlyFileError
+
 
 def resolved_path(path: Path) -> Path:
-    try:
-        resolved = path.resolve()
-    except RuntimeError as err:
-        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(path)) from err
+    resolved = Path(os.path.realpath(path))
     if resolved.is_symlink():
         raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(path))
     return resolved
+
+
+def _refuse_a_read_only_file(path: Path) -> None:
+    if path.is_file() and not os.access(path, os.W_OK):
+        raise ReadOnlyFileError(
+            errno.EACCES, "the file is read-only, so skaldr leaves it as it is", str(path)
+        )
 
 
 def _rewrite_in_place(path: Path) -> bool:
@@ -25,7 +31,9 @@ def replace_file(path: Path, text: str) -> None:
     path = resolved_path(path)
     if path.is_dir():
         raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(path))
+    _refuse_a_read_only_file(path)
     encoded = text.encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
     if _rewrite_in_place(path):
         path.write_bytes(encoded)
         return

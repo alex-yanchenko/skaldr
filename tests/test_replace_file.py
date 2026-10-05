@@ -1,11 +1,13 @@
 import errno
 import os
 import stat
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from skaldr.errors import ReadOnlyFileError
 from skaldr.replace_file import replace_file
 
 
@@ -15,6 +17,65 @@ def read_only_directory(tmp_path: Path) -> Iterator[Path]:
     directory.mkdir()
     yield directory
     directory.chmod(0o755)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a read-only file")
+@pytest.mark.parametrize("directory_mode", [0o755, 0o555], ids=["writable-directory", "read-only-directory"])
+def test_a_read_only_file_is_refused_and_left_untouched(tmp_path: Path, directory_mode: int) -> None:
+    directory = tmp_path / "pages"
+    directory.mkdir()
+    path = directory / "page.html"
+    path.write_text("earlier page", encoding="utf-8")
+    path.chmod(0o444)
+    directory.chmod(directory_mode)
+
+    try:
+        with pytest.raises(ReadOnlyFileError) as raised:
+            replace_file(path, "new page")
+        outcome = (str(raised.value), path.read_text(encoding="utf-8"), sorted(directory.iterdir()))
+    finally:
+        directory.chmod(0o755)
+
+    assert outcome == (
+        f"[Errno {errno.EACCES}] the file is read-only, so skaldr leaves it as it is: '{path}'",
+        "earlier page",
+        [path],
+    )
+
+
+def test_a_dangling_symlink_into_a_missing_folder_creates_that_folder(tmp_path: Path) -> None:
+    target = tmp_path / "published" / "deep" / "page.html"
+    link = tmp_path / "page.html"
+    link.symlink_to(target)
+
+    replace_file(link, "new page")
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (True, "new page")
+
+
+def test_the_staging_folder_sits_next_to_the_file_a_symlink_points_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "published" / "page.html"
+    target.parent.mkdir()
+    target.write_text("earlier page", encoding="utf-8")
+    link = tmp_path / "links" / "page.html"
+    link.parent.mkdir()
+    link.symlink_to(target)
+    staged_in: list[str | None] = []
+    real_temporary_directory = tempfile.TemporaryDirectory
+
+    def recording_temporary_directory(
+        *, prefix: str | None = None, dir: str | Path | None = None
+    ) -> tempfile.TemporaryDirectory[str]:
+        staged_in.append(None if dir is None else str(dir))
+        return real_temporary_directory(prefix=prefix, dir=dir)
+
+    monkeypatch.setattr("skaldr.replace_file.tempfile.TemporaryDirectory", recording_temporary_directory)
+
+    replace_file(link, "new page")
+
+    assert (staged_in, target.read_text(encoding="utf-8")) == ([str(target.parent)], "new page")
 
 
 def test_a_new_file_is_written_with_its_text(tmp_path: Path) -> None:
