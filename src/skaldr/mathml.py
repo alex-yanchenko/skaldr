@@ -21,6 +21,7 @@ NOTION_EQUATION_FENCE: Final = "$$"
 ENVIRONMENT_OPENING = re.compile(r"\\begin\{([^{}]+)\}")
 KNOWN_ENVIRONMENTS: Final = frozenset(command.removeprefix("\\") for command in MATRICES)
 COLOUR_ATTRIBUTES: Final = frozenset({"mathcolor", "mathbackground", "border-color"})
+CSS_COMMENT_OPENING: Final = "/*"
 MATHML_ATTRIBUTES: Final = frozenset(
     {
         "accent",
@@ -272,11 +273,20 @@ def _braced_argument(following: Sequence[str]) -> str:
 
 def _refuse_unknown_colour(element: Element, expression: str) -> None:
     for name, value in element.attrib.items():
-        if name in COLOUR_ATTRIBUTES and parse_color(value) is None:
+        if name in COLOUR_ATTRIBUTES and not _is_css_colour(value):
             raise ReportError(
                 f"math expression '{expression}' sets the colour '{value}', which is not a CSS colour: write "
                 "a colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)"
             )
+
+
+def _is_css_colour(value: str) -> bool:
+    if CSS_COMMENT_OPENING in value or value.count("(") != value.count(")"):
+        return False
+    try:
+        return parse_color(value) is not None
+    except ValueError:
+        return False
 
 
 def _refuse_unknown_command_token(tokens: Sequence[str], expression: str) -> None:

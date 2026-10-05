@@ -268,6 +268,12 @@ def test_inline_math_the_converter_rejects_fails_naming_the_expression() -> None
             r"\binom each take two, as in \frac{a}{b}",
             id="fraction-missing-a-part",
         ),
+        pytest.param(
+            r"\color{color()} x",
+            r"math expression '\color{color()} x' sets the colour 'color()', which is not a CSS colour: "
+            "write a colour name like red, a hex value like #ff0000, or a colour function like rgb(255,0,0)",
+            id="colour-the-css-parser-raises-on",
+        ),
     ],
 )
 def test_inline_math_that_cannot_render_fails_naming_the_expression(expression: str, message: str) -> None:

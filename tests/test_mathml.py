@@ -221,6 +221,16 @@ def test_an_environment_defined_with_spaces_in_its_newenvironment_converts(
         pytest.param(r"\color{red blue} x", "red blue", id="two-colours"),
         pytest.param(r"\color{var(--x)} y", "var(--x)", id="custom-property"),
         pytest.param(r"\color{url(x)} y", "url(x)", id="url"),
+        pytest.param(r"\color{color()} x", "color()", id="colour-function-the-parser-raises-on"),
+        pytest.param(r"\color{color( )} x", "color( )", id="spaced-colour-function-the-parser-raises-on"),
+        pytest.param(r"\color{red/*x*/} y", "red/*x*/", id="css-comment"),
+        pytest.param(r"\color{/*x*/red} y", "/*x*/red", id="leading-css-comment"),
+        pytest.param(r"\color{rgb(1,0,0} x", "rgb(1,0,0", id="unterminated-function"),
+        pytest.param(r"\color{rgb(1,0,0))} x", "rgb(1,0,0))", id="extra-closing-parenthesis"),
+        pytest.param(r"\colorbox{rgb(255 0 0)}{x}", "rgb(25500)", id="box-drops-the-spaces"),
+        pytest.param(
+            r"\fcolorbox{oklch(0.6 0.2 30)}{red}{x}", "oklch(0.60.230)", id="box-border-drops-the-spaces"
+        ),
     ],
 )
 def test_a_colour_css_does_not_parse_fails_naming_it(expression: str, colour: str) -> None:
@@ -277,6 +287,16 @@ def test_a_colour_css_does_not_parse_fails_naming_it(expression: str, colour: st
         ),
         pytest.param(
             r"\color{#aabbccdd} x", '<mstyle mathcolor="#aabbccdd"><mi>x</mi></mstyle>', id="hex-with-alpha"
+        ),
+        pytest.param(
+            r"\color{rgb(255 0 0 / 50%)} x",
+            '<mstyle mathcolor="rgb(255 0 0 / 50%)"><mi>x</mi></mstyle>',
+            id="space-and-slash-form",
+        ),
+        pytest.param(
+            r"\colorbox{rgb(255,0,0)}{x}",
+            '<mpadded mathbackground="rgb(255,0,0)"><mtext>x</mtext></mpadded>',
+            id="box-with-the-comma-form",
         ),
     ],
 )
