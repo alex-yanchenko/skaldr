@@ -1,12 +1,11 @@
-import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from fractions import Fraction
 from typing import Final
 
 from typing_extensions import assert_never
 
+from skaldr.export.apportion import apportioned
 from skaldr.export.markup import (
     CALLOUT_ICON,
     DIVIDER_LINE,
@@ -60,7 +59,6 @@ OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
-SHARE_DENOMINATOR_LIMIT: Final = 1_000_000
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -179,16 +177,6 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     return _row_lines(row.cells, texts, tone)
 
 
-def apportioned_pixels(weights: Sequence[float], total: int) -> list[int]:
-    exact = [Fraction(weight).limit_denominator(SHARE_DENOMINATOR_LIMIT) for weight in weights]
-    quotas = [weight / sum(exact) * total for weight in exact]
-    widths = [math.floor(quota) for quota in quotas]
-    by_remainder = sorted(range(len(quotas)), key=lambda index: widths[index] - quotas[index])
-    for index in by_remainder[: total - sum(widths)]:
-        widths[index] += 1
-    return widths
-
-
 def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
     shares = [column.share for column in columns]
     auto_count = shares.count(None)
@@ -196,7 +184,7 @@ def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
         return [None] * len(shares)
     auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
     weights = [auto_share if share is None else share for share in shares]
-    return apportioned_pixels(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
+    return apportioned(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
 
 
 def _width_attribute(width: int | None) -> str:

@@ -6,11 +6,11 @@ from typing import get_args
 import pytest
 
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
+from skaldr.export.apportion import apportioned
 from skaldr.export.markup import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
     NotionChunks,
-    apportioned_pixels,
     chunk_notion,
     notion_inline,
     render_notion,
@@ -729,7 +729,7 @@ def test_number_columns_too_many_for_their_default_width_leave_the_label_a_posit
 def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_float_noise(
     shares: list[float],
 ) -> None:
-    assert apportioned_pixels(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
+    assert apportioned(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
 
 
 def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:

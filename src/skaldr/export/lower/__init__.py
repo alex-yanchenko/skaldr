@@ -4,6 +4,7 @@ from itertools import chain
 from typing_extensions import assert_never
 
 from skaldr import compute, models
+from skaldr.export.apportion import apportioned
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, lowering_for, spaced
 from skaldr.export.lower.diagrams import lower_chart, lower_fan, lower_flow
@@ -28,7 +29,6 @@ from skaldr.export.lower.prose import (
 )
 from skaldr.export.lower.requests import lower_request, lower_request_flow
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
-from skaldr.export.notion import apportioned_pixels
 from skaldr.export.tree import (
     Callout,
     Columns,
@@ -195,7 +195,7 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
         cell_nodes.append((Callout(cell.tone, children),) if cell.tone else children)
     if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
         return [node for children in cell_nodes for node in children]
-    ratios = apportioned_pixels([cell.span for cell in block.cells], COLUMN_RATIO_TOTAL)
+    ratios = apportioned([cell.span for cell in block.cells], COLUMN_RATIO_TOTAL)
     return [
         Columns(
             tuple(GridColumn(ratio, children) for ratio, children in zip(ratios, cell_nodes, strict=True))
