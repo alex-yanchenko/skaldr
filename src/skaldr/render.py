@@ -30,6 +30,7 @@ from skaldr.models import (
     package_text,
     unresolvable_request_variables,
 )
+from skaldr.prose_blocks import prose_blocks
 from skaldr.publish import without_publish_block
 from skaldr.replace_file import replace_file
 from skaldr.richtext import (
@@ -187,7 +188,7 @@ def html_environment() -> Environment:
     )
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
-    filters["paragraphs"] = compute.paragraphs
+    filters["prose_blocks"] = prose_blocks
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
         pct=compute.pct,

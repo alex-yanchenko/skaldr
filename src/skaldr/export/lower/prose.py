@@ -118,10 +118,10 @@ def lower_def_list(block: models.DefList, lowering: Lowering) -> list[Node]:
 
 
 def _definition(term: str, body: str, lowering: Lowering) -> ListEntry:
-    parts = compute.paragraphs(body)
-    first = lowering.rich(parts[0]) if parts else ()
-    rest = tuple(Paragraph(lowering.rich(part)) for part in parts[1:])
-    return ListEntry(with_bold_label(term, first), children=rest)
+    nodes = lowering.prose(body)
+    if nodes and isinstance(nodes[0], Paragraph):
+        return ListEntry(with_bold_label(term, nodes[0].text), children=nodes[1:])
+    return ListEntry(with_bold_label(term, ()), children=nodes)
 
 
 def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
@@ -246,8 +246,7 @@ def lower_math(block: models.Math) -> list[Node]:
 
 
 def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
-    lines = tuple(lowering.rich(part) for part in compute.paragraphs(block.body))
-    return [Quote(lines, plain(block.cite) if block.cite else ())]
+    return [Quote(lowering.prose_lines(block.body), plain(block.cite) if block.cite else ())]
 
 
 def lower_image(block: models.Image) -> list[Node]:

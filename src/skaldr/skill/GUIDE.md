@@ -148,6 +148,8 @@ Everything else is escaped and shown literally: there is no raw HTML.
 table cells. Every other prose field (`key_value` values, `list` items, `status_list`/`timeline`
 text, headings, labels) is single-line: a blank line there is just collapsed whitespace.
 
+**Lists inside a body.** In those same set-apart bodies, two or more lines in a row that start with `- `, `* ` or a number and `. ` or `) ` (`1. `, `2) `) are a list: bulleted for `-` and `*`, numbered from the first line's number otherwise. A list can sit between plain lines of one paragraph (`Two checks:` on the line above it needs no blank line), a line indented under an item continues that item, and a change of marker starts a new list. A single marked line stays text as written, so `2024. was the year` or a lone `- note` is never a list. Lists are one level deep.
+
 > **YAML gotcha:** a folded `>` block scalar turns blank lines into spaces *before skaldr sees them*,
 > so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:
 > ```yaml
@@ -1025,6 +1027,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges, or note links, citations, inline math, subscripts and superscripts it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, `panel`, a toned `grid` cell | a quote led by an icon | a native callout |
+| a list inside a set-apart body | a Markdown list; inside a table cell or a `quote`, each item is a line led by `• ` or its number | a native list; inside a table cell or a `quote`, each item is a line led by `• ` or its number, since a Notion cell or quote holds only text |
 | a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
 | a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |

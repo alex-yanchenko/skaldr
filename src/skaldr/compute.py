@@ -58,6 +58,7 @@ from skaldr.models import (
     iter_tables,
     walk_blocks,
 )
+from skaldr.prose_blocks import rendered_strings
 from skaldr.richtext import RichContext, parse_rich
 
 __all__ = [
@@ -621,12 +622,8 @@ def provenance_footer(report: Report) -> str | None:
     return " · ".join(parts) if parts else None
 
 
-def paragraphs(text: str) -> list[str]:
-    return [part.strip() for part in text.split("\n\n") if part.strip()]
-
-
 def _parsed_strings(text: str, marker: RichTextMarker) -> list[str]:
-    return paragraphs(text) if marker.split_into_paragraphs else [text]
+    return rendered_strings(text) if marker.split_into_paragraphs else [text]
 
 
 def _rich_text_marker(hint: object) -> RichTextMarker | None:

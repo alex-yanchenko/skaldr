@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -1479,3 +1479,48 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
     result = export_notion(report, tmp_path, chunk=1)
 
     assert [path.name for path in result.files] == [f"page.{index:03d}.md" for index in range(101)]
+
+
+@pytest.mark.parametrize(
+    ("block", "page"),
+    [
+        pytest.param(
+            {"type": "callout", "tone": "warning", "title": "List", "body": "- first with `code`\n- second"},
+            '<callout icon="⚠️" color="yellow_bg">\n'
+            "\t**List**\n\t- first with `code`\n\t- second\n</callout>\n",
+            id="callout-whose-body-is-a-list",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two\n\nAfter."}]},
+            "- **Why**\n\t- one\n\t- two\n\tAfter.\n",
+            id="definition-that-opens-with-a-list",
+        ),
+        pytest.param(
+            {"type": "quote", "body": "Said:\n2. b\n3. c"},
+            "> Said:<br>2\\. b<br>3\\. c\n",
+            id="quote-lines-carry-their-markers",
+        ),
+        pytest.param(
+            {"type": "text", "body": "Intro\n- a\n- b"},
+            "Intro\n- a\n- b\n",
+            id="text-body",
+        ),
+    ],
+)
+def test_list_lines_in_prose_become_notion_lists(block: dict[str, Any], page: str) -> None:
+    assert notion_of([block]) == page
+
+
+def test_list_lines_in_a_table_cell_are_bulleted_lines_since_a_notion_cell_holds_only_text() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "Steps:\n- one\n- two"}],
+    }
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>Steps:<br>• one<br>• two</td>\n\t</tr>\n"
+        "</table>\n"
+    )
