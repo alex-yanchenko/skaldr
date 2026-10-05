@@ -25,7 +25,6 @@ UNDERLINE_OPEN: Final = "underline_open"
 SUBSCRIPT: Final = "subscript"
 SUPERSCRIPT: Final = "superscript"
 LINK_OPEN: Final = "link_open"
-TEXT: Final = "text"
 CODE_INLINE: Final = "code_inline"
 STRONG_OPEN: Final = "strong_open"
 EM_OPEN: Final = "em_open"
@@ -35,7 +34,8 @@ _TINT_CLOSE: Final = "tint_close"
 _UNDERLINE_CLOSE: Final = "underline_close"
 _LINK_CLOSE: Final = "link_close"
 _LINK_RULE: Final = "link"
-_TEXT_RULE: Final = "text"
+_TEXT: Final = "text"
+_LEVELS_ABOVE_THE_DEEPEST_RUN: Final = 1
 _ESCAPE_RULE: Final = "escape"
 _BACKTICKS_RULE: Final = "backticks"
 _EMPHASIS_RULE: Final = "emphasis"
@@ -183,13 +183,13 @@ def _closes_brackets_nested_past_the_limit(source: str, close: int) -> bool:
 
 def _attribute_list_colors_no_text(attributes: str) -> ReportError:
     return ReportError(
-        "the attribute list {" + attributes.strip() + "} follows no [text] it can color: the text "
+        f"the attribute list {{{attributes.strip()}}} follows no [text] it can color: the text "
         "inside a [text]{…} span is not empty and holds no link"
     )
 
 
 def _span_tones(attributes: str) -> SpanTones:
-    token = "{" + attributes.strip() + "}"
+    token = f"{{{attributes.strip()}}}"
     tones: dict[str, ToneLiteral] = {}
     for attribute in attributes.split():
         key, equals, value = attribute.partition("=")
@@ -285,9 +285,9 @@ def _underline_delimiters(state: StateInline, silent: bool) -> bool:
         return False
     pairs, odd = divmod(scanned.length, 2)
     if odd:
-        state.push(TEXT, "", 0).content = _UNDERLINE_MARKER
+        state.push(_TEXT, "", 0).content = _UNDERLINE_MARKER
     for _ in range(pairs):
-        state.push(TEXT, "", 0).content = _UNDERLINE_MARKER * 2
+        state.push(_TEXT, "", 0).content = _UNDERLINE_MARKER * 2
         state.delimiters.append(
             Delimiter(
                 marker=ord(_UNDERLINE_MARKER),
@@ -325,7 +325,7 @@ def _underline_pairs(state: StateInline) -> None:
 
 
 def _rich_markdown() -> MarkdownIt:
-    markdown = _RichMarkdown("zero", {"maxNesting": MAX_NESTING + 1})
+    markdown = _RichMarkdown("zero", {"maxNesting": MAX_NESTING + _LEVELS_ABOVE_THE_DEEPEST_RUN})
     markdown.enable([_ESCAPE_RULE, _BACKTICKS_RULE, _STRIKETHROUGH_RULE, _EMPHASIS_RULE, _LINK_RULE])
     inline = markdown.inline.ruler
     inline.before(_BACKTICKS_RULE, INLINE_MATH, _inline_math)
