@@ -51,6 +51,7 @@
         "label": {
           "description": "Group label, shown in the row's gutter.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -130,8 +131,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -196,8 +197,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -283,10 +284,16 @@
         "value": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "string"
@@ -302,10 +309,16 @@
         "of": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "null"
@@ -423,6 +436,7 @@
         "label": {
           "description": "Delta text shown beside the value, e.g. '+12%' or '0.3s'.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -480,8 +494,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -520,8 +534,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -604,6 +618,7 @@
         "label": {
           "description": "Series name, shown in the legend.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -617,7 +632,9 @@
               {
                 "type": "number"
               }
-            ]
+            ],
+            "maximum": 1e+300,
+            "minimum": -1e+300
           },
           "minItems": 1,
           "title": "Values",
@@ -660,6 +677,7 @@
         "label": {
           "description": "Slice name, shown in the legend.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -673,6 +691,8 @@
             }
           ],
           "description": "Slice magnitude (> 0); its share of the whole is derived.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value"
         },
         "tone": {
@@ -712,8 +732,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -810,8 +830,8 @@
         "width": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -859,8 +879,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -897,6 +917,8 @@
         "highlight": {
           "anyOf": [
             {
+              "maximum": 1e+300,
+              "minimum": -1e+300,
               "type": "integer"
             },
             {
@@ -942,6 +964,7 @@
         "value": {
           "description": "Cell text (for a \u2713/\u2717 pass a bare true/false instead).",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Value",
           "type": "string"
         },
@@ -981,6 +1004,7 @@
         "feature": {
           "description": "Row label: the attribute being compared.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Feature",
           "type": "string"
         },
@@ -1017,6 +1041,7 @@
         "term": {
           "description": "The label/term, rendered prominent (e.g. 'Action').",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Term",
           "type": "string"
         },
@@ -1040,8 +1065,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1080,8 +1105,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1131,8 +1156,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1172,8 +1197,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1227,8 +1252,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1289,6 +1314,7 @@
         "label": {
           "description": "Short stage name: the node label.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -1357,8 +1383,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1609,6 +1635,8 @@
         },
         "value": {
           "description": "Count in the bucket; added to the column sum for reconciliation.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value",
           "type": "integer"
         }
@@ -1626,8 +1654,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1646,6 +1674,7 @@
         "text": {
           "description": "Heading text; also the TOC entry at level 2.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -1677,6 +1706,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -1701,8 +1732,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1744,6 +1775,8 @@
         "max_width": {
           "anyOf": [
             {
+              "maximum": 1e+300,
+              "minimum": -1e+300,
               "type": "integer"
             },
             {
@@ -1769,8 +1802,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -1981,8 +2014,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2278,8 +2311,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2318,8 +2351,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2350,8 +2383,8 @@
         "start": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 999999999,
+              "maximum": 999999999,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2383,8 +2416,10 @@
         "items": {
           "description": "Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest sub-points (nested lists inherit the parent's style; up to 4 levels deep).",
           "items": {
-            "anyOf": [
+            "oneOf": [
               {
+                "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -2410,6 +2445,7 @@
         "text": {
           "description": "The point's rich-text content.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -2429,8 +2465,10 @@
           "default": [],
           "description": "Optional nested sub-points, rendered as an indented list in the parent's style.",
           "items": {
-            "anyOf": [
+            "oneOf": [
               {
+                "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -2454,8 +2492,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2491,8 +2529,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2511,6 +2549,8 @@
         "rows": {
           "description": "Row labels, top to bottom (the row axis).",
           "items": {
+            "minLength": 1,
+            "pattern": "\\S",
             "type": "string"
           },
           "minItems": 1,
@@ -2520,6 +2560,8 @@
         "columns": {
           "description": "Column headers, left to right (the column axis).",
           "items": {
+            "minLength": 1,
+            "pattern": "\\S",
             "type": "string"
           },
           "minItems": 1,
@@ -2566,18 +2608,22 @@
         "row": {
           "description": "Which row this cell sits in: one of the block's `rows`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Row",
           "type": "string"
         },
         "col": {
           "description": "Which column this cell sits in: one of the block's `columns`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Col",
           "type": "string"
         },
         "badge": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -2614,6 +2660,8 @@
         "label": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -2712,8 +2760,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2764,6 +2812,8 @@
             }
           ],
           "description": "Filled amount (0 \u2264 value \u2264 max).",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value"
         },
         "max": {
@@ -2776,6 +2826,8 @@
             }
           ],
           "description": "Bar maximum (> 0); the denominator for the derived percentage.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Max"
         },
         "tone": {
@@ -2816,8 +2868,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2836,6 +2888,7 @@
         "body": {
           "description": "Rich-text aside; blank lines split paragraphs.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Body",
           "type": "string"
         },
@@ -2974,8 +3027,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -2994,6 +3047,7 @@
         "title": {
           "description": "Panel title, shown in the header band.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },
@@ -3192,8 +3246,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3241,8 +3295,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3326,6 +3380,7 @@
         "label": {
           "description": "Label shown inside the segment.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3339,6 +3394,8 @@
             }
           ],
           "description": "Relative width (> 0). Spans are normalised across the segments, so only the ratios matter: [3, 1] and [30, 10] render identically.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Span"
         },
         "tone": {
@@ -3367,6 +3424,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3391,6 +3450,8 @@
         "total": {
           "description": "Denominator; the column sum + handled must equal this.",
           "exclusiveMinimum": 0,
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Total",
           "type": "integer"
         },
@@ -3432,6 +3493,7 @@
         "text": {
           "description": "Rich-text source description (e.g. a doc name + page).",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Text",
           "type": "string"
         },
@@ -3462,8 +3524,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3502,8 +3564,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3539,6 +3601,7 @@
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3594,6 +3657,8 @@
         "command_note": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3615,6 +3680,8 @@
         "body": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3718,12 +3785,15 @@
         "label": {
           "description": "Tab label, and the case's heading when printed.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
         "value": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3806,6 +3876,8 @@
         "verdict": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -3830,8 +3902,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -3872,6 +3944,7 @@
         "label": {
           "description": "What the flow is for, shown in the block header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -3899,8 +3972,8 @@
         "status": {
           "anyOf": [
             {
-              "ge": 100,
-              "le": 599,
+              "maximum": 599,
+              "minimum": 100,
               "type": "integer"
             },
             {
@@ -3960,6 +4033,7 @@
         "label": {
           "description": "What the call is for, shown in the header.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -4015,6 +4089,8 @@
         "command_note": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4036,6 +4112,8 @@
         "body": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4097,6 +4175,8 @@
         "label": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4110,6 +4190,8 @@
         "example": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4167,8 +4249,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4186,6 +4268,8 @@
         },
         "title": {
           "description": "Summary label shown on the collapsible.",
+          "minLength": 1,
+          "pattern": "\\S",
           "title": "Title",
           "type": "string"
         },
@@ -4246,6 +4330,7 @@
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
+                "panel": "#/$defs/Panel",
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
@@ -4354,6 +4439,9 @@
               },
               {
                 "$ref": "#/$defs/RequestFlow"
+              },
+              {
+                "$ref": "#/$defs/Panel"
               }
             ]
           },
@@ -4404,8 +4492,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4444,8 +4532,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -4464,7 +4552,16 @@
         "lanes": {
           "description": "Lanes, in row order (top to bottom). A bare string is shorthand for `{name: \u2026}`; use `{id, name}` to give a stable reference key. Capped at 8: more rows than that stop reading as a matrix; split into two swimlanes instead.",
           "items": {
-            "$ref": "#/$defs/SwimlaneLane"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/SwimlaneLane"
+              }
+            ]
           },
           "maxItems": 8,
           "minItems": 1,
@@ -4474,7 +4571,16 @@
         "columns": {
           "description": "Columns, left to right: the sprint / phase axis. A bare string is shorthand for `{name: \u2026}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
           "items": {
-            "$ref": "#/$defs/SwimlaneColumn"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/SwimlaneColumn"
+              }
+            ]
           },
           "minItems": 1,
           "title": "Columns",
@@ -4513,6 +4619,7 @@
         "name": {
           "description": "Column header label.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4534,6 +4641,8 @@
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {
@@ -4557,6 +4666,7 @@
         "name": {
           "description": "Group (milestone / delivery) name, shown on its cap.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4599,6 +4709,7 @@
         "name": {
           "description": "Lane label shown in the row gutter.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Name",
           "type": "string"
         },
@@ -4630,24 +4741,28 @@
         "lane": {
           "description": "Which lane this step sits in: one of the block's `lanes`.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Lane",
           "type": "string"
         },
         "col": {
           "description": "Which column (sprint) this step sits in: one of the block's `columns`. Two steps sharing a lane/col stack in that cell.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Col",
           "type": "string"
         },
         "n": {
           "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "N",
           "type": "string"
         },
         "label": {
           "description": "Step label, shown beside the number.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
@@ -4667,10 +4782,16 @@
         "value": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "null"
@@ -4917,8 +5038,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5062,8 +5183,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5118,8 +5239,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5160,8 +5281,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5267,8 +5388,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5321,6 +5442,7 @@
                 "matrix": "#/$defs/Matrix",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
+                "panel": "#/$defs/Panel",
                 "quote": "#/$defs/Quote",
                 "range": "#/$defs/Range",
                 "references": "#/$defs/References",
@@ -5429,6 +5551,9 @@
               },
               {
                 "$ref": "#/$defs/RequestFlow"
+              },
+              {
+                "$ref": "#/$defs/Panel"
               }
             ]
           },
@@ -5466,8 +5591,8 @@
         "span": {
           "anyOf": [
             {
-              "ge": 1,
-              "le": 6,
+              "maximum": 6,
+              "minimum": 1,
               "type": "integer"
             },
             {
@@ -5514,12 +5639,15 @@
         "label": {
           "description": "Step title: a few words to a short sentence; it wraps across lines, so it can be long.",
           "minLength": 1,
+          "pattern": "\\S",
           "title": "Label",
           "type": "string"
         },
         "sub": {
           "anyOf": [
             {
+              "minLength": 1,
+              "pattern": "\\S",
               "type": "string"
             },
             {

@@ -1841,21 +1841,9 @@ def test_a_reconciled_table_shows_its_rollup_and_reconcile_line_which_the_footer
     ("tag", "chips", "tone"),
     [
         pytest.param("API", (Chip("api", "blue"),), "info", id="one-key"),
-        pytest.param(
-            ["API", "OPS"],
-            (Chip("api", "blue"), Plain(" "), Chip("ops", "red")),
-            "info",
-            id="first-of-a-list",
-        ),
-        pytest.param(
-            ["", "API"],
-            (Chip("api", "blue"),),
-            None,
-            id="blank-first-key-leaves-the-row-untinted-like-the-html",
-        ),
     ],
 )
-def test_a_tinted_table_row_takes_the_tone_of_its_first_badge_key(
+def test_a_tinted_table_row_takes_the_tone_of_its_badge_key(
     tag: str | list[str], chips: ExportRich, tone: ToneName | None
 ) -> None:
     badges = {**API_BADGES, "OPS": {"label": "ops", "tone": "red", "legend": False}}

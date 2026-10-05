@@ -20,10 +20,25 @@ publishes* below), nothing else. Every block is a mapping with a `type` discrimi
 **Validation is strict:** an unknown block type, a field that doesn't belong to that block, an
 unknown top-level key, or a value of the wrong shape each fails the build with a precise path,
 e.g. `error: invalid content data: blocks.3.items.2.value: number column needs a numeric value`.
-Run `skaldr --check <file>` to validate without rendering; read the path, fix, re-run. Add an
-output flag and the check becomes a gate on that render: `skaldr --check --strict plan.yaml -o
-plan.html --if-stale` validates and writes in one invocation, and writes nothing at all if the
-check fails.
+A failed reconciliation is listed with the other block errors in the file. A page-wide check (an
+undeclared badge key, a repeated table, matrix, reference or heading id) runs once every block is
+valid and names each place involved after `at`. Run `skaldr --check <file>` to validate without
+rendering; read the path, fix, re-run. Add an output flag and the check becomes a gate on that
+render: `skaldr --check --strict plan.yaml -o plan.html --if-stale` validates and writes in one
+invocation, and writes nothing at all if the check fails.
+
+**Values are never coerced.** A number field takes a YAML number, so `value: '5'` and `start: '4'`
+fail where `value: 5` and `start: 4` pass. A whole-number field such as `span` or `start` takes an
+integer, not `2.0`; a field that takes decimals also takes an integer. A true/false field takes
+`true` or `false` (YAML also reads a bare `yes` or `no` as one), not a quoted `'no'` or a `1`. YAML
+reads `1e3` and `1e+3` as text, because its float form needs a dot and a signed exponent, so write
+`1000` or `1.0e+3` in a number field. The JSON Schema from `--write-schema` is looser than the build
+in one place: it accepts an integral float such as `span: 2.0` where the build wants `2`.
+
+A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
+and labels the schema marks with `pattern: \S` must hold visible text. An empty one fails the build
+at its path with `String should have at least 1 character`, and a whitespace-only one with `String
+should match pattern '\S'`. To leave an optional one empty, leave the field out.
 
 ## `meta`
 
@@ -160,8 +175,9 @@ other blank until you fill in the URL.
 ## Numbers are formatted for you
 
 Write raw numbers (`8500`, not `"8,500"`). skaldr adds thousands separators, computes
-percentages, subtotals, and the reconciliation line. A number field rejects booleans and
-infinities.
+percentages, subtotals, and the reconciliation line. A number field, a table `number` cell and a
+subrow value reject booleans, infinities, and anything beyond 1e300 in either direction, so the sums
+and chart axes skaldr derives always stay finite.
 
 ## Blocks
 
@@ -239,10 +255,12 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
 Images must be self-contained `data:` URIs. skaldr
 embeds images; it does not fetch or generate them. **Base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
-`section`, a `grid`, or a `walkthrough`. It **starts collapsed** (`collapsed: true` default), right
-for an appendix or detail-on-demand; for a doc meant to be **read through** (a weekly status doc), set
-`collapsed: false` so it opens expanded. Its optional `updated` shows a muted "updated <value>" stamp
-in the section header: a free-form label like `meta.date`, for keeping a living doc's regions honest.
+`section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one. A `panel` holds any block
+except a `section`, a `grid`, a `walkthrough` or another `panel` directly inside it. A section
+**starts collapsed** (`collapsed: true` default), right for an appendix or detail-on-demand; for a
+doc meant to be **read through** (a weekly status doc), set `collapsed: false` so it opens expanded.
+Its optional `updated` shows a muted "updated <value>" stamp in the section header: a free-form
+label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor, so a living-doc region can be both navigable and freshness-stamped.
 
@@ -894,6 +912,7 @@ link instead.
   also shows its share of the reconcile total. `pct_of_total` is defined **only** against a
   `reconcile` total. It has no meaning against a plain `totals` sum, so a table that sets
   `pct_of_total` without a `reconcile` is rejected at build time (add a `reconcile`, or drop the flag).
+  It is also rejected on a column that is not a `number` column, which has no share to show.
 - **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
 - **`rollup`** (`{ by: <badge-column-key>, label? }`) adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
@@ -904,7 +923,8 @@ link instead.
   column, so a long table reads as bands of colour (a lightweight heatmap). You name the column;
   skaldr owns the intensity. A row left blank there stays untinted, and an explicit row `tone`
   (`muted`/`danger`) wins over the tint. Must name a `badge` column; the same column can still show
-  its chip.
+  its chip. Each row takes one badge's tone, so a `tint_by` over an in-cell badge column whose cells
+  hold a list of keys is rejected, as a `rollup` over one is.
 - A group with an empty `rows: []` renders a "none" row, so an empty section reads as
   intentional. Group bands show a subtotal of the reconcile/totals column.
 

@@ -1125,6 +1125,19 @@ def test_section_gets_an_anchor_id_and_appears_in_the_toc() -> None:
     assert '<a href="#overview">Overview</a>' in html  # heading still linked, in order
 
 
+def test_a_panel_inside_a_section_renders_as_a_card_in_the_section_body() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    report = parse_report(make_report(blocks=[{"type": "section", "title": "Appendix", "blocks": [panel]}]))
+
+    html = render_html(report)
+
+    assert (
+        '<details class="section" id="appendix"><summary>Appendix</summary><div class="section-body">'
+        '<div class="panel-card"><div class="panel-card-hd">Card</div><div class="panel-card-body">'
+        '<p class="text">inside</p></div></div>\n</div></details>'
+    ) in html
+
+
 def test_section_and_its_inner_heading_both_get_anchor_ids() -> None:
     block = {
         "type": "section",
@@ -3716,7 +3729,7 @@ def test_derived_card_label_override_and_note_render() -> None:
 
 def test_derived_card_resolves_a_matrix_nested_in_a_section() -> None:
     """`of_matrix` resolves across the whole block tree — a top-level summary card can count a matrix
-    that lives inside a section (the iter_matrices/iter_cards recursion), and an id-less matrix
+    that lives inside a section (the iter_matrices recursion), and an id-less matrix
     elsewhere on the page does not interfere with the count."""
     decoy = {  # id-less, all HAVE — would inflate the count if wrongly tallied
         "type": "matrix",
@@ -4125,32 +4138,6 @@ def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
 
     assert '<tr class="row danger">' in html  # explicit row tone wins
     assert '<tr class="row tint' not in html  # a toned row never carries a tint class
-
-
-def test_table_tint_by_a_cell_badge_list_uses_the_first_key_tone() -> None:
-    """tint_by may name a placement: cell badge column whose value is a LIST of keys; the row's tint
-    comes from the FIRST key's tone (a single row can't carry two tints)."""
-    table = make_table(
-        columns=[
-            {"key": "item", "label": "Item", "kind": "text"},
-            {"key": "tags", "label": "Tags", "kind": "badge", "placement": "cell"},
-        ],
-        rows=[{"item": "a", "tags": ["DONE", "PENDING"]}],
-        tint_by="tags",
-    )
-    report = parse_report(
-        make_report(
-            blocks=[table],
-            badges={
-                "DONE": {"label": "Done", "tone": "success", "legend": "finished"},
-                "PENDING": {"label": "Pending", "tone": "warning", "legend": "not yet"},
-            },
-        )
-    )
-
-    html = render_html(report)
-
-    assert '<tr class="row tint green">' in html  # first key DONE → success → green drives the tint
 
 
 def test_image_max_width_renders_style() -> None:
@@ -4589,6 +4576,38 @@ def test_chart_escapes_author_category_labels() -> None:
     html = render_html(parse_report(make_report(blocks=[block])))
 
     assert "&lt;x&gt;" in html  # the label is escaped inside the SVG <text>, never raw markup
+
+
+def _bar_chart_at_the_bound(**overrides: object) -> dict[str, object]:
+    return {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["a"],
+        "series": [{"label": "s0", "values": [1e300]}, {"label": "s1", "values": [1e300]}],
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(_bar_chart_at_the_bound(), id="grouped-bars"),
+        pytest.param(_bar_chart_at_the_bound(stacked=True), id="stacked-bars"),
+        pytest.param(_bar_chart_at_the_bound(variant="line"), id="lines"),
+        pytest.param(
+            {
+                "type": "chart",
+                "variant": "donut",
+                "slices": [{"label": "a", "value": 1e300}, {"label": "b", "value": 1e300}],
+            },
+            id="donut",
+        ),
+    ],
+)
+def test_a_chart_of_the_largest_numbers_skaldr_accepts_still_renders(block: dict[str, object]) -> None:
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert html.count('role="img"') == 1
 
 
 def _command_page(**overrides: object) -> str:

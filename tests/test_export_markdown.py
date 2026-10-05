@@ -605,12 +605,6 @@ def test_a_list_entry_with_no_text_is_a_bare_marker() -> None:
     assert render_markdown([ListNode("bullet", (ListEntry(()),))]) == "-\n"
 
 
-def test_an_empty_string_list_item_exports_as_a_bare_marker() -> None:
-    block = {"type": "list", "items": ["", "two"]}
-
-    assert markdown_of([block]) == "-\n- two\n"
-
-
 @pytest.mark.parametrize(
     ("kind", "markdown"),
     [
@@ -799,6 +793,13 @@ def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     }
 
     assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
+
+
+def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+
+    assert markdown_of([section]) == "## Appendix\n\n> 📝 **Card**\n>\n> inside\n"
 
 
 def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:

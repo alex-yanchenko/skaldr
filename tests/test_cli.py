@@ -463,6 +463,24 @@ def test_emit_json_still_refuses_an_output_flag(tmp_path: Path, capsys: pytest.C
     assert "--emit-json only validates" in capsys.readouterr().err
 
 
+def test_emit_json_refuses_a_heading_id_used_twice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "heading", "text": "A", "id": "dup"}, {"type": "heading", "text": "B", "id": "dup"}]
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        (
+            "",
+            "error: invalid content data: Value error, heading/section id(s) used more than once: ['dup'], "
+            "at blocks.0.heading.id, blocks.1.heading.id; heading and section ids must be unique\n",
+        ),
+    )
+
+
 def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
 
@@ -471,6 +489,21 @@ def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.Cap
     captured = capsys.readouterr()
     assert exit_code == 1
     assert f"FAIL  {data_path}" in captured.err
+
+
+def test_check_reports_a_number_cell_beyond_float_range_as_a_failed_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "x", "count": 10**400}]}])
+    data_path = _write(tmp_path, make_report(blocks=[table]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: invalid content data: blocks.0.table: Value error, groups.0.rows.0.count: "
+        "must be between -1e+300 and 1e+300\n\n1 file failed\n",
+    )
 
 
 def test_check_notes_unfilled_placeholders_but_passes_without_strict(
