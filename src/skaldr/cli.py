@@ -11,7 +11,7 @@ import time
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from typing_extensions import assert_never
 
@@ -70,18 +70,17 @@ _STANDALONE_MODES = frozenset(
 )
 
 
-def _flag_name(action: argparse.Action) -> str:
-    return max(action.option_strings, key=len) if action.option_strings else "the content file"
+def _flag_name(dest: str) -> str:
+    return "the content file" if dest == "data" else "--" + dest.replace("_", "-")
 
 
-def _refuse_company_for_a_standalone_mode(
-    parser: argparse.ArgumentParser, args: argparse.Namespace, actions: Sequence[argparse.Action]
-) -> None:
-    given = [action for action in actions if getattr(args, action.dest, action.default) != action.default]
-    mode = next((action for action in given if action.dest in _STANDALONE_MODES), None)
+def _refuse_company_for_a_standalone_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    defaults = vars(parser.parse_args([]))
+    given = [dest for dest, value in vars(args).items() if value != defaults[dest]]
+    mode = next((dest for dest in given if dest in _STANDALONE_MODES), None)
     if mode is None:
         return
-    others = [_flag_name(action) for action in given if action is not mode]
+    others = [_flag_name(dest) for dest in given if dest != mode]
     if others:
         parser.error(f"{_flag_name(mode)} runs on its own; drop {', '.join(others)}")
 
@@ -121,70 +120,65 @@ def main(argv: list[str] | None = None) -> int:
         description="Render a skaldr content file to an HTML page.",
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`.",
     )
-    actions: list[argparse.Action] = []
-
-    def option(*names: str, **settings: Any) -> None:
-        actions.append(parser.add_argument(*names, **settings))
-
-    option(
+    parser.add_argument(
         "--version",
         action="version",
         version=f"skaldr {skaldr_version()}",
         help="print the installed skaldr version and exit",
     )
-    option(
+    parser.add_argument(
         "data",
         nargs="*",
         default=[],
         help="path to the content YAML (one to render; one or more with --check)",
     )
-    option("-o", "--out", help="output HTML path (default: out/<data-stem>.html)")
-    option(
+    parser.add_argument("-o", "--out", help="output HTML path (default: out/<data-stem>.html)")
+    parser.add_argument(
         "--check",
         action="store_true",
         help="validate the content file(s) against the schema; exits non-zero if any file is invalid. "
         "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
         "file to render it once it passes. A file that fails is never written.",
     )
-    option(
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="with --check: also fail if any `{{placeholder}}` blank is still unfilled — the "
         "finalize gate for a rehearse-then-finalize living doc.",
     )
-    option(
+    parser.add_argument(
         "--emit-json",
         action="store_true",
         help="validate the content file and print its normalised model as JSON to stdout (no HTML) — "
         "for tooling/an agent to query the data without re-parsing YAML + markdown.",
     )
-    option(
+    parser.add_argument(
         "--embed",
         action="store_true",
         help="emit an Artifact-ready fragment (inline <style> + content + controls, no "
         "<html>/<head>/<body> skeleton or CSP meta) for publishing to a claude.ai Artifact, "
         "instead of a full document",
     )
-    option(
+    parser.add_argument(
         "--no-source",
         action="store_true",
         help="don't embed the YAML source in the rendered page (by default a full page and an --embed "
         "fragment both carry their own source so `skaldr --extract-source` can recover it)",
     )
-    option(
+    parser.add_argument(
         "--extract-source",
         metavar="FILE|URL",
         help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
         "and exit, so the source is recovered without parsing the HTML. Exits non-zero if none is embedded. "
         "A URL is downloaded in full within 30 seconds and up to 16 MB; a slower or larger page fails.",
     )
-    option(
+    parser.add_argument(
         "--pdf",
         metavar="PATH",
         help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge — needs one "
         "installed; set SKALDR_BROWSER to override discovery). Prints the full page's print styling.",
     )
-    option(
+    parser.add_argument(
         "--watch",
         action="store_true",
         help="re-render to HTML on every save of the content file — a live edit-preview loop; Ctrl-C to "
@@ -192,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         "its !include fragments.) Needs a process that stays alive: under an agent harness that reaps "
         "background jobs between turns, use --if-stale + --live instead.",
     )
-    option(
+    parser.add_argument(
         "--if-stale",
         action="store_true",
         help="render only when the output is missing, older than the content file or any file it "
@@ -201,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         "and `--if-stale` after every edit keeps the page live. Makes an unconditional re-render after "
         "every edit free, so no watcher process is needed.",
     )
-    option(
+    parser.add_argument(
         "--live",
         nargs="?",
         const=0,
@@ -213,18 +207,18 @@ def main(argv: list[str] | None = None) -> int:
         "pages only — an --embed fragment is published as an Artifact and must not reload on a reader's "
         "screen.",
     )
-    option(
+    parser.add_argument(
         "--export",
         choices=EXPORT_TARGETS,
         help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
         "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
     )
-    option(
+    parser.add_argument(
         "--export-dir",
         metavar="DIR",
         help="where --export writes (default: out/<data-stem>.<target>/)",
     )
-    option(
+    parser.add_argument(
         "--chunk",
         type=int,
         metavar="N",
@@ -232,30 +226,30 @@ def main(argv: list[str] | None = None) -> int:
         "code points rather than bytes, each after the first starting at a level 1 or 2 heading, for a tool "
         "or a paste box that caps its input size. A single section longer than N stays whole.",
     )
-    option(
+    parser.add_argument(
         "--write-schema",
         metavar="PATH",
         help="write the JSON Schema for content files to PATH and exit",
     )
-    option(
+    parser.add_argument(
         "--guide",
         action="store_true",
         help="print the authoring guide (blocks, rules, a complete example) and exit",
     )
-    option(
+    parser.add_argument(
         "--install-skill",
         action="store_true",
         help="install skaldr's Claude skill into ~/.claude/skills (copies it — run once, survives "
         "upgrades), then exit",
     )
-    option(
+    parser.add_argument(
         "--install-plan-rule",
         action="store_true",
         help="add skaldr's live-plan-doc rule to ~/.claude/CLAUDE.md — steers the agent to keep its "
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(arguments)
-    _refuse_company_for_a_standalone_mode(parser, args, actions)
+    _refuse_company_for_a_standalone_mode(parser, args)
 
     # Opportunistically refresh already-installed skills that drifted after an upgrade. Fail-safe and
     # silent unless it writes; `--install-skill` below does its own (create-or-refresh) pass.

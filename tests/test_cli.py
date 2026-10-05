@@ -552,6 +552,11 @@ _NO_SOURCE_WITHOUT_A_PAGE = (
             "--install-skill runs on its own; drop --install-plan-rule",
             id="two-installs",
         ),
+        pytest.param(
+            ["--install-plan-rule", "{data}", "--strict"],
+            "--install-plan-rule runs on its own; drop the content file, --strict",
+            id="plan-rule-with-a-file",
+        ),
     ],
 )
 def test_a_flag_that_would_be_silently_ignored_is_refused(
@@ -583,6 +588,34 @@ def test_no_source_with_a_checked_render_writes_the_page_without_its_source(tmp_
     assert main(["--check", str(data_path), "-o", str(out_path), "--no-source"]) == 0
 
     assert out_path.read_text(encoding="utf-8") == render_html(parse_report(make_report()))
+
+
+def test_no_source_with_a_checked_embed_writes_the_default_fragment_without_its_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+
+    assert main(["--check", str(data_path), "--embed", "--no-source"]) == 0
+
+    assert (tmp_path / "out" / "report.html").read_text(encoding="utf-8") == render_embed(
+        parse_report(make_report())
+    )
+
+
+def test_no_source_is_accepted_with_watch_and_reaches_the_watch_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    watched: list[bool] = []
+
+    def record_watch(*_args: object, no_source: bool = False, **_kwargs: object) -> int:
+        watched.append(no_source)
+        return 0
+
+    monkeypatch.setattr("skaldr.cli._watch", record_watch)
+    data_path = _write(tmp_path, make_report())
+
+    assert (main([str(data_path), "--watch", "--no-source"]), watched) == (0, [True])
 
 
 @pytest.mark.parametrize(
