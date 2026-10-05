@@ -55,10 +55,9 @@ _TICK_UNITS: tuple[tuple[float, str], ...] = ((1e9, "B"), (1e6, "M"), (1e3, "k")
 
 
 def _tick(value: float) -> str:
-    """Compact axis-tick text: 1500 → '1.5k', 2500000 → '2.5M', 5e9 → '5B', 250 → '250'."""
     for size, suffix in _TICK_UNITS:
         if value >= size:
-            return f"{round(value / size, 2):g}{suffix}"
+            return f"{value / size:g}{suffix}"
     return f"{value:g}"
 
 
