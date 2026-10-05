@@ -160,6 +160,18 @@ def _request_recording(status: int) -> dict[str, Any]:
     return make_request(cases=[{"label": "one", "response": {"status": status, "body": "[]"}}])
 
 
+def _bar_chart_valued(value: float) -> dict[str, Any]:
+    return {
+        "type": "chart",
+        "variant": "bar",
+        "categories": ["a"],
+        "series": [{"label": "s", "values": [value]}],
+    }
+
+
+NUMBER_OUT_OF_RANGE = "must be between -1e+300 and 1e+300"
+
+
 @pytest.mark.parametrize(
     "block",
     [
@@ -186,11 +198,6 @@ def test_a_bounded_number_at_its_edge_passes_both_the_build_and_the_schema(block
             {"type": "text", "body": "x", "span": 2.0},
             "blocks.0.text.span: Input should be a valid integer",
             id="integral-float-span",
-        ),
-        pytest.param(
-            {"type": "meter", "items": [{"label": "m", "value": 1, "max": 1e301}]},
-            "blocks.0.meter.items.0.max: Value error, must be between -1e+300 and 1e+300",
-            id="number-past-the-bound",
         ),
     ],
 )
@@ -263,6 +270,30 @@ def test_the_schema_accepts_what_the_guide_says_only_the_build_refuses(
             ("blocks", 0, "cells", 0, "span"),
             {"7 is greater than the maximum of 6"},
             id="grid-cell-span-past-six",
+        ),
+        pytest.param(
+            {"type": "meter", "items": [{"label": "m", "value": 1, "max": 1e301}]},
+            "blocks.0.meter.items.0.max",
+            f"Value error, {NUMBER_OUT_OF_RANGE}",
+            ("blocks", 0, "items", 0, "max"),
+            {"1e+301 is greater than the maximum of 1e+300"},
+            id="number-past-the-bound",
+        ),
+        pytest.param(
+            _bar_chart_valued(-1e301),
+            "blocks.0.chart.series.0.values.0",
+            f"Value error, {NUMBER_OUT_OF_RANGE}",
+            ("blocks", 0, "series", 0, "values", 0),
+            {"-1e+301 is less than the minimum of -1e+300"},
+            id="number-below-the-negative-bound",
+        ),
+        pytest.param(
+            {"type": "image", "src": "data:image/png;base64,AA==", "alt": "a", "max_width": 10**301},
+            "blocks.0.image.max_width",
+            f"Value error, {NUMBER_OUT_OF_RANGE}",
+            ("blocks", 0, "max_width"),
+            {f"{10**301} is greater than the maximum of 1e+300", f"{10**301} is not of type 'null'"},
+            id="count-past-the-bound",
         ),
     ],
 )

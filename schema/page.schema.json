@@ -284,10 +284,16 @@
         "value": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "string"
@@ -303,10 +309,16 @@
         "of": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "null"
@@ -620,7 +632,9 @@
               {
                 "type": "number"
               }
-            ]
+            ],
+            "maximum": 1e+300,
+            "minimum": -1e+300
           },
           "minItems": 1,
           "title": "Values",
@@ -677,6 +691,8 @@
             }
           ],
           "description": "Slice magnitude (> 0); its share of the whole is derived.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value"
         },
         "tone": {
@@ -901,6 +917,8 @@
         "highlight": {
           "anyOf": [
             {
+              "maximum": 1e+300,
+              "minimum": -1e+300,
               "type": "integer"
             },
             {
@@ -1617,6 +1635,8 @@
         },
         "value": {
           "description": "Count in the bucket; added to the column sum for reconciliation.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value",
           "type": "integer"
         }
@@ -1755,6 +1775,8 @@
         "max_width": {
           "anyOf": [
             {
+              "maximum": 1e+300,
+              "minimum": -1e+300,
               "type": "integer"
             },
             {
@@ -2790,6 +2812,8 @@
             }
           ],
           "description": "Filled amount (0 \u2264 value \u2264 max).",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Value"
         },
         "max": {
@@ -2802,6 +2826,8 @@
             }
           ],
           "description": "Bar maximum (> 0); the denominator for the derived percentage.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Max"
         },
         "tone": {
@@ -3368,6 +3394,8 @@
             }
           ],
           "description": "Relative width (> 0). Spans are normalised across the segments, so only the ratios matter \u2014 [3, 1] and [30, 10] render identically.",
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Span"
         },
         "tone": {
@@ -3422,6 +3450,8 @@
         "total": {
           "description": "Denominator; the column sum + handled must equal this.",
           "exclusiveMinimum": 0,
+          "maximum": 1e+300,
+          "minimum": -1e+300,
           "title": "Total",
           "type": "integer"
         },
@@ -4752,10 +4782,16 @@
         "value": {
           "anyOf": [
             {
-              "type": "integer"
-            },
-            {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
             },
             {
               "type": "null"

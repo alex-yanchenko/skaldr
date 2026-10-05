@@ -32,8 +32,7 @@ integer, not `2.0`; a field that takes decimals also takes an integer. A true/fa
 `true` or `false` (YAML also reads a bare `yes` or `no` as one), not a quoted `'no'` or a `1`. YAML
 reads `1e3` and `1e+3` as text, because its float form needs a dot and a signed exponent, so write
 `1000` or `1.0e+3` in a number field. The JSON Schema from `--write-schema` is looser than the build
-in two places: it accepts an integral float such as `span: 2.0` where the build wants `2`, and it
-states no bound on a number, while the build refuses one beyond 1e300 in either direction.
+in one place: it accepts an integral float such as `span: 2.0` where the build wants `2`.
 
 A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
 and labels the schema marks with `pattern: \S` must hold visible text. An empty one fails the build

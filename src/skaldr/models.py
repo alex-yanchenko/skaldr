@@ -97,8 +97,9 @@ def _refuse_an_unusable_number(value: int | float, location: str) -> None:
 # Numeric field types that reject bool + non-finite before pydantic coerces them.
 # Number keeps the int-vs-float distinction (a card's `600` stays an int); Count is int-only.
 _NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
-Number = Annotated[int | float, _NUMBER_GUARD]
-Count = Annotated[int, _NUMBER_GUARD]
+_NUMBER_BOUND_IN_SCHEMA = Field(json_schema_extra={"minimum": -LARGEST_NUMBER, "maximum": LARGEST_NUMBER})
+Number = Annotated[int | float, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
+Count = Annotated[int, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
 SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
 
@@ -2363,7 +2364,7 @@ Panel.model_rebuild()
 
 
 class InnerGridCell(FrozenModel):
-    span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
+    span: SixthsCount = Field(description="Columns this cell spans, of 6.")
     blocks: list[InnerBlock] = Field(min_length=1, description="Leaf blocks stacked in the cell.")
     tone: Tone | None = Field(
         default=None,
@@ -2386,7 +2387,7 @@ CellBlock = Annotated[_Leaf | InnerGrid, Field(discriminator="type")]
 
 
 class GridCell(FrozenModel):
-    span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
+    span: SixthsCount = Field(description="Columns this cell spans, of 6.")
     blocks: list[CellBlock] = Field(
         min_length=1, description="Blocks stacked in the cell; may include nested grids (depth 2 max)."
     )
@@ -2439,10 +2440,8 @@ class Walkthrough(_Block):
         min_length=1,
         description="Ordered steps; each is a big numbered title beside its detail column.",
     )
-    step_span: Count = Field(
+    step_span: Annotated[int, Field(ge=1, le=5), _NUMBER_GUARD] = Field(
         default=2,
-        ge=1,
-        le=5,
         description="Width of the title column, of 6; the detail column takes the rest (default 2).",
     )
 
