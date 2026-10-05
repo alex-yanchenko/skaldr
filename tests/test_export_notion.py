@@ -1771,3 +1771,61 @@ def test_the_document_meta_chooses_the_notion_page_width(tmp_path: Path) -> None
     export_notion(report, tmp_path)
 
     assert '<col width="600">\n\t\t<col width="600">' in (tmp_path / "page.md").read_text(encoding="utf-8")
+
+
+def _long_table(rows: int) -> TableNode:
+    return TableNode(
+        (TableCell((Plain("Name"),)), TableCell((Plain("Note"),))),
+        tuple(
+            TableRow((TableCell((Plain(f"row {index}"),)), TableCell((Plain("n" * 30),))))
+            for index in range(rows)
+        ),
+    )
+
+
+def _row_names(chunk: str) -> list[str]:
+    return re.findall(r"<td>(row \d+)</td>", chunk)
+
+
+def test_a_table_longer_than_the_chunk_splits_into_tables_that_repeat_the_header() -> None:
+    split = chunk_notion([Heading(2, (Plain("Big"),)), _long_table(12)], 400)
+
+    assert split.oversized_sections == ()
+    assert all(len(chunk) <= 400 for chunk in split.chunks)
+    assert all(chunk.count("<td>**Name**</td>") == 1 for chunk in split.chunks)
+    assert [name for chunk in split.chunks for name in _row_names(chunk)] == [
+        f"row {index}" for index in range(12)
+    ]
+    assert split.chunks[0].startswith("## Big\n<table")
+
+
+def test_the_parts_of_a_split_full_width_table_keep_one_set_of_column_widths() -> None:
+    table = TableNode(
+        (TableCell((Plain("Name"),)), TableCell((Plain("Note"),))),
+        tuple(
+            TableRow(
+                (TableCell((Plain(f"row {index}"),)), TableCell((Plain("n" * (5 if index < 6 else 80)),)))
+            )
+            for index in range(12)
+        ),
+    )
+
+    split = chunk_notion([table], 700, page_width="full")
+
+    assert len(split.chunks) > 1
+    assert {tuple(re.findall(r'<col width="(\d+)">', chunk)) for chunk in split.chunks} == {("141", "1059")}
+
+
+def test_a_long_section_splits_between_blocks_and_keeps_a_heading_with_the_block_after_it() -> None:
+    paragraphs = [Paragraph((Plain(f"paragraph {index} " + "p" * 40),)) for index in range(3)]
+
+    split = chunk_notion([Heading(2, (Plain("Notes"),)), *paragraphs], 100)
+
+    assert split == NotionChunks(
+        (
+            "## Notes\nparagraph 0 " + "p" * 40 + "\n",
+            "paragraph 1 " + "p" * 40 + "\n",
+            "paragraph 2 " + "p" * 40 + "\n",
+        ),
+        (),
+    )

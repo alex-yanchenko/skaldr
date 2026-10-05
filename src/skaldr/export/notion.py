@@ -37,6 +37,7 @@ from skaldr.export.tree import (
     Paragraph,
     Quote,
     TableCell,
+    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -417,18 +418,7 @@ def _list_kind(node: Node) -> ListKind | None:
 
 
 def _notion_blocks(nodes: Sequence[Node], room: TableRoom) -> list[str]:
-    lines: list[str] = []
-    previous_kind: ListKind | None = None
-    for node in nodes:
-        node_lines = _notion_lines(node, room)
-        if not node_lines:
-            continue
-        kind = _list_kind(node)
-        if kind is not None and kind == previous_kind:
-            lines.append(EMPTY_BLOCK)
-        lines += node_lines
-        previous_kind = kind
-    return lines
+    return [line for block in _rendered_blocks(nodes, room) for line in block.lines]
 
 
 def _page(lines: Sequence[str]) -> str:
@@ -462,20 +452,115 @@ def chunk_notion(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "n
         if _chunk_heading(node) is not None and sections[-1]:
             sections.append([])
         sections[-1].append(node)
+    expanded = [_with_long_tables_split(section, limit, room) for section in sections]
+    placed = [(index, node) for index, section in enumerate(expanded) for node in section]
+    blocks = _rendered_blocks([node for _, node in placed], room)
+    by_section: list[list[_RenderedBlock]] = [[] for _ in sections]
+    for block in blocks:
+        by_section[block.section_index(placed)].append(block)
     chunks: list[str] = []
     oversized: list[str] = []
     current_chunk = ""
-    for section in sections:
-        lines = _notion_blocks(section, room)
-        if not lines:
-            continue
-        text = _page(lines)
-        if len(text) > limit:
+    for section, section_blocks in zip(sections, by_section, strict=True):
+        pieces = _section_pieces(section_blocks, limit)
+        if any(len(piece) > limit for piece in pieces):
             oversized.append(_section_label(section))
-        if current_chunk and len(current_chunk) + len(text) > limit:
-            chunks.append(current_chunk)
-            current_chunk = ""
-        current_chunk += text
+        for piece in pieces:
+            if current_chunk and len(current_chunk) + len(piece) > limit:
+                chunks.append(current_chunk)
+                current_chunk = ""
+            current_chunk += piece
     if current_chunk:
         chunks.append(current_chunk)
     return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))
+
+
+@dataclass(frozen=True)
+class _RenderedBlock:
+    position: int
+    node: Node
+    lines: tuple[str, ...]
+
+    def section_index(self, placed: Sequence[tuple[int, Node]]) -> int:
+        return placed[self.position][0]
+
+
+def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[_RenderedBlock]:
+    blocks: list[_RenderedBlock] = []
+    previous_kind: ListKind | None = None
+    for position, node in enumerate(nodes):
+        node_lines = _notion_lines(node, room)
+        if not node_lines:
+            continue
+        kind = _list_kind(node)
+        separator = [EMPTY_BLOCK] if kind is not None and kind == previous_kind else []
+        blocks.append(_RenderedBlock(position, node, (*separator, *node_lines)))
+        previous_kind = kind
+    return blocks
+
+
+def _text_of(blocks: Sequence[_RenderedBlock]) -> str:
+    return _page([line for block in blocks for line in block.lines]) if blocks else ""
+
+
+def _section_pieces(blocks: Sequence[_RenderedBlock], limit: int) -> list[str]:
+    whole = _text_of(blocks)
+    if len(whole) <= limit:
+        return [whole] if whole else []
+    pieces: list[str] = []
+    group: list[_RenderedBlock] = []
+    for block in blocks:
+        only_headings = all(isinstance(member.node, Heading) for member in group)
+        if group and not only_headings and len(_text_of([*group, block])) > limit:
+            pieces.append(_text_of(group))
+            group = []
+        group.append(block)
+    if group:
+        pieces.append(_text_of(group))
+    return pieces
+
+
+def _rendered(nodes: Sequence[Node], room: TableRoom) -> str:
+    return _text_of(_rendered_blocks(nodes, room))
+
+
+def _with_long_tables_split(nodes: Sequence[Node], limit: int, room: TableRoom) -> list[Node]:
+    split: list[Node] = []
+    headings_before: list[Node] = []
+    for node in nodes:
+        if isinstance(node, TableNode) and len(_rendered([node], room)) > limit:
+            first_limit = limit - len(_rendered(headings_before, room))
+            split += _table_parts(node, limit, first_limit, room)
+        else:
+            split.append(node)
+        headings_before = [*headings_before, node] if isinstance(node, Heading) else []
+    return split
+
+
+def _table_parts(table: TableNode, limit: int, first_limit: int, room: TableRoom) -> list[TableNode]:
+    whole_widths = _with_its_widths_fixed(table, room)
+    parts: list[TableNode] = []
+    rows: list[TableRow] = []
+    for row in whole_widths.rows:
+        room_left = first_limit if not parts else limit
+        if rows and len(_rendered([replace(whole_widths, rows=(*rows, row))], room)) > room_left:
+            parts.append(replace(whole_widths, rows=tuple(rows)))
+            rows = []
+        rows.append(row)
+    if rows:
+        parts.append(replace(whole_widths, rows=tuple(rows)))
+    return parts
+
+
+def _with_its_widths_fixed(table: TableNode, room: TableRoom) -> TableNode:
+    widths = _column_widths(table, room)
+    if all(width is None for width in widths):
+        return table
+    columns = table.columns or tuple(TableColumn() for _ in table.header)
+    return replace(
+        table,
+        columns=tuple(
+            replace(column, share=None if width is None else width / room.width)
+            for column, width in zip(columns, widths, strict=True)
+        ),
+    )

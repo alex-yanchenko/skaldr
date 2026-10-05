@@ -262,6 +262,6 @@ def test_the_cli_reports_a_section_too_long_for_the_chunk(
 
     captured = capsys.readouterr()
     assert (captured.err, captured.out) == (
-        "warning: section '## Part 0' is longer than --chunk 50 and stays whole\n",
+        "warning: section '## Part 0' holds a block longer than --chunk 50; that block stays whole\n",
         f"OK  {export_dir / 'page.00.md'}\n",
     )
