@@ -9,7 +9,6 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 import math
 from typing import TypedDict
 
-from babel.numbers import format_compact_decimal
 from markupsafe import Markup, escape
 from typing_extensions import assert_never
 
@@ -53,8 +52,9 @@ def _nice_max(value: float) -> float:
 
 
 def _tick(value: float) -> str:
+    """Compact axis-tick text: 1500 → '1.5k', 2000 → '2k', 250 → '250'."""
     if value >= 1000:
-        return format_compact_decimal(value, format_type="short", locale="en", fraction_digits=2)
+        return f"{value / 1000:g}k"
     return f"{value:g}"
 
 

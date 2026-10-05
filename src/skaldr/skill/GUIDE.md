@@ -453,8 +453,6 @@ colours any unset series/slice from the palette so they stay distinct.
     - { label: Rejected, tone: danger,  value: 420 }
 ```
 
-The y axis of a bar or line chart labels its gridlines compactly from a thousand up: `1.5K`, `3.75M`, `2B`.
-
 ## The `comparison`
 
 A feature matrix — the `options` you're weighing across the top, each `feature` down the side. One
