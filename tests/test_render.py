@@ -89,7 +89,7 @@ def test_sales_example_renders_and_reconciles() -> None:
     html = render_html(report)
 
     assert html.startswith("<!doctype html>")
-    assert "Q3 Pipeline Review — West Region" in html
+    assert "Q3 Pipeline Review: West Region" in html
     assert "Reconciles: 120 = 120." in html
 
 
@@ -286,7 +286,7 @@ def test_fan_badges_on_hub_and_a_spoke_both_render_and_feed_the_legend() -> None
 
     # one chip on the hub, one on spoke A — the spoke-badge iteration is exercised, not just the hub
     assert html.count('<span class="chips"><span class="chip green">OK</span></span>') == 2
-    assert "Legend — badges used on this page" in html
+    assert "Legend: badges used on this page" in html
 
 
 def test_fan_inside_a_grid_cell_renders() -> None:
@@ -985,7 +985,7 @@ def test_table_inside_a_panel_still_gets_the_badge_legend_before_it() -> None:
     html = render_html(report)
 
     assert "the prod tag" in html  # legend rendered (placement walks into the panel for the table)
-    assert "Legend — badges used on this page" in html
+    assert "Legend: badges used on this page" in html
 
 
 def test_note_body_splits_blank_line_paragraphs() -> None:
@@ -1165,7 +1165,7 @@ def test_container_badges_render_chips_on_card_timeline_and_flow() -> None:
     # a chip renders inside each of the three containers
     assert html.count('<span class="chips"><span class="chip green">OK</span></span>') == 3
     # and a container badge now feeds the auto-legend — the "dead badge" wart, inverted
-    assert "Legend — badges used on this page" in html
+    assert "Legend: badges used on this page" in html
 
 
 def test_container_badges_render_on_a_steps_style_flow_node() -> None:
@@ -3144,7 +3144,7 @@ def test_a_link_inside_an_attribute_span_fails_the_build_instead_of_publishing_i
 
     assert str(raised.value) == (
         "the attribute list {tone=info} follows no [text] it can color: the text inside a [text]{…} span "
-        "is not empty and holds no link and no other [ or ]"
+        "is not empty and holds no link"
     )
 
 
@@ -3180,12 +3180,12 @@ def test_richtext_escapes_a_link_target_inside_its_href() -> None:
             "<del>a <strong>b ~~ c</strong> d</del>",
             id="strike-holds-a-bold-with-tildes",
         ),
-        pytest.param("*a **b* c**", "*a **b* c**", id="italic-crossing-bold-stays-text"),
+        pytest.param(
+            "*a **b* c**", "<em>a <em><em>b</em> c</em></em>", id="italic-crossing-bold-pairs-as-commonmark"
+        ),
     ],
 )
-def test_richtext_crossed_emphasis_nests_inside_the_first_match_instead_of_interleaving_tags(
-    text: str, html: str
-) -> None:
+def test_richtext_crossed_emphasis_renders_well_nested_tags(text: str, html: str) -> None:
     assert str(render_richtext(text)) == html
 
 
@@ -3213,21 +3213,21 @@ def test_richtext_a_marker_character_inside_an_inner_emphasis_does_not_block_the
 @pytest.mark.parametrize(
     ("text", "html"),
     [
-        pytest.param("[l](https://a.io/`c`)", "[l](https://a.io/<code>c</code>)", id="code-span"),
-        pytest.param(
-            "[l](https://a.io/[^sop])",
-            '[l](https://a.io/<sup class="fn"><a id="fnref-sop" href="#ref-sop">[1]</a></sup>)',
-            id="citation",
-        ),
+        pytest.param("[l](https://a.io/`c`)", '<a href="https://a.io/`c`">l</a>', id="code-span"),
+        pytest.param("[l](https://a.io/[^sop])", '<a href="https://a.io/[^sop]">l</a>', id="citation"),
     ],
 )
-def test_richtext_a_web_link_whose_target_holds_markup_stays_text(text: str, html: str) -> None:
+def test_richtext_a_web_link_target_is_read_as_written(text: str, html: str) -> None:
     assert str(render_richtext(text, {"sop": 1})) == html
 
 
-def test_richtext_rejects_an_anchor_link_whose_target_holds_a_code_span() -> None:
-    with pytest.raises(ReportError, match=r"links to the anchor '#sec…', whose target holds a `code` span"):
+def test_richtext_rejects_an_anchor_link_whose_target_holds_backticks_as_an_unknown_anchor() -> None:
+    with pytest.raises(ReportError) as raised:
         render_richtext("[l](#sec`c`)", anchor_ids=frozenset({"sec"}))
+
+    assert str(raised.value) == (
+        "rich text links to unknown anchor '#sec`c`': no heading or section has that id"
+    )
 
 
 def test_richtext_renders_a_placeholder_as_a_chip_and_collects_it() -> None:
@@ -3270,14 +3270,15 @@ def test_richtext_malformed_placeholder_fails_the_build(token: str) -> None:
         render_richtext(f"a {token} b")
 
 
-@pytest.mark.parametrize("body", ["wrap {{ `code` }} it", "wrap {{[x](https://y.com)}} it"])
-def test_richtext_placeholder_wrapping_other_markup_fails_without_leaking_the_stash(body: str) -> None:
-    # a `{{…}}` around an already-stashed inline element must not leak the internal NUL sentinel into
-    # the error — it reports the cause (a placeholder is a bare name) instead.
-    with pytest.raises(ReportError, match=r"can't contain a link, `code` span, or") as exc:
+@pytest.mark.parametrize(
+    ("body", "token"),
+    [("wrap {{ `code` }} it", "{{`code`}}"), ("wrap {{[x](https://y.com)}} it", "{{[x](https://y.com)}}")],
+)
+def test_richtext_placeholder_wrapping_other_markup_fails_naming_it_as_written(body: str, token: str) -> None:
+    with pytest.raises(ReportError) as exc:
         render_richtext(body)
 
-    assert "\x00" not in str(exc.value)
+    assert str(exc.value).startswith(f"invalid placeholder '{token}': ")
 
 
 def test_richtext_double_brace_with_an_inner_brace_stays_literal() -> None:
@@ -3581,7 +3582,7 @@ def test_range_segments_carry_their_span_as_flex_with_soft_tint() -> None:
     block = {
         "type": "range",
         "segments": [
-            {"label": "Transferable", "span": 3, "tone": "success", "sub": "full **credit**"},
+            {"label": "Supported", "span": 3, "tone": "success", "sub": "security **fixes**"},
             {"label": "Expired", "span": 1, "tone": "danger"},
         ],
     }
@@ -3591,8 +3592,8 @@ def test_range_segments_carry_their_span_as_flex_with_soft_tint() -> None:
     assert '<div class="range">' in html
     assert (
         '<div class="rbar">'
-        '<div class="rseg success" style="flex:3"><span class="rlab">Transferable</span>'
-        '<span class="rsub">full <strong>credit</strong></span></div>'
+        '<div class="rseg success" style="flex:3"><span class="rlab">Supported</span>'
+        '<span class="rsub">security <strong>fixes</strong></span></div>'
         '<div class="rseg danger" style="flex:1"><span class="rlab">Expired</span></div>'
         "</div>" in html
     )
@@ -3966,7 +3967,7 @@ def test_badge_row_grouped_reference_feeds_the_auto_legend() -> None:
 
     html = render_html(report)
 
-    assert "Legend — badges used on this page" in html
+    assert "Legend: badges used on this page" in html
     assert "urgent" in html  # the grouped ref's legend meaning shows
 
 
@@ -3982,11 +3983,8 @@ def test_badge_row_flat_items_still_render_the_ungrouped_row() -> None:
     assert 'class="badge-groups"' not in html
 
 
-def test_richtext_strips_nul_bytes() -> None:
-    html = str(render_richtext("a\x00b **c**"))
-
-    assert "\x00" not in html
-    assert html == "ab <strong>c</strong>"
+def test_richtext_replaces_nul_bytes_with_the_replacement_character() -> None:
+    assert str(render_richtext("a\x00b **c**")) == "a\N{REPLACEMENT CHARACTER}b <strong>c</strong>"
 
 
 def test_pct_clamps_tiny_nonzero_to_marker() -> None:
@@ -4172,7 +4170,7 @@ def test_legend_renders_at_top_when_no_table() -> None:
 
     html = render_html(report)
 
-    assert "Legend — badges used on this page" in html
+    assert "Legend: badges used on this page" in html
 
 
 def test_badge_with_legend_false_chips_but_stays_out_of_the_legend() -> None:
@@ -4393,7 +4391,7 @@ def test_grouped_table_with_empty_last_group_stays_inside_the_wrapper() -> None:
     html = render_html(parse_report(make_report(meta={"title": "T", "source": "s"}, blocks=[table])))
 
     assert '<div class="table-wrap"><table class="rep">' in html
-    assert '<tr class="empty"><td colspan="2">— none —</td></tr></tbody>' in html
+    assert '<tr class="empty"><td colspan="2">none</td></tr></tbody>' in html
     assert "</table></div>" in html
 
 

@@ -391,12 +391,12 @@ def test_derived_card_without_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_an_authored_value_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its value — don't set `value`"):
+    with pytest.raises(ReportError, match=r"computes its value; don't set `value`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "value": 5}))
 
 
 def test_derived_card_with_an_authored_of_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"computes its percentage — don't set `of`"):
+    with pytest.raises(ReportError, match=r"computes its percentage; don't set `of`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "of": 10}))
 
 
@@ -427,12 +427,12 @@ def test_derived_card_with_an_undeclared_badge_is_rejected() -> None:
 
 
 def test_derived_card_with_extra_badges_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"don't also set `badges`"):
+    with pytest.raises(ReportError, match=r"shows its own badge chip; don't also set `badges`"):
         parse_report(_report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "badges": ["HAVE"]}))
 
 
 def test_derived_card_with_a_delta_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"a derived card has no `delta`"):
+    with pytest.raises(ReportError, match=r"a derived card has no `delta`; its value is a live count"):
         parse_report(
             _report_with_derived_card({"badge": "HAVE", "of_matrix": "cov", "delta": {"label": "+1"}})
         )
@@ -1802,9 +1802,9 @@ def test_positional_row_preserves_a_list_cell_value() -> None:
         {"key": "name", "label": "N", "kind": "text"},
         {"key": "access", "label": "Access", "kind": "badge", "placement": "cell"},
     ]
-    table = Table.model_validate(make_table(columns=cols, rows=[["SOAXREF", ["WRITE", "READ"]]]))
+    table = Table.model_validate(make_table(columns=cols, rows=[["Supplier ledger", ["WRITE", "READ"]]]))
 
-    assert table.all_rows() == [{"name": "SOAXREF", "access": ["WRITE", "READ"]}]
+    assert table.all_rows() == [{"name": "Supplier ledger", "access": ["WRITE", "READ"]}]
 
 
 @pytest.mark.parametrize("row", [["x"], ["x", 1, "extra"]], ids=["too-few", "too-many"])
@@ -3348,7 +3348,7 @@ def test_matrix_cell_unknown_col_is_rejected() -> None:
 
 def test_matrix_two_cells_at_the_same_position_are_rejected() -> None:
     block = _matrix([{"row": "r1", "col": "c1", "label": "a"}, {"row": "r1", "col": "c1", "label": "b"}])
-    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\) — at most one per cell"):
+    with pytest.raises(ReportError, match=r"two cells at \('r1', 'c1'\); at most one per cell"):
         parse_report(make_report(blocks=[block]))
 
 
@@ -3789,7 +3789,7 @@ def test_swimlane_step_in_a_split_column_must_name_its_group() -> None:
     )
     with pytest.raises(
         ReportError,
-        match=r"swimlane step in column 'C1' must name a group — that column is split across 2 groups",
+        match=r"swimlane step in column 'C1' must name a group: that column is split across 2 groups",
     ):
         parse_report(make_report(blocks=[block]))
 

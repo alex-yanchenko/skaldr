@@ -119,7 +119,6 @@ def _environment() -> Environment:
     filters = cast("dict[str, Any]", env.filters)
     filters["fmt"] = compute.fmt
     filters["paragraphs"] = compute.paragraphs
-    filters["richtext"] = render_richtext
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
         pct=compute.pct,
@@ -170,6 +169,9 @@ def _render(
 
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
+    compute.validate_rich_text_fields(
+        report, RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids)
+    )
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
     # trailing references list reads it to give a cited key a backlink and skip one never cited.
     cited_references: set[str] = set()

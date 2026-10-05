@@ -7,12 +7,14 @@ from typing import get_args
 
 import httpx2
 
+from skaldr.auth import printable_only
 from skaldr.auth.jira import API_TOKENS_PAGE, verify_jira_token
 from skaldr.auth.notion import (
     DEFAULT_CALLBACK_PORT,
     INTEGRATIONS_PAGE,
     redirect_uri_for,
     revoke_notion_token,
+    save_or_revoke_notion,
     sign_in_to_notion,
 )
 from skaldr.auth.store import (
@@ -26,11 +28,13 @@ from skaldr.auth.store import (
     load_notion,
     normalise_site,
     notion_client_from_environment,
+    refuse_an_unusable_keychain,
     save_jira,
-    save_notion,
     stored_notion,
 )
 from skaldr.errors import AuthError
+
+_UNNAMED_WORKSPACE = "(unnamed workspace)"
 
 
 def main(
@@ -101,6 +105,7 @@ def _tcp_port(text: str) -> int:
 def _sign_in_to_notion(
     port: int, transport: httpx2.BaseTransport | None, open_browser: Callable[[str], object]
 ) -> None:
+    refuse_an_unusable_keychain("notion")
     print(
         f"Register a public Notion connection once at {INTEGRATIONS_PAGE}, with redirect URI "
         f"{redirect_uri_for(port)}"
@@ -124,17 +129,25 @@ def _sign_in_to_notion(
     credentials = sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
-    save_notion(credentials)
-    print(f"Signed in to Notion workspace {_workspace(credentials)}. Saved to the keychain.")
+    save_or_revoke_notion(credentials, transport=transport)
+    workspace = _workspace_name(credentials) or _UNNAMED_WORKSPACE
+    print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
+    refuse_an_unusable_keychain("jira")
     site = normalise_site(input("Jira site (https://<site>.atlassian.net): "))
     email = _required(input("Atlassian account email: "), "An Atlassian account email is required")
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
     credentials = verify_jira_token(site, email, api_token, transport=transport)
     save_jira(credentials)
-    print(f"Signed in to Jira at {site} as {_person(credentials)}. Saved to the keychain.")
+    display_name = _display_name(credentials)
+    signed_in = (
+        f"Signed in to Jira at {site}"
+        if display_name is None
+        else f"Signed in to Jira at {site} as {display_name}"
+    )
+    print(f"{signed_in}. Saved to the keychain.")
 
 
 def _print_status() -> int:
@@ -189,7 +202,7 @@ def _describe_notion(sign_in: SignIn[NotionCredentials] | None) -> str:
         return "not signed in (run `skaldr auth notion`)"
     if sign_in.source == "environment":
         return "access token from NOTION_ACCESS_TOKEN (environment)"
-    return f"signed in to workspace {_workspace(sign_in.credentials)} (keychain)"
+    return f"signed in to workspace {_workspace_name(sign_in.credentials) or _UNNAMED_WORKSPACE} (keychain)"
 
 
 def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
@@ -197,16 +210,19 @@ def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
         return "not signed in (run `skaldr auth jira`)"
     credentials = sign_in.credentials
     if sign_in.source == "environment":
-        return f"{credentials.email} at {credentials.site} (environment)"
-    return f"signed in to {credentials.site} as {_person(credentials)} (keychain)"
+        return f"JIRA_EMAIL, JIRA_API_TOKEN for {credentials.site} (environment)"
+    display_name = _display_name(credentials)
+    if display_name is None:
+        return f"signed in to {credentials.site} (keychain)"
+    return f"signed in to {credentials.site} as {display_name} (keychain)"
 
 
-def _workspace(credentials: NotionCredentials) -> str:
-    return credentials.workspace_name or "(unnamed workspace)"
+def _workspace_name(credentials: NotionCredentials) -> str | None:
+    return printable_only(credentials.workspace_name or "") or None
 
 
-def _person(credentials: JiraCredentials) -> str:
-    return credentials.display_name or credentials.email
+def _display_name(credentials: JiraCredentials) -> str | None:
+    return printable_only(credentials.display_name or "") or None
 
 
 def _required(answer: str, refusal: str) -> str:
