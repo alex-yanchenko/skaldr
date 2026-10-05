@@ -61,6 +61,8 @@ meta:
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
 ```
 
+`source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
+
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
 
@@ -589,7 +591,9 @@ ticket's left edge; the label stays legible at every state (`deferred` recedes b
 dimming). Reach for `deferred` for work you've consciously parked, `blocked` for work stopped by a
 dependency (pair it with a `depends_on` marker). A step's `value` counts toward the totals in every
 state. skaldr auto-renders a small state legend under the grid whenever two or more states appear
-(a single-state swimlane needs none); you don't author it.
+(a single-state swimlane needs none); you don't author it. In the Markdown exports the legend lists
+the states that carry a glyph, and appears whenever two or more glyphs appear or some steps carry a
+glyph and others none.
 
 To record dependencies, give a step an `id` (a safe slug: letters, digits, `_`, `-`) and point at it
 from another step's `depends_on: [id, …]`. Each dependent renders a small "needs 1, 2" line showing the
@@ -892,10 +896,11 @@ A reference's `url`, like a swimlane step's, must be a well-formed `http`, `http
   column (`rich`/`number`/`badge`/`indicator`). A
   `text`/`rich` cell may hold **multiple paragraphs**: separate them with a blank line (like a
   `text` block's `body`) and they stack; a single newline collapses to a space. A
-  `badge` column defaults to `placement: title`: its value chips **under the row title** and the
-  column `label` is ignored. Set `placement: cell` to give the badge **its own labelled column**
-  instead, where the cell value is a badge key *or a list of keys* (several chips, wrapping). Reach
-  for it when the chip is a real column like "Access" or "Severity". An `indicator` column renders a
+  `badge` column with a non-blank `label` defaults to `placement: cell`: the badge gets **its own
+  labelled column**, where the cell value is a badge key *or a list of keys* (several chips,
+  wrapping), as for a real column like "Access" or "Severity". A badge column with a blank `label`
+  (`label: ""`) defaults to `placement: title`: its value chips **under the row title**. Set
+  `placement` to choose either one explicitly. An `indicator` column renders a
   colour-only **dot in its own cell** (the value is a tone name or blank), for orthogonal
   green/amber/red signals per row that each want an at-a-glance column.
 

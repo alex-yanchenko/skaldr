@@ -4,7 +4,7 @@ import pytest
 
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
-from skaldr.export.lower.context import tone_named, tone_of, with_bold_label
+from skaldr.export.lower.context import spaced, tone_named, tone_of, with_bold_label
 from skaldr.export.lower.prose import code_language
 from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
@@ -1822,7 +1822,39 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
             ),
             header_column=True,
         ),
+        Paragraph((SwimlaneMark("deferred"), Plain(" "), Plain("deferred")), "muted"),
     )
+
+
+@pytest.mark.parametrize(
+    ("states", "legend"),
+    [
+        pytest.param(["done", None], ("done",), id="one-marked-state-beside-unmarked-steps-is-explained"),
+        pytest.param(["done", "done"], (), id="one-state-on-every-step-needs-no-legend"),
+        pytest.param([None, None], (), id="no-marks-no-legend"),
+    ],
+)
+def test_the_export_legend_explains_every_glyph_that_differs_from_its_neighbours(
+    states: list[SwimlaneStepState | None], legend: tuple[SwimlaneStepState, ...]
+) -> None:
+    steps = [
+        {"lane": "Ops", "col": "Plan", "n": str(index), "label": "s", **({"state": state} if state else {})}
+        for index, state in enumerate(states)
+    ]
+    swimlane = {"type": "swimlane", "lanes": ["Ops"], "columns": [{"name": "Plan"}], "steps": steps}
+
+    nodes = lowered([swimlane])
+
+    expected = (
+        (
+            Paragraph(
+                spaced([spaced([(SwimlaneMark(state),), plain(state)]) for state in legend], " · "), "muted"
+            ),
+        )
+        if legend
+        else ()
+    )
+    assert nodes[1:] == expected
 
 
 def test_a_swimlane_step_with_no_state_has_no_glyph_and_an_explicit_todo_keeps_its_own() -> None:

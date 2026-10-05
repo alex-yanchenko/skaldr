@@ -1012,6 +1012,19 @@ def test_a_page_with_no_source_date_or_reconcile_has_no_footer() -> None:
     assert provenance_footer(parse_report(make_report(meta={"title": "T"}))) is None
 
 
+@pytest.mark.parametrize(
+    ("meta", "footer"),
+    [
+        pytest.param({"source": "   "}, None, id="alone-is-no-footer"),
+        pytest.param(
+            {"source": "  ", "date": "d"}, Provenance(None, ("d",)), id="beside-a-date-is-no-source"
+        ),
+    ],
+)
+def test_a_whitespace_source_is_no_source(meta: dict[str, str], footer: Provenance | None) -> None:
+    assert provenance_footer(parse_report(make_report(meta={"title": "T", **meta}))) == footer
+
+
 def test_table_rollup_counts_rows_by_the_badge_column_in_first_appearance_order() -> None:
     # PENDING appears first but ends with the LOWER count — so this distinguishes first-appearance
     # order (the contract) from a count-descending sort, which would flip the two buckets.

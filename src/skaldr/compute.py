@@ -342,7 +342,11 @@ def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
 
 
 def swimlane_marked_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
-    return _legend_states({step.state for step in block.steps if step.state is not None})
+    marked: set[SwimlaneStepState] = {state for step in block.steps if (state := step.state) is not None}
+    some_unmarked = any(step.state is None for step in block.steps)
+    if some_unmarked and marked:
+        return [state for state in _SWIM_STATE_ORDER if state in marked]
+    return _legend_states(marked)
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:
@@ -631,7 +635,7 @@ def provenance_footer(report: Report) -> Provenance | None:
     if report.meta.updated:
         facts.append(f"updated {report.meta.updated}")
     facts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
-    source = report.meta.source or None
+    source = report.meta.source if report.meta.source and report.meta.source.strip() else None
     return Provenance(source, tuple(facts)) if source or facts else None
 
 
