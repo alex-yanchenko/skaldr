@@ -126,11 +126,13 @@ def test_an_equals_sign_is_escaped_so_notion_reads_no_block_attribute(text: str,
 @pytest.mark.parametrize(
     ("text", "notion"),
     [
-        pytest.param("ship __init__ now", "ship \\_\\_init\\_\\_ now", id="a-dunder-name"),
-        pytest.param("a _private_ name", "a \\_private\\_ name", id="a-name-in-underscores"),
+        pytest.param("ship \\_\\_init\\_\\_ now", "ship \\_\\_init\\_\\_ now", id="a-dunder-name"),
+        pytest.param("a \\_private\\_ name", "a \\_private\\_ name", id="a-name-in-underscores"),
         pytest.param("snake_case", "snake\\_case", id="an-underscore-inside-a-word"),
         pytest.param("edit my_file.py", "edit `my_file.py`", id="a-file-name-is-code-and-escaped-once"),
-        pytest.param("see __init__.py", "see `__init__.py`", id="a-dunder-file-name-is-code"),
+        pytest.param("see \\_\\_init\\_\\_.py", "see `__init__.py`", id="a-dunder-file-name-is-code"),
+        pytest.param("ship __init__ now", "ship **init** now", id="bare-double-underscores-are-bold"),
+        pytest.param("a _private_ name", "a *private* name", id="bare-single-underscores-are-italic"),
         pytest.param(
             "`a_b` via [x_y](https://e.com/a_b)",
             "`a_b` via [x\\_y](https://e.com/a_b)",
@@ -146,7 +148,7 @@ def test_an_underscore_is_escaped_so_notion_reads_no_emphasis(text: str, notion:
     ("block", "notion"),
     [
         pytest.param(
-            make_table([{"key": "a", "label": "a_b"}], rows=[{"a": "x = __init__"}]),
+            make_table([{"key": "a", "label": "a_b"}], rows=[{"a": "x = \\_\\_init\\_\\_"}]),
             '<table fit-page-width="true" header-row="true">\n'
             "\t<tr>\n\t\t<td>**a\\_b**</td>\n\t</tr>\n"
             "\t<tr>\n\t\t<td>x \\= \\_\\_init\\_\\_</td>\n\t</tr>\n"
