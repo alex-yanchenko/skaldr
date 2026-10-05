@@ -6,18 +6,24 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
+import keyring
 import pytest
+from keyring.errors import KeyringError
 
 from skaldr.auth import notion as notion_module
-from skaldr.auth.notion import revoke_notion_token, sign_in_to_notion
+from skaldr.auth.notion import revoke_notion_token, save_or_revoke_notion, sign_in_to_notion
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
     FakeBrowser,
+    InMemoryKeyring,
     Visit,
+    WriteFailingKeyring,
     answerless,
     approving,
+    approving_without_state,
+    assert_secret_not_in_error_chain,
     basic_auth_header,
     fake_api,
     favicon,
@@ -28,7 +34,9 @@ from tests.factories.auth_factory import (
     needs_ipv6_loopback,
     refusing,
     refusing_connections,
+    refusing_with_an_escape_sequence,
     refusing_without_state,
+    revoke_request_for,
     summarise,
 )
 
@@ -160,7 +168,15 @@ def test_a_second_matching_callback_is_turned_away() -> None:
 
 
 @pytest.mark.parametrize(
-    "visit", [forged, answerless, forged_refusal], ids=["forged state", "no code or error", "forged refusal"]
+    "visit",
+    [forged, answerless, forged_refusal, refusing_without_state, approving_without_state],
+    ids=[
+        "forged state",
+        "no code or error",
+        "forged refusal",
+        "a refusal without a state",
+        "a code without a state",
+    ],
 )
 def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_endpoint(visit: Visit) -> None:
     seen: list[httpx2.Request] = []
@@ -172,17 +188,31 @@ def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_en
     assert (browser.finished(), seen) == ([400], [])
 
 
+def test_a_refusal_without_a_state_does_not_end_the_wait_for_the_real_callback() -> None:
+    browser = FakeBrowser(refusing_without_state, approving)
+
+    credentials = sign_in(browser)
+
+    assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+    assert browser.finished() == [400, 200]
+
+
 @pytest.mark.parametrize(
-    "visit", [refusing, refusing_without_state], ids=["with the state", "without a state"]
+    ("visit", "message"),
+    [
+        (refusing, "Notion did not grant access: access_denied"),
+        (refusing_with_an_escape_sequence, "Notion did not grant access"),
+    ],
+    ids=["an oauth error code", "an error that is not an oauth error code"],
 )
-def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
+def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit, message: str) -> None:
     seen: list[httpx2.Request] = []
     browser = FakeBrowser(visit)
 
-    with pytest.raises(AuthError, match=r"^Notion did not grant access: access_denied$"):
+    with pytest.raises(AuthError) as raised:
         sign_in(browser, seen)
 
-    assert (browser.finished(), seen) == ([200], [])
+    assert (str(raised.value), browser.finished(), seen) == (message, [200], [])
 
 
 @pytest.mark.parametrize(
@@ -197,8 +227,21 @@ def test_a_refused_consent_screen_stops_the_sign_in(visit: Visit) -> None:
             {"error": "invalid_grant", "error_description": "code expired"},
             "Notion refused the sign-in: invalid_grant (code expired)",
         ),
+        (
+            {"error": "invalid\x1b[2J_grant", "error_description": "code\x1b]0;title\x07 expired\r\n"},
+            "Notion refused the sign-in: invalid[2J_grant (code]0;title expired)",
+        ),
+        (
+            {"error": "\x1b\x07", "error_description": "\x1b\r\n"},
+            "Notion refused the sign-in: (unnamed error)",
+        ),
     ],
-    ids=["error only", "error with a description"],
+    ids=[
+        "error only",
+        "error with a description",
+        "control characters in the error and description",
+        "nothing but control characters",
+    ],
 )
 def test_a_refused_token_request_names_the_oauth_error(answer: dict[str, str], message: str) -> None:
     with pytest.raises(AuthError) as raised:
@@ -236,6 +279,7 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
         sign_in(FakeBrowser(approving), token=(200, answer))
 
     assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
+    assert_secret_not_in_error_chain(raised.value, "secret-refresh-value")
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:
@@ -303,3 +347,116 @@ def test_a_failed_revoke_names_the_status() -> None:
 def test_an_unreachable_revoke_endpoint_is_named() -> None:
     with pytest.raises(AuthError, match=r"^Could not reach Notion: connection refused$"):
         revoke_notion_token(make_notion_credentials(), transport=refusing_connections())
+
+
+ISSUED = make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+UNREVOKED = (
+    "The token Notion just issued could not be saved, and revoking it failed too ({}), so remove the "
+    "connection in Notion under Settings, Connections."
+)
+
+
+def revoke_answering(answer: int | None, seen: list[httpx2.Request]) -> httpx2.BaseTransport:
+    if answer is None:
+        return refusing_connections(seen)
+    return fake_api({"/v1/oauth/revoke": (answer, {})}, seen)
+
+
+def test_a_saved_sign_in_is_not_revoked(keychain: InMemoryKeyring) -> None:
+    seen: list[httpx2.Request] = []
+
+    save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (keychain.entries, seen) == ({("skaldr", "notion"): ISSUED.model_dump_json()}, [])
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [OSError("disk full"), ValueError("bad entry"), KeyboardInterrupt(), EOFError()],
+    ids=["an os error", "a value error", "an interrupt at a keychain prompt", "end of input at a prompt"],
+)
+def test_a_save_that_fails_with_any_other_exception_revokes_the_token_and_lets_it_through(
+    failure: BaseException,
+) -> None:
+    keyring.set_keyring(WriteFailingKeyring(failure))
+    seen: list[httpx2.Request] = []
+
+    with pytest.raises(type(failure)) as raised:
+        save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (raised.value, [summarise(request) for request in seen]) == (
+        failure,
+        [revoke_request_for("new-access")],
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure", "revoke_answer", "message", "cause"),
+    [
+        pytest.param(
+            KeyringError("denied"),
+            200,
+            "The system keychain is unavailable: denied. The token Notion issued has been revoked.",
+            (AuthError, "The system keychain is unavailable: denied"),
+            id="revoked",
+        ),
+        pytest.param(
+            KeyringError("denied."),
+            200,
+            "The system keychain is unavailable: denied. The token Notion issued has been revoked.",
+            (AuthError, "The system keychain is unavailable: denied."),
+            id="revoked after a message that ends in a period",
+        ),
+        pytest.param(
+            KeyringError("denied"),
+            400,
+            "The system keychain is unavailable: denied. "
+            + UNREVOKED.format("Notion did not revoke the token: HTTP 400"),
+            (AuthError, "The system keychain is unavailable: denied"),
+            id="the revoke answers 400",
+        ),
+        pytest.param(
+            KeyringError("denied"),
+            None,
+            "The system keychain is unavailable: denied. "
+            + UNREVOKED.format("Could not reach Notion: connection refused"),
+            (AuthError, "The system keychain is unavailable: denied"),
+            id="the revoke cannot reach notion",
+        ),
+        pytest.param(
+            OSError("disk full"),
+            None,
+            "Saving to the keychain failed (OSError: disk full). "
+            + UNREVOKED.format("Could not reach Notion: connection refused"),
+            (OSError, "disk full"),
+            id="an os error and an unreachable revoke",
+        ),
+        pytest.param(
+            KeyboardInterrupt(),
+            400,
+            "Saving to the keychain failed (KeyboardInterrupt). "
+            + UNREVOKED.format("Notion did not revoke the token: HTTP 400"),
+            (KeyboardInterrupt, ""),
+            id="an interrupt and a refused revoke",
+        ),
+    ],
+)
+def test_a_save_that_fails_says_whether_the_token_was_revoked(
+    failure: BaseException, revoke_answer: int | None, message: str, cause: tuple[type, str]
+) -> None:
+    keyring.set_keyring(WriteFailingKeyring(failure))
+    seen: list[httpx2.Request] = []
+
+    with pytest.raises(AuthError) as raised:
+        save_or_revoke_notion(ISSUED, transport=revoke_answering(revoke_answer, seen))
+
+    error = raised.value
+    assert (
+        str(error),
+        (type(error.__cause__), str(error.__cause__)),
+        [summarise(request) for request in seen],
+    ) == (
+        message,
+        cause,
+        [revoke_request_for("new-access")],
+    )

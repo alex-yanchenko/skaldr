@@ -1,8 +1,8 @@
-# Q3 Warehouse Inventory Count — Discrepancies & Fixes
+# Q3 Warehouse Inventory Count: Discrepancies & Fixes
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 
-Mixed audience — ops reads the impact, the floor team reads the fix.
+Mixed audience: ops reads the impact, the floor team reads the fix.
 
 - [Overview](#overview)
 - [Discrepancies & fixes](#discrepancies--fixes)
@@ -11,7 +11,7 @@ Mixed audience — ops reads the impact, the floor team reads the fix.
 - [Rollout](#rollout)
 - [Method](#method)
 - [At a glance](#at-a-glance)
-- [Appendix — discrepancy-reason raw counts](#appendix--discrepancy-reason-raw-counts)
+- [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
 - [Counts at a glance](#counts-at-a-glance)
 - [Count methods compared](#count-methods-compared)
 - [Readiness by zone](#readiness-by-zone)
@@ -36,10 +36,10 @@ Mixed audience — ops reads the impact, the floor team reads the fix.
 - **Mode**: strict
 
 * **Matched cleanly**: 8,500 (85.0%) **▲ +3%**
-* **Floor — fixable**: 1,100 (11.0%) **Floor**
+* **Floor: fixable**: 1,100 (11.0%) **Floor**
 
   Miscounts + mislabeled bins we can correct.
-* **Vendor — escalate**: 400 (4.0%) **▼ −90** **Vendor**
+* **Vendor: escalate**: 400 (4.0%) **▼ −90** **Vendor**
 * **Count status**: HEALTHY
 * **Total units**: 10,000
 
@@ -47,7 +47,7 @@ Mixed audience — ops reads the impact, the floor team reads the fix.
 - **Floor-fixable**: 11.0%, 1,100
 - **Vendor**: 4.0%, 400
 
-The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate** — a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
+The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.
 
@@ -103,12 +103,12 @@ flowchart LR
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
-| **Floor — fixable (1,100)** |  |  |  |  |
+| **Floor: fixable (1,100)** |  |  |  |  |
 | Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340 | 🟡 | 600 (6.0% of total) | The same pallet is scanned twice when a picker re-enters an aisle within the count window. | De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan. |
 | Mislabeled bin codes **System** | 🟡 | 500 (5.0% of total) | Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup. | Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log. |
-| **Vendor — escalation (400)** |  |  |  |  |
+| **Vendor: escalation (400)** |  |  |  |  |
 | Short shipment **Vendor** | 🔴 | 400 (4.0% of total) | The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted. | Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives. |
-| **Correctly counted — no action (0)** |  |  |  |  |
+| **Correctly counted: no action (0)** |  |  |  |  |
 | *none* |  |  |  |  |
 
 **Discrepancies by owner**: **Floor** 1 · **System** 1 · **Vendor** 1
@@ -136,7 +136,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 - ✅ De-dup validated on a 1,000-pallet sample.
 - 🔵 Overflow bins being re-counted by hand right now.
 - ⚪ Overflow re-scan scheduled for the next count.
-- ❌ Vendor short-ship — blocked, cannot count.
+- ❌ Vendor short-ship: blocked, cannot count.
 - ⛔ Vendor escalation awaiting `OPS-1234` response.
 
 ### Follow-up checklist
@@ -149,14 +149,14 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 #### Sign-off and rollback
 
-- **Owner**: Inventory Ops — **@site-lead** signs off each fix.
+- **Owner**: Inventory Ops. **@site-lead** signs off each fix.
 - **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
 ---
 
 > 🎤 **For the read-out**
 >
-> Lead with the reconciliation gate — it is the one number leadership tracks.
+> Lead with the reconciliation gate: it is the one number leadership tracks.
 
 ### Re-count procedure, from step iv
 
@@ -215,9 +215,9 @@ function pickWinner(a, b) {
 }
 ```
 
-*Image: Fig 1 — discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
+*Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
 
-> These bins are aggregate lots — we can't split `AGG-07` into individual SKUs from the dock scan alone.
+> These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.
 >
 > *Floor lead, ticket OPS-1234*
 
@@ -237,7 +237,7 @@ function pickWinner(a, b) {
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.
 
-## Appendix — discrepancy-reason raw counts
+## Appendix: discrepancy-reason raw counts
 
 *updated 18 Jul 2026*
 
@@ -352,7 +352,7 @@ flowchart LR
    Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
 
    - One row per bin, with the expected quantity.
-   - Flag overflow bins (`bin > 12`) — they take the manual path.
+   - Flag overflow bins (`bin > 12`): they take the manual path.
 2. **Scan every bin twice, reconcile on the pallet ID**
 
    Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
@@ -365,7 +365,7 @@ flowchart LR
    ```
 3. **Escalate anything that still won't balance**
 
-   > ⚠️ A residual gap is a vendor short-ship, not a miscount — open a ticket, don't force the numbers.
+   > ⚠️ A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 
 ## Pulling a bin from the WMS yourself
 
@@ -592,7 +592,7 @@ content-type: application/json
 
 Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
 
-- \[1\] *Warehouse Counting SOP*, rev. 7 — §3 Cycle vs sampling.
+- \[1\] *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
 - \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
 
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.

@@ -5,7 +5,7 @@ The page is `version` + `meta` + author-declared `badges` + a flat, ordered `blo
 block, or an unknown top-level key each fails with a precise `blocks.3.items.2.value`-style path.
 
 No domain vocabulary is hardcoded here: tags/statuses live in `badges`, declared per report.
-The only fixed vocabularies are the design-system primitives — tones, badge colours, and the
+The only fixed vocabularies are the design-system primitives: tones, badge colours, and the
 state glyphs for status lists and timelines.
 """
 
@@ -14,6 +14,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -31,14 +32,16 @@ from pydantic import (
     AfterValidator,
     AnyUrl,
     BeforeValidator,
+    Discriminator,
     Field,
     StrictBool,
+    StringConstraints,
+    Tag,
     TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
 )
-from pydantic.config import JsonDict
 from pydantic_core import PydanticCustomError
 from typing_extensions import assert_never
 
@@ -86,6 +89,9 @@ REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
 ANCHOR_ID_PATTERN = SLUG_PATTERN
 
 
+LARGEST_NUMBER: Final = 1e300
+
+
 def _reject_bool_and_non_finite(value: Any) -> Any:
     """Guard numeric fields at the boundary: `bool` is an int subclass pydantic would silently
     coerce (`value: true` → 1), and `.inf`/`.nan` render as literal 'inf'/'nan'. Non-numbers pass
@@ -94,17 +100,28 @@ def _reject_bool_and_non_finite(value: Any) -> Any:
         raise ValueError("must be a number, not a boolean")
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError("must be a finite number")
-    # A Python int is unbounded; one beyond the float range overflows any float arithmetic
-    # downstream (e.g. chart axis scaling). Reject it at the boundary rather than crash later.
-    if isinstance(value, int) and abs(value) > sys.float_info.max:
-        raise ValueError("must be a finite number")
+    if isinstance(value, int | float) and abs(value) > LARGEST_NUMBER:
+        raise ValueError(f"must be between -{LARGEST_NUMBER:g} and {LARGEST_NUMBER:g}")
     return value
+
+
+def _refuse_an_unusable_number(value: int | float, location: str) -> None:
+    try:
+        _reject_bool_and_non_finite(value)
+    except ValueError as error:
+        raise ValueError(f"{location}: {error}") from error
 
 
 # Numeric field types that reject bool + non-finite before pydantic coerces them.
 # Number keeps the int-vs-float distinction (a card's `600` stays an int); Count is int-only.
-Number = Annotated[int | float, BeforeValidator(_reject_bool_and_non_finite)]
-Count = Annotated[int, BeforeValidator(_reject_bool_and_non_finite)]
+_NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
+_NUMBER_BOUND_IN_SCHEMA = Field(json_schema_extra={"minimum": -LARGEST_NUMBER, "maximum": LARGEST_NUMBER})
+Number = Annotated[int | float, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
+Count = Annotated[int, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
+SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
+
+
+NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -147,7 +164,7 @@ def _to_badge_color(value: Any) -> Any:
 
 
 def _tone_names(tone_type: Any) -> tuple[str, ...]:
-    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator] —
+    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator]:
     for the manually-validated tones (table row + indicator cell) that aren't plain typed fields."""
     return get_args(get_args(tone_type)[0])
 
@@ -166,13 +183,13 @@ _CALLOUT_TONES = ("info", "success", "warning", "danger")
 
 def _to_callout_tone(value: Any) -> Any:
     """Normalise a palette alias to its semantic twin (blue→info), then reject a tone that isn't one of
-    the four callout meanings — naming both what was given and the allowed set, so the fix is obvious in
+    the four callout meanings, naming both what was given and the allowed set, so the fix is obvious in
     the error itself. A callout is a semantic 'stop and look' note, so teal/sky/accent/neutral (fine on
     cards/badges) have no callout look and are refused rather than silently mapped."""
     normalized = _to_tone(value)
     if isinstance(normalized, str) and normalized not in _CALLOUT_TONES:
         raise ValueError(
-            f"callout tone must be one of info, success, warning, danger (got '{value}') — a callout is "
+            f"callout tone must be one of info, success, warning, danger (got '{value}'): a callout is "
             "semantic; for another palette colour reach for a card, badge_row, or note"
         )
     return normalized
@@ -196,6 +213,28 @@ def _one_emoji(value: str) -> str:
 
 
 Icon = Annotated[str, AfterValidator(_one_emoji)]
+
+
+@dataclass(frozen=True)
+class RichTextMarker:
+    split_into_paragraphs: bool
+
+
+RICH_TEXT: Final = RichTextMarker(split_into_paragraphs=False)
+RICH_PROSE: Final = RichTextMarker(split_into_paragraphs=True)
+RichText = Annotated[str, RICH_TEXT]
+RichProse = Annotated[str, RICH_PROSE]
+NonBlankRichText = Annotated[NonBlank, RICH_TEXT]
+NonBlankRichProse = Annotated[NonBlank, RICH_PROSE]
+RICH_COLUMN_KINDS: Final = ("text", "rich")
+FieldPath = tuple[str, ...]
+MappedRow = dict[str, Any]
+
+
+def _mapped_rows(rows: object) -> list[MappedRow]:
+    return cast("list[MappedRow]", rows)
+
+
 StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
@@ -230,10 +269,8 @@ class _Block(FrozenModel):
     the 6 content columns the block occupies. It is width only; blocks still stack vertically (one per
     row). To place several blocks in a single row, use a `grid` (whose cells carry their own span)."""
 
-    span: Count | None = Field(
+    span: SixthsCount | None = Field(
         default=None,
-        ge=1,
-        le=6,
         description="Block width in content columns (1 to 6); omit for full width. Same column-count "
         "vocabulary as a grid cell's span, relative to the block's container (the page, or the "
         "enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to "
@@ -244,11 +281,11 @@ class _Block(FrozenModel):
 class Badge(FrozenModel):
     label: str = Field(description="Chip text for this tag/status.")
     tone: BadgeColor = Field(
-        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
+        description="Chip colour: a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
     )
     legend: str | Literal[False] = Field(
         description="One-line meaning, shown in the derived legend. Set `false` to keep this badge out "
-        "of the legend entirely — for a one-off inline chip that needs no explanation.",
+        "of the legend entirely, for a one-off inline chip that needs no explanation.",
     )
 
 
@@ -260,7 +297,7 @@ class Meta(FrozenModel):
     updated: str | None = Field(
         default=None,
         description="When the report was last revised; feeds the footer as 'updated <value>'. A "
-        "free-form label like the date (author it — never auto-now).",
+        "free-form label like the date (author it; never auto-now).",
     )
     toc: bool = Field(
         default=False, description="Render a table of contents from top-level level-2 headings and sections."
@@ -274,7 +311,7 @@ class Meta(FrozenModel):
 
 class Heading(_Block):
     type: Literal["heading"]
-    text: str = Field(min_length=1, description="Heading text; also the TOC entry at level 2.")
+    text: NonBlank = Field(description="Heading text; also the TOC entry at level 2.")
     level: Literal[2, 3, 4] = Field(
         default=2,
         description="Heading level: 2 (major heading), 3 (sub-heading) or 4 (a minor heading under a 3).",
@@ -285,25 +322,17 @@ class Heading(_Block):
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the text-derived "
         "slug so `[…](#id)` links survive a heading rename. Must be unique across the page.",
     )
-    sub: str | None = Field(
+    sub: NonBlankRichText | None = Field(
         default=None,
-        description="Optional caption line under the heading, styled subordinate — a real subtitle "
+        description="Optional caption line under the heading, styled subordinate: a real subtitle "
         "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
         "stays the plain `text`).",
     )
 
-    @model_validator(mode="after")
-    def _non_blank(self) -> "Heading":
-        if not self.text.strip():
-            raise ValueError("heading text must not be blank")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("heading sub must not be blank (omit it instead)")
-        return self
-
 
 class Text(_Block):
     type: Literal["text"]
-    body: str = Field(description="Rich-text prose; blank lines split paragraphs.")
+    body: RichProse = Field(description="Rich-text prose; blank lines split paragraphs.")
     muted: bool = Field(default=False, description="Render in the caption colour, for asides.")
 
 
@@ -311,7 +340,7 @@ _MAX_LIST_DEPTH = 4
 
 
 class ListItem(FrozenModel):
-    text: str = Field(min_length=1, description="The point's rich-text content.")
+    text: NonBlankRichText = Field(description="The point's rich-text content.")
     checked: bool = Field(
         default=False,
         description="Only meaningful in a `style: check` list: renders the box ticked. Set it in the "
@@ -323,14 +352,25 @@ class ListItem(FrozenModel):
         description="Only meaningful in a `style: decision` list: marks the point a decision already "
         "taken. Left false, the point is an open question.",
     )
-    items: list["str | ListItem"] = Field(
+    items: "list[ListPoint]" = Field(
         default=[],
         description="Optional nested sub-points, rendered as an indented list in the parent's style.",
     )
 
 
+def _list_point_kind(point: Any) -> Literal["str", "ListItem"]:
+    return "str" if isinstance(point, str) else "ListItem"
+
+
+ListPoint = Annotated[
+    Annotated[NonBlankRichText, Tag("str")] | Annotated[ListItem, Tag("ListItem")],
+    Discriminator(_list_point_kind),
+]
+ListItem.model_rebuild()
+
+
 def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
-    """Reject list nesting deeper than `_MAX_LIST_DEPTH` — past that a bullet tree is unreadable and
+    """Reject list nesting deeper than `_MAX_LIST_DEPTH`: past that a bullet tree is unreadable and
     almost always a data-shape mistake. Depth 1 is the top-level list; each nested `items` is +1."""
     if depth > _MAX_LIST_DEPTH:
         raise ValueError(f"list nesting exceeds the maximum depth of {_MAX_LIST_DEPTH}")
@@ -355,14 +395,12 @@ class ListBlock(_Block):
     type: Literal["list"]
     style: ListStyle = Field(
         default="bullet",
-        description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
+        description="Bulleted, numbered, or `check`, which shows tickable checkboxes for a live checklist "
         "(the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a "
         "decision taken (`decided: true`) or an open question.",
     )
-    start: Count | None = Field(
+    start: Annotated[int, Field(ge=1, le=LARGEST_LIST_START), _NUMBER_GUARD] | None = Field(
         default=None,
-        ge=1,
-        le=LARGEST_LIST_START,
         description="Only in a `style: number` list: the number the first point carries (default 1). "
         "Nested lists count from 1.",
     )
@@ -371,7 +409,7 @@ class ListBlock(_Block):
         description="Only in a `style: number` list: `decimal` (the default), `letters` (a, b, c) or "
         "`roman` (i, ii, iii). Nested lists keep it.",
     )
-    items: list[str | ListItem] = Field(
+    items: list[ListPoint] = Field(
         min_length=1,
         description="Rich-text points. A point is a plain string, or `{text, items: [...]}` to nest "
         f"sub-points (nested lists inherit the parent's style; up to {_MAX_LIST_DEPTH} levels deep).",
@@ -407,7 +445,7 @@ class FactStrip(_Block):
 
 class KVPair(FrozenModel):
     label: str = Field(description="Row label (muted).")
-    value: str = Field(description="Rich-text value.")
+    value: RichText = Field(description="Rich-text value.")
 
 
 class KeyValue(_Block):
@@ -416,28 +454,28 @@ class KeyValue(_Block):
 
 
 class DefItem(FrozenModel):
-    term: str = Field(min_length=1, description="The label/term, rendered prominent (e.g. 'Action').")
-    body: str = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
+    term: NonBlank = Field(description="The label/term, rendered prominent (e.g. 'Action').")
+    body: RichProse = Field(min_length=1, description="Rich-text definition; blank lines split paragraphs.")
 
 
 class DefList(_Block):
     type: Literal["def_list"]
     items: list[DefItem] = Field(
         min_length=1,
-        description="Term/definition pairs — a real labelled list for procedural sub-labels like "
+        description="Term/definition pairs: a real labelled list for procedural sub-labels like "
         "Action / Expected / Say. Unlike `key_value` (compact muted metadata), the term reads as a "
         "prominent label and the body is full rich prose.",
     )
 
 
 class CardDelta(FrozenModel):
-    label: str = Field(min_length=1, description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
+    label: NonBlank = Field(description="Delta text shown beside the value, e.g. '+12%' or '0.3s'.")
     direction: DeltaDirection | None = Field(
         default=None, description="Optional glyph before the label: ▲ up, ▼ down, → flat."
     )
     tone: Tone | None = Field(
         default=None,
-        description="Delta colour — YOU set it: up isn't always good (down is good for cost/errors), so "
+        description="Delta colour, which YOU set: up isn't always good (down is good for cost/errors), so "
         "skaldr never infers it. Omit for a neutral chip.",
     )
 
@@ -446,7 +484,7 @@ class Card(FrozenModel):
     label: str | None = Field(
         default=None,
         description="Card label above the number. Required for a normal card; for a derived card "
-        "(`of_matrix`/`of_tables`) it defaults to the badge's label — set it only to override.",
+        "(`of_matrix`/`of_tables`) it defaults to the badge's label; set it only to override.",
     )
     value: Number | str | None = Field(
         default=None,
@@ -480,11 +518,11 @@ class Card(FrozenModel):
         default=None,
         description="Derive this card's value by counting the cells in the matrix with this `id` whose "
         "state is `badge`; the percentage denominator is that matrix's total cell count. When set, "
-        "`value` and `of` are computed — don't author them. Requires `badge`; not with `of_tables`.",
+        "`value` and `of` are computed, so don't author them. Requires `badge`; not with `of_tables`.",
     )
     of_tables: list[str] | None = Field(
         default=None,
-        description="Derive this card's value by counting `badge` across the tables with these `id`s — a "
+        description="Derive this card's value by counting `badge` across the tables with these `id`s, a "
         "page-level summary over several per-section tables that can't drift. Each named table must "
         "declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the "
         "total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with "
@@ -508,13 +546,13 @@ class Card(FrozenModel):
             if self.badge is None:
                 raise ValueError("a derived card (`of_matrix`/`of_tables`) needs a `badge` to count")
             if self.value is not None:
-                raise ValueError("a derived card computes its value — don't set `value`")
+                raise ValueError("a derived card computes its value; don't set `value`")
             if self.of is not None:
-                raise ValueError("a derived card computes its percentage — don't set `of`")
+                raise ValueError("a derived card computes its percentage; don't set `of`")
             if self.badges:
-                raise ValueError("a derived card shows its own badge chip — don't also set `badges`")
+                raise ValueError("a derived card shows its own badge chip; don't also set `badges`")
             if self.delta is not None:
-                raise ValueError("a derived card has no `delta` — its value is a live count")
+                raise ValueError("a derived card has no `delta`; its value is a live count")
         else:
             if self.badge is not None:
                 raise ValueError(
@@ -529,7 +567,7 @@ class Card(FrozenModel):
                 raise ValueError("`of_tables` must name at least one table")
             if len(set(self.of_tables)) != len(self.of_tables):
                 # a table listed twice would double-count in both the numerator and the denominator
-                raise ValueError("`of_tables` lists a table id more than once — each table is counted once")
+                raise ValueError("`of_tables` lists a table id more than once; each table is counted once")
         if self.of is not None:
             if isinstance(self.value, str):
                 raise ValueError("'of' requires a numeric 'value'")
@@ -550,12 +588,12 @@ class BadgeRef(FrozenModel):
 class BadgeLiteral(FrozenModel):
     label: str = Field(description="Chip text for a one-off badge (not from the page vocabulary).")
     tone: BadgeColor = Field(
-        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin."
+        description="Chip colour: a palette name (slate/blue/…) or its semantic tone twin."
     )
 
 
 class BadgeGroup(FrozenModel):
-    label: str = Field(min_length=1, description="Group label, shown in the row's gutter.")
+    label: NonBlank = Field(description="Group label, shown in the row's gutter.")
     items: list[BadgeRef | BadgeLiteral] = Field(
         min_length=1, description="Chips in this group: page-vocabulary refs or one-off label+tone pairs."
     )
@@ -573,7 +611,7 @@ class BadgeRow(_Block):
     )
     groups: list[BadgeGroup] = Field(
         default_factory=list[BadgeGroup],
-        description="Grouped chips — each group renders as a labelled gutter row. Use this OR `items`, "
+        description="Grouped chips: each group renders as a labelled gutter row. Use this OR `items`, "
         "not both.",
     )
 
@@ -591,10 +629,10 @@ class Callout(_Block):
     type: Literal["callout"]
     tone: CalloutTone = Field(
         description="Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A "
-        "callout is semantic, so teal/sky/accent/neutral aren't callout tones — use a card/badge_row/note."
+        "callout is semantic, so teal/sky/accent/neutral aren't callout tones; use a card/badge_row/note."
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
-    body: str = Field(description="Rich-text body.")
+    body: RichProse = Field(description="Rich-text body.")
     icon: Icon | None = Field(
         default=None,
         description="Optional single emoji shown at the head of the callout, in place of the tone's "
@@ -606,7 +644,7 @@ class StatusItem(FrozenModel):
     state: StatusState = Field(
         description="Step state, driving the glyph: done, current (in progress), pending, failed, blocked."
     )
-    text: str = Field(description="Rich-text label for the step.")
+    text: RichText = Field(description="Rich-text label for the step.")
 
 
 class StatusList(_Block):
@@ -635,24 +673,22 @@ class Meter(_Block):
 
 
 class RangeSegment(FrozenModel):
-    label: str = Field(min_length=1, description="Label shown inside the segment.")
+    label: NonBlank = Field(description="Label shown inside the segment.")
     span: Number = Field(
         description="Relative width (> 0). Spans are normalised across the segments, so only the "
-        "ratios matter — [3, 1] and [30, 10] render identically."
+        "ratios matter: [3, 1] and [30, 10] render identically."
     )
     tone: Tone | None = Field(
         default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
     )
-    sub: str | None = Field(default=None, description="Optional rich-text sub-line under the label.")
+    sub: NonBlankRichText | None = Field(
+        default=None, description="Optional rich-text sub-line under the label."
+    )
 
     @model_validator(mode="after")
     def _shape(self) -> "RangeSegment":
-        if not self.label.strip():
-            raise ValueError("range segment label must not be blank")
         if self.span <= 0:
             raise ValueError("segment 'span' must be greater than 0")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("range segment sub must not be blank (omit it instead)")
         return self
 
 
@@ -705,13 +741,13 @@ class Math(_Block):
 
 class Quote(_Block):
     type: Literal["quote"]
-    body: str = Field(description="Rich-text quotation.")
+    body: RichProse = Field(description="Rich-text quotation.")
     cite: str | None = Field(default=None, description="Optional attribution line.")
 
 
 class Note(_Block):
     type: Literal["note"]
-    body: str = Field(min_length=1, description="Rich-text aside; blank lines split paragraphs.")
+    body: NonBlankRichProse = Field(description="Rich-text aside; blank lines split paragraphs.")
     title: str | None = Field(default=None, description="Optional label for the note.")
     icon: Icon | None = Field(
         default=None,
@@ -727,7 +763,7 @@ class Divider(_Block):
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
-        description="A data: URI (self-contained — no external fetches). Base64-encode the payload "
+        description="A data: URI (self-contained, no external fetches). Base64-encode the payload "
         "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render."
     )
     alt: str = Field(description="Alt text for the image.")
@@ -744,7 +780,7 @@ class Image(_Block):
 class TimelineItem(FrozenModel):
     time: str | None = Field(default=None, description="Optional timestamp/label for the entry.")
     title: str = Field(description="Entry title.")
-    body: str | None = Field(default=None, description="Optional rich-text detail.")
+    body: RichText | None = Field(default=None, description="Optional rich-text detail.")
     state: TimelineState | None = Field(
         default=None, description="Optional dot state: done, current, pending."
     )
@@ -760,30 +796,25 @@ class Timeline(_Block):
 
 
 class FlowStep(FrozenModel):
-    label: str = Field(min_length=1, description="Short stage name — the node label.")
+    label: NonBlank = Field(description="Short stage name: the node label.")
     tone: Tone | None = Field(
         default=None, description="Optional tone accent for this node's border + number."
     )
-    note: str | None = Field(
+    note: RichText | None = Field(
         default=None,
         description="Optional one-line detail (rich text). Shown as the caption in `steps` style, and as a "
         "small sub-line in `arrow` style. If most nodes need a note, prefer style: steps.",
     )
-    points: list[str] = Field(
+    points: list[RichText] = Field(
         default_factory=list,
         description="Optional detail bullets (rich text) under the node, for when one line isn't enough. "
-        "Render below the note. Best paired with style: steps — a few bullets crowd a compact arrow chip.",
+        "Render below the note. Best paired with style: steps, since a few bullets crowd a compact "
+        "arrow chip.",
     )
     badges: list[str] = Field(
         default_factory=list,
         description="Declared badge keys (from the page `badges`) to chip onto this node.",
     )
-
-    @model_validator(mode="after")
-    def _non_blank(self) -> "FlowStep":
-        if not self.label.strip():
-            raise ValueError("flow step label must not be blank")
-        return self
 
 
 class Flow(_Block):
@@ -793,13 +824,13 @@ class Flow(_Block):
     )
     style: FlowStyle = Field(
         default="arrow",
-        description="arrow (default): short-labelled nodes joined by → connectors — reach for it when the "
+        description="arrow (default): short-labelled nodes joined by → connectors; reach for it when the "
         "DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each "
-        "carry a caption line — reach for it when every stage needs a sentence of explanation.",
+        "carry a caption line; reach for it when every stage needs a sentence of explanation.",
     )
     loop: bool = Field(
         default=False,
-        description="Draw a '↺ back to <first>' return marker after the last node — for a cycle, "
+        description="Draw a '↺ back to <first>' return marker after the last node, for a cycle, "
         "not a one-way pipeline.",
     )
     numbered: bool = Field(
@@ -810,7 +841,7 @@ class Flow(_Block):
 class Fan(_Block):
     type: Literal["fan"]
     hub: FlowStep = Field(
-        description="The single node — the 'one' side (a fan-in's target, a fan-out's source)."
+        description="The single node: the 'one' side (a fan-in's target, a fan-out's source)."
     )
     spokes: list[FlowStep] = Field(
         min_length=2,
@@ -825,7 +856,7 @@ class Fan(_Block):
 
 
 class ChartSeries(FrozenModel):
-    label: str = Field(min_length=1, description="Series name — shown in the legend.")
+    label: NonBlank = Field(description="Series name, shown in the legend.")
     values: list[Number] = Field(
         min_length=1, description="One value per category, in the same order as `categories`."
     )
@@ -833,7 +864,7 @@ class ChartSeries(FrozenModel):
 
 
 class ChartSlice(FrozenModel):
-    label: str = Field(min_length=1, description="Slice name — shown in the legend.")
+    label: NonBlank = Field(description="Slice name, shown in the legend.")
     value: Number = Field(description="Slice magnitude (> 0); its share of the whole is derived.")
     tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
 
@@ -880,7 +911,7 @@ class Chart(_Block):
                 if len(entry.values) != len(self.categories):
                     raise ValueError(
                         f"series '{entry.label}' has {len(entry.values)} values but there are "
-                        f"{len(self.categories)} categories — they must match"
+                        f"{len(self.categories)} categories; they must match"
                     )
                 # Bars/lines measure up from a zero baseline (no negative axis) — a negative value
                 # would draw an invalid or below-axis mark. Mirror the donut/meter positivity guard.
@@ -905,7 +936,7 @@ class Column(FrozenModel):
     kind: ColumnKind = Field(
         default="text",
         description="text (default) / rich (first one becomes the title column), number, badge (a "
-        "coloured chip — see `placement`), or indicator (a colour-only dot in its own column; the cell "
+        "coloured chip; see `placement`), or indicator (a colour-only dot in its own column; the cell "
         "value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
     )
     placement: ColumnPlacement = Field(
@@ -918,10 +949,8 @@ class Column(FrozenModel):
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
     )
-    width: Count | None = Field(
+    width: SixthsCount | None = Field(
         default=None,
-        ge=1,
-        le=6,
         description="Proportional width weight (1-6); set it on every in-cell column, or none. A "
         "`title`-placement badge column takes no width (it rides under the title).",
     )
@@ -987,8 +1016,7 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
             if column.kind == "number":
                 if isinstance(value, bool) or not isinstance(value, int | float):
                     raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
-                if not math.isfinite(value):
-                    raise ValueError(f"{loc}.{index}.{column.key}: number column must be finite")
+                _refuse_an_unusable_number(value, f"{loc}.{index}.{column.key}")
             elif column.kind == "badge" and column.placement == "cell":
                 # an in-cell badge holds one key or a list of keys (several wrapping chips)
                 badge_vals = _as_badge_list(value)
@@ -1027,8 +1055,8 @@ def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], lo
                 sub_value = subrow["value"]
                 if isinstance(sub_value, bool) or not isinstance(sub_value, int | float | str):
                     raise ValueError(f"{sub_loc}.value: must be a number or string")
-                if isinstance(sub_value, float) and not math.isfinite(sub_value):
-                    raise ValueError(f"{sub_loc}.value: number must be finite")
+                if not isinstance(sub_value, str):
+                    _refuse_an_unusable_number(sub_value, f"{sub_loc}.value")
 
 
 # A table row is authored as a mapping (column key → value) OR a positional list of values in column
@@ -1042,8 +1070,8 @@ class Group(FrozenModel):
     name: str = Field(description="Group band label; shows the derived subtotal.")
     rows: list[TableRow] = Field(
         default_factory=list[TableRow],
-        description="Rows in this group — each a mapping or a positional list in the declared column "
-        "order. Empty renders a '— none —' row.",
+        description="Rows in this group, each a mapping or a positional list in the declared column "
+        "order. Empty renders a 'none' row.",
     )
 
     @model_validator(mode="after")
@@ -1146,7 +1174,7 @@ class Table(_Block):
     def _validate_table(self) -> "Table":
         if (self.groups is None) == (self.rows is None):
             raise ValueError("provide exactly one of 'groups' or 'rows'")
-        if not any(column.kind in ("text", "rich") for column in self.columns):
+        if not any(column.kind in RICH_COLUMN_KINDS for column in self.columns):
             raise ValueError("a table needs at least one text or rich column (it hosts the title + chips)")
         column_keys = [column.key for column in self.columns]
         if len(column_keys) != len(set(column_keys)):
@@ -1160,6 +1188,11 @@ class Table(_Block):
                 raise ValueError(f"{name}.column '{spec.column}' must be a number column")
         if self.reconcile is None and any(column.pct_of_total for column in self.columns):
             raise ValueError("pct_of_total requires a reconcile total")
+        pct_misuse = [
+            column.key for column in self.columns if column.pct_of_total and column.kind != "number"
+        ]
+        if pct_misuse:
+            raise ValueError(f"column(s) {pct_misuse}: pct_of_total is only for number columns")
         placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
         if placement_misuse:
             raise ValueError(f"column(s) {placement_misuse}: placement 'cell' is only for badge columns")
@@ -1191,23 +1224,25 @@ class Table(_Block):
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.rollup.by not in badge_keys:
                 raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
-            located_rows = self._located_rows()
-            for loc, row in located_rows:
-                if isinstance(row[self.rollup.by], list):
-                    raise ValueError(
-                        f"rollup.by '{self.rollup.by}' counts each row under one badge, so its cells "
-                        f"can't hold a list of keys ({loc} holds {row[self.rollup.by]})"
-                    )
-            if not any(row[self.rollup.by].strip() for _, row in located_rows):
+            self._refuse_list_cells(
+                f"rollup.by '{self.rollup.by}' counts each row under one badge", self.rollup.by
+            )
+            if not any(row[self.rollup.by].strip() for _, row in self.located_rows()):
                 raise ValueError(
-                    f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
+                    f"rollup.by '{self.rollup.by}' has no values to count: every row is blank there"
                 )
         if self.tint_by is not None:
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.tint_by not in badge_keys:
                 raise ValueError(f"tint_by '{self.tint_by}' must be a badge column")
+            self._refuse_list_cells(f"tint_by '{self.tint_by}' tints each row by one badge", self.tint_by)
         self._reconcile()
         return self
+
+    def _refuse_list_cells(self, reason: str, key: str) -> None:
+        for loc, row in self.located_rows():
+            if isinstance(row[key], list):
+                raise ValueError(f"{reason}, so its cells can't hold a list of keys ({loc} holds {row[key]})")
 
     @property
     def cell_columns(self) -> list[Column]:
@@ -1234,7 +1269,7 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
-    def _located_rows(self) -> list[tuple[str, dict[str, Any]]]:
+    def located_rows(self) -> list[tuple[str, dict[str, Any]]]:
         if self.groups is not None:
             return [
                 (f"groups.{group_index}.rows.{row_index}", cast("dict[str, Any]", row))
@@ -1253,7 +1288,27 @@ class Table(_Block):
 
     @property
     def title_key(self) -> str:
-        return next(column.key for kind in ("text", "rich") for column in self.columns if column.kind == kind)
+        return next(
+            column.key for kind in RICH_COLUMN_KINDS for column in self.columns if column.kind == kind
+        )
+
+    def rich_cells(self) -> Iterator[tuple[FieldPath, str, RichTextMarker]]:
+        keys = [column.key for column in self.columns if column.kind in RICH_COLUMN_KINDS]
+        row_sets = (
+            [(("rows",), self.all_rows())]
+            if self.groups is None
+            else [
+                (("groups", str(index), "rows"), _mapped_rows(group.rows))
+                for index, group in enumerate(self.groups)
+            ]
+        )
+        for rows_path, rows in row_sets:
+            for index, row in enumerate(rows):
+                row_path = (*rows_path, str(index))
+                for key in keys:
+                    yield (*row_path, key), row[key], RICH_PROSE
+                for sub_index, subrow in enumerate(_mapped_rows(row.get("subrows") or [])):
+                    yield (*row_path, "subrows", str(sub_index), "label"), subrow["label"], RICH_TEXT
 
     @property
     def sum_key(self) -> str | None:
@@ -1311,7 +1366,7 @@ class ReferenceItem(FrozenModel):
         pattern=rf"^{REFERENCE_KEY_PATTERN}$",
         description="Short id (ASCII letters, digits, _, -); cite it inline with [^key].",
     )
-    text: str = Field(min_length=1, description="Rich-text source description (e.g. a doc name + page).")
+    text: NonBlankRichText = Field(description="Rich-text source description (e.g. a doc name + page).")
     url: str | None = Field(default=None, description="Optional link for the source (http/https/mailto).")
 
     @model_validator(mode="after")
@@ -1328,35 +1383,35 @@ class References(_Block):
 
 
 class ComparisonCell(FrozenModel):
-    value: str = Field(min_length=1, description="Cell text (for a ✓/✗ pass a bare true/false instead).")
+    value: NonBlankRichText = Field(description="Cell text (for a ✓/✗ pass a bare true/false instead).")
     tone: Tone | None = Field(default=None, description="Optional tone for the text.")
 
 
 # A comparison cell is a bare bool (✓/✗), a bare string, or {value, tone} for toned text.
 # StrictBool (not bool) so a stray int like 0/1 fails loudly instead of silently rendering ✓/✗.
-ComparisonValue = StrictBool | str | ComparisonCell
+ComparisonValue = StrictBool | RichText | ComparisonCell
 
 
 class ComparisonRow(FrozenModel):
-    feature: str = Field(min_length=1, description="Row label — the attribute being compared.")
+    feature: NonBlank = Field(description="Row label: the attribute being compared.")
     values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
 
 
 class Comparison(_Block):
     type: Literal["comparison"]
     options: list[str] = Field(
-        min_length=2, description="The things being compared — the column headers (2+)."
+        min_length=2, description="The things being compared: the column headers (2+)."
     )
     rows: list[ComparisonRow] = Field(
         min_length=1, description="Feature rows; each supplies one value per option."
     )
-    highlight: int | None = Field(
+    highlight: Count | None = Field(
         default=None, description="0-based index of the recommended option column to emphasise."
     )
     polarity: list[Literal["positive", "negative"]] | None = Field(
         default=None,
         description="Optional per-option polarity, one per option (default all positive). In a 'negative' "
-        "column a true ✓ reads as BAD (red) and a false ✗ as GOOD (green) — for present-is-bad attributes "
+        "column a true ✓ reads as BAD (red) and a false ✗ as GOOD (green), for present-is-bad attributes "
         "(e.g. 'leaks disk layout'). Affects only ✓/✗ bool cells; the glyph still marks present/absent.",
     )
 
@@ -1366,7 +1421,7 @@ class Comparison(_Block):
             if len(row.values) != len(self.options):
                 raise ValueError(
                     f"comparison row '{row.feature}' has {len(row.values)} values but there are "
-                    f"{len(self.options)} options — they must match"
+                    f"{len(self.options)} options; they must match"
                 )
         if self.highlight is not None and not (0 <= self.highlight < len(self.options)):
             raise ValueError(
@@ -1375,7 +1430,7 @@ class Comparison(_Block):
         if self.polarity is not None and len(self.polarity) != len(self.options):
             raise ValueError(
                 f"comparison polarity has {len(self.polarity)} entries but there are "
-                f"{len(self.options)} options — they must match"
+                f"{len(self.options)} options; they must match"
             )
         return self
 
@@ -1384,11 +1439,9 @@ class Comparison(_Block):
 
 
 class MatrixCell(FrozenModel):
-    row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")
-    col: str = Field(
-        min_length=1, description="Which column this cell sits in — one of the block's `columns`."
-    )
-    badge: str | None = Field(
+    row: NonBlank = Field(description="Which row this cell sits in: one of the block's `rows`.")
+    col: NonBlank = Field(description="Which column this cell sits in: one of the block's `columns`.")
+    badge: NonBlank | None = Field(
         default=None,
         description="A declared badge key: its tone fills the cell and its label is the cell text. Use "
         "this OR `tone`, not both.",
@@ -1396,9 +1449,9 @@ class MatrixCell(FrozenModel):
     tone: BadgeColor | None = Field(
         default=None,
         description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
-        "badge — e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
+        "badge, e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
     )
-    label: str | None = Field(
+    label: NonBlank | None = Field(
         default=None,
         description="Short text shown in the cell. With `badge` it overrides the badge's label; with "
         "`tone` it is the cell text; on its own it is plain text on an untinted cell.",
@@ -1406,27 +1459,21 @@ class MatrixCell(FrozenModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "MatrixCell":
-        if not self.row.strip():
-            raise ValueError("matrix cell row must not be blank")
-        if not self.col.strip():
-            raise ValueError("matrix cell col must not be blank")
-        if self.badge is not None and not self.badge.strip():
-            raise ValueError("matrix cell badge must not be blank (omit it instead)")
         if self.badge is not None and self.tone is not None:
             raise ValueError("a matrix cell takes `badge` or `tone`, not both")
         if self.badge is None and self.tone is None and self.label is None:
             raise ValueError(
                 "a matrix cell needs a `badge`, a `tone`, or a `label` (omit it for a blank cell)"
             )
-        if self.label is not None and not self.label.strip():
-            raise ValueError("matrix cell label must not be blank (omit it instead)")
         return self
 
 
 class Matrix(_Block):
     type: Literal["matrix"]
-    rows: list[str] = Field(min_length=1, description="Row labels, top to bottom (the row axis).")
-    columns: list[str] = Field(min_length=1, description="Column headers, left to right (the column axis).")
+    rows: list[NonBlank] = Field(min_length=1, description="Row labels, top to bottom (the row axis).")
+    columns: list[NonBlank] = Field(
+        min_length=1, description="Column headers, left to right (the column axis)."
+    )
     cells: list[MatrixCell] = Field(
         min_length=1,
         description="Filled cells, each naming a `row` + `col` from the axes. Omit a cell entirely for a "
@@ -1444,8 +1491,6 @@ class Matrix(_Block):
     def _shape(self) -> "Matrix":
         for axis, name in ((self.rows, "row"), (self.columns, "column")):
             stripped = [entry.strip() for entry in axis]
-            if any(not entry for entry in stripped):
-                raise ValueError(f"matrix {name} labels must not be blank")
             if len(set(stripped)) != len(stripped):
                 raise ValueError(f"matrix {name} labels must be unique")
         row_set, col_set = set(self.rows), set(self.columns)
@@ -1457,49 +1502,47 @@ class Matrix(_Block):
                 raise ValueError(f"matrix cell col '{cell.col}' is not one of the declared columns")
             if (cell.row, cell.col) in seen:
                 raise ValueError(
-                    f"matrix has two cells at ('{cell.row}', '{cell.col}') — at most one per cell"
+                    f"matrix has two cells at ('{cell.row}', '{cell.col}'); at most one per cell"
                 )
             seen.add((cell.row, cell.col))
         return self
 
 
 class SwimlaneStep(FrozenModel):
-    lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
-    col: str = Field(
-        min_length=1,
-        description="Which column (sprint) this step sits in — one of the block's `columns`. Two steps "
+    lane: NonBlank = Field(description="Which lane this step sits in: one of the block's `lanes`.")
+    col: NonBlank = Field(
+        description="Which column (sprint) this step sits in: one of the block's `columns`. Two steps "
         "sharing a lane/col stack in that cell.",
     )
-    n: str = Field(
-        min_length=1,
-        description="The number shown in the step's cell — a free string ('1', '3a', 'R1'); skaldr never "
+    n: NonBlank = Field(
+        description="The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never "
         "derives or renumbers it, so it reads exactly as written.",
     )
-    label: str = Field(min_length=1, description="Step label, shown beside the number.")
+    label: NonBlank = Field(description="Step label, shown beside the number.")
     group: str | None = Field(
         default=None,
-        description="Which group (milestone) this step belongs to — one of the block's `groups` that covers "
+        description="Which group (milestone) this step belongs to: one of the block's `groups` that covers "
         "its `col`. Required only when the column is split across more than one group; inferred otherwise.",
     )
     value: Number | None = Field(
         default=None,
-        description="Optional numeric weight for this step (points, hours, cost, count — whatever the "
+        description="Optional numeric weight for this step (points, hours, cost, count: whatever the "
         "matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column "
-        "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals — so the "
+        "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals, so the "
         "numbers never drift by hand. A step with no value counts as 0.",
     )
     url: str | None = Field(
         default=None,
-        description="Optional link (http/https/mailto) for the step — e.g. its Jira/GitHub ticket. The "
+        description="Optional link (http/https/mailto) for the step, e.g. its Jira/GitHub ticket. The "
         "step's number becomes a link out to it.",
     )
     state: SwimlaneStepState = Field(
         default="todo",
-        description="Progress state — the same progress axis as `status_list`/`timeline`, in roadmap "
+        description="Progress state: the same progress axis as `status_list`/`timeline`, in roadmap "
         "terms (`todo` for not-started, plus `deferred`). `done` (green), "
-        "`current` (in progress — the raised blue badge), `todo` (default — planned, not started; a cool "
-        "filled slate badge), `blocked` (waiting / on-hold — amber + dashed), `deferred` (pushed out / "
-        "post-MVP — a warm hollow badge that recedes). The value counts toward the totals in every state.",
+        "`current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool "
+        "filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / "
+        "post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
     )
     id: str | None = Field(
         default=None,
@@ -1516,21 +1559,13 @@ class SwimlaneStep(FrozenModel):
     )
 
     @model_validator(mode="after")
-    def _non_blank(self) -> "SwimlaneStep":
-        if not self.lane.strip():
-            raise ValueError("swimlane step lane must not be blank")
-        if not self.col.strip():
-            raise ValueError("swimlane step col must not be blank")
-        if not self.n.strip():
-            raise ValueError("swimlane step n must not be blank")
-        if not self.label.strip():
-            raise ValueError("swimlane step label must not be blank")
+    def _url_scheme(self) -> "SwimlaneStep":
         _require_url_scheme(self.url, "swimlane step url")
         return self
 
 
 class SwimlaneLane(FrozenModel):
-    name: str = Field(min_length=1, description="Lane label shown in the row gutter.")
+    name: NonBlank = Field(description="Lane label shown in the row gutter.")
     id: str | None = Field(
         default=None,
         min_length=1,
@@ -1546,7 +1581,7 @@ class SwimlaneLane(FrozenModel):
 
 
 class SwimlaneColumn(FrozenModel):
-    name: str = Field(min_length=1, description="Column header label.")
+    name: NonBlank = Field(description="Column header label.")
     id: str | None = Field(
         default=None,
         min_length=1,
@@ -1555,16 +1590,10 @@ class SwimlaneColumn(FrozenModel):
         "and a group via `columns`; defaults to `name`. Set it to rename the header without touching "
         "every step/group.",
     )
-    sub: str | None = Field(
+    sub: NonBlank | None = Field(
         default=None,
         description="Optional secondary caption under the header (e.g. a delivery target or date range).",
     )
-
-    @model_validator(mode="after")
-    def _non_blank_sub(self) -> "SwimlaneColumn":
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("swimlane column sub must not be blank (omit it instead)")
-        return self
 
     @property
     def key(self) -> str:
@@ -1573,14 +1602,14 @@ class SwimlaneColumn(FrozenModel):
 
 
 class SwimlaneGroup(FrozenModel):
-    name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
+    name: NonBlank = Field(description="Group (milestone / delivery) name, shown on its cap.")
     color: BadgeColor = Field(
-        description="Cap colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
+        description="Cap colour: a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
         "Author-chosen, never auto-assigned: a group's colour carries meaning."
     )
     columns: list[str] = Field(
         min_length=1,
-        description="The columns this group spans, by their key (id, or name if no id) — a CONTIGUOUS run "
+        description="The columns this group spans, by their key (id, or name if no id): a CONTIGUOUS run "
         "of the block's `columns` (a group cannot skip a column). Order need not match; it is derived "
         "from the block `columns`.",
     )
@@ -1594,18 +1623,27 @@ def _first_and_last_index(keys: Iterable[str | None]) -> dict[str, tuple[int, in
     return spans
 
 
+MAX_SWIMLANE_LANES: Final = 8
+
+
+def _wrap_bare_names(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    return [{"name": item} if isinstance(item, str) else item for item in cast("list[object]", value)]
+
+
 class Swimlane(_Block):
     type: Literal["swimlane"]
     lanes: list[SwimlaneLane] = Field(
         min_length=1,
-        max_length=8,
+        max_length=MAX_SWIMLANE_LANES,
         description="Lanes, in row order (top to bottom). A bare string is shorthand for `{name: …}`; "
-        "use `{id, name}` to give a stable reference key. Capped at 8 — more rows than that stop "
-        "reading as a matrix; split into two swimlanes instead.",
+        f"use `{{id, name}}` to give a stable reference key. Capped at {MAX_SWIMLANE_LANES}: more rows "
+        "than that stop reading as a matrix; split into two swimlanes instead.",
     )
     columns: list[SwimlaneColumn] = Field(
         min_length=1,
-        description="Columns, left to right — the sprint / phase axis. A bare string is shorthand for "
+        description="Columns, left to right: the sprint / phase axis. A bare string is shorthand for "
         "`{name: …}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
     )
     groups: list[SwimlaneGroup] = Field(
@@ -1617,13 +1655,25 @@ class Swimlane(_Block):
         min_length=1, description="Steps placed on the lane/column grid; the sequence reads as a staircase."
     )
 
-    @field_validator("lanes", "columns", mode="before")
+    @field_validator(
+        "lanes",
+        mode="before",
+        json_schema_input_type=Annotated[
+            list[NonBlank | SwimlaneLane], Field(min_length=1, max_length=MAX_SWIMLANE_LANES)
+        ],
+    )
     @classmethod
-    def _wrap_bare_names(cls, value: Any) -> Any:
-        """A bare string lane/column is shorthand for `{name: <string>}` (key defaults to the name)."""
-        if not isinstance(value, list):
-            return value
-        return [{"name": item} if isinstance(item, str) else item for item in cast("list[object]", value)]
+    def _wrap_bare_lane_names(cls, value: Any) -> Any:
+        return _wrap_bare_names(value)
+
+    @field_validator(
+        "columns",
+        mode="before",
+        json_schema_input_type=Annotated[list[NonBlank | SwimlaneColumn], Field(min_length=1)],
+    )
+    @classmethod
+    def _wrap_bare_column_names(cls, value: Any) -> Any:
+        return _wrap_bare_names(value)
 
     def _groups_covering(self, col: str) -> list[SwimlaneGroup]:
         return [group for group in self.groups if col in group.columns]
@@ -1693,7 +1743,7 @@ class Swimlane(_Block):
             positions = [index for index, (_, name) in enumerate(segments) if name == group.name]
             if positions and positions != list(range(positions[0], positions[-1] + 1)):
                 raise ValueError(
-                    f"swimlane group '{group.name}' cannot be laid out contiguously — it shares a column "
+                    f"swimlane group '{group.name}' cannot be laid out contiguously: it shares a column "
                     "with another group while spanning past it; groups must nest, not interleave"
                 )
         return tuple(segments)
@@ -1737,7 +1787,7 @@ class Swimlane(_Block):
                     raise ValueError(f"swimlane step group '{step.group}' does not cover column '{step.col}'")
             elif len(covering) > 1:
                 raise ValueError(
-                    f"swimlane step in column '{step.col}' must name a group — that column is split across "
+                    f"swimlane step in column '{step.col}' must name a group: that column is split across "
                     f"{len(covering)} groups"
                 )
 
@@ -1795,8 +1845,10 @@ class RequestVariable(FrozenModel):
         description="The token a reader fills, written `{{name}}` in the url, a header value or the "
         "body. ASCII letters, digits, _ and -.",
     )
-    label: str | None = Field(default=None, description="Field label above the input. Defaults to `name`.")
-    example: str | None = Field(
+    label: NonBlank | None = Field(
+        default=None, description="Field label above the input. Defaults to `name`."
+    )
+    example: NonBlank | None = Field(
         default=None,
         description="A sample value, prefilled into the input so the request can be run as it stands. "
         "On a `secret` it is placeholder text only and is never prefilled, since a prefilled secret "
@@ -1811,20 +1863,10 @@ class RequestVariable(FrozenModel):
         "not masked, because the same value is shown in full in the command right below it.",
     )
 
-    @model_validator(mode="after")
-    def _shape(self) -> "RequestVariable":
-        if self.label is not None and not self.label.strip():
-            raise ValueError("request variable label must not be blank (omit it instead)")
-        if self.example is not None and not self.example.strip():
-            raise ValueError("request variable example must not be blank (omit it instead)")
-        return self
-
 
 class RequestResponse(FrozenModel):
-    status: Count | None = Field(
+    status: Annotated[int, Field(ge=100, le=599), _NUMBER_GUARD] | None = Field(
         default=None,
-        ge=100,
-        le=599,
         description="The status you recorded. Omit for a response with no status line, such as a bare "
         "token from `curl -s`. The case's tone follows this number, so you never pick one.",
     )
@@ -1872,8 +1914,8 @@ def check_header_map(
 
 
 class RequestCase(FrozenModel):
-    label: str = Field(min_length=1, description="Tab label, and the case's heading when printed.")
-    value: str | None = Field(
+    label: NonBlank = Field(description="Tab label, and the case's heading when printed.")
+    value: NonBlank | None = Field(
         default=None,
         description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
         "which is what you want when the cases are resource names.",
@@ -1901,7 +1943,7 @@ class RequestCase(FrozenModel):
         "passes. A recorded status decides the tone by itself, so the two are never set together.",
     )
     response: RequestResponse = Field(description="What came back when you ran it.")
-    verdict: str | None = Field(
+    verdict: NonBlankRichText | None = Field(
         default=None,
         description="Rich-text reading of this response: what you expected, what you got, what it "
         "means. The one part of the block a reader cannot work out for themselves.",
@@ -1909,12 +1951,6 @@ class RequestCase(FrozenModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "RequestCase":
-        if not self.label.strip():
-            raise ValueError("request case label must not be blank")
-        if self.value is not None and not self.value.strip():
-            raise ValueError("request case value must not be blank (omit it to use the label)")
-        if self.verdict is not None and not self.verdict.strip():
-            raise ValueError("request case verdict must not be blank (omit it instead)")
         if self.headers is not None and self.headers_add is not None:
             raise ValueError(
                 "a request case sets headers and headers_add together: headers replaces and "
@@ -1947,7 +1983,7 @@ class _RequestCore(FrozenModel):
     it produced. Shared by a standalone `request` and by a step of a `request_flow`, which differ only
     in where their variables come from."""
 
-    label: str = Field(min_length=1, description="What the call is for, shown in the header.")
+    label: NonBlank = Field(description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
         default=None, description="The HTTP method. Required unless the call runs a `command`."
     )
@@ -1965,7 +2001,7 @@ class _RequestCore(FrozenModel):
         "that shapes the output. May carry `{{variable}}` tokens, written in as the reader types them "
         "with no shell quoting added. Cannot be combined with `method`, `url`, `headers` or `body`.",
     )
-    command_note: str | None = Field(
+    command_note: NonBlankRichText | None = Field(
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
@@ -1975,7 +2011,7 @@ class _RequestCore(FrozenModel):
         description="Request headers as a map, in the order they should read. A value may carry "
         "`{{variable}}` tokens.",
     )
-    body: str | None = Field(
+    body: NonBlank | None = Field(
         default=None,
         description="Request body, sent as `--data`. May carry `{{variable}}` tokens, so a credential "
         "can sit inside a JSON login payload without ever being written here.",
@@ -2032,7 +2068,7 @@ class _RequestCore(FrozenModel):
         if len(self.cases) > MAX_STRIP_LABELS:
             raise ValueError(
                 f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
-                f"{len(self.cases)} — split it into blocks a reader can take in"
+                f"{len(self.cases)}; split it into blocks a reader can take in"
             )
         if self.case_variable is None:
             for case in self.cases:
@@ -2041,10 +2077,6 @@ class _RequestCore(FrozenModel):
                         f"case '{case.label}' sets a value but the request declares no case_variable, "
                         "so there is nothing for it to fill"
                     )
-        if self.body is not None and not self.body.strip():
-            raise ValueError("request body must not be blank (omit it instead)")
-        if self.command_note is not None and not self.command_note.strip():
-            raise ValueError("request command_note must not be blank (omit it instead)")
         check_header_map(self.headers, "request header")
         if self.command is None:
             self._check_composed_call()
@@ -2124,14 +2156,14 @@ class Request(_RequestCore, _VariableOwner, _Block):
             raise ValueError(f"request declares a variable twice: {', '.join(sorted(repeated))}")
         if self.case_variable is not None and self.case_variable in declared:
             raise ValueError(
-                f"`{self.case_variable}` is both the case_variable and a declared variable — each case "
+                f"`{self.case_variable}` is both the case_variable and a declared variable: each case "
                 "supplies it, so it must not also be a field the reader fills"
             )
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
                 f"request declares {', '.join(sorted(unused))} but never uses "
-                f"{'them' if len(unused) > 1 else 'it'} — every variable needs a `{{{{name}}}}` to fill"
+                f"{'them' if len(unused) > 1 else 'it'}; every variable needs a `{{{{name}}}}` to fill"
             )
         return self
 
@@ -2183,7 +2215,7 @@ class RequestStep(_RequestCore):
             raise ValueError(f"step captures the same name twice: {', '.join(sorted(repeated))}")
         if self.captures and len(self.cases) > 1:
             raise ValueError(
-                f"step '{self.label}' captures a value and records {len(self.cases)} cases — a capture "
+                f"step '{self.label}' captures a value and records {len(self.cases)} cases; a capture "
                 "reads one definite response, so a step that produces a value keeps a single case"
             )
         return self
@@ -2191,7 +2223,7 @@ class RequestStep(_RequestCore):
 
 class RequestFlow(_VariableOwner, _Block):
     type: Literal["request_flow"]
-    label: str = Field(min_length=1, description="What the flow is for, shown in the block header.")
+    label: NonBlank = Field(description="What the flow is for, shown in the block header.")
     steps: list[RequestStep] = Field(
         min_length=2,
         description="The calls in the order they run. A flow of one step is a `request`, so use that.",
@@ -2229,7 +2261,7 @@ class RequestFlow(_VariableOwner, _Block):
         clashing = {name for name in captured if name in declared}
         if clashing:
             raise ValueError(
-                f"{', '.join(sorted(clashing))} is both captured and declared — a step produces it, so "
+                f"{', '.join(sorted(clashing))} is both captured and declared: a step produces it, so "
                 "it must not also be a field the reader fills"
             )
         duplicated = {name for name in captured if captured.count(name) > 1}
@@ -2253,25 +2285,9 @@ class RequestFlow(_VariableOwner, _Block):
         return self
 
 
-def _refuse_blank(what: str) -> AfterValidator:
-    def refuse(value: str) -> str:
-        if not value.strip():
-            raise ValueError(f"{what} must not be blank")
-        return value
-
-    return AfterValidator(refuse)
-
-
-_NON_BLANK_JSON_SCHEMA: Final[JsonDict] = {"pattern": r"\S"}
-
-
 class _ToggleBase(_Block):
     type: Literal["toggle"]
-    title: Annotated[str, _refuse_blank("toggle title")] = Field(
-        min_length=1,
-        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
-        description="Summary label shown on the collapsible.",
-    )
+    title: NonBlank = Field(description="Summary label shown on the collapsible.")
     collapsed: bool = Field(
         default=True,
         description="Whether the toggle starts collapsed, as a section does. Set false to open it.",
@@ -2288,7 +2304,7 @@ class InnerToggle(_ToggleBase):
 
 
 class Toggle(_ToggleBase):
-    blocks: list["FullWidthBlock"] = Field(
+    blocks: list["SectionBlock"] = Field(
         min_length=1,
         description="Blocks inside a toggle at the top level, in a section, in a panel or in another such "
         "toggle: any block a section holds, including a request or request_flow.",
@@ -2296,11 +2312,7 @@ class Toggle(_ToggleBase):
 
 
 class Tab(FrozenModel):
-    label: Annotated[str, _refuse_blank("tab label")] = Field(
-        min_length=1,
-        json_schema_extra=_NON_BLANK_JSON_SCHEMA,
-        description="The tab's label in the strip, and its heading on paper.",
-    )
+    label: NonBlank = Field(description="The tab's label in the strip, and its heading on paper.")
     tone: Tone | None = Field(
         default=None,
         description="Optional tone: a coloured dot before the label, the way a request case shows its "
@@ -2362,13 +2374,12 @@ InnerBlock = Annotated[_Leaf, Field(discriminator="type")]
 InnerToggle.model_rebuild()
 Tab.model_rebuild()
 FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Field(discriminator="type")]
-Toggle.model_rebuild()
 RequestLike = Request | RequestStep
 
 
 class Section(_Block):
     type: Literal["section"]
-    title: str = Field(description="Summary label shown on the collapsible.")
+    title: NonBlank = Field(description="Summary label shown on the collapsible.")
     id: str | None = Field(
         default=None,
         pattern=rf"^{ANCHOR_ID_PATTERN}$",
@@ -2383,23 +2394,29 @@ class Section(_Block):
     updated: str | None = Field(
         default=None,
         description="When this section was last revised; shown as a muted stamp in its header. A "
-        "free-form label like the report date (author it — never auto-now).",
+        "free-form label like the report date (author it; never auto-now).",
     )
-    blocks: list[FullWidthBlock] = Field(
+    blocks: list["SectionBlock"] = Field(
         min_length=1,
-        description="Blocks in the section — any block except another section, grid, or walkthrough.",
+        description="Blocks in the section: any block except another section, grid, or walkthrough.",
     )
 
 
 class Panel(_Block):
     type: Literal["panel"]
-    title: str = Field(min_length=1, description="Panel title, shown in the header band.")
+    title: NonBlank = Field(description="Panel title, shown in the header band.")
     blocks: list[FullWidthBlock] = Field(
         min_length=1,
-        description="Blocks inside the panel — any block except another panel, section, grid, or "
-        "walkthrough. Unlike a `section`, a panel is always open — "
+        description="Blocks inside the panel: any block except another panel, section, grid, or "
+        "walkthrough. Unlike a `section`, a panel is always open: "
         "a titled framed card, one per 'slide' in a deck-style doc.",
     )
+
+
+SectionBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow | Panel, Field(discriminator="type")]
+Toggle.model_rebuild()
+Section.model_rebuild()
+Panel.model_rebuild()
 
 
 # Grid: a bounded side-by-side layout over a 6-column base.
@@ -2410,7 +2427,7 @@ class Panel(_Block):
 
 
 class InnerGridCell(FrozenModel):
-    span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
+    span: SixthsCount = Field(description="Columns this cell spans, of 6.")
     blocks: list[InnerBlock] = Field(min_length=1, description="Leaf blocks stacked in the cell.")
     tone: Tone | None = Field(
         default=None,
@@ -2433,7 +2450,7 @@ CellBlock = Annotated[_Leaf | InnerGrid, Field(discriminator="type")]
 
 
 class GridCell(FrozenModel):
-    span: Count = Field(ge=1, le=6, description="Columns this cell spans, of 6.")
+    span: SixthsCount = Field(description="Columns this cell spans, of 6.")
     blocks: list[CellBlock] = Field(
         min_length=1, description="Blocks stacked in the cell; may include nested grids (depth 2 max)."
     )
@@ -2461,17 +2478,16 @@ def _check_span_sum(cells: Sequence[GridCell | InnerGridCell]) -> None:
 
 
 class WalkthroughStep(FrozenModel):
-    label: str = Field(
-        min_length=1,
-        description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
+    label: NonBlank = Field(
+        description="Step title: a few words to a short sentence; it wraps across lines, so it can be long.",
     )
-    sub: str | None = Field(
+    sub: NonBlankRichText | None = Field(
         default=None, description="Optional one-line sub-label under the title (rich text)."
     )
     tone: Tone | None = Field(
         default=None,
         description="Optional tone for the step's left rail. Every step always HAS the rail (it is the "
-        "list's structure); tone only changes its colour, so use it to mark a key step — not every "
+        "list's structure); tone only changes its colour, so use it to mark a key step, not every "
         "step. The numeral stays a uniform muted grey regardless, so tones can't leave steps mismatched.",
     )
     detail: list[CellBlock] = Field(
@@ -2480,14 +2496,6 @@ class WalkthroughStep(FrozenModel):
         "two-column step like Action | Script), rendered in the column beside the numbered title.",
     )
 
-    @model_validator(mode="after")
-    def _non_blank(self) -> "WalkthroughStep":
-        if not self.label.strip():
-            raise ValueError("walkthrough step label must not be blank")
-        if self.sub is not None and not self.sub.strip():
-            raise ValueError("walkthrough step sub must not be blank (omit it instead)")
-        return self
-
 
 class Walkthrough(_Block):
     type: Literal["walkthrough"]
@@ -2495,10 +2503,8 @@ class Walkthrough(_Block):
         min_length=1,
         description="Ordered steps; each is a big numbered title beside its detail column.",
     )
-    step_span: Count = Field(
+    step_span: Annotated[int, Field(ge=1, le=5), _NUMBER_GUARD] = Field(
         default=2,
-        ge=1,
-        le=5,
         description="Width of the title column, of 6; the detail column takes the rest (default 2).",
     )
 
@@ -2511,16 +2517,28 @@ Block = Annotated[
 AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
 
 
-def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
     match block:
         case Section() | Panel() | Toggle() | InnerToggle():
-            return block.blocks
+            return [(f"blocks.{index}", inner) for index, inner in enumerate(block.blocks)]
         case Grid() | InnerGrid():
-            return [inner for cell in block.cells for inner in cell.blocks]
+            return [
+                (f"cells.{cell_index}.blocks.{index}", inner)
+                for cell_index, cell in enumerate(block.cells)
+                for index, inner in enumerate(cell.blocks)
+            ]
         case Walkthrough():
-            return [inner for step in block.steps for inner in step.detail]
+            return [
+                (f"steps.{step_index}.detail.{index}", inner)
+                for step_index, step in enumerate(block.steps)
+                for index, inner in enumerate(step.detail)
+            ]
         case Tabs():
-            return [inner for tab in block.tabs for inner in tab.blocks]
+            return [
+                (f"tabs.{tab_index}.blocks.{index}", inner)
+                for tab_index, tab in enumerate(block.tabs)
+                for index, inner in enumerate(tab.blocks)
+            ]
         case (
             Heading()
             | Text()
@@ -2557,16 +2575,31 @@ def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
             assert_never(block)
 
 
+def child_blocks(block: AnyBlock) -> Sequence[AnyBlock]:
+    return [inner for _, inner in located_child_blocks(block)]
+
+
 def walk_blocks(blocks: Sequence[AnyBlock]) -> Iterator[AnyBlock]:
     for block in blocks:
         yield block
         yield from walk_blocks(child_blocks(block))
 
 
+def _walk_placed(placed: Iterable[tuple[str, AnyBlock]]) -> Iterator[tuple[str, AnyBlock]]:
+    for place, block in placed:
+        path = f"{place}.{block.type}"
+        yield path, block
+        yield from _walk_placed((f"{path}.{child}", inner) for child, inner in located_child_blocks(block))
+
+
+def walk_located_blocks(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, AnyBlock]]:
+    yield from _walk_placed((f"blocks.{index}", block) for index, block in enumerate(blocks))
+
+
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
     """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
     for block in walk_blocks(blocks):
-        if isinstance(block, (Request, RequestFlow)):
+        if isinstance(block, Request | RequestFlow):
             yield block
 
 
@@ -2589,40 +2622,63 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
-    for block in walk_blocks(blocks):
-        if isinstance(block, BadgeRow):
-            for item in (*block.items, *(i for group in block.groups for i in group.items)):
+    return (key for _, key in iter_located_badge_keys(blocks))
+
+
+def iter_located_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, str]]:
+    for path, block in walk_located_blocks(blocks):
+        yield from _badge_keys_in(path, block)
+
+
+def _badge_keys_from(path: str, keys: Sequence[str]) -> Iterator[tuple[str, str]]:
+    for index, key in enumerate(keys):
+        yield f"{path}.{index}", key
+
+
+def _badge_keys_in(path: str, block: AnyBlock) -> Iterator[tuple[str, str]]:
+    if isinstance(block, BadgeRow):
+        for index, item in enumerate(block.items):
+            if isinstance(item, BadgeRef):
+                yield f"{path}.items.{index}.key", item.key
+        for group_index, group in enumerate(block.groups):
+            for index, item in enumerate(group.items):
                 if isinstance(item, BadgeRef):
-                    yield item.key
-        elif isinstance(block, Cards):
-            for card in block.items:
-                yield from card.badges
-                if card.badge is not None:
-                    yield card.badge
-        elif isinstance(block, Timeline):
-            for item in block.items:
-                yield from item.badges
-        elif isinstance(block, Flow):
-            for step in block.steps:
-                yield from step.badges
-        elif isinstance(block, Fan):
-            yield from block.hub.badges
-            for spoke in block.spokes:
-                yield from spoke.badges
-        elif isinstance(block, Matrix):
-            for cell in block.cells:
-                if cell.badge is not None:
-                    yield cell.badge
-        elif isinstance(block, Table):
-            badge_columns = [column.key for column in block.columns if column.kind == "badge"]
-            for row in block.all_rows():
-                for key in badge_columns:
-                    value = row.get(key)
-                    # A cell badge may hold a list of keys; a title badge holds one. A blank string is
-                    # an opt-out (no chip on that row), not a reference.
-                    for candidate in _as_badge_list(value):
-                        if isinstance(candidate, str) and candidate.strip():
-                            yield candidate.strip()
+                    yield f"{path}.groups.{group_index}.items.{index}.key", item.key
+    elif isinstance(block, Cards):
+        for index, card in enumerate(block.items):
+            yield from _badge_keys_from(f"{path}.items.{index}.badges", card.badges)
+            if card.badge is not None:
+                yield f"{path}.items.{index}.badge", card.badge
+    elif isinstance(block, Timeline):
+        for index, item in enumerate(block.items):
+            yield from _badge_keys_from(f"{path}.items.{index}.badges", item.badges)
+    elif isinstance(block, Flow):
+        for index, step in enumerate(block.steps):
+            yield from _badge_keys_from(f"{path}.steps.{index}.badges", step.badges)
+    elif isinstance(block, Fan):
+        yield from _badge_keys_from(f"{path}.hub.badges", block.hub.badges)
+        for index, spoke in enumerate(block.spokes):
+            yield from _badge_keys_from(f"{path}.spokes.{index}.badges", spoke.badges)
+    elif isinstance(block, Matrix):
+        for index, cell in enumerate(block.cells):
+            if cell.badge is not None:
+                yield f"{path}.cells.{index}.badge", cell.badge
+    elif isinstance(block, Table):
+        badge_columns = [column.key for column in block.columns if column.kind == "badge"]
+        for row_path, row in block.located_rows():
+            for key in badge_columns:
+                yield from _badge_keys_in_cell(f"{path}.{row_path}.{key}", row.get(key))
+
+
+def _badge_keys_in_cell(path: str, value: Any) -> Iterator[tuple[str, str]]:
+    placed = (
+        [(f"{path}.{index}", key) for index, key in enumerate(cast("list[Any]", value))]
+        if isinstance(value, list)
+        else [(path, value)]
+    )
+    for place, candidate in placed:
+        if isinstance(candidate, str) and candidate.strip():
+            yield place, candidate.strip()
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
@@ -2647,14 +2703,6 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
     for block in walk_blocks(blocks):
         if isinstance(block, Table):
             yield block
-
-
-def iter_cards(blocks: Sequence[AnyBlock]) -> Iterator[Card]:
-    """Every card in the block tree (recursing into containers), in document order — for the
-    `of_matrix`/`of_tables` reference checks and the derived-value computation."""
-    for block in walk_blocks(blocks):
-        if isinstance(block, Cards):
-            yield from block.items
 
 
 class Report(FrozenModel):
@@ -2682,77 +2730,123 @@ class Report(FrozenModel):
 
     @model_validator(mode="after")
     def _validate_badge_references(self) -> "Report":
-        bad = sorted({key for key in iter_referenced_badge_keys(self.blocks) if key not in self.badges})
-        if bad:
-            raise ValueError(f"badge key(s) not declared in `badges`: {bad} (add them to the badges map)")
+        undeclared = [
+            (path, key) for path, key in iter_located_badge_keys(self.blocks) if key not in self.badges
+        ]
+        if undeclared:
+            keys = sorted({key for _, key in undeclared})
+            where = ", ".join(f"{path} ({key!r})" for path, key in undeclared)
+            raise ValueError(
+                f"badge key(s) not declared in `badges`: {keys}, at {where}; add them to the badges map"
+            )
         return self
+
+    @cached_property
+    def located_blocks(self) -> list[tuple[str, AnyBlock]]:
+        return list(walk_located_blocks(self.blocks))
+
+    def _located_cards(self) -> Iterator[tuple[str, Card]]:
+        for path, block in self.located_blocks:
+            if isinstance(block, Cards):
+                for index, card in enumerate(block.items):
+                    yield f"{path}.items.{index}", card
 
     @model_validator(mode="after")
     def _validate_matrix_references(self) -> "Report":
-        counts = Counter(matrix.id for matrix in iter_matrices(self.blocks) if matrix.id is not None)
-        duplicates = sorted(mid for mid, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"matrix id(s) used more than once: {duplicates} — matrix ids must be unique")
-        for card in iter_cards(self.blocks):
-            if card.of_matrix is not None and card.of_matrix not in counts:
-                raise ValueError(f"card of_matrix '{card.of_matrix}' names no matrix with that id")
+        placed = [
+            (f"{path}.id", block.id)
+            for path, block in self.located_blocks
+            if isinstance(block, Matrix) and block.id is not None
+        ]
+        _refuse_repeats(placed, "matrix id(s)", "matrix ids must be unique")
+        matrix_ids = {matrix_id for _, matrix_id in placed}
+        for path, card in self._located_cards():
+            if card.of_matrix is not None and card.of_matrix not in matrix_ids:
+                raise ValueError(
+                    f"card of_matrix names '{card.of_matrix}', which is not the id of any matrix, at "
+                    f"{path}.of_matrix"
+                )
         return self
 
     @model_validator(mode="after")
     def _validate_table_references(self) -> "Report":
-        # A `of_tables` card counts a badge across the named tables' rollup columns, so each referenced
-        # table must both exist (by id, unique) AND declare a `rollup` (which names the column to count).
-        with_rollup: set[str] = set()
-        counts: Counter[str] = Counter()
-        for table in iter_tables(self.blocks):
-            if table.id is not None:
-                counts[table.id] += 1
-                if table.rollup is not None:
-                    with_rollup.add(table.id)
-        duplicates = sorted(tid for tid, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"table id(s) used more than once: {duplicates} — table ids must be unique")
-        for card in iter_cards(self.blocks):
-            for tid in card.of_tables or []:
-                if tid not in counts:
-                    raise ValueError(f"card of_tables references '{tid}', which names no table with that id")
-                if tid not in with_rollup:
+        tables = [
+            (f"{path}.id", block.id, block)
+            for path, block in self.located_blocks
+            if isinstance(block, Table) and block.id is not None
+        ]
+        _refuse_repeats(
+            [(path, table_id) for path, table_id, _ in tables], "table id(s)", "table ids must be unique"
+        )
+        rollups = {table_id: table.rollup is not None for _, table_id, table in tables}
+        for path, card in self._located_cards():
+            for index, table_id in enumerate(card.of_tables or []):
+                where = f"{path}.of_tables.{index}"
+                if table_id not in rollups:
                     raise ValueError(
-                        f"card of_tables references table '{tid}', which has no `rollup` — "
-                        "of_tables counts a badge using each table's rollup column, so it must declare one"
+                        f"card of_tables names '{table_id}', which is not the id of any table, at {where}"
+                    )
+                if not rollups[table_id]:
+                    raise ValueError(
+                        f"card of_tables names '{table_id}', which is a table with no `rollup`, at {where}; "
+                        "of_tables counts a badge with each table's rollup column, so the table must "
+                        "declare one"
                     )
         return self
 
     @model_validator(mode="after")
     def _validate_request_storage_keys_unique(self) -> "Report":
-        counts = Counter(block.id or block.label for block in iter_requests(self.blocks))
-        duplicates = sorted(key for key, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(
-                f"request block label(s) used more than once: {duplicates} — a label keys what a "
-                "reader's fields are remembered under while their tab is open, so two blocks sharing "
-                "one would share those values; give one of them an `id`"
-            )
+        _refuse_repeats(
+            [
+                (path, block.id or block.label)
+                for path, block in self.located_blocks
+                if isinstance(block, Request | RequestFlow)
+            ],
+            "request block label(s)",
+            "request labels must be unique, because a label keys what a reader's fields are remembered "
+            "under while their tab is open: give one of them an `id`",
+        )
         return self
 
     @model_validator(mode="after")
     def _validate_reference_keys_unique(self) -> "Report":
-        # A key must be globally unique: it becomes an HTML id, and the shared numbering assumes one
-        # source per key. This subsumes any within-block check, so `References` carries none.
-        counts = Counter(item.key for item in iter_reference_items(self.blocks))
-        duplicates = sorted(key for key, count in counts.items() if count > 1)
-        if duplicates:
-            raise ValueError(f"reference key(s) declared more than once: {duplicates}")
+        _refuse_repeats(
+            [
+                (f"{path}.items.{index}.key", item.key)
+                for path, block in self.located_blocks
+                if isinstance(block, References)
+                for index, item in enumerate(block.items)
+            ],
+            "reference key(s)",
+            "reference keys must be unique",
+        )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_anchor_ids_unique(self) -> "Report":
+        _refuse_repeats(
+            [
+                (f"{path}.id", block.id)
+                for path, block in self.located_blocks
+                if isinstance(block, Heading | Section) and block.id is not None
+            ],
+            "heading/section id(s)",
+            "heading and section ids must be unique",
+        )
         return self
 
 
+def _refuse_repeats(placed: Sequence[tuple[str, str]], what: str, reason: str) -> None:
+    counts = Counter(value for _, value in placed)
+    repeated = sorted(value for value, count in counts.items() if count > 1)
+    if repeated:
+        where = ", ".join(path for path, value in placed if counts[value] > 1)
+        raise ValueError(f"{what} used more than once: {repeated}, at {where}; {reason}")
+
+
 def _format_validation_error(error: ValidationError) -> str:
-    issues = error.errors()
-    for issue in issues:
-        if issue["type"] == _RECONCILIATION_ERROR_TYPE:
-            return issue["msg"]
     lines: list[str] = []
-    for issue in issues:
+    for issue in error.errors():
         location = ".".join(str(part) for part in issue["loc"])
         lines.append(f"{location}: {issue['msg']}" if location else issue["msg"])
     return "invalid content data: " + "; ".join(lines)
@@ -2825,7 +2919,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: li
         chain = " -> ".join(str(ancestor) for ancestor in (*ancestors, resolved))
         raise ReportError(f"circular !include: {chain}")
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
-        raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path} — likely a mistake")
+        raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
     text = read_text_file(path)
     loaded.append(resolved)
 

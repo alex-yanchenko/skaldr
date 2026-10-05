@@ -1,12 +1,11 @@
-import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from fractions import Fraction
 from typing import Final
 
 from typing_extensions import assert_never
 
+from skaldr.export.apportion import apportioned
 from skaldr.export.markup import (
     CALLOUT_ICON,
     DIVIDER_LINE,
@@ -48,17 +47,18 @@ from skaldr.export.tree import (
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
-NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*~`$[]<>{}|^"})
+NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
+CLOSING_TAG_OPENER: Final = "</"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
+NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
-SHARE_DENOMINATOR_LIMIT: Final = 1_000_000
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -104,7 +104,7 @@ class _NotionRuns(MarkupRuns):
         return self.code(piece) if is_file_name else self.escape(piece)
 
     def code(self, text: str, /) -> str:
-        return self.escape(text) if "`" in text else f"`{text}`"
+        return self.escape(text) if "`" in text or CLOSING_TAG_OPENER in text else f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
@@ -177,16 +177,6 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     return _row_lines(row.cells, texts, tone)
 
 
-def apportioned_pixels(weights: Sequence[float], total: int) -> list[int]:
-    exact = [Fraction(weight).limit_denominator(SHARE_DENOMINATOR_LIMIT) for weight in weights]
-    quotas = [weight / sum(exact) * total for weight in exact]
-    widths = [math.floor(quota) for quota in quotas]
-    by_remainder = sorted(range(len(quotas)), key=lambda index: widths[index] - quotas[index])
-    for index in by_remainder[: total - sum(widths)]:
-        widths[index] += 1
-    return widths
-
-
 def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
     shares = [column.share for column in columns]
     auto_count = shares.count(None)
@@ -194,7 +184,7 @@ def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
         return [None] * len(shares)
     auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
     weights = [auto_share if share is None else share for share in shares]
-    return apportioned_pixels(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
+    return apportioned(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
 
 
 def _width_attribute(width: int | None) -> str:
@@ -221,22 +211,30 @@ def _table_lines(table: TableNode) -> list[str]:
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
-def _list_marker(kind: ListKind, index: int, checked: bool) -> str:
-    match kind:
+def _numbers_as_bullets(node: ListNode) -> bool:
+    return node.kind == "number" and node.start != NOTION_LIST_START
+
+
+def _written_kind(node: ListNode) -> ListKind:
+    return "bullet" if _numbers_as_bullets(node) else node.kind
+
+
+def _list_marker(node: ListNode, index: int, checked: bool) -> str:
+    match node.kind:
         case "bullet":
             return "-"
         case "number":
-            return f"{index}."
+            return f"- {index}\\." if _numbers_as_bullets(node) else f"{index}."
         case "check":
             return "- [x]" if checked else "- [ ]"
         case _:
-            assert_never(kind)
+            assert_never(node.kind)
 
 
 def _list_lines(node: ListNode) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
-        marker = _list_marker(node.kind, index, entry.checked)
+        marker = _list_marker(node, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}{_trailing_color(entry.tone)}")
         lines += _indent(_notion_blocks(entry.children))
     return lines
@@ -317,7 +315,7 @@ def _notion_lines(node: Node) -> list[str]:
 
 
 def _list_kind(node: Node) -> ListKind | None:
-    return node.kind if isinstance(node, ListNode) else None
+    return _written_kind(node) if isinstance(node, ListNode) else None
 
 
 def _notion_blocks(nodes: Sequence[Node]) -> list[str]:

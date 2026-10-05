@@ -19,6 +19,20 @@ from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
+_UNKNOWN_TONE_TEXT = "x [a]{tone=x}"
+_UNKNOWN_TONE_MESSAGE = (
+    "unknown tone 'x' in {tone=x}: a tone is one of neutral, info, success, warning, danger, accent, teal, "
+    "sky, or a palette name slate, blue, green, amber, red, violet"
+)
+
+
+def _note_table(**rows_or_groups: object) -> dict[str, object]:
+    return {
+        "type": "table",
+        "columns": [{"key": "item", "label": "Item"}, {"key": "note", "label": "Note"}],
+        **rows_or_groups,
+    }
+
 
 def _write(tmp_path: Path, data: dict[str, object], name: str = "report.yaml") -> Path:
     path = tmp_path / name
@@ -727,6 +741,24 @@ def test_emit_json_still_refuses_an_output_flag(tmp_path: Path, capsys: pytest.C
     assert "--emit-json only validates" in capsys.readouterr().err
 
 
+def test_emit_json_refuses_a_heading_id_used_twice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "heading", "text": "A", "id": "dup"}, {"type": "heading", "text": "B", "id": "dup"}]
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        (
+            "",
+            "error: invalid content data: Value error, heading/section id(s) used more than once: ['dup'], "
+            "at blocks.0.heading.id, blocks.1.heading.id; heading and section ids must be unique\n",
+        ),
+    )
+
+
 def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "oops": 1}]))
 
@@ -735,6 +767,21 @@ def test_check_invalid_file_exits_1_on_stderr(tmp_path: Path, capsys: pytest.Cap
     captured = capsys.readouterr()
     assert exit_code == 1
     assert f"FAIL  {data_path}" in captured.err
+
+
+def test_check_reports_a_number_cell_beyond_float_range_as_a_failed_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    table = make_reconciled_table(groups=[{"name": "g", "rows": [{"issue": "x", "count": 10**400}]}])
+    data_path = _write(tmp_path, make_report(blocks=[table]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: invalid content data: blocks.0.table: Value error, groups.0.rows.0.count: "
+        "must be between -1e+300 and 1e+300\n\n1 file failed\n",
+    )
 
 
 def test_check_notes_unfilled_placeholders_but_passes_without_strict(
@@ -759,6 +806,178 @@ def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "2 unfilled placeholders: ticket, url" in captured.err  # plural + sorted
+
+
+def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = (
+        "Review [the PR](https://github.com/acme/repo/pull/{{pr}}) "
+        "and [ticket {{ticket}}](https://example.com/t)."
+    )
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": body}]))
+
+    exit_code = main(["--check", "--strict", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: 2 unfilled placeholders: pr, ticket\n\n1 file failed\n",
+    )
+
+
+@pytest.mark.parametrize(
+    ("blocks", "message"),
+    [
+        pytest.param(
+            [
+                {"type": "text", "body": "Intro."},
+                {"type": "list", "items": ["fine", "the rate $`\\simga`$"]},
+            ],
+            "blocks.1.items.1: math expression '\\simga' uses \\simga, which latex2mathml does not know: "
+            "check its spelling, or write \\text{...} for literal text",
+            id="math-in-a-list-item",
+        ),
+        pytest.param(
+            [{"type": "list", "items": [{"text": "parent", "items": ["ok", "see [a]{tone=purple}"]}]}],
+            "blocks.0.items.0.items.1: unknown tone 'purple' in {tone=purple}: a tone is one of neutral, "
+            "info, success, warning, danger, accent, teal, sky, or a palette name slate, blue, green, amber, "
+            "red, violet",
+            id="tone-in-a-nested-point",
+        ),
+        pytest.param(
+            [{"type": "callout", "tone": "info", "body": "First.\n\nThen {{two words}}."}],
+            "blocks.0.body: invalid placeholder '{{two words}}': a placeholder name is letters, digits, '_' "
+            "or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="placeholder-in-a-second-paragraph",
+        ),
+        pytest.param(
+            [
+                {"type": "code", "content": "write {{a b}} here"},
+                {"type": "callout", "tone": "info", "body": "{{a b}}"},
+            ],
+            "blocks.1.body: invalid placeholder '{{a b}}': a placeholder name is letters, digits, '_' "
+            "or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="an-earlier-plain-field-holding-the-same-text-is-not-blamed",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "comparison",
+                    "options": ["A", "B"],
+                    "rows": [{"feature": "f", "values": [True, "x [a]{tone=x}"]}],
+                }
+            ],
+            "blocks.0.rows.0.values.1: unknown tone 'x' in {tone=x}: a tone is one of neutral, info, "
+            "success, warning, danger, accent, teal, sky, or a palette name slate, blue, green, amber, red, "
+            "violet",
+            id="comparison-cell",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "table",
+                    "columns": [
+                        {"key": "item", "label": "Item"},
+                        {"key": "n", "label": "N", "kind": "number"},
+                    ],
+                    "groups": [
+                        {
+                            "name": "G",
+                            "rows": [{"item": "a", "n": 1, "subrows": [{"label": "$` `$", "value": 1}]}],
+                        }
+                    ],
+                }
+            ],
+            "blocks.0.groups.0.rows.0.subrows.0.label: inline math $` `$ is empty: write an expression "
+            "between $` and `$, as in $`x_i`$",
+            id="subrow-label-in-a-group",
+        ),
+        pytest.param(
+            [{"type": "text", "body": "*a " * 260 + "b" + "*" * 260}],
+            "blocks.0.body: rich text nests more than 20 marks, links or [text]{…} spans inside one "
+            "another: flatten it",
+            id="emphasis-nested-past-the-limit",
+        ),
+        pytest.param(
+            [{"type": "list", "items": ["{{a\n\nb}}"]}],
+            "blocks.0.items.0: invalid placeholder '{{a\n\nb}}': a placeholder name is letters, digits, "
+            "'_' or '-' only (a fill-me-later blank is written {{name}}; for a literal {{ use a `code` span)",
+            id="a-list-item-is-parsed-whole-across-a-blank-line",
+        ),
+        pytest.param(
+            [{"type": "flow", "steps": [{"label": "A", "points": [_UNKNOWN_TONE_TEXT]}, {"label": "B"}]}],
+            f"blocks.0.steps.0.points.0: {_UNKNOWN_TONE_MESSAGE}",
+            id="flow-step-point",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "fan",
+                    "hub": {"label": "H"},
+                    "spokes": [{"label": "S1"}, {"label": "S2", "points": ["ok", _UNKNOWN_TONE_TEXT]}],
+                }
+            ],
+            f"blocks.0.spokes.1.points.1: {_UNKNOWN_TONE_MESSAGE}",
+            id="fan-spoke-point",
+        ),
+        pytest.param(
+            [_note_table(rows=[{"item": "a", "note": "ok"}, {"item": "b", "note": _UNKNOWN_TONE_TEXT}])],
+            f"blocks.0.rows.1.note: {_UNKNOWN_TONE_MESSAGE}",
+            id="ungrouped-table-cell",
+        ),
+        pytest.param(
+            [
+                _note_table(
+                    groups=[
+                        {"name": "G1", "rows": [{"item": "a", "note": "ok"}]},
+                        {
+                            "name": "G2",
+                            "rows": [{"item": "b", "note": "ok"}, {"item": _UNKNOWN_TONE_TEXT, "note": ""}],
+                        },
+                    ]
+                )
+            ],
+            f"blocks.0.groups.1.rows.1.item: {_UNKNOWN_TONE_MESSAGE}",
+            id="second-group-second-row",
+        ),
+        pytest.param(
+            [
+                _note_table(
+                    rows=[
+                        {
+                            "item": "a",
+                            "note": "ok",
+                            "subrows": [
+                                {"label": "ok", "value": 1},
+                                {"label": _UNKNOWN_TONE_TEXT, "value": 2},
+                            ],
+                        }
+                    ]
+                )
+            ],
+            f"blocks.0.rows.0.subrows.1.label: {_UNKNOWN_TONE_MESSAGE}",
+            id="second-subrow",
+        ),
+    ],
+)
+def test_check_names_the_field_whose_rich_text_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], blocks: list[dict[str, object]], message: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (1, f"FAIL  {data_path}: {message}\n\n1 file failed\n")
+
+
+def test_check_passes_a_span_across_a_blank_line_in_a_list_item(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "list", "items": ["[a\n\nb]{tone=info}"]}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"OK    {data_path}\n")
 
 
 def test_check_strict_passes_when_no_placeholders_remain(

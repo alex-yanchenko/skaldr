@@ -143,13 +143,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="with --check: also fail if any `{{placeholder}}` blank is still unfilled — the "
+        help="with --check: also fail if any `{{placeholder}}` blank is still unfilled: the "
         "finalize gate for a rehearse-then-finalize living doc.",
     )
     parser.add_argument(
         "--emit-json",
         action="store_true",
-        help="validate the content file and print its normalised model as JSON to stdout (no HTML) — "
+        help="validate the content file and print its normalised model as JSON to stdout (no HTML), "
         "for tooling/an agent to query the data without re-parsing YAML + markdown.",
     )
     parser.add_argument(
@@ -169,19 +169,19 @@ def main(argv: list[str] | None = None) -> int:
         "--extract-source",
         metavar="FILE|URL",
         help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
-        "and exit, so the source is recovered without parsing the HTML. Exits non-zero if none is embedded. "
+        "and exit, recovering the source without parsing the HTML. Exits non-zero if none is embedded. "
         "A URL is downloaded in full within 30 seconds and up to 16 MB; a slower or larger page fails.",
     )
     parser.add_argument(
         "--pdf",
         metavar="PATH",
-        help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge — needs one "
+        help="render straight to a PDF at PATH (drives a headless Chrome/Chromium/Edge, so needs one "
         "installed; set SKALDR_BROWSER to override discovery). Prints the full page's print styling.",
     )
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="re-render to HTML on every save of the content file — a live edit-preview loop; Ctrl-C to "
+        help="re-render to HTML on every save of the content file, a live edit-preview loop; Ctrl-C to "
         "stop. HTML only; can't combine with --check/--emit-json/--pdf. (Watches the file itself, not "
         "its !include fragments.) Needs a process that stays alive: under an agent harness that reaps "
         "background jobs between turns, use --if-stale + --live instead.",
@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         help="add a self-refreshing reloader to the page: it re-reads itself from disk when you return "
         "to the tab, so a re-render appears without a manual refresh. Scroll position and open sections "
         "survive. Pass milliseconds to also poll on a timer (for a screen that never loses focus). Full "
-        "pages only — an --embed fragment is published as an Artifact and must not reload on a reader's "
+        "pages only: an --embed fragment is published as an Artifact and must not reload on a reader's "
         "screen.",
     )
     parser.add_argument(
@@ -239,13 +239,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--install-skill",
         action="store_true",
-        help="install skaldr's Claude skill into ~/.claude/skills (copies it — run once, survives "
+        help="install skaldr's Claude skill into ~/.claude/skills (copies it; run once, survives "
         "upgrades), then exit",
     )
     parser.add_argument(
         "--install-plan-rule",
         action="store_true",
-        help="add skaldr's live-plan-doc rule to ~/.claude/CLAUDE.md — steers the agent to keep its "
+        help="add skaldr's live-plan-doc rule to ~/.claude/CLAUDE.md, which steers the agent to keep its "
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(arguments)
@@ -286,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check and args.emit_json:
         parser.error("--check and --emit-json are mutually exclusive (each is a distinct validate-only mode)")
     if args.emit_json and (args.out or args.pdf or args.embed):
-        parser.error("--emit-json only validates — it writes no HTML, so -o/--pdf/--embed do nothing")
+        parser.error("--emit-json only validates: it writes no HTML, so -o/--pdf/--embed do nothing")
     if args.watch and (args.check or args.emit_json or args.pdf):
         parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
     if args.watch and args.if_stale:
@@ -314,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.check and len(args.data) > 1 and (args.out or args.pdf or args.embed or args.export):
         parser.error(
-            "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export "
+            "an output flag renders one file: pass a single content file, or drop -o/--pdf/--embed/--export "
             "to validate the whole set"
         )
     _reject_flags_that_do_not_fit_an_export(parser, args)
@@ -471,7 +471,7 @@ def _watch(
 ) -> int:
     """Re-render to HTML whenever the content file changes, until interrupted. Polls the mtime (no
     third-party watcher); a failing render prints its error and the loop keeps going."""
-    print(f"watching {data_path} — re-rendering to {out_path} on change (Ctrl-C to stop)")
+    print(f"watching {data_path}: re-rendering to {out_path} on change (Ctrl-C to stop)")
     try:
         _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
         last = _mtime(data_path)
@@ -480,7 +480,7 @@ def _watch(
             current = _mtime(data_path)
             if current is not None and current != last:
                 last = current
-                print(f"\n{data_path} changed — re-rendering:")
+                print(f"\n{data_path} changed, re-rendering:")
                 _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
     except KeyboardInterrupt:
         print("\nstopped watching")
@@ -749,7 +749,7 @@ def install_plan_rule(home: Path | None = None) -> int:
         print(f"error: could not update {md_path}: {err}", file=sys.stderr)
         return 1
     print(f"OK  {action} the plan-workflow rule in {md_path}")
-    print("    (the skaldr:plan-rule block — delete it to opt out)")
+    print("    (the skaldr:plan-rule block; delete it to opt out)")
     print("    Restart Claude Code to pick it up.")
     return 0
 

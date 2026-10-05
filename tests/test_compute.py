@@ -836,20 +836,6 @@ def test_anchor_slugs_keep_letters_and_digits_from_any_script(text: str, slug: s
     assert list(anchor_slugs(report).values()) == [slug]
 
 
-def test_anchor_slugs_rejects_a_duplicate_author_id() -> None:
-    report = parse_report(
-        make_report(
-            blocks=[
-                {"type": "heading", "text": "A", "id": "dup"},
-                {"type": "section", "title": "B", "id": "dup", "blocks": [{"type": "text", "body": "x"}]},
-            ],
-        )
-    )
-
-    with pytest.raises(ReportError, match=r"duplicate anchor id 'dup'"):
-        anchor_slugs(report)
-
-
 def test_toc_uses_an_author_id_as_the_anchor_target() -> None:
     report = parse_report(
         make_report(

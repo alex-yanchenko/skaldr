@@ -362,10 +362,13 @@ def test_a_section_id_used_twice_cannot_name_a_publish_item() -> None:
         blocks=[make_section("inner"), make_section("inner", title="Other")], publish=SPLIT_ON_INNER
     )
 
-    with pytest.raises(
-        ReportError, match=re.escape("section id 'inner' names more than one top-level section")
-    ):
+    with pytest.raises(ReportError) as raised:
         parse_report(report)
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, heading/section id(s) used more than once: ['inner'], at "
+        "blocks.0.section.id, blocks.1.section.id; heading and section ids must be unique"
+    )
 
 
 @pytest.mark.parametrize(
@@ -480,6 +483,7 @@ def test_the_comments_left_out_are_the_ones_next_to_the_block(source: str, embed
     assert without_publish_block(source) == embedded
 
 
+@pytest.mark.timeout(5)
 def test_shared_aliases_are_compared_once_so_an_alias_bomb_stays_fast() -> None:
     levels = ["l0: &l0 [x, x, x, x, x, x, x, x, x]"]
     levels += [f"l{depth}: &l{depth} [" + ", ".join([f"*l{depth - 1}"] * 9) + "]" for depth in range(1, 13)]

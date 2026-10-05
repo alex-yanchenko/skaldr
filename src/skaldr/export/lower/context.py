@@ -69,13 +69,15 @@ class Lowering:
 
 def lowering_for(report: Report) -> Lowering:
     anchors = compute.anchor_slugs(report)
+    rich_context = RichContext(
+        reference_numbers=compute.reference_numbers(report),
+        reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
+        anchor_ids=frozenset(anchors.values()),
+    )
+    compute.validate_rich_text_fields(report, rich_context)
     return Lowering(
         report=report,
-        rich_context=RichContext(
-            reference_numbers=compute.reference_numbers(report),
-            reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
-            anchor_ids=frozenset(anchors.values()),
-        ),
+        rich_context=rich_context,
         anchors=anchors,
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),
