@@ -114,14 +114,14 @@ flowchart LR
 		<td></td>
 	</tr>
 	<tr>
-		<td color="yellow_bg">Double-counted units <span color="yellow">**Floor**</span><br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
+		<td color="yellow_bg">Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
 		<td color="yellow_bg">🟡</td>
 		<td>600 (6.0% of total)</td>
 		<td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 		<td>De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan.</td>
 	</tr>
 	<tr>
-		<td color="blue_bg">Mislabeled bin codes <span color="blue">**System**</span></td>
+		<td color="blue_bg">Mislabeled bin codes **System**</td>
 		<td color="yellow_bg">🟡</td>
 		<td>500 (5.0% of total)</td>
 		<td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
@@ -135,7 +135,7 @@ flowchart LR
 		<td></td>
 	</tr>
 	<tr>
-		<td color="red_bg">Short shipment <span color="red">**Vendor**</span></td>
+		<td color="red_bg">Short shipment **Vendor**</td>
 		<td color="red_bg">🔴</td>
 		<td>400 (4.0% of total)</td>
 		<td>The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted.</td>

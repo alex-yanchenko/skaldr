@@ -36,7 +36,6 @@ from skaldr.export.tree import (
     Paragraph,
     Quote,
     TableCell,
-    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -45,7 +44,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, ToneLiteral
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
@@ -60,6 +59,14 @@ OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
+NOTION_FULL_PAGE_WIDTH_PX: Final = 1200
+NOTION_PAGE_WIDTH_PX: Final[Mapping[NotionWidth, int]] = {
+    "normal": NOTION_DEFAULT_PAGE_WIDTH_PX,
+    "full": NOTION_FULL_PAGE_WIDTH_PX,
+}
+NARROWEST_COLUMN_CHARACTERS: Final = 8
+WIDEST_COLUMN_CHARACTERS: Final = 60
+WHOLE_COLUMN_RATIO: Final = 100
 BACKGROUND_SUFFIX: Final = "_bg"
 BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "neutral": "gray",
@@ -86,6 +93,19 @@ LATEX_TEXT_ESCAPES: Final = str.maketrans(
 )
 
 
+@dataclass(frozen=True)
+class TableRoom:
+    width: int
+    sizes_every_table: bool
+
+    @classmethod
+    def on_page(cls, page_width: NotionWidth) -> "TableRoom":
+        return cls(NOTION_PAGE_WIDTH_PX[page_width], sizes_every_table=page_width == "full")
+
+    def within(self, ratio: int) -> "TableRoom":
+        return replace(self, width=round(self.width * ratio / WHOLE_COLUMN_RATIO))
+
+
 def latex_text(text: str) -> str:
     return "\\text{" + text.translate(LATEX_TEXT_ESCAPES) + "}"
 
@@ -93,6 +113,7 @@ def latex_text(text: str) -> str:
 @dataclass(frozen=True)
 class _NotionRuns(MarkupRuns):
     inside_bold: bool = False
+    on_fill: bool = False
 
     def escape(self, text: str, /) -> str:
         return text.translate(NOTION_ESCAPES)
@@ -118,7 +139,8 @@ class _NotionRuns(MarkupRuns):
 
     def chip(self, run: Chip, /) -> str:
         label = self.text(run.label)
-        return _colored_span(CHIP_COLOR[run.tone], label if self.inside_bold else styled("bold", label))
+        bolded = label if self.inside_bold else styled("bold", label)
+        return bolded if self.on_fill else _colored_span(CHIP_COLOR[run.tone], bolded)
 
     def underline(self, inner: str, /) -> str:
         return f'<span underline="true">{inner}</span>'
@@ -137,8 +159,8 @@ def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 
-def notion_inline(runs: ExportRich, *, inside_bold: bool = False) -> str:
-    return write_export_runs(runs, _NotionRuns(inside_bold))
+def notion_inline(runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False) -> str:
+    return write_export_runs(runs, _NotionRuns(inside_bold, on_fill))
 
 
 def _block_text(runs: ExportRich) -> str:
@@ -161,8 +183,8 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
     return SPACED_PLUS_AFTER_CODE.sub(f"` {FULL_WIDTH_PLUS} ", text)
 
 
-def _table_cell_text(cell: TableCell, *, inside_bold: bool) -> str:
-    text = notion_inline(cell.text, inside_bold=inside_bold)
+def _table_cell_text(cell: TableCell, *, inside_bold: bool, on_fill: bool = False) -> str:
+    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill)
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 
@@ -184,49 +206,72 @@ def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[T
     )
 
 
+def _column_tones(table: TableNode) -> list[ToneName | None]:
+    return [column.tone for column in table.columns] or [None] * len(table.header)
+
+
 def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
-    emphasised = [is_emphasised_body_cell(table, row, index) for index in range(len(row.cells))]
+    band = (row.tone or "neutral") if row.emphasis == "group" else None
+    cells = _row_tone_in_one_cell(row.cells, row.tone) if row.tone and band is None else row.cells
+    column_tones = _column_tones(table) + [None] * max(0, len(cells) - len(table.header))
     texts = body_cell_texts(
         table,
         row,
-        [_table_cell_text(cell, inside_bold=bold) for cell, bold in zip(row.cells, emphasised, strict=True)],
+        [
+            _table_cell_text(
+                cell,
+                inside_bold=is_emphasised_body_cell(table, row, index),
+                on_fill=band is not None or (cell.tone or column_tones[index]) is not None,
+            )
+            for index, cell in enumerate(cells)
+        ],
     )
-    if row.emphasis == "group":
-        return _row_lines(row.cells, texts, row.tone or "neutral")
-    cells = _row_tone_in_one_cell(row.cells, row.tone) if row.tone else row.cells
-    return _row_lines(cells, texts, None)
+    return _row_lines(cells, texts, band)
 
 
-def _column_widths(columns: Sequence[TableColumn]) -> Sequence[int | None]:
-    shares = [column.share for column in columns]
+def _longest_text(table: TableNode, index: int) -> int:
+    cells = [table.header, *(row.cells for row in table.rows)]
+    return max((len(export_visible_text(row[index].text)) for row in cells if index < len(row)), default=0)
+
+
+def _content_weight(table: TableNode, index: int) -> int:
+    return max(NARROWEST_COLUMN_CHARACTERS, min(WIDEST_COLUMN_CHARACTERS, _longest_text(table, index)))
+
+
+def _column_widths(table: TableNode, room: TableRoom) -> Sequence[int | None]:
+    shares = [column.share for column in table.columns] or [None] * len(table.header)
     auto_count = shares.count(None)
     if auto_count == len(shares):
-        return [None] * len(shares)
+        if not room.sizes_every_table:
+            return [None] * len(shares)
+        return apportioned([_content_weight(table, index) for index in range(len(shares))], room.width)
     auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
     weights = [auto_share if share is None else share for share in shares]
-    return apportioned(weights, NOTION_DEFAULT_PAGE_WIDTH_PX)
+    return apportioned(weights, room.width)
 
 
 def _width_attribute(width: int | None) -> str:
     return "" if width is None else f' width="{width}"'
 
 
-def _colgroup_lines(columns: Sequence[TableColumn]) -> list[str]:
-    if not columns:
+def _colgroup_lines(table: TableNode, room: TableRoom) -> list[str]:
+    tones = _column_tones(table)
+    widths = _column_widths(table, room)
+    if not any(tones) and all(width is None for width in widths):
         return []
     cols = [
-        f"<col{_background_attribute(column.tone)}{_width_attribute(width)}>"
-        for column, width in zip(columns, _column_widths(columns), strict=True)
+        f"<col{_background_attribute(tone)}{_width_attribute(width)}>"
+        for tone, width in zip(tones, widths, strict=True)
     ]
     return ["<colgroup>", *_indent(cols), "</colgroup>"]
 
 
-def _table_lines(table: TableNode) -> list[str]:
+def _table_lines(table: TableNode, room: TableRoom) -> list[str]:
     attributes = ['fit-page-width="true"', 'header-row="true"']
     if table.header_column:
         attributes.append('header-column="true"')
     header_texts = [styled("bold", _table_cell_text(cell, inside_bold=True)) for cell in table.header]
-    lines = _colgroup_lines(table.columns) + _row_lines(table.header, header_texts, None)
+    lines = _colgroup_lines(table, room) + _row_lines(table.header, header_texts, None)
     lines += [line for row in table.rows for line in _body_row_lines(table, row)]
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
@@ -251,12 +296,12 @@ def _list_marker(node: ListNode, index: int, checked: bool) -> str:
             assert_never(node.kind)
 
 
-def _list_lines(node: ListNode) -> list[str]:
+def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node, index, entry.checked)
         lines.append(f"{marker} {_block_text(entry.text)}")
-        lines += _indent(_notion_blocks(entry.children))
+        lines += _indent(_notion_blocks(entry.children, room))
     return lines
 
 
@@ -271,8 +316,8 @@ def _heading_marks(level: HeadingLevel) -> str:
     return "#" * min(level, DEEPEST_NOTION_HEADING)
 
 
-def _toggle_lines(node: Toggle) -> list[str]:
-    children = _indent(_notion_blocks(node.children))
+def _toggle_lines(node: Toggle, room: TableRoom) -> list[str]:
+    children = _indent(_notion_blocks(node.children, room))
     if node.heading_level is not None:
         return [
             f'{_heading_marks(node.heading_level)} {notion_inline(node.title)} {{toggle="true"}}',
@@ -281,23 +326,24 @@ def _toggle_lines(node: Toggle) -> list[str]:
     return ["<details>", f"<summary>{notion_inline(node.title)}</summary>", *children, "</details>"]
 
 
-def _columns_lines(node: Columns) -> list[str]:
+def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
     lines: list[str] = []
     for column in node.columns:
-        lines += [f'<column ratio="{column.ratio}">', *_indent(_notion_blocks(column.children)), "</column>"]
+        children = _notion_blocks(column.children, room.within(column.ratio))
+        lines += [f'<column ratio="{column.ratio}">', *_indent(children), "</column>"]
     return ["<columns>", *_indent(lines), "</columns>"]
 
 
-def _tabs_lines(node: Tabs) -> list[str]:
+def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
     lines: list[str] = []
     for tab in node.tabs:
         icon = tab_icon(tab.tone)
         lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
-        lines += [*_indent([_block_text(tab.title), *_notion_blocks(tab.children)]), "</tab>"]
+        lines += [*_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
     return ["<tabs>", *_indent(lines), "</tabs>"]
 
 
-def _notion_lines(node: Node) -> list[str]:
+def _notion_lines(node: Node, room: TableRoom) -> list[str]:
     match node:
         case Heading():
             return [f"{_heading_marks(node.level)} {notion_inline(node.text)}"]
@@ -305,9 +351,9 @@ def _notion_lines(node: Node) -> list[str]:
             text = _block_text(node.text)
             return [text + _trailing_color(node.tone)] if text else []
         case ListNode():
-            return _list_lines(node)
+            return _list_lines(node, room)
         case TableNode():
-            return _table_lines(node)
+            return _table_lines(node, room)
         case CodeBlock():
             return code_block_lines(node)
         case DisplayMath():
@@ -315,19 +361,19 @@ def _notion_lines(node: Node) -> list[str]:
         case Callout():
             icon = node.icon or CALLOUT_ICON[node.tone]
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
-            return [opening, *_indent(_notion_blocks(node.children)), "</callout>"]
+            return [opening, *_indent(_notion_blocks(node.children, room)), "</callout>"]
         case Quote():
             return [_quote_line(node)]
         case Divider():
             return [DIVIDER_LINE]
         case Toggle():
-            return _toggle_lines(node)
+            return _toggle_lines(node, room)
         case Columns():
-            return _columns_lines(node)
+            return _columns_lines(node, room)
         case Tabs():
-            return _tabs_lines(node)
+            return _tabs_lines(node, room)
         case Diagram():
-            return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement)]
+            return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement, room)]
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:
@@ -338,11 +384,11 @@ def _list_kind(node: Node) -> ListKind | None:
     return _written_kind(node) if isinstance(node, ListNode) else None
 
 
-def _notion_blocks(nodes: Sequence[Node]) -> list[str]:
+def _notion_blocks(nodes: Sequence[Node], room: TableRoom) -> list[str]:
     lines: list[str] = []
     previous_kind: ListKind | None = None
     for node in nodes:
-        node_lines = _notion_lines(node)
+        node_lines = _notion_lines(node, room)
         if not node_lines:
             continue
         kind = _list_kind(node)
@@ -357,8 +403,8 @@ def _page(lines: Sequence[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_notion(nodes: Sequence[Node]) -> str:
-    return _page(_notion_blocks(nodes))
+def render_notion(nodes: Sequence[Node], page_width: NotionWidth = "normal") -> str:
+    return _page(_notion_blocks(nodes, TableRoom.on_page(page_width)))
 
 
 def _chunk_heading(node: Node) -> Heading | None:
@@ -377,7 +423,8 @@ class NotionChunks:
     oversized_sections: tuple[str, ...]
 
 
-def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
+def chunk_notion(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "normal") -> NotionChunks:
+    room = TableRoom.on_page(page_width)
     sections: list[list[Node]] = [[]]
     for node in nodes:
         if _chunk_heading(node) is not None and sections[-1]:
@@ -387,7 +434,7 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
     oversized: list[str] = []
     current_chunk = ""
     for section in sections:
-        lines = _notion_blocks(section)
+        lines = _notion_blocks(section, room)
         if not lines:
             continue
         text = _page(lines)
@@ -399,4 +446,4 @@ def chunk_notion(nodes: Sequence[Node], limit: int) -> NotionChunks:
         current_chunk += text
     if current_chunk:
         chunks.append(current_chunk)
-    return NotionChunks(tuple(chunks) or (render_notion(nodes),), tuple(oversized))
+    return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))

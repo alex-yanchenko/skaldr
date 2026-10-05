@@ -19,9 +19,11 @@ from skaldr.export.notion import (
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
+    Columns,
     Diagram,
     Graph,
     GraphNode,
+    GridColumn,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -32,6 +34,7 @@ from skaldr.export.tree import (
     Quote,
     Tab,
     TableCell,
+    TableColumn,
     TableNode,
     TableRow,
     Tabs,
@@ -817,8 +820,8 @@ def test_cell_tones_become_backgrounds_a_group_row_is_a_band_and_a_total_row_is_
     [
         pytest.param(
             (TableCell((Plain("a"),)), TableCell((Plain("b "), Chip("New", "violet")))),
-            ["<td>a</td>", '<td color="blue_bg">b <span color="purple">**New**</span></td>'],
-            id="the-cell-holding-the-badge",
+            ["<td>a</td>", '<td color="blue_bg">b **New**</td>'],
+            id="the-cell-holding-the-badge-and-its-badge-in-the-normal-colour",
         ),
         pytest.param(
             (TableCell((Plain("a"),)), TableCell((Plain("b"),))),
@@ -827,18 +830,40 @@ def test_cell_tones_become_backgrounds_a_group_row_is_a_band_and_a_total_row_is_
         ),
         pytest.param(
             (TableCell((Chip("x", "red"),), "danger"), TableCell((Plain("b"),))),
-            ['<td color="red_bg"><span color="red">**x**</span></td>', "<td>b</td>"],
+            ['<td color="red_bg">**x**</td>', "<td>b</td>"],
             id="a-cell-tone-wins-over-the-row-tone",
+        ),
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Chip("x", "red"),)), TableCell((Chip("y", "blue"),))),
+            ["<td>a</td>", '<td color="blue_bg">**x**</td>', '<td><span color="blue">**y**</span></td>'],
+            id="a-badge-outside-the-filled-cell-keeps-its-colour",
         ),
     ],
 )
 def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ...], lines: list[str]) -> None:
-    table = TableNode((TableCell((Plain("A"),)), TableCell((Plain("B"),))), (TableRow(cells, "info"),))
+    names = "ABC"[: len(cells)]
+    table = TableNode(tuple(TableCell((Plain(name),)) for name in names), (TableRow(cells, "info"),))
 
     assert render_notion([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
-        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
+        "\t<tr>\n" + "".join(f"\t\t<td>**{name}**</td>\n" for name in names) + "\t</tr>\n"
         "\t<tr>\n" + "".join(f"\t\t{line}\n" for line in lines) + "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_badge_in_a_column_filled_by_its_tone_takes_the_normal_colour() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
+        (TableRow((TableCell((Chip("x", "red"),)), TableCell((Chip("y", "red"),)))),),
+        columns=(TableColumn(), TableColumn(tone="info")),
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col>\n\t\t<col color="blue_bg">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td><span color="red">**x**</span></td>\n\t\t<td>**y**</td>\n\t</tr>\n'
         "</table>\n"
     )
 
@@ -849,8 +874,7 @@ def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ..
         pytest.param(
             TableRow((TableCell((Plain("9"),)), TableCell((Chip("x", "red"),))), "warning", emphasis="total"),
             False,
-            '\t<tr>\n\t\t<td>**9**</td>\n\t\t<td color="yellow_bg">**<span color="red">x</span>**</td>\n'
-            "\t</tr>\n",
+            '\t<tr>\n\t\t<td>**9**</td>\n\t\t<td color="yellow_bg">**x**</td>\n\t</tr>\n',
             id="a-toned-total-row-fills-its-badge-cell-and-bolds-it-once",
         ),
         pytest.param(
@@ -858,8 +882,7 @@ def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ..
                 (TableCell((Plain("g "), Chip("x", "red"))), TableCell(())), "warning", emphasis="group"
             ),
             False,
-            '\t<tr color="yellow_bg">\n\t\t<td>**g <span color="red">x</span>**</td>\n'
-            "\t\t<td></td>\n\t</tr>\n",
+            '\t<tr color="yellow_bg">\n\t\t<td>**g x**</td>\n\t\t<td></td>\n\t</tr>\n',
             id="a-group-row-holding-a-badge-stays-a-full-band",
         ),
         pytest.param(
@@ -1595,3 +1618,68 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
     result = export_notion(report, tmp_path, chunk=1)
 
     assert [path.name for path in result.files] == [f"page.{index:03d}.md" for index in range(101)]
+
+
+def _two_column_table(columns: tuple[TableColumn, ...] = ()) -> TableNode:
+    return TableNode(
+        (TableCell((Plain("Level"),)), TableCell((Plain("In one line"),))),
+        (TableRow((TableCell((Plain("New"),)), TableCell((Plain("x" * 80),)))),),
+        columns=columns,
+    )
+
+
+def _widths_page(widths: list[int]) -> str:
+    cols = "".join(f'\t\t<col width="{width}">\n' for width in widths)
+    return (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"\t<colgroup>\n{cols}\t</colgroup>\n"
+        "\t<tr>\n\t\t<td>**Level**</td>\n\t\t<td>**In one line**</td>\n\t</tr>\n"
+        f"\t<tr>\n\t\t<td>New</td>\n\t\t<td>{'x' * 80}</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("columns", "widths"),
+    [
+        pytest.param((), [141, 1059], id="unsized-columns-share-by-their-longest-text-clamped-to-8-and-60"),
+        pytest.param(
+            (TableColumn(share=0.25), TableColumn(share=0.75)),
+            [300, 900],
+            id="author-widths-keep-their-ratio",
+        ),
+    ],
+)
+def test_a_full_width_page_sizes_every_table_to_1200_pixels(
+    columns: tuple[TableColumn, ...], widths: list[int]
+) -> None:
+    assert render_notion([_two_column_table(columns)], page_width="full") == _widths_page(widths)
+
+
+def test_a_table_in_a_half_width_column_is_sized_to_its_column() -> None:
+    grid = Columns((GridColumn(50, (_two_column_table(),)), GridColumn(50, ())))
+
+    page = render_notion([grid], page_width="full")
+
+    assert '\t\t\t\t<col width="71">\n\t\t\t\t<col width="529">\n' in page
+
+
+def test_a_normal_width_page_leaves_an_unsized_table_to_notion() -> None:
+    assert "<colgroup>" not in render_notion([_two_column_table()], page_width="normal")
+
+
+def test_the_document_meta_chooses_the_notion_page_width(tmp_path: Path) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "notion_width": "full"},
+            blocks=[
+                make_table(
+                    [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}], rows=[{"a": "x", "b": "y"}]
+                )
+            ],
+        )
+    )
+
+    export_notion(report, tmp_path)
+
+    assert '<col width="600">\n\t\t<col width="600">' in (tmp_path / "page.md").read_text(encoding="utf-8")
