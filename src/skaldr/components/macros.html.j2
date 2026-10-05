@@ -14,7 +14,7 @@
 
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
-<summary>Legend — {{ badge_legend_subject }}</summary>
+<summary>Legend: {{ badge_legend_subject }}</summary>
 <div class="section-body">
 <div class="legend-grid">
 {% for key, b in used_badges %}<div class="legend-row"><span class="chip {{ b.tone }}">{{ b.label }}</span><span class="meaning">{{ b.legend }}</span></div>
@@ -27,7 +27,7 @@
 {# A rich/text table cell: a blank line is a paragraph break (like text.body); a single newline
    collapses. A one-paragraph cell renders inline, so single-line cells are unchanged. #}
 {% macro rich_cell(value) -%}
-{% set paras = value | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ value | richtext }}{% endif %}
+{% set paras = value | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="cell-p">{{ p | richtext }}</p>{% endfor %}{% else %}{% for p in paras %}{{ p | richtext }}{% endfor %}{% endif %}
 {%- endmacro %}
 
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
@@ -71,7 +71,7 @@
 {% for g in b.groups %}
 <tr class="group"><td colspan="{{ cell_cols | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
 {% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
-{% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">— none —</td></tr>{% endif %}
+{% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">none</td></tr>{% endif %}
 {% endfor %}
 {% else %}
 {% for row in b.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
@@ -91,7 +91,7 @@
 {% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% set decided = false if item is string else item.decided %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% elif style == "decision" %}<span class="dec {{ "decided" if decided else "open" }}"><span class="glyph">{{ "✓" if decided else "?" }}</span><span>{{ text | richtext }}</span></span>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 {% macro iconed(icon) %}{% if icon %}<span class="block-icon" aria-hidden="true">{{ icon }}</span><div class="iconed-body">{{ caller() }}</div>{% else %}{{ caller() }}{% endif %}{% endmacro %}
 {% macro rich_list(items, style, numbering=none, start=none) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " " ~ style if style in ("check", "decision") else "" }}"{% if start %} start="{{ start }}"{% endif %}{% if numbering in LIST_NUMBERING_TYPES %} type="{{ LIST_NUMBERING_TYPES[numbering] }}"{% endif %}>{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style, numbering) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
-{% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
+{% macro prose_paras(text) %}{% set paras = text | paragraphs %}{% if paras | length > 1 %}{% for p in paras %}<p class="prose-p">{{ p | richtext }}</p>{% endfor %}{% else %}{% for p in paras %}{{ p | richtext }}{% endfor %}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
 <div class="flow {{ b.style }}">

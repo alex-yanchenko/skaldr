@@ -1,6 +1,6 @@
 version: 1
 meta:
-  title: "Q3 Pipeline Review — West Region"
+  title: "Q3 Pipeline Review: West Region"
   subtitle: ["120 open opportunities, reconciled by stage and risk."]
   source: "CRM export"
   date: "Q3 2026"
@@ -8,7 +8,7 @@ meta:
 
 badges:
   COMMIT: { label: "Commit", tone: green, legend: "Forecast-committed this quarter." }
-  AT_RISK: { label: "At risk", tone: amber, legend: "Slipping or unqualified — needs attention." }
+  AT_RISK: { label: "At risk", tone: amber, legend: "Slipping or unqualified; needs attention." }
 
 blocks:
   - { type: heading, text: "Where we stand" }
@@ -21,7 +21,7 @@ blocks:
   - type: callout
     tone: warning
     title: "Needs a decision this week"
-    body: "**7 deals ($620K)** are flagged *at risk* — mostly stalled in Proposal with no next
+    body: "**7 deals ($620K)** are flagged *at risk*, mostly stalled in Proposal with no next
       step booked. Owners should confirm a close plan or move them out of the quarter."
 
   - { type: heading, text: "Opportunities by stage" }
@@ -44,7 +44,7 @@ blocks:
           - stage: "Proposal"
             flag: AT_RISK
             count: 34
-            note: "Half have *no booked next step* — the main slip risk this quarter."
+            note: "Half have *no booked next step*, the main slip risk this quarter."
       - name: "Early stage"
         rows:
           - stage: "Discovery"
@@ -54,7 +54,7 @@ blocks:
           - stage: "Prospecting"
             flag: ""
             count: 27
-            note: "Top of funnel — not forecasted, tracked for next quarter."
+            note: "Top of funnel: not forecasted, tracked for next quarter."
 
   - type: status_list
     items:

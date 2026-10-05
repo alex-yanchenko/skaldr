@@ -13,9 +13,11 @@ import re
 import string
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any, Final, NamedTuple, TypedDict
+from functools import cache
+from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
 
 import roman
+from pydantic import BaseModel
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
@@ -27,6 +29,7 @@ from skaldr.models import (
     Card,
     CaseTone,
     DeltaDirection,
+    FieldPath,
     Heading,
     ListNumbering,
     Matrix,
@@ -38,6 +41,7 @@ from skaldr.models import (
     RequestFlow,
     RequestLike,
     RequestResponse,
+    RichTextMarker,
     Section,
     Swimlane,
     SwimlaneStepState,
@@ -51,6 +55,7 @@ from skaldr.models import (
     iter_tables,
     walk_blocks,
 )
+from skaldr.richtext import RichContext, parse_rich
 
 __all__ = [
     "anchor_slugs",
@@ -64,11 +69,13 @@ __all__ = [
     "provenance_footer",
     "reconcile_line",
     "reference_numbers",
+    "rich_text_strings",
     "swimlane_layout",
     "table_rollup",
     "table_tallies",
     "toc_entries",
     "used_badges",
+    "validate_rich_text_fields",
 ]
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
@@ -100,13 +107,9 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     """`id(block) -> slug` for every heading and section, in document order. One source for the
     heading/section `id` attribute, the TOC, and same-page `#link` targets so they can't drift. An
     author-set `id` is used verbatim (and reserved so a text-derived slug yields to it with a `-N`
-    suffix); a text-derived slug de-dups the same way. Duplicate author ids fail the build."""
+    suffix); a text-derived slug de-dups the same way. Duplicate author ids fail validation."""
     anchored = list(_iter_anchored(report.blocks))
     explicit = [block.id for block in anchored if block.id is not None]
-    duplicate = next((anchor for anchor in explicit if explicit.count(anchor) > 1), None)
-    if duplicate is not None:
-        raise ReportError(f"duplicate anchor id '{duplicate}' — a heading/section id must be unique")
-
     slugs: dict[int, str] = {}
     taken: set[str] = set(explicit)
     for block in anchored:
@@ -589,6 +592,58 @@ def provenance_footer(report: Report) -> str | None:
 
 def paragraphs(text: str) -> list[str]:
     return [part.strip() for part in text.split("\n\n") if part.strip()]
+
+
+def _parsed_strings(text: str, marker: RichTextMarker) -> list[str]:
+    return paragraphs(text) if marker.split_into_paragraphs else [text]
+
+
+def _rich_text_marker(hint: object) -> RichTextMarker | None:
+    for argument in get_args(hint):
+        found = argument if isinstance(argument, RichTextMarker) else _rich_text_marker(argument)
+        if found is not None:
+            return found
+    return None
+
+
+@cache
+def _rich_field_markers(model: type[BaseModel]) -> Mapping[str, RichTextMarker | None]:
+    hints = get_type_hints(model, include_extras=True)
+    return {name: _rich_text_marker(hints[name]) for name in model.model_fields}
+
+
+def _rich_texts(
+    value: object, path: FieldPath, marker: RichTextMarker | None
+) -> Iterator[tuple[FieldPath, str]]:
+    if isinstance(value, str):
+        if marker is not None:
+            yield from ((path, piece) for piece in _parsed_strings(value, marker))
+    elif isinstance(value, Table):
+        for cell_path, text, cell_marker in value.rich_cells():
+            yield from (((*path, *cell_path), piece) for piece in _parsed_strings(text, cell_marker))
+        yield from _rich_model_texts(value, path)
+    elif isinstance(value, BaseModel):
+        yield from _rich_model_texts(value, path)
+    elif isinstance(value, list):
+        for index, item in enumerate(cast("list[object]", value)):
+            yield from _rich_texts(item, (*path, str(index)), marker)
+
+
+def _rich_model_texts(model: BaseModel, path: FieldPath) -> Iterator[tuple[FieldPath, str]]:
+    for name, marker in _rich_field_markers(type(model)).items():
+        yield from _rich_texts(getattr(model, name), (*path, name), marker)
+
+
+def rich_text_strings(report: Report) -> Iterator[tuple[FieldPath, str]]:
+    return _rich_model_texts(report, ())
+
+
+def validate_rich_text_fields(report: Report, context: RichContext) -> None:
+    for path, text in rich_text_strings(report):
+        try:
+            parse_rich(text, context)
+        except ReportError as error:
+            raise ReportError(f"{'.'.join(path)}: {error}") from error
 
 
 def fmt(value: Any) -> str:

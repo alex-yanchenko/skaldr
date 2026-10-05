@@ -11,6 +11,7 @@ dependencies = [
     "emoji>=2.16",
     "jinja2>=3.1",
     "latex2mathml==3.81.1",
+    "markdown-it-py>=4.2.0,<5",
     "markupsafe>=2.1",
     "pydantic>=2.13.4",
     "pyyaml>=6.0",
@@ -52,10 +53,14 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.26.0",
+    "markdown-it-py>=4.2.0,<5",
     "pyright>=1.1",
     "pytest>=8.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.14",
     "skaldr[publish]",
+    "types-jsonschema>=4.26.0",
     "types-pyyaml>=6.0",
 ]
 
@@ -92,3 +97,4 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+timeout = 60

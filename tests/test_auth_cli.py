@@ -8,6 +8,7 @@ from typing import Any, NoReturn
 import httpx2
 import keyring
 import pytest
+from keyring.errors import KeyringError
 
 from skaldr.auth import cli as auth_cli
 from skaldr.auth.store import Service, SignIn, load_jira, load_notion, save_jira, save_notion
@@ -18,11 +19,16 @@ from tests.factories.auth_factory import (
     FakeBrowser,
     InMemoryKeyring,
     LockedKeyring,
+    PlaintextKeyring,
+    WriteFailingKeyring,
     approving,
     fake_api,
     free_port,
+    insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
+    revoke_request_for,
+    summarise,
 )
 
 SIGNED_IN_NOTION = make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
@@ -66,6 +72,37 @@ def test_auth_jira_verifies_the_token_and_saves_it(
     assert load_jira() == SignIn(make_jira_credentials(), "keychain")
     assert capsys.readouterr().out == (
         "Signed in to Jira at https://example.atlassian.net as Example Reader. Saved to the keychain.\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "display_name", ["", "\x1b\x07\r\n"], ids=["empty", "nothing but control characters"]
+)
+def test_auth_jira_leaves_out_a_display_name_it_cannot_show(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], display_name: str
+) -> None:
+    answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
+    myself = {**MYSELF, "displayName": display_name}
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        "Signed in to Jira at https://example.atlassian.net. Saved to the keychain.\n",
+    )
+
+
+def test_auth_jira_prints_only_the_printable_part_of_the_display_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
+    myself = {**MYSELF, "displayName": "Example\x1b[2J Reader\x07\r\n"}
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        "Signed in to Jira at https://example.atlassian.net as Example[2J Reader. Saved to the keychain.\n",
     )
 
 
@@ -170,6 +207,25 @@ def test_auth_notion_names_a_workspace_notion_left_unnamed(
     )
 
 
+def test_auth_notion_prints_only_the_printable_part_of_the_workspace_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion_client_in_environment(monkeypatch)
+    browser = FakeBrowser(approving)
+    token = {**TOKEN_RESPONSE, "workspace_name": "Example\x1b[2J\N{RIGHT-TO-LEFT OVERRIDE} Workspace\r\n"}
+
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())],
+        transport=fake_api({"/v1/oauth/token": (200, token)}, []),
+        open_browser=browser,
+    )
+
+    assert (exit_code, browser.finished()) == (0, [200])
+    assert capsys.readouterr().out.endswith(
+        "Signed in to Notion workspace Example[2J Workspace. Saved to the keychain.\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("variable", "typed", "hidden"),
     [("NOTION_CLIENT_ID", [], ["client-secret"]), ("NOTION_CLIENT_SECRET", ["client-id"], [])],
@@ -203,21 +259,112 @@ def test_auth_notion_refuses_a_client_secret_with_characters_outside_ascii(
     )
 
 
-def test_auth_notion_reports_a_keychain_it_cannot_save_to(
+def test_auth_notion_reports_a_locked_keychain_before_listening_or_opening_the_browser(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     notion_client_in_environment(monkeypatch)
     keyring.set_keyring(LockedKeyring())
     browser = FakeBrowser(approving)
+    seen: list[httpx2.Request] = []
 
-    exit_code = auth_cli.main(
-        ["notion", "--port", str(free_port())],
-        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
-        open_browser=browser,
+    with socket.create_server(("127.0.0.1", 0)) as blocker:
+        port = blocker.getsockname()[1]
+        exit_code = auth_cli.main(
+            ["notion", "--port", str(port)], transport=fake_api({}, seen), open_browser=browser
+        )
+
+    assert (exit_code, capsys.readouterr().err, browser.opened, seen) == (
+        1,
+        "error: The system keychain is unavailable: locked\n",
+        [],
+        [],
     )
 
-    assert (exit_code, browser.finished()) == (1, [200])
-    assert capsys.readouterr().err == "error: The system keychain is unavailable: locked\n"
+
+def sign_in_to_notion_with_a_failing_save(
+    monkeypatch: pytest.MonkeyPatch, failure: BaseException, revoke_status: int, seen: list[httpx2.Request]
+) -> tuple[int, FakeBrowser]:
+    notion_client_in_environment(monkeypatch)
+    keyring.set_keyring(WriteFailingKeyring(failure))
+    browser = FakeBrowser(approving)
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, TOKEN_RESPONSE),
+        "/v1/oauth/revoke": (revoke_status, {}),
+    }
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())], transport=fake_api(routes, seen), open_browser=browser
+    )
+    return exit_code, browser
+
+
+def revokes_among(seen: list[httpx2.Request]) -> list[dict[str, object]]:
+    return [summarise(request) for request in seen if request.url.path == "/v1/oauth/revoke"]
+
+
+@pytest.mark.parametrize(
+    ("failure", "revoke_status", "stderr"),
+    [
+        (
+            KeyringError("denied"),
+            200,
+            "error: The system keychain is unavailable: denied. The token Notion issued has been revoked.\n",
+        ),
+        (
+            KeyringError("denied"),
+            400,
+            "error: The system keychain is unavailable: denied. The token Notion just issued could not be "
+            "saved, and revoking it failed too (Notion did not revoke the token: HTTP 400), so remove the "
+            "connection in Notion under Settings, Connections.\n",
+        ),
+        (KeyboardInterrupt(), 200, "\nerror: cancelled\n"),
+    ],
+    ids=["the revoke succeeds", "the revoke fails too", "interrupted at a keychain prompt"],
+)
+def test_auth_notion_revokes_a_token_the_keychain_did_not_save(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: BaseException,
+    revoke_status: int,
+    stderr: str,
+) -> None:
+    seen: list[httpx2.Request] = []
+
+    exit_code, browser = sign_in_to_notion_with_a_failing_save(monkeypatch, failure, revoke_status, seen)
+
+    assert (exit_code, browser.finished(), revokes_among(seen), capsys.readouterr().err) == (
+        1,
+        [200],
+        [revoke_request_for("new-access")],
+        stderr,
+    )
+
+
+def test_auth_notion_revokes_a_token_when_the_keychain_fails_unexpectedly_and_lets_the_error_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[httpx2.Request] = []
+    failure = OSError("disk full")
+
+    with pytest.raises(OSError) as raised:
+        sign_in_to_notion_with_a_failing_save(monkeypatch, failure, 200, seen)
+
+    assert (raised.value, revokes_among(seen)) == (failure, [revoke_request_for("new-access")])
+
+
+def test_auth_jira_reports_a_locked_keychain_before_asking_for_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keyring.set_keyring(LockedKeyring())
+    refuse_prompts(monkeypatch)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({}, seen))
+
+    assert (exit_code, capsys.readouterr().err, seen) == (
+        1,
+        "error: The system keychain is unavailable: locked\n",
+        [],
+    )
 
 
 @pytest.mark.parametrize(
@@ -239,6 +386,54 @@ def test_auth_notion_refuses_a_blank_client(
 
     assert auth_cli.main(["notion"]) == 1
     assert capsys.readouterr().err == f"error: {error}\n"
+
+
+@pytest.mark.parametrize(
+    "client_in_environment", [False, True], ids=["client to prompt for", "client from the environment"]
+)
+def test_auth_notion_refuses_an_insecure_keyring_before_prompting_listening_or_opening_the_browser(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    plaintext_keyring: PlaintextKeyring,
+    client_in_environment: bool,
+) -> None:
+    if client_in_environment:
+        notion_client_in_environment(monkeypatch)
+    refuse_prompts(monkeypatch)
+    browser = FakeBrowser(approving)
+    seen: list[httpx2.Request] = []
+
+    with socket.create_server(("127.0.0.1", 0)) as blocker:
+        port = blocker.getsockname()[1]
+        exit_code = auth_cli.main(
+            ["notion", "--port", str(port)], transport=fake_api({}, seen), open_browser=browser
+        )
+
+    assert (exit_code, capsys.readouterr().err, browser.opened, seen, plaintext_keyring.entries) == (
+        1,
+        f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
+        [],
+        [],
+        {},
+    )
+
+
+def test_auth_jira_refuses_an_insecure_keyring_before_asking_for_anything(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    plaintext_keyring: PlaintextKeyring,
+) -> None:
+    refuse_prompts(monkeypatch)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({}, seen))
+
+    assert (exit_code, capsys.readouterr().err, seen, plaintext_keyring.entries) == (
+        1,
+        f"error: {insecure_keyring_refusal('keyrings.alt.file.PlaintextKeyring')}\n",
+        [],
+        {},
+    )
 
 
 def test_auth_notion_names_a_busy_port(
@@ -293,7 +488,18 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  signed in to workspace (unnamed workspace) (keychain)\n"
-        "jira    signed in to https://example.atlassian.net as reader@example.com (keychain)\n"
+        "jira    signed in to https://example.atlassian.net (keychain)\n"
+    )
+
+
+def test_status_prints_only_the_printable_part_of_stored_names(capsys: pytest.CaptureFixture[str]) -> None:
+    save_notion(make_notion_credentials(workspace_name="Example\x1b[2J Workspace"))
+    save_jira(make_jira_credentials(display_name="Example\x1b]0;title\x07 Reader"))
+
+    assert auth_cli.main(["status"]) == 0
+    assert capsys.readouterr().out == (
+        "notion  signed in to workspace Example[2J Workspace (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as Example]0;title Reader (keychain)\n"
     )
 
 
@@ -308,7 +514,7 @@ def test_status_names_credentials_from_the_environment(
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         "notion  access token from NOTION_ACCESS_TOKEN (environment)\n"
-        "jira    ci@example.com at https://example.atlassian.net (environment)\n"
+        "jira    JIRA_EMAIL, JIRA_API_TOKEN for https://example.atlassian.net (environment)\n"
     )
 
 
