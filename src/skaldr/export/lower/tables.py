@@ -206,7 +206,8 @@ def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
 
 def _swim_step(block: models.Swimlane, step: models.SwimlaneStep, show_group: bool) -> ExportRich:
     number: ExportRich = (Link(plain(step.n), step.url),) if step.url else bold(step.n)
-    parts: list[ExportRich] = [(SwimlaneMark(step.state),), number, plain(step.label)]
+    mark: ExportRich = (SwimlaneMark(step.state),) if step.state is not None else ()
+    parts: list[ExportRich] = [mark, number, plain(step.label)]
     if step.value is not None:
         parts.append(plain(f"({compute.fmt(step.value)})"))
     text = spaced([part for part in parts if part])
@@ -288,4 +289,4 @@ def lower_swimlane(block: models.Swimlane) -> list[Node]:
         )
         rows.append(TableRow(footer, emphasis="total"))
     table = TableNode(_swimlane_header(block, totals), tuple(rows), header_column=True)
-    return [table, *_state_legend(compute.swimlane_state_legend(block))]
+    return [table, *_state_legend(compute.swimlane_marked_state_legend(block))]

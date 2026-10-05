@@ -1562,14 +1562,20 @@ class SwimlaneStep(FrozenModel):
         description="Optional link (http/https/mailto) for the step, e.g. its Jira/GitHub ticket. The "
         "step's number becomes a link out to it.",
     )
-    state: SwimlaneStepState = Field(
-        default="todo",
+    state: SwimlaneStepState | None = Field(
+        default=None,
         description="Progress state: the same progress axis as `status_list`/`timeline`, in roadmap "
         "terms (`todo` for not-started, plus `deferred`). `done` (green), "
-        "`current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool "
+        "`current` (in progress, the raised blue badge), `todo` (planned, not started; a cool "
         "filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / "
-        "post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
+        "post-MVP: a warm hollow badge that recedes). Unset, the HTML draws the step as `todo` and the "
+        "Markdown exports show no state glyph. The value counts toward the totals in every state.",
     )
+
+    @property
+    def shown_state(self) -> SwimlaneStepState:
+        return self.state or "todo"
+
     id: str | None = Field(
         default=None,
         min_length=1,

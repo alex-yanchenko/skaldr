@@ -1774,15 +1774,11 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
                         TableCell((Plain("Ops"),)),
                         TableCell(
                             (
-                                SwimlaneMark("todo"),
-                                Plain(" "),
                                 *bold("1"),
                                 Plain(" "),
                                 Plain("Draft"),
                                 Plain(", A"),
                                 Break(),
-                                SwimlaneMark("todo"),
-                                Plain(" "),
                                 *bold("1"),
                                 Plain(" "),
                                 Plain("Redraft"),
@@ -1803,18 +1799,54 @@ def test_a_split_swimlane_column_names_each_step_group_and_its_dependencies_once
             ),
             header_column=True,
         ),
-        Paragraph(
-            (
-                SwimlaneMark("todo"),
-                Plain(" "),
-                Plain("todo"),
-                Plain(" · "),
-                SwimlaneMark("deferred"),
-                Plain(" "),
-                Plain("deferred"),
-            ),
-            "muted",
+    )
+
+
+def test_a_swimlane_step_with_no_state_has_no_glyph_and_an_explicit_todo_keeps_its_own() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan"}],
+        "steps": [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "Unset"},
+            {"lane": "Ops", "col": "Plan", "n": "2", "label": "Planned", "state": "todo"},
+            {"lane": "Ops", "col": "Plan", "n": "3", "label": "Shipped", "state": "done"},
+        ],
+    }
+
+    table, legend = lowered([swimlane])
+
+    assert isinstance(table, TableNode)
+    assert table.rows[0].cells[1] == TableCell(
+        (
+            *bold("1"),
+            Plain(" "),
+            Plain("Unset"),
+            Break(),
+            SwimlaneMark("todo"),
+            Plain(" "),
+            *bold("2"),
+            Plain(" "),
+            Plain("Planned"),
+            Break(),
+            SwimlaneMark("done"),
+            Plain(" "),
+            *bold("3"),
+            Plain(" "),
+            Plain("Shipped"),
+        )
+    )
+    assert legend == Paragraph(
+        (
+            SwimlaneMark("done"),
+            Plain(" "),
+            Plain("done"),
+            Plain(" · "),
+            SwimlaneMark("todo"),
+            Plain(" "),
+            Plain("todo"),
         ),
+        "muted",
     )
 
 

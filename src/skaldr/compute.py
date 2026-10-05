@@ -332,9 +332,16 @@ def swimlane_totals(block: Swimlane) -> SwimTotals | None:
     }
 
 
-def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
-    present = {step.state for step in block.steps}
+def _legend_states(present: set[SwimlaneStepState]) -> list[SwimlaneStepState]:
     return [state for state in _SWIM_STATE_ORDER if state in present] if len(present) >= 2 else []
+
+
+def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
+    return _legend_states({step.shown_state for step in block.steps})
+
+
+def swimlane_marked_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
+    return _legend_states({step.state for step in block.steps if step.state is not None})
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:
@@ -446,7 +453,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "label": step.label,
                     "value": step.value,
                     "url": step.url,
-                    "state": step.state,
+                    "state": step.shown_state,
                     "deps": block.dependency_numbers(step),
                 }
                 for step in block.steps_at(lane.key, sub["col"], sub["group"])

@@ -65,7 +65,7 @@ flowchart LR
 		<td>**System**</td>
 		<td></td>
 		<td>🔵 **2a** Check scan log</td>
-		<td>⚪ **3** Reconcile</td>
+		<td>**3** Reconcile</td>
 		<td></td>
 	</tr>
 	<tr>
@@ -76,7 +76,7 @@ flowchart LR
 		<td>⛔ **4** Escalate short-ship</td>
 	</tr>
 </table>
-✅ done · 🔵 current · ⚪ todo · ⛔ blocked · ⏸️ deferred {color="gray"}
+✅ done · 🔵 current · ⛔ blocked · ⏸️ deferred {color="gray"}
 <callout icon="⚠️" color="yellow_bg">
 	**Action needed before the next count**
 	The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.

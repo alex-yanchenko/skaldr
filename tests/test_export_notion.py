@@ -974,7 +974,7 @@ def test_a_swimlane_header_and_lane_cells_are_bold_as_a_whole() -> None:
     assert notion_of([swimlane]) == (
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Lane**</td>\n\t\t<td>**Plan<br>*wk 1*<br>Q1 (2)**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>⚪ **1** Draft (2)</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Ops (2)**</td>\n\t\t<td>**1** Draft (2)</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**2**</td>\n\t</tr>\n"
         "</table>\n"
     )

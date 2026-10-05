@@ -4840,17 +4840,24 @@
           "title": "Url"
         },
         "state": {
-          "default": "todo",
-          "description": "Progress state: the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
-          "enum": [
-            "done",
-            "current",
-            "todo",
-            "blocked",
-            "deferred"
+          "anyOf": [
+            {
+              "enum": [
+                "done",
+                "current",
+                "todo",
+                "blocked",
+                "deferred"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "State",
-          "type": "string"
+          "default": null,
+          "description": "Progress state: the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress, the raised blue badge), `todo` (planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / post-MVP: a warm hollow badge that recedes). Unset, the HTML draws the step as `todo` and the Markdown exports show no state glyph. The value counts toward the totals in every state.",
+          "title": "State"
         },
         "id": {
           "anyOf": [

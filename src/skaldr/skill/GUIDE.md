@@ -581,8 +581,9 @@ without one counts as 0.
 A step may also carry an optional `url` (http/https/mailto, e.g. its Jira/GitHub ticket), which turns
 its number into a link, and a **`state`**: the same progress axis as `status_list` and `timeline`, in
 roadmap terms (`todo` for not-started, plus a `deferred`). The states are `done` (green),
-`current` (in progress, the raised blue badge), `todo` (**default**: planned, not started; a cool
-filled slate badge), `blocked` (waiting / on-hold: amber + a sharp dashed frame), and `deferred`
+`current` (in progress, the raised blue badge), `todo` (planned, not started; a cool
+filled slate badge, which is also how the HTML draws a step with no `state`; the Markdown exports
+show a state glyph only for a step whose `state` is set), `blocked` (waiting / on-hold: amber + a sharp dashed frame), and `deferred`
 (pushed out / post-MVP: a warm hollow badge that recedes). Colour rides on the number badge and the
 ticket's left edge; the label stays legible at every state (`deferred` recedes by hue, not by
 dimming). Reach for `deferred` for work you've consciously parked, `blocked` for work stopped by a
@@ -605,7 +606,7 @@ room; the "needs" marker is the compact, readable form.)
     - { lane: "Eng", col: "Sprint 3", n: "3a", label: "Feature flag", state: current }   # stacks with 3b
     - { lane: "Eng", col: "Sprint 3", n: "3b", label: "Perf pass", state: deferred }   # parked / post-MVP
     - { lane: "QA", col: "Sprint 2", n: "2b", label: "Vendor sign-off", state: blocked }   # waiting on a dep
-    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }   # todo (default)
+    - { lane: "QA", col: "Sprint 3", n: "4", label: "Regression" }   # no state: drawn as todo
 ```
 
 ### Optional group (milestone) overlay

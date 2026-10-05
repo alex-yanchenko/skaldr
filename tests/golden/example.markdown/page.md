@@ -82,10 +82,10 @@ flowchart LR
 | Lane | Detect<br>In-house | Investigate | Resolve | Escalate<br>Vendor claim |
 | --- | --- | --- | --- | --- |
 | **Floor** | ✅ **1** Recount bin | ⏸️ **2b** Re-label |  |  |
-| **System** |  | 🔵 **2a** Check scan log | ⚪ **3** Reconcile |  |
+| **System** |  | 🔵 **2a** Check scan log | **3** Reconcile |  |
 | **Vendor** |  |  |  | ⛔ **4** Escalate short-ship |
 
-✅ done · 🔵 current · ⚪ todo · ⛔ blocked · ⏸️ deferred
+✅ done · 🔵 current · ⛔ blocked · ⏸️ deferred
 
 > ⚠️ **Action needed before the next count**
 >
