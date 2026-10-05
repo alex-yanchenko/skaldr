@@ -823,6 +823,10 @@ def test_anchor_slugs_refuse_an_author_id_the_page_itself_uses(author_id: str) -
         pytest.param("Ünïcödé — and ASCII 2", "ünïcödé-and-ascii-2", id="mixed"),
         pytest.param("snake_case name", "snake-case-name", id="underscore"),
         pytest.param("Über", "über", id="decomposed"),
+        pytest.param("हिन्दी भाषा", "हिन्दी-भाषा", id="devanagari-vowel-signs"),
+        pytest.param("สวัสดี ครับ", "สวัสดี-ครับ", id="thai-combining-vowels"),
+        pytest.param("İstanbul", "i̇stanbul", id="dotted-capital-i"),
+        pytest.param("Price: 5 € / unit_cost", "price-5-unit-cost", id="symbols-and-underscore"),
         pytest.param("!!!", "section", id="no-letters"),
     ],
 )

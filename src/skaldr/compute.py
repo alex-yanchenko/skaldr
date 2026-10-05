@@ -75,14 +75,21 @@ __all__ = [
     "used_badges",
 ]
 
-_SLUG_STRIP = re.compile(r"[\W_]+")
+_SLUG_CATEGORIES = frozenset("LNM")
+_SLUG_SEPARATORS = re.compile(r"-+")
 
 SOURCE_BLOCK_ID = "skaldr-source"
 SETTINGS_MENU_ID = "sc-menu"
 
 
+def _kept_in_a_slug(character: str) -> bool:
+    return unicodedata.category(character)[0] in _SLUG_CATEGORIES
+
+
 def _slugify(text: str) -> str:
-    return _SLUG_STRIP.sub("-", unicodedata.normalize("NFC", text).lower()).strip("-") or "section"
+    lowered = unicodedata.normalize("NFC", text).lower()
+    marked = "".join(character if _kept_in_a_slug(character) else "-" for character in lowered)
+    return _SLUG_SEPARATORS.sub("-", marked).strip("-") or "section"
 
 
 def _page_ids(report: Report) -> set[str]:
