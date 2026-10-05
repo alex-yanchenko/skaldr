@@ -34,7 +34,6 @@ from pydantic import (
     Field,
     StrictBool,
     TypeAdapter,
-    UrlConstraints,
     ValidationError,
     field_validator,
     model_validator,
@@ -53,9 +52,19 @@ _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
 # links in render.py and reference `url`s here), so a `javascript:`/`data:text/html:` link can't ship.
 ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:")
-_LINK_URL: TypeAdapter[AnyUrl] = TypeAdapter(
-    Annotated[AnyUrl, UrlConstraints(allowed_schemes=["http", "https", "mailto"])]
-)
+_LINK_URL: TypeAdapter[AnyUrl] = TypeAdapter(AnyUrl)
+
+
+def _url_defect(url: str) -> str | None:
+    if any(character.isspace() for character in url):
+        return "it holds whitespace"
+    try:
+        parsed = _LINK_URL.validate_python(url)
+    except ValidationError as err:
+        return err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
+    if parsed.scheme == "mailto" and not parsed.path:
+        return "it names no address"
+    return None
 
 
 def _require_url_scheme(url: str | None, subject: str) -> None:
@@ -65,11 +74,9 @@ def _require_url_scheme(url: str | None, subject: str) -> None:
         return
     if not url.startswith(ALLOWED_URL_SCHEMES):
         raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
-    try:
-        _LINK_URL.validate_python(url)
-    except ValidationError as err:
-        reason = err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
-        raise ValueError(f"{subject} {url!r} is not a valid URL ({reason})") from err
+    defect = _url_defect(url)
+    if defect is not None:
+        raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in

@@ -3605,9 +3605,15 @@ def test_references_rejects_url_with_a_disallowed_scheme() -> None:
     [
         pytest.param("https://", "empty host", id="no-host"),
         pytest.param("http://#frag", "empty host", id="fragment-only"),
-        pytest.param("https://exa mple.com", "invalid international domain name", id="space-in-host"),
+        pytest.param("https://exa mple.com", "it holds whitespace", id="space-in-host"),
+        pytest.param("https://exa<mple.com", "invalid international domain name", id="bad-host"),
         pytest.param("https://[::1", "invalid IPv6 address", id="broken-ipv6"),
         pytest.param("https://x.io:99999", "invalid port number", id="port-out-of-range"),
+        pytest.param("https://x.io/a b", "it holds whitespace", id="space-in-path"),
+        pytest.param("https://x.io/a\tb", "it holds whitespace", id="tab-in-path"),
+        pytest.param("https://x.io/\n\n# h", "it holds whitespace", id="newline"),
+        pytest.param("mailto:", "it names no address", id="bare-mailto"),
+        pytest.param("mailto:?subject=hi", "it names no address", id="mailto-with-only-a-query"),
     ],
 )
 def test_references_rejects_a_malformed_url(url: str, reason: str) -> None:
@@ -3633,7 +3639,10 @@ def test_a_swimlane_step_url_that_is_malformed_is_refused() -> None:
         parse_report(make_report(blocks=[block]))
 
 
-@pytest.mark.parametrize("url", ["https://x.io", "mailto:ops@example.com", "http://x.io/a b"])
+@pytest.mark.parametrize(
+    "url",
+    ["https://x.io", "mailto:ops@example.com", "mailto:ops@example.com?subject=hi", "http://x.io/a%20b"],
+)
 def test_a_valid_url_is_kept_exactly_as_the_author_wrote_it(url: str) -> None:
     block = {"type": "references", "items": [{"key": "a", "text": "x", "url": url}]}
 
