@@ -1,5 +1,39 @@
 # Changelog
 
+## [3.2.0](https://github.com/alex-yanchenko/skaldr/compare/v3.1.0...v3.2.0) (2026-10-05)
+
+
+### Features
+
+* **auth:** sign in to notion with oauth and jira with an api token ([#150](https://github.com/alex-yanchenko/skaldr/issues/150)) ([ac1515d](https://github.com/alex-yanchenko/skaldr/commit/ac1515d6a4d22931dd123fb56f38bad24733185b))
+* **blocks:** add divider, level 4 heading, toggle and tabs blocks ([#162](https://github.com/alex-yanchenko/skaldr/issues/162)) ([57217a2](https://github.com/alex-yanchenko/skaldr/commit/57217a2e0768f11c523d5a80a965d663b685acc7))
+* **blocks:** list numbering and decisions, callout icons, and toned table columns ([#161](https://github.com/alex-yanchenko/skaldr/issues/161)) ([b82fa34](https://github.com/alex-yanchenko/skaldr/commit/b82fa34e8f650bbb51f9bc5527dfbdecedbb4548))
+* **export:** export badges, states and measures in both Markdown flavors ([#156](https://github.com/alex-yanchenko/skaldr/issues/156)) ([6648708](https://github.com/alex-yanchenko/skaldr/commit/6648708e7d12a75ded6db9519d127ce132e3869c))
+* **export:** export Notion-flavored Markdown with --export notion and split it with --chunk ([#155](https://github.com/alex-yanchenko/skaldr/issues/155)) ([2cc40bc](https://github.com/alex-yanchenko/skaldr/commit/2cc40bc1642ce6a2943f42ccf5ef0abbe2b1460e))
+* **export:** export requests and diagrams, so every block has a Markdown form ([#158](https://github.com/alex-yanchenko/skaldr/issues/158)) ([15fd454](https://github.com/alex-yanchenko/skaldr/commit/15fd4545e4473431b12dc5803fce9427ea33f648))
+* **export:** export text blocks as GitHub-flavored Markdown with --export markdown ([#154](https://github.com/alex-yanchenko/skaldr/issues/154)) ([c1e8914](https://github.com/alex-yanchenko/skaldr/commit/c1e8914ea02019111f17be2e3480eb9be4dafbd2))
+* **publish:** add a publish block naming where a document publishes ([#149](https://github.com/alex-yanchenko/skaldr/issues/149)) ([ddaa736](https://github.com/alex-yanchenko/skaldr/commit/ddaa736a0cedb16ffe2cd03ffc7f944ff8b8d452))
+* **richtext:** underline, sub and superscript, coloured spans and MathML math ([#163](https://github.com/alex-yanchenko/skaldr/issues/163)) ([79636e4](https://github.com/alex-yanchenko/skaldr/commit/79636e47d9e03198e8f8d393f1a01c363d737655))
+
+
+### Bug Fixes
+
+* **auth:** refuse a jira site off atlassian.net, a stateless oauth callback and insecure keyrings, and keep secrets out of error chains ([#165](https://github.com/alex-yanchenko/skaldr/issues/165)) ([de009b5](https://github.com/alex-yanchenko/skaldr/commit/de009b5caeac1728eaa02adfd8c62e0a3f5a3690))
+* **cli:** keep a live page live under --if-stale, write every file through one safe writer, and refuse ignored flags ([#170](https://github.com/alex-yanchenko/skaldr/issues/170)) ([a36f286](https://github.com/alex-yanchenko/skaldr/commit/a36f286ba44bcb7753546bbb3c32edfb6d8f47da))
+* **export:** make the notion export read back as written, and cap github list markers at nine digits ([#169](https://github.com/alex-yanchenko/skaldr/issues/169)) ([b71e73e](https://github.com/alex-yanchenko/skaldr/commit/b71e73e26a7c14ce324c6b9701d3513e5d8aa7ce))
+* **export:** refuse to overwrite files an export did not write, and show one donut total everywhere ([#171](https://github.com/alex-yanchenko/skaldr/issues/171)) ([a5d0f4d](https://github.com/alex-yanchenko/skaldr/commit/a5d0f4de59a44c011bd72ea7228a41f4198ac14a))
+* **mathml:** refuse unknown commands, elements and colours, and check colours with tinycss2 ([#168](https://github.com/alex-yanchenko/skaldr/issues/168)) ([7b6938f](https://github.com/alex-yanchenko/skaldr/commit/7b6938f5a40589b52d1de224fb3cb5b7c8dedfe6))
+* **models:** refuse a table rollup over a badge column whose cells hold several badges ([#159](https://github.com/alex-yanchenko/skaldr/issues/159)) ([78e33c2](https://github.com/alex-yanchenko/skaldr/commit/78e33c2635f5baf8bb761cd9a4b500391f6676a0))
+* **models:** trim a table cell's badge keys before checking they are declared ([#160](https://github.com/alex-yanchenko/skaldr/issues/160)) ([842b5d7](https://github.com/alex-yanchenko/skaldr/commit/842b5d721362846141998c213090ca6c4271fae2))
+* **models:** validate strictly, name the path of every build error, and publish a schema that agrees with the build ([#167](https://github.com/alex-yanchenko/skaldr/issues/167)) ([8946f95](https://github.com/alex-yanchenko/skaldr/commit/8946f95fcbd3ad090c5971ba51dc86898673a4fb))
+
+
+### Code Refactoring
+
+* **publish:** drop on_remote_edit; overwriting a remote edit is a per-run choice ([#152](https://github.com/alex-yanchenko/skaldr/issues/152)) ([451d0c9](https://github.com/alex-yanchenko/skaldr/commit/451d0c9a2ce40b9eeb1cfb731bdc4cea8216b956))
+* **richtext:** parse inline rich text into runs that every writer shares ([#153](https://github.com/alex-yanchenko/skaldr/issues/153)) ([3e0ab0a](https://github.com/alex-yanchenko/skaldr/commit/3e0ab0a10a683d303ed3dad85569ad0d7392a568))
+* **richtext:** parse rich text with markdown-it-py and name the field every rich-text error sits in ([#166](https://github.com/alex-yanchenko/skaldr/issues/166)) ([8154839](https://github.com/alex-yanchenko/skaldr/commit/81548393a1b88ab1f6713e56610bf5e46199784f))
+
 ## [3.1.0](https://github.com/alex-yanchenko/skaldr/compare/v3.0.1...v3.1.0) (2026-09-25)
 
 
