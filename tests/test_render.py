@@ -2133,6 +2133,104 @@ def test_rich_cell_single_newline_is_not_a_paragraph_break() -> None:
     assert '<p class="cell-p">' not in html
 
 
+@pytest.mark.parametrize(
+    ("detail", "cell"),
+    [
+        pytest.param(
+            "Steps:\n- `a`\n- b",
+            '<td><p class="cell-p">Steps:</p><ul class="list"><li><code>a</code></li><li>b</li></ul></td>',
+            id="bullets",
+        ),
+        pytest.param(
+            "2. b\n3. c", '<td><ol class="list" start="2"><li>b</li><li>c</li></ol></td>', id="numbers"
+        ),
+    ],
+)
+def test_a_rich_cell_holding_list_lines_renders_a_list(detail: str, cell: str) -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table(detail)])))
+
+    assert cell in html
+
+
+@pytest.mark.parametrize(
+    ("block", "body_html"),
+    [
+        pytest.param(
+            {"type": "callout", "tone": "warning", "body": "- first\n- second"},
+            '<div><ul class="list"><li>first</li><li>second</li></ul></div>',
+            id="callout-whose-body-is-a-list",
+        ),
+        pytest.param(
+            {"type": "note", "body": "Two checks:\n1. lint\n2. test"},
+            '<div><p class="prose-p">Two checks:</p><ol class="list"><li>lint</li><li>test</li></ol></div>',
+            id="note-with-an-intro-and-a-numbered-list",
+        ),
+        pytest.param(
+            {"type": "quote", "body": "3. three\n4. four"},
+            '<div><ol class="list" start="3"><li>three</li><li>four</li></ol></div>',
+            id="numbered-list-keeps-its-first-number",
+        ),
+        pytest.param(
+            {"type": "text", "body": "Intro\n- a\n- b"},
+            '<p class="text">Intro</p><ul class="list"><li>a</li><li>b</li></ul>',
+            id="text-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two"}]},
+            '<dd><ul class="list"><li>one</li><li>two</li></ul></dd>',
+            id="definition-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- one\n- two"}]},
+            '<dd><p class="prose-p">Intro.</p><ul class="list"><li>one</li><li>two</li></ul></dd>',
+            id="definition-body-with-a-paragraph-before-its-list",
+        ),
+        pytest.param(
+            {"type": "text", "muted": True, "body": "Intro\n- a\n- b"},
+            '<p class="text muted">Intro</p><ul class="list muted"><li>a</li><li>b</li></ul>',
+            id="muted-text-body",
+        ),
+        pytest.param(
+            {"type": "text", "body": "0. zero\n1. one"},
+            '<ol class="list" start="0"><li>zero</li><li>one</li></ol>',
+            id="a-numbered-list-from-zero",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n- b\n  - x\n  - y"},
+            '<div><ul class="list"><li>a</li><li>b<ul class="list"><li>x</li><li>y</li></ul></li></ul></div>',
+            id="a-nested-list",
+        ),
+    ],
+)
+def test_list_lines_in_a_prose_body_render_as_a_list(block: dict[str, object], body_html: str) -> None:
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert body_html in html
+
+
+def test_a_single_marked_line_in_a_prose_body_stays_text() -> None:
+    block = {"type": "callout", "tone": "info", "body": "- not a list on its own"}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert "<div>- not a list on its own</div>" in html
+
+
+def test_a_list_nested_too_deep_names_the_field() -> None:
+    body = "\n".join("  " * level + f"- n{level}" for level in range(21)) + "\n- tail"
+    block = {"type": "callout", "tone": "info", "body": body}
+
+    with pytest.raises(ReportError, match=r"^blocks\.0\.body: a list nests more than 20 levels deep"):
+        render_html(parse_report(make_report(blocks=[block])))
+
+
+def test_a_rich_text_mistake_inside_a_prose_list_item_names_the_field() -> None:
+    block = {"type": "callout", "tone": "info", "body": "- ok\n- [bad]{tone=nope}"}
+
+    with pytest.raises(ReportError, match=r"^blocks\.0\.body: unknown tone 'nope'"):
+        render_html(parse_report(make_report(blocks=[block])))
+
+
 def test_rich_cell_paragraph_breaks_work_in_the_title_cell_alongside_a_badge() -> None:
     # the title cell is the other rich_cell call site; a multi-paragraph title stacks and the
     # title-placement badge still chips under it.

@@ -16,7 +16,6 @@ from skaldr.compute import (
     first_table_index,
     fmt,
     list_label,
-    paragraphs,
     produced_names,
     provenance_footer,
     reason_phrase,
@@ -680,20 +679,6 @@ def test_swimlane_layout_groups_and_headers_use_column_ids_and_subs() -> None:
         ("Alpha", None),
         ("Beta col", "→ MVP demo"),
     ]
-
-
-@pytest.mark.parametrize(
-    ("text", "parts"),
-    [
-        pytest.param("a\n\nb", ["a", "b"], id="blank-line"),
-        pytest.param("a\n\n\n\nb", ["a", "b"], id="run-of-blank-lines"),
-        pytest.param("  a \n\n  \n", ["a"], id="trimmed-and-whitespace-dropped"),
-        pytest.param("one\nline", ["one\nline"], id="single-newline-stays"),
-        pytest.param("\n\n", [], id="only-blank-lines"),
-    ],
-)
-def test_paragraphs_split_on_blank_lines_and_drop_empty_ones(text: str, parts: list[str]) -> None:
-    assert paragraphs(text) == parts
 
 
 @pytest.mark.parametrize(

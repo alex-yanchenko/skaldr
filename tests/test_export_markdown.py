@@ -844,6 +844,28 @@ def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
     assert markdown_of([quote]) == "> first\n>\n> second\n>\n> *Ops lead*\n"
 
 
+def test_list_lines_in_a_callout_body_become_a_list_inside_the_quote() -> None:
+    callout = {"type": "callout", "tone": "info", "body": "Checks:\n- lint\n- test"}
+
+    assert markdown_of([callout]) == "> 💡 Checks:\n>\n> - lint\n> - test\n"
+
+
+def test_list_lines_in_a_quote_are_lines_led_by_their_marker() -> None:
+    quote = {"type": "quote", "body": "Said:\n- a\n- b"}
+
+    assert markdown_of([quote]) == "> Said:\n>\n> • a\n>\n> • b\n"
+
+
+def test_list_lines_in_a_table_cell_are_lines_led_by_their_marker() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "Steps:\n\n2. one\n3. two"}],
+    }
+
+    assert markdown_of([table]) == "| A |\n| --- |\n| Steps:<br>2. one<br>3. two |\n"
+
+
 def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
     section = {
         "type": "section",
