@@ -8,6 +8,7 @@ from keyring.backends import fail, null
 from keyring.backends.chainer import ChainerBackend
 from pydantic import ValidationError
 
+from skaldr.auth import store
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
@@ -33,10 +34,15 @@ from tests.factories.auth_factory import (
     PlaintextKeyring,
     PlaintextKeyringSubclass,
     ReadRecordingKeyring,
+    SlowKeyring,
     assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
     make_jira_credentials,
     make_notion_credentials,
+)
+
+WAITING_FOR_THE_KEYCHAIN = (
+    "Waiting for the system keychain; if it asks whether skaldr may use its entry, answer there.\n"
 )
 
 
@@ -255,6 +261,42 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 
     with pytest.raises(AuthError, match=r"^The system keychain is unavailable: locked$"):
         operation()
+
+
+def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    slow = SlowKeyring(answers_after=0.3)
+    keyring.set_keyring(slow)
+    save_jira(make_jira_credentials())
+    captured_before = capsys.readouterr()
+
+    loaded = load_jira()
+
+    assert loaded == SignIn(make_jira_credentials(), "keychain")
+    assert captured_before.err == capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+
+
+def test_a_keychain_that_never_answers_stops_with_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
+    slow = SlowKeyring(answers_after=30)
+    keyring.set_keyring(slow)
+
+    try:
+        with pytest.raises(AuthError, match=r"^The system keychain did not answer within 0\.2 seconds"):
+            load_jira()
+    finally:
+        slow.released.set()
+
+
+@pytest.mark.usefixtures("keychain")
+def test_a_prompt_keychain_prints_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+    save_notion(make_notion_credentials())
+    load_notion()
+
+    assert capsys.readouterr().err == ""
 
 
 INSECURE_BACKENDS = [

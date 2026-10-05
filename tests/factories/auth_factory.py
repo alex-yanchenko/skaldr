@@ -95,6 +95,28 @@ def insecure_keyring_refusal(backend_name: str) -> str:
     )
 
 
+class SlowKeyring(InMemoryKeyring):
+    def __init__(self, answers_after: float) -> None:
+        super().__init__()
+        self.answers_after = answers_after
+        self.released = threading.Event()
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        self.released.wait(self.answers_after)
+        return super().get_password(service, username)
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.released.wait(self.answers_after)
+        self.entries[(service, username)] = password
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        self.released.wait(self.answers_after)
+        super().delete_password(service, username)
+
+
 class LockedKeyring(KeyringBackend):
     @properties.classproperty
     def priority(cls) -> float:
