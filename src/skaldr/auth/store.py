@@ -1,8 +1,10 @@
 import os
-from collections.abc import Generator, Mapping, Sequence
+import sys
+import threading
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Generic, Literal, TypeVar
+from typing import Generic, Literal, TypeVar, cast
 
 import keyring
 from keyring.backend import KeyringBackend
@@ -15,6 +17,13 @@ from skaldr.auth import CaughtWithoutChaining
 from skaldr.errors import AuthError
 
 KEYCHAIN_SERVICE = "skaldr"
+KEYCHAIN_NOTICE_SECONDS = 2.0
+KEYCHAIN_TIMEOUT_SECONDS = 120.0
+KEYCHAIN_WAIT_NOTICE = (
+    "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
+    "unlock it or answer there."
+)
+Answer = TypeVar("Answer")
 
 Service = Literal["notion", "jira"]
 Source = Literal["keychain", "environment"]
@@ -123,7 +132,7 @@ def notion_client_from_environment() -> tuple[str | None, str | None]:
 def forget(service: Service) -> bool:
     with _keychain_errors_as_auth_errors():
         try:
-            keyring.delete_password(KEYCHAIN_SERVICE, service)
+            _from_the_keychain(lambda: keyring.delete_password(KEYCHAIN_SERVICE, service))
         except PasswordDeleteError:
             return False
     return True
@@ -159,6 +168,38 @@ def _site_refusal(typed: str) -> str:
     return f"{_SITE_REQUIREMENT}, not {typed!r}"
 
 
+@dataclass
+class _KeychainReply(Generic[Answer]):
+    value: Answer | None = None
+    error: BaseException | None = None
+
+
+def _from_the_keychain(ask: Callable[[], Answer]) -> Answer:
+    answered = threading.Event()
+    reply: _KeychainReply[Answer] = _KeychainReply()
+
+    def ask_and_record() -> None:
+        try:
+            reply.value = ask()
+        except BaseException as exc:
+            reply.error = exc
+        finally:
+            answered.set()
+
+    threading.Thread(target=ask_and_record, name="skaldr-keychain", daemon=True).start()
+    if not answered.wait(KEYCHAIN_NOTICE_SECONDS):
+        print(KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
+        if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
+            raise AuthError(
+                f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
+                "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
+                "may still be applied if the keychain answers later"
+            )
+    if reply.error is not None:
+        raise reply.error
+    return cast("Answer", reply.value)
+
+
 @contextmanager
 def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
     try:
@@ -170,18 +211,19 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
 def refuse_an_unusable_keychain(service: Service) -> None:
     _refuse_an_insecure_keyring()
     with _keychain_errors_as_auth_errors():
-        keyring.get_password(KEYCHAIN_SERVICE, service)
+        _from_the_keychain(lambda: keyring.get_password(KEYCHAIN_SERVICE, service))
 
 
 def _save(service: Service, credentials: BaseModel) -> None:
     _refuse_an_insecure_keyring()
+    serialized = credentials.model_dump_json()
     with _keychain_errors_as_auth_errors():
-        keyring.set_password(KEYCHAIN_SERVICE, service, credentials.model_dump_json())
+        _from_the_keychain(lambda: keyring.set_password(KEYCHAIN_SERVICE, service, serialized))
 
 
 def _refuse_an_insecure_keyring() -> None:
     with _keychain_errors_as_auth_errors():
-        backend = keyring.get_keyring()
+        backend = _from_the_keychain(keyring.get_keyring)
     candidates: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
     for candidate in candidates:
         insecure_base = _insecure_keyring_base(type(candidate))
@@ -219,7 +261,7 @@ def _is_an_insecure_keyring_module(module: str) -> bool:
 
 def _load_from_keychain(service: Service, model: type[CredentialsT]) -> CredentialsT | None:
     with _keychain_errors_as_auth_errors():
-        stored = keyring.get_password(KEYCHAIN_SERVICE, service)
+        stored = _from_the_keychain(lambda: keyring.get_password(KEYCHAIN_SERVICE, service))
     if stored is None:
         return None
     with CaughtWithoutChaining(ValidationError):
