@@ -95,10 +95,7 @@ def _override_errors(target_label: str, target: TargetBase) -> list[str]:
 
 def section_choice_errors(publish: Publish, section_ids: Sequence[str]) -> list[str]:
     known_section_ids = set(section_ids)
-    errors = [
-        f"section id '{section_id}' names more than one top-level section"
-        for section_id in _duplicates(section_ids)
-    ]
+    errors: list[str] = []
     for position, target in enumerate(publish.targets, start=1):
         target_label = f"publish target {position} ({target.to})"
         errors += _from_errors(target_label, target, known_section_ids)
