@@ -1951,18 +1951,25 @@ def test_a_toned_grid_cell_becomes_a_callout_column_and_a_one_cell_grid_flattens
 
 
 @pytest.mark.parametrize(
-    ("span", "bodies", "ratios"),
+    ("spans", "ratios"),
     [
-        pytest.param(2, "abc", (34, 33, 33), id="three-cells-give-the-one-left-over-to-the-first"),
-        pytest.param(1, "abcdef", (17, 17, 17, 17, 16, 16), id="six-cells-spread-the-four-left-over"),
+        pytest.param((2, 2, 2), (34, 33, 33), id="three-equal-cells-give-the-one-left-over-to-the-first"),
+        pytest.param((1,) * 6, (17, 17, 17, 17, 16, 16), id="six-equal-cells-spread-the-four-left-over"),
+        pytest.param(
+            (1, 1, 1, 3), (17, 17, 16, 50), id="unequal-cells-give-the-left-over-to-the-largest-remainders"
+        ),
     ],
 )
-def test_equal_grid_cells_get_largest_remainder_ratios_that_add_up_to_a_hundred(
-    span: int, bodies: str, ratios: tuple[int, ...]
+def test_grid_cells_get_largest_remainder_ratios_that_add_up_to_a_hundred(
+    spans: tuple[int, ...], ratios: tuple[int, ...]
 ) -> None:
+    bodies = "abcdef"[: len(spans)]
     grid = {
         "type": "grid",
-        "cells": [{"span": span, "blocks": [{"type": "text", "body": body}]} for body in bodies],
+        "cells": [
+            {"span": span, "blocks": [{"type": "text", "body": body}]}
+            for span, body in zip(spans, bodies, strict=True)
+        ],
     }
 
     assert lowered([grid]) == (

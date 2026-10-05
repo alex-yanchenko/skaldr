@@ -55,6 +55,7 @@ from tests.factories import (
     make_command_request,
     make_label_table,
     make_report,
+    make_section,
     make_table,
     make_toggle,
     notion_of,
@@ -139,6 +140,36 @@ def test_an_equals_sign_is_escaped_so_notion_reads_no_block_attribute(text: str,
 )
 def test_an_underscore_is_escaped_so_notion_reads_no_emphasis(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("block", "notion"),
+    [
+        pytest.param(
+            make_table([{"key": "a", "label": "a_b"}], rows=[{"a": "x = __init__"}]),
+            '<table fit-page-width="true" header-row="true">\n'
+            "\t<tr>\n\t\t<td>**a\\_b**</td>\n\t</tr>\n"
+            "\t<tr>\n\t\t<td>x \\= \\_\\_init\\_\\_</td>\n\t</tr>\n"
+            "</table>\n",
+            id="a-table-cell-and-header",
+        ),
+        pytest.param({"type": "heading", "text": "a = _b_"}, "## a \\= \\_b\\_\n", id="a-heading"),
+        pytest.param(
+            make_toggle(title="x = _y_"),
+            "<details>\n<summary>x \\= \\_y\\_</summary>\n\tx\n</details>\n",
+            id="a-toggle-title",
+        ),
+        pytest.param(
+            make_section("s", title="x = _y_", collapsed=True),
+            '## x \\= \\_y\\_ {toggle="true"}\n\tx\n',
+            id="a-heading-toggle-title",
+        ),
+    ],
+)
+def test_an_equals_sign_and_an_underscore_are_escaped_in_every_notion_text_container(
+    block: dict[str, object], notion: str
+) -> None:
+    assert notion_of([block]) == notion
 
 
 def test_inline_runs_become_notion_spans() -> None:
