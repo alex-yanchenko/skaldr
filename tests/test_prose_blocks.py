@@ -1,6 +1,14 @@
 import pytest
 
-from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks, rendered_strings
+from skaldr.errors import ReportError
+from skaldr.prose_blocks import (
+    MAX_LIST_DEPTH,
+    ProseBlock,
+    ProseItem,
+    ProseList,
+    prose_blocks,
+    rendered_strings,
+)
 
 
 def bullets(*texts: str) -> ProseList:
@@ -87,6 +95,38 @@ def numbers(start: int, *texts: str) -> ProseList:
 )
 def test_prose_splits_into_paragraphs_and_lists(text: str, blocks: list[ProseBlock]) -> None:
     assert prose_blocks(text) == blocks
+
+
+@pytest.mark.parametrize(
+    ("text", "blocks"),
+    [
+        pytest.param("x\n- a\n\n  more", ["x\n- a", "more"], id="a-one-item-list-keeps-its-paragraph-break"),
+        pytest.param("x\r\n- a\r\ny", ["x\n- a\ny"], id="crlf-in-a-one-item-list"),
+        pytest.param("+ a\n+ b", [bullets("a", "b")], id="plus-bullets"),
+        pytest.param(
+            "-\n  - x\n  - y\n- b",
+            [ProseList((ProseItem("", (bullets("x", "y"),)), ProseItem("b")))],
+            id="an-item-that-opens-with-a-list",
+        ),
+    ],
+)
+def test_prose_edge_cases(text: str, blocks: list[ProseBlock]) -> None:
+    assert prose_blocks(text) == blocks
+
+
+def _nested(depth: int) -> str:
+    return "\n".join("  " * level + f"- n{level}" for level in range(depth)) + "\n- tail"
+
+
+def test_a_list_twenty_levels_deep_keeps_every_item() -> None:
+    assert rendered_strings(_nested(MAX_LIST_DEPTH)) == [f"n{level}" for level in range(MAX_LIST_DEPTH)] + [
+        "tail"
+    ]
+
+
+def test_a_list_deeper_than_twenty_levels_fails_naming_the_limit() -> None:
+    with pytest.raises(ReportError, match=r"^a list nests more than 20 levels deep"):
+        prose_blocks(_nested(MAX_LIST_DEPTH + 1))
 
 
 def test_rendered_strings_are_each_paragraph_and_each_list_item_at_every_depth() -> None:

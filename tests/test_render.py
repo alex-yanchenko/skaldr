@@ -2172,6 +2172,14 @@ def test_a_single_marked_line_in_a_prose_body_stays_text() -> None:
     assert "<div>- not a list on its own</div>" in html
 
 
+def test_a_list_nested_too_deep_names_the_field() -> None:
+    body = "\n".join("  " * level + f"- n{level}" for level in range(21)) + "\n- tail"
+    block = {"type": "callout", "tone": "info", "body": body}
+
+    with pytest.raises(ReportError, match=r"^blocks\.0\.body: a list nests more than 20 levels deep"):
+        render_html(parse_report(make_report(blocks=[block])))
+
+
 def test_a_rich_text_mistake_inside_a_prose_list_item_names_the_field() -> None:
     block = {"type": "callout", "tone": "info", "body": "- ok\n- [bad]{tone=nope}"}
 

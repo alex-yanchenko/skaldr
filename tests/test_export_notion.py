@@ -1549,3 +1549,9 @@ def test_list_lines_in_a_table_cell_are_bulleted_lines_since_a_notion_cell_holds
         "\t<tr>\n\t\t<td>Steps:<br>• one<br>• two</td>\n\t</tr>\n"
         "</table>\n"
     )
+
+
+def test_a_nested_list_in_a_quote_is_led_by_a_hollow_bullet_line() -> None:
+    quote = {"type": "quote", "body": "- a\n- b\n  - x\n  - y"}
+
+    assert notion_of([quote]) == "> • a<br>• b<br>◦ x<br>◦ y\n"

@@ -622,8 +622,13 @@ def provenance_footer(report: Report) -> str | None:
     return " · ".join(parts) if parts else None
 
 
-def _parsed_strings(text: str, marker: RichTextMarker) -> list[str]:
-    return rendered_strings(text) if marker.split_into_paragraphs else [text]
+def _parsed_strings(text: str, marker: RichTextMarker, path: FieldPath) -> list[str]:
+    if not marker.split_into_paragraphs:
+        return [text]
+    try:
+        return rendered_strings(text)
+    except ReportError as error:
+        raise ReportError(f"{'.'.join(path)}: {error}") from error
 
 
 def _rich_text_marker(hint: object) -> RichTextMarker | None:
@@ -645,10 +650,11 @@ def _rich_texts(
 ) -> Iterator[tuple[FieldPath, str]]:
     if isinstance(value, str):
         if marker is not None:
-            yield from ((path, piece) for piece in _parsed_strings(value, marker))
+            yield from ((path, piece) for piece in _parsed_strings(value, marker, path))
     elif isinstance(value, Table):
         for cell_path, text, cell_marker in value.rich_cells():
-            yield from (((*path, *cell_path), piece) for piece in _parsed_strings(text, cell_marker))
+            cell_field = (*path, *cell_path)
+            yield from ((cell_field, piece) for piece in _parsed_strings(text, cell_marker, cell_field))
         yield from _rich_model_texts(value, path)
     elif isinstance(value, BaseModel):
         yield from _rich_model_texts(value, path)
