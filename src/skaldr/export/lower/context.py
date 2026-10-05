@@ -16,7 +16,7 @@ from skaldr.models import (
     iter_reference_items,
 )
 from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks
-from skaldr.richtext import Plain, Rich, RichContext
+from skaldr.richtext import Plain, Rich, RichContext, Tinted
 
 TEXT_BULLET: Final = "• "
 NESTED_TEXT_BULLET: Final = "◦ "
@@ -129,8 +129,12 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
     return runs
 
 
-def with_bold_label(label: str | None, text: ExportRich) -> ExportRich:
-    name = bold(one_line(label or "").removesuffix(":").rstrip())
+def toned(tone: ToneLiteral | None, runs: Rich) -> Rich:
+    return (Tinted(tone, None, runs),) if tone and runs else runs
+
+
+def with_bold_label(label: str | None, text: ExportRich, tone: ToneLiteral | None = None) -> ExportRich:
+    name = toned(tone, bold(one_line(label or "").removesuffix(":").rstrip()))
     return (*name, Plain(": "), *text) if name and text else name + text
 
 

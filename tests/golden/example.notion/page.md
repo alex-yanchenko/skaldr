@@ -12,20 +12,20 @@ Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray
 - **Method**: `full cycle count`
 - **Mode**: strict
 <empty-block/>
-- **Matched cleanly**: 8,500 (85.0%) <span color="green_bg">▲ +3%</span> {color="green"}
-- **Floor: fixable**: 1,100 (11.0%) <span color="yellow_bg">Floor</span> {color="yellow"}
+- <span color="green">**Matched cleanly**</span>: 8,500 (85.0%) <span color="green">**▲ +3%**</span>
+- **Floor: fixable**: 1,100 (11.0%) <span color="yellow">**Floor**</span>
 	Miscounts + mislabeled bins we can correct. {color="gray"}
-- **Vendor: escalate**: 400 (4.0%) <span color="green_bg">▼ −90</span> <span color="red_bg">Vendor</span> {color="red"}
-- **Count status**: HEALTHY {color="purple"}
-- **Total units**: 10,000 {color="gray"}
+- **Vendor: escalate**: 400 (4.0%) <span color="green">**▼ −90**</span> <span color="red">**Vendor**</span>
+- <span color="purple">**Count status**</span>: HEALTHY
+- <span color="gray">**Total units**</span>: 10,000
 <empty-block/>
-- **Matched cleanly**: 85.0%, 8,500 units {color="green"}
-- **Floor-fixable**: 11.0%, 1,100 {color="yellow"}
-- **Vendor**: 4.0%, 400 {color="red"}
+- <span color="green">**Matched cleanly**</span>: 85.0%, 8,500 units
+- <span color="yellow">**Floor-fixable**</span>: 11.0%, 1,100
+- <span color="red">**Vendor**</span>: 4.0%, 400
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
-Zone C is <span color="red">behind schedule</span>, its recount is <span color="yellow_bg">due Friday</span>, and the <span color="purple"><span color="blue_bg">vendor lots</span></span> stay open until the supplier replies.
+Zone C is <span color="red">behind schedule</span>, its recount is <span color="yellow_bg">due Friday</span>, and the <span color="purple"><span color="pink_bg">vendor lots</span></span> stay open until the supplier replies.
 ### Count pipeline
 ```mermaid
 flowchart LR
@@ -44,7 +44,7 @@ flowchart LR
     classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
     classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
-- **Flag** <span color="blue_bg">System</span>
+- **Flag** <span color="blue">**System**</span>
 ### Discrepancy resolution across teams
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>
@@ -87,9 +87,9 @@ flowchart LR
 ## Discrepancies & fixes
 <details>
 <summary>Legend: badges used on this page</summary>
-	- <span color="yellow_bg">Floor</span> Fixable on the floor before the next count.
-	- <span color="blue_bg">System</span> Defect in the scanning/labeling pipeline.
-	- <span color="red_bg">Vendor</span> Depends on the vendor to resolve.
+	- <span color="yellow">**Floor**</span> Fixable on the floor before the next count.
+	- <span color="blue">**System**</span> Defect in the scanning/labeling pipeline.
+	- <span color="red">**Vendor**</span> Depends on the vendor to resolve.
 </details>
 <table fit-page-width="true" header-row="true">
 	<colgroup>
@@ -113,15 +113,15 @@ flowchart LR
 		<td></td>
 		<td></td>
 	</tr>
-	<tr color="yellow_bg">
-		<td>Double-counted units <span color="yellow_bg">Floor</span><br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
+	<tr>
+		<td color="yellow_bg">Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
 		<td color="yellow_bg">🟡</td>
 		<td>600 (6.0% of total)</td>
 		<td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 		<td>De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan.</td>
 	</tr>
-	<tr color="blue_bg">
-		<td>Mislabeled bin codes <span color="blue_bg">System</span></td>
+	<tr>
+		<td color="blue_bg">Mislabeled bin codes **System**</td>
 		<td color="yellow_bg">🟡</td>
 		<td>500 (5.0% of total)</td>
 		<td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
@@ -134,8 +134,8 @@ flowchart LR
 		<td></td>
 		<td></td>
 	</tr>
-	<tr color="red_bg">
-		<td>Short shipment <span color="red_bg">Vendor</span></td>
+	<tr>
+		<td color="red_bg">Short shipment **Vendor**</td>
 		<td color="red_bg">🔴</td>
 		<td>400 (4.0% of total)</td>
 		<td>The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted.</td>
@@ -156,13 +156,13 @@ flowchart LR
 		<td></td>
 	</tr>
 </table>
-**Discrepancies by owner**: <span color="yellow_bg">Floor</span> 1 · <span color="blue_bg">System</span> 1 · <span color="red_bg">Vendor</span> 1
+**Discrepancies by owner**: <span color="yellow">**Floor**</span> 1 · <span color="blue">**System**</span> 1 · <span color="red">**Vendor**</span> 1
 Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 ## Count progress
-- **Zone A**: ██████████ 100.0% {color="blue"}
-- **Zone B**: █████████░ 92.0% {color="green"}
-- **Zone C**: █████████░ 85.0% {color="yellow"}
-- **Overflow**: ░░░░░░░░░░ 4.0% {color="red"}
+- <span color="blue">**Zone A**</span>: ██████████ 100.0%
+- <span color="green">**Zone B**</span>: █████████░ 92.0%
+- <span color="yellow">**Zone C**</span>: █████████░ 85.0%
+- <span color="red">**Overflow**</span>: ░░░░░░░░░░ 4.0%
 <table fit-page-width="true" header-row="true">
 	<colgroup>
 		<col width="177">
@@ -188,14 +188,14 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 		<td>12</td>
 		<td>Two mislabeled bins, re-scanned.</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Overflow</td>
+	<tr>
+		<td color="red_bg">Overflow</td>
 		<td>120</td>
 		<td>260</td>
 		<td>Skipped by the `bin > 12` rule.</td>
 	</tr>
 </table>
-**Affects**: <span color="green_bg">inventory</span> <span color="blue_bg">scan-app</span> <span color="purple_bg">DC-West</span>
+**Affects**: <span color="brown">**inventory**</span> <span color="pink">**scan-app**</span> <span color="purple">**DC-West**</span>
 ## Verification
 - ✅ Reconciliation gate passes (10,000 \= 10,000).
 - ✅ De-dup validated on a 1,000-pallet sample.
@@ -263,8 +263,8 @@ function pickWinner(a, b) {
 <columns>
 	<column ratio="33">
 		<callout icon="📌" color="purple_bg">
-			- **Matched cleanly**: 8,500 (85.0%) {color="green"}
-			- **Needs work**: 1,500 (15.0%) {color="yellow"}
+			- <span color="green">**Matched cleanly**</span>: 8,500 (85.0%)
+			- <span color="yellow">**Needs work**</span>: 1,500 (15.0%)
 		</callout>
 	</column>
 	<column ratio="67">
@@ -272,7 +272,7 @@ function pickWinner(a, b) {
 			**Reading this section**
 			The cards on the left summarise; the panels below break down count progress and checks side by side.
 		</callout>
-		- **Zone C**: █████████░ 88.0% {color="yellow"}
+		- <span color="yellow">**Zone C**</span>: █████████░ 88.0%
 		<empty-block/>
 		- ✅ Reconciliation gate passes.
 		- ⛔ Awaiting `OPS-1234`.
@@ -301,15 +301,15 @@ function pickWinner(a, b) {
 		<td>**Zone C**</td>
 		<td>**Zone D**</td>
 	</tr>
-	<tr color="green_bg">
-		<td>Clean</td>
+	<tr>
+		<td color="green_bg">Clean</td>
 		<td>2,100</td>
 		<td>1,850</td>
 		<td>2,320</td>
 		<td>2,230</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Discrepant</td>
+	<tr>
+		<td color="red_bg">Discrepant</td>
 		<td>180</td>
 		<td>340</td>
 		<td>90</td>
@@ -353,18 +353,18 @@ pie
 		<td>**Value**</td>
 		<td>**Share**</td>
 	</tr>
-	<tr color="green_bg">
-		<td>Fixed on floor</td>
+	<tr>
+		<td color="green_bg">Fixed on floor</td>
 		<td>900</td>
 		<td>44%</td>
 	</tr>
-	<tr color="yellow_bg">
-		<td>System defect</td>
+	<tr>
+		<td color="yellow_bg">System defect</td>
 		<td>760</td>
 		<td>37%</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Vendor</td>
+	<tr>
+		<td color="red_bg">Vendor</td>
 		<td>400</td>
 		<td>19%</td>
 	</tr>
@@ -408,9 +408,9 @@ pie
 	</tr>
 </table>
 ## Readiness by zone
-- <span color="yellow_bg">Floor</span>: 7 (43.8%) {color="yellow"}
-- <span color="blue_bg">System</span>: 2 (12.5%) {color="blue"}
-- <span color="red_bg">Vendor</span>: 2 (12.5%) {color="red"}
+- <span color="yellow">**Floor**</span>: 7 (43.8%)
+- <span color="blue">**System**</span>: 2 (12.5%)
+- <span color="red">**Vendor**</span>: 2 (12.5%)
 	Awaiting the vendor's corrected ASN. {color="gray"}
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>
@@ -481,18 +481,18 @@ flowchart LR
     classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
 ## How to run the recount
-1. **Freeze the aisle and pull the expected list** *before any scanning* {color="blue"}
+1. <span color="blue">**Freeze the aisle and pull the expected list** *before any scanning*</span>
 	Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
 	- One row per bin, with the expected quantity.
 	- Flag overflow bins (`bin > 12`): they take the manual path.
-2. **Scan every bin twice, reconcile on the pallet ID** {color="purple"}
+2. <span color="purple">**Scan every bin twice, reconcile on the pallet ID**</span>
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 	`reconcile`
 	```
 	counted = dedupe(scans, key="pallet_id")
 	assert sum(counted) == expected
 	```
-3. **Escalate anything that still won't balance** {color="yellow"}
+3. <span color="yellow">**Escalate anything that still won't balance**</span>
 	<callout icon="⚠️" color="yellow_bg">
 		A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 	</callout>

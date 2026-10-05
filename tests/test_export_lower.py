@@ -866,7 +866,6 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
                         Chip("api", "blue"),
                     ),
                     children=(Paragraph((Plain("since Monday"),), "muted"),),
-                    tone="success",
                 ),
             ),
         ),
@@ -889,7 +888,22 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             (*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("▼ -8%", "green")),
             id="toned-delta-is-a-colored-chip",
         ),
+        pytest.param(
+            {"label": "Site", "value": "West", "tone": "danger"},
+            (Tinted("danger", None, bold("Site")), Plain(": "), Plain("West")),
+            id="tone-colours-the-label-only",
+        ),
+        pytest.param(
+            {"label": "Cost", "value": 5, "tone": "danger", "delta": {"label": "-8%", "tone": "success"}},
+            (Tinted("danger", None, bold("Cost")), Plain(": "), Plain("5"), Plain(" "), Chip("-8%", "green")),
+            id="a-toned-delta-keeps-its-own-colour-beside-the-coloured-label",
+        ),
         pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
+        pytest.param(
+            {"label": " ", "value": 7, "tone": "danger"},
+            (Plain("7"),),
+            id="a-blank-label-has-nothing-to-colour",
+        ),
         pytest.param({"label": "Empty", "value": ""}, bold("Empty"), id="empty-value-is-the-label-alone"),
     ],
 )
@@ -897,7 +911,18 @@ def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRi
     assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
 
-def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() -> None:
+def test_a_toned_card_that_shows_a_badge_leaves_the_colour_to_the_badge() -> None:
+    card = {"label": "Cost", "value": 5, "tone": "danger", "badges": ["API"]}
+
+    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+        API_LEGEND,
+        ListNode(
+            "bullet", (ListEntry((*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)
+        ),
+    )
+
+
+def test_a_derived_card_counts_its_badge_in_a_matrix_and_leaves_its_colour_to_the_badge() -> None:
     blocks = [
         {"type": "cards", "items": [{"badge": "API", "of_matrix": "m", "note": "live"}]},
         {
@@ -917,7 +942,6 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() 
                 ListEntry(
                     (Chip("api", "blue"), Plain(": 1 (50.0%)")),
                     children=(Paragraph((Plain("live"),), "muted"),),
-                    tone="info",
                 ),
             ),
         ),
@@ -932,7 +956,7 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_takes_the_badge_tone() 
     )
 
 
-def test_a_derived_card_sums_its_tables_and_keeps_an_explicit_tone() -> None:
+def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> None:
     blocks = [
         {
             "type": "cards",
@@ -948,7 +972,7 @@ def test_a_derived_card_sums_its_tables_and_keeps_an_explicit_tone() -> None:
     ]
 
     assert lowered(blocks, badges=API_BADGES) == (
-        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)")), tone="danger"),)),
+        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)"))),)),
         API_LEGEND,
         TableNode(
             _cells("A"),
@@ -987,8 +1011,13 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
             "bullet",
             (
                 ListEntry(
-                    (*bold("Zone"), Plain(": "), Gauge(5, 10), Plain(" "), Plain("50.0%")),
-                    tone="warning",
+                    (
+                        Tinted("warning", None, bold("Zone")),
+                        Plain(": "),
+                        Gauge(5, 10),
+                        Plain(" "),
+                        Plain("50.0%"),
+                    )
                 ),
             ),
         ),
@@ -1025,7 +1054,13 @@ def test_a_range_shows_the_axis_ends_it_has_and_each_segment_share(
             "bullet",
             (
                 ListEntry(
-                    (*bold("Seg"), Plain(": "), Plain("25.0%"), Plain(", "), Plain("one")), tone="danger"
+                    (
+                        Tinted("danger", None, bold("Seg")),
+                        Plain(": "),
+                        Plain("25.0%"),
+                        Plain(", "),
+                        Plain("one"),
+                    )
                 ),
                 ListEntry((*bold("Rest"), Plain(": "), Plain("75.0%"))),
             ),
@@ -1420,9 +1455,8 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
             "number",
             (
                 ListEntry(
-                    (*bold("Go"), Plain(" "), Styled("italic", (Plain("first"),))),
+                    (Tinted("info", None, (*bold("Go"), Plain(" "), Styled("italic", (Plain("first"),)))),),
                     children=(Paragraph((Plain("d"),)),),
-                    tone="info",
                 ),
             ),
         ),
