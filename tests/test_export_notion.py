@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
@@ -1654,6 +1655,16 @@ def test_a_full_width_page_sizes_every_table_to_1200_pixels(
     columns: tuple[TableColumn, ...], widths: list[int]
 ) -> None:
     assert render_notion([_two_column_table(columns)], page_width="full") == _widths_page(widths)
+
+
+def test_a_short_column_beside_many_long_ones_keeps_a_readable_width() -> None:
+    header = (TableCell((Plain("%"),)), *(TableCell((Plain(f"Long {index}"),)) for index in range(5)))
+    row = TableRow((TableCell((Plain("55"),)), *(TableCell((Plain("y" * 80),)) for _ in range(5))))
+
+    page = render_notion([TableNode(header, (row,))], page_width="full")
+
+    widths = [int(width) for width in re.findall(r'<col width="(\d+)">', page)]
+    assert widths == [64, 228, 227, 227, 227, 227]
 
 
 def test_a_table_in_a_half_width_column_is_sized_to_its_column() -> None:

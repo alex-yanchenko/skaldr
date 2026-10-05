@@ -65,6 +65,7 @@ NOTION_PAGE_WIDTH_PX: Final[Mapping[NotionWidth, int]] = {
     "full": NOTION_FULL_PAGE_WIDTH_PX,
 }
 NARROWEST_COLUMN_CHARACTERS: Final = 8
+NARROWEST_COLUMN_PX: Final = 64
 WIDEST_COLUMN_CHARACTERS: Final = 60
 WHOLE_COLUMN_RATIO: Final = 100
 BACKGROUND_SUFFIX: Final = "_bg"
@@ -244,10 +245,24 @@ def _column_widths(table: TableNode, room: TableRoom) -> Sequence[int | None]:
     if auto_count == len(shares):
         if not room.sizes_every_table:
             return [None] * len(shares)
-        return apportioned([_content_weight(table, index) for index in range(len(shares))], room.width)
+        return _readable_widths([_content_weight(table, index) for index in range(len(shares))], room.width)
     auto_share = (1 - sum(share or 0 for share in shares)) / auto_count if auto_count else 0.0
     weights = [auto_share if share is None else share for share in shares]
-    return apportioned(weights, room.width)
+    return (
+        _readable_widths(weights, room.width) if room.sizes_every_table else apportioned(weights, room.width)
+    )
+
+
+def _readable_widths(weights: Sequence[float], width: int) -> list[int]:
+    floored: set[int] = set()
+    while True:
+        free = [index for index in range(len(weights)) if index not in floored]
+        shared = apportioned([weights[index] for index in free], width - NARROWEST_COLUMN_PX * len(floored))
+        too_narrow = {index for index, part in zip(free, shared, strict=True) if part < NARROWEST_COLUMN_PX}
+        if not too_narrow:
+            widths = dict.fromkeys(floored, NARROWEST_COLUMN_PX) | dict(zip(free, shared, strict=True))
+            return [widths[index] for index in range(len(weights))]
+        floored |= too_narrow
 
 
 def _width_attribute(width: int | None) -> str:
