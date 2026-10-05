@@ -5,7 +5,7 @@ The page is `version` + `meta` + author-declared `badges` + a flat, ordered `blo
 block, or an unknown top-level key each fails with a precise `blocks.3.items.2.value`-style path.
 
 No domain vocabulary is hardcoded here: tags/statuses live in `badges`, declared per report.
-The only fixed vocabularies are the design-system primitives — tones, badge colours, and the
+The only fixed vocabularies are the design-system primitives: tones, badge colours, and the
 state glyphs for status lists and timelines.
 """
 
@@ -131,7 +131,7 @@ def _to_badge_color(value: Any) -> Any:
 
 
 def _tone_names(tone_type: Any) -> tuple[str, ...]:
-    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator] —
+    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator]:
     for the manually-validated tones (table row + indicator cell) that aren't plain typed fields."""
     return get_args(get_args(tone_type)[0])
 
@@ -150,13 +150,13 @@ _CALLOUT_TONES = ("info", "success", "warning", "danger")
 
 def _to_callout_tone(value: Any) -> Any:
     """Normalise a palette alias to its semantic twin (blue→info), then reject a tone that isn't one of
-    the four callout meanings — naming both what was given and the allowed set, so the fix is obvious in
+    the four callout meanings, naming both what was given and the allowed set, so the fix is obvious in
     the error itself. A callout is a semantic 'stop and look' note, so teal/sky/accent/neutral (fine on
     cards/badges) have no callout look and are refused rather than silently mapped."""
     normalized = _to_tone(value)
     if isinstance(normalized, str) and normalized not in _CALLOUT_TONES:
         raise ValueError(
-            f"callout tone must be one of info, success, warning, danger (got '{value}') — a callout is "
+            f"callout tone must be one of info, success, warning, danger (got '{value}'): a callout is "
             "semantic; for another palette colour reach for a card, badge_row, or note"
         )
     return normalized
@@ -248,11 +248,11 @@ class _Block(FrozenModel):
 class Badge(FrozenModel):
     label: str = Field(description="Chip text for this tag/status.")
     tone: BadgeColor = Field(
-        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
+        description="Chip colour: a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…)."
     )
     legend: str | Literal[False] = Field(
         description="One-line meaning, shown in the derived legend. Set `false` to keep this badge out "
-        "of the legend entirely — for a one-off inline chip that needs no explanation.",
+        "of the legend entirely, for a one-off inline chip that needs no explanation.",
     )
 
 
@@ -264,7 +264,7 @@ class Meta(FrozenModel):
     updated: str | None = Field(
         default=None,
         description="When the report was last revised; feeds the footer as 'updated <value>'. A "
-        "free-form label like the date (author it — never auto-now).",
+        "free-form label like the date (author it; never auto-now).",
     )
     toc: bool = Field(
         default=False, description="Render a table of contents from top-level level-2 headings and sections."
@@ -291,7 +291,7 @@ class Heading(_Block):
     )
     sub: RichText | None = Field(
         default=None,
-        description="Optional caption line under the heading, styled subordinate — a real subtitle "
+        description="Optional caption line under the heading, styled subordinate: a real subtitle "
         "slot instead of a muted `text` paragraph faking one. Rich text. Does not feed the TOC (that "
         "stays the plain `text`).",
     )
@@ -334,7 +334,7 @@ class ListItem(FrozenModel):
 
 
 def _check_list_depth(items: list["str | ListItem"], depth: int) -> None:
-    """Reject list nesting deeper than `_MAX_LIST_DEPTH` — past that a bullet tree is unreadable and
+    """Reject list nesting deeper than `_MAX_LIST_DEPTH`: past that a bullet tree is unreadable and
     almost always a data-shape mistake. Depth 1 is the top-level list; each nested `items` is +1."""
     if depth > _MAX_LIST_DEPTH:
         raise ValueError(f"list nesting exceeds the maximum depth of {_MAX_LIST_DEPTH}")
@@ -359,7 +359,7 @@ class ListBlock(_Block):
     type: Literal["list"]
     style: ListStyle = Field(
         default="bullet",
-        description="Bulleted, numbered, or `check` — tickable checkboxes for a live checklist "
+        description="Bulleted, numbered, or `check`, which shows tickable checkboxes for a live checklist "
         "(the ticks are ephemeral: a browser reload resets them). `decision` marks each point as a "
         "decision taken (`decided: true`) or an open question.",
     )
@@ -428,7 +428,7 @@ class DefList(_Block):
     type: Literal["def_list"]
     items: list[DefItem] = Field(
         min_length=1,
-        description="Term/definition pairs — a real labelled list for procedural sub-labels like "
+        description="Term/definition pairs: a real labelled list for procedural sub-labels like "
         "Action / Expected / Say. Unlike `key_value` (compact muted metadata), the term reads as a "
         "prominent label and the body is full rich prose.",
     )
@@ -441,7 +441,7 @@ class CardDelta(FrozenModel):
     )
     tone: Tone | None = Field(
         default=None,
-        description="Delta colour — YOU set it: up isn't always good (down is good for cost/errors), so "
+        description="Delta colour, which YOU set: up isn't always good (down is good for cost/errors), so "
         "skaldr never infers it. Omit for a neutral chip.",
     )
 
@@ -450,7 +450,7 @@ class Card(FrozenModel):
     label: str | None = Field(
         default=None,
         description="Card label above the number. Required for a normal card; for a derived card "
-        "(`of_matrix`/`of_tables`) it defaults to the badge's label — set it only to override.",
+        "(`of_matrix`/`of_tables`) it defaults to the badge's label; set it only to override.",
     )
     value: Number | str | None = Field(
         default=None,
@@ -484,11 +484,11 @@ class Card(FrozenModel):
         default=None,
         description="Derive this card's value by counting the cells in the matrix with this `id` whose "
         "state is `badge`; the percentage denominator is that matrix's total cell count. When set, "
-        "`value` and `of` are computed — don't author them. Requires `badge`; not with `of_tables`.",
+        "`value` and `of` are computed, so don't author them. Requires `badge`; not with `of_tables`.",
     )
     of_tables: list[str] | None = Field(
         default=None,
-        description="Derive this card's value by counting `badge` across the tables with these `id`s — a "
+        description="Derive this card's value by counting `badge` across the tables with these `id`s, a "
         "page-level summary over several per-section tables that can't drift. Each named table must "
         "declare a `rollup` (its `rollup.by` is the column counted); the percentage denominator is the "
         "total rows across those tables. When set, `value`/`of` are computed. Requires `badge`; not with "
@@ -512,13 +512,13 @@ class Card(FrozenModel):
             if self.badge is None:
                 raise ValueError("a derived card (`of_matrix`/`of_tables`) needs a `badge` to count")
             if self.value is not None:
-                raise ValueError("a derived card computes its value — don't set `value`")
+                raise ValueError("a derived card computes its value; don't set `value`")
             if self.of is not None:
-                raise ValueError("a derived card computes its percentage — don't set `of`")
+                raise ValueError("a derived card computes its percentage; don't set `of`")
             if self.badges:
-                raise ValueError("a derived card shows its own badge chip — don't also set `badges`")
+                raise ValueError("a derived card shows its own badge chip; don't also set `badges`")
             if self.delta is not None:
-                raise ValueError("a derived card has no `delta` — its value is a live count")
+                raise ValueError("a derived card has no `delta`; its value is a live count")
         else:
             if self.badge is not None:
                 raise ValueError(
@@ -533,7 +533,7 @@ class Card(FrozenModel):
                 raise ValueError("`of_tables` must name at least one table")
             if len(set(self.of_tables)) != len(self.of_tables):
                 # a table listed twice would double-count in both the numerator and the denominator
-                raise ValueError("`of_tables` lists a table id more than once — each table is counted once")
+                raise ValueError("`of_tables` lists a table id more than once; each table is counted once")
         if self.of is not None:
             if isinstance(self.value, str):
                 raise ValueError("'of' requires a numeric 'value'")
@@ -554,7 +554,7 @@ class BadgeRef(FrozenModel):
 class BadgeLiteral(FrozenModel):
     label: str = Field(description="Chip text for a one-off badge (not from the page vocabulary).")
     tone: BadgeColor = Field(
-        description="Chip colour — a palette name (slate/blue/…) or its semantic tone twin."
+        description="Chip colour: a palette name (slate/blue/…) or its semantic tone twin."
     )
 
 
@@ -577,7 +577,7 @@ class BadgeRow(_Block):
     )
     groups: list[BadgeGroup] = Field(
         default_factory=list[BadgeGroup],
-        description="Grouped chips — each group renders as a labelled gutter row. Use this OR `items`, "
+        description="Grouped chips: each group renders as a labelled gutter row. Use this OR `items`, "
         "not both.",
     )
 
@@ -595,7 +595,7 @@ class Callout(_Block):
     type: Literal["callout"]
     tone: CalloutTone = Field(
         description="Accent + tint: info/success/warning/danger only (blue/green/amber/red alias in). A "
-        "callout is semantic, so teal/sky/accent/neutral aren't callout tones — use a card/badge_row/note."
+        "callout is semantic, so teal/sky/accent/neutral aren't callout tones; use a card/badge_row/note."
     )
     title: str | None = Field(default=None, description="Optional bold title line in the tone colour.")
     body: RichProse = Field(description="Rich-text body.")
@@ -642,7 +642,7 @@ class RangeSegment(FrozenModel):
     label: str = Field(min_length=1, description="Label shown inside the segment.")
     span: Number = Field(
         description="Relative width (> 0). Spans are normalised across the segments, so only the "
-        "ratios matter — [3, 1] and [30, 10] render identically."
+        "ratios matter: [3, 1] and [30, 10] render identically."
     )
     tone: Tone | None = Field(
         default=None, description="Soft-tint fill + text colour for the segment (defaults to neutral)."
@@ -731,7 +731,7 @@ class Divider(_Block):
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
-        description="A data: URI (self-contained — no external fetches). Base64-encode the payload "
+        description="A data: URI (self-contained, no external fetches). Base64-encode the payload "
         "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render."
     )
     alt: str = Field(description="Alt text for the image.")
@@ -764,7 +764,7 @@ class Timeline(_Block):
 
 
 class FlowStep(FrozenModel):
-    label: str = Field(min_length=1, description="Short stage name — the node label.")
+    label: str = Field(min_length=1, description="Short stage name: the node label.")
     tone: Tone | None = Field(
         default=None, description="Optional tone accent for this node's border + number."
     )
@@ -776,7 +776,8 @@ class FlowStep(FrozenModel):
     points: list[RichText] = Field(
         default_factory=list,
         description="Optional detail bullets (rich text) under the node, for when one line isn't enough. "
-        "Render below the note. Best paired with style: steps — a few bullets crowd a compact arrow chip.",
+        "Render below the note. Best paired with style: steps, since a few bullets crowd a compact "
+        "arrow chip.",
     )
     badges: list[str] = Field(
         default_factory=list,
@@ -797,13 +798,13 @@ class Flow(_Block):
     )
     style: FlowStyle = Field(
         default="arrow",
-        description="arrow (default): short-labelled nodes joined by → connectors — reach for it when the "
+        description="arrow (default): short-labelled nodes joined by → connectors; reach for it when the "
         "DIRECTION between stages is the message (a pipeline or a data flow). steps: equal cards that each "
-        "carry a caption line — reach for it when every stage needs a sentence of explanation.",
+        "carry a caption line; reach for it when every stage needs a sentence of explanation.",
     )
     loop: bool = Field(
         default=False,
-        description="Draw a '↺ back to <first>' return marker after the last node — for a cycle, "
+        description="Draw a '↺ back to <first>' return marker after the last node, for a cycle, "
         "not a one-way pipeline.",
     )
     numbered: bool = Field(
@@ -814,7 +815,7 @@ class Flow(_Block):
 class Fan(_Block):
     type: Literal["fan"]
     hub: FlowStep = Field(
-        description="The single node — the 'one' side (a fan-in's target, a fan-out's source)."
+        description="The single node: the 'one' side (a fan-in's target, a fan-out's source)."
     )
     spokes: list[FlowStep] = Field(
         min_length=2,
@@ -829,7 +830,7 @@ class Fan(_Block):
 
 
 class ChartSeries(FrozenModel):
-    label: str = Field(min_length=1, description="Series name — shown in the legend.")
+    label: str = Field(min_length=1, description="Series name, shown in the legend.")
     values: list[Number] = Field(
         min_length=1, description="One value per category, in the same order as `categories`."
     )
@@ -837,7 +838,7 @@ class ChartSeries(FrozenModel):
 
 
 class ChartSlice(FrozenModel):
-    label: str = Field(min_length=1, description="Slice name — shown in the legend.")
+    label: str = Field(min_length=1, description="Slice name, shown in the legend.")
     value: Number = Field(description="Slice magnitude (> 0); its share of the whole is derived.")
     tone: Tone | None = Field(default=None, description="Optional tone for this slice.")
 
@@ -884,7 +885,7 @@ class Chart(_Block):
                 if len(entry.values) != len(self.categories):
                     raise ValueError(
                         f"series '{entry.label}' has {len(entry.values)} values but there are "
-                        f"{len(self.categories)} categories — they must match"
+                        f"{len(self.categories)} categories; they must match"
                     )
                 # Bars/lines measure up from a zero baseline (no negative axis) — a negative value
                 # would draw an invalid or below-axis mark. Mirror the donut/meter positivity guard.
@@ -909,7 +910,7 @@ class Column(FrozenModel):
     kind: ColumnKind = Field(
         default="text",
         description="text (default) / rich (first one becomes the title column), number, badge (a "
-        "coloured chip — see `placement`), or indicator (a colour-only dot in its own column; the cell "
+        "coloured chip; see `placement`), or indicator (a colour-only dot in its own column; the cell "
         "value is a tone name). Omit for a plain text column: `{key, label}` alone is a text column.",
     )
     placement: ColumnPlacement = Field(
@@ -1046,8 +1047,8 @@ class Group(FrozenModel):
     name: str = Field(description="Group band label; shows the derived subtotal.")
     rows: list[TableRow] = Field(
         default_factory=list[TableRow],
-        description="Rows in this group — each a mapping or a positional list in the declared column "
-        "order. Empty renders a '— none —' row.",
+        description="Rows in this group, each a mapping or a positional list in the declared column "
+        "order. Empty renders a 'none' row.",
     )
 
     @model_validator(mode="after")
@@ -1204,7 +1205,7 @@ class Table(_Block):
                     )
             if not any(row[self.rollup.by].strip() for _, row in located_rows):
                 raise ValueError(
-                    f"rollup.by '{self.rollup.by}' has no values to count — every row is blank there"
+                    f"rollup.by '{self.rollup.by}' has no values to count: every row is blank there"
                 )
         if self.tint_by is not None:
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
@@ -1362,14 +1363,14 @@ ComparisonValue = StrictBool | RichText | ComparisonCell
 
 
 class ComparisonRow(FrozenModel):
-    feature: str = Field(min_length=1, description="Row label — the attribute being compared.")
+    feature: str = Field(min_length=1, description="Row label: the attribute being compared.")
     values: list[ComparisonValue] = Field(min_length=1, description="One cell per option, in column order.")
 
 
 class Comparison(_Block):
     type: Literal["comparison"]
     options: list[str] = Field(
-        min_length=2, description="The things being compared — the column headers (2+)."
+        min_length=2, description="The things being compared: the column headers (2+)."
     )
     rows: list[ComparisonRow] = Field(
         min_length=1, description="Feature rows; each supplies one value per option."
@@ -1380,7 +1381,7 @@ class Comparison(_Block):
     polarity: list[Literal["positive", "negative"]] | None = Field(
         default=None,
         description="Optional per-option polarity, one per option (default all positive). In a 'negative' "
-        "column a true ✓ reads as BAD (red) and a false ✗ as GOOD (green) — for present-is-bad attributes "
+        "column a true ✓ reads as BAD (red) and a false ✗ as GOOD (green), for present-is-bad attributes "
         "(e.g. 'leaks disk layout'). Affects only ✓/✗ bool cells; the glyph still marks present/absent.",
     )
 
@@ -1390,7 +1391,7 @@ class Comparison(_Block):
             if len(row.values) != len(self.options):
                 raise ValueError(
                     f"comparison row '{row.feature}' has {len(row.values)} values but there are "
-                    f"{len(self.options)} options — they must match"
+                    f"{len(self.options)} options; they must match"
                 )
         if self.highlight is not None and not (0 <= self.highlight < len(self.options)):
             raise ValueError(
@@ -1399,7 +1400,7 @@ class Comparison(_Block):
         if self.polarity is not None and len(self.polarity) != len(self.options):
             raise ValueError(
                 f"comparison polarity has {len(self.polarity)} entries but there are "
-                f"{len(self.options)} options — they must match"
+                f"{len(self.options)} options; they must match"
             )
         return self
 
@@ -1408,9 +1409,9 @@ class Comparison(_Block):
 
 
 class MatrixCell(FrozenModel):
-    row: str = Field(min_length=1, description="Which row this cell sits in — one of the block's `rows`.")
+    row: str = Field(min_length=1, description="Which row this cell sits in: one of the block's `rows`.")
     col: str = Field(
-        min_length=1, description="Which column this cell sits in — one of the block's `columns`."
+        min_length=1, description="Which column this cell sits in: one of the block's `columns`."
     )
     badge: str | None = Field(
         default=None,
@@ -1420,7 +1421,7 @@ class MatrixCell(FrozenModel):
     tone: BadgeColor | None = Field(
         default=None,
         description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
-        "badge — e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
+        "badge, e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
     )
     label: str | None = Field(
         default=None,
@@ -1481,49 +1482,49 @@ class Matrix(_Block):
                 raise ValueError(f"matrix cell col '{cell.col}' is not one of the declared columns")
             if (cell.row, cell.col) in seen:
                 raise ValueError(
-                    f"matrix has two cells at ('{cell.row}', '{cell.col}') — at most one per cell"
+                    f"matrix has two cells at ('{cell.row}', '{cell.col}'); at most one per cell"
                 )
             seen.add((cell.row, cell.col))
         return self
 
 
 class SwimlaneStep(FrozenModel):
-    lane: str = Field(min_length=1, description="Which lane this step sits in — one of the block's `lanes`.")
+    lane: str = Field(min_length=1, description="Which lane this step sits in: one of the block's `lanes`.")
     col: str = Field(
         min_length=1,
-        description="Which column (sprint) this step sits in — one of the block's `columns`. Two steps "
+        description="Which column (sprint) this step sits in: one of the block's `columns`. Two steps "
         "sharing a lane/col stack in that cell.",
     )
     n: str = Field(
         min_length=1,
-        description="The number shown in the step's cell — a free string ('1', '3a', 'R1'); skaldr never "
+        description="The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never "
         "derives or renumbers it, so it reads exactly as written.",
     )
     label: str = Field(min_length=1, description="Step label, shown beside the number.")
     group: str | None = Field(
         default=None,
-        description="Which group (milestone) this step belongs to — one of the block's `groups` that covers "
+        description="Which group (milestone) this step belongs to: one of the block's `groups` that covers "
         "its `col`. Required only when the column is split across more than one group; inferred otherwise.",
     )
     value: Number | None = Field(
         default=None,
-        description="Optional numeric weight for this step (points, hours, cost, count — whatever the "
+        description="Optional numeric weight for this step (points, hours, cost, count: whatever the "
         "matrix measures). When any step in the block has a value, skaldr auto-sums them into per-column "
-        "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals — so the "
+        "(footer row), per-lane (beside the lane label), and per-group (on the cap) totals, so the "
         "numbers never drift by hand. A step with no value counts as 0.",
     )
     url: str | None = Field(
         default=None,
-        description="Optional link (http/https/mailto) for the step — e.g. its Jira/GitHub ticket. The "
+        description="Optional link (http/https/mailto) for the step, e.g. its Jira/GitHub ticket. The "
         "step's number becomes a link out to it.",
     )
     state: SwimlaneStepState = Field(
         default="todo",
-        description="Progress state — the same progress axis as `status_list`/`timeline`, in roadmap "
+        description="Progress state: the same progress axis as `status_list`/`timeline`, in roadmap "
         "terms (`todo` for not-started, plus `deferred`). `done` (green), "
-        "`current` (in progress — the raised blue badge), `todo` (default — planned, not started; a cool "
-        "filled slate badge), `blocked` (waiting / on-hold — amber + dashed), `deferred` (pushed out / "
-        "post-MVP — a warm hollow badge that recedes). The value counts toward the totals in every state.",
+        "`current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool "
+        "filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / "
+        "post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
     )
     id: str | None = Field(
         default=None,
@@ -1599,12 +1600,12 @@ class SwimlaneColumn(FrozenModel):
 class SwimlaneGroup(FrozenModel):
     name: str = Field(min_length=1, description="Group (milestone / delivery) name, shown on its cap.")
     color: BadgeColor = Field(
-        description="Cap colour — a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
+        description="Cap colour: a palette name (slate/blue/…) or its semantic tone twin (neutral/info/…). "
         "Author-chosen, never auto-assigned: a group's colour carries meaning."
     )
     columns: list[str] = Field(
         min_length=1,
-        description="The columns this group spans, by their key (id, or name if no id) — a CONTIGUOUS run "
+        description="The columns this group spans, by their key (id, or name if no id): a CONTIGUOUS run "
         "of the block's `columns` (a group cannot skip a column). Order need not match; it is derived "
         "from the block `columns`.",
     )
@@ -1624,12 +1625,12 @@ class Swimlane(_Block):
         min_length=1,
         max_length=8,
         description="Lanes, in row order (top to bottom). A bare string is shorthand for `{name: …}`; "
-        "use `{id, name}` to give a stable reference key. Capped at 8 — more rows than that stop "
+        "use `{id, name}` to give a stable reference key. Capped at 8: more rows than that stop "
         "reading as a matrix; split into two swimlanes instead.",
     )
     columns: list[SwimlaneColumn] = Field(
         min_length=1,
-        description="Columns, left to right — the sprint / phase axis. A bare string is shorthand for "
+        description="Columns, left to right: the sprint / phase axis. A bare string is shorthand for "
         "`{name: …}`; use `{id, name, sub}` for a stable key and/or a secondary header caption.",
     )
     groups: list[SwimlaneGroup] = Field(
@@ -1717,7 +1718,7 @@ class Swimlane(_Block):
             positions = [index for index, (_, name) in enumerate(segments) if name == group.name]
             if positions and positions != list(range(positions[0], positions[-1] + 1)):
                 raise ValueError(
-                    f"swimlane group '{group.name}' cannot be laid out contiguously — it shares a column "
+                    f"swimlane group '{group.name}' cannot be laid out contiguously: it shares a column "
                     "with another group while spanning past it; groups must nest, not interleave"
                 )
         return tuple(segments)
@@ -1761,7 +1762,7 @@ class Swimlane(_Block):
                     raise ValueError(f"swimlane step group '{step.group}' does not cover column '{step.col}'")
             elif len(covering) > 1:
                 raise ValueError(
-                    f"swimlane step in column '{step.col}' must name a group — that column is split across "
+                    f"swimlane step in column '{step.col}' must name a group: that column is split across "
                     f"{len(covering)} groups"
                 )
 
@@ -2056,7 +2057,7 @@ class _RequestCore(FrozenModel):
         if len(self.cases) > MAX_STRIP_LABELS:
             raise ValueError(
                 f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
-                f"{len(self.cases)} — split it into blocks a reader can take in"
+                f"{len(self.cases)}; split it into blocks a reader can take in"
             )
         if self.case_variable is None:
             for case in self.cases:
@@ -2148,14 +2149,14 @@ class Request(_RequestCore, _VariableOwner, _Block):
             raise ValueError(f"request declares a variable twice: {', '.join(sorted(repeated))}")
         if self.case_variable is not None and self.case_variable in declared:
             raise ValueError(
-                f"`{self.case_variable}` is both the case_variable and a declared variable — each case "
+                f"`{self.case_variable}` is both the case_variable and a declared variable: each case "
                 "supplies it, so it must not also be a field the reader fills"
             )
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
                 f"request declares {', '.join(sorted(unused))} but never uses "
-                f"{'them' if len(unused) > 1 else 'it'} — every variable needs a `{{{{name}}}}` to fill"
+                f"{'them' if len(unused) > 1 else 'it'}; every variable needs a `{{{{name}}}}` to fill"
             )
         return self
 
@@ -2207,7 +2208,7 @@ class RequestStep(_RequestCore):
             raise ValueError(f"step captures the same name twice: {', '.join(sorted(repeated))}")
         if self.captures and len(self.cases) > 1:
             raise ValueError(
-                f"step '{self.label}' captures a value and records {len(self.cases)} cases — a capture "
+                f"step '{self.label}' captures a value and records {len(self.cases)} cases; a capture "
                 "reads one definite response, so a step that produces a value keeps a single case"
             )
         return self
@@ -2253,7 +2254,7 @@ class RequestFlow(_VariableOwner, _Block):
         clashing = {name for name in captured if name in declared}
         if clashing:
             raise ValueError(
-                f"{', '.join(sorted(clashing))} is both captured and declared — a step produces it, so "
+                f"{', '.join(sorted(clashing))} is both captured and declared: a step produces it, so "
                 "it must not also be a field the reader fills"
             )
         duplicated = {name for name in captured if captured.count(name) > 1}
@@ -2407,11 +2408,11 @@ class Section(_Block):
     updated: str | None = Field(
         default=None,
         description="When this section was last revised; shown as a muted stamp in its header. A "
-        "free-form label like the report date (author it — never auto-now).",
+        "free-form label like the report date (author it; never auto-now).",
     )
     blocks: list[FullWidthBlock] = Field(
         min_length=1,
-        description="Blocks in the section — any block except another section, grid, or walkthrough.",
+        description="Blocks in the section: any block except another section, grid, or walkthrough.",
     )
 
 
@@ -2420,8 +2421,8 @@ class Panel(_Block):
     title: str = Field(min_length=1, description="Panel title, shown in the header band.")
     blocks: list[FullWidthBlock] = Field(
         min_length=1,
-        description="Blocks inside the panel — any block except another panel, section, grid, or "
-        "walkthrough. Unlike a `section`, a panel is always open — "
+        description="Blocks inside the panel: any block except another panel, section, grid, or "
+        "walkthrough. Unlike a `section`, a panel is always open: "
         "a titled framed card, one per 'slide' in a deck-style doc.",
     )
 
@@ -2487,7 +2488,7 @@ def _check_span_sum(cells: Sequence[GridCell | InnerGridCell]) -> None:
 class WalkthroughStep(FrozenModel):
     label: str = Field(
         min_length=1,
-        description="Step title — a few words to a short sentence; it wraps across lines, so it can be long.",
+        description="Step title: a few words to a short sentence; it wraps across lines, so it can be long.",
     )
     sub: RichText | None = Field(
         default=None, description="Optional one-line sub-label under the title (rich text)."
@@ -2495,7 +2496,7 @@ class WalkthroughStep(FrozenModel):
     tone: Tone | None = Field(
         default=None,
         description="Optional tone for the step's left rail. Every step always HAS the rail (it is the "
-        "list's structure); tone only changes its colour, so use it to mark a key step — not every "
+        "list's structure); tone only changes its colour, so use it to mark a key step, not every "
         "step. The numeral stays a uniform muted grey regardless, so tones can't leave steps mismatched.",
     )
     detail: list[CellBlock] = Field(
@@ -2716,7 +2717,7 @@ class Report(FrozenModel):
         counts = Counter(matrix.id for matrix in iter_matrices(self.blocks) if matrix.id is not None)
         duplicates = sorted(mid for mid, count in counts.items() if count > 1)
         if duplicates:
-            raise ValueError(f"matrix id(s) used more than once: {duplicates} — matrix ids must be unique")
+            raise ValueError(f"matrix id(s) used more than once: {duplicates}; matrix ids must be unique")
         for card in iter_cards(self.blocks):
             if card.of_matrix is not None and card.of_matrix not in counts:
                 raise ValueError(f"card of_matrix '{card.of_matrix}' names no matrix with that id")
@@ -2735,14 +2736,14 @@ class Report(FrozenModel):
                     with_rollup.add(table.id)
         duplicates = sorted(tid for tid, count in counts.items() if count > 1)
         if duplicates:
-            raise ValueError(f"table id(s) used more than once: {duplicates} — table ids must be unique")
+            raise ValueError(f"table id(s) used more than once: {duplicates}; table ids must be unique")
         for card in iter_cards(self.blocks):
             for tid in card.of_tables or []:
                 if tid not in counts:
                     raise ValueError(f"card of_tables references '{tid}', which names no table with that id")
                 if tid not in with_rollup:
                     raise ValueError(
-                        f"card of_tables references table '{tid}', which has no `rollup` — "
+                        f"card of_tables references table '{tid}', which has no `rollup`; "
                         "of_tables counts a badge using each table's rollup column, so it must declare one"
                     )
         return self
@@ -2753,7 +2754,7 @@ class Report(FrozenModel):
         duplicates = sorted(key for key, count in counts.items() if count > 1)
         if duplicates:
             raise ValueError(
-                f"request block label(s) used more than once: {duplicates} — a label keys what a "
+                f"request block label(s) used more than once: {duplicates}. A label keys what a "
                 "reader's fields are remembered under while their tab is open, so two blocks sharing "
                 "one would share those values; give one of them an `id`"
             )
@@ -2817,7 +2818,7 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...]) -> Any:
         chain = " -> ".join(str(ancestor) for ancestor in (*ancestors, resolved))
         raise ReportError(f"circular !include: {chain}")
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
-        raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path} — likely a mistake")
+        raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
     text = read_text_file(path)
 
     class _IncludeLoader(yaml.SafeLoader):

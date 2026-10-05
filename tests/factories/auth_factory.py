@@ -2,17 +2,31 @@ import base64
 import json
 import socket
 import threading
+import traceback
 from collections.abc import Callable
+from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import pytest
 from keyring.backend import KeyringBackend
+from keyring.backends import null
 from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
 from skaldr.auth.store import JiraCredentials, NotionCredentials
+
+SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
+
+
+def rendered_traceback(error: BaseException) -> str:
+    return "".join(traceback.format_exception(error))
+
+
+def assert_secret_not_in_error_chain(error: BaseException, secret: str) -> None:
+    secret_is_shown = secret in rendered_traceback(error)
+    assert (secret_is_shown, error.__cause__, error.__context__) == (False, None, None)
 
 
 class InMemoryKeyring(KeyringBackend):
@@ -36,6 +50,49 @@ class InMemoryKeyring(KeyringBackend):
     def delete_password(self, service: str, username: str) -> None:
         if self.entries.pop((service, username), None) is None:
             raise PasswordDeleteError(username)
+
+
+class PlaintextKeyring(InMemoryKeyring):
+    __module__ = "keyrings.alt.file"
+
+
+class PlaintextKeyringSubclass(PlaintextKeyring):
+    pass
+
+
+class NullKeyringSubclass(null.Keyring):
+    pass
+
+
+class ReadRecordingKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads: list[tuple[str, str]] = []
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        self.reads.append((service, username))
+        return super().get_password(service, username)
+
+
+class WriteFailingKeyring(InMemoryKeyring):
+    def __init__(self, failure: BaseException) -> None:
+        super().__init__()
+        self.failure = failure
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        raise self.failure
+
+
+def insecure_keyring_refusal(backend_name: str) -> str:
+    return (
+        f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "
+        "secrets where skaldr cannot vouch for them, and the null and fail backends store nothing. Choose a "
+        "secure backend with the PYTHON_KEYRING_BACKEND environment variable or keyring's keyringrc.cfg, "
+        "for example keyring.backends.macOS.Keyring, keyring.backends.Windows.WinVaultKeyring or "
+        "keyring.backends.SecretService.Keyring"
+    )
 
 
 class LockedKeyring(KeyringBackend):
@@ -75,6 +132,59 @@ MYSELF: dict[str, object] = {
 Visit = Callable[[str], str]
 
 
+def site_refusal(typed: str) -> str:
+    return f"The Jira site must be an https URL like https://<site>.atlassian.net, not {typed!r}"
+
+
+USERINFO_REFUSAL = (
+    "The Jira site must be an https URL like https://<site>.atlassian.net, with no user name or password "
+    "before the host"
+)
+
+
+@dataclass(frozen=True)
+class RefusedSite:
+    case: str
+    typed: str
+    carries_userinfo: bool = False
+
+    @property
+    def refusal(self) -> str:
+        return USERINFO_REFUSAL if self.carries_userinfo else site_refusal(self.typed)
+
+
+REFUSED_SITES = (
+    RefusedSite("userinfo that reads as the site", "acme.atlassian.net@evil.example", carries_userinfo=True),
+    RefusedSite(
+        "userinfo after the scheme", "https://acme.atlassian.net@evil.example", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a user name and password", "https://reader:secret@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a fragment before the site", "https://evil.example#@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a backslash before the site", "https://evil.example\\@acme.atlassian.net", carries_userinfo=True
+    ),
+    RefusedSite(
+        "a backslash after the site", "https://acme.atlassian.net\\@evil.example", carries_userinfo=True
+    ),
+    RefusedSite("a backslash for a slash", "https://acme.atlassian.net\\jira"),
+    RefusedSite("a query", "https://acme.atlassian.net/?next=/jira"),
+    RefusedSite("a fragment", "https://acme.atlassian.net/jira#top"),
+    RefusedSite("an ip literal", "https://127.0.0.1"),
+    RefusedSite("an ipv6 literal", "https://[::1]"),
+    RefusedSite("localhost with a port", "localhost:22"),
+    RefusedSite("a host outside atlassian.net", "https://evil.example"),
+    RefusedSite("atlassian.net itself", "https://atlassian.net"),
+    RefusedSite("atlassian.net inside another host", "https://acme.atlassian.net.evil.example"),
+)
+
+SITE_REFUSALS = [pytest.param(site.typed, site.refusal, id=site.case) for site in REFUSED_SITES]
+SITES_OFF_JIRA_CLOUD = [pytest.param(site.typed, id=site.case) for site in REFUSED_SITES]
+
+
 def approving(state: str) -> str:
     return f"/callback?code=the-code&state={state}"
 
@@ -87,8 +197,16 @@ def refusing_without_state(_state: str) -> str:
     return "/callback?error=access_denied"
 
 
+def refusing_with_an_escape_sequence(state: str) -> str:
+    return f"/callback?error=%1b%5b2J%1b%5bHPaste+your+client+secret&state={state}"
+
+
 def forged_refusal(_state: str) -> str:
     return "/callback?error=access_denied&state=forged"
+
+
+def approving_without_state(_state: str) -> str:
+    return "/callback?code=the-code"
 
 
 def forged(_state: str) -> str:
@@ -157,11 +275,23 @@ def fake_api(routes: dict[str, tuple[int, object]], seen: list[httpx2.Request]) 
     return httpx2.MockTransport(respond)
 
 
-def refusing_connections() -> httpx2.MockTransport:
+def refusing_connections(seen: list[httpx2.Request] | None = None) -> httpx2.MockTransport:
     def refuse(request: httpx2.Request) -> httpx2.Response:
+        if seen is not None:
+            seen.append(request)
         raise httpx2.ConnectError("connection refused", request=request)
 
     return httpx2.MockTransport(refuse)
+
+
+def revoke_request_for(access_token: str) -> dict[str, object]:
+    return {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/oauth/revoke",
+        "authorization": basic_auth_header("client-id", "client-secret"),
+        "content_type": "application/json",
+        "body": {"token": access_token},
+    }
 
 
 def summarise(request: httpx2.Request) -> dict[str, object]:

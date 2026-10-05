@@ -150,7 +150,7 @@ def _link_runs(url: str, label: Rich, rules: RichContext) -> Rich:
     if rules.anchor_ids is None:
         return (Plain("["), *label, Plain(f"]({url})"))
     if url.removeprefix(ANCHOR_PREFIX) not in rules.anchor_ids:
-        raise ReportError(f"rich text links to unknown anchor '{url}' — no heading or section has that id")
+        raise ReportError(f"rich text links to unknown anchor '{url}': no heading or section has that id")
     return (AnchorLink(label, url.removeprefix(ANCHOR_PREFIX)),)
 
 

@@ -882,7 +882,7 @@ def test_an_anchor_link_target_is_read_as_written_and_fails_when_no_heading_has_
         parse_rich(f"[x]({target})", FULL_CONTEXT)
 
     assert str(raised.value) == (
-        f"rich text links to unknown anchor '{target}' — no heading or section has that id"
+        f"rich text links to unknown anchor '{target}': no heading or section has that id"
     )
 
 

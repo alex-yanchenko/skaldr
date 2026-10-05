@@ -95,7 +95,7 @@ def test_an_export_of_an_invalid_file_without_check_reports_the_error_and_writes
     assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 1
 
     assert capsys.readouterr().err == (
-        "error: blocks.0.body: rich text links to unknown anchor '#nowhere' — "
+        "error: blocks.0.body: rich text links to unknown anchor '#nowhere': "
         "no heading or section has that id\n"
     )
     assert not export_dir.exists()
@@ -160,7 +160,7 @@ def test_the_cli_refuses_to_check_and_export_several_files(
 
     assert raised.value.code == 2
     assert (
-        "an output flag renders one file — pass a single content file, or drop -o/--pdf/--embed/--export"
+        "an output flag renders one file: pass a single content file, or drop -o/--pdf/--embed/--export"
         in capsys.readouterr().err
     )
 
