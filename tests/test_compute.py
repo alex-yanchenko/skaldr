@@ -8,6 +8,7 @@ import pytest
 
 from skaldr.compute import (
     DELTA_GLYPHS,
+    Provenance,
     Strip,
     StripLabel,
     anchor_slugs,
@@ -962,7 +963,7 @@ def test_provenance_footer_recurses_into_sections() -> None:
 
     footer = provenance_footer(report)
 
-    assert footer == "src · Reconciles: 10 + 90 clean = 100."
+    assert footer == Provenance("src", ("Reconciles: 10 + 90 clean = 100.",))
 
 
 def test_provenance_footer_includes_updated_after_the_date() -> None:
@@ -970,26 +971,43 @@ def test_provenance_footer_includes_updated_after_the_date() -> None:
         make_report(meta={"title": "T", "source": "src", "date": "Q3 2026", "updated": "18 Jul 2026"})
     )
 
-    assert provenance_footer(report) == "src · Q3 2026 · updated 18 Jul 2026"
+    assert provenance_footer(report) == Provenance("src", ("Q3 2026", "updated 18 Jul 2026"))
 
 
 def test_provenance_footer_updated_alone() -> None:
     report = parse_report(make_report(meta={"title": "T", "updated": "18 Jul 2026"}))
 
-    assert provenance_footer(report) == "updated 18 Jul 2026"
+    assert provenance_footer(report) == Provenance(None, ("updated 18 Jul 2026",))
 
 
 def test_provenance_footer_omits_updated_when_absent() -> None:
     report = parse_report(make_report(meta={"title": "T", "source": "src"}))
 
-    assert provenance_footer(report) == "src"
+    assert provenance_footer(report) == Provenance("src", ())
 
 
 def test_provenance_footer_omits_updated_when_blank() -> None:
     # a blank string is absent: no stray "updated " segment in the footer
     report = parse_report(make_report(meta={"title": "T", "source": "src", "updated": ""}))
 
-    assert provenance_footer(report) == "src"
+    assert provenance_footer(report) == Provenance("src", ())
+
+
+def test_a_page_with_no_source_date_or_reconcile_has_no_footer() -> None:
+    assert provenance_footer(parse_report(make_report(meta={"title": "T"}))) is None
+
+
+@pytest.mark.parametrize(
+    ("meta", "footer"),
+    [
+        pytest.param({"source": "   "}, None, id="alone-is-no-footer"),
+        pytest.param(
+            {"source": "  ", "date": "d"}, Provenance(None, ("d",)), id="beside-a-date-is-no-source"
+        ),
+    ],
+)
+def test_a_whitespace_source_is_no_source(meta: dict[str, str], footer: Provenance | None) -> None:
+    assert provenance_footer(parse_report(make_report(meta={"title": "T", **meta}))) == footer
 
 
 def test_table_rollup_counts_rows_by_the_badge_column_in_first_appearance_order() -> None:
@@ -1099,7 +1117,7 @@ def test_reconciled_table_in_a_walkthrough_step_detail_reaches_the_footer() -> N
         )
     )
 
-    assert provenance_footer(report) == "src · Reconciles: 10 + 90 clean = 100."
+    assert provenance_footer(report) == Provenance("src", ("Reconciles: 10 + 90 clean = 100.",))
 
 
 def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail() -> None:

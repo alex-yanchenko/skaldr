@@ -60,6 +60,7 @@ NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
+NOTION_PLAIN_TEXT_LANGUAGE: Final = "plain text"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 NOTION_FULL_PAGE_WIDTH_PX: Final = 1200
 NOTION_PAGE_WIDTH_PX: Final[Mapping[NotionWidth, int]] = {
@@ -388,7 +389,7 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
         case TableNode():
             return _table_lines(node, room)
         case CodeBlock():
-            return code_block_lines(node)
+            return code_block_lines(replace(node, language=node.language or NOTION_PLAIN_TEXT_LANGUAGE))
         case DisplayMath():
             return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
         case Callout():
