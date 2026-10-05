@@ -2089,12 +2089,23 @@ def test_rich_cell_single_newline_is_not_a_paragraph_break() -> None:
     assert '<p class="cell-p">' not in html
 
 
-def test_a_rich_cell_holding_list_lines_renders_a_list() -> None:
-    html = render_html(parse_report(make_report(blocks=[_cell_table("Steps:\n- `a`\n- b")])))
+@pytest.mark.parametrize(
+    ("detail", "cell"),
+    [
+        pytest.param(
+            "Steps:\n- `a`\n- b",
+            '<td><p class="cell-p">Steps:</p><ul class="list"><li><code>a</code></li><li>b</li></ul></td>',
+            id="bullets",
+        ),
+        pytest.param(
+            "2. b\n3. c", '<td><ol class="list" start="2"><li>b</li><li>c</li></ol></td>', id="numbers"
+        ),
+    ],
+)
+def test_a_rich_cell_holding_list_lines_renders_a_list(detail: str, cell: str) -> None:
+    html = render_html(parse_report(make_report(blocks=[_cell_table(detail)])))
 
-    assert (
-        '<td><p class="cell-p">Steps:</p><ul class="list"><li><code>a</code></li><li>b</li></ul></td>' in html
-    )
+    assert cell in html
 
 
 @pytest.mark.parametrize(
@@ -2124,6 +2135,26 @@ def test_a_rich_cell_holding_list_lines_renders_a_list() -> None:
             {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two"}]},
             '<dd><ul class="list"><li>one</li><li>two</li></ul></dd>',
             id="definition-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- one\n- two"}]},
+            '<dd><p class="prose-p">Intro.</p><ul class="list"><li>one</li><li>two</li></ul></dd>',
+            id="definition-body-with-a-paragraph-before-its-list",
+        ),
+        pytest.param(
+            {"type": "text", "muted": True, "body": "Intro\n- a\n- b"},
+            '<p class="text muted">Intro</p><ul class="list muted"><li>a</li><li>b</li></ul>',
+            id="muted-text-body",
+        ),
+        pytest.param(
+            {"type": "text", "body": "0. zero\n1. one"},
+            '<ol class="list" start="0"><li>zero</li><li>one</li></ol>',
+            id="a-numbered-list-from-zero",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n- b\n  - x\n  - y"},
+            '<div><ul class="list"><li>a</li><li>b<ul class="list"><li>x</li><li>y</li></ul></li></ul></div>',
+            id="a-nested-list",
         ),
     ],
 )

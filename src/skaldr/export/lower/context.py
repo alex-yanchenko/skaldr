@@ -15,10 +15,11 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
-from skaldr.prose_blocks import ProseBlock, ProseList, prose_blocks
+from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks
 from skaldr.richtext import Plain, Rich, RichContext
 
 TEXT_BULLET: Final = "• "
+NESTED_TEXT_BULLET: Final = "◦ "
 
 
 def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
@@ -50,19 +51,28 @@ class Lowering:
     def _prose_node(self, block: ProseBlock, tone: ToneName | None) -> Node:
         if isinstance(block, str):
             return Paragraph(self.rich(block), tone)
-        entries = tuple(ListEntry(self.rich(item)) for item in block.items)
+        entries = tuple(
+            ListEntry(
+                self.rich(item.text), children=tuple(self._prose_node(child, None) for child in item.blocks)
+            )
+            for item in block.items
+        )
         return (
             ListNode("bullet", entries) if block.start is None else ListNode("number", entries, block.start)
         )
 
     def prose_lines(self, text: str) -> tuple[ExportRich, ...]:
+        return tuple(line for block in prose_blocks(text) for line in self._text_lines(block, depth=0))
+
+    def _text_lines(self, block: ProseBlock, depth: int) -> list[ExportRich]:
+        if isinstance(block, str):
+            return [self.rich(block)]
         lines: list[ExportRich] = []
-        for block in prose_blocks(text):
-            if isinstance(block, str):
-                lines.append(self.rich(block))
-            else:
-                lines.extend((Plain(marker), *self.rich(item)) for marker, item in _item_markers(block))
-        return tuple(lines)
+        for marker, item in _item_markers(block, depth):
+            lines.append((Plain(marker), *self.rich(item.text)))
+            for child in item.blocks:
+                lines += self._text_lines(child, depth + 1)
+        return lines
 
     def anchor_of(self, block: AnyBlock) -> str | None:
         return self.anchors.get(id(block))
@@ -104,9 +114,9 @@ def lowering_for(report: Report) -> Lowering:
     )
 
 
-def _item_markers(block: ProseList) -> list[tuple[str, str]]:
+def _item_markers(block: ProseList, depth: int) -> list[tuple[str, ProseItem]]:
     if block.start is None:
-        return [(TEXT_BULLET, item) for item in block.items]
+        return [(TEXT_BULLET if depth == 0 else NESTED_TEXT_BULLET, item) for item in block.items]
     return [(f"{number}. ", item) for number, item in enumerate(block.items, start=block.start)]
 
 

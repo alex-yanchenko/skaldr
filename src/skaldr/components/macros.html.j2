@@ -92,8 +92,8 @@
 {% macro list_item_body(item, style) %}{% set text = item if item is string else item.text %}{% set checked = false if item is string else item.checked %}{% set decided = false if item is string else item.decided %}{% if style == "check" %}<label class="chk"><input type="checkbox"{{ " checked" if checked else "" }}><span>{{ text | richtext }}</span></label>{% elif style == "decision" %}<span class="dec {{ "decided" if decided else "open" }}"><span class="glyph">{{ "✓" if decided else "?" }}</span><span>{{ text | richtext }}</span></span>{% else %}{{ text | richtext }}{% endif %}{% endmacro %}
 {% macro iconed(icon) %}{% if icon %}<span class="block-icon" aria-hidden="true">{{ icon }}</span><div class="iconed-body">{{ caller() }}</div>{% else %}{{ caller() }}{% endif %}{% endmacro %}
 {% macro rich_list(items, style, numbering=none, start=none) %}<{{ "ol" if style == "number" else "ul" }} class="list{{ " " ~ style if style in ("check", "decision") else "" }}"{% if start %} start="{{ start }}"{% endif %}{% if numbering in LIST_NUMBERING_TYPES %} type="{{ LIST_NUMBERING_TYPES[numbering] }}"{% endif %}>{% for item in items %}<li>{{ list_item_body(item, style) }}{% if item is not string and item.items %}{{ rich_list(item.items, style, numbering) }}{% endif %}</li>{% endfor %}</{{ "ol" if style == "number" else "ul" }}>{% endmacro %}
-{% macro prose_list(block) %}{% set tag = "ul" if block.start is none else "ol" %}<{{ tag }} class="list"{% if block.start not in (none, 1) %} start="{{ block.start }}"{% endif %}>{% for item in block.items %}<li>{{ item | richtext }}</li>{% endfor %}</{{ tag }}>{% endmacro %}
-{% macro prose_block(block, p_class) %}{% if block is string %}<p class="{{ p_class }}">{{ block | richtext }}</p>{% else %}{{ prose_list(block) }}{% endif %}{% endmacro %}
+{% macro prose_list(block, muted=false) %}{% set tag = "ul" if block.start is none else "ol" %}<{{ tag }} class="list{{ " muted" if muted else "" }}"{% if block.start not in (none, 1) %} start="{{ block.start }}"{% endif %}>{% for item in block.items %}<li>{{ item.text | richtext }}{% for child in item.blocks %}{{ prose_block(child, "prose-p") }}{% endfor %}</li>{% endfor %}</{{ tag }}>{% endmacro %}
+{% macro prose_block(block, p_class, muted=false) %}{% if block is string %}<p class="{{ p_class }}">{{ block | richtext }}</p>{% else %}{{ prose_list(block, muted) }}{% endif %}{% endmacro %}
 {% macro prose_paras(text, p_class="prose-p") %}{% set blocks = text | prose_blocks %}{% if blocks | length == 1 and blocks[0] is string %}{{ blocks[0] | richtext }}{% else %}{% for b in blocks %}{{ prose_block(b, p_class) }}{% endfor %}{% endif %}{% endmacro %}
 
 {% macro flow(b) %}
@@ -285,7 +285,7 @@
 {% if block.type == "heading" %}
 <h{{ block.level }} id="{{ anchor_id(block) }}">{{ block.text }}{% if block.sub %}<span class="hsub">{{ block.sub | richtext }}</span>{% endif %}</h{{ block.level }}>
 {% elif block.type == "text" %}
-{% for b in block.body | prose_blocks %}{{ prose_block(b, "text muted" if block.muted else "text") }}{% endfor %}
+{% for b in block.body | prose_blocks %}{{ prose_block(b, "text muted" if block.muted else "text", block.muted) }}{% endfor %}
 {% elif block.type == "list" %}
 {{ rich_list(block.items, block.style, block.numbering, block.start) }}
 {% elif block.type == "fact_strip" %}

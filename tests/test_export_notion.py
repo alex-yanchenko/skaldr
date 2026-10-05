@@ -1496,7 +1496,7 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
             id="definition-that-opens-with-a-list",
         ),
         pytest.param(
-            {"type": "quote", "body": "Said:\n2. b\n3. c"},
+            {"type": "quote", "body": "Said:\n\n2. b\n3. c"},
             "> Said:<br>2\\. b<br>3\\. c\n",
             id="quote-lines-carry-their-markers",
         ),
@@ -1504,6 +1504,31 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
             {"type": "text", "body": "Intro\n- a\n- b"},
             "Intro\n- a\n- b\n",
             id="text-body",
+        ),
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- a\n- b"}]},
+            "- **Why**: Intro.\n\t- a\n\t- b\n",
+            id="definition-with-a-paragraph-before-its-list",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "1. a\n2. b"},
+            '<callout icon="💡" color="blue_bg">\n\t1. a\n\t2. b\n</callout>\n',
+            id="a-numbered-list-from-one-is-native",
+        ),
+        pytest.param(
+            {"type": "text", "body": "3. a\n4. b"},
+            "- 3\\. a\n- 4\\. b\n",
+            id="a-numbered-list-from-three-keeps-its-numbers",
+        ),
+        pytest.param(
+            {"type": "text", "body": "- a\n- b\n\nOutro\n\n- c\n- d\n* e\n* f"},
+            "- a\n- b\nOutro\n- c\n- d\n<empty-block/>\n- e\n- f\n",
+            id="a-paragraph-between-lists-and-a-marker-change",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n- b\n  - x\n  - y"},
+            '<callout icon="💡" color="blue_bg">\n\t- a\n\t- b\n\t\t- x\n\t\t- y\n</callout>\n',
+            id="a-nested-list",
         ),
     ],
 )
