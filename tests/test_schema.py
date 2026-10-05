@@ -1,10 +1,11 @@
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import pytest
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
+from pydantic import JsonValue
 
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, parse_report
@@ -28,20 +29,37 @@ def schema_errors(document: Any) -> list[str]:
     return [error.message for error in SCHEMA_VALIDATOR.iter_errors(document)]
 
 
-def _branch_the_discriminator_picks(error: ValidationError) -> list[ValidationError]:
-    schema = cast("dict[str, Any]", error.schema)
+def as_json(value: Any) -> JsonValue:
+    return value
+
+
+def _ref_the_discriminator_picks(error: ValidationError) -> JsonValue:
+    schema, instance = as_json(error.schema), as_json(error.instance)
+    if not isinstance(schema, dict) or not isinstance(instance, dict):
+        return None
     discriminator = schema.get("discriminator")
-    instance: object = error.instance
-    if discriminator is None or not isinstance(instance, dict):
+    if not isinstance(discriminator, dict):
+        return None
+    mapping, property_name = discriminator.get("mapping"), discriminator.get("propertyName")
+    if not isinstance(mapping, dict) or not isinstance(property_name, str):
+        return None
+    tag = instance.get(property_name)
+    return mapping.get(tag) if isinstance(tag, str) else None
+
+
+def _ref_of_branch(error: ValidationError, branch_error: ValidationError) -> JsonValue:
+    branches, index = as_json(error.validator_value), branch_error.relative_schema_path[0]
+    if not isinstance(branches, list) or not isinstance(index, int):
+        return None
+    branch = branches[index]
+    return branch.get("$ref") if isinstance(branch, dict) else None
+
+
+def _branch_the_discriminator_picks(error: ValidationError) -> list[ValidationError]:
+    picked = _ref_the_discriminator_picks(error)
+    if picked is None:
         return list(error.context)
-    instance = cast("dict[str, Any]", instance)
-    picked = discriminator["mapping"].get(instance.get(discriminator["propertyName"]))
-    branches = cast("list[dict[str, Any]]", error.validator_value)
-    return [
-        branch_error
-        for branch_error in error.context
-        if branches[cast("int", branch_error.relative_schema_path[0])].get("$ref") == picked
-    ]
+    return [branch_error for branch_error in error.context if _ref_of_branch(error, branch_error) == picked]
 
 
 def _leaf_errors(errors: Iterable[ValidationError]) -> Iterator[ValidationError]:
@@ -60,13 +78,13 @@ def schema_messages_at(document: Any, path: SchemaPath) -> set[str]:
     }
 
 
-def schema_keys(node: object) -> Iterator[str]:
+def schema_keys(node: JsonValue) -> Iterator[str]:
     if isinstance(node, dict):
-        for key, value in cast("dict[str, object]", node).items():
+        for key, value in node.items():
             yield key
             yield from schema_keys(value)
     elif isinstance(node, list):
-        for item in cast("list[object]", node):
+        for item in node:
             yield from schema_keys(item)
 
 
@@ -123,7 +141,7 @@ def test_an_empty_bare_string_lane_is_refused_by_both_the_build_and_the_schema()
 
 
 def test_every_numeric_bound_in_the_schema_is_a_json_schema_keyword() -> None:
-    assert sorted(set(schema_keys(SCHEMA)) & PYDANTIC_ONLY_BOUND_KEYWORDS) == []
+    assert sorted(set(schema_keys(as_json(SCHEMA))) & PYDANTIC_ONLY_BOUND_KEYWORDS) == []
 
 
 def _numbered_list(start: int) -> dict[str, Any]:
