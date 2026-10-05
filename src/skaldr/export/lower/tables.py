@@ -30,7 +30,7 @@ def _blank_cells(count: int) -> tuple[TableCell, ...]:
 def _cell_text(value: object, lowering: Lowering) -> ExportRich:
     if value is None or value == "":
         return ()
-    return _joined_by_breaks(lowering.rich(part) for part in compute.paragraphs(str(value)))
+    return _joined_by_breaks(lowering.prose_lines(str(value)))
 
 
 def _subrows(row: Row) -> list[Row]:
