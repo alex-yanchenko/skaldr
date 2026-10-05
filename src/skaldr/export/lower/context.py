@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TypeGuard
+from typing import Final, TypeGuard
 
 from skaldr import compute
 from skaldr.export.inline import bold, one_line, plain, rich_line
@@ -15,7 +15,11 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
+from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks
 from skaldr.richtext import Plain, Rich, RichContext, Tinted
+
+TEXT_BULLET: Final = "• "
+NESTED_TEXT_BULLET: Final = "◦ "
 
 
 def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
@@ -42,7 +46,33 @@ class Lowering:
         return rich_line(text, self.rich_context)
 
     def prose(self, text: str, tone: ToneName | None = None) -> tuple[Node, ...]:
-        return tuple(Paragraph(self.rich(part), tone) for part in compute.paragraphs(text))
+        return tuple(self._prose_node(block, tone) for block in prose_blocks(text))
+
+    def _prose_node(self, block: ProseBlock, tone: ToneName | None) -> Node:
+        if isinstance(block, str):
+            return Paragraph(self.rich(block), tone)
+        entries = tuple(
+            ListEntry(
+                self.rich(item.text), children=tuple(self._prose_node(child, None) for child in item.blocks)
+            )
+            for item in block.items
+        )
+        return (
+            ListNode("bullet", entries) if block.start is None else ListNode("number", entries, block.start)
+        )
+
+    def prose_lines(self, text: str) -> tuple[ExportRich, ...]:
+        return tuple(line for block in prose_blocks(text) for line in self._text_lines(block, depth=0))
+
+    def _text_lines(self, block: ProseBlock, depth: int) -> list[ExportRich]:
+        if isinstance(block, str):
+            return [self.rich(block)]
+        lines: list[ExportRich] = []
+        for marker, item in _item_markers(block, depth):
+            lines.append((Plain(marker), *self.rich(item.text)))
+            for child in item.blocks:
+                lines += self._text_lines(child, depth + 1)
+        return lines
 
     def anchor_of(self, block: AnyBlock) -> str | None:
         return self.anchors.get(id(block))
@@ -82,6 +112,12 @@ def lowering_for(report: Report) -> Lowering:
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),
     )
+
+
+def _item_markers(block: ProseList, depth: int) -> list[tuple[str, ProseItem]]:
+    if block.start is None:
+        return [(TEXT_BULLET if depth == 0 else NESTED_TEXT_BULLET, item) for item in block.items]
+    return [(f"{number}. ", item) for number, item in enumerate(block.items, start=block.start)]
 
 
 def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
