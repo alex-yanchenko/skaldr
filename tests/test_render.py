@@ -1657,6 +1657,50 @@ def test_swimlane_step_url_links_the_number_and_state_styles_the_ticket() -> Non
     assert '<div class="swim-tkt">' not in html
 
 
+def test_an_unset_swimlane_step_is_drawn_and_listed_as_todo_in_the_html() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["R"],
+        "columns": ["C1", "C2"],
+        "steps": [
+            {"lane": "R", "col": "C1", "n": "1", "label": "a"},
+            {"lane": "R", "col": "C2", "n": "2", "label": "b", "state": "done"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[swimlane])))
+
+    assert '<div class="swim-tkt todo">' in html
+    assert (
+        '<div class="swim-legend">'
+        '<span class="swim-leg"><span class="swim-leg-sw done"></span>done</span>'
+        '<span class="swim-leg"><span class="swim-leg-sw todo"></span>todo</span>'
+        "</div>" in html
+    )
+
+
+def test_a_labelled_badge_column_without_a_placement_is_its_own_html_column() -> None:
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "name", "label": "View"},
+            {"key": "access", "label": "Access", "kind": "badge"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        "rows": [{"name": "One", "access": "WRITE", "status": "LIVE"}],
+    }
+    badges = {
+        "WRITE": {"label": "Write", "tone": "blue", "legend": "Read-write."},
+        "LIVE": {"label": "Live", "tone": "green", "legend": "In production."},
+    }
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=[table])))
+
+    assert "<thead><tr><th>View</th><th>Access</th></tr></thead>" in html
+    assert '<td class="bc"><span class="chip blue">Write</span></td>' in html
+    assert '<div><span class="chip green">Live</span></div>' in html
+
+
 def test_swimlane_state_legend_renders_used_states_and_is_suppressed_when_single_state() -> None:
     """A swimlane with ≥2 states renders an auto legend of swatch+name for each used state (canonical
     order, used-only); a single-state grid renders no legend at all."""

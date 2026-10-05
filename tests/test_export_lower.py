@@ -772,6 +772,7 @@ def test_muted_text_and_the_provenance_footer_are_muted_paragraphs() -> None:
             id="the-date-and-the-other-facts-stay-plain",
         ),
         pytest.param({"date": "1 Oct"}, (Plain("1 Oct"),), id="no-source"),
+        pytest.param({"source": " ", "date": "1 Oct"}, (Plain("1 Oct"),), id="a-blank-source-is-no-source"),
     ],
 )
 def test_the_provenance_footer_reads_its_source_as_rich_text(meta: dict[str, str], runs: ExportRich) -> None:

@@ -15,6 +15,7 @@ from skaldr.models import (
     BadgeColorLiteral,
     Callout,
     Cards,
+    Code,
     Column,
     DefItem,
     DefList,
@@ -3038,6 +3039,42 @@ def test_a_badge_column_without_a_placement_follows_its_label(column: dict[str, 
 
     assert isinstance(block, Table)
     assert block.columns[1].placement == placement
+
+
+@pytest.mark.parametrize(
+    "lang",
+    [
+        pytest.param("shell", id="a-word"),
+        pytest.param("c++", id="plus-signs"),
+        pytest.param("c#", id="a-hash"),
+        pytest.param("objective-c", id="a-dash"),
+        pytest.param("plain text", id="two-words"),
+        pytest.param("a" * 40, id="forty-characters"),
+    ],
+)
+def test_a_code_language_is_one_or_more_fence_safe_words(lang: str) -> None:
+    block = parse_report(make_report(blocks=[{"type": "code", "content": "x", "lang": lang}])).blocks[0]
+
+    assert isinstance(block, Code)
+    assert block.lang == lang
+
+
+@pytest.mark.parametrize(
+    "lang",
+    [
+        pytest.param("", id="empty"),
+        pytest.param(" x", id="a-leading-space"),
+        pytest.param("x ", id="a-trailing-space"),
+        pytest.param("a  b", id="two-spaces"),
+        pytest.param("a\nb", id="a-newline"),
+        pytest.param("```", id="backticks"),
+        pytest.param("{x}", id="braces"),
+        pytest.param("a" * 41, id="forty-one-characters"),
+    ],
+)
+def test_a_code_language_that_could_break_its_fence_is_refused(lang: str) -> None:
+    with pytest.raises(ReportError, match=r"blocks\.0\.code\.lang"):
+        parse_report(make_report(blocks=[{"type": "code", "content": "x", "lang": lang}]))
 
 
 def test_a_title_placement_badge_column_cannot_take_a_tone() -> None:

@@ -310,6 +310,25 @@ def test_a_notion_code_fence_always_names_a_language(code: dict[str, Any], fence
     assert notion_of([{"type": "code", **code}]).splitlines()[-3] == fence
 
 
+def test_a_code_fence_inside_a_callout_also_says_plain_text() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [{"span": 6, "tone": "info", "blocks": [{"type": "code", "content": "x"}]}],
+    }
+
+    assert (
+        notion_of([grid]) == '<callout icon="💡" color="blue_bg">\n\t```plain text\n\tx\n\t```\n</callout>\n'
+    )
+
+
+def test_the_notion_footer_shows_rich_text_from_the_source_and_plain_facts() -> None:
+    page = notion_of(
+        [{"type": "text", "body": "x"}], meta={"title": "T", "source": "see `app.ts`", "date": "5 Oct"}
+    )
+
+    assert page.splitlines()[-1] == 'see `app.ts` · 5 Oct {color="gray"}'
+
+
 @pytest.mark.parametrize(
     ("body", "line"),
     [

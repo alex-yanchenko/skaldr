@@ -339,6 +339,14 @@ def test_a_github_code_fence_carries_the_authored_language(code: dict[str, Any],
     assert markdown_of([{"type": "code", **code}]) == f"{fence}\nx\n```\n"
 
 
+def test_the_github_footer_shows_rich_text_from_the_source_and_plain_facts() -> None:
+    page = markdown_of(
+        [{"type": "text", "body": "x"}], meta={"title": "T", "source": "see `app.ts`", "date": "5 Oct"}
+    )
+
+    assert page.splitlines()[-1] == "see `app.ts` · 5 Oct"
+
+
 @pytest.mark.parametrize(
     ("value", "maximum", "bar"),
     [
