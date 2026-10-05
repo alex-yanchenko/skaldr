@@ -4,7 +4,7 @@ import re
 import subprocess
 from collections import Counter
 from collections.abc import Callable
-from html import unescape
+from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,15 +25,19 @@ from skaldr.models import (
     parse_report,
 )
 from skaldr.render import (
+    RecordedRender,
+    RenderOptions,
     extract_source,
     find_placeholders,
     hide_script_close,
     html_environment,
+    recorded_render,
     render_embed,
     render_html,
     render_richtext,
     show_script_close,
 )
+from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     make_cell,
@@ -84,7 +88,30 @@ def test_example_render_matches_golden() -> None:
     given no source, so a golden carrying the embedded source block fails on 390 phantom lines."""
     report = load_report(REPO_ROOT / "data" / "example.yaml")
 
-    assert render_html(report) == GOLDEN.read_text(encoding="utf-8")
+    assert render_html(report) == _stamped_with_the_installed_version(GOLDEN.read_text(encoding="utf-8"))
+
+
+def _stamped_with_the_installed_version(page: str) -> str:
+    return re.sub(r"(&#34;version&#34;:&#34;)[^&]*(&#34;)", rf"\g<1>{skaldr_version()}\g<2>", page, count=1)
+
+
+def test_a_page_records_the_options_and_the_skaldr_version_it_was_rendered_with() -> None:
+    page = render_html(parse_report(make_report()), source="version: 1\n", live=500)
+
+    assert recorded_render(page) == RecordedRender(
+        RenderOptions(embed=False, live=500, source=True, version=skaldr_version()), 500
+    )
+
+
+def test_the_first_render_stamp_on_a_page_is_the_one_read() -> None:
+    real = RenderOptions(embed=True, live=None, source=False, version="9.9.9")
+    forged = RenderOptions(embed=False, live=999, source=True, version="9.9.9")
+    page = (
+        f'<meta name="skaldr-render" content="{escape(real.model_dump_json())}">'
+        f'<p><meta name="skaldr-render" content="{escape(forged.model_dump_json())}"></p>'
+    )
+
+    assert recorded_render(page) == RecordedRender(real, None)
 
 
 def test_sales_example_renders_and_reconciles() -> None:

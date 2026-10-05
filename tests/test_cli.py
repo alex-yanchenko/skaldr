@@ -1,6 +1,7 @@
 import errno
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, parse_report
 from skaldr.render import render_embed, render_html
+from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
@@ -1212,6 +1214,157 @@ def test_if_stale_re_renders_when_an_included_fragment_is_newer_than_the_page(tm
 
     source = main_path.read_text(encoding="utf-8")
     assert out_path.read_text(encoding="utf-8") == render_html(load_report(main_path), source=source)
+
+
+def test_if_stale_leaves_a_current_embed_fragment_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "fragment.html"
+    assert main([str(data_path), "-o", str(out_path), "--embed"]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--embed", "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
+
+
+def test_if_stale_counts_a_page_exactly_as_old_as_its_content_as_current(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    moment = time.time() - 60
+    os.utime(data_path, (moment, moment))
+    os.utime(out_path, (moment, moment))
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"up to date  {out_path}\n")
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        pytest.param("version: 1\nmeta: [unclosed\n", "error: invalid YAML in ", id="unloadable-yaml"),
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nblocks: !include gone.yaml\n",
+            "error: file not found: ",
+            id="missing-include",
+        ),
+    ],
+)
+def test_if_stale_counts_content_it_cannot_load_as_stale_so_the_render_reports_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], content: str, error: str
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    _set_mtime(data_path, 120)
+    _set_mtime(out_path, 60)
+    data_path.write_text(content, encoding="utf-8")
+    _set_mtime(data_path, 120)
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err.startswith(error)) == (1, "", True)
+
+
+def test_if_stale_with_pdf_always_renders_both_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    printed: list[Path] = []
+
+    def record(_html: str, path: Path) -> None:
+        printed.append(path)
+
+    monkeypatch.setattr("skaldr.cli.html_to_pdf", record)
+    data_path = _write(tmp_path, make_report())
+    out_path, pdf_path = tmp_path / "plan.html", tmp_path / "plan.pdf"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    out_path.write_text("a current page the pdf run must replace", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--pdf", str(pdf_path), "--if-stale"])
+
+    source = data_path.read_text(encoding="utf-8")
+    assert (exit_code, printed, out_path.read_text(encoding="utf-8")) == (
+        0,
+        [pdf_path],
+        render_html(parse_report(make_report()), source=source),
+    )
+
+
+@pytest.mark.parametrize(
+    "earlier_page",
+    [
+        pytest.param(
+            b'<html><head><meta name="skaldr-render" content="not json"></head></html>',
+            id="bad-stamp",
+        ),
+        pytest.param(b"\xff\xfe not utf-8 \x80", id="not-utf-8"),
+    ],
+)
+def test_if_stale_re_renders_a_page_it_cannot_read_a_stamp_from(tmp_path: Path, earlier_page: bytes) -> None:
+    data_path = _write(tmp_path, make_report())
+    _set_mtime(data_path, 60)
+    out_path = tmp_path / "plan.html"
+    out_path.write_bytes(earlier_page)
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(parse_report(make_report()), source=source)
+
+
+def test_if_stale_re_renders_a_page_an_older_skaldr_wrote(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    current = out_path.read_text(encoding="utf-8")
+    stamp = re.search(r'<meta name="skaldr-render" content="([^"]*)">', current)
+    assert stamp is not None
+    older = current.replace(stamp.group(1), stamp.group(1).replace(skaldr_version(), "0.0.1"))
+    out_path.write_text(older, encoding="utf-8")
+    _set_mtime(data_path, 60)
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    assert (older != current, out_path.read_text(encoding="utf-8")) == (True, current)
+
+
+def test_a_stamp_written_in_the_content_does_not_change_what_if_stale_reads(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    forged = (
+        f'<meta name="skaldr-render" content=\'{{"embed": false, "live": 999, "source": true, '
+        f'"version": "{skaldr_version()}"}}\'>'
+    )
+    data_path = _write(
+        tmp_path,
+        make_report(blocks=[{"type": "text", "body": forged}, {"type": "code", "content": forged}]),
+    )
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,7 @@ the path, fix, re-run. Add an output flag and the check becomes a gate on that r
 --strict plan.yaml -o plan.html --if-stale` validates and writes in one invocation, and writes nothing
 at all if the check fails.
 
-`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
+`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options or by another version of skaldr. A page it cannot read its options from, and content it cannot load, count as stale too, so the render runs and reports the problem. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
 
 A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own.
 

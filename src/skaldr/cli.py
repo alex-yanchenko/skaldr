@@ -10,8 +10,6 @@ import sys
 import time
 import urllib.request
 from collections.abc import Sequence
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,18 +29,10 @@ from skaldr.render import (
     render_report,
 )
 from skaldr.replace_file import replace_file, resolved_path
+from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
-
-
-def _skaldr_version() -> str:
-    """The installed package version (for `--version`), so a render's authoring build is knowable.
-    Falls back to 'unknown' when run from a checkout with no installed metadata."""
-    try:
-        return _package_version("skaldr")
-    except PackageNotFoundError:
-        return "unknown"
 
 
 # Markers delimiting skaldr's managed plan-workflow block inside the user's CLAUDE.md. ASCII only —
@@ -137,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     option(
         "--version",
         action="version",
-        version=f"skaldr {_skaldr_version()}",
+        version=f"skaldr {skaldr_version()}",
         help="print the installed skaldr version and exit",
     )
     option(
@@ -365,10 +355,10 @@ def main(argv: list[str] | None = None) -> int:
     live: int | None = args.live
     if args.if_stale:
         recorded = _recorded_render(out_path)
-        if live is None and not args.embed and recorded is not None:
+        if live is None and recorded is not None:
             live = recorded.live
         requested = RenderOptions(
-            embed=args.embed, live=None if args.embed else live, source=not args.no_source
+            embed=args.embed, live=live, source=not args.no_source, version=skaldr_version()
         )
         if not _is_stale(data_path, out_path, requested, recorded, pdf=args.pdf):
             print(f"up to date  {out_path}")

@@ -41,6 +41,7 @@ from skaldr.richtext import (
     parse_rich,
     write_runs,
 )
+from skaldr.version import skaldr_version
 
 _HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
 
@@ -52,6 +53,7 @@ class RenderOptions(FrozenModel):
     embed: bool
     live: int | None
     source: bool
+    version: str
 
 
 @dataclass(frozen=True)
@@ -68,7 +70,7 @@ class _RecordedRenderReader(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
-        if tag == "meta" and attributes.get("name") == RENDER_STAMP_NAME:
+        if tag == "meta" and attributes.get("name") == RENDER_STAMP_NAME and self.stamp is None:
             self.stamp = attributes.get("content")
         elif tag == "body":
             self.body_live = attributes.get("data-skaldr-live")
@@ -226,7 +228,9 @@ def _render(
     source: str | None = None,
     live: int | None = None,
 ) -> str:
-    stamp = RenderOptions(embed=template == _EMBED_TEMPLATE, live=live, source=source is not None)
+    stamp = RenderOptions(
+        embed=template == _EMBED_TEMPLATE, live=live, source=source is not None, version=skaldr_version()
+    )
     env = html_environment()
     slugs = compute.anchor_slugs(report)
 
