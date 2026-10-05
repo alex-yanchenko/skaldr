@@ -9,6 +9,7 @@ from typing import get_args
 import pytest
 
 from skaldr import compute
+from skaldr.charts import DONUT_TOTAL_FONT_PX
 from skaldr.errors import ReportError
 from skaldr.models import (
     MAX_STRIP_LABELS,
@@ -4589,6 +4590,7 @@ def test_chart_donut_renders_arcs_centre_total_and_derived_shares() -> None:
         pytest.param([1.25, 1233.31], "1,234.56", id="two-decimals"),
         pytest.param([5.25, 5], "10.25", id="decimal-plus-whole"),
         pytest.param([60, 40], "100", id="whole"),
+        pytest.param([0.1, 0.2], "0.3", id="float-noise-rounded-away"),
     ],
 )
 def test_a_donut_centre_total_reads_the_same_as_the_total_both_exports_write(
@@ -4611,6 +4613,55 @@ def test_a_donut_centre_total_reads_the_same_as_the_total_both_exports_write(
         total,
         total,
     )
+
+
+CENTRE_TOTAL_ATTRIBUTES = 'class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7"'
+CENTRE_TOTAL_FITTED_TO_THE_HOLE = 'textLength="86" lengthAdjust="spacingAndGlyphs"'
+
+
+@pytest.mark.parametrize(
+    ("values", "centre"),
+    [
+        pytest.param([60, 40], f"<text {CENTRE_TOTAL_ATTRIBUTES}>100</text>", id="short"),
+        pytest.param([5.25, 5], f"<text {CENTRE_TOTAL_ATTRIBUTES}>10.25</text>", id="short-decimal"),
+        pytest.param([12000, 345], f"<text {CENTRE_TOTAL_ATTRIBUTES}>12,345</text>", id="widest-natural"),
+        pytest.param(
+            [1.25, 1233.31],
+            f"<text {CENTRE_TOTAL_ATTRIBUTES} {CENTRE_TOTAL_FITTED_TO_THE_HOLE}>1,234.56</text>",
+            id="narrowest-fitted",
+        ),
+        pytest.param(
+            [123000, 456.78],
+            f"<text {CENTRE_TOTAL_ATTRIBUTES} {CENTRE_TOTAL_FITTED_TO_THE_HOLE}>123,456.78</text>",
+            id="long",
+        ),
+        pytest.param(
+            [12345678.9],
+            f"<text {CENTRE_TOTAL_ATTRIBUTES} {CENTRE_TOTAL_FITTED_TO_THE_HOLE}>12,345,678.9</text>",
+            id="longest",
+        ),
+    ],
+)
+def test_a_long_donut_centre_total_is_fitted_to_the_hole_and_a_short_one_keeps_its_size(
+    values: list[float], centre: str
+) -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": f"S{index}", "value": value} for index, value in enumerate(values)],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[donut])))
+
+    assert re.findall(r'<text class="c-total"[^>]*>[^<]*</text>', html) == [centre]
+
+
+def test_the_donut_centre_total_is_styled_at_the_font_size_its_fit_is_estimated_for() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert _css_declarations(html, "& .c-total") == [
+        f"fill:var(--ink);font-size:{DONUT_TOTAL_FONT_PX}px;font-weight:700"
+    ]
 
 
 def test_chart_escapes_author_category_labels() -> None:

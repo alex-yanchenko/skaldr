@@ -7,7 +7,7 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 """
 
 import math
-from typing import TypedDict
+from typing import Final, TypedDict
 
 from markupsafe import Markup, escape
 from typing_extensions import assert_never
@@ -30,6 +30,10 @@ _PLOT_W, _PLOT_H = _AX_R - _AX_L, _BASE - _TOP
 _XLBL_Y = 195
 # Donut box.
 _D_CX, _D_CY, _D_R, _D_SW = 105, 100, 62, 26
+DONUT_TOTAL_FONT_PX: Final = 26
+_D_TOTAL_MAX_WIDTH: Final = 2 * (_D_R - _D_SW // 2) - 12
+_DIGIT_WIDTH_EM: Final = 0.6
+_SEPARATOR_WIDTH_EM: Final = 0.3
 
 # When a series/slice gives no tone, colour it from this cycle so multiple series stay distinct
 # without the author naming a colour for each (derived-not-authored).
@@ -151,6 +155,24 @@ def donut_total(chart: Chart) -> float:
     return sum(segment.value for segment in chart.slices)
 
 
+def _estimated_bold_width(text: str) -> float:
+    ems = sum(_SEPARATOR_WIDTH_EM if character in ",." else _DIGIT_WIDTH_EM for character in text)
+    return ems * DONUT_TOTAL_FONT_PX
+
+
+def _donut_centre_total(total: float) -> str:
+    text = compute.fmt(total)
+    fit = (
+        f' textLength="{_D_TOTAL_MAX_WIDTH}" lengthAdjust="spacingAndGlyphs"'
+        if _estimated_bold_width(text) > _D_TOTAL_MAX_WIDTH
+        else ""
+    )
+    return (
+        f'<text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7"{fit}>'
+        f"{escape(text)}</text>"
+    )
+
+
 def _donut_svg(chart: Chart) -> str:
     circ = 2 * math.pi * _D_R
     total = donut_total(chart)
@@ -164,10 +186,7 @@ def _donut_svg(chart: Chart) -> str:
             'transform="rotate(-90)"/>'
         )
         offset += dash
-    centre = escape(compute.fmt(total))
-    body.append(
-        f'<text class="c-total" text-anchor="middle" dominant-baseline="middle" y="-7">{centre}</text>'
-    )
+    body.append(_donut_centre_total(total))
     body.append('<text class="c-totlbl" text-anchor="middle" dominant-baseline="middle" y="17">TOTAL</text>')
     inner = "".join(body)
     return (
