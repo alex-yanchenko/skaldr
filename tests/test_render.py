@@ -3728,7 +3728,7 @@ def test_derived_card_label_override_and_note_render() -> None:
 
 def test_derived_card_resolves_a_matrix_nested_in_a_section() -> None:
     """`of_matrix` resolves across the whole block tree — a top-level summary card can count a matrix
-    that lives inside a section (the iter_matrices/iter_cards recursion), and an id-less matrix
+    that lives inside a section (the iter_matrices recursion), and an id-less matrix
     elsewhere on the page does not interfere with the count."""
     decoy = {  # id-less, all HAVE — would inflate the count if wrongly tallied
         "type": "matrix",

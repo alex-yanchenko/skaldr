@@ -330,7 +330,7 @@ class ListItem(FrozenModel):
     )
 
 
-def _list_point_kind(point: Any) -> str:
+def _list_point_kind(point: Any) -> Literal["str", "ListItem"]:
     return "str" if isinstance(point, str) else "ListItem"
 
 
@@ -1159,7 +1159,9 @@ class Table(_Block):
                 raise ValueError(f"{name}.column '{spec.column}' must be a number column")
         if self.reconcile is None and any(column.pct_of_total for column in self.columns):
             raise ValueError("pct_of_total requires a reconcile total")
-        pct_misuse = [c.key for c in self.columns if c.pct_of_total and c.kind != "number"]
+        pct_misuse = [
+            column.key for column in self.columns if column.pct_of_total and column.kind != "number"
+        ]
         if pct_misuse:
             raise ValueError(f"column(s) {pct_misuse}: pct_of_total is only for number columns")
         placement_misuse = [c.key for c in self.columns if c.placement == "cell" and c.kind != "badge"]
@@ -1208,12 +1210,10 @@ class Table(_Block):
         self._reconcile()
         return self
 
-    def _refuse_list_cells(self, one_badge_per_row: str, key: str) -> None:
+    def _refuse_list_cells(self, reason: str, key: str) -> None:
         for loc, row in self.located_rows():
             if isinstance(row[key], list):
-                raise ValueError(
-                    f"{one_badge_per_row}, so its cells can't hold a list of keys ({loc} holds {row[key]})"
-                )
+                raise ValueError(f"{reason}, so its cells can't hold a list of keys ({loc} holds {row[key]})")
 
     @property
     def cell_columns(self) -> list[Column]:
@@ -1589,8 +1589,8 @@ class Swimlane(_Block):
         min_length=1,
         max_length=MAX_SWIMLANE_LANES,
         description="Lanes, in row order (top to bottom). A bare string is shorthand for `{name: …}`; "
-        "use `{id, name}` to give a stable reference key. Capped at 8 — more rows than that stop "
-        "reading as a matrix; split into two swimlanes instead.",
+        f"use `{{id, name}}` to give a stable reference key. Capped at {MAX_SWIMLANE_LANES} — more rows "
+        "than that stop reading as a matrix; split into two swimlanes instead.",
     )
     columns: list[SwimlaneColumn] = Field(
         min_length=1,
@@ -2552,7 +2552,7 @@ def walk_located_blocks(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, AnyBl
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
     """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
     for block in walk_blocks(blocks):
-        if isinstance(block, (Request, RequestFlow)):
+        if isinstance(block, Request | RequestFlow):
             yield block
 
 
@@ -2575,8 +2575,7 @@ def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:
 
     Single source of truth for both validation (undeclared keys) and the derived legend.
     """
-    for _, key in iter_located_badge_keys(blocks):
-        yield key
+    return (key for _, key in iter_located_badge_keys(blocks))
 
 
 def iter_located_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, str]]:
