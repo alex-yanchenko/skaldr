@@ -120,9 +120,10 @@ def _chunk_pages(chunks: Sequence[str]) -> dict[str, str]:
 
 def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
     document = lower_report(report)
+    page_width = report.meta.notion_width
     if chunk is None:
-        return _export_pages(out_dir, document.title, {"page.md": render_notion(document.body)})
-    split = chunk_notion(document.body, chunk)
+        return _export_pages(out_dir, document.title, {"page.md": render_notion(document.body, page_width)})
+    split = chunk_notion(document.body, chunk, page_width)
     return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
 
 

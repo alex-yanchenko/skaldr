@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import get_args
@@ -19,9 +20,11 @@ from skaldr.export.notion import (
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
     Callout,
+    Columns,
     Diagram,
     Graph,
     GraphNode,
+    GridColumn,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -32,6 +35,7 @@ from skaldr.export.tree import (
     Quote,
     Tab,
     TableCell,
+    TableColumn,
     TableNode,
     TableRow,
     Tabs,
@@ -46,7 +50,17 @@ from skaldr.models import (
     parse_report,
     walk_blocks,
 )
-from skaldr.richtext import AnchorLink, Citation, Code, Placeholder, Plain, ScriptText, parse_rich
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    Placeholder,
+    Plain,
+    ScriptText,
+    Styled,
+    Tinted,
+    parse_rich,
+)
 from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
@@ -75,8 +89,8 @@ NOTION_CHIP_COLOR: dict[str, str] = {
     "amber": "yellow",
     "red": "red",
     "violet": "purple",
-    "teal": "green",
-    "sky": "blue",
+    "teal": "brown",
+    "sky": "pink",
 }
 
 
@@ -197,7 +211,7 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow_bg">api</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow">**api**</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 
@@ -233,7 +247,7 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
         pytest.param("[due]{bg=amber}", '<span color="yellow_bg">due</span>', id="highlight"),
         pytest.param(
             "[**now** a|b]{tone=accent bg=sky}",
-            '<span color="purple"><span color="blue_bg">**now** a\\|b</span></span>',
+            '<span color="purple"><span color="pink_bg">**now** a\\|b</span></span>',
             id="color-around-highlight",
         ),
         pytest.param(
@@ -308,30 +322,40 @@ def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
 def test_every_badge_color_has_a_notion_chip_color(tone: BadgeColorLiteral) -> None:
     color = NOTION_CHIP_COLOR.get(tone)
 
-    assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}_bg">a\\*b</span>'
+    assert notion_inline((Chip("a*b", tone),)) == f'<span color="{color}">**a\\*b**</span>'
+
+
+def test_no_two_badge_colors_share_a_notion_color() -> None:
+    assert sorted(NOTION_CHIP_COLOR.values()) == sorted(set(NOTION_CHIP_COLOR.values()))
 
 
 def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_it() -> None:
-    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue_bg">`README.md`</span>'
+    assert notion_inline((Chip("README.md", "blue"),)) == '<span color="blue">**`README.md`**</span>'
+
+
+def test_a_toned_title_is_coloured_text_and_the_rest_of_the_line_stays_plain() -> None:
+    entry = ListEntry((Tinted("info", None, (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
+
+    assert render_notion([ListNode("number", (entry,))]) == '1. <span color="blue">**Go**</span>: now\n'
 
 
 def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
     assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
-        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
+        '\t- <span color="blue">**api**</span> the API\n</details>\n'
         "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
         "- **Lead**: **Ana**\n<empty-block/>\n"
         "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
-        '- **Clean**: 9 (90.0%) <span color="green_bg">▲ +1</span> <span color="blue_bg">api</span>'
-        ' {color="green"}\n\tsince Monday {color="gray"}\n'
+        '- **Clean**: 9 (90.0%) <span color="green">**▲ +1**</span> <span color="blue">**api**</span>\n'
+        '\tsince Monday {color="gray"}\n'
         "- **Lag**: 3 days → flat\n"
-        '**Affects**: <span color="blue_bg">api</span> <span color="green_bg">ops</span>\n'
-        '- **Owners**: <span color="purple_bg">web</span>\n<empty-block/>\n'
+        '**Affects**: <span color="blue">**api**</span> <span color="brown">**ops**</span>\n'
+        '- **Owners**: <span color="purple">**web**</span>\n<empty-block/>\n'
         "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
-        '- 🔵 **Mon**: Start <span color="blue_bg">api</span>\n\tkick-off\n- Later\n<empty-block/>\n'
-        '- **Zone**: ████░░░░░░ 42.9% {color="yellow"}\n'
+        '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
+        '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
         'Jan to Dec {color="gray"}\n'
-        '- **Q1**: 25.0%, slow {color="red"}\n- **Rest**: 75.0%\n'
+        '- <span color="red">**Q1**</span>: 25.0%, slow\n- **Rest**: 75.0%\n'
     )
 
 
@@ -340,8 +364,8 @@ def test_the_notion_legend_is_a_toggle_of_colored_chips_before_the_content() -> 
 
     assert notion_of([row], badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
-        '\t- <span color="blue_bg">api</span> the API\n</details>\n'
-        '<span color="blue_bg">api</span>\n'
+        '\t- <span color="blue">**api**</span> the API\n</details>\n'
+        '<span color="blue">**api**</span>\n'
     )
 
 
@@ -419,7 +443,7 @@ def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
 def test_block_nodes_become_notion_blocks() -> None:
     nodes = [
         Paragraph((Plain("muted"),), "muted"),
-        ListNode("number", (ListEntry((Plain("one"),), tone="warning"),)),
+        ListNode("number", (ListEntry((Plain("one"),)),)),
         ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),)))),
         Callout("info", (Paragraph((Plain("tip"),)),)),
         Quote(((Plain("said"),),)),
@@ -431,7 +455,7 @@ def test_block_nodes_become_notion_blocks() -> None:
 
     assert render_notion(nodes) == (
         'muted {color="gray"}\n'
-        '1. one {color="yellow"}\n'
+        "1. one\n"
         "- [x] done\n"
         "- [ ] open\n"
         '<callout icon="💡" color="blue_bg">\n\ttip\n</callout>\n'
@@ -769,12 +793,12 @@ def test_equal_shares_apportion_the_same_pixels_in_column_order_whatever_their_f
     assert apportioned(shares, NOTION_DEFAULT_PAGE_WIDTH_PX) == [71] * 8 + [70] * 2
 
 
-def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -> None:
+def test_cell_tones_become_backgrounds_a_group_row_is_a_band_and_a_total_row_is_bold() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)), TableCell(())),
         (
             TableRow((TableCell((Plain("group"),)), TableCell(())), emphasis="group"),
-            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal")), "sky"),
+            TableRow((TableCell((Plain("x"),), "danger"), TableCell((Plain("y"),), "teal"))),
             TableRow((TableCell((Plain("9"),)), TableCell(())), emphasis="total"),
         ),
         header_column=True,
@@ -784,10 +808,126 @@ def test_table_row_and_cell_tones_become_backgrounds_and_a_total_row_is_bold() -
         '<table fit-page-width="true" header-row="true" header-column="true">\n'
         "\t<tr>\n\t\t<td>**Name**</td>\n\t\t<td></td>\n\t</tr>\n"
         '\t<tr color="gray_bg">\n\t\t<td>**group**</td>\n\t\t<td></td>\n\t</tr>\n'
-        '\t<tr color="blue_bg">\n'
-        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="green_bg">y</td>\n'
+        "\t<tr>\n"
+        '\t\t<td color="red_bg">**x**</td>\n\t\t<td color="brown_bg">y</td>\n'
         "\t</tr>\n"
         "\t<tr>\n\t\t<td>**9**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("cells", "lines"),
+    [
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Plain("b "), Chip("New", "violet")))),
+            ["<td>a</td>", '<td color="blue_bg">b **New**</td>'],
+            id="the-cell-holding-the-badge-and-its-badge-in-the-normal-colour",
+        ),
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Plain("b"),))),
+            ['<td color="blue_bg">a</td>', "<td>b</td>"],
+            id="the-first-cell-when-no-cell-holds-a-badge",
+        ),
+        pytest.param(
+            (TableCell((Chip("x", "red"),), "danger"), TableCell((Plain("b"),))),
+            ['<td color="red_bg">**x**</td>', "<td>b</td>"],
+            id="a-cell-tone-wins-over-the-row-tone",
+        ),
+        pytest.param(
+            (TableCell((Plain("a"),)), TableCell((Chip("x", "red"),)), TableCell((Chip("y", "blue"),))),
+            ["<td>a</td>", '<td color="blue_bg">**x**</td>', '<td><span color="blue">**y**</span></td>'],
+            id="a-badge-outside-the-filled-cell-keeps-its-colour",
+        ),
+    ],
+)
+def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ...], lines: list[str]) -> None:
+    names = "ABC"[: len(cells)]
+    table = TableNode(tuple(TableCell((Plain(name),)) for name in names), (TableRow(cells, "info"),))
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n" + "".join(f"\t\t<td>**{name}**</td>\n" for name in names) + "\t</tr>\n"
+        "\t<tr>\n" + "".join(f"\t\t{line}\n" for line in lines) + "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_badge_in_a_column_filled_by_its_tone_takes_the_normal_colour() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
+        (TableRow((TableCell((Chip("x", "red"),)), TableCell((Chip("y", "red"),)))),),
+        columns=(TableColumn(), TableColumn(tone="info")),
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<colgroup>\n\t\t<col>\n\t\t<col color="blue_bg">\n\t</colgroup>\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td><span color="red">**x**</span></td>\n\t\t<td>**y**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("row", "header_column", "line"),
+    [
+        pytest.param(
+            TableRow((TableCell((Plain("9"),)), TableCell((Chip("x", "red"),))), "warning", emphasis="total"),
+            False,
+            '\t<tr>\n\t\t<td>**9**</td>\n\t\t<td color="yellow_bg">**x**</td>\n\t</tr>\n',
+            id="a-toned-total-row-fills-its-badge-cell-and-bolds-it-once",
+        ),
+        pytest.param(
+            TableRow(
+                (TableCell((Plain("g "), Chip("x", "red"))), TableCell(())), "warning", emphasis="group"
+            ),
+            False,
+            '\t<tr color="yellow_bg">\n\t\t<td>**g x**</td>\n\t\t<td></td>\n\t</tr>\n',
+            id="a-group-row-holding-a-badge-stays-a-full-band",
+        ),
+        pytest.param(
+            TableRow((TableCell((Plain("a"),)), TableCell((Plain("b"),))), "info"),
+            True,
+            '\t<tr>\n\t\t<td color="blue_bg">**a**</td>\n\t\t<td>b</td>\n\t</tr>\n',
+            id="the-bold-header-column-cell-takes-the-fill",
+        ),
+    ],
+)
+def test_a_toned_row_fill_meets_bold_rows_and_columns(row: TableRow, header_column: bool, line: str) -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))), (row,), header_column=header_column
+    )
+    opening = '<table fit-page-width="true" header-row="true"' + (
+        ' header-column="true">' if header_column else ">"
+    )
+
+    assert render_notion([table]) == (
+        f"{opening}\n\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n{line}</table>\n"
+    )
+
+
+def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
+    table = TableNode(
+        (TableCell((Plain("Name"),)),),
+        (TableRow((TableCell((Plain("x "), Chip("New", "violet"))),)),),
+        header_column=True,
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Name**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td>**x <span color="purple">New</span>**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
+def test_a_badge_in_a_header_cell_is_bolded_once_with_the_header() -> None:
+    table = TableNode((TableCell((Chip("New", "violet"),)),), ())
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        '\t<tr>\n\t\t<td>**<span color="purple">New</span>**</td>\n\t</tr>\n'
         "</table>\n"
     )
 
@@ -1047,8 +1187,8 @@ def test_an_empty_paragraph_writes_no_line() -> None:
         pytest.param("warning", "yellow", id="warning"),
         pytest.param("danger", "red", id="danger"),
         pytest.param("accent", "purple", id="accent"),
-        pytest.param("teal", "green", id="teal"),
-        pytest.param("sky", "blue", id="sky"),
+        pytest.param("teal", "brown", id="teal"),
+        pytest.param("sky", "pink", id="sky"),
     ],
 )
 def test_every_tone_has_a_notion_block_color(tone: ToneName, color: str) -> None:
@@ -1479,3 +1619,155 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
     result = export_notion(report, tmp_path, chunk=1)
 
     assert [path.name for path in result.files] == [f"page.{index:03d}.md" for index in range(101)]
+
+
+def _two_column_table(columns: tuple[TableColumn, ...] = ()) -> TableNode:
+    return TableNode(
+        (TableCell((Plain("Level"),)), TableCell((Plain("In one line"),))),
+        (TableRow((TableCell((Plain("New"),)), TableCell((Plain("x" * 80),)))),),
+        columns=columns,
+    )
+
+
+def _widths_page(widths: list[int]) -> str:
+    cols = "".join(f'\t\t<col width="{width}">\n' for width in widths)
+    return (
+        '<table fit-page-width="true" header-row="true">\n'
+        f"\t<colgroup>\n{cols}\t</colgroup>\n"
+        "\t<tr>\n\t\t<td>**Level**</td>\n\t\t<td>**In one line**</td>\n\t</tr>\n"
+        f"\t<tr>\n\t\t<td>New</td>\n\t\t<td>{'x' * 80}</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("columns", "widths"),
+    [
+        pytest.param((), [141, 1059], id="unsized-columns-share-by-their-longest-text-clamped-to-8-and-60"),
+        pytest.param(
+            (TableColumn(share=0.25), TableColumn(share=0.75)),
+            [300, 900],
+            id="author-widths-keep-their-ratio",
+        ),
+    ],
+)
+def test_a_full_width_page_sizes_every_table_to_1200_pixels(
+    columns: tuple[TableColumn, ...], widths: list[int]
+) -> None:
+    assert render_notion([_two_column_table(columns)], page_width="full") == _widths_page(widths)
+
+
+def test_a_short_column_beside_many_long_ones_keeps_a_readable_width() -> None:
+    header = (TableCell((Plain("%"),)), *(TableCell((Plain(f"Long {index}"),)) for index in range(5)))
+    row = TableRow((TableCell((Plain("55"),)), *(TableCell((Plain("y" * 80),)) for _ in range(5))))
+
+    page = render_notion([TableNode(header, (row,))], page_width="full")
+
+    widths = [int(width) for width in re.findall(r'<col width="(\d+)">', page)]
+    assert widths == [64, 228, 227, 227, 227, 227]
+
+
+def test_a_table_in_a_half_width_column_is_sized_to_its_column() -> None:
+    grid = Columns((GridColumn(50, (_two_column_table(),)), GridColumn(50, ())))
+
+    page = render_notion([grid], page_width="full")
+
+    assert '\t\t\t\t<col width="71">\n\t\t\t\t<col width="529">\n' in page
+
+
+def test_a_normal_width_page_leaves_an_unsized_table_to_notion() -> None:
+    assert "<colgroup>" not in render_notion([_two_column_table()], page_width="normal")
+
+
+def test_a_normal_width_page_sizes_a_table_in_a_grid_column_to_the_whole_page_as_before() -> None:
+    table = _two_column_table((TableColumn(share=0.3), TableColumn(share=0.7)))
+    grid = Columns((GridColumn(50, (table,)), GridColumn(50, ())))
+
+    assert '\t\t\t\t<col width="212">\n\t\t\t\t<col width="496">\n' in render_notion(
+        [grid], page_width="normal"
+    )
+
+
+def test_unsized_columns_beside_a_sized_one_share_the_rest_by_their_longest_text() -> None:
+    table = TableNode(
+        (TableCell((Plain("n"),)), TableCell((Plain("Short"),)), TableCell((Plain("x" * 60),))),
+        (),
+        columns=(TableColumn(share=0.1), TableColumn(), TableColumn()),
+    )
+
+    page = render_notion([table], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [120, 127, 953]
+
+
+def test_a_long_header_widens_its_column_as_much_as_long_body_text_does() -> None:
+    table = TableNode(
+        (TableCell((Plain("h" * 60),)), TableCell((Plain("b"),))),
+        ((TableRow((TableCell((Plain("a"),)), TableCell((Plain("b" * 60),)))),)),
+    )
+
+    page = render_notion([table], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [600, 600]
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(
+            ListNode("bullet", (ListEntry((Plain("e"),), children=(_two_column_table(),)),)), id="list"
+        ),
+        pytest.param(Callout("info", (_two_column_table(),)), id="callout"),
+        pytest.param(Toggle((Plain("t"),), None, (_two_column_table(),)), id="toggle"),
+        pytest.param(Tabs((Tab((Plain("t"),), (_two_column_table(),)),)), id="tabs"),
+        pytest.param(Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_two_column_table(),)), id="diagram"),
+    ],
+)
+def test_a_table_nested_in_any_block_is_sized_to_the_full_page(container: Node) -> None:
+    page = render_notion([container], page_width="full")
+
+    assert [int(width) for width in re.findall(r'<col width="(\d+)">', page)] == [141, 1059]
+
+
+def test_a_chunked_full_width_export_sizes_its_tables(tmp_path: Path) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "notion_width": "full"},
+            blocks=[
+                make_table(
+                    [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}], rows=[{"a": "x", "b": "y"}]
+                )
+            ],
+        )
+    )
+
+    export_notion(report, tmp_path, chunk=10_000)
+
+    assert '<col width="600">' in (tmp_path / "page.00.md").read_text(encoding="utf-8")
+
+
+def test_a_row_wider_than_its_header_reads_no_column_tone_past_the_last_column() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)),),
+        (TableRow((TableCell((Chip("x", "red"),)), TableCell((Chip("y", "red"),)))),),
+        columns=(TableColumn(tone="info"),),
+    )
+
+    assert '\t\t<td>**x**</td>\n\t\t<td><span color="red">**y**</span></td>\n' in render_notion([table])
+
+
+def test_the_document_meta_chooses_the_notion_page_width(tmp_path: Path) -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "T", "notion_width": "full"},
+            blocks=[
+                make_table(
+                    [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}], rows=[{"a": "x", "b": "y"}]
+                )
+            ],
+        )
+    )
+
+    export_notion(report, tmp_path)
+
+    assert '<col width="600">\n\t\t<col width="600">' in (tmp_path / "page.md").read_text(encoding="utf-8")

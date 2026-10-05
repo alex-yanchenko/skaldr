@@ -17,7 +17,7 @@ from skaldr.compute import (
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Card, Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
+from skaldr.models import Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
 from tests.factories import (
     API_BADGES,
     make_command_request,
@@ -105,13 +105,6 @@ def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
         DerivedCardTally(counted=1, total=2),
         DerivedCardTally(counted=2, total=3),
     ]
-
-
-def test_a_derived_card_takes_the_semantic_twin_of_its_badge_colour_unless_it_sets_a_tone() -> None:
-    badge = parse_report(make_report(badges=API_BADGES)).badges["API"]
-    cards = [Card(badge="API", of_matrix="m"), Card(badge="API", of_matrix="m", tone="danger")]
-
-    assert [card.tone_with(badge) for card in cards] == ["info", "danger"]
 
 
 def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_column() -> None:

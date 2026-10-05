@@ -239,6 +239,7 @@ StatusState = Literal["done", "current", "pending", "failed", "blocked"]
 DeltaDirection = Literal["up", "down", "flat"]
 TimelineState = Literal["done", "current", "pending"]
 ColumnKind = Literal["text", "number", "badge", "rich", "indicator"]
+NotionWidth = Literal["normal", "full"]
 DEFAULT_COLUMN_WIDTH_SHARES: Final[Mapping[ColumnKind, float]] = {"number": 0.1, "indicator": 0.07}
 ColumnPlacement = Literal["title", "cell"]  # where a badge column's chip renders
 ChartVariant = Literal["bar", "line", "donut"]
@@ -293,6 +294,12 @@ class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
     source: str | None = Field(default=None, description="Provenance; feeds the footer.")
+    notion_width: NotionWidth = Field(
+        default="normal",
+        description="The Notion page width the Notion export sizes tables for: `normal` (default) leaves a "
+        "table without author widths to Notion; `full` gives every table column widths that add up to "
+        "1,200 px, for a page switched to Full width.",
+    )
     date: str | None = Field(default=None, description="Report date; feeds the footer (never auto-now).")
     updated: str | None = Field(
         default=None,
@@ -532,9 +539,6 @@ class Card(FrozenModel):
     @property
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
-
-    def tone_with(self, badge: Badge) -> ToneLiteral:
-        return self.tone or BADGE_COLOR_TONE[badge.tone]
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":

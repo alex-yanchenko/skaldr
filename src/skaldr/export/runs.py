@@ -61,6 +61,10 @@ ExportRun = Run | Chip | Break | Mark | Gauge
 ExportRich = tuple[ExportRun, ...]
 
 
+def holds_a_chip(runs: ExportRich) -> bool:
+    return any(isinstance(run, Chip) for run in runs)
+
+
 class ExportRunWriter(RunWriter, Protocol):
     def chip(self, run: Chip, /) -> str: ...
 
