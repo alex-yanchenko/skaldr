@@ -941,10 +941,11 @@ class Column(FrozenModel):
     )
     placement: ColumnPlacement = Field(
         default="title",
-        description="For a `badge` column: `title` (default) chips the badge under the row's title and "
-        "ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a "
-        "badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is "
-        "rejected; the default is a no-op elsewhere.",
+        description="For a `badge` column: `cell` gives the badge its own labelled column, the cell value "
+        "a badge key or a list of keys (several chips, wrapping); `title` chips the badge under the "
+        "row's title and shows no `label`. Omitted, a badge column with a non-blank `label` is `cell` "
+        "and one with a blank `label` is `title`. `cell` on a non-badge column is rejected; the "
+        "default is a no-op elsewhere.",
     )
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
@@ -960,6 +961,17 @@ class Column(FrozenModel):
         "row tint paints over it. A `title`-placement badge column takes no tone (it rides under the "
         "title).",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _a_labelled_badge_column_gets_its_own_cell(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        if fields.get("kind") != "badge" or "placement" in fields:
+            return fields
+        label = fields.get("label")
+        return {**fields, "placement": "cell" if isinstance(label, str) and label.strip() else "title"}
 
 
 class Handled(FrozenModel):

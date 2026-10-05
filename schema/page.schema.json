@@ -813,7 +813,7 @@
         },
         "placement": {
           "default": "title",
-          "description": "For a `badge` column: `title` (default) chips the badge under the row's title and ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is rejected; the default is a no-op elsewhere.",
+          "description": "For a `badge` column: `cell` gives the badge its own labelled column, the cell value a badge key or a list of keys (several chips, wrapping); `title` chips the badge under the row's title and shows no `label`. Omitted, a badge column with a non-blank `label` is `cell` and one with a blank `label` is `title`. `cell` on a non-badge column is rejected; the default is a no-op elsewhere.",
           "enum": [
             "title",
             "cell"

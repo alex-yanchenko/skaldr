@@ -3010,6 +3010,36 @@ def test_a_table_column_takes_a_tone_and_a_palette_alias_names_the_same_tone() -
     ]
 
 
+@pytest.mark.parametrize(
+    ("column", "placement"),
+    [
+        pytest.param(
+            {"key": "t", "label": "Level", "kind": "badge"}, "cell", id="a-labelled-badge-column-is-a-column"
+        ),
+        pytest.param(
+            {"key": "t", "label": "", "kind": "badge"}, "title", id="an-unlabelled-one-rides-the-title"
+        ),
+        pytest.param({"key": "t", "label": "  ", "kind": "badge"}, "title", id="a-blank-label-is-no-label"),
+        pytest.param(
+            {"key": "t", "label": "Level", "kind": "badge", "placement": "title"},
+            "title",
+            id="explicit-title-wins",
+        ),
+        pytest.param(
+            {"key": "t", "label": "", "kind": "badge", "placement": "cell"}, "cell", id="explicit-cell-wins"
+        ),
+        pytest.param({"key": "t", "label": "Note"}, "title", id="a-text-column-keeps-the-no-op-default"),
+    ],
+)
+def test_a_badge_column_without_a_placement_follows_its_label(column: dict[str, Any], placement: str) -> None:
+    table = make_table([{"key": "a", "label": "A"}, column], rows=[{"a": "x", "t": ""}])
+
+    block = parse_report(make_report(blocks=[table])).blocks[0]
+
+    assert isinstance(block, Table)
+    assert block.columns[1].placement == placement
+
+
 def test_a_title_placement_badge_column_cannot_take_a_tone() -> None:
     table = make_table(
         [{"key": "a", "label": "A"}, {"key": "t", "label": "", "kind": "badge", "tone": "info"}],
