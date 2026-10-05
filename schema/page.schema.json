@@ -776,6 +776,21 @@
           ],
           "title": "Mode",
           "type": "string"
+        },
+        "lang": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "pattern": "^[A-Za-z0-9#+._-]+( [A-Za-z0-9#+._-]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional language the Markdown exports put on the code fence, such as `shell`, `python` or `plain text`. Unset, the language comes from a file name in `label` (`deploy.sh` is bash); with neither, the GitHub fence has none and the Notion fence says `plain text`. `mode: diff` always exports as `diff`. The HTML shows code without highlighting either way.",
+          "title": "Lang"
         }
       },
       "required": [

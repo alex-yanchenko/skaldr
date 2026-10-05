@@ -488,7 +488,7 @@ flowchart LR
 2. **Scan every bin twice, reconcile on the pallet ID** {color="purple"}
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 	`reconcile`
-	```
+	```plain text
 	counted = dedupe(scans, key="pallet_id")
 	assert sum(counted) == expected
 	```

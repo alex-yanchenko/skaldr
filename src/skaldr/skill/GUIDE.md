@@ -213,7 +213,7 @@ or to keep a small block from stretching across the whole page.
 | `meter` | Labelled bars | `items: [{label, value, max, tone?}]` |
 | `range` | One bar split by proportional span (see below) | `segments: [{label, span, tone?, sub?}]`, `axis?: {min?, max?}` |
 | `table` | The workhorse (see below) | `columns` (each `{key, label, kind?, width?, tone?}`), `groups`/`rows`, `reconcile?`, `totals?`, `rollup?`, `tint_by?`, `id?` (for `of_tables`) |
-| `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff` |
+| `code` | Code / logs / diff | `content`, `label?`, `mode: plain\|diff`, `lang?` |
 | `math` | A display equation, written in LaTeX and rendered as MathML | `expression` |
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
@@ -319,6 +319,8 @@ compute a diff. `mode: plain` (the default) renders the content verbatim with no
     +  total = sum(scan.count for scan in dedupe(scans))
        return total
 ```
+
+Code language: `lang` names the language the Markdown exports put on the code fence (`lang: shell`, `lang: python`, `lang: plain text`). Without it, a file name in `label` decides (`deploy.sh` is bash, `query.sql` is sql); with neither, the GitHub fence has no language and the Notion fence says `plain text`, since Notion shows a fence without a language as JavaScript. `mode: diff` always exports as `diff`. The HTML page shows code without highlighting either way.
 
 ## The `grid`
 

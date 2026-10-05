@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -326,6 +326,17 @@ def test_a_code_span_outgrows_the_backticks_it_contains(text: str, span: str) ->
 )
 def test_a_code_block_fence_outgrows_any_run_of_backticks_inside(content: str, fence: str) -> None:
     assert code_block_lines(CodeBlock(content, "md")) == [f"{fence}md", *content.split("\n"), fence]
+
+
+@pytest.mark.parametrize(
+    ("code", "fence"),
+    [
+        pytest.param({"content": "x"}, "```", id="no-language-stays-a-bare-fence"),
+        pytest.param({"content": "x", "lang": "shell"}, "```shell", id="an-authored-language"),
+    ],
+)
+def test_a_github_code_fence_carries_the_authored_language(code: dict[str, Any], fence: str) -> None:
+    assert markdown_of([{"type": "code", **code}]) == f"{fence}\nx\n```\n"
 
 
 @pytest.mark.parametrize(

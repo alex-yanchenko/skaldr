@@ -39,6 +39,7 @@ PLAIN_TEXT_FIELDS = frozenset(
         "ChartSlice.label",
         "Code.content",
         "Code.label",
+        "Code.lang",
         "Column.key",
         "Column.label",
         "Comparison.options",

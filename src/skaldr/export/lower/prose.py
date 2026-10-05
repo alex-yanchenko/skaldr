@@ -237,7 +237,7 @@ def code_language(label: str | None) -> str:
 
 def lower_code(block: models.Code) -> list[Node]:
     label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
-    language = "diff" if block.mode == "diff" else code_language(block.label)
+    language = "diff" if block.mode == "diff" else block.lang or code_language(block.label)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
 

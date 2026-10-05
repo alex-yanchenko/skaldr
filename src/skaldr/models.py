@@ -122,6 +122,9 @@ SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
 
 NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
+CodeLanguage = Annotated[
+    str, StringConstraints(max_length=40, pattern=r"^[A-Za-z0-9#+._-]+( [A-Za-z0-9#+._-]+)*$")
+]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -719,6 +722,13 @@ class Code(_Block):
     label: str | None = Field(default=None, description="Optional label header above the block.")
     mode: Literal["plain", "diff"] = Field(
         default="plain", description="plain, or diff (+/- lines tinted success/danger)."
+    )
+    lang: CodeLanguage | None = Field(
+        default=None,
+        description="Optional language the Markdown exports put on the code fence, such as `shell`, `python` "
+        "or `plain text`. Unset, the language comes from a file name in `label` (`deploy.sh` is bash); "
+        "with neither, the GitHub fence has none and the Notion fence says `plain text`. `mode: diff` "
+        "always exports as `diff`. The HTML shows code without highlighting either way.",
     )
 
 

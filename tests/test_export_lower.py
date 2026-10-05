@@ -1303,6 +1303,19 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
         ),
         pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
         pytest.param(
+            {"content": "gh run list", "lang": "shell"}, (CodeBlock("gh run list", "shell"),), id="lang"
+        ),
+        pytest.param(
+            {"label": "q.sql", "content": "x", "lang": "plain text"},
+            (Paragraph((Code("q.sql"),)), CodeBlock("x", "plain text")),
+            id="lang-wins-over-the-label-suffix",
+        ),
+        pytest.param(
+            {"content": "+a", "mode": "diff", "lang": "python"},
+            (CodeBlock("+a", "diff"),),
+            id="diff-mode-wins-over-lang",
+        ),
+        pytest.param(
             {"label": "run.sh\n# injected", "content": "x"},
             (Paragraph((Code("run.sh # injected"),)), CodeBlock("x", "")),
             id="label-stays-on-one-line",

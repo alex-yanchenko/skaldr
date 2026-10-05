@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -81,7 +81,7 @@ NOTION_CHIP_COLOR: dict[str, str] = {
 
 
 def _section_text(title: str, body: str, rows: int) -> str:
-    return f"## {title}\n```\n" + f"{body}\n" * rows + "```\n"
+    return f"## {title}\n```plain text\n" + f"{body}\n" * rows + "```\n"
 
 
 @pytest.mark.parametrize(
@@ -273,11 +273,27 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
 
 
 def test_code_with_a_backtick_becomes_escaped_text_because_notion_has_no_longer_code_fence() -> None:
-    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```\nx\n```\n"
+    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```plain text\nx\n```\n"
 
 
 def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
-    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == "````\n```\ninner\n```\n````\n"
+    assert notion_of([{"type": "code", "content": "```\ninner\n```"}]) == (
+        "````plain text\n```\ninner\n```\n````\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "fence"),
+    [
+        pytest.param(
+            {"content": "x"}, "```plain text", id="no-language-is-plain-text-not-notions-javascript"
+        ),
+        pytest.param({"content": "x", "lang": "shell"}, "```shell", id="an-authored-language"),
+        pytest.param({"label": "run.sh", "content": "x"}, "```bash", id="a-language-from-the-label"),
+    ],
+)
+def test_a_notion_code_fence_always_names_a_language(code: dict[str, Any], fence: str) -> None:
+    assert notion_of([{"type": "code", **code}]).splitlines()[-3] == fence
 
 
 @pytest.mark.parametrize(
@@ -499,7 +515,7 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
         "\t\tcontrol\n"
         "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
         "\t\t**Recorded output**\n"
-        "\t\t```\n\t\tnone\n\t\t```\n"
+        "\t\t```plain text\n\t\tnone\n\t\t```\n"
         "\t</tab>\n"
         "</tabs>\n"
     )
