@@ -885,6 +885,13 @@ def test_math_parses_to_whole_model() -> None:
             r"check its spelling, or write \text{...} for literal text",
             id="unknown-command",
         ),
+        pytest.param(
+            r"\color{color()} x",
+            r"Value error, math expression '\color{color()} x' sets the colour 'color()', which is not a "
+            "CSS colour: write a colour name like red, a hex value like #ff0000, or a colour function like "
+            "rgb(255,0,0)",
+            id="colour-the-css-parser-raises-on",
+        ),
     ],
 )
 def test_a_math_block_that_cannot_render_fails_at_its_path(expression: str, message: str) -> None:
