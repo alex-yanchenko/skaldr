@@ -162,6 +162,32 @@ def test_a_bounded_number_at_its_edge_passes_both_the_build_and_the_schema(block
 
 
 @pytest.mark.parametrize(
+    ("block", "build_message"),
+    [
+        pytest.param(
+            {"type": "text", "body": "x", "span": 2.0},
+            "blocks.0.text.span: Input should be a valid integer",
+            id="integral-float-span",
+        ),
+        pytest.param(
+            {"type": "meter", "items": [{"label": "m", "value": 1, "max": 1e301}]},
+            "blocks.0.meter.items.0.max: Value error, must be between -1e+300 and 1e+300",
+            id="number-past-the-bound",
+        ),
+    ],
+)
+def test_the_schema_accepts_what_the_guide_says_only_the_build_refuses(
+    block: dict[str, Any], build_message: str
+) -> None:
+    document = make_report(blocks=[block])
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(document)
+
+    assert (str(raised.value), schema_errors(document)) == (f"invalid content data: {build_message}", [])
+
+
+@pytest.mark.parametrize(
     ("block", "location", "build_message", "schema_path", "schema_messages"),
     [
         pytest.param(

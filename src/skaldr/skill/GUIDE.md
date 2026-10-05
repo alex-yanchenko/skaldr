@@ -31,7 +31,9 @@ fail where `value: 5` and `start: 4` pass. A whole-number field such as `span` o
 integer, not `2.0`; a field that takes decimals also takes an integer. A true/false field takes
 `true` or `false` (YAML also reads a bare `yes` or `no` as one), not a quoted `'no'` or a `1`. YAML
 reads `1e3` and `1e+3` as text, because its float form needs a dot and a signed exponent, so write
-`1000` or `1.0e+3` in a number field.
+`1000` or `1.0e+3` in a number field. The JSON Schema from `--write-schema` is looser than the build
+in two places: it accepts an integral float such as `span: 2.0` where the build wants `2`, and it
+states no bound on a number, while the build refuses one beyond 1e300 in either direction.
 
 A heading's text, a section, panel or toggle title, a tab label, a list point, and the other names
 and labels the schema marks with `pattern: \S` must hold visible text. An empty or whitespace-only
@@ -246,10 +248,10 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
 Images must be self-contained `data:` URIs — skaldr
 embeds images, it does not fetch or generate them; **base64-encode the payload** (a raw,
 unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
-`section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one; a `panel` holds any block
-except a `section`, a `grid`, a `walkthrough` or a `panel` directly inside it. A section **starts collapsed** (`collapsed: true` default) — right
-for an appendix or detail-on-demand; for a doc meant to be **read through** (a weekly status doc), set
-`collapsed: false` so it opens expanded. Its optional `updated` shows a muted "updated <value>" stamp
+`section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one. A `panel` holds any block
+except a `section`, a `grid`, a `walkthrough` or another `panel` directly inside it. A section
+**starts collapsed** (`collapsed: true` default) — right for an appendix or detail-on-demand; for a
+doc meant to be **read through** (a weekly status doc), set `collapsed: false` so it opens expanded. Its optional `updated` shows a muted "updated <value>" stamp
 in the section header — a free-form label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor — a living-doc region can be both navigable and freshness-stamped.
