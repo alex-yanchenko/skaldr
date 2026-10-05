@@ -1,8 +1,8 @@
 <div class="sc" data-open="false">
-<button class="sc-btn" type="button" aria-label="Display settings" aria-expanded="false" aria-controls="sc-menu">
+<button class="sc-btn" type="button" aria-label="Display settings" aria-expanded="false" aria-controls="{{ settings_menu_id }}">
 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="var(--surface)"/><circle cx="15" cy="16" r="2.6" fill="var(--surface)"/></svg>
 </button>
-<div class="sc-menu" id="sc-menu" role="group" aria-label="Display settings" hidden>
+<div class="sc-menu" id="{{ settings_menu_id }}" role="group" aria-label="Display settings" hidden>
 <div class="sc-row"><span class="sc-lbl">Theme</span><div class="sc-seg" role="group" aria-label="Theme"><button type="button" aria-pressed="false" data-set="theme" data-val="auto">Auto</button><button type="button" aria-pressed="false" data-set="theme" data-val="light">Light</button><button type="button" aria-pressed="false" data-set="theme" data-val="dark">Dark</button></div></div>
 <div class="sc-row"><span class="sc-lbl">Width</span><div class="sc-seg" role="group" aria-label="Width"><button type="button" aria-pressed="false" data-set="width" data-val="default">Default</button><button type="button" aria-pressed="false" data-set="width" data-val="wide">Wide</button><button type="button" aria-pressed="false" data-set="width" data-val="full">Full</button></div></div>
 </div>

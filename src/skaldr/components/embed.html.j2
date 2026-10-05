@@ -4,6 +4,7 @@
    host provides those). A leading <title> lets the Artifact publisher name the artifact. Inline JS is
    allowed in Artifacts, so theme/width controls and the print handler work here too. #}
 <title>{{ meta.title }}</title>
+<meta name="{{ render_stamp_name }}" content="{{ render_stamp }}">
 {% if source_block %}{{ source_block }}
 {% endif %}<style>{{ styles | safe }}</style>
 {% include "_theme_boot.html.j2" %}

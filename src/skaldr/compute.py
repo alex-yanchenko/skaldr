@@ -10,10 +10,13 @@ it, and models must not import compute) so templates can reach it through this o
 import json
 import math
 import re
+import shlex
 import string
+import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cache
+from http import HTTPStatus
 from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
 
 import roman
@@ -67,6 +70,7 @@ __all__ = [
     "matrix_tallies",
     "pct",
     "provenance_footer",
+    "reason_phrase",
     "reconcile_line",
     "reference_numbers",
     "rich_text_strings",
@@ -78,11 +82,30 @@ __all__ = [
     "validate_rich_text_fields",
 ]
 
-_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+_SLUG_CATEGORIES = frozenset("LNM")
+_SLUG_SEPARATORS = re.compile(r"-+")
+
+SOURCE_BLOCK_ID = "skaldr-source"
+SETTINGS_MENU_ID = "sc-menu"
+
+
+def _kept_in_a_slug(character: str) -> bool:
+    return unicodedata.category(character)[0] in _SLUG_CATEGORIES
 
 
 def _slugify(text: str) -> str:
-    return _SLUG_STRIP.sub("-", text.lower()).strip("-") or "section"
+    lowered = unicodedata.normalize("NFC", text).lower()
+    marked = "".join(character if _kept_in_a_slug(character) else "-" for character in lowered)
+    return _SLUG_SEPARATORS.sub("-", marked).strip("-") or "section"
+
+
+def _page_ids(report: Report) -> set[str]:
+    reference_ids = (
+        anchor
+        for item in iter_reference_items(report.blocks)
+        for anchor in (f"ref-{item.key}", f"fnref-{item.key}")
+    )
+    return {SOURCE_BLOCK_ID, SETTINGS_MENU_ID, *reference_ids}
 
 
 def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
@@ -110,8 +133,16 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     suffix); a text-derived slug de-dups the same way. Duplicate author ids fail validation."""
     anchored = list(_iter_anchored(report.blocks))
     explicit = [block.id for block in anchored if block.id is not None]
+    page_ids = _page_ids(report)
+    reserved = next((anchor for anchor in explicit if anchor in page_ids), None)
+    if reserved is not None:
+        raise ReportError(
+            f"anchor id '{reserved}' is one the page itself uses (the source block, the settings menu, or a "
+            "reference and its citation); give the heading or section another id"
+        )
+
     slugs: dict[int, str] = {}
-    taken: set[str] = set(explicit)
+    taken: set[str] = set(explicit) | page_ids
     for block in anchored:
         if block.id is not None:
             slugs[id(block)] = block.id
@@ -791,29 +822,11 @@ def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> Matrix
     return MatrixCellDisplay(cell.tone, cell.label or "")
 
 
-HTTP_REASONS = {
-    200: "OK",
-    201: "Created",
-    202: "Accepted",
-    204: "No Content",
-    301: "Moved Permanently",
-    302: "Found",
-    304: "Not Modified",
-    400: "Bad Request",
-    401: "Unauthorized",
-    403: "Forbidden",
-    404: "Not Found",
-    405: "Method Not Allowed",
-    409: "Conflict",
-    410: "Gone",
-    415: "Unsupported Media Type",
-    422: "Unprocessable Entity",
-    429: "Too Many Requests",
-    500: "Internal Server Error",
-    502: "Bad Gateway",
-    503: "Service Unavailable",
-    504: "Gateway Timeout",
-}
+def reason_phrase(status: int) -> str:
+    try:
+        return HTTPStatus(status).phrase
+    except ValueError:
+        return ""
 
 
 def status_line(response: RequestResponse) -> str:
@@ -821,7 +834,7 @@ def status_line(response: RequestResponse) -> str:
     falls back to the standard text for the code rather than rendering a bare number."""
     if response.status is None:
         return "no status line"
-    return f"{response.status} {response.reason or HTTP_REASONS.get(response.status, '')}".strip()
+    return f"{response.status} {response.reason or reason_phrase(response.status)}".strip()
 
 
 def status_tone(response: RequestResponse) -> CaseTone:
@@ -924,12 +937,6 @@ def request_wire(block: RequestLike, case: RequestCase) -> str:
     return resolve_case("\n".join(lines), block, case)
 
 
-def single_quoted(text: str) -> str:
-    """`text` as one single-quoted shell word. A single quote inside it closes the string, escapes
-    itself and reopens, which is the only way a POSIX shell takes a quote inside single quotes."""
-    return "'" + text.replace("'", "'\\''") + "'"
-
-
 def command_for(core: RequestLike, case: RequestCase) -> str:
     """The command shown under one call, every value written out, so it runs exactly as it is copied:
     the author's own `command` when there is one, else the curl built from the call's fields."""
@@ -939,12 +946,12 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
     call = core.composed_call()
     parts = [f"curl -i -X {call.method}"]
     parts += [
-        f"  -H {single_quoted(resolve_case(f'{name}: {value}', core, case))}"
+        f"  -H {shlex.quote(resolve_case(f'{name}: {value}', core, case))}"
         for name, value in request_headers(core, case).items()
     ]
     if core.body:
-        parts.append(f"  --data {single_quoted(resolve_case(core.body, core, case))}")
-    parts.append(f"  {single_quoted(resolve_case(call.url, core, case))}")
+        parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
+    parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
 
 

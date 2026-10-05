@@ -4,3 +4,11 @@ class ReportError(Exception):
 
 class AuthError(Exception):
     pass
+
+
+class ReadOnlyFileError(PermissionError):
+    pass
+
+
+class PageFetchError(OSError):
+    pass

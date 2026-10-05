@@ -218,9 +218,19 @@ def test_a_backslash_in_a_link_target_stays_a_backslash_like_the_html_href() -> 
 @pytest.mark.parametrize(
     ("url", "written"),
     [
-        pytest.param("https://e.com/a?q=1#top", "https://e.com/a?q=1#top", id="plain-url"),
         pytest.param("https://e.com/a\n\n# Injected", "https://e.com/a%0A%0A#%20Injected", id="line-breaks"),
         pytest.param("https://e.com/\ta\r<b>", "https://e.com/%09a%0D%3Cb%3E", id="tab-cr-and-angles"),
+    ],
+)
+def test_a_link_target_holding_whitespace_is_percent_encoded(url: str, written: str) -> None:
+    assert render_markdown([Paragraph((Link((Plain("x"),), url),))]) == f"[x]({written})\n"
+
+
+@pytest.mark.parametrize(
+    ("url", "written"),
+    [
+        pytest.param("https://e.com/a?q=1#top", "https://e.com/a?q=1#top", id="plain-url"),
+        pytest.param("https://e.com/a<b>", "https://e.com/a%3Cb%3E", id="angles"),
     ],
 )
 def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(

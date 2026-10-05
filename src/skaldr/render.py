@@ -2,20 +2,24 @@
 
 The page carries its own skeleton (`<!doctype>`, `<meta charset>`, viewport), inlines all CSS,
 and uses system fonts only — so it renders anywhere with no external resources. Rich-text prose
-is a limited markdown subset (bold/italic/code/strike/links); everything else is escaped, so a
+is a limited markdown subset (see `skaldr --guide`, "Rich text"); everything else is escaped, so a
 content file can never smuggle in raw HTML.
 """
 
 import re
+from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
+from pydantic import NonNegativeInt, TypeAdapter, ValidationError
 
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
+from skaldr.frozen_model import FrozenModel
 from skaldr.mathml import mathml
 from skaldr.models import (
     Heading,
@@ -23,7 +27,6 @@ from skaldr.models import (
     Section,
     ToneLiteral,
     iter_requests,
-    load_report,
     package_text,
     unresolvable_request_variables,
 )
@@ -38,8 +41,70 @@ from skaldr.richtext import (
     parse_rich,
     write_runs,
 )
+from skaldr.version import skaldr_version
 
 _HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
+
+RENDER_STAMP_NAME = "skaldr-render"
+_EMBED_TEMPLATE = "embed.html.j2"
+
+
+class RenderOptions(FrozenModel):
+    embed: bool
+    live: int | None
+    source: bool
+    version: str
+
+
+@dataclass(frozen=True)
+class RecordedRender:
+    options: RenderOptions | None
+    live: int | None
+
+
+class _RecordedRenderReader(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stamp: str | None = None
+        self.body_live: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "meta" and attributes.get("name") == RENDER_STAMP_NAME and self.stamp is None:
+            self.stamp = attributes.get("content")
+        elif tag == "body":
+            self.body_live = attributes.get("data-skaldr-live")
+
+
+_LIVE_INTERVAL: TypeAdapter[int] = TypeAdapter(NonNegativeInt)
+
+
+def _stamped_options(stamp: str | None) -> RenderOptions | None:
+    if stamp is None:
+        return None
+    try:
+        return RenderOptions.model_validate_json(stamp)
+    except ValidationError:
+        return None
+
+
+def _body_live(attribute: str | None) -> int | None:
+    if attribute is None:
+        return None
+    try:
+        return _LIVE_INTERVAL.validate_python(attribute)
+    except ValidationError:
+        return None
+
+
+def recorded_render(html: str) -> RecordedRender:
+    reader = _RecordedRenderReader()
+    reader.feed(html)
+    reader.close()
+    options = _stamped_options(reader.stamp)
+    if options is not None:
+        return RecordedRender(options, options.live)
+    return RecordedRender(None, _body_live(reader.body_live))
 
 
 class _HtmlRuns:
@@ -108,7 +173,11 @@ def render_richtext(
     return Markup(write_runs(runs, _HtmlRuns(cited if cited is not None else set(), placeholders)))
 
 
-def _environment() -> Environment:
+def unhandled_block(block_type: str) -> NoReturn:
+    raise ReportError(f"no HTML template renders the block type '{block_type}'")
+
+
+def html_environment() -> Environment:
     env = Environment(
         loader=PackageLoader("skaldr", "components"),
         undefined=StrictUndefined,
@@ -143,6 +212,8 @@ def _environment() -> Environment:
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,
+        settings_menu_id=compute.SETTINGS_MENU_ID,
+        unhandled_block=unhandled_block,
     )
     return env
 
@@ -156,7 +227,10 @@ def _render(
     source: str | None = None,
     live: int | None = None,
 ) -> str:
-    env = _environment()
+    stamp = RenderOptions(
+        embed=template == _EMBED_TEMPLATE, live=live, source=source is not None, version=skaldr_version()
+    )
+    env = html_environment()
     slugs = compute.anchor_slugs(report)
 
     def anchor_id(block: Heading | Section) -> str:
@@ -204,6 +278,8 @@ def _render(
         has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,
         live=live,
+        render_stamp_name=RENDER_STAMP_NAME,
+        render_stamp=stamp.model_dump_json(),
     )
 
 
@@ -262,7 +338,7 @@ def source_block(source: str) -> Markup:
     hidden = hide_script_close(source)
     begin = _SOURCE_BEGIN if hidden == source else _SOURCE_BEGIN_ESCAPED
     return Markup(
-        '<script type="application/yaml" id="skaldr-source">\n'
+        f'<script type="application/yaml" id="{compute.SOURCE_BLOCK_ID}">\n'
         "# skaldr embeds this page's editable YAML source below, so an agent can recover it WITHOUT\n"
         "# reading the rendered HTML/CSS. Recover it with `skaldr --extract-source <file-or-url>`, or\n"
         "# read only the lines between the scissor markers. This block does not affect rendering.\n"
@@ -312,7 +388,7 @@ def render_embed(report: Report, *, source: str | None = None) -> str:
     inline JS), so it self-manages theme/width and stays `light-dark()` + `[data-theme]` aware.
     `source`, when given, is embedded so a shared Artifact carries its own recoverable YAML — the
     common case, since Artifacts are shared as URLs an agent then has to read back."""
-    return _render(report, "embed.html.j2", source=source)
+    return _render(report, _EMBED_TEMPLATE, source=source)
 
 
 def render_report(
@@ -329,12 +405,4 @@ def render_report(
     for an `--embed` fragment: those get published as Artifacts, and a shared page that reloads itself
     on someone else's screen is never what the author meant."""
     html = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    replace_file(out_path.resolve(), html)
-
-
-def render_file(data_path: Path, out_path: Path, *, embed: bool = False) -> Report:
-    report = load_report(data_path)
-    source = data_path.read_text(encoding="utf-8")
-    render_report(report, out_path, embed=embed, source=source)
-    return report
+    replace_file(out_path, html)

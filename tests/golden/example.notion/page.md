@@ -629,7 +629,7 @@ The bin lookup above assumes you already hold a token. Getting one is its own ca
 curl -i -X POST \
   -H 'Content-Type: application/json' \
   --data '{"key":"{{api_key}}","scope":"inventory.read"}' \
-  'https://wms.example.com/v2/sessions'
+  https://wms.example.com/v2/sessions
 ```
 **Recorded response**: 200 OK
 ```http

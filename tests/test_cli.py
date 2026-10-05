@@ -1,5 +1,11 @@
+import errno
+import itertools
 import json
 import os
+import re
+import stat
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -7,8 +13,9 @@ import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ReportError
-from skaldr.models import Report, parse_report
-from skaldr.render import render_html, render_report
+from skaldr.models import Report, load_report, parse_report
+from skaldr.render import render_embed, render_html
+from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import make_reconciled_table, make_report
 
@@ -137,6 +144,92 @@ def test_extract_source_reports_an_unreadable_target(
 ) -> None:
     assert main(["--extract-source", str(tmp_path / "nope.html")]) == 1
     assert "could not read" in capsys.readouterr().err
+
+
+def test_extract_source_gives_up_on_a_url_that_stalls_naming_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, float | None]] = []
+
+    def stalled_urlopen(url: str, timeout: float | None = None) -> object:
+        calls.append((url, timeout))
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("skaldr.cli.urllib.request.urlopen", stalled_urlopen)
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err, calls) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: timed out\n",
+        [("https://pages.example.com/plan.html", 30)],
+    )
+
+
+class _StreamedResponse:
+    def __init__(self, chunks: Iterator[bytes]) -> None:
+        self._chunks = chunks
+
+    def read(self, _size: int = -1) -> bytes:
+        return next(self._chunks, b"")
+
+    def __enter__(self) -> "_StreamedResponse":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+
+def _serve(monkeypatch: pytest.MonkeyPatch, chunks: Iterator[bytes]) -> None:
+    def urlopen(_url: str, timeout: float | None = None) -> _StreamedResponse:
+        assert timeout == 30
+        return _StreamedResponse(chunks)
+
+    monkeypatch.setattr("skaldr.cli.urllib.request.urlopen", urlopen)
+
+
+def test_extract_source_reads_a_page_streamed_in_chunks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    page = out_path.read_bytes()
+    _serve(monkeypatch, iter([page[:1000], page[1000:]]))
+    capsys.readouterr()
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, data_path.read_text(encoding="utf-8"))
+
+
+def test_extract_source_gives_up_when_the_whole_fetch_outlasts_its_deadline(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clock = iter(range(0, 1000, 10))
+    monkeypatch.setattr("skaldr.cli.time.monotonic", lambda: float(next(clock)))
+    _serve(monkeypatch, itertools.repeat(b"x"))
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: "
+        "the page took longer than 30 seconds to download\n",
+    )
+
+
+def test_extract_source_refuses_a_page_larger_than_its_cap(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _serve(monkeypatch, itertools.repeat(b"x" * 1024 * 1024))
+
+    exit_code = main(["--extract-source", "https://pages.example.com/plan.html"])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: could not read https://pages.example.com/plan.html: the page is larger than 16 MB\n",
+    )
 
 
 def test_success_exit_code_and_summary(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -277,6 +370,83 @@ def test_write_schema_writes_current_schema(tmp_path: Path) -> None:
     assert json.loads(schema_path.read_text(encoding="utf-8")) == Report.model_json_schema()
 
 
+def test_write_schema_writes_through_a_symlink_and_keeps_the_link(tmp_path: Path) -> None:
+    target = tmp_path / "shared" / "page.schema.json"
+    target.parent.mkdir()
+    target.write_text("{}", encoding="utf-8")
+    link = tmp_path / "page.schema.json"
+    link.symlink_to(target)
+
+    exit_code = main(["--write-schema", str(link)])
+
+    assert (exit_code, link.is_symlink(), json.loads(target.read_text(encoding="utf-8"))) == (
+        0,
+        True,
+        Report.model_json_schema(),
+    )
+
+
+def test_write_schema_keeps_the_mode_of_the_file_it_replaces(tmp_path: Path) -> None:
+    schema_path = tmp_path / "page.schema.json"
+    schema_path.write_text("{}", encoding="utf-8")
+    schema_path.chmod(0o600)
+
+    assert main(["--write-schema", str(schema_path)]) == 0
+
+    assert (
+        json.loads(schema_path.read_text(encoding="utf-8")),
+        stat.S_IMODE(schema_path.stat().st_mode),
+        sorted(tmp_path.iterdir()),
+    ) == (Report.model_json_schema(), 0o600, [schema_path])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a read-only file")
+def test_write_schema_refuses_a_read_only_file_naming_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    schema_path = tmp_path / "page.schema.json"
+    schema_path.write_text("{}", encoding="utf-8")
+    schema_path.chmod(0o444)
+
+    exit_code = main(["--write-schema", str(schema_path)])
+
+    assert (exit_code, capsys.readouterr().err, schema_path.read_text(encoding="utf-8")) == (
+        1,
+        f"error: [Errno {errno.EACCES}] the file is read-only, so skaldr leaves it as it is: "
+        f"'{schema_path}'\n",
+        "{}",
+    )
+
+
+def test_a_render_keeps_the_mode_of_the_page_it_replaces(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+    out_path.write_text("earlier page", encoding="utf-8")
+    out_path.chmod(0o640)
+
+    assert main([str(data_path), "-o", str(out_path), "--no-source"]) == 0
+
+    assert (
+        out_path.read_text(encoding="utf-8"),
+        stat.S_IMODE(out_path.stat().st_mode),
+        sorted(tmp_path.iterdir()),
+    ) == (render_html(parse_report(make_report())), 0o640, [out_path, data_path])
+
+
+def test_a_render_into_a_symlink_whose_folder_is_missing_creates_the_folder(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    target = tmp_path / "published" / "deep" / "report.html"
+    link = tmp_path / "report.html"
+    link.symlink_to(target)
+
+    assert main([str(data_path), "-o", str(link), "--no-source"]) == 0
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (
+        True,
+        render_html(parse_report(make_report())),
+    )
+
+
 def test_committed_schema_is_fresh() -> None:
     committed = json.loads((REPO_ROOT / "schema" / "page.schema.json").read_text(encoding="utf-8"))
 
@@ -352,6 +522,114 @@ def test_checking_a_set_while_asking_for_one_render_is_refused_before_any_work(
     assert excinfo.value.code == 2
     assert "an output flag renders one file" in captured.err
     assert "OK" not in captured.out
+
+
+def _return_without_watching(*_args: object, **_kwargs: object) -> int:
+    return 0
+
+
+_NO_SOURCE_WITHOUT_A_PAGE = (
+    "--no-source shapes the HTML page, and this command writes none; add -o to write one, or drop --no-source"
+)
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        pytest.param(
+            ["{data}", "--watch", "--if-stale"],
+            "--watch re-renders on every save, so --if-stale has nothing to skip; drop one of them",
+            id="watch-if-stale",
+        ),
+        pytest.param(["--check", "{data}", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="check-no-source"),
+        pytest.param(
+            ["{data}", "--pdf", "{tmp}/x.pdf", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="pdf-no-source"
+        ),
+        pytest.param(
+            ["--emit-json", "{data}", "--no-source"], _NO_SOURCE_WITHOUT_A_PAGE, id="emit-json-no-source"
+        ),
+        pytest.param(
+            ["--write-schema", "{tmp}/s.json", "--watch"],
+            "--write-schema runs on its own; drop --watch",
+            id="write-schema-watch",
+        ),
+        pytest.param(
+            ["--guide", "{data}"], "--guide runs on its own; drop the content file", id="guide-data"
+        ),
+        pytest.param(
+            ["--extract-source", "{tmp}/page.html", "-o", "{tmp}/x.html", "--no-source"],
+            "--extract-source runs on its own; drop --out, --no-source",
+            id="extract-source-out",
+        ),
+        pytest.param(
+            ["--install-skill", "--install-plan-rule"],
+            "--install-skill runs on its own; drop --install-plan-rule",
+            id="two-installs",
+        ),
+        pytest.param(
+            ["--install-plan-rule", "{data}", "--strict"],
+            "--install-plan-rule runs on its own; drop the content file, --strict",
+            id="plan-rule-with-a-file",
+        ),
+    ],
+)
+def test_a_flag_that_would_be_silently_ignored_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    message: str,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr("skaldr.cli._watch", _return_without_watching)
+    data_path = _write(tmp_path, make_report())
+    filled = [part.format(data=data_path, tmp=tmp_path) for part in argv]
+
+    with pytest.raises(SystemExit) as raised:
+        main(filled)
+
+    assert (raised.value.code, capsys.readouterr().err.splitlines()[-1].split(": error: ", 1)[1]) == (
+        2,
+        message,
+    )
+    assert sorted(tmp_path.iterdir()) == [data_path]
+
+
+def test_no_source_with_a_checked_render_writes_the_page_without_its_source(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "report.html"
+
+    assert main(["--check", str(data_path), "-o", str(out_path), "--no-source"]) == 0
+
+    assert out_path.read_text(encoding="utf-8") == render_html(parse_report(make_report()))
+
+
+def test_no_source_with_a_checked_embed_writes_the_default_fragment_without_its_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+
+    assert main(["--check", str(data_path), "--embed", "--no-source"]) == 0
+
+    assert (tmp_path / "out" / "report.html").read_text(encoding="utf-8") == render_embed(
+        parse_report(make_report())
+    )
+
+
+def test_no_source_is_accepted_with_watch_and_reaches_the_watch_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    watched: list[bool] = []
+
+    def record_watch(*_args: object, no_source: bool = False, **_kwargs: object) -> int:
+        watched.append(no_source)
+        return 0
+
+    monkeypatch.setattr("skaldr.cli._watch", record_watch)
+    data_path = _write(tmp_path, make_report())
+
+    assert (main([str(data_path), "--watch", "--no-source"]), watched) == (0, [True])
 
 
 @pytest.mark.parametrize(
@@ -1220,6 +1498,257 @@ def test_check_and_if_stale_are_the_plan_loop(tmp_path: Path, capsys: pytest.Cap
     assert out_path.stat().st_mtime_ns == first
 
 
+def _set_mtime(path: Path, seconds_ago: int) -> None:
+    moment = time.time() - seconds_ago
+    os.utime(path, (moment, moment))
+
+
+def test_the_live_plan_loop_keeps_the_reloader_through_every_if_stale_re_render(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), "--live"]) == 0
+    for body in ("first edit", "second edit"):
+        _set_mtime(out_path, 60)
+        _write(tmp_path, make_report(blocks=[{"type": "text", "body": body}]))
+        assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    edited = parse_report(make_report(blocks=[{"type": "text", "body": "second edit"}]))
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(edited, source=source, live=0)
+
+
+def test_if_stale_keeps_a_live_page_that_is_current_untouched(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), "--live", "500"]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
+
+
+@pytest.mark.parametrize(
+    ("first_render", "if_stale_render", "embed", "with_source", "live"),
+    [
+        pytest.param([], ["--embed"], True, True, None, id="to-embed"),
+        pytest.param([], ["--no-source"], False, False, None, id="to-no-source"),
+        pytest.param(["--no-source"], [], False, True, None, id="back-to-source"),
+        pytest.param(["--live"], ["--live", "500"], False, True, 500, id="to-another-interval"),
+        pytest.param([], ["--live"], False, True, 0, id="to-live"),
+    ],
+)
+def test_if_stale_re_renders_a_current_page_written_with_other_options(
+    tmp_path: Path,
+    first_render: list[str],
+    if_stale_render: list[str],
+    embed: bool,
+    with_source: bool,
+    live: int | None,
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path), *first_render]) == 0
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale", *if_stale_render]) == 0
+
+    report = parse_report(make_report())
+    source = data_path.read_text(encoding="utf-8") if with_source else None
+    expected = render_embed(report, source=source) if embed else render_html(report, source=source, live=live)
+    assert out_path.read_text(encoding="utf-8") == expected
+
+
+def test_if_stale_re_renders_a_page_from_an_older_skaldr_and_keeps_its_live_interval(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    _set_mtime(data_path, 60)
+    out_path = tmp_path / "plan.html"
+    out_path.write_text('<!doctype html><html><body data-skaldr-live="300"></body></html>', encoding="utf-8")
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(
+        parse_report(make_report()), source=source, live=300
+    )
+
+
+def test_if_stale_re_renders_when_an_included_fragment_is_newer_than_the_page(tmp_path: Path) -> None:
+    part_path = tmp_path / "part.yaml"
+    part_path.write_text("type: text\nbody: version one\n", encoding="utf-8")
+    nested_path = tmp_path / "nested.yaml"
+    nested_path.write_text("- !include part.yaml\n", encoding="utf-8")
+    main_path = tmp_path / "main.yaml"
+    main_path.write_text("version: 1\nmeta:\n  title: T\nblocks: !include nested.yaml\n", encoding="utf-8")
+    out_path = tmp_path / "main.html"
+    assert main([str(main_path), "-o", str(out_path)]) == 0
+    for path, seconds_ago in ((main_path, 120), (nested_path, 120), (out_path, 60)):
+        _set_mtime(path, seconds_ago)
+    part_path.write_text("type: text\nbody: version two\n", encoding="utf-8")
+
+    assert main([str(main_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = main_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(load_report(main_path), source=source)
+
+
+def test_if_stale_leaves_a_current_embed_fragment_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "fragment.html"
+    assert main([str(data_path), "-o", str(out_path), "--embed"]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--embed", "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
+
+
+def test_if_stale_counts_a_page_exactly_as_old_as_its_content_as_current(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    moment = time.time() - 60
+    os.utime(data_path, (moment, moment))
+    os.utime(out_path, (moment, moment))
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"up to date  {out_path}\n")
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        pytest.param("version: 1\nmeta: [unclosed\n", "error: invalid YAML in ", id="unloadable-yaml"),
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nblocks: !include gone.yaml\n",
+            "error: file not found: ",
+            id="missing-include",
+        ),
+    ],
+)
+def test_if_stale_counts_content_it_cannot_load_as_stale_so_the_render_reports_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], content: str, error: str
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    _set_mtime(data_path, 120)
+    _set_mtime(out_path, 60)
+    data_path.write_text(content, encoding="utf-8")
+    _set_mtime(data_path, 120)
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err.startswith(error)) == (1, "", True)
+
+
+def test_if_stale_with_pdf_always_renders_both_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    printed: list[Path] = []
+
+    def record(_html: str, path: Path) -> None:
+        printed.append(path)
+
+    monkeypatch.setattr("skaldr.cli.html_to_pdf", record)
+    data_path = _write(tmp_path, make_report())
+    out_path, pdf_path = tmp_path / "plan.html", tmp_path / "plan.pdf"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    out_path.write_text("a current page the pdf run must replace", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--pdf", str(pdf_path), "--if-stale"])
+
+    source = data_path.read_text(encoding="utf-8")
+    assert (exit_code, printed, out_path.read_text(encoding="utf-8")) == (
+        0,
+        [pdf_path],
+        render_html(parse_report(make_report()), source=source),
+    )
+
+
+@pytest.mark.parametrize(
+    "earlier_page",
+    [
+        pytest.param(
+            b'<html><head><meta name="skaldr-render" content="not json"></head></html>',
+            id="bad-stamp",
+        ),
+        pytest.param(b"\xff\xfe not utf-8 \x80", id="not-utf-8"),
+    ],
+)
+def test_if_stale_re_renders_a_page_it_cannot_read_a_stamp_from(tmp_path: Path, earlier_page: bytes) -> None:
+    data_path = _write(tmp_path, make_report())
+    _set_mtime(data_path, 60)
+    out_path = tmp_path / "plan.html"
+    out_path.write_bytes(earlier_page)
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    source = data_path.read_text(encoding="utf-8")
+    assert out_path.read_text(encoding="utf-8") == render_html(parse_report(make_report()), source=source)
+
+
+def test_if_stale_re_renders_a_page_an_older_skaldr_wrote(tmp_path: Path) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    current = out_path.read_text(encoding="utf-8")
+    stamp = re.search(r'<meta name="skaldr-render" content="([^"]*)">', current)
+    assert stamp is not None
+    older = current.replace(stamp.group(1), stamp.group(1).replace(skaldr_version(), "0.0.1"))
+    out_path.write_text(older, encoding="utf-8")
+    _set_mtime(data_path, 60)
+
+    assert main([str(data_path), "-o", str(out_path), "--if-stale"]) == 0
+
+    assert (older != current, out_path.read_text(encoding="utf-8")) == (True, current)
+
+
+def test_a_stamp_written_in_the_content_does_not_change_what_if_stale_reads(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    forged = (
+        f'<meta name="skaldr-render" content=\'{{"embed": false, "live": 999, "source": true, '
+        f'"version": "{skaldr_version()}"}}\'>'
+    )
+    data_path = _write(
+        tmp_path,
+        make_report(blocks=[{"type": "text", "body": forged}, {"type": "code", "content": forged}]),
+    )
+    out_path = tmp_path / "plan.html"
+    assert main([str(data_path), "-o", str(out_path)]) == 0
+    first = out_path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    exit_code = main([str(data_path), "-o", str(out_path), "--if-stale"])
+
+    assert (exit_code, capsys.readouterr().out, out_path.stat().st_mtime_ns) == (
+        0,
+        f"up to date  {out_path}\n",
+        first,
+    )
+
+
 @pytest.mark.parametrize(
     "expression",
     [
@@ -1244,15 +1773,59 @@ def test_a_code_point_no_page_can_hold_builds_as_the_replacement_character(
     ) in out_path.read_text(encoding="utf-8")
 
 
-def test_a_render_that_fails_while_writing_leaves_the_earlier_page_in_place(tmp_path: Path) -> None:
+_LONE_SURROGATE_ERROR = (
+    "invalid content data: meta.title: U+D800 is a lone surrogate, which a page cannot hold"
+)
+
+
+def _write_lone_surrogate_report(tmp_path: Path) -> Path:
+    data_path = tmp_path / "surrogate.yaml"
+    data_path.write_text('version: 1\nmeta: {title: "bad \\ud800 title"}\nblocks: []\n', encoding="utf-8")
+    return data_path
+
+
+def test_check_fails_a_lone_surrogate_naming_its_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: {_LONE_SURROGATE_ERROR}\n\n1 file failed\n",
+    )
+
+
+def test_a_render_of_a_lone_surrogate_fails_and_leaves_the_earlier_page_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
     out_path = tmp_path / "report.html"
     out_path.write_text("earlier page", encoding="utf-8")
-    report = parse_report(make_report(blocks=[{"type": "text", "body": "lone \ud800 surrogate"}]))
 
-    with pytest.raises(UnicodeEncodeError):
-        render_report(report, out_path)
+    exit_code = main([str(data_path), "-o", str(out_path)])
 
-    assert (out_path.read_text(encoding="utf-8"), sorted(tmp_path.iterdir())) == ("earlier page", [out_path])
+    assert (exit_code, capsys.readouterr().err, out_path.read_text(encoding="utf-8")) == (
+        1,
+        f"error: {_LONE_SURROGATE_ERROR}\n",
+        "earlier page",
+    )
+
+
+def test_an_export_of_a_lone_surrogate_fails_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write_lone_surrogate_report(tmp_path)
+    export_dir = tmp_path / "exported"
+
+    exit_code = main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)])
+
+    assert (exit_code, capsys.readouterr().err, export_dir.exists()) == (
+        1,
+        f"error: {_LONE_SURROGATE_ERROR}\n",
+        False,
+    )
 
 
 def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a_link(
@@ -1275,6 +1848,22 @@ def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a
         "",
         True,
         expected_page,
+    )
+
+
+def test_a_symlink_loop_at_the_output_path_fails_naming_that_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    out_path = tmp_path / "loop1.html"
+    out_path.symlink_to(tmp_path / "loop2.html")
+    (tmp_path / "loop2.html").symlink_to(out_path)
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"error: [Errno {errno.ELOOP}] {os.strerror(errno.ELOOP)}: '{out_path}'\n",
     )
 
 

@@ -1,5 +1,6 @@
 import re
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
 from typing import get_args
 
@@ -7,7 +8,6 @@ import pytest
 
 from skaldr.compute import (
     DELTA_GLYPHS,
-    HTTP_REASONS,
     Strip,
     StripLabel,
     anchor_slugs,
@@ -18,10 +18,10 @@ from skaldr.compute import (
     paragraphs,
     produced_names,
     provenance_footer,
+    reason_phrase,
     reconcile_line,
     reference_numbers,
     request_wire,
-    single_quoted,
     status_line,
     strip_registry,
     swimlane_layout,
@@ -30,6 +30,7 @@ from skaldr.compute import (
     used_badges,
     variable_parts,
 )
+from skaldr.errors import ReportError
 from skaldr.models import (
     DeltaDirection,
     ListNumbering,
@@ -771,6 +772,70 @@ def test_anchor_slugs_uses_an_author_id_verbatim_and_yields_the_derived_slug_to_
     assert list(anchor_slugs(report).values()) == ["overview", "overview-2"]
 
 
+def test_anchor_slugs_yield_to_the_ids_the_page_itself_uses() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "Skaldr source"},
+                {"type": "heading", "text": "SC menu"},
+                {"type": "heading", "text": "Ref a"},
+                {"type": "heading", "text": "Fnref a"},
+                {"type": "heading", "text": "Ref b"},
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+            ],
+        )
+    )
+
+    assert list(anchor_slugs(report).values()) == [
+        "skaldr-source-2",
+        "sc-menu-2",
+        "ref-a-2",
+        "fnref-a-2",
+        "ref-b",
+    ]
+
+
+@pytest.mark.parametrize("author_id", ["skaldr-source", "sc-menu", "ref-a", "fnref-a"])
+def test_anchor_slugs_refuse_an_author_id_the_page_itself_uses(author_id: str) -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "A", "id": author_id},
+                {"type": "references", "items": [{"key": "a", "text": "A"}]},
+            ],
+        )
+    )
+
+    with pytest.raises(ReportError) as raised:
+        anchor_slugs(report)
+
+    assert str(raised.value) == (
+        f"anchor id '{author_id}' is one the page itself uses (the source block, the settings menu, or a "
+        "reference and its citation); give the heading or section another id"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "slug"),
+    [
+        pytest.param("Über uns", "über-uns", id="accented-latin"),
+        pytest.param("日本語の見出し", "日本語の見出し", id="japanese"),
+        pytest.param("Ünïcödé — and ASCII 2", "ünïcödé-and-ascii-2", id="mixed"),
+        pytest.param("snake_case name", "snake-case-name", id="underscore"),
+        pytest.param("Über", "über", id="decomposed"),
+        pytest.param("हिन्दी भाषा", "हिन्दी-भाषा", id="devanagari-vowel-signs"),
+        pytest.param("สวัสดี ครับ", "สวัสดี-ครับ", id="thai-combining-vowels"),
+        pytest.param("İstanbul", "i̇stanbul", id="dotted-capital-i"),
+        pytest.param("Price: 5 € / unit_cost", "price-5-unit-cost", id="symbols-and-underscore"),
+        pytest.param("!!!", "section", id="no-letters"),
+    ],
+)
+def test_anchor_slugs_keep_letters_and_digits_from_any_script(text: str, slug: str) -> None:
+    report = parse_report(make_report(blocks=[{"type": "heading", "text": text}]))
+
+    assert list(anchor_slugs(report).values()) == [slug]
+
+
 def test_toc_uses_an_author_id_as_the_anchor_target() -> None:
     report = parse_report(
         make_report(
@@ -1061,36 +1126,33 @@ def test_reference_numbers_reach_a_references_block_in_a_walkthrough_step_detail
 
 
 @pytest.mark.parametrize(
-    ("plain", "quoted"),
-    [
-        ("https://api.example.com/x", "'https://api.example.com/x'"),
-        ("it's", "'it'\\''s'"),
-        ("a;rm -rf ~", "'a;rm -rf ~'"),
-        ("", "''"),
-        ("'", "''\\'''"),
-        ("'lead", "''\\''lead'"),
-        ("trail'", "'trail'\\'''"),
-        ("a''b", "'a'\\'''\\''b'"),
-    ],
-    ids=["plain", "apostrophe", "metacharacters", "empty", "only", "leading", "trailing", "adjacent"],
-)
-def test_single_quoting_survives_a_shell_metacharacter(plain: str, quoted: str) -> None:
-    assert single_quoted(plain) == quoted
-
-
-@pytest.mark.parametrize(
     "payload",
-    ["'", "'lead", "trail'", "a''b", "x'; echo owned; '", "$(id)", "`id`", "a\nb"],
-    ids=["only", "leading", "trailing", "adjacent", "injection", "subshell", "backtick", "newline"],
+    ["'", "'lead", "trail'", "a''b", "x'; echo owned; '", "$(id)", "`id`", "a\nb", "a;rm -rf ~", "plain"],
+    ids=[
+        "only",
+        "leading",
+        "trailing",
+        "adjacent",
+        "injection",
+        "subshell",
+        "backtick",
+        "newline",
+        "metacharacters",
+        "safe",
+    ],
 )
-def test_a_single_quoted_word_is_one_shell_word_carrying_its_payload(payload: str) -> None:
-    """The quoted form must survive a real shell: one argument out, byte-identical to what went in."""
-    quoted = single_quoted(payload)
+def test_a_body_reaches_curl_as_one_word_carrying_its_payload(payload: str) -> None:
+    block = _request_block(method="POST", headers={}, body=payload)
+    command = command_for(block, block.cases[0])
 
-    assert (
-        subprocess.run(["bash", "-c", f"printf %s {quoted}"], capture_output=True, text=True).stdout
-        == payload
+    result = subprocess.run(
+        ["bash", "-c", f'curl() {{ printf %s "$5"; }}\n{command}'],
+        capture_output=True,
+        text=True,
+        check=False,
     )
+
+    assert (result.returncode, result.stdout, result.stderr) == (0, payload, "")
 
 
 @pytest.mark.parametrize(
@@ -1128,14 +1190,39 @@ def test_a_command_quotes_the_url_the_headers_and_the_body() -> None:
     command = command_for(block, block.cases[0])
 
     assert "-H 'Accept: application/json'" in command
-    assert "--data '{\"q\":\"it'\\''s\"}'" in command
+    assert '--data \'{"q":"it\'"\'"\'s"}\'' in command
     assert "'https://{{host}}/widgets'" in command
+
+
+def test_a_url_made_only_of_safe_characters_is_left_bare_in_the_command() -> None:
+    block = _request_block(url="https://api.example.com/widgets", headers={}, variables=[])
+
+    assert command_for(block, block.cases[0]) == "curl -i -X GET \\\n  https://api.example.com/widgets"
 
 
 def test_an_omitted_reason_phrase_is_filled_in_from_the_status() -> None:
     block = _request_block(cases=[{"label": "one", "response": {"status": 503, "body": "{}"}}])
 
     assert status_line(block.cases[0].response) == "503 Service Unavailable"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        pytest.param(307, "307 Temporary Redirect", id="temporary-redirect"),
+        pytest.param(206, "206 Partial Content", id="partial-content"),
+        pytest.param(501, "501 Not Implemented", id="not-implemented"),
+        pytest.param(413, f"413 {HTTPStatus(413).phrase}", id="renamed-in-3-13-content-too-large"),
+        pytest.param(422, f"422 {HTTPStatus(422).phrase}", id="renamed-in-3-13-unprocessable"),
+        pytest.param(299, "299", id="unassigned"),
+    ],
+)
+def test_every_standard_status_gets_its_reason_phrase_and_an_unassigned_one_stays_bare(
+    status: int, expected: str
+) -> None:
+    block = _request_block(cases=[{"label": "one", "response": {"status": status, "body": "{}"}}])
+
+    assert status_line(block.cases[0].response) == expected
 
 
 def test_an_authored_reason_phrase_wins_over_the_standard_text() -> None:
@@ -1214,13 +1301,47 @@ def test_produced_names_pairs_each_capture_with_the_step_that_makes_it() -> None
     assert produced_names(flow) == [(flow.steps[0].captures[0], 1)]
 
 
-def test_the_reason_table_in_the_browser_script_matches_the_one_the_page_renders() -> None:
-    """status_line fills a missing reason when the page is built; the pasted-response parser fills one
-    in the browser. Two tables that drift make the recorded pill and the live pill disagree."""
+_PHRASES_PYTHON_RENAMED: dict[int, frozenset[str]] = {
+    422: frozenset({"Unprocessable Entity", "Unprocessable Content"}),
+}
+
+
+def test_the_reason_table_in_the_browser_script_agrees_with_the_phrases_the_page_renders() -> None:
     script = Path("src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
     literal = re.search(r"var REASONS = \{(.*?)\};", script, re.DOTALL)
     assert literal is not None
 
     in_browser = {int(code): text for code, text in re.findall(r'(\d{3}):\s*"([^"]+)"', literal.group(1))}
+    disagreeing = {
+        code: text
+        for code, text in in_browser.items()
+        if text != reason_phrase(code)
+        and not {text, reason_phrase(code)} <= _PHRASES_PYTHON_RENAMED.get(code, frozenset[str]())
+    }
 
-    assert in_browser == HTTP_REASONS
+    assert (sorted(in_browser), disagreeing) == (
+        [
+            200,
+            201,
+            202,
+            204,
+            301,
+            302,
+            304,
+            400,
+            401,
+            403,
+            404,
+            405,
+            409,
+            410,
+            415,
+            422,
+            429,
+            500,
+            502,
+            503,
+            504,
+        ],
+        {},
+    )

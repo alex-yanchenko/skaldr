@@ -6,34 +6,35 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 import time
 import urllib.request
 from collections.abc import Sequence
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ReportError
+from skaldr.errors import PageFetchError, ReportError
 from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
-from skaldr.models import Report, load_report, package_path, package_text
+from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
-from skaldr.render import extract_source, find_placeholders, render_html, render_report
+from skaldr.render import (
+    RecordedRender,
+    RenderOptions,
+    extract_source,
+    find_placeholders,
+    recorded_render,
+    render_html,
+    render_report,
+)
+from skaldr.replace_file import replace_file, resolved_path
+from skaldr.version import skaldr_version
 
+_FETCH_TIMEOUT_SECONDS = 30
+_FETCH_LIMIT_BYTES = 16 * 1024 * 1024
+_FETCH_CHUNK_BYTES = 64 * 1024
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
-
-
-def _skaldr_version() -> str:
-    """The installed package version (for `--version`), so a render's authoring build is knowable.
-    Falls back to 'unknown' when run from a checkout with no installed metadata."""
-    try:
-        return _package_version("skaldr")
-    except PackageNotFoundError:
-        return "unknown"
 
 
 # Markers delimiting skaldr's managed plan-workflow block inside the user's CLAUDE.md. ASCII only —
@@ -61,7 +62,37 @@ _PLAN_RULE_BLOCK = re.compile(
 
 def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
-    return Path(out_arg).resolve() if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+    return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+
+
+_STANDALONE_MODES = frozenset(
+    {"write_schema", "guide", "install_skill", "install_plan_rule", "extract_source"}
+)
+
+
+def _flag_name(dest: str) -> str:
+    return "the content file" if dest == "data" else "--" + dest.replace("_", "-")
+
+
+def _refuse_company_for_a_standalone_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    defaults = vars(parser.parse_args([]))
+    given = [dest for dest, value in vars(args).items() if value != defaults[dest]]
+    mode = next((dest for dest in given if dest in _STANDALONE_MODES), None)
+    if mode is None:
+        return
+    others = [_flag_name(dest) for dest in given if dest != mode]
+    if others:
+        parser.error(f"{_flag_name(mode)} runs on its own; drop {', '.join(others)}")
+
+
+def _writes_an_html_page(args: argparse.Namespace) -> bool:
+    if args.emit_json or args.export:
+        return False
+    if args.out or args.watch:
+        return True
+    if args.pdf:
+        return False
+    return not args.check or args.embed
 
 
 def _run_auth(argv: list[str]) -> int:
@@ -92,12 +123,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"skaldr {_skaldr_version()}",
+        version=f"skaldr {skaldr_version()}",
         help="print the installed skaldr version and exit",
     )
     parser.add_argument(
         "data",
         nargs="*",
+        default=[],
         help="path to the content YAML (one to render; one or more with --check)",
     )
     parser.add_argument("-o", "--out", help="output HTML path (default: out/<data-stem>.html)")
@@ -137,7 +169,8 @@ def main(argv: list[str] | None = None) -> int:
         "--extract-source",
         metavar="FILE|URL",
         help="print the YAML source embedded in a rendered skaldr page (a local file or an http(s) URL) "
-        "and exit, recovering the source without parsing the HTML. Exits non-zero if none is embedded.",
+        "and exit, recovering the source without parsing the HTML. Exits non-zero if none is embedded. "
+        "A URL is downloaded in full within 30 seconds and up to 16 MB; a slower or larger page fails.",
     )
     parser.add_argument(
         "--pdf",
@@ -156,9 +189,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--if-stale",
         action="store_true",
-        help="render only when the output is missing or older than the content file; otherwise print "
-        "'up to date' and exit 0. Makes an unconditional re-render after every edit free, so no watcher "
-        "process is needed.",
+        help="render only when the output is missing, older than the content file or any file it "
+        "!includes, or written with other --embed/--no-source/--live options; otherwise print 'up to date' "
+        "and exit 0. Without --live it keeps the reloader of a page rendered with --live, so `--live` once "
+        "and `--if-stale` after every edit keeps the page live. Makes an unconditional re-render after "
+        "every edit free, so no watcher process is needed.",
     )
     parser.add_argument(
         "--live",
@@ -214,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(arguments)
+    _refuse_company_for_a_standalone_mode(parser, args)
 
     # Opportunistically refresh already-installed skills that drifted after an upgrade. Fail-safe and
     # silent unless it writes; `--install-skill` below does its own (create-or-refresh) pass.
@@ -236,8 +272,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.write_schema:
         schema_path = Path(args.write_schema)
-        schema_path.parent.mkdir(parents=True, exist_ok=True)
-        schema_path.write_text(json.dumps(Report.model_json_schema(), indent=2) + "\n", encoding="utf-8")
+        try:
+            replace_file(schema_path, json.dumps(Report.model_json_schema(), indent=2) + "\n")
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         print(f"OK  {schema_path}")
         return 0
 
@@ -250,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--emit-json only validates: it writes no HTML, so -o/--pdf/--embed do nothing")
     if args.watch and (args.check or args.emit_json or args.pdf):
         parser.error("--watch re-renders HTML on change; it can't combine with --check/--emit-json/--pdf")
+    if args.watch and args.if_stale:
+        parser.error("--watch re-renders on every save, so --if-stale has nothing to skip; drop one of them")
     if args.live is not None and (args.emit_json or args.embed):
         parser.error(
             "--live adds a self-refreshing reloader to a full HTML page; it can't combine with "
@@ -282,6 +323,11 @@ def main(argv: list[str] | None = None) -> int:
             "--live and --if-stale shape a render; --check alone writes nothing, so add "
             "-o/--pdf/--embed or drop them"
         )
+    if args.no_source and not _writes_an_html_page(args):
+        parser.error(
+            "--no-source shapes the HTML page, and this command writes none; "
+            "add -o to write one, or drop --no-source"
+        )
 
     if args.check:
         if not args.data:
@@ -296,19 +342,26 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("only one content file can be processed at a time (use --check to validate several)")
 
     data_path = Path(args.data[0]).resolve()
+    try:
+        out_path = _resolve_out_path(data_path, args.out)
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     if args.watch:
-        return _watch(
-            data_path,
-            _resolve_out_path(data_path, args.out),
-            embed=args.embed,
-            no_source=args.no_source,
-            live=args.live,
-        )
+        return _watch(data_path, out_path, embed=args.embed, no_source=args.no_source, live=args.live)
 
-    if args.if_stale and not _is_stale(data_path, _resolve_out_path(data_path, args.out), pdf=args.pdf):
-        print(f"up to date  {_resolve_out_path(data_path, args.out)}")
-        return 0
+    live: int | None = args.live
+    if args.if_stale:
+        recorded = _recorded_render(out_path)
+        if live is None and recorded is not None:
+            live = recorded.live
+        requested = RenderOptions(
+            embed=args.embed, live=live, source=not args.no_source, version=skaldr_version()
+        )
+        if not _is_stale(data_path, out_path, requested, recorded, pdf=args.pdf):
+            print(f"up to date  {out_path}")
+            return 0
 
     if args.emit_json:
         try:
@@ -326,9 +379,8 @@ def main(argv: list[str] | None = None) -> int:
         # HTML first — it needs no browser, so a later PDF failure never costs the reader the HTML.
         # Write HTML when asked (-o), or by default when no --pdf was requested.
         if args.out or not args.pdf:
-            out_path = _resolve_out_path(data_path, args.out)
             source = None if args.no_source else data_path.read_text(encoding="utf-8")
-            render_report(report, out_path, embed=args.embed, source=source, live=args.live)
+            render_report(report, out_path, embed=args.embed, source=source, live=live)
             written.append(out_path)
         if args.pdf:
             # PDF prints the full page with every section expanded: the print CSS needs the whole
@@ -347,16 +399,38 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _is_stale(data_path: Path, out_path: Path, *, pdf: str | None = None) -> bool:
-    """Whether `out_path` needs rebuilding: missing, or older than the content file. A --pdf run is
-    always stale, since the PDF is a second output this comparison doesn't see."""
+def _recorded_render(out_path: Path) -> RecordedRender | None:
+    try:
+        return recorded_render(out_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _newest_content_mtime(data_path: Path) -> float | None:
+    try:
+        mtimes = [_mtime(path) for path in content_files(data_path)]
+    except ReportError:
+        return None
+    if any(mtime is None for mtime in mtimes):
+        return None
+    return max(mtime for mtime in mtimes if mtime is not None)
+
+
+def _is_stale(
+    data_path: Path,
+    out_path: Path,
+    requested: RenderOptions,
+    recorded: RecordedRender | None,
+    *,
+    pdf: str | None = None,
+) -> bool:
     if pdf:
         return True
     out_mtime = _mtime(out_path)
-    if out_mtime is None:
+    if out_mtime is None or recorded is None or recorded.options != requested:
         return True
-    data_mtime = _mtime(data_path)
-    return data_mtime is None or data_mtime > out_mtime
+    content_mtime = _newest_content_mtime(data_path)
+    return content_mtime is None or content_mtime > out_mtime
 
 
 def _render_once(
@@ -413,14 +487,28 @@ def _watch(
         return 0
 
 
+def _fetch_page(url: str) -> bytes:
+    deadline = time.monotonic() + _FETCH_TIMEOUT_SECONDS
+    received = bytearray()
+    with urllib.request.urlopen(url, timeout=_FETCH_TIMEOUT_SECONDS) as response:
+        while chunk := response.read(_FETCH_CHUNK_BYTES):
+            received += chunk
+            if len(received) > _FETCH_LIMIT_BYTES:
+                raise PageFetchError(f"the page is larger than {_FETCH_LIMIT_BYTES // (1024 * 1024)} MB")
+            if time.monotonic() > deadline:
+                raise PageFetchError(
+                    f"the page took longer than {_FETCH_TIMEOUT_SECONDS} seconds to download"
+                )
+    return bytes(received)
+
+
 def _extract_source(target: str) -> int:
     """Print the YAML source embedded in a rendered skaldr page — `target` is a local file or an
     http(s) URL. Reads the page (never into the caller's context) and prints only the source, so an
     agent recovers it without parsing the HTML. Returns 1 if the page carries no embedded source."""
     try:
         if target.startswith(("http://", "https://")):
-            with urllib.request.urlopen(target) as response:
-                html = response.read().decode("utf-8")
+            html = _fetch_page(target).decode("utf-8")
         else:
             html = Path(target).read_text(encoding="utf-8")
     except (OSError, ValueError) as err:
@@ -542,12 +630,7 @@ def _skill_up_to_date(src: Path, dest_file: Path) -> bool:
 
 
 def _copy_skill(src: Path, dest_file: Path) -> None:
-    """Install one SKILL.md atomically: copy to a temp sibling, then `replace()` it into place — so a
-    concurrent reader never sees a half-written skill and a failed copy can't truncate the existing one
-    (the same temp-then-swap `_install_plan_rule` uses for CLAUDE.md)."""
-    tmp = dest_file.with_name(dest_file.name + ".skaldr-tmp")
-    shutil.copyfile(src, tmp)
-    tmp.replace(dest_file)
+    replace_file(dest_file, src.read_text(encoding="utf-8"))
 
 
 def install_skill(home: Path | None = None) -> int:
@@ -682,11 +765,7 @@ def _install_plan_rule(claude_dir: Path) -> Literal["added", "updated"]:
     existing = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     had_block = bool(_PLAN_RULE_BLOCK.search(existing))
     kept = _PLAN_RULE_BLOCK.sub("", existing).rstrip()
-    # Write atomically: `write_text` truncates at open(), so a mid-write failure (disk full) would
-    # otherwise wipe the user's hand-maintained CLAUDE.md. Write a sibling temp, then atomically swap.
-    tmp_path = md_path.with_suffix(md_path.suffix + ".skaldr-tmp")
-    tmp_path.write_text(f"{kept}\n\n{block}" if kept else block, encoding="utf-8")
-    tmp_path.replace(md_path)
+    replace_file(md_path, f"{kept}\n\n{block}" if kept else block)
     return "updated" if had_block else "added"
 
 
