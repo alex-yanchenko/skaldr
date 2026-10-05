@@ -20,7 +20,8 @@ KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_NOTICE_SECONDS = 2.0
 KEYCHAIN_TIMEOUT_SECONDS = 120.0
 KEYCHAIN_WAIT_NOTICE = (
-    "Waiting for the system keychain; if it asks whether skaldr may use its entry, answer there."
+    "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
+    "unlock it or answer there."
 )
 Answer = TypeVar("Answer")
 
@@ -191,7 +192,8 @@ def _from_the_keychain(ask: Callable[[], Answer]) -> Answer:
         if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
             raise AuthError(
                 f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
-                "unlock it or answer its prompt, then run the command again"
+                "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
+                "may still be applied if the keychain answers later"
             )
     if reply.error is not None:
         raise reply.error
@@ -214,14 +216,14 @@ def refuse_an_unusable_keychain(service: Service) -> None:
 
 def _save(service: Service, credentials: BaseModel) -> None:
     _refuse_an_insecure_keyring()
+    serialized = credentials.model_dump_json()
     with _keychain_errors_as_auth_errors():
-        serialized = credentials.model_dump_json()
         _from_the_keychain(lambda: keyring.set_password(KEYCHAIN_SERVICE, service, serialized))
 
 
 def _refuse_an_insecure_keyring() -> None:
     with _keychain_errors_as_auth_errors():
-        backend = keyring.get_keyring()
+        backend = _from_the_keychain(keyring.get_keyring)
     candidates: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
     for candidate in candidates:
         insecure_base = _insecure_keyring_base(type(candidate))

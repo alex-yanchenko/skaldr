@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Callable
 
 import keyring
@@ -42,7 +43,8 @@ from tests.factories.auth_factory import (
 )
 
 WAITING_FOR_THE_KEYCHAIN = (
-    "Waiting for the system keychain; if it asks whether skaldr may use its entry, answer there.\n"
+    "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
+    "unlock it or answer there.\n"
 )
 
 
@@ -267,28 +269,42 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
-    slow = SlowKeyring(answers_after=0.3)
+    slow = SlowKeyring(answers_after=0.5)
+    slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
     keyring.set_keyring(slow)
-    save_jira(make_jira_credentials())
-    captured_before = capsys.readouterr()
 
     loaded = load_jira()
 
     assert loaded == SignIn(make_jira_credentials(), "keychain")
-    assert captured_before.err == capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
 
 
-def test_a_keychain_that_never_answers_stops_with_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(lambda: save_notion(make_notion_credentials()), id="save"),
+        pytest.param(load_jira, id="load"),
+        pytest.param(lambda: forget("jira"), id="forget"),
+        pytest.param(lambda: refuse_an_unusable_keychain("notion"), id="the check before sign-in"),
+    ],
+)
+def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], operation: Callable[[], object]
+) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
     slow = SlowKeyring(answers_after=30)
     keyring.set_keyring(slow)
+    started = time.monotonic()
 
     try:
         with pytest.raises(AuthError, match=r"^The system keychain did not answer within 0\.2 seconds"):
-            load_jira()
+            operation()
     finally:
         slow.released.set()
+
+    assert time.monotonic() - started < 2
+    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
 
 
 @pytest.mark.usefixtures("keychain")
