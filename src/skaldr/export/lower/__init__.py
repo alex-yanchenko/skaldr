@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from itertools import chain
 
 from typing_extensions import assert_never
 
@@ -32,6 +31,7 @@ from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swi
 from skaldr.export.runs import ExportRich
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
+    BlockRegion,
     Callout,
     Columns,
     Divider,
@@ -41,7 +41,9 @@ from skaldr.export.tree import (
     ListNode,
     LoweredDocument,
     Node,
+    PagePart,
     Paragraph,
+    Region,
     Tab,
     TableOfContents,
     Tabs,
@@ -58,15 +60,41 @@ FOOTER_SEPARATOR = " · "
 
 def lower_report(report: models.Report) -> LoweredDocument:
     lowering = lowering_for(report)
-    nodes: list[Node] = [Paragraph(plain(line), "muted") for line in report.meta.subtitle]
-    toc = _table_of_contents(report, lowering)
-    if toc.entries:
-        nodes.append(toc)
-    nodes += _blocks_with_the_legend(report, lowering)
+    return assemble_page(lower_regions(lowering), lowering)
+
+
+def lower_regions(lowering: Lowering) -> tuple[BlockRegion, ...]:
+    return tuple(lower_region(lowering, index) for index in range(len(lowering.report.blocks)))
+
+
+def lower_region(lowering: Lowering, source_index: int) -> BlockRegion:
+    block = lowering.report.blocks[source_index]
+    return BlockRegion(
+        source_index,
+        tuple(_lower_block(block, lowering, depth=0)),
+        section_id=block.id if isinstance(block, models.Section) else None,
+        anchor=lowering.anchor_of(block),
+    )
+
+
+def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> LoweredDocument:
+    report = lowering.report
+    header = PagePart("header", (*_subtitle(report), *_table_of_contents(report, lowering)))
+    legend = PagePart("legend", tuple(_legend(lowering)))
+    footer = PagePart("footer", _footer(report, lowering))
+    page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), footer]
+    return LoweredDocument(
+        report.meta.title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
+    )
+
+
+def _subtitle(report: models.Report) -> tuple[Node, ...]:
+    return tuple(Paragraph(plain(line), "muted") for line in report.meta.subtitle)
+
+
+def _footer(report: models.Report, lowering: Lowering) -> tuple[Node, ...]:
     footer = compute.provenance_footer(report)
-    if footer:
-        nodes.append(Paragraph(_footer_runs(footer, lowering), "muted"))
-    return LoweredDocument(report.meta.title, tuple(nodes))
+    return (Paragraph(_footer_runs(footer, lowering), "muted"),) if footer else ()
 
 
 def _footer_runs(footer: compute.Provenance, lowering: Lowering) -> ExportRich:
@@ -74,9 +102,13 @@ def _footer_runs(footer: compute.Provenance, lowering: Lowering) -> ExportRich:
     return spaced([*source, *(plain(fact) for fact in footer.facts)], FOOTER_SEPARATOR)
 
 
-def _table_of_contents(report: models.Report, lowering: Lowering) -> TableOfContents:
+def _table_of_contents(report: models.Report, lowering: Lowering) -> tuple[TableOfContents, ...]:
     entries = compute.toc_entries(report, lowering.anchors)
-    return TableOfContents(tuple(TocEntry(anchor, plain(title)) for anchor, title in entries))
+    return (
+        (TableOfContents(tuple(TocEntry(anchor, plain(title)) for anchor, title in entries)),)
+        if entries
+        else ()
+    )
 
 
 def _lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering, depth: int) -> list[Node]:
@@ -241,13 +273,9 @@ def _legend(lowering: Lowering) -> list[Node]:
     return [Toggle(title, None, (ListNode("bullet", entries),))]
 
 
-def place_legend(
-    blocks: Sequence[Sequence[Node]], legend: Sequence[Node], legend_at: int | None
-) -> list[Node]:
-    split = legend_at or 0
-    return [*chain.from_iterable(blocks[:split]), *legend, *chain.from_iterable(blocks[split:])]
-
-
-def _blocks_with_the_legend(report: models.Report, lowering: Lowering) -> list[Node]:
-    blocks = [_lower_block(block, lowering, depth=0) for block in report.blocks]
-    return place_legend(blocks, _legend(lowering), compute.first_table_index(report))
+def _with_the_legend(regions: Sequence[BlockRegion], legend: PagePart, legend_at: int | None) -> list[Region]:
+    split = next(
+        (position for position, region in enumerate(regions) if region.source_index >= (legend_at or 0)),
+        len(regions),
+    )
+    return [*regions[:split], legend, *regions[split:]]
