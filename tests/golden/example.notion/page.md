@@ -65,7 +65,7 @@ flowchart LR
 		<td>**System**</td>
 		<td></td>
 		<td>🔵 **2a** Check scan log</td>
-		<td>⚪ **3** Reconcile</td>
+		<td>**3** Reconcile</td>
 		<td></td>
 	</tr>
 	<tr>
@@ -76,7 +76,7 @@ flowchart LR
 		<td>⛔ **4** Escalate short-ship</td>
 	</tr>
 </table>
-✅ done · 🔵 current · ⚪ todo · ⛔ blocked · ⏸️ deferred {color="gray"}
+✅ done · 🔵 current · ⛔ blocked · ⏸️ deferred {color="gray"}
 <callout icon="⚠️" color="yellow_bg">
 	**Action needed before the next count**
 	The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.
@@ -488,7 +488,7 @@ flowchart LR
 2. <span color="purple">**Scan every bin twice, reconcile on the pallet ID**</span>
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 	`reconcile`
-	```
+	```plain text
 	counted = dedupe(scans, key="pallet_id")
 	assert sum(counted) == expected
 	```

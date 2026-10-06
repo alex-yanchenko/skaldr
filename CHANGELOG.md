@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.2.1](https://github.com/alex-yanchenko/skaldr/compare/v3.2.0...v3.2.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **auth:** say what skaldr waits for when the keychain is slow, and stop after two minutes ([#176](https://github.com/alex-yanchenko/skaldr/issues/176)) ([aea1900](https://github.com/alex-yanchenko/skaldr/commit/aea19001dabfd801e9441371ad0fcac6e65f47df))
+* **export-notion:** show each status colour once, in distinct colours, and size tables for a full-width page ([#172](https://github.com/alex-yanchenko/skaldr/issues/172)) ([caed4d4](https://github.com/alex-yanchenko/skaldr/commit/caed4d4ed2ae8b85e3aa318f41d792b31d78db70))
+* **export-notion:** split a section and a table that are longer than --chunk ([#177](https://github.com/alex-yanchenko/skaldr/issues/177)) ([5ce9a12](https://github.com/alex-yanchenko/skaldr/commit/5ce9a127fa26406b8b9f2c79092182a8d7f7bfdb))
+* **models:** a labelled badge column is a column, code names its language, an unset swimlane state shows none, and meta.source is rich text ([#175](https://github.com/alex-yanchenko/skaldr/issues/175)) ([48b2df9](https://github.com/alex-yanchenko/skaldr/commit/48b2df9567cc797180da4fbabd934c7661775cfd))
+* **richtext:** read list lines in prose bodies as lists ([#173](https://github.com/alex-yanchenko/skaldr/issues/173)) ([41d4a37](https://github.com/alex-yanchenko/skaldr/commit/41d4a377ddb210b666fb3a7593998b5c8fcb1b78))
+
 ## [3.2.0](https://github.com/alex-yanchenko/skaldr/compare/v3.1.0...v3.2.0) (2026-10-05)
 
 

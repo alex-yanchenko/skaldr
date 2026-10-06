@@ -29,6 +29,7 @@ from skaldr.export.lower.prose import (
 )
 from skaldr.export.lower.requests import lower_request, lower_request_flow
 from skaldr.export.lower.tables import lower_comparison, lower_matrix, lower_swimlane, lower_table
+from skaldr.export.runs import ExportRich
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
     Callout,
@@ -52,6 +53,7 @@ from skaldr.richtext import Plain
 
 PART_HEADING_LEVEL = 1
 SECTION_HEADING_LEVEL = 2
+FOOTER_SEPARATOR = " · "
 
 
 def lower_report(report: models.Report) -> LoweredDocument:
@@ -63,8 +65,13 @@ def lower_report(report: models.Report) -> LoweredDocument:
     nodes += _blocks_with_the_legend(report, lowering)
     footer = compute.provenance_footer(report)
     if footer:
-        nodes.append(Paragraph(plain(footer), "muted"))
+        nodes.append(Paragraph(_footer_runs(footer, lowering), "muted"))
     return LoweredDocument(report.meta.title, tuple(nodes))
+
+
+def _footer_runs(footer: compute.Provenance, lowering: Lowering) -> ExportRich:
+    source: list[ExportRich] = [lowering.rich(footer.source)] if footer.source else []
+    return spaced([*source, *(plain(fact) for fact in footer.facts)], FOOTER_SEPARATOR)
 
 
 def _table_of_contents(report: models.Report, lowering: Lowering) -> TableOfContents:

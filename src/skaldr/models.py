@@ -124,6 +124,9 @@ SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
 
 NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
+CodeLanguage = Annotated[
+    str, StringConstraints(max_length=40, pattern=r"^[A-Za-z0-9#+._-]+( [A-Za-z0-9#+._-]+)*$")
+]
 
 # One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
 # the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
@@ -295,7 +298,9 @@ class Badge(FrozenModel):
 class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
-    source: str | None = Field(default=None, description="Provenance; feeds the footer.")
+    source: RichText | None = Field(
+        default=None, description="Provenance, in rich text (`code` spans, links); feeds the footer."
+    )
     notion_width: NotionWidth = Field(
         default="normal",
         description="The Notion page width the Notion export sizes tables for: `normal` (default) leaves a "
@@ -726,6 +731,13 @@ class Code(_Block):
     mode: Literal["plain", "diff"] = Field(
         default="plain", description="plain, or diff (+/- lines tinted success/danger)."
     )
+    lang: CodeLanguage | None = Field(
+        default=None,
+        description="Optional language the Markdown exports put on the code fence, such as `shell`, `python` "
+        "or `plain text`. Unset, the language comes from a file name in `label` (`deploy.sh` is bash); "
+        "with neither, the GitHub fence has none and the Notion fence says `plain text`. `mode: diff` "
+        "always exports as `diff`. The HTML shows code without highlighting either way.",
+    )
 
 
 class Math(_Block):
@@ -947,10 +959,11 @@ class Column(FrozenModel):
     )
     placement: ColumnPlacement = Field(
         default="title",
-        description="For a `badge` column: `title` (default) chips the badge under the row's title and "
-        "ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a "
-        "badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is "
-        "rejected; the default is a no-op elsewhere.",
+        description="For a `badge` column: `cell` gives the badge its own labelled column, the cell value "
+        "a badge key or a list of keys (several chips, wrapping); `title` chips the badge under the "
+        "row's title and shows no `label`. Omitted, a badge column with a non-blank `label` is `cell` "
+        "and one with a blank `label` is `title`. `cell` on a non-badge column is rejected; the "
+        "default is a no-op elsewhere.",
     )
     pct_of_total: bool = Field(
         default=False, description="Show a derived '% of total' caption (needs a reconcile total)."
@@ -966,6 +979,17 @@ class Column(FrozenModel):
         "row tint paints over it. A `title`-placement badge column takes no tone (it rides under the "
         "title).",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _a_labelled_badge_column_gets_its_own_cell(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        if fields.get("kind") != "badge" or "placement" in fields:
+            return fields
+        label = fields.get("label")
+        return {**fields, "placement": "cell" if isinstance(label, str) and label.strip() else "title"}
 
 
 class Handled(FrozenModel):
@@ -1542,14 +1566,20 @@ class SwimlaneStep(FrozenModel):
         description="Optional link (http/https/mailto) for the step, e.g. its Jira/GitHub ticket. The "
         "step's number becomes a link out to it.",
     )
-    state: SwimlaneStepState = Field(
-        default="todo",
+    state: SwimlaneStepState | None = Field(
+        default=None,
         description="Progress state: the same progress axis as `status_list`/`timeline`, in roadmap "
         "terms (`todo` for not-started, plus `deferred`). `done` (green), "
-        "`current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool "
+        "`current` (in progress, the raised blue badge), `todo` (planned, not started; a cool "
         "filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / "
-        "post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
+        "post-MVP: a warm hollow badge that recedes). Unset, the HTML draws the step as `todo` and the "
+        "Markdown exports show no state glyph. The value counts toward the totals in every state.",
     )
+
+    @property
+    def shown_state(self) -> SwimlaneStepState:
+        return self.state or "todo"
+
     id: str | None = Field(
         default=None,
         min_length=1,

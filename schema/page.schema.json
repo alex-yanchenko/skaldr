@@ -776,6 +776,21 @@
           ],
           "title": "Mode",
           "type": "string"
+        },
+        "lang": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "pattern": "^[A-Za-z0-9#+._-]+( [A-Za-z0-9#+._-]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional language the Markdown exports put on the code fence, such as `shell`, `python` or `plain text`. Unset, the language comes from a file name in `label` (`deploy.sh` is bash); with neither, the GitHub fence has none and the Notion fence says `plain text`. `mode: diff` always exports as `diff`. The HTML shows code without highlighting either way.",
+          "title": "Lang"
         }
       },
       "required": [
@@ -813,7 +828,7 @@
         },
         "placement": {
           "default": "title",
-          "description": "For a `badge` column: `title` (default) chips the badge under the row's title and ignores the column `label`; `cell` gives the badge its own labelled column, the cell value a badge key or a list of keys (several chips, wrapping). `cell` on a non-badge column is rejected; the default is a no-op elsewhere.",
+          "description": "For a `badge` column: `cell` gives the badge its own labelled column, the cell value a badge key or a list of keys (several chips, wrapping); `title` chips the badge under the row's title and shows no `label`. Omitted, a badge column with a non-blank `label` is `cell` and one with a blank `label` is `title`. `cell` on a non-badge column is rejected; the default is a no-op elsewhere.",
           "enum": [
             "title",
             "cell"
@@ -2740,7 +2755,7 @@
             }
           ],
           "default": null,
-          "description": "Provenance; feeds the footer.",
+          "description": "Provenance, in rich text (`code` spans, links); feeds the footer.",
           "title": "Source"
         },
         "notion_width": {
@@ -4859,17 +4874,24 @@
           "title": "Url"
         },
         "state": {
-          "default": "todo",
-          "description": "Progress state: the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress, the raised blue badge), `todo` (default: planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / post-MVP: a warm hollow badge that recedes). The value counts toward the totals in every state.",
-          "enum": [
-            "done",
-            "current",
-            "todo",
-            "blocked",
-            "deferred"
+          "anyOf": [
+            {
+              "enum": [
+                "done",
+                "current",
+                "todo",
+                "blocked",
+                "deferred"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "State",
-          "type": "string"
+          "default": null,
+          "description": "Progress state: the same progress axis as `status_list`/`timeline`, in roadmap terms (`todo` for not-started, plus `deferred`). `done` (green), `current` (in progress, the raised blue badge), `todo` (planned, not started; a cool filled slate badge), `blocked` (waiting / on-hold: amber + dashed), `deferred` (pushed out / post-MVP: a warm hollow badge that recedes). Unset, the HTML draws the step as `todo` and the Markdown exports show no state glyph. The value counts toward the totals in every state.",
+          "title": "State"
         },
         "id": {
           "anyOf": [

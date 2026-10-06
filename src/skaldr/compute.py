@@ -63,6 +63,7 @@ from skaldr.prose_blocks import rendered_strings
 from skaldr.richtext import RichContext, parse_rich
 
 __all__ = [
+    "Provenance",
     "anchor_slugs",
     "col_sum",
     "first_table_index",
@@ -342,9 +343,20 @@ def swimlane_totals(block: Swimlane) -> SwimTotals | None:
     }
 
 
-def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
-    present = {step.state for step in block.steps}
+def _legend_states(present: set[SwimlaneStepState]) -> list[SwimlaneStepState]:
     return [state for state in _SWIM_STATE_ORDER if state in present] if len(present) >= 2 else []
+
+
+def swimlane_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
+    return _legend_states({step.shown_state for step in block.steps})
+
+
+def swimlane_marked_state_legend(block: Swimlane) -> list[SwimlaneStepState]:
+    marked: set[SwimlaneStepState] = {state for step in block.steps if (state := step.state) is not None}
+    some_unmarked = any(step.state is None for step in block.steps)
+    if some_unmarked and marked:
+        return [state for state in _SWIM_STATE_ORDER if state in marked]
+    return _legend_states(marked)
 
 
 def swimlane_layout(block: Swimlane) -> SwimLayout:
@@ -456,7 +468,7 @@ def swimlane_layout(block: Swimlane) -> SwimLayout:
                     "label": step.label,
                     "value": step.value,
                     "url": step.url,
-                    "state": step.state,
+                    "state": step.shown_state,
                     "deps": block.dependency_numbers(step),
                 }
                 for step in block.steps_at(lane.key, sub["col"], sub["group"])
@@ -622,13 +634,19 @@ def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
     return body
 
 
-def provenance_footer(report: Report) -> str | None:
+class Provenance(NamedTuple):
+    source: str | None
+    facts: tuple[str, ...]
+
+
+def provenance_footer(report: Report) -> Provenance | None:
     """Composed footer: meta source/date/updated + each reconciled table's 'Reconciles: …' line."""
-    parts = [part for part in (report.meta.source, report.meta.date) if part]
+    facts = [report.meta.date] if report.meta.date else []
     if report.meta.updated:
-        parts.append(f"updated {report.meta.updated}")
-    parts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
-    return " · ".join(parts) if parts else None
+        facts.append(f"updated {report.meta.updated}")
+    facts.extend(reconcile_line(table) for table in iter_tables(report.blocks) if table.reconcile is not None)
+    source = report.meta.source if report.meta.source and report.meta.source.strip() else None
+    return Provenance(source, tuple(facts)) if source or facts else None
 
 
 def _parsed_strings(text: str, marker: RichTextMarker, path: FieldPath) -> list[str]:
