@@ -186,3 +186,146 @@ def test_code_at_the_size_cap_is_still_highlighted(monkeypatch: pytest.MonkeyPat
     assert code_panel(content="x = 1", lang="python") == (
         '<div class="code"><pre>x <span class="t-op">=</span> <span class="t-num">1</span></pre></div>'
     )
+
+
+def test_the_size_cap_counts_the_text_after_line_endings_are_normalised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_CHARACTERS", 5)
+    assert code_panel(content="x=1\r\ny", lang="python") == (
+        '<div class="code"><pre>x<span class="t-op">=</span><span class="t-num">1</span>\ny</pre></div>'
+    )
+
+
+class VisibleText(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def visible_pre_text(panel: str) -> str:
+    reader = VisibleText()
+    reader.feed(panel[panel.index("<pre") :])
+    return "".join(reader.parts)
+
+
+def test_a_console_line_without_a_trailing_newline_is_kept() -> None:
+    assert code_panel(content="$ ls", lang="console") == '<div class="code"><pre>$ ls</pre></div>'
+
+
+def test_the_last_console_line_without_a_trailing_newline_is_kept() -> None:
+    assert code_panel(content="$ ls -l\ntotal 0", lang="console") == (
+        '<div class="code"><pre>$ ls -l\ntotal 0</pre></div>'
+    )
+
+
+def test_a_console_diff_keeps_its_context_line() -> None:
+    assert code_panel(content="+$ ls\n x", mode="diff", lang="console") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add">$ ls</span><span class="ln ctx"> x</span>'
+        "</pre></div>"
+    )
+
+
+@pytest.mark.parametrize(
+    "language",
+    [
+        "console",
+        "shell-session",
+        "rconsole",
+        "ps1con",
+        "doscon",
+        "tcshcon",
+        "sqlite3",
+        "rbcon",
+        "pwsh-session",
+        "psysh",
+    ],
+)
+def test_session_lexers_never_drop_the_text_of_the_block(language: str) -> None:
+    source = "$ one\ntwo\n> three"
+    assert visible_pre_text(code_panel(content=source, lang=language)) == source
+
+
+def test_a_lexer_that_expands_tabs_renders_the_block_plain() -> None:
+    source = "*** Test Cases ***\nCase\n\tLog\tx"
+    assert code_panel(content=source, lang="robotframework") == (
+        f'<div class="code"><pre>{source}</pre></div>'
+    )
+
+
+def test_a_leading_byte_order_mark_is_kept() -> None:
+    assert (
+        code_panel(content="\ufeffx = 1", lang="python") == '<div class="code"><pre>\ufeffx = 1</pre></div>'
+    )
+
+
+def test_a_lone_carriage_return_in_a_plain_block_becomes_a_line_feed() -> None:
+    assert code_panel(content="a\rb") == '<div class="code"><pre>a\nb</pre></div>'
+
+
+def test_a_lone_carriage_return_in_a_plain_diff_added_line_starts_a_context_line() -> None:
+    assert code_panel(content="+a\rb", mode="diff") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add">a</span><span class="ln ctx">b</span>'
+        "</pre></div>"
+    )
+
+
+def test_diff_context_lines_are_lexed_without_their_marker_column() -> None:
+    assert code_panel(content="-a:\n+  b: 1\n   c: 2", mode="diff", lang="yaml") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln del">a<span class="t-pun">:</span></span>'
+        '<span class="ln add">  b<span class="t-pun">:</span> 1</span>'
+        '<span class="ln ctx">   c<span class="t-pun">:</span> 2</span>'
+        "</pre></div>"
+    )
+
+
+def test_diff_context_indentation_matches_the_added_side() -> None:
+    assert code_panel(content="+if a:\n+    b = 1\n     c = 2", mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add"><span class="t-kw">if</span> a<span class="t-pun">:</span></span>'
+        '<span class="ln add">    b <span class="t-op">=</span> <span class="t-num">1</span></span>'
+        '<span class="ln ctx">     c <span class="t-op">=</span> <span class="t-num">2</span></span>'
+        "</pre></div>"
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "rows"),
+    [
+        pytest.param(
+            "+a = 1\n+b = 2",
+            '<span class="ln add">a <span class="t-op">=</span> <span class="t-num">1</span></span>'
+            '<span class="ln add">b <span class="t-op">=</span> <span class="t-num">2</span></span>',
+            id="only-added",
+        ),
+        pytest.param(
+            "-a = 1\n-b = 2",
+            '<span class="ln del">a <span class="t-op">=</span> <span class="t-num">1</span></span>'
+            '<span class="ln del">b <span class="t-op">=</span> <span class="t-num">2</span></span>',
+            id="only-removed",
+        ),
+        pytest.param(
+            "+a = 1\n\n-b = 2",
+            '<span class="ln add">a <span class="t-op">=</span> <span class="t-num">1</span></span>'
+            '<span class="ln ctx"></span>'
+            '<span class="ln del">b <span class="t-op">=</span> <span class="t-num">2</span></span>',
+            id="blank-context-line",
+        ),
+        pytest.param(
+            "+a = 1\n",
+            '<span class="ln add">a <span class="t-op">=</span> <span class="t-num">1</span></span>'
+            '<span class="ln ctx"></span>',
+            id="trailing-newline",
+        ),
+    ],
+)
+def test_highlighted_diff_shapes(content: str, rows: str) -> None:
+    assert code_panel(content=content, mode="diff", lang="python") == (
+        f'<div class="code"><pre class="diff">{rows}</pre></div>'
+    )

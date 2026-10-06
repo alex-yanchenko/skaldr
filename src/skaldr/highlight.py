@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Final, Literal
 
 from markupsafe import Markup, escape
@@ -26,15 +27,22 @@ DiffKind = Literal["add", "del", "ctx"]
 Piece = tuple[str, str]
 
 
+@dataclass(frozen=True)
+class DiffRow:
+    kind: DiffKind
+    marker: str
+    body: str
+
+
 def token_class(kind: _TokenType) -> str:
     return next((name for family, name in TOKEN_CLASSES if kind in family), "")
 
 
-def lexer_for(language: str, text: str) -> Lexer | None:
-    if not language or len(text) > MAX_HIGHLIGHTED_CHARACTERS:
+def lexer_for(language: str, size: int) -> Lexer | None:
+    if not language or size > MAX_HIGHLIGHTED_CHARACTERS:
         return None
     try:
-        return get_lexer_by_name(language, ensurenl=False, stripnl=False)
+        return get_lexer_by_name(language, ensurenl=True, stripnl=False)
     except ClassNotFound:
         return None
 
@@ -43,9 +51,9 @@ def with_line_feeds(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def pieces_by_line(text: str, lexer: Lexer) -> list[list[Piece]]:
+def pieces_by_line(tokens: list[tuple[_TokenType, str]]) -> list[list[Piece]]:
     lines: list[list[Piece]] = [[]]
-    for kind, value in lexer.get_tokens(text):
+    for kind, value in tokens:
         name = token_class(kind)
         for index, part in enumerate(value.split("\n")):
             if index:
@@ -65,8 +73,15 @@ def piece_markup(piece: Piece) -> Markup:
     return Markup('<span class="{}">{}</span>').format(name, text) if name else escape(text)
 
 
-def lexed_lines(text: str, lexer: Lexer) -> list[Markup]:
-    lines = pieces_by_line(with_line_feeds(text), lexer)
+def lexed_lines(text: str, lexer: Lexer) -> list[Markup] | None:
+    tokens = list(lexer.get_tokens(text))
+    ends_with_newline = text.endswith("\n")
+    lexed_text = "".join(value for _, value in tokens)
+    if lexed_text != (text if ends_with_newline else text + "\n"):
+        return None
+    lines = pieces_by_line(tokens)
+    if not ends_with_newline:
+        lines.pop()
     return [Markup("").join(piece_markup(piece) for piece in line) for line in lines]
 
 
@@ -75,37 +90,40 @@ def plain_lines(text: str) -> list[Markup]:
 
 
 def highlighted_code(block: Code) -> Markup:
-    lexer = lexer_for(block_code_language(block), block.content)
-    lines = plain_lines(block.content) if lexer is None else lexed_lines(block.content, lexer)
-    return Markup("\n").join(lines)
+    text = with_line_feeds(block.content)
+    lexer = lexer_for(block_code_language(block), len(text))
+    lines = lexed_lines(text, lexer) if lexer else None
+    return Markup("\n").join(plain_lines(text) if lines is None else lines)
 
 
-def diff_line_kind(line: str) -> DiffKind:
+def diff_row(line: str) -> DiffRow:
     if line.startswith("+"):
-        return "add"
+        return DiffRow("add", "", line[1:])
     if line.startswith("-"):
-        return "del"
-    return "ctx"
+        return DiffRow("del", "", line[1:])
+    return DiffRow("ctx", line[:1], line[1:])
 
 
-def diff_rows(content: str) -> list[tuple[DiffKind, str]]:
-    rows: list[tuple[DiffKind, str]] = []
-    for line in content.split("\n"):
-        kind = diff_line_kind(line)
-        rows.append((kind, line if kind == "ctx" else line[1:]))
-    return rows
+def plain_diff_lines(rows: list[DiffRow]) -> list[tuple[DiffKind, Markup]]:
+    return [(row.kind, escape(row.marker + row.body)) for row in rows]
+
+
+def side_lines(rows: list[DiffRow], skipped: DiffKind, lexer: Lexer) -> list[Markup] | None:
+    return lexed_lines("\n".join(row.body for row in rows if row.kind != skipped), lexer)
 
 
 def highlighted_diff_lines(block: Code) -> list[tuple[DiffKind, Markup]]:
-    lexer = lexer_for(block_code_language(block), block.content)
-    if lexer is None:
-        return [(kind, escape(text)) for kind, text in diff_rows(block.content)]
-    rows = diff_rows(with_line_feeds(block.content))
-    old_side = iter(lexed_lines("\n".join(text for kind, text in rows if kind != "add"), lexer))
-    new_side = iter(lexed_lines("\n".join(text for kind, text in rows if kind != "del"), lexer))
+    rows = [diff_row(line) for line in with_line_feeds(block.content).split("\n")]
+    size = sum(len(row.marker) + len(row.body) + 1 for row in rows) - 1
+    lexer = lexer_for(block_code_language(block), size)
+    old_lines = side_lines(rows, "add", lexer) if lexer else None
+    new_lines = side_lines(rows, "del", lexer) if lexer else None
+    if old_lines is None or new_lines is None:
+        return plain_diff_lines(rows)
+    old_side, new_side = iter(old_lines), iter(new_lines)
     highlighted: list[tuple[DiffKind, Markup]] = []
-    for kind, _ in rows:
-        old_line = next(old_side) if kind != "add" else None
-        new_line = next(new_side) if kind != "del" else None
-        highlighted.append((kind, new_line if new_line is not None else old_line or Markup("")))
+    for row in rows:
+        old_line = next(old_side) if row.kind != "add" else Markup("")
+        new_line = next(new_side) if row.kind != "del" else Markup("")
+        highlighted.append((row.kind, escape(row.marker) + (old_line if row.kind == "del" else new_line)))
     return highlighted
