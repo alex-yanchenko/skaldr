@@ -74,6 +74,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   white, so a white code body vanished into it. A light grey reads as a code panel on both the
 		   white paper and the tinted on-screen page. Dark is unchanged — it already sits above the page. */
 		--code-bg:light-dark(#f4f4f5,#171d28); --code-hdr:light-dark(#e6e6e8,#1b212b);
+		--tok-kw:var(--accent-fg); --tok-str:var(--success-fg); --tok-num:var(--warning-fg); --tok-com:var(--muted);
+		--tok-fn:var(--info-fg); --tok-cls:var(--teal-fg); --tok-op:var(--sky-fg); --tok-pun:var(--muted);
 		/* Spacing + radius scales — the recurring geometry, tokenised so a block never hand-picks a
 		   magic number. --r-inner is a panel's radius minus its 1px border, for a child that sits flush. */
 		--s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
@@ -414,7 +416,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .diff .add::before{content:"+ "; color:var(--diff-add-fg); font-weight:700}
 		& .diff .del{background:var(--diff-del-bg); border-inline-start-color:var(--diff-del-bar)}
 		& .diff .del::before{content:"- "; color:var(--diff-del-fg); font-weight:700}
-		& .diff .ctx::before{content:"  "}}
+		& .diff .ctx::before{content:"  "}
+		& .t-kw{color:var(--tok-kw)}
+		& .t-str{color:var(--tok-str)}
+		& .t-num{color:var(--tok-num)}
+		& .t-com{color:var(--tok-com); font-style:italic}
+		& .t-fn{color:var(--tok-fn)}
+		& .t-cls{color:var(--tok-cls)}
+		& .t-op{color:var(--tok-op)}
+		& .t-pun{color:var(--tok-pun)}}
 
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}

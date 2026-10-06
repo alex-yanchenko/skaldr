@@ -20,6 +20,7 @@ from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.highlight import highlighted_code, highlighted_diff_lines
 from skaldr.mathml import mathml
 from skaldr.models import (
     Report,
@@ -211,6 +212,8 @@ def html_environment() -> Environment:
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,
+        highlighted_code=highlighted_code,
+        highlighted_diff_lines=highlighted_diff_lines,
         settings_menu_id=compute.SETTINGS_MENU_ID,
         unhandled_block=unhandled_block,
     )
