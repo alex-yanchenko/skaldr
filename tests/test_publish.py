@@ -9,6 +9,7 @@ from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import parse_report
 from skaldr.publish import Publish, notion_page_id, without_publish_block
+from skaldr.publish.source import _document, same_documents  # pyright: ignore[reportPrivateUsage]
 from skaldr.render import extract_source, render_html
 from tests.factories import (
     NOTION_PAGE_ID,
@@ -537,3 +538,44 @@ def test_check_fails_on_a_split_id_that_names_no_section(
     assert main(["--check", str(path)]) == 1
 
     assert "splits on 'st9', which is not the id of a top-level section" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        pytest.param("a: 1\nb: [x, {c: 2}]\n", "a: 1\nb: [x, {c: 2}]\n", id="same-nested-document"),
+        pytest.param("a: 1\nb: 2\n", "b: 2\na: 1\n", id="key-order-is-not-compared"),
+        pytest.param("a: 1\n1: b\n", "a: 1\n1: b\n", id="mixed-key-types"),
+        pytest.param("a: 'x'\n", "a: x\n", id="quoted-and-unquoted-scalar"),
+        pytest.param("a: .nan\n", "a: .nan\n", id="not-a-number-equals-itself"),
+        pytest.param("a: !include p.yaml\n", "a: !include p.yaml\n", id="include-tag"),
+        pytest.param("a: &x [1]\nb: *x\n", "a: &y [1]\nb: *y\n", id="shared-alias"),
+        pytest.param("a: &p [*p]\n", "a: &q [*q]\n", id="alias-cycle"),
+    ],
+)
+def test_two_sources_with_the_same_values_compare_equal(left: str, right: str) -> None:
+    assert same_documents(_document(left), _document(right))
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        pytest.param("a: 1\n", "a: 2\n", id="different-value"),
+        pytest.param("a: 1\n", "b: 1\n", id="different-key"),
+        pytest.param("a: 1\n", "a: 1\nb: 2\n", id="extra-key"),
+        pytest.param("a: 1\n", "a: 1.0\n", id="int-and-float"),
+        pytest.param("a: 1\n", "a: true\n", id="int-and-bool"),
+        pytest.param("a: 1\n", "a: '1'\n", id="int-and-string"),
+        pytest.param("a: true\n", "a: 'true'\n", id="bool-and-string"),
+        pytest.param("a: ~\n", "a: ''\n", id="null-and-empty-string"),
+        pytest.param("a: [1, 2]\n", "a: [2, 1]\n", id="list-order-is-compared"),
+        pytest.param("a: [1, [2, 3]]\n", "a: [1, [2, 4]]\n", id="nested-list-element"),
+        pytest.param("a: [1]\n", "a: [1, 1]\n", id="list-length"),
+        pytest.param("a: [1]\n", "a: {0: 1}\n", id="list-and-mapping"),
+        pytest.param("a: !include p.yaml\n", "a: [p.yaml]\n", id="include-and-plain-list"),
+        pytest.param("a: !include p.yaml\n", "a: !include q.yaml\n", id="include-of-another-file"),
+        pytest.param("a: .nan\n", "a: 1.0\n", id="not-a-number-and-number"),
+    ],
+)
+def test_two_sources_with_different_values_compare_unequal(left: str, right: str) -> None:
+    assert not same_documents(_document(left), _document(right))

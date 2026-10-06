@@ -102,27 +102,12 @@ def _cut(source: str) -> str:
     return "".join(line for number, line in enumerate(lines) if number not in dropped)
 
 
-def _same_values(left: object, right: object, compared: set[tuple[int, int]]) -> bool:
-    pair = (id(left), id(right))
-    if pair in compared:
-        return True
-    if isinstance(left, dict) and isinstance(right, dict):
-        compared.add(pair)
-        left_map, right_map = cast("dict[object, object]", left), cast("dict[object, object]", right)
-        return left_map.keys() == right_map.keys() and all(
-            _same_values(value, right_map[key], compared) for key, value in left_map.items()
-        )
-    if isinstance(left, list) and isinstance(right, list):
-        compared.add(pair)
-        left_items, right_items = cast("list[object]", left), cast("list[object]", right)
-        return len(left_items) == len(right_items) and all(
-            _same_values(a, b, compared) for a, b in zip(left_items, right_items, strict=True)
-        )
-    return _same_scalar(cast(object, left), right)
+def _canonical_text(value: object) -> str:
+    return yaml.dump(value, allow_unicode=True)
 
 
-def _same_scalar(left: object, right: object) -> bool:
-    return type(left) is type(right) and (left == right or (left != left and right != right))
+def same_documents(left: object, right: object) -> bool:
+    return _canonical_text(left) == _canonical_text(right)
 
 
 def without_publish_block(source: str) -> str:
@@ -135,7 +120,7 @@ def without_publish_block(source: str) -> str:
     expected = {key: value for key, value in document.items() if key != PUBLISH_KEY}
     stripped = _cut(source)
     try:
-        matches = _same_values(_document(stripped), expected, set[tuple[int, int]]())
+        matches = same_documents(_document(stripped), expected)
     except (ReportError, RecursionError):
         matches = False
     if not matches:
