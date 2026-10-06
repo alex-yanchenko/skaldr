@@ -12,9 +12,10 @@ from markdown_it import MarkdownIt
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from skaldr.export import ExportTarget
-from skaldr.models import AnyBlock, Report, package_text, parse_report
+from skaldr.models import Report, package_text, parse_report
 from skaldr.render import render_html
 from tests.conftest import REPO_ROOT
+from tests.factories import authored_block_types
 from tests.factories.report_factory import make_report
 
 GUIDE = package_text("skill/GUIDE.md")
@@ -269,10 +270,6 @@ def test_a_guide_example_builds_when_copied(example: GuideExample) -> None:
     assert html.startswith("<!doctype html>")
 
 
-def _every_block_type() -> set[str]:
-    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
-
-
 def _readme_block_list(readme: str) -> str:
     paragraph = re.search(r"^\*\*Blocks:\*\*(.*?)\n\n(?!- )", readme, re.MULTILINE | re.DOTALL)
     assert paragraph is not None
@@ -282,7 +279,7 @@ def _readme_block_list(readme: str) -> str:
 def test_the_readme_block_list_names_every_block_type() -> None:
     listed = _readme_block_list(README)
 
-    assert {kind for kind in _every_block_type() if f"`{kind}`" not in listed} == set()
+    assert {kind for kind in authored_block_types() if f"`{kind}`" not in listed} == set()
 
 
 @pytest.mark.parametrize("text", [pytest.param(SKILL, id="skill"), pytest.param(README, id="readme")])

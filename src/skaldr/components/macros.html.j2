@@ -361,3 +361,13 @@
 {% endif %}
 {%- if block.span %}</div>{% endif -%}
 {% endmacro %}
+
+{% macro page_block(block) -%}
+{%- if block.type == "part" and block.collapsed -%}
+<details class="part" id="{{ anchor_id(block) }}"{% if expand_details %} open{% endif %}><summary><span class="part-title">{{ block.title }}</span></summary><div class="part-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+{%- elif block.type == "part" -%}
+<section class="part" id="{{ anchor_id(block) }}"><h1 class="part-title">{{ block.title }}</h1>{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</section>
+{%- else -%}
+{{ render_block(block) }}
+{%- endif -%}
+{%- endmacro %}

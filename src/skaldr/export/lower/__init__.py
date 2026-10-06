@@ -50,6 +50,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Plain
 
+PART_HEADING_LEVEL = 1
 SECTION_HEADING_LEVEL = 2
 
 
@@ -141,6 +142,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return lower_request(block, lowering)
         case models.RequestFlow():
             return lower_request_flow(block, lowering)
+        case models.Part():
+            return _part(block, lowering)
         case models.Section():
             return _section(block, lowering, depth)
         case models.Toggle() | models.InnerToggle():
@@ -168,6 +171,14 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             ]
         case _:
             assert_never(block)
+
+
+def _part(block: models.Part, lowering: Lowering) -> list[Node]:
+    children = _lower_blocks(block.blocks, lowering, depth=0)
+    anchor = lowering.anchor_of(block)
+    if block.collapsed:
+        return [Toggle(plain(block.title), PART_HEADING_LEVEL, tuple(children), anchor)]
+    return [Heading(PART_HEADING_LEVEL, plain(block.title), anchor), *children]
 
 
 def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node]:

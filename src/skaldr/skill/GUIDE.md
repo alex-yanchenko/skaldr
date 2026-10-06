@@ -12,11 +12,12 @@ version: 1          # required, integer
 meta: { ... }       # page header + options
 badges: { ... }     # optional: your tag/status vocabulary
 blocks: [ ... ]     # the ordered content
+index: { ... }      # optional: build one page from other documents (see Index documents)
 publish: { ... }    # optional: where the document publishes (see below)
 ```
 
-Top level is `version`, `meta`, `blocks`, and optional `badges` and `publish` (see *Where it
-publishes* below), nothing else. Every block is a mapping with a `type` discriminator.
+Top level is `version`, `meta`, `blocks`, and optional `badges`, `index` and `publish` (see *Index
+documents* and *Where it publishes* below), nothing else. Every block is a mapping with a `type` discriminator.
 **Validation is strict:** an unknown block type, a field that doesn't belong to that block, an
 unknown top-level key, or a value of the wrong shape each fails the build with a precise path,
 e.g. `error: invalid content data: blocks.3.items.2.value: number column needs a numeric value`.
@@ -964,6 +965,29 @@ fragments can move as a unit. Includes can nest; a file that includes itself (di
 chain) fails the build rather than looping. A missing fragment fails with the path that named it.
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
+
+## Index documents: one page from several
+
+Several small reports that belong together, such as the chapters of a review, read better as one page. An index document builds that page from the other files without copying them:
+
+```yaml
+version: 1
+meta: { title: "Platform review", toc: true }
+index:
+  parts: [01-overview.skaldr.yaml, 02-findings.skaldr.yaml, 03-plan.skaldr.yaml]
+blocks:                       # optional: an intro shown before the first part
+  - type: text
+    body: "Three reviews, read in order."
+```
+
+- **Parts** are paths relative to the index file. Each part stays a normal skaldr document that still builds alone; an index never edits it.
+- **Each part becomes a part of the page**: its `meta.title` is the part's title, a level 1 heading in the exports and a title band in the HTML, and its blocks follow unchanged. The table of contents lists the index's own headings and sections, then one entry per part.
+- **`collapsed: true`** under `index` starts every part collapsed: a collapsible in the HTML, a toggle heading in the Notion export. Parts are open by default.
+- **Badges merge.** The index's `badges` and every part's `badges` combine into one vocabulary and one legend. A key declared with a different label, tone or legend in two files fails the build naming both files; rename one key or make them agree.
+- **Ids are page-wide.** A heading, section, table or matrix id repeated across two parts fails like a repeat inside one file.
+- The rendered page is the combined page, and `--export notion` writes one `page.md` for it. `--if-stale` follows every part file, so an edit to a part rebuilds the index.
+- A part cannot be an index itself, and `index` takes only `layout: one_page` for now. An index document cannot carry `publish` yet, and a part's own `publish` block is left out of the combined page; publish each part file on its own.
+- `part` is the block an index builds; it is not written by hand, and the build refuses one outside an index. To group content inside one file, use a `section` or a `heading`.
 
 ## Where it publishes: `publish`
 

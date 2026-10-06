@@ -725,6 +725,16 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		&[open] > summary::before{content:"▾"}
 		& .section-body{padding:0 var(--s4) var(--s4)}}
 
+	section.part,details.part{margin-block:var(--s8) var(--s4); scroll-margin-top:var(--hdr-h)}
+	.part-title{display:block; font-size:24px; font-weight:650; letter-spacing:-0.01em; text-wrap:balance;
+		padding-block-end:var(--s2); margin-block-end:var(--s4); border-block-end:2px solid var(--line)}
+	details.part{
+		& > summary{cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:var(--s2)}
+		& > summary::-webkit-details-marker{display:none}
+		& > summary::before{content:"▸"; color:var(--muted); font-size:16px}
+		&[open] > summary::before{content:"▾"}
+		& > summary .part-title{flex:1}}
+
 	/* panel: an always-open titled card (one per 'slide'), unlike the collapsible section. */
 	.panel-card{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow)}
 	.panel-card .panel-card-hd{padding:var(--s3) var(--s4); font-weight:650; font-size:14px; border-block-end:1px solid var(--line)}

@@ -1796,6 +1796,40 @@
       "title": "Image",
       "type": "object"
     },
+    "Index": {
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "const": "one_page",
+          "default": "one_page",
+          "description": "How the parts combine: `one_page` builds one page holding every part in order, each under its own title.",
+          "title": "Layout",
+          "type": "string"
+        },
+        "parts": {
+          "description": "The skaldr documents this index combines, in order, each a path relative to the index file. A part's `meta.title` becomes its part title; its blocks follow unchanged; its badges merge into the page. A part cannot be an index itself.",
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        },
+        "collapsed": {
+          "default": false,
+          "description": "Whether every part starts collapsed (a collapsible in HTML, a toggle heading in the exports). Default false: every part is open.",
+          "title": "Collapsed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "Index",
+      "type": "object"
+    },
     "InnerGrid": {
       "additionalProperties": false,
       "properties": {
@@ -5854,6 +5888,18 @@
       "title": "Badges",
       "type": "object"
     },
+    "index": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Index"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Makes this document an index: one page built from other skaldr documents. `blocks` becomes optional and, when present, opens the page before the first part."
+    },
     "blocks": {
       "items": {
         "discriminator": {
@@ -6018,13 +6064,12 @@
         }
       ],
       "default": null,
-      "description": "Where the document publishes (Notion pages, Jira issues). Omitted from the source embedded in a rendered page."
+      "description": "Where the document publishes (Notion pages, Jira issues). Omitted from the source embedded in a rendered page. Not yet accepted on an index document."
     }
   },
   "required": [
     "version",
-    "meta",
-    "blocks"
+    "meta"
   ],
   "title": "Report",
   "type": "object"

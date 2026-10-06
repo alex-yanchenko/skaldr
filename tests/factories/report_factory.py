@@ -13,6 +13,12 @@ def make_report(**overrides: Any) -> dict[str, Any]:
     return report
 
 
+def make_index_report(parts: list[str], **overrides: Any) -> dict[str, Any]:
+    report: dict[str, Any] = {"version": 1, "meta": {"title": "Combined"}, "index": {"parts": parts}}
+    report.update(overrides)
+    return report
+
+
 NOTION_PAGE_URL = "https://www.notion.so/Team-Plans-0123456789abcdef0123456789abcdef"
 NOTION_PAGE_ID = "0123456789abcdef0123456789abcdef"
 
