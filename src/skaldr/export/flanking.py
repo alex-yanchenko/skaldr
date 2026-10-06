@@ -11,6 +11,8 @@ EMPHASIS_OPENER_STAND_IN: Final = "*"
 
 
 def _is_certainly_punctuation(character: str) -> bool:
+    if character == NO_CHARACTER:
+        return False
     return character in string.punctuation or unicodedata.category(character).startswith("P")
 
 

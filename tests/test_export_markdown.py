@@ -827,9 +827,7 @@ def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_th
     assert render_markdown([callout]) == "> 💡\n>\n> - first\n> - second\n"
 
 
-def test_a_callout_whose_first_paragraph_is_empty_still_leads_with_its_icon_before_a_later_paragraph() -> (
-    None
-):
+def test_a_callout_with_an_empty_first_paragraph_puts_its_icon_before_a_later_paragraph() -> None:
     callout = Callout("info", (Paragraph(()), _para("later")))
 
     assert render_markdown([callout]) == "> 💡 later\n"
@@ -990,6 +988,15 @@ def test_emphasis_beside_non_ascii_punctuation_keeps_its_markers(body: str, mark
         pytest.param("(a)", "x", "y", "<strong>(a)</strong>", id="no-spaces-inside-and-letters-around"),
         pytest.param("a", "x", "y", "**a**", id="letters-inside-need-no-neighbour"),
         pytest.param("  ", "x", "y", "  ", id="only-spaces-is-no-emphasis"),
+        pytest.param("(a)", "", "", "<strong>(a)</strong>", id="an-empty-neighbour-is-not-punctuation"),
+        pytest.param(
+            "(a)", "", " ", "<strong>(a)</strong>", id="an-empty-neighbour-before-is-not-punctuation"
+        ),
+        pytest.param(
+            "(a)", " ", "", "<strong>(a)</strong>", id="an-empty-neighbour-after-is-not-punctuation"
+        ),
+        pytest.param("a", "", "", "**a**", id="letters-inside-need-no-neighbour-at-all"),
+        pytest.param("(a)", "$", "!", "**(a)**", id="ascii-punctuation-neighbours"),
     ],
 )
 def test_bold_is_written_with_markers_only_when_the_neighbours_let_github_close_it(
@@ -1009,6 +1016,18 @@ def test_a_bold_chip_directly_before_text_is_written_as_the_neighbour_allows(
     following: str, written: str
 ) -> None:
     assert render_markdown([Paragraph((Chip("(x)", "blue"), Plain(following)))]) == written
+
+
+def test_a_table_of_contents_alternates_markers_with_the_bullet_lists_around_it() -> None:
+    contents = TableOfContents((TocEntry("x", (Plain("Intro"),)),))
+
+    assert render_markdown([_bullets("a"), contents, _bullets("b")]) == "- a\n\n* Intro\n\n- b\n"
+
+
+def test_bold_after_a_dollar_sign_keeps_its_markers_because_ascii_punctuation_closes_the_gap() -> None:
+    written = markdown_of([{"type": "text", "body": "$**(a)**"}])
+
+    assert (written, _github_html(written)) == ("\\$**(a)**\n", "<p>$<strong>(a)</strong></p>\n")
 
 
 @pytest.mark.parametrize(
@@ -1261,6 +1280,10 @@ def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
         pytest.param("a🄯b", "ab", id="copyleft-just-before-the-squared-letters-goes"),
         pytest.param("a🅪b", "ab", id="raised-mc-sign-after-the-circled-negative-letters-goes"),
         pytest.param("a🆊b", "ab", id="crossed-negative-squared-p-after-the-negative-squared-letters-goes"),
+        pytest.param("a🅏b", "ab", id="squared-wc-just-before-the-circled-negative-letters-goes"),
+        pytest.param("a🅩b", "a🅩b", id="last-circled-negative-letter-stays"),
+        pytest.param("a🅯b", "ab", id="circled-human-figure-after-the-circled-negative-letters-goes"),
+        pytest.param("a🅐b", "a🅐b", id="first-circled-negative-letter-stays"),
         pytest.param("Step ① one", "step--one", id="circled-digit-goes"),
         pytest.param("Ⅻ and ٣", "ⅻ-and-٣", id="letter-numbers-and-decimal-digits-stay"),
         pytest.param("Ⓔⓘ 🄺", "ⓔⓘ-🄺", id="circled-and-squared-letters-stay"),

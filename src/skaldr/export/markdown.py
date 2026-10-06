@@ -61,7 +61,7 @@ from skaldr.richtext import (
 )
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
-    range(0x24B6, 0x24EA),
+    range(0x24D0, 0x24EA),
     range(0x1F130, 0x1F14A),
     range(0x1F150, 0x1F16A),
     range(0x1F170, 0x1F18A),
@@ -134,7 +134,7 @@ class _MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.heading_slugs = heading_slugs
 
-    def write(self, runs: ExportRich, before: str = LINE_EDGE, after: str = LINE_EDGE) -> str:
+    def write(self, runs: ExportRich) -> str:
         pieces = self._pieces(runs)
         written = ""
         open_marker_character = NO_CHARACTER
@@ -150,21 +150,18 @@ class _MarkdownRuns(MarkupRuns):
             if runs_into_the_previous_marker:
                 emphasis = styled_in_tags(piece.style, piece.inner)
             else:
-                following = _first_character(pieces[index + 1 :]) or after
-                emphasis = written_emphasis(piece.style, piece.inner, written[-1:] or before, following)
+                following = _first_character(pieces[index + 1 :]) or LINE_EDGE
+                emphasis = written_emphasis(piece.style, piece.inner, written[-1:] or LINE_EDGE, following)
             written += emphasis
             open_marker_character = marker[0] if emphasis.endswith(marker) else NO_CHARACTER
         return written
-
-    def _inside_delimiters(self, runs: ExportRich) -> str:
-        return self.write(runs, EMPHASIS_OPENER_STAND_IN, EMPHASIS_OPENER_STAND_IN)
 
     def _pieces(self, runs: ExportRich) -> list[_Piece]:
         pieces: list[_Piece] = []
         for run in runs:
             match run:
                 case Styled():
-                    inner = self._inside_delimiters(run.runs)
+                    inner = self.write(run.runs)
                     marker_style = _marker_style(run.style)
                     pieces.append(
                         self.underline(inner) if marker_style is None else _Emphasis(marker_style, inner)
@@ -172,11 +169,11 @@ class _MarkdownRuns(MarkupRuns):
                 case Tinted():
                     pieces += self._pieces(run.runs)
                 case Link():
-                    pieces.append(self.link(self._inside_delimiters(run.label), run.url))
+                    pieces.append(self.link(self.write(run.label), run.url))
                 case AnchorLink() if run.anchor not in self.heading_slugs:
                     pieces += self._pieces(run.label)
                 case AnchorLink():
-                    pieces.append(self.anchor_link(self._inside_delimiters(run.label), run.anchor))
+                    pieces.append(self.anchor_link(self.write(run.label), run.anchor))
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
                 case _:
@@ -408,7 +405,7 @@ class _MarkdownWriter:
                 return self.titled(styled("bold", self.inline(node.title)), node.children, after)
             case Columns():
                 columns = self.blocks_after(nested_nodes(node), after)
-                return _Written(columns.lines, columns.tail)
+                return _Written.of(columns.lines, columns.tail)
             case Tabs():
                 return self.tabs_written(node, after)
             case Diagram():
