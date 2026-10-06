@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.3.0](https://github.com/alex-yanchenko/skaldr/compare/v3.2.1...v3.3.0) (2026-10-06)
+
+
+### Features
+
+* **index:** build one page from several documents with an index ([#178](https://github.com/alex-yanchenko/skaldr/issues/178)) ([46bb5e4](https://github.com/alex-yanchenko/skaldr/commit/46bb5e4de8a1f06c93d69f726cea9a7536c8fc66))
+* **render:** highlight code blocks in the html page with pygments ([#182](https://github.com/alex-yanchenko/skaldr/issues/182)) ([9068938](https://github.com/alex-yanchenko/skaldr/commit/90689380b0bdec72133f2d8a704e775376d9d597))
+
+
+### Bug Fixes
+
+* **export-markdown:** keep lists apart across containers and write emphasis github can read ([#184](https://github.com/alex-yanchenko/skaldr/issues/184)) ([0c1d132](https://github.com/alex-yanchenko/skaldr/commit/0c1d13291be63c2128cfa286aae122a7ee4219d7))
+* **release:** install and test the regenerated formula with brew before pushing it ([#181](https://github.com/alex-yanchenko/skaldr/issues/181)) ([a3d6d3c](https://github.com/alex-yanchenko/skaldr/commit/a3d6d3cb221d797dd0dc6bab48dffda3850862b3))
+
+
+### Code Refactoring
+
+* **publish:** compare parsed sources with yaml.dump instead of a hand-written walk ([#180](https://github.com/alex-yanchenko/skaldr/issues/180)) ([00d96c4](https://github.com/alex-yanchenko/skaldr/commit/00d96c41d7cc5c08e31267b8eaeec591c7010b1b))
+* **publish:** move the publish block schema out of the publish package and add a connector seam ([#183](https://github.com/alex-yanchenko/skaldr/issues/183)) ([ba21419](https://github.com/alex-yanchenko/skaldr/commit/ba21419ac4f3be17cc76bb361bb469a5865e820e))
+
 ## [3.2.1](https://github.com/alex-yanchenko/skaldr/compare/v3.2.0...v3.2.1) (2026-10-05)
 
 
