@@ -13,7 +13,6 @@ from skaldr.auth import store
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
-    Service,
     SignIn,
     forget,
     jira_credentials,
@@ -25,6 +24,7 @@ from skaldr.auth.store import (
     save_notion,
 )
 from skaldr.errors import AuthError
+from skaldr.services import Service
 from tests.factories.auth_factory import (
     SITE_REFUSALS,
     SITE_WITH_A_PASSWORD,

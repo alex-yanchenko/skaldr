@@ -11,8 +11,9 @@ import pytest
 from keyring.errors import KeyringError
 
 from skaldr.auth import cli as auth_cli
-from skaldr.auth.store import Service, SignIn, load_jira, load_notion, save_jira, save_notion
+from skaldr.auth.store import SignIn, load_jira, load_notion, save_jira, save_notion
 from skaldr.cli import main
+from skaldr.services import Service
 from tests.factories.auth_factory import (
     MYSELF,
     TOKEN_RESPONSE,
