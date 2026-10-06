@@ -121,3 +121,68 @@ def test_copied_text_is_the_plain_code() -> None:
     reader = Text()
     reader.feed(code_panel(content=source, lang="python"))
     assert "".join(reader.parts) == source
+
+
+@pytest.mark.parametrize("newline", ["\r\n", "\r"], ids=["crlf", "lone-cr"])
+def test_carriage_returns_in_highlighted_code_become_line_feeds(newline: str) -> None:
+    assert code_panel(content=f"x = 1{newline}y = 2", lang="python") == (
+        '<div class="code"><pre>x <span class="t-op">=</span> <span class="t-num">1</span>\n'
+        'y <span class="t-op">=</span> <span class="t-num">2</span></pre></div>'
+    )
+
+
+def test_a_lone_carriage_return_in_a_highlighted_diff_starts_a_context_line() -> None:
+    assert code_panel(content="+a\rb\n c", mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add">a</span><span class="ln ctx">b</span><span class="ln ctx"> c</span>'
+        "</pre></div>"
+    )
+
+
+def test_crlf_in_a_highlighted_diff_does_not_change_the_line_count() -> None:
+    assert code_panel(content="+x = 1\r\n y = 2", mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add">x <span class="t-op">=</span> <span class="t-num">1</span></span>'
+        '<span class="ln ctx"> y <span class="t-op">=</span> <span class="t-num">2</span></span>'
+        "</pre></div>"
+    )
+
+
+def test_unstyled_tokens_are_escaped() -> None:
+    assert code_panel(content="echo <img src=x onerror=1> &amp; </script>", lang="bash") == (
+        '<div class="code"><pre>echo &lt;img src<span class="t-op">=</span>x '
+        'onerror<span class="t-op">=</span><span class="t-num">1</span>&gt; '
+        '<span class="t-pun">&amp;</span>amp<span class="t-pun">;</span> '
+        "&lt;/script&gt;</pre></div>"
+    )
+
+
+def test_a_string_opened_on_a_removed_line_does_not_colour_the_added_side() -> None:
+    assert code_panel(content='-s = """\n+s = 1\n print(s)', mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln del">s <span class="t-op">=</span> <span class="t-str">&#34;&#34;&#34;</span></span>'
+        '<span class="ln add">s <span class="t-op">=</span> <span class="t-num">1</span></span>'
+        '<span class="ln ctx"> print<span class="t-pun">(</span>s<span class="t-pun">)</span></span>'
+        "</pre></div>"
+    )
+
+
+def test_code_over_the_size_cap_renders_plain(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_CHARACTERS", 5)
+    assert code_panel(content="x = 12", lang="python") == '<div class="code"><pre>x = 12</pre></div>'
+
+
+def test_a_diff_over_the_size_cap_renders_plain(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_CHARACTERS", 5)
+    assert code_panel(content="+x = 1\n y", mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln add">x = 1</span><span class="ln ctx"> y</span>'
+        "</pre></div>"
+    )
+
+
+def test_code_at_the_size_cap_is_still_highlighted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_CHARACTERS", 5)
+    assert code_panel(content="x = 1", lang="python") == (
+        '<div class="code"><pre>x <span class="t-op">=</span> <span class="t-num">1</span></pre></div>'
+    )

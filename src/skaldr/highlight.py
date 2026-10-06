@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 from typing import Final, Literal
 
 from markupsafe import Markup, escape
@@ -7,8 +6,10 @@ from pygments.lexers import get_lexer_by_name  # pyright: ignore[reportUnknownVa
 from pygments.token import Token, _TokenType  # pyright: ignore[reportPrivateUsage]
 from pygments.util import ClassNotFound
 
-from skaldr.export.lower.prose import code_language
+from skaldr.code_language import block_code_language
 from skaldr.models import Code
+
+MAX_HIGHLIGHTED_CHARACTERS: Final = 200_000
 
 TOKEN_CLASSES: Final[tuple[tuple[_TokenType, str], ...]] = (
     (Token.Comment, "t-com"),
@@ -29,13 +30,17 @@ def token_class(kind: _TokenType) -> str:
     return next((name for family, name in TOKEN_CLASSES if kind in family), "")
 
 
-def lexer_for(language: str) -> Lexer | None:
-    if not language:
+def lexer_for(language: str, text: str) -> Lexer | None:
+    if not language or len(text) > MAX_HIGHLIGHTED_CHARACTERS:
         return None
     try:
         return get_lexer_by_name(language, ensurenl=False, stripnl=False)
     except ClassNotFound:
         return None
+
+
+def with_line_feeds(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def pieces_by_line(text: str, lexer: Lexer) -> list[list[Piece]]:
@@ -60,19 +65,19 @@ def piece_markup(piece: Piece) -> Markup:
     return Markup('<span class="{}">{}</span>').format(name, text) if name else escape(text)
 
 
-def highlighted_lines(text: str, language: str) -> list[Markup]:
-    lexer = lexer_for(language)
-    if lexer is None:
-        return [escape(line) for line in text.split("\n")]
-    return [Markup("").join(piece_markup(piece) for piece in line) for line in pieces_by_line(text, lexer)]
+def lexed_lines(text: str, lexer: Lexer) -> list[Markup]:
+    lines = pieces_by_line(with_line_feeds(text), lexer)
+    return [Markup("").join(piece_markup(piece) for piece in line) for line in lines]
 
 
-def code_language_of(block: Code) -> str:
-    return block.lang or code_language(block.label)
+def plain_lines(text: str) -> list[Markup]:
+    return [escape(line) for line in text.split("\n")]
 
 
 def highlighted_code(block: Code) -> Markup:
-    return Markup("\n").join(highlighted_lines(block.content, code_language_of(block)))
+    lexer = lexer_for(block_code_language(block), block.content)
+    lines = plain_lines(block.content) if lexer is None else lexed_lines(block.content, lexer)
+    return Markup("\n").join(lines)
 
 
 def diff_line_kind(line: str) -> DiffKind:
@@ -83,13 +88,24 @@ def diff_line_kind(line: str) -> DiffKind:
     return "ctx"
 
 
-def without_diff_marker(line: str) -> str:
-    return line[1:] if diff_line_kind(line) != "ctx" else line
+def diff_rows(content: str) -> list[tuple[DiffKind, str]]:
+    rows: list[tuple[DiffKind, str]] = []
+    for line in content.split("\n"):
+        kind = diff_line_kind(line)
+        rows.append((kind, line if kind == "ctx" else line[1:]))
+    return rows
 
 
-def highlighted_diff_lines(block: Code) -> Iterable[tuple[DiffKind, Markup]]:
-    source_lines = block.content.split("\n")
-    code_lines = highlighted_lines(
-        "\n".join(without_diff_marker(line) for line in source_lines), code_language_of(block)
-    )
-    return [(diff_line_kind(line), code) for line, code in zip(source_lines, code_lines, strict=True)]
+def highlighted_diff_lines(block: Code) -> list[tuple[DiffKind, Markup]]:
+    lexer = lexer_for(block_code_language(block), block.content)
+    if lexer is None:
+        return [(kind, escape(text)) for kind, text in diff_rows(block.content)]
+    rows = diff_rows(with_line_feeds(block.content))
+    old_side = iter(lexed_lines("\n".join(text for kind, text in rows if kind != "add"), lexer))
+    new_side = iter(lexed_lines("\n".join(text for kind, text in rows if kind != "del"), lexer))
+    highlighted: list[tuple[DiffKind, Markup]] = []
+    for kind, _ in rows:
+        old_line = next(old_side) if kind != "add" else None
+        new_line = next(new_side) if kind != "del" else None
+        highlighted.append((kind, new_line if new_line is not None else old_line or Markup("")))
+    return highlighted
