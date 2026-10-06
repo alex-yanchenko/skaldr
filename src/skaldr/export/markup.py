@@ -22,6 +22,7 @@ from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
+STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
@@ -42,17 +43,23 @@ BACKTICK_RUN = re.compile(r"`+")
 URL_SAFE_CHARACTERS: Final = "/:?#[]@!$&'*+,;=%~"
 
 
-def _wrap_marker(marker: str, inner: str) -> str:
+def wrap_around_core(inner: str, opener: str, closer: str) -> str:
     core = inner.strip()
     if not core:
         return inner
     lead = inner[: len(inner) - len(inner.lstrip())]
     trail = inner[len(inner.rstrip()) :]
-    return f"{lead}{marker}{core}{marker}{trail}"
+    return f"{lead}{opener}{core}{closer}{trail}"
 
 
 def styled(style: MarkerStyle, inner: str) -> str:
-    return _wrap_marker(STYLE_MARKER[style], inner)
+    marker = STYLE_MARKER[style]
+    return wrap_around_core(inner, marker, marker)
+
+
+def styled_in_tags(style: MarkerStyle, inner: str) -> str:
+    tag = STYLE_TAG[style]
+    return wrap_around_core(inner, f"<{tag}>", f"</{tag}>")
 
 
 def is_emphasised_body_cell(table: TableNode, row: TableRow, index: int) -> bool:
