@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, get_args
 
 import yaml
 
@@ -7,8 +7,8 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import Node
-from skaldr.models import AnyBlock, parse_report
-from tests.factories.report_factory import make_report
+from skaldr.models import AnyBlock, AuthoredBlock, parse_report
+from tests.factories.report_factory import make_index_report, make_report
 
 BlockT = TypeVar("BlockT", bound=AnyBlock)
 
@@ -63,6 +63,10 @@ BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
 ]
 
 
+def authored_block_types() -> set[str]:
+    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AuthoredBlock)}
+
+
 def parsed_block(kind: type[BlockT], block: dict[str, Any], **overrides: Any) -> BlockT:
     parsed = parse_report(make_report(blocks=[block], **overrides)).blocks[0]
     if not isinstance(parsed, kind):
@@ -94,7 +98,14 @@ def folder_texts(folder: Path) -> dict[str, str]:
     return {path.name: path.read_text(encoding="utf-8") for path in sorted(folder.iterdir())}
 
 
-def write_report(directory: Path, data: dict[str, Any]) -> Path:
-    path = directory / "doc.yaml"
+def write_report(directory: Path, data: dict[str, Any], name: str = "doc.yaml") -> Path:
+    path = directory / name
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
     return path
+
+
+def write_index_document(directory: Path, parts: dict[str, dict[str, Any]], **overrides: Any) -> Path:
+    for name, part in parts.items():
+        write_report(directory, part, name)
+    return write_report(directory, make_index_report(list(parts), **overrides), "index.yaml")

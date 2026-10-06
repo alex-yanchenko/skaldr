@@ -37,6 +37,7 @@ from skaldr.models import (
     ListNumbering,
     Matrix,
     MatrixCell,
+    Part,
     Report,
     Request,
     RequestCapture,
@@ -110,12 +111,19 @@ def _page_ids(report: Report) -> set[str]:
     return {SOURCE_BLOCK_ID, SETTINGS_MENU_ID, *reference_ids}
 
 
-def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Heading | Section]:
-    """Headings (any level, nested) and sections, in document order — the blocks that carry an anchor
-    id and can appear in the TOC. A section yields itself, then its inner headings."""
+Anchored = Heading | Section | Part
+
+
+def _iter_anchored(blocks: Sequence[AnyBlock]) -> Iterator[Anchored]:
+    """Headings (any level, nested), sections and parts, in document order: the blocks that carry an
+    anchor id and can appear in the TOC. A section or part yields itself, then its inner headings."""
     for block in walk_blocks(blocks):
-        if isinstance(block, (Heading, Section)):
+        if isinstance(block, (Heading, Section, Part)):
             yield block
+
+
+def _explicit_anchor(block: Anchored) -> str | None:
+    return None if isinstance(block, Part) else block.id
 
 
 def reference_numbers(report: Report) -> dict[str, int]:
@@ -134,7 +142,7 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     author-set `id` is used verbatim (and reserved so a text-derived slug yields to it with a `-N`
     suffix); a text-derived slug de-dups the same way. Duplicate author ids fail validation."""
     anchored = list(_iter_anchored(report.blocks))
-    explicit = [block.id for block in anchored if block.id is not None]
+    explicit = [anchor for anchor in map(_explicit_anchor, anchored) if anchor is not None]
     page_ids = _page_ids(report)
     reserved = next((anchor for anchor in explicit if anchor in page_ids), None)
     if reserved is not None:
@@ -146,8 +154,9 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     slugs: dict[int, str] = {}
     taken: set[str] = set(explicit) | page_ids
     for block in anchored:
-        if block.id is not None:
-            slugs[id(block)] = block.id
+        explicit_anchor = _explicit_anchor(block)
+        if explicit_anchor is not None:
+            slugs[id(block)] = explicit_anchor
             continue
         base = _slugify(block.text if isinstance(block, Heading) else block.title)
         slug, suffix = base, 1
@@ -160,15 +169,15 @@ def anchor_slugs(report: Report) -> dict[int, str]:
 
 
 def toc_entries(report: Report, slugs: dict[int, str]) -> list[tuple[str, str]]:
-    """(slug, text) for top-level level-2 headings and sections, in document order — the TOC targets.
-    A section is a top-level region on a par with an h2, so it earns a TOC entry and its own anchor."""
+    """(slug, text) for top-level level-2 headings, sections and parts, in document order: the TOC
+    targets. A section or part is a top-level region, so it earns a TOC entry and its own anchor."""
     if not report.meta.toc:
         return []
     entries: list[tuple[str, str]] = []
     for block in report.blocks:
         if isinstance(block, Heading) and block.level == 2:
             entries.append((slugs[id(block)], block.text))
-        elif isinstance(block, Section):
+        elif isinstance(block, Section | Part):
             entries.append((slugs[id(block)], block.title))
     return entries
 

@@ -1195,6 +1195,26 @@ def test_watch_survives_an_invalid_file(
     assert "stopped watching" in captured.out
 
 
+def test_watch_re_renders_a_save_that_leaves_the_yaml_unreadable_so_its_error_shows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+    sleeps = {"n": 0}
+
+    def save_broken_yaml_then_stop(_seconds: float) -> None:
+        sleeps["n"] += 1
+        if sleeps["n"] > 1:
+            raise KeyboardInterrupt
+        mtime = data_path.stat().st_mtime
+        data_path.write_text("blocks: [unclosed\n", encoding="utf-8")
+        os.utime(data_path, (mtime + 10, mtime + 10))
+
+    monkeypatch.setattr("time.sleep", save_broken_yaml_then_stop)
+
+    assert main(["--watch", str(data_path), "-o", str(tmp_path / "out.html")]) == 0
+    assert "changed, re-rendering" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("argv_tail", [["--check"], ["--emit-json"], ["--pdf", "r.pdf"]])
 def test_watch_rejects_incompatible_modes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], argv_tail: list[str]

@@ -182,18 +182,18 @@ def main(argv: list[str] | None = None) -> int:
         "--watch",
         action="store_true",
         help="re-render to HTML on every save of the content file, a live edit-preview loop; Ctrl-C to "
-        "stop. HTML only; can't combine with --check/--emit-json/--pdf. (Watches the file itself, not "
-        "its !include fragments.) Needs a process that stays alive: under an agent harness that reaps "
-        "background jobs between turns, use --if-stale + --live instead.",
+        "stop. HTML only; can't combine with --check/--emit-json/--pdf. Watches the file, every file it "
+        "!includes and, for an index, every part. Needs a process that stays alive: under an agent "
+        "harness that reaps background jobs between turns, use --if-stale + --live instead.",
     )
     parser.add_argument(
         "--if-stale",
         action="store_true",
-        help="render only when the output is missing, older than the content file or any file it "
-        "!includes, or written with other --embed/--no-source/--live options; otherwise print 'up to date' "
-        "and exit 0. Without --live it keeps the reloader of a page rendered with --live, so `--live` once "
-        "and `--if-stale` after every edit keeps the page live. Makes an unconditional re-render after "
-        "every edit free, so no watcher process is needed.",
+        help="render only when the output is missing, older than the content file, any file it "
+        "!includes or any part of an index, or written with other --embed/--no-source/--live options; "
+        "otherwise print 'up to date' and exit 0. Without --live it keeps the reloader of a page "
+        "rendered with --live, so `--live` once and `--if-stale` after every edit keeps the page live. "
+        "Makes an unconditional re-render after every edit free, so no watcher process is needed.",
     )
     parser.add_argument(
         "--live",
@@ -417,6 +417,17 @@ def _newest_content_mtime(data_path: Path) -> float | None:
     return max(mtime for mtime in mtimes if mtime is not None)
 
 
+def _watched_files(data_path: Path, known: tuple[Path, ...]) -> tuple[Path, ...]:
+    try:
+        return content_files(data_path)
+    except ReportError:
+        return known or (data_path,)
+
+
+def _mtimes(paths: Sequence[Path]) -> tuple[float | None, ...]:
+    return tuple(_mtime(path) for path in paths)
+
+
 def _is_stale(
     data_path: Path,
     out_path: Path,
@@ -470,19 +481,26 @@ def _watch(
     interval: float = _POLL_INTERVAL_SECONDS,
     live: int | None = None,
 ) -> int:
-    """Re-render to HTML whenever the content file changes, until interrupted. Polls the mtime (no
-    third-party watcher); a failing render prints its error and the loop keeps going."""
+    """Re-render to HTML whenever the content file or a file it pulls in changes, until interrupted.
+    Polls the mtimes (no third-party watcher); a failing render prints its error and the loop keeps going."""
     print(f"watching {data_path}: re-rendering to {out_path} on change (Ctrl-C to stop)")
     try:
         _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
-        last = _mtime(data_path)
+        watched = _watched_files(data_path, ())
+        last = _mtimes(watched)
         while True:
             time.sleep(interval)
-            current = _mtime(data_path)
-            if current is not None and current != last:
-                last = current
-                print(f"\n{data_path} changed, re-rendering:")
-                _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
+            current = _mtimes(watched)
+            if None in current or current == last:
+                continue
+            changed = next(
+                path for path, before, now in zip(watched, last, current, strict=True) if before != now
+            )
+            print(f"\n{changed} changed, re-rendering:")
+            _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
+            resolved = _watched_files(data_path, watched)
+            last = current if resolved == watched else _mtimes(resolved)
+            watched = resolved
     except KeyboardInterrupt:
         print("\nstopped watching")
         return 0

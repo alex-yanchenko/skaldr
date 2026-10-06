@@ -65,6 +65,7 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    authored_block_types,
     folder_texts,
     heading_sections,
     lowered,
@@ -506,12 +507,8 @@ def _block_types_in(blocks: Sequence[AnyBlock]) -> set[str]:
     return {block.type for block in walk_blocks(blocks)}
 
 
-def _every_block_type() -> set[str]:
-    return {get_args(model.model_fields["type"].annotation)[0] for model in get_args(AnyBlock)}
-
-
 def test_the_export_fixture_uses_every_block_type() -> None:
-    assert _block_types_in(load_report(EXAMPLE).blocks) == _every_block_type()
+    assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
 def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:

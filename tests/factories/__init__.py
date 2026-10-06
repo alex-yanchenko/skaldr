@@ -1,12 +1,14 @@
 from tests.factories.export_factory import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    authored_block_types,
     folder_texts,
     heading_sections,
     lowered,
     markdown_of,
     notion_of,
     parsed_block,
+    write_index_document,
     write_report,
 )
 from tests.factories.report_factory import (
@@ -16,6 +18,7 @@ from tests.factories.report_factory import (
     make_command_request,
     make_flow,
     make_grid,
+    make_index_report,
     make_jira_target,
     make_label_table,
     make_notion_target,
@@ -37,6 +40,7 @@ __all__ = [
     "BADGE_AND_STATE_BLOCKS",
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
+    "authored_block_types",
     "folder_texts",
     "heading_sections",
     "lowered",
@@ -44,6 +48,7 @@ __all__ = [
     "make_command_request",
     "make_flow",
     "make_grid",
+    "make_index_report",
     "make_jira_target",
     "make_label_table",
     "make_notion_target",
@@ -61,5 +66,6 @@ __all__ = [
     "markdown_of",
     "notion_of",
     "parsed_block",
+    "write_index_document",
     "write_report",
 ]

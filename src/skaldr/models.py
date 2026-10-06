@@ -39,9 +39,11 @@ from pydantic import (
     Tag,
     TypeAdapter,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
+from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import PydanticCustomError
 from typing_extensions import assert_never
 
@@ -2543,17 +2545,44 @@ class Walkthrough(_Block):
     )
 
 
-Block = Annotated[
-    _Simple | Toggle | Tabs | Request | RequestFlow | Section | Grid | Walkthrough | Panel,
-    Field(discriminator="type"),
-]
+_TopLevel = _Simple | Toggle | Tabs | Request | RequestFlow | Section | Grid | Walkthrough | Panel
+Block = Annotated[_TopLevel, Field(discriminator="type")]
+
+BUILT_BY_AN_INDEX: Final = "built_by_an_index"
+
+
+def _is_built_by_an_index(info: ValidationInfo) -> bool:
+    context: object = info.context
+    return (
+        isinstance(context, Mapping) and cast("Mapping[str, object]", context).get(BUILT_BY_AN_INDEX) is True
+    )
+
+
+class Part(FrozenModel):
+    type: Literal["part"]
+    title: NonBlank
+    collapsed: bool = False
+    blocks: list[Block] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _only_an_index_builds_a_part(self, info: ValidationInfo) -> "Part":
+        if not _is_built_by_an_index(info):
+            raise ValueError(
+                "a `part` block is built by an `index`, not written by hand; list the file under "
+                "`index.parts`, or use a `section` or a `heading`"
+            )
+        return self
+
+
+PageBlock = Annotated[_TopLevel | SkipJsonSchema[Part], Field(discriminator="type")]
 # Every node the tree-walkers (badge/heading/table recursion) may descend into.
-AnyBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
+AuthoredBlock = _Leaf | Toggle | Request | RequestFlow | Section | Panel | Grid | InnerGrid | Walkthrough
+AnyBlock = AuthoredBlock | Part
 
 
 def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
     match block:
-        case Section() | Panel() | Toggle() | InnerToggle():
+        case Part() | Section() | Panel() | Toggle() | InnerToggle():
             return [(f"blocks.{index}", inner) for index, inner in enumerate(block.blocks)]
         case Grid() | InnerGrid():
             return [
@@ -2739,18 +2768,74 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
             yield block
 
 
+def _relative_part_path(path: str) -> str:
+    if Path(path).is_absolute():
+        raise ValueError(f"a part path is relative to the index file, not absolute: {path}")
+    return path
+
+
+PartPath = Annotated[NonBlank, AfterValidator(_relative_part_path)]
+
+
+class Index(FrozenModel):
+    layout: Literal["one_page"] = Field(
+        default="one_page",
+        description="How the parts combine: `one_page` builds one page holding every part in order, each "
+        "under its own title.",
+    )
+    parts: list[PartPath] = Field(
+        min_length=1,
+        description="The skaldr documents this index combines, in order, each a path relative to the index "
+        "file. A part's `meta.title` becomes its part title; its blocks follow unchanged; its badges merge "
+        "into the page. A part cannot be an index itself.",
+    )
+    collapsed: bool = Field(
+        default=False,
+        description="Whether every part starts collapsed (a collapsible in HTML, a toggle heading in the "
+        "exports). Default false: every part is open.",
+    )
+
+    @field_validator("parts")
+    @classmethod
+    def _each_part_listed_once(cls, parts: list[str]) -> list[str]:
+        repeated = sorted({part for part, count in Counter(parts).items() if count > 1})
+        if repeated:
+            raise ValueError(f"a part is listed more than once: {', '.join(repeated)}; list each part once")
+        return parts
+
+
 class Report(FrozenModel):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
     badges: dict[str, Badge] = Field(
         default_factory=dict, description="Author-declared tag/status vocabulary."
     )
-    blocks: list[Block] = Field(min_length=1)
+    index: Index | None = Field(
+        default=None,
+        description="Makes this document an index: one page built from other skaldr documents. `blocks` "
+        "becomes optional and, when present, opens the page before the first part.",
+    )
+    blocks: list[PageBlock] = Field(default_factory=list[PageBlock], min_length=1)
     publish: Publish | None = Field(
         default=None,
         description="Where the document publishes (Notion pages, Jira issues). Omitted from the source "
-        "embedded in a rendered page.",
+        "embedded in a rendered page. Not yet accepted on an index document.",
     )
+
+    @model_validator(mode="after")
+    def _refuse_an_index_that_was_not_loaded(self) -> "Report":
+        if self.index is not None:
+            raise ValueError(
+                "`index` is read when its file is loaded, which brings in every part; load the index file "
+                "rather than its parsed data"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _refuse_a_page_without_blocks(self) -> "Report":
+        if not self.blocks:
+            raise ValueError("`blocks` needs at least one block; only an index document may leave it out")
+        return self
 
     @model_validator(mode="after")
     def _validate_publish_sections(self) -> "Report":
@@ -2878,10 +2963,10 @@ def _refuse_repeats(placed: Sequence[tuple[str, str]], what: str, reason: str) -
         raise ValueError(f"{what} used more than once: {repeated}, at {where}; {reason}")
 
 
-def _format_validation_error(error: ValidationError) -> str:
+def _format_validation_error(error: ValidationError, within: tuple[str, ...] = ()) -> str:
     lines: list[str] = []
     for issue in error.errors():
-        location = ".".join(str(part) for part in issue["loc"])
+        location = ".".join(str(part) for part in (*within, *issue["loc"]))
         lines.append(f"{location}: {issue['msg']}" if location else issue["msg"])
     return "invalid content data: " + "; ".join(lines)
 
@@ -2926,10 +3011,10 @@ def _refuse_unencodable_text(data: object, location: tuple[str, ...]) -> None:
             _refuse_unencodable_text(item, (*location, str(index)))
 
 
-def parse_report(data: Any) -> Report:
+def parse_report(data: Any, *, built_by_an_index: bool = False) -> Report:
     _refuse_unencodable_text(data, ())
     try:
-        return Report.model_validate(data)
+        return Report.model_validate(data, context={BUILT_BY_AN_INDEX: built_by_an_index})
     except ValidationError as err:
         raise ReportError(_format_validation_error(err)) from err
 
@@ -2977,12 +3062,133 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: li
         raise ReportError(f"invalid YAML in {path}: {err}") from err
 
 
-def load_report(path: Path) -> Report:
+def _index_of(data: object) -> object:
+    return cast("Mapping[str, object]", data).get("index") if isinstance(data, Mapping) else None
+
+
+class _LoadedPart(NamedTuple):
+    path: Path
+    data: Mapping[str, Any]
+    report: Report
+
+
+def _parsed_index(data: object) -> Index:
+    try:
+        return Index.model_validate(data)
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("index",))) from err
+
+
+def _loaded_part(path: Path) -> _LoadedPart:
     data = _load_yaml_with_includes(path, (), [])
-    return parse_report(data)
+    if _index_of(data) is not None:
+        raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
+    try:
+        report = parse_report(data)
+    except ReportError as err:
+        raise ReportError(f"in part {path}: {err}") from err
+    return _LoadedPart(path, cast("Mapping[str, Any]", data), report)
+
+
+_BADGES: Final = TypeAdapter(dict[str, Badge])
+
+
+def _parsed_badges(data: object) -> dict[str, Badge]:
+    try:
+        return _BADGES.validate_python(data)
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("badges",))) from err
+
+
+def _merged_badges(declared: Sequence[tuple[Path, Mapping[str, Badge]]]) -> dict[str, Any]:
+    merged: dict[str, Badge] = {}
+    declared_in: dict[str, Path] = {}
+    for path, badges in declared:
+        for key, badge in badges.items():
+            if key in merged and merged[key] != badge:
+                raise ReportError(
+                    f"badge {key!r} is declared differently in {declared_in[key]} and {path}; "
+                    "an index merges every part's badges, "
+                    "so give it one label, tone and legend or rename one key"
+                )
+            merged.setdefault(key, badge)
+            declared_in.setdefault(key, path)
+    return {key: badge.model_dump(mode="json") for key, badge in merged.items()}
+
+
+def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
+    return {
+        "type": "part",
+        "title": part.report.meta.title,
+        "collapsed": index.collapsed,
+        "blocks": part.data["blocks"],
+    }
+
+
+_INTRO_BLOCKS: Final = TypeAdapter(list[PageBlock])
+
+
+def _intro_blocks(data: Mapping[str, Any]) -> list[object]:
+    intro: object = data.get("blocks", [])
+    try:
+        _INTRO_BLOCKS.validate_python(intro, context={BUILT_BY_AN_INDEX: False})
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("blocks",))) from err
+    return cast("list[object]", intro)
+
+
+class _Document(NamedTuple):
+    data: object
+    parts: tuple[tuple[int, Path], ...] = ()
+
+
+def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Document:
+    if data.get("publish") is not None:
+        raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
+    intro = _intro_blocks(data)
+    parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    own_badges = _parsed_badges(data.get("badges", {}))
+    badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
+    page = {key: value for key, value in data.items() if key != "index"}
+    combined = {**page, "badges": badges, "blocks": [*intro, *(_part_block(part, index) for part in parts)]}
+    return _Document(combined, tuple(enumerate((part.path for part in parts), start=len(intro))))
+
+
+def _load_document(path: Path) -> _Document:
+    data = _load_yaml_with_includes(path, (), [])
+    index = _index_of(data)
+    if index is None:
+        return _Document(data)
+    return _combined_index(path, cast("Mapping[str, Any]", data), _parsed_index(index))
+
+
+_PART_PLACE = re.compile(r"\bblocks\.(\d+)\.part\b")
+
+
+def _parts_named_in(message: str, parts: Sequence[tuple[int, Path]]) -> str | None:
+    named = {int(position) for position in _PART_PLACE.findall(message)}
+    places = [f"blocks.{position} is {path}" for position, path in parts if position in named]
+    if not places:
+        return None
+    listed = places[0] if len(places) == 1 else f"{', '.join(places[:-1])} and {places[-1]}"
+    return f"in this index, {listed}"
+
+
+def load_report(path: Path) -> Report:
+    document = _load_document(path)
+    try:
+        return parse_report(document.data, built_by_an_index=bool(document.parts))
+    except ReportError as err:
+        where = _parts_named_in(str(err), document.parts)
+        if where is None:
+            raise
+        raise ReportError(f"{err}; {where}") from err
 
 
 def content_files(path: Path) -> tuple[Path, ...]:
     loaded: list[Path] = []
-    _load_yaml_with_includes(path, (), loaded)
+    index = _index_of(_load_yaml_with_includes(path, (), loaded))
+    if index is not None:
+        for part_path in _parsed_index(index).parts:
+            _load_yaml_with_includes(path.parent / part_path, (), loaded)
     return tuple(loaded)

@@ -22,9 +22,7 @@ from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
 from skaldr.mathml import mathml
 from skaldr.models import (
-    Heading,
     Report,
-    Section,
     ToneLiteral,
     iter_requests,
     package_text,
@@ -234,7 +232,7 @@ def _render(
     env = html_environment()
     slugs = compute.anchor_slugs(report)
 
-    def anchor_id(block: Heading | Section) -> str:
+    def anchor_id(block: compute.Anchored) -> str:
         return slugs[id(block)]
 
     strips = compute.strip_registry(report)
