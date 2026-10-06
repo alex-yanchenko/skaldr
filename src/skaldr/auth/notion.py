@@ -6,11 +6,14 @@ import socket
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
 from types import TracebackType
+from typing import NoReturn
 from urllib.parse import parse_qs, parse_qsl, urlsplit
+from uuid import UUID
 
 import httpx2
 from authlib.common.errors import AuthlibBaseError
@@ -23,9 +26,9 @@ from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_o
 from skaldr.auth.store import (
     NotionCredentials,
     StoredEntry,
-    forget,
+    entry_for_workspace,
     save_notion,
-    stored_notion_replaced_by,
+    stored_notion_sign_ins,
 )
 from skaldr.errors import AuthError
 
@@ -44,12 +47,17 @@ _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
 _OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
+_UNUSABLE_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
+OLDER_SIGN_IN_NOTICE = (
+    "an older Notion sign-in without a workspace id is still stored; `skaldr auth status` names it, "
+    "and `skaldr auth logout notion <name>` revokes it and removes it"
+)
 
 
 class _NotionToken(BaseModel):
     access_token: str
     refresh_token: str | None = None
-    workspace_id: str
+    workspace_id: object = None
     workspace_name: str | None = None
 
 
@@ -83,14 +91,42 @@ def sign_in_to_notion(
                     state=state,
                 )
             )
-    return NotionCredentials(
+    credentials = NotionCredentials(
         client_id=client_id,
         client_secret=client_secret,
         access_token=token.access_token,
         refresh_token=token.refresh_token,
-        workspace_id=token.workspace_id,
+        workspace_id=_workspace_id_of(token),
         workspace_name=token.workspace_name,
     )
+    if credentials.workspace_id is None:
+        _refuse_after_revoking(credentials, _UNUSABLE_WORKSPACE_ID, transport)
+    return credentials
+
+
+def _workspace_id_of(token: _NotionToken) -> UUID | None:
+    if not isinstance(token.workspace_id, str):
+        return None
+    try:
+        return UUID(token.workspace_id)
+    except ValueError:
+        return None
+
+
+def _refuse_after_revoking(
+    credentials: NotionCredentials, refusal: str, transport: httpx2.BaseTransport | None
+) -> NoReturn:
+    try:
+        revoke_notion_token(credentials, transport=transport)
+    except AuthError as unrevoked:
+        raise AuthError(
+            _sentences(
+                refusal,
+                f"The token Notion issued could not be revoked ({unrevoked}), so remove the connection "
+                "in Notion under Settings, Connections",
+            )
+        ) from None
+    raise AuthError(_sentences(refusal, "The token Notion issued has been revoked"))
 
 
 def revoke_notion_token(
@@ -110,8 +146,14 @@ def revoke_notion_token(
 def save_or_revoke_notion(
     credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
 ) -> None:
+    _run_or_revoke(credentials, lambda: save_notion(credentials), transport)
+
+
+def _run_or_revoke(
+    credentials: NotionCredentials, operation: Callable[[], object], transport: httpx2.BaseTransport | None
+) -> None:
     try:
-        save_notion(credentials)
+        operation()
     except BaseException as unsaved:
         try:
             revoke_notion_token(credentials, transport=transport)
@@ -128,16 +170,33 @@ def save_or_revoke_notion(
         raise
 
 
+@dataclass
+class _StoredBeforeTheSave:
+    replaced: StoredEntry[NotionCredentials] | None = None
+    older_sign_in_without_a_workspace_id: bool = False
+
+
 def save_notion_replacing_the_old_sign_in(
     credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
-) -> str | None:
-    replaced = stored_notion_replaced_by(credentials)
-    save_or_revoke_notion(credentials, transport=transport)
-    if replaced is None:
-        return None
-    if replaced.identifier != credentials.workspace_id:
-        forget(replaced)
-    return _revoke_replaced_token(replaced, credentials, transport)
+) -> list[str]:
+    before = _StoredBeforeTheSave()
+
+    def look_up_then_save() -> None:
+        entries = stored_notion_sign_ins()
+        before.replaced = entry_for_workspace(entries, credentials.workspace_id)
+        before.older_sign_in_without_a_workspace_id = any(
+            entry.credentials is not None and entry.credentials.workspace_id is None for entry in entries
+        )
+        save_notion(credentials)
+
+    _run_or_revoke(credentials, look_up_then_save, transport)
+    warnings: list[str] = []
+    if before.replaced is not None:
+        revoke_warning = _revoke_replaced_token(before.replaced, credentials, transport)
+        warnings.extend([] if revoke_warning is None else [revoke_warning])
+    if before.older_sign_in_without_a_workspace_id:
+        warnings.append(OLDER_SIGN_IN_NOTICE)
+    return warnings
 
 
 def _revoke_replaced_token(

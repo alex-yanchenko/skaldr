@@ -11,11 +11,17 @@ import pytest
 from keyring.errors import KeyringError
 
 from skaldr.auth import notion as notion_module
-from skaldr.auth.notion import revoke_notion_token, save_or_revoke_notion, sign_in_to_notion
+from skaldr.auth.notion import (
+    revoke_notion_token,
+    save_notion_replacing_the_old_sign_in,
+    save_or_revoke_notion,
+    sign_in_to_notion,
+)
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
+    WORKSPACE_ID,
     FakeBrowser,
     InMemoryKeyring,
     Visit,
@@ -269,11 +275,10 @@ def test_a_failed_token_request_without_an_oauth_error_names_the_status(status: 
 @pytest.mark.parametrize(
     ("answer", "fields"),
     [
-        ({"refresh_token": "secret-refresh-value", "workspace_id": "workspace-id"}, "access_token"),
-        ({"refresh_token": "secret-refresh-value", "access_token": "a"}, "workspace_id"),
+        ({"refresh_token": "secret-refresh-value", "workspace_id": WORKSPACE_ID}, "access_token"),
         (["secret-refresh-value"], "(the whole answer)"),
     ],
-    ids=["no access token", "no workspace id", "not an object"],
+    ids=["no access token", "not an object"],
 )
 def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: object, fields: str) -> None:
     with pytest.raises(AuthError) as raised:
@@ -281,6 +286,71 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
 
     assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
     assert_secret_not_in_error_chain(raised.value, "secret-refresh-value")
+
+
+WITHOUT_A_WORKSPACE_ID = {key: value for key, value in TOKEN_RESPONSE.items() if key != "workspace_id"}
+REFUSED_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        WITHOUT_A_WORKSPACE_ID,
+        {**TOKEN_RESPONSE, "workspace_id": None},
+        {**TOKEN_RESPONSE, "workspace_id": "not-a-uuid"},
+        {**TOKEN_RESPONSE, "workspace_id": "a\x1b[2Jb"},
+    ],
+    ids=["missing", "null", "not a uuid", "an escape sequence"],
+)
+def test_a_token_answer_without_a_usable_workspace_id_has_its_token_revoked_before_it_is_refused(
+    answer: dict[str, object],
+) -> None:
+    seen: list[httpx2.Request] = []
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, answer),
+        "/v1/oauth/revoke": (200, {}),
+    }
+
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), transport=fake_api(routes, seen))
+
+    assert (str(raised.value), [summarise(request) for request in seen if "revoke" in request.url.path]) == (
+        f"{REFUSED_WORKSPACE_ID}. The token Notion issued has been revoked.",
+        [revoke_request_for("new-access")],
+    )
+
+
+def test_a_token_answer_without_a_workspace_id_whose_revoke_fails_says_to_remove_the_connection() -> None:
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, WITHOUT_A_WORKSPACE_ID),
+        "/v1/oauth/revoke": (400, {}),
+    }
+
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), transport=fake_api(routes, []))
+
+    assert str(raised.value) == (
+        f"{REFUSED_WORKSPACE_ID}. The token Notion issued could not be revoked (Notion did not revoke the "
+        "token: HTTP 400), so remove the connection in Notion under Settings, Connections."
+    )
+
+
+def test_an_unreadable_index_after_the_oauth_exchange_revokes_the_token_it_cannot_save(
+    keychain: InMemoryKeyring,
+) -> None:
+    keychain.entries[("skaldr", "index")] = "not json"
+    seen: list[httpx2.Request] = []
+
+    with pytest.raises(AuthError) as raised:
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (str(raised.value), [summarise(request) for request in seen], keychain.entries) == (
+        "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry named "
+        "index under skaldr, then name each Jira site or Notion workspace to find its sign-in again. "
+        "The token Notion issued has been revoked.",
+        [revoke_request_for("new-access")],
+        {("skaldr", "index"): "not json"},
+    )
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:
@@ -370,8 +440,8 @@ def test_a_saved_sign_in_is_not_revoked(keychain: InMemoryKeyring) -> None:
 
     assert (keychain.entries, seen) == (
         {
-            ("skaldr", "notion:workspace-id"): ISSUED.model_dump_json(),
-            ("skaldr", "index"): '{"jira": [], "notion": ["notion:workspace-id"]}',
+            ("skaldr", f"notion:{WORKSPACE_ID}"): ISSUED.model_dump_json(),
+            ("skaldr", "index"): f'{{"jira": [], "notion": ["notion:{WORKSPACE_ID}"]}}',
         },
         [],
     )

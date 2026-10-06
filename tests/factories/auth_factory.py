@@ -17,6 +17,8 @@ from typing_extensions import override
 
 from skaldr.auth.store import JiraCredentials, NotionCredentials
 
+WORKSPACE_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
 
 
@@ -140,7 +142,7 @@ TOKEN_RESPONSE: dict[str, object] = {
     "token_type": "bearer",
     "refresh_token": "new-refresh",
     "bot_id": "bot-id",
-    "workspace_id": "workspace-id",
+    "workspace_id": "11111111-1111-4111-8111-111111111111",
     "workspace_name": "Example Workspace",
     "owner": {"type": "user"},
 }
@@ -357,7 +359,7 @@ def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
         "client_secret": "client-secret",
         "access_token": "access-token",
         "refresh_token": "refresh-token",
-        "workspace_id": "workspace-id",
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
         "workspace_name": "Example Workspace",
     }
     _refuse_unknown_fields(overrides, fields)

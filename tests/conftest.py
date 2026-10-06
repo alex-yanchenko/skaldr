@@ -5,6 +5,7 @@ from pathlib import Path
 import keyring
 import pytest
 
+from skaldr.auth import store
 from skaldr.auth.notion import CALLBACK_THREAD_PREFIX
 from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
 from tests.factories.auth_factory import InMemoryKeyring, PlaintextKeyring
@@ -21,6 +22,11 @@ def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
     keyring.set_keyring(in_memory)
     yield in_memory
     keyring.set_keyring(previous)
+
+
+@pytest.fixture(autouse=True)
+def auth_lock_in_the_test_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(store, "lock_file", lambda: tmp_path / "auth.lock")
 
 
 @pytest.fixture

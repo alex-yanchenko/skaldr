@@ -139,10 +139,10 @@ def _sign_in_to_notion(
     credentials = sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
-    warning = save_notion_replacing_the_old_sign_in(credentials, transport=transport)
+    warnings = save_notion_replacing_the_old_sign_in(credentials, transport=transport)
     workspace = _workspace_name(credentials) or _UNNAMED_WORKSPACE
     print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
-    if warning is not None:
+    for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
 
 
@@ -212,29 +212,66 @@ def _log_out_of_jira(site: str | None) -> None:
     print(f"Signed out of Jira: removed from the keychain. Revoke the API token itself at {API_TOKENS_PAGE}")
 
 
-def _notion_status_lines() -> list[_StatusLine]:
+def _status_lines(
+    environment: Callable[[], str | None],
+    stored: Callable[[], list[_StatusLine]],
+    signed_out: str,
+) -> list[_StatusLine]:
     lines: list[_StatusLine] = []
-    if notion_from_environment() is not None:
-        lines.append(_StatusLine("access token from NOTION_ACCESS_TOKEN (environment)"))
-    lines.extend(_describe_stored_notion(entry) for entry in stored_notion_sign_ins())
-    return lines or [_StatusLine("not signed in (run `skaldr auth notion`)")]
+    from_environment: str | None = None
+    try:
+        from_environment = environment()
+    except AuthError as exc:
+        lines.append(_StatusLine(f"error: {exc}", failed=True))
+    if from_environment is not None:
+        lines.append(_StatusLine(from_environment))
+    try:
+        lines.extend(stored())
+    except AuthError as exc:
+        keychain_line = (
+            _StatusLine(f"error: {exc}", failed=True)
+            if from_environment is None
+            else _StatusLine(f"stored sign-ins not read: {exc}")
+        )
+        lines.append(keychain_line)
+    return lines or [_StatusLine(signed_out)]
+
+
+def _notion_status_lines() -> list[_StatusLine]:
+    def environment() -> str | None:
+        if notion_from_environment() is None:
+            return None
+        return "access token from NOTION_ACCESS_TOKEN (environment)"
+
+    return _status_lines(
+        environment,
+        lambda: [_describe_stored_notion(entry) for entry in stored_notion_sign_ins()],
+        "not signed in (run `skaldr auth notion`)",
+    )
 
 
 def _jira_status_lines() -> list[_StatusLine]:
-    lines: list[_StatusLine] = []
-    from_environment = jira_from_environment()
-    if from_environment is not None:
-        lines.append(_StatusLine(f"JIRA_EMAIL, JIRA_API_TOKEN for {from_environment.site} (environment)"))
-    lines.extend(_describe_stored_jira(entry) for entry in stored_jira_sign_ins())
-    return lines or [_StatusLine("not signed in (run `skaldr auth jira`)")]
+    def environment() -> str | None:
+        from_environment = jira_from_environment()
+        if from_environment is None:
+            return None
+        return f"JIRA_EMAIL, JIRA_API_TOKEN for {from_environment.site} (environment)"
+
+    return _status_lines(
+        environment,
+        lambda: [_describe_stored_jira(entry) for entry in stored_jira_sign_ins()],
+        "not signed in (run `skaldr auth jira`)",
+    )
 
 
 def _describe_stored_notion(entry: StoredEntry[NotionCredentials]) -> _StatusLine:
     if entry.credentials is None:
         return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
     workspace = _workspace_name(entry.credentials) or _UNNAMED_WORKSPACE
-    workspace_id = entry.credentials.workspace_id
-    identified = "" if workspace_id is None else f" (id {printable_only(workspace_id)})"
+    if entry.credentials.workspace_id is None:
+        identified = f" (no workspace id; name it as {entry.identifier})"
+    else:
+        identified = f" (id {entry.credentials.workspace_id})"
     return _StatusLine(f"signed in to workspace {workspace}{identified} (keychain)")
 
 

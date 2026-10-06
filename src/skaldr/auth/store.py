@@ -5,9 +5,12 @@ import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar, cast
+from uuid import UUID
 
 import keyring
+from filelock import FileLock, Timeout
 from keyring.backend import KeyringBackend
 from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
@@ -19,6 +22,8 @@ from skaldr.errors import AuthError
 
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
+LEGACY_SELECTOR = "legacy"
+LOCK_TIMEOUT_SECONDS = 30.0
 _UNIDENTIFIED_WORKSPACE = "unidentified"
 _UNREADABLE_LEGACY_ENTRY = "an unreadable entry"
 _INDEX_SHAPE = TypeAdapter(dict[str, list[str]])
@@ -58,7 +63,7 @@ class NotionCredentials(BaseModel):
     client_secret: str | None
     access_token: str
     refresh_token: str | None
-    workspace_id: str | None = None
+    workspace_id: UUID | None = None
     workspace_name: str | None
 
 
@@ -108,13 +113,17 @@ class _Kind(Generic[CredentialsT]):
     service: Service
     model: type[CredentialsT]
     identify: Callable[[CredentialsT], str]
+    legacy_replaces_keyed: bool
 
 
-_JIRA = _Kind[JiraCredentials]("jira", JiraCredentials, lambda credentials: credentials.site)
+_JIRA = _Kind[JiraCredentials]("jira", JiraCredentials, lambda credentials: credentials.site, True)
 _NOTION = _Kind[NotionCredentials](
     "notion",
     NotionCredentials,
-    lambda credentials: credentials.workspace_id or _UNIDENTIFIED_WORKSPACE,
+    lambda credentials: (
+        _UNIDENTIFIED_WORKSPACE if credentials.workspace_id is None else str(credentials.workspace_id)
+    ),
+    False,
 )
 
 
@@ -131,8 +140,16 @@ class StoredEntry(Generic[CredentialsT]):
 
     @property
     def unreadable_message(self) -> str:
-        label = self.service if self.identifier is None else f"{self.service} {self.identifier}"
-        return f"The keychain entry for {label} is unreadable; run `skaldr auth {self.service}` again"
+        if self.identifier is None:
+            return (
+                f"The keychain entry for {self.service} is unreadable; run "
+                f"`skaldr auth logout {self.service} {LEGACY_SELECTOR}` to remove it, then run "
+                f"`skaldr auth {self.service}` again"
+            )
+        return (
+            f"The keychain entry for {self.service} {self.identifier} is unreadable; "
+            f"run `skaldr auth {self.service}` again"
+        )
 
 
 def save_notion(credentials: NotionCredentials) -> None:
@@ -152,41 +169,40 @@ def stored_notion_sign_ins() -> list[StoredEntry[NotionCredentials]]:
 
 
 def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
-    origin = None if site is None else normalise_site(site)
-    return _the_only_match(
+    names_an_origin = site is not None and site != LEGACY_SELECTOR
+    wanted = normalise_site(site) if site is not None and names_an_origin else site
+    found = _the_only_match(
         stored_jira_sign_ins(),
-        origin,
-        lambda entry, wanted: entry.identifier == wanted,
+        wanted,
+        _is_site,
         "Jira sites",
         lambda entry: entry.identifier or _UNREADABLE_LEGACY_ENTRY,
     )
+    if found is None and wanted is not None and names_an_origin:
+        return _in_the_keychain(lambda: _entry_named(_JIRA, wanted))
+    return found
 
 
 def find_notion(workspace: str | None = None) -> StoredEntry[NotionCredentials] | None:
-    return _the_only_match(
+    wanted = None if workspace is None else _canonical_workspace_selector(workspace)
+    found = _the_only_match(
         stored_notion_sign_ins(),
-        workspace,
+        wanted,
         _is_workspace,
         "Notion workspaces",
         _describe_workspace,
     )
+    if found is None and wanted is not None and _is_uuid(wanted):
+        return _in_the_keychain(lambda: _entry_named(_NOTION, wanted))
+    return found
 
 
-def stored_notion_replaced_by(credentials: NotionCredentials) -> StoredEntry[NotionCredentials] | None:
-    entries = stored_notion_sign_ins()
-    same_workspace = _NOTION.identify(credentials)
-    for entry in entries:
-        if entry.identifier == same_workspace:
-            return entry
-    for entry in entries:
-        if (
-            entry.identifier == _UNIDENTIFIED_WORKSPACE
-            and entry.credentials is not None
-            and credentials.workspace_name is not None
-            and entry.credentials.workspace_name == credentials.workspace_name
-        ):
-            return entry
-    return None
+def entry_for_workspace(
+    entries: list[StoredEntry[NotionCredentials]], workspace_id: UUID | None
+) -> StoredEntry[NotionCredentials] | None:
+    if workspace_id is None:
+        return None
+    return next((entry for entry in entries if entry.identifier == str(workspace_id)), None)
 
 
 def load_jira(site: str | None = None) -> SignIn[JiraCredentials] | None:
@@ -252,10 +268,37 @@ def _the_only_match(
     return chosen[0] if chosen else None
 
 
+def _is_site(entry: StoredEntry[JiraCredentials], selector: str) -> bool:
+    return entry.identifier == selector or (selector == LEGACY_SELECTOR and entry.identifier is None)
+
+
 def _is_workspace(entry: StoredEntry[NotionCredentials], selector: str) -> bool:
-    return entry.identifier == selector or (
-        entry.credentials is not None and entry.credentials.workspace_name == selector
+    return (
+        entry.identifier == selector
+        or (selector == LEGACY_SELECTOR and entry.identifier is None)
+        or (entry.credentials is not None and entry.credentials.workspace_name == selector)
     )
+
+
+def _is_uuid(text: str) -> bool:
+    try:
+        UUID(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _canonical_workspace_selector(selector: str) -> str:
+    return str(UUID(selector)) if _is_uuid(selector) else selector
+
+
+def _entry_named(kind: _Kind[CredentialsT], identifier: str) -> StoredEntry[CredentialsT] | None:
+    username = f"{kind.service}:{identifier}"
+    stored = _get(username)
+    if stored is None:
+        return None
+    _list(kind.service, username)
+    return StoredEntry(kind.service, username, _parse(stored, kind.model))
 
 
 def _describe_workspace(entry: StoredEntry[NotionCredentials]) -> str:
@@ -274,6 +317,7 @@ def _get(username: str) -> str | None:
 
 
 def _set(username: str, secret: str) -> None:
+    _refuse_an_insecure_backend(keyring.get_keyring())
     keyring.set_password(KEYCHAIN_SERVICE, username, secret)
 
 
@@ -293,8 +337,8 @@ def _read_index() -> dict[Service, list[str]]:
         return {"jira": listed.get("jira", []), "notion": listed.get("notion", [])}
     raise AuthError(
         "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry "
-        f"named {KEYCHAIN_INDEX_USERNAME} under {KEYCHAIN_SERVICE} and run `skaldr auth` again for each "
-        "sign-in"
+        f"named {KEYCHAIN_INDEX_USERNAME} under {KEYCHAIN_SERVICE}, then name each Jira site or Notion "
+        "workspace to find its sign-in again"
     )
 
 
@@ -323,11 +367,21 @@ def _migrate_legacy_entry(kind: _Kind[CredentialsT]) -> None:
     credentials = None if legacy is None else _parse(legacy, kind.model)
     if credentials is None:
         return
-    username = _username(kind, credentials)
-    if _get(username) is None:
-        _set(username, credentials.model_dump_json())
+    serialized = credentials.model_dump_json()
+    username = _migration_username(kind, _username(kind, credentials), serialized)
+    _set(username, serialized)
     _list(kind.service, username)
     _delete(kind.service)
+
+
+def _migration_username(kind: _Kind[CredentialsT], preferred: str, serialized: str) -> str:
+    if kind.legacy_replaces_keyed:
+        return preferred
+    candidate, number = preferred, 1
+    while (existing := _get(candidate)) is not None and existing != serialized:
+        number += 1
+        candidate = f"{preferred}-{number}"
+    return candidate
 
 
 def _entries(kind: _Kind[CredentialsT]) -> list[StoredEntry[CredentialsT]]:
@@ -410,14 +464,37 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
         raise AuthError(f"The system keychain is unavailable: {exc}") from exc
 
 
+def lock_file() -> Path:
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "skaldr"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return state / "auth.lock"
+
+
+def _under_the_lock(operation: Callable[[], Answer]) -> Answer:
+    try:
+        lock = FileLock(lock_file())
+        lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
+    except Timeout as exc:
+        raise AuthError(
+            f"Another skaldr auth command has held the keychain lock for {LOCK_TIMEOUT_SECONDS:g} "
+            "seconds; run this again when it finishes"
+        ) from exc
+    except OSError as exc:
+        raise AuthError(f"skaldr cannot take its keychain lock: {exc}") from exc
+    try:
+        return operation()
+    finally:
+        lock.release()
+
+
 def _in_the_keychain(operation: Callable[[], Answer]) -> Answer:
     with _keychain_errors_as_auth_errors():
-        return _from_the_keychain(operation)
+        return _from_the_keychain(lambda: _under_the_lock(operation))
 
 
 def refuse_an_unusable_keychain() -> None:
     _refuse_an_insecure_keyring()
-    _in_the_keychain(lambda: _get(KEYCHAIN_INDEX_USERNAME))
+    _in_the_keychain(_read_index)
 
 
 def _save(kind: _Kind[CredentialsT], credentials: CredentialsT) -> None:
@@ -436,6 +513,10 @@ def _save(kind: _Kind[CredentialsT], credentials: CredentialsT) -> None:
 def _refuse_an_insecure_keyring() -> None:
     with _keychain_errors_as_auth_errors():
         backend = _from_the_keychain(keyring.get_keyring)
+    _refuse_an_insecure_backend(backend)
+
+
+def _refuse_an_insecure_backend(backend: KeyringBackend) -> None:
     candidates: list[KeyringBackend] = backend.backends if isinstance(backend, ChainerBackend) else [backend]
     for candidate in candidates:
         insecure_base = _insecure_keyring_base(type(candidate))
