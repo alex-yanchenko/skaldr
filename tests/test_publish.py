@@ -9,7 +9,7 @@ from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import parse_report
 from skaldr.publish import Publish, notion_page_id, without_publish_block
-from skaldr.publish.source import _document, same_documents  # pyright: ignore[reportPrivateUsage]
+from skaldr.publish.source import _document, _same_documents  # pyright: ignore[reportPrivateUsage]
 from skaldr.render import extract_source, render_html
 from tests.factories import (
     NOTION_PAGE_ID,
@@ -551,10 +551,12 @@ def test_check_fails_on_a_split_id_that_names_no_section(
         pytest.param("a: !include p.yaml\n", "a: !include p.yaml\n", id="include-tag"),
         pytest.param("a: &x [1]\nb: *x\n", "a: &y [1]\nb: *y\n", id="shared-alias"),
         pytest.param("a: &p [*p]\n", "a: &q [*q]\n", id="alias-cycle"),
+        pytest.param("a: !!set {x, y}\n", "a: !!set {y, x}\n", id="set-order-is-not-compared"),
+        pytest.param("a: 2026-01-01\n", "a: 2026-01-01\n", id="same-date"),
     ],
 )
 def test_two_sources_with_the_same_values_compare_equal(left: str, right: str) -> None:
-    assert same_documents(_document(left), _document(right))
+    assert _same_documents(_document(left), _document(right))
 
 
 @pytest.mark.parametrize(
@@ -575,7 +577,12 @@ def test_two_sources_with_the_same_values_compare_equal(left: str, right: str) -
         pytest.param("a: !include p.yaml\n", "a: [p.yaml]\n", id="include-and-plain-list"),
         pytest.param("a: !include p.yaml\n", "a: !include q.yaml\n", id="include-of-another-file"),
         pytest.param("a: .nan\n", "a: 1.0\n", id="not-a-number-and-number"),
+        pytest.param(
+            "a: !include p.yaml\n", "a: ['!include', p.yaml]\n", id="include-and-a-list-of-its-parts"
+        ),
+        pytest.param("a: !!set {x}\n", "a: !!set {y}\n", id="different-set"),
+        pytest.param("a: 2026-01-01\n", "a: 2026-01-01 00:00:00\n", id="date-and-timestamp"),
     ],
 )
 def test_two_sources_with_different_values_compare_unequal(left: str, right: str) -> None:
-    assert not same_documents(_document(left), _document(right))
+    assert not _same_documents(_document(left), _document(right))

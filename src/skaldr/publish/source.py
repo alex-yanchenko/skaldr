@@ -102,12 +102,8 @@ def _cut(source: str) -> str:
     return "".join(line for number, line in enumerate(lines) if number not in dropped)
 
 
-def _canonical_text(value: object) -> str:
-    return yaml.dump(value, allow_unicode=True)
-
-
-def same_documents(left: object, right: object) -> bool:
-    return _canonical_text(left) == _canonical_text(right)
+def _same_documents(left: object, right: object) -> bool:
+    return yaml.dump(left) == yaml.dump(right)
 
 
 def without_publish_block(source: str) -> str:
@@ -120,7 +116,7 @@ def without_publish_block(source: str) -> str:
     expected = {key: value for key, value in document.items() if key != PUBLISH_KEY}
     stripped = _cut(source)
     try:
-        matches = same_documents(_document(stripped), expected)
+        matches = _same_documents(_document(stripped), expected)
     except (ReportError, RecursionError):
         matches = False
     if not matches:
