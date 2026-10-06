@@ -29,7 +29,7 @@ from skaldr.models import (
     unresolvable_request_variables,
 )
 from skaldr.prose_blocks import prose_blocks
-from skaldr.publish import without_publish_block
+from skaldr.publish_block import without_publish_block
 from skaldr.replace_file import replace_file
 from skaldr.richtext import (
     SCRIPT_HTML_TAG,

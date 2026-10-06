@@ -13,6 +13,7 @@ from skaldr.export.notion import chunk_notion, render_notion
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
 from skaldr.replace_file import replace_file
+from skaldr.services import NotionService
 
 __all__ = [
     "EXPORT_MANIFEST",
@@ -23,7 +24,7 @@ __all__ = [
     "export_notion",
 ]
 
-ExportTarget = Literal["notion", "markdown"]
+ExportTarget = Literal[NotionService, "markdown"]
 EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 ExportedPageName = Annotated[str, StringConstraints(pattern=r"^page(?:\.[0-9]{2,})?\.md$")]

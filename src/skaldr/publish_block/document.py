@@ -1,18 +1,20 @@
 from collections import Counter
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Final, get_args
 
 from pydantic import Field, model_validator
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.patterns import SLUG_PATTERN
-from skaldr.publish.jira import JiraTarget
-from skaldr.publish.notion import NotionTarget
-from skaldr.publish.target import Location, TargetBase
+from skaldr.publish_block.jira import JiraTarget
+from skaldr.publish_block.notion import NotionTarget
+from skaldr.publish_block.target import Location, TargetBase
 
 NOT_A_SECTION = "which is not the id of a top-level section (a section is named by its `id:`)"
 
-PublishTarget = Annotated[NotionTarget | JiraTarget, Field(discriminator="to")]
+_AnyPublishTarget = NotionTarget | JiraTarget
+PublishTarget = Annotated[_AnyPublishTarget, Field(discriminator="to")]
+PUBLISH_TARGET_TYPES: Final[tuple[type[TargetBase], ...]] = get_args(_AnyPublishTarget)
 
 
 class Publish(FrozenModel):

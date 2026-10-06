@@ -1,8 +1,10 @@
 from abc import abstractmethod
+from typing import get_args
 
 from pydantic import ConfigDict, Field, JsonValue
 
 from skaldr.frozen_model import FrozenModel
+from skaldr.services import Service
 
 JsonFields = dict[str, JsonValue]
 Location = tuple[str, ...]
@@ -35,6 +37,11 @@ class TargetBase(FrozenModel):
         default_factory=dict[str, TargetOverride],
         description="Per-item field values keyed by a split section id, applied over `where.fields`.",
     )
+
+    @classmethod
+    def service(cls) -> Service:
+        (name,) = get_args(cls.model_fields["to"].annotation)
+        return name
 
     @abstractmethod
     def location_key(self) -> Location: ...

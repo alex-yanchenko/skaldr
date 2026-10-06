@@ -3,7 +3,6 @@ import sys
 import webbrowser
 from collections.abc import Callable
 from getpass import getpass
-from typing import get_args
 
 import httpx2
 
@@ -20,7 +19,6 @@ from skaldr.auth.notion import (
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
-    Service,
     SignIn,
     UnreadableEntryError,
     forget,
@@ -33,6 +31,7 @@ from skaldr.auth.store import (
     stored_notion,
 )
 from skaldr.errors import AuthError
+from skaldr.services import SERVICES, Service
 
 _UNNAMED_WORKSPACE = "(unnamed workspace)"
 
@@ -44,6 +43,10 @@ def main(
     open_browser: Callable[[str], object] = webbrowser.open,
 ) -> int:
     args = _parser().parse_args(argv)
+    log_out: dict[Service, Callable[[], None]] = {
+        "notion": lambda: _log_out_of_notion(transport),
+        "jira": _log_out_of_jira,
+    }
     try:
         if args.command == "notion":
             _sign_in_to_notion(args.port, transport, open_browser)
@@ -51,10 +54,8 @@ def main(
             _sign_in_to_jira(transport)
         elif args.command == "status":
             return _print_status()
-        elif args.command == "logout" and args.service == "notion":
-            _log_out_of_notion(transport)
-        elif args.command == "logout" and args.service == "jira":
-            _log_out_of_jira()
+        elif args.command == "logout":
+            log_out[args.service]()
         else:
             raise AssertionError(f"skaldr auth has no handler for {args.command!r}")
     except AuthError as exc:
@@ -87,7 +88,7 @@ def _parser() -> argparse.ArgumentParser:
     logout = commands.add_parser(
         "logout", help="remove a service's credentials from the keychain, revoking the Notion token first"
     )
-    logout.add_argument("service", choices=get_args(Service))
+    logout.add_argument("service", choices=SERVICES)
     return parser
 
 
@@ -152,13 +153,13 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
 
 def _print_status() -> int:
     exit_code = 0
-    lines = (
-        ("notion", lambda: _describe_notion(load_notion())),
-        ("jira", lambda: _describe_jira(load_jira())),
-    )
-    for service, describe in lines:
+    describers: dict[Service, Callable[[], str]] = {
+        "notion": lambda: _describe_notion(load_notion()),
+        "jira": lambda: _describe_jira(load_jira()),
+    }
+    for service in SERVICES:
         try:
-            line = describe()
+            line = describers[service]()
         except AuthError as exc:
             line, exit_code = f"error: {exc}", 1
         print(f"{service:<8}{line}")

@@ -51,7 +51,7 @@ from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
 from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
-from skaldr.publish import Publish, section_choice_errors
+from skaldr.publish_block import Publish, section_choice_errors
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown

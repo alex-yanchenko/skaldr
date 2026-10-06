@@ -8,7 +8,7 @@ import yaml
 from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import parse_report
-from skaldr.publish import Publish, notion_page_id, without_publish_block
+from skaldr.publish_block import Publish, notion_page_id, without_publish_block
 from skaldr.render import extract_source, render_html
 from tests.factories import (
     NOTION_PAGE_ID,
