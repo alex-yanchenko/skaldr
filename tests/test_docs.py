@@ -84,6 +84,9 @@ _SKELETONS = {
         "an !include example naming fragment files that do not exist", _whole_document
     ),
     "publish:": Skeleton("a publish fragment naming sections the example does not define", _whole_document),
+    "version: 1                    # an index document": Skeleton(
+        "an index naming part files that do not exist", _whole_document
+    ),
 }
 
 

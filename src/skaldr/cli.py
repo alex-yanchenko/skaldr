@@ -406,26 +406,25 @@ def _recorded_render(out_path: Path) -> RecordedRender | None:
         return None
 
 
-def _newest_mtime(paths: Sequence[Path]) -> float | None:
-    mtimes = [_mtime(path) for path in paths]
+def _newest_content_mtime(data_path: Path) -> float | None:
+    try:
+        mtimes = [_mtime(path) for path in content_files(data_path)]
+    except ReportError:
+        return None
     if any(mtime is None for mtime in mtimes):
         return None
     return max(mtime for mtime in mtimes if mtime is not None)
 
 
-def _newest_content_mtime(data_path: Path) -> float | None:
+def _watched_files(data_path: Path, known: tuple[Path, ...]) -> tuple[Path, ...]:
     try:
-        return _newest_mtime(content_files(data_path))
+        return content_files(data_path)
     except ReportError:
-        return None
+        return known or (data_path,)
 
 
-def _watched_mtime(data_path: Path) -> float | None:
-    try:
-        watched = content_files(data_path)
-    except ReportError:
-        watched = (data_path,)
-    return _newest_mtime(watched)
+def _mtimes(paths: Sequence[Path]) -> tuple[float | None, ...]:
+    return tuple(_mtime(path) for path in paths)
 
 
 def _is_stale(
@@ -486,14 +485,21 @@ def _watch(
     print(f"watching {data_path}: re-rendering to {out_path} on change (Ctrl-C to stop)")
     try:
         _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
-        last = _watched_mtime(data_path)
+        watched = _watched_files(data_path, ())
+        last = _mtimes(watched)
         while True:
             time.sleep(interval)
-            current = _watched_mtime(data_path)
-            if current is not None and current != last:
-                last = current
-                print(f"\n{data_path} changed, re-rendering:")
-                _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
+            current = _mtimes(watched)
+            if None in current or current == last:
+                continue
+            changed = next(
+                path for path, before, now in zip(watched, last, current, strict=True) if before != now
+            )
+            print(f"\n{changed} changed, re-rendering:")
+            _render_once(data_path, out_path, embed=embed, no_source=no_source, live=live)
+            resolved = _watched_files(data_path, watched)
+            last = current if resolved == watched else _mtimes(resolved)
+            watched = resolved
     except KeyboardInterrupt:
         print("\nstopped watching")
         return 0

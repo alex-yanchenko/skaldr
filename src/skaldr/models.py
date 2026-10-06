@@ -2765,6 +2765,14 @@ class Index(FrozenModel):
         "exports). Default false: every part is open.",
     )
 
+    @field_validator("parts")
+    @classmethod
+    def _each_part_listed_once(cls, parts: list[str]) -> list[str]:
+        repeated = sorted({part for part, count in Counter(parts).items() if count > 1})
+        if repeated:
+            raise ValueError(f"a part is listed more than once: {', '.join(repeated)}; list each part once")
+        return parts
+
 
 class Report(FrozenModel):
     version: Literal[1] = Field(description="Content-file schema version.")
@@ -2783,6 +2791,15 @@ class Report(FrozenModel):
         description="Where the document publishes (Notion pages, Jira issues). Omitted from the source "
         "embedded in a rendered page. Not yet accepted on an index document.",
     )
+
+    @model_validator(mode="after")
+    def _refuse_an_index_that_was_not_loaded(self) -> "Report":
+        if self.index is not None:
+            raise ValueError(
+                "`index` is read when its file is loaded, which brings in every part; load the index file "
+                "rather than its parsed data"
+            )
+        return self
 
     @model_validator(mode="after")
     def _refuse_a_page_without_blocks(self) -> "Report":
@@ -3115,8 +3132,14 @@ def _load_document(path: Path) -> _Document:
     return _combined_index(path, cast("Mapping[str, Any]", data), _parsed_index(index))
 
 
-def _where_the_parts_sit(parts: Sequence[tuple[int, Path]]) -> str:
-    places = [f"blocks.{position} is {path}" for position, path in parts]
+_PART_PLACE = re.compile(r"\bblocks\.(\d+)\.part\b")
+
+
+def _parts_named_in(message: str, parts: Sequence[tuple[int, Path]]) -> str | None:
+    named = {int(position) for position in _PART_PLACE.findall(message)}
+    places = [f"blocks.{position} is {path}" for position, path in parts if position in named]
+    if not places:
+        return None
     listed = places[0] if len(places) == 1 else f"{', '.join(places[:-1])} and {places[-1]}"
     return f"in this index, {listed}"
 
@@ -3126,9 +3149,10 @@ def load_report(path: Path) -> Report:
     try:
         return parse_report(document.data, built_by_an_index=bool(document.parts))
     except ReportError as err:
-        if not document.parts:
+        where = _parts_named_in(str(err), document.parts)
+        if where is None:
             raise
-        raise ReportError(f"{err}; {_where_the_parts_sit(document.parts)}") from err
+        raise ReportError(f"{err}; {where}") from err
 
 
 def content_files(path: Path) -> tuple[Path, ...]:

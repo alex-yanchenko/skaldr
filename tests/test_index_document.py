@@ -1,5 +1,6 @@
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -164,27 +165,71 @@ def test_content_files_lists_a_part_that_does_not_validate(tmp_path: Path) -> No
     assert content_files(index) == (index.resolve(), (tmp_path / "one.yaml").resolve())
 
 
-def test_watch_re_renders_when_a_part_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    index = _two_part_index(tmp_path)
-    out = tmp_path / "out.html"
+def _shift_mtime(path: Path, seconds: float) -> None:
+    mtime = path.stat().st_mtime + seconds
+    os.utime(path, (mtime, mtime))
+
+
+def _watch_through(
+    index: Path, monkeypatch: pytest.MonkeyPatch, edits: list[Callable[[], None]]
+) -> list[str]:
     renders: list[str] = []
+    pending = iter(edits)
 
     def record_render(*_args: object, **_kwargs: object) -> int:
         renders.append("render")
         return 0
 
-    def edit_a_part_then_stop(_seconds: float) -> None:
-        if len(renders) > 1:
+    def next_edit_or_stop(_seconds: float) -> None:
+        edit = next(pending, None)
+        if edit is None:
             raise KeyboardInterrupt
-        part = tmp_path / "two.yaml"
-        stat = part.stat()
-        os.utime(part, (stat.st_atime, stat.st_mtime + 10))
+        edit()
 
     monkeypatch.setattr("skaldr.cli._render_once", record_render)
-    monkeypatch.setattr("time.sleep", edit_a_part_then_stop)
+    monkeypatch.setattr("time.sleep", next_edit_or_stop)
+    assert main(["--watch", str(index), "-o", str(index.parent / "out.html")]) == 0
+    return renders
 
-    assert main(["--watch", str(index), "-o", str(out)]) == 0
+
+def test_watch_re_renders_when_a_part_changes_and_names_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    index = _two_part_index(tmp_path)
+    part = tmp_path / "two.yaml"
+
+    renders = _watch_through(index, monkeypatch, [lambda: _shift_mtime(part, 10)])
+
     assert renders == ["render", "render"]
+    assert f"\n{part} changed, re-rendering:" in capsys.readouterr().out
+
+
+def test_watch_sees_a_part_replaced_by_an_older_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    index = _two_part_index(tmp_path)
+
+    renders = _watch_through(index, monkeypatch, [lambda: _shift_mtime(tmp_path / "one.yaml", -100)])
+
+    assert renders == ["render", "render"]
+
+
+def test_watch_keeps_following_the_parts_while_one_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    index = _two_part_index(tmp_path)
+    part = tmp_path / "two.yaml"
+    good = part.read_text(encoding="utf-8")
+
+    def break_the_part() -> None:
+        part.write_text("blocks: [unclosed\n", encoding="utf-8")
+        _shift_mtime(part, 10)
+
+    def mend_the_part() -> None:
+        part.write_text(good, encoding="utf-8")
+        _shift_mtime(part, 10)
+
+    renders = _watch_through(index, monkeypatch, [break_the_part, mend_the_part])
+
+    assert renders == ["render", "render", "render"]
 
 
 def test_badges_from_every_part_merge(tmp_path: Path) -> None:
@@ -263,6 +308,80 @@ def test_an_id_repeated_across_parts_names_the_file_behind_each_part(tmp_path: P
     )
 
 
+def test_a_page_wide_error_names_only_the_parts_it_points_at(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {
+            "one.yaml": make_report(meta={"title": "A"}, blocks=[make_section("shared")]),
+            "two.yaml": _part("B", "b"),
+            "three.yaml": make_report(meta={"title": "C"}, blocks=[make_section("shared")]),
+        },
+    )
+
+    assert _refusal(index).endswith(
+        f"; in this index, blocks.0 is {tmp_path / 'one.yaml'} and blocks.2 is {tmp_path / 'three.yaml'}"
+    )
+
+
+def test_a_page_wide_error_across_three_parts_lists_them_in_order(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {
+            name: make_report(meta={"title": name}, blocks=[make_section("shared")])
+            for name in ("a.yaml", "b.yaml", "c.yaml")
+        },
+    )
+
+    assert _refusal(index).endswith(
+        f"; in this index, blocks.0 is {tmp_path / 'a.yaml'}, blocks.1 is {tmp_path / 'b.yaml'} "
+        f"and blocks.2 is {tmp_path / 'c.yaml'}"
+    )
+
+
+def test_a_page_wide_error_between_the_intro_and_one_part_names_that_part(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": make_report(meta={"title": "A"}, blocks=[make_section("shared")])},
+        blocks=[make_section("shared")],
+    )
+
+    assert _refusal(index).endswith(f"; in this index, blocks.1 is {tmp_path / 'one.yaml'}")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param(
+            {"blocks": [make_section("shared"), make_section("shared")]},
+            "invalid content data: Value error, heading/section id(s) used more than once: ['shared'], at "
+            "blocks.0.section.id, blocks.1.section.id; heading and section ids must be unique",
+            id="intro-only",
+        ),
+        pytest.param(
+            {"meta": {"subtitle": ["no title"]}},
+            "invalid content data: meta.title: Field required",
+            id="index-meta",
+        ),
+    ],
+)
+def test_an_error_that_points_at_no_part_names_no_part(
+    tmp_path: Path, overrides: dict[str, Any], message: str
+) -> None:
+    index = write_index_document(tmp_path, {"one.yaml": _part("A", "a")}, **overrides)
+
+    assert _refusal(index) == message
+
+
+def test_parsing_index_data_without_loading_its_file_is_refused() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_index_report(["one.yaml"]))
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, `index` is read when its file is loaded, which brings in every "
+        "part; load the index file rather than its parsed data"
+    )
+
+
 def test_a_part_that_fails_validation_is_named_with_its_field_path(tmp_path: Path) -> None:
     index = write_index_document(
         tmp_path, {"one.yaml": make_report(meta={"title": "A"}, blocks=[{"type": "text"}])}
@@ -302,6 +421,12 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
             "invalid content data: index.parts.0: Value error, a part path is relative to the index file, "
             "not absolute: /abs/part.yaml",
             id="absolute",
+        ),
+        pytest.param(
+            {"index": {"parts": ["one.yaml", "two.yaml", "one.yaml"]}},
+            "invalid content data: index.parts: Value error, a part is listed more than once: one.yaml; "
+            "list each part once",
+            id="listed-twice",
         ),
         pytest.param(
             {"index": {"parts": ["  "]}},
