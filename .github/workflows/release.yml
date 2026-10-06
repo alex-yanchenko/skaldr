@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       # Mint a short-lived installation token from the dedicated release GitHub App so
       # PR creation is scoped to THIS workflow's token. The token also makes the release
@@ -93,8 +93,9 @@ jobs:
       # Regenerate skaldr's Homebrew formula and push it to the tap. This step is what
       # updates brew, so let it fail the release if the push fails. The formula pins a
       # dependency wheel per platform, so the tap's generator rebuilds the whole file;
-      # uv (used by the generator) is on PATH from setup-uv above.
-      - name: Regenerate + push the Homebrew formula
+      # uv (used by the generator) is on PATH from setup-uv above. The job runs on macOS so
+      # the regenerated formula is installed and tested with Homebrew before it is pushed.
+      - name: Regenerate, brew install + test, and push the Homebrew formula
         if: ${{ steps.release.outputs.release_created }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -117,7 +118,7 @@ jobs:
           # (eventual consistency) and exit non-zero — which previously failed the whole release with
           # the tag + PyPI publish already done. Retry so that race self-heals instead of half-releasing.
           for i in $(seq 1 5); do
-            uv run --no-project python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb" && break
+            uv run --no-project --with packaging python "$tap/scripts/gen-skaldr-formula.py" "$ver" > "$tap/Formula/skaldr.rb" && break
             [ "$i" -eq 5 ] && { echo "formula generation failed after 5 attempts"; exit 1; }
             sleep 15
           done
@@ -126,5 +127,11 @@ jobs:
           git config user.email "alex-release-bot[bot]@users.noreply.github.com"
           if ! git diff --quiet; then
             git commit -am "chore: skaldr $ver"
+            # Homebrew installs only from a tap, so tap the local clone (it now holds the
+            # regenerated formula as a commit) and install + test that before pushing.
+            export HOMEBREW_NO_AUTO_UPDATE=1
+            brew tap alex-yanchenko/tap "$tap"
+            brew install alex-yanchenko/tap/skaldr
+            brew test alex-yanchenko/tap/skaldr
             git push
           fi
