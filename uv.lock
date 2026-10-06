@@ -1243,7 +1243,7 @@ requires-dist = [
     { name = "markdown-it-py", specifier = ">=4.2.0,<5" },
     { name = "markupsafe", specifier = ">=2.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
-    { name = "pygments", specifier = ">=2.21,<3" },
+    { name = "pygments", specifier = ">=2.8,<3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "roman", specifier = ">=5.2" },
     { name = "tinycss2", specifier = ">=1.5.1,<2" },

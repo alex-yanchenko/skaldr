@@ -1,18 +1,39 @@
+import time
+from collections.abc import Iterator
 from html.parser import HTMLParser
-from typing import Any
+from typing import cast
 
 import pytest
+from markupsafe import Markup
+from pygments.lexer import Lexer
+from pygments.token import Keyword, Text, _TokenType  # pyright: ignore[reportPrivateUsage]
 
+from skaldr import highlight
 from skaldr.models import parse_report
 from skaldr.render import render_html
 from tests.factories.report_factory import make_report
 
 
-def code_panel(**block: Any) -> str:
+def code_panel(**block: str) -> str:
     html = render_html(parse_report(make_report(blocks=[{"type": "code", **block}])))
     start = html.index('<div class="code">')
     end = html.index("</pre></div>", start) + len("</pre></div>")
     return html[start:end]
+
+
+class VisibleText(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def visible_text(markup: str) -> str:
+    reader = VisibleText()
+    reader.feed(markup)
+    return "".join(reader.parts)
 
 
 PYTHON_SNIPPET = 'def f(x): return "a<&b"'
@@ -109,18 +130,8 @@ def test_a_closing_script_tag_in_unhighlighted_code_is_escaped() -> None:
 
 
 def test_copied_text_is_the_plain_code() -> None:
-    class Text(HTMLParser):
-        def __init__(self) -> None:
-            super().__init__()
-            self.parts: list[str] = []
-
-        def handle_data(self, data: str) -> None:
-            self.parts.append(data)
-
     source = 'def f(x):\n    return "a<&b"  # </script>\n'
-    reader = Text()
-    reader.feed(code_panel(content=source, lang="python"))
-    assert "".join(reader.parts) == source
+    assert visible_text(code_panel(content=source, lang="python")) == source
 
 
 @pytest.mark.parametrize("newline", ["\r\n", "\r"], ids=["crlf", "lone-cr"])
@@ -197,21 +208,6 @@ def test_the_size_cap_counts_the_text_after_line_endings_are_normalised(
     )
 
 
-class VisibleText(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self.parts.append(data)
-
-
-def visible_pre_text(panel: str) -> str:
-    reader = VisibleText()
-    reader.feed(panel[panel.index("<pre") :])
-    return "".join(reader.parts)
-
-
 def test_a_console_line_without_a_trailing_newline_is_kept() -> None:
     assert code_panel(content="$ ls", lang="console") == '<div class="code"><pre>$ ls</pre></div>'
 
@@ -247,7 +243,7 @@ def test_a_console_diff_keeps_its_context_line() -> None:
 )
 def test_session_lexers_never_drop_the_text_of_the_block(language: str) -> None:
     source = "$ one\ntwo\n> three"
-    assert visible_pre_text(code_panel(content=source, lang=language)) == source
+    assert visible_text(code_panel(content=source, lang=language)) == source
 
 
 def test_a_lexer_that_expands_tabs_renders_the_block_plain() -> None:
@@ -329,3 +325,85 @@ def test_highlighted_diff_shapes(content: str, rows: str) -> None:
     assert code_panel(content=content, mode="diff", lang="python") == (
         f'<div class="code"><pre class="diff">{rows}</pre></div>'
     )
+
+
+def test_unprefixed_diff_context_lines_are_lexed_whole() -> None:
+    assert code_panel(content="def f():\n-    return 1\n+    return 2", mode="diff", lang="python") == (
+        '<div class="code"><pre class="diff">'
+        '<span class="ln ctx"><span class="t-kw">def</span> <span class="t-fn">f</span>'
+        '<span class="t-pun">():</span></span>'
+        '<span class="ln del">    <span class="t-kw">return</span> <span class="t-num">1</span></span>'
+        '<span class="ln add">    <span class="t-kw">return</span> <span class="t-num">2</span></span>'
+        "</pre></div>"
+    )
+
+
+def test_unprefixed_typescript_diff_context_keeps_its_first_character() -> None:
+    panel = code_panel(
+        content="function pick(a) {\n-  return 1;\n+  return 2;\n}", mode="diff", lang="typescript"
+    )
+    assert visible_text(panel) == "function pick(a) {  return 1;  return 2;}"
+    assert '<span class="ln ctx"><span class="t-kw">function</span> pick' in panel
+
+
+def test_a_hunk_header_context_line_keeps_its_first_character() -> None:
+    panel = code_panel(content="@@ -1 +1 @@\n-x = 1\n+x = 2", mode="diff", lang="python")
+    assert visible_text(panel) == "@@ -1 +1 @@x = 1x = 2"
+
+
+def stub_lexer(*tokens: tuple[_TokenType, str]) -> Lexer:
+    class Stub:
+        def get_tokens(self, _text: str) -> Iterator[tuple[_TokenType, str]]:
+            return iter(tokens)
+
+    return cast(Lexer, Stub())
+
+
+def test_the_fidelity_guard_accepts_tokens_that_rebuild_the_text() -> None:
+    assert highlight.lexed_lines("ab", stub_lexer((Keyword, "a"), (Text, "b\n"))) == [
+        Markup('<span class="t-kw">a</span>b')
+    ]
+
+
+def test_the_fidelity_guard_refuses_a_lexer_that_drops_text() -> None:
+    assert highlight.lexed_lines("ab\n", stub_lexer((Text, "a\n"))) is None
+
+
+def test_the_fidelity_guard_refuses_a_lexer_that_reorders_text() -> None:
+    assert highlight.lexed_lines("ab\n", stub_lexer((Text, "b"), (Keyword, "a"), (Text, "\n"))) is None
+
+
+@pytest.mark.parametrize(
+    ("language", "snippet"),
+    [
+        ("python", "def f(x): return 1"),
+        ("javascript", "const a = 1;"),
+        ("typescript", "const a: number = 1;"),
+        ("sql", "SELECT 1 FROM t;"),
+        ("yaml", "a: 1\nb: [1]"),
+        ("json", '{"a": 1}'),
+        ("bash", 'if [ -f x ]; then echo "a"; fi'),
+        ("go", "func main() { return 1 }"),
+        ("rust", "fn main() { let x = 1; }"),
+        ("java", "class A { int x = 1; }"),
+        ("ruby", "def f; 1; end"),
+        ("html", '<a href="x">y</a>'),
+        ("css", "a { color: red; }"),
+        ("markdown", "# Title\n**b** `c`"),
+        ("dockerfile", 'FROM python:3\nRUN echo "x"'),
+        ("toml", "[a]\nb = 1"),
+    ],
+)
+def test_common_languages_are_highlighted_and_keep_their_text(language: str, snippet: str) -> None:
+    panel = code_panel(content=snippet, lang=language)
+    assert 'class="t-' in panel
+    assert visible_text(panel) == snippet
+
+
+@pytest.mark.parametrize(("language", "unit"), [("perl", "<<"), ("rust", 'r#"')])
+def test_a_pathological_block_at_the_size_cap_renders_within_a_bound(language: str, unit: str) -> None:
+    content = unit * (highlight.MAX_HIGHLIGHTED_CHARACTERS // len(unit))
+    started = time.perf_counter()
+    panel = code_panel(content=content, lang=language)
+    assert time.perf_counter() - started < 3
+    assert visible_text(panel) == content

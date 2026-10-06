@@ -10,7 +10,7 @@ from pygments.util import ClassNotFound
 from skaldr.code_language import block_code_language
 from skaldr.models import Code
 
-MAX_HIGHLIGHTED_CHARACTERS: Final = 200_000
+MAX_HIGHLIGHTED_CHARACTERS: Final = 20_000
 
 TOKEN_CLASSES: Final[tuple[tuple[_TokenType, str], ...]] = (
     (Token.Comment, "t-com"),
@@ -101,7 +101,8 @@ def diff_row(line: str) -> DiffRow:
         return DiffRow("add", "", line[1:])
     if line.startswith("-"):
         return DiffRow("del", "", line[1:])
-    return DiffRow("ctx", line[:1], line[1:])
+    marker = " " if line.startswith(" ") else ""
+    return DiffRow("ctx", marker, line[len(marker) :])
 
 
 def plain_diff_lines(rows: list[DiffRow]) -> list[tuple[DiffKind, Markup]]:
