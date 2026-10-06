@@ -1,11 +1,11 @@
 import re
-from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 
 from skaldr.frozen_model import FrozenModel
-from skaldr.publish.target import JsonFields, Location, TargetBase
+from skaldr.publish_block.target import JsonFields, Location, TargetBase
+from skaldr.services import NotionService
 
 NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
 DASHLESS_PAGE_ID = re.compile(r"[0-9a-f]{32}")
@@ -84,7 +84,7 @@ class NotionWhere(FrozenModel):
 
 
 class NotionTarget(TargetBase):
-    to: Literal["notion"] = Field(description="Publish to Notion: `notion`.")
+    to: NotionService = Field(description="Publish to Notion: `notion`.")
     where: NotionWhere = Field(description="The Notion page the document goes under or into.")
 
     def location_key(self) -> Location:

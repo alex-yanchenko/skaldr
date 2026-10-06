@@ -2,10 +2,10 @@ from typing import Any, get_args
 
 import pytest
 
+from skaldr.code_language import code_language
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import spaced, tone_named, tone_of, with_bold_label
-from skaldr.export.lower.prose import code_language
 from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
 from skaldr.export.runs import (
     Break,
