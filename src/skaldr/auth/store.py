@@ -4,9 +4,9 @@ import sys
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar, cast
+from typing import Generic, Literal, TypeVar, cast
 from uuid import UUID
 
 import keyring
@@ -14,7 +14,7 @@ from filelock import FileLock, Timeout
 from keyring.backend import KeyringBackend
 from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
-from pydantic import BaseModel, ConfigDict, HttpUrl, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
 from skaldr.auth import CaughtWithoutChaining, printable_only
@@ -33,6 +33,7 @@ KEYCHAIN_WAIT_NOTICE = (
     "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
     "unlock it or answer there."
 )
+LOCK_WAIT_NOTICE = "Waiting for another skaldr command to finish with the keychain."
 Answer = TypeVar("Answer")
 
 Service = Literal["notion", "jira"]
@@ -60,9 +61,9 @@ class NotionCredentials(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     client_id: str | None
-    client_secret: str | None
-    access_token: str
-    refresh_token: str | None
+    client_secret: str | None = Field(repr=False)
+    access_token: str = Field(repr=False)
+    refresh_token: str | None = Field(repr=False)
     workspace_id: UUID | None = None
     workspace_name: str | None
 
@@ -72,7 +73,7 @@ class JiraCredentials(BaseModel):
 
     site: str
     email: str
-    api_token: str
+    api_token: str = Field(repr=False)
     display_name: str | None
 
     @field_validator("site")
@@ -132,6 +133,7 @@ class StoredEntry(Generic[CredentialsT]):
     service: Service
     username: str
     credentials: CredentialsT | None
+    raw: str | None = field(default=None, compare=False, repr=False)
 
     @property
     def identifier(self) -> str | None:
@@ -152,8 +154,59 @@ class StoredEntry(Generic[CredentialsT]):
         )
 
 
+AnyStoredEntry = StoredEntry[JiraCredentials] | StoredEntry[NotionCredentials]
+
+
+@dataclass(frozen=True)
+class NotionReplacement:
+    replaced: StoredEntry[NotionCredentials] | None
+    older_sign_in_without_a_workspace_id: bool
+
+
 def save_notion(credentials: NotionCredentials) -> None:
+    _refuse_credentials_without_a_workspace_id(credentials)
     _save(_NOTION, credentials)
+
+
+def save_notion_returning_the_replaced(credentials: NotionCredentials) -> NotionReplacement:
+    _refuse_credentials_without_a_workspace_id(credentials)
+    _refuse_an_insecure_keyring()
+    username = _username(_NOTION, credentials)
+
+    def look_up_then_write() -> NotionReplacement:
+        entries = _entries(_NOTION)
+        replacement = NotionReplacement(
+            entry_for_workspace(entries, credentials.workspace_id),
+            any(
+                entry.credentials is not None and entry.credentials.workspace_id is None for entry in entries
+            ),
+        )
+        _write(_NOTION, username, credentials)
+        return replacement
+
+    return _in_the_keychain(look_up_then_write)
+
+
+def save_notion_to(entry: StoredEntry[NotionCredentials], credentials: NotionCredentials) -> None:
+    if entry.identifier is None:
+        raise AuthError("A legacy keychain entry cannot be saved to; run `skaldr auth notion` again")
+    if not _is_for_the_workspace_of(entry.identifier, credentials):
+        raise AuthError("The refreshed Notion sign-in is not for the workspace of the entry it replaces")
+    _refuse_an_insecure_keyring()
+    _in_the_keychain(lambda: _write(_NOTION, entry.username, credentials))
+
+
+def _refuse_credentials_without_a_workspace_id(credentials: NotionCredentials) -> None:
+    if credentials.workspace_id is None:
+        raise AuthError(
+            "A Notion sign-in without a workspace id can only be saved back to the entry it came from"
+        )
+
+
+def _is_for_the_workspace_of(identifier: str, credentials: NotionCredentials) -> bool:
+    if identifier.startswith(_UNIDENTIFIED_WORKSPACE):
+        return credentials.workspace_id is None
+    return str(credentials.workspace_id) == identifier
 
 
 def save_jira(credentials: JiraCredentials) -> None:
@@ -239,12 +292,16 @@ def notion_client_from_environment() -> tuple[str | None, str | None]:
     return _environment(_NOTION_CLIENT_ID), _environment(_NOTION_CLIENT_SECRET)
 
 
-def forget(entry: StoredEntry[Any]) -> None:
-    def delete_and_unlist() -> None:
+def forget(entry: AnyStoredEntry) -> bool:
+    def delete_unless_changed_then_unlist() -> bool:
+        stored = _get(entry.username)
+        if stored is not None and entry.raw is not None and stored != entry.raw:
+            return False
         _delete(entry.username)
         _unlist(entry.service, entry.username)
+        return True
 
-    _in_the_keychain(delete_and_unlist)
+    return _in_the_keychain(delete_unless_changed_then_unlist)
 
 
 def _signed_in(entry: StoredEntry[CredentialsT] | None) -> SignIn[CredentialsT] | None:
@@ -298,7 +355,7 @@ def _entry_named(kind: _Kind[CredentialsT], identifier: str) -> StoredEntry[Cred
     if stored is None:
         return None
     _list(kind.service, username)
-    return StoredEntry(kind.service, username, _parse(stored, kind.model))
+    return StoredEntry(kind.service, username, _parse(stored, kind.model), stored)
 
 
 def _describe_workspace(entry: StoredEntry[NotionCredentials]) -> str:
@@ -390,7 +447,7 @@ def _entries(kind: _Kind[CredentialsT]) -> list[StoredEntry[CredentialsT]]:
     for username in [*_read_index()[kind.service], kind.service]:
         stored = _get(username)
         if stored is not None:
-            entries.append(StoredEntry(kind.service, username, _parse(stored, kind.model)))
+            entries.append(StoredEntry(kind.service, username, _parse(stored, kind.model), stored))
     return entries
 
 
@@ -430,7 +487,17 @@ class _KeychainReply(Generic[Answer]):
     error: BaseException | None = None
 
 
-def _from_the_keychain(ask: Callable[[], Answer]) -> Answer:
+class KeychainTimeoutError(AuthError):
+    pass
+
+
+class KeychainWaitInterrupted(KeyboardInterrupt):
+    pass
+
+
+def _from_the_keychain(
+    ask: Callable[[], Answer], still_waiting_for_the_lock: Callable[[], bool] = lambda: False
+) -> Answer:
     answered = threading.Event()
     reply: _KeychainReply[Answer] = _KeychainReply()
 
@@ -443,14 +510,17 @@ def _from_the_keychain(ask: Callable[[], Answer]) -> Answer:
             answered.set()
 
     threading.Thread(target=ask_and_record, name="skaldr-keychain", daemon=True).start()
-    if not answered.wait(KEYCHAIN_NOTICE_SECONDS):
-        print(KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
-        if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
-            raise AuthError(
-                f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
-                "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
-                "may still be applied if the keychain answers later"
-            )
+    try:
+        if not answered.wait(KEYCHAIN_NOTICE_SECONDS):
+            print(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
+            if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
+                raise KeychainTimeoutError(
+                    f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
+                    "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
+                    "may still be applied if the keychain answers later"
+                )
+    except KeyboardInterrupt as interrupted:
+        raise KeychainWaitInterrupted from interrupted
     if reply.error is not None:
         raise reply.error
     return cast("Answer", reply.value)
@@ -464,13 +534,27 @@ def _keychain_errors_as_auth_errors() -> Generator[None, None, None]:
         raise AuthError(f"The system keychain is unavailable: {exc}") from exc
 
 
+def state_directory() -> Path:
+    configured = Path(os.environ.get("XDG_STATE_HOME", ""))
+    base = configured if configured.is_absolute() else Path.home() / ".local" / "state"
+    return base / "skaldr"
+
+
 def lock_file() -> Path:
-    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "skaldr"
-    state.mkdir(parents=True, exist_ok=True, mode=0o700)
-    return state / "auth.lock"
+    directory = state_directory()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return directory / "auth.lock"
 
 
-def _under_the_lock(operation: Callable[[], Answer]) -> Answer:
+@dataclass
+class _LockWait:
+    waiting: bool = True
+
+
+_holding_the_lock = threading.local()
+
+
+def _under_the_lock(operation: Callable[[], Answer], wait: _LockWait) -> Answer:
     try:
         lock = FileLock(lock_file())
         lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
@@ -480,16 +564,22 @@ def _under_the_lock(operation: Callable[[], Answer]) -> Answer:
             "seconds; run this again when it finishes"
         ) from exc
     except OSError as exc:
-        raise AuthError(f"skaldr cannot take its keychain lock: {exc}") from exc
+        raise AuthError(f"skaldr cannot take its keychain lock in {state_directory()}: {exc}") from exc
+    wait.waiting = False
+    _holding_the_lock.held = True
     try:
         return operation()
     finally:
+        _holding_the_lock.held = False
         lock.release()
 
 
 def _in_the_keychain(operation: Callable[[], Answer]) -> Answer:
+    if getattr(_holding_the_lock, "held", False):
+        return operation()
+    wait = _LockWait()
     with _keychain_errors_as_auth_errors():
-        return _from_the_keychain(lambda: _under_the_lock(operation))
+        return _from_the_keychain(lambda: _under_the_lock(operation, wait), lambda: wait.waiting)
 
 
 def refuse_an_unusable_keychain() -> None:
@@ -499,15 +589,14 @@ def refuse_an_unusable_keychain() -> None:
 
 def _save(kind: _Kind[CredentialsT], credentials: CredentialsT) -> None:
     _refuse_an_insecure_keyring()
-    serialized = credentials.model_dump_json()
     username = _username(kind, credentials)
+    _in_the_keychain(lambda: _write(kind, username, credentials))
 
-    def move_legacy_then_write() -> None:
-        _migrate_legacy_entry(kind)
-        _set(username, serialized)
-        _list(kind.service, username)
 
-    _in_the_keychain(move_legacy_then_write)
+def _write(kind: _Kind[CredentialsT], username: str, credentials: CredentialsT) -> None:
+    _migrate_legacy_entry(kind)
+    _set(username, credentials.model_dump_json())
+    _list(kind.service, username)
 
 
 def _refuse_an_insecure_keyring() -> None:

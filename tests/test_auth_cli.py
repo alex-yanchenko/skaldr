@@ -17,6 +17,7 @@ from skaldr.auth.store import (
     NotionCredentials,
     Service,
     SignIn,
+    StoredEntry,
     load_jira,
     load_notion,
     save_jira,
@@ -966,6 +967,55 @@ def test_logout_notion_with_a_workspace_revokes_and_removes_only_that_one(
         [make_notion_credentials()],
     )
     assert capsys.readouterr().out == "Signed out of Notion: token revoked and removed from the keychain.\n"
+
+
+def test_logout_notion_keeps_a_sign_in_stored_while_the_old_token_was_being_revoked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_notion(make_notion_credentials(access_token="old-access"))
+    newer = make_notion_credentials(access_token="newer-access")
+    real_revoke = auth_cli.revoke_notion_token
+
+    def revoke_then_let_another_sign_in_land(
+        credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
+    ) -> None:
+        real_revoke(credentials, transport=transport)
+        save_notion(newer)
+
+    monkeypatch.setattr(auth_cli, "revoke_notion_token", revoke_then_let_another_sign_in_land)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (200, {})}, seen))
+
+    assert (exit_code, revokes_among(seen), stored_notion(), capsys.readouterr().out) == (
+        0,
+        [revoke_request_for("old-access")],
+        [newer],
+        "The Notion token was revoked, but a newer sign-in was stored in the meantime and was kept.\n",
+    )
+
+
+def test_logout_jira_keeps_a_sign_in_stored_after_it_was_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_jira(make_jira_credentials(api_token="old-token"))
+    newer = make_jira_credentials(api_token="newer-token")
+    real_find = auth_cli.find_jira
+
+    def find_then_let_another_sign_in_land(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
+        found = real_find(site)
+        save_jira(newer)
+        return found
+
+    monkeypatch.setattr(auth_cli, "find_jira", find_then_let_another_sign_in_land)
+
+    exit_code = auth_cli.main(["logout", "jira"])
+
+    assert (exit_code, stored_jira(), capsys.readouterr().out) == (
+        0,
+        [newer],
+        "A newer Jira sign-in was stored in the meantime and was kept.\n",
+    )
 
 
 def test_logout_notion_for_a_workspace_nobody_signed_in_to_says_so(

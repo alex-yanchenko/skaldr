@@ -3,10 +3,10 @@ import json
 import re
 import secrets
 import socket
+import sys
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack
-from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
@@ -24,11 +24,12 @@ from typing_extensions import Self, override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
 from skaldr.auth.store import (
+    Answer,
+    KeychainTimeoutError,
+    KeychainWaitInterrupted,
     NotionCredentials,
     StoredEntry,
-    entry_for_workspace,
-    save_notion,
-    stored_notion_sign_ins,
+    save_notion_returning_the_replaced,
 )
 from skaldr.errors import AuthError
 
@@ -47,6 +48,16 @@ _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
 _OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
+_NOT_REVOKED_AFTER_AN_INTERRUPT = (
+    "the keychain save may still complete, so the token Notion issued was not revoked; run "
+    "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
+    "Settings, Connections if it is not"
+)
+_NOT_REVOKED_AFTER_A_TIMEOUT = (
+    "The token Notion issued was not revoked, because the save may still complete; run "
+    "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
+    "Settings, Connections if it is not"
+)
 _UNUSABLE_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
 OLDER_SIGN_IN_NOTICE = (
     "an older Notion sign-in without a workspace id is still stored; `skaldr auth status` names it, "
@@ -143,17 +154,16 @@ def revoke_notion_token(
         raise AuthError(f"Notion did not revoke the token: HTTP {response.status_code}")
 
 
-def save_or_revoke_notion(
-    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
-) -> None:
-    _run_or_revoke(credentials, lambda: save_notion(credentials), transport)
-
-
 def _run_or_revoke(
-    credentials: NotionCredentials, operation: Callable[[], object], transport: httpx2.BaseTransport | None
-) -> None:
+    credentials: NotionCredentials, operation: Callable[[], Answer], transport: httpx2.BaseTransport | None
+) -> Answer:
     try:
-        operation()
+        return operation()
+    except KeychainTimeoutError as timed_out:
+        raise AuthError(_sentences(str(timed_out), _NOT_REVOKED_AFTER_A_TIMEOUT)) from None
+    except KeychainWaitInterrupted:
+        print(f"warning: {_NOT_REVOKED_AFTER_AN_INTERRUPT}", file=sys.stderr)
+        raise
     except BaseException as unsaved:
         try:
             revoke_notion_token(credentials, transport=transport)
@@ -170,31 +180,17 @@ def _run_or_revoke(
         raise
 
 
-@dataclass
-class _StoredBeforeTheSave:
-    replaced: StoredEntry[NotionCredentials] | None = None
-    older_sign_in_without_a_workspace_id: bool = False
-
-
 def save_notion_replacing_the_old_sign_in(
     credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
 ) -> list[str]:
-    before = _StoredBeforeTheSave()
-
-    def look_up_then_save() -> None:
-        entries = stored_notion_sign_ins()
-        before.replaced = entry_for_workspace(entries, credentials.workspace_id)
-        before.older_sign_in_without_a_workspace_id = any(
-            entry.credentials is not None and entry.credentials.workspace_id is None for entry in entries
-        )
-        save_notion(credentials)
-
-    _run_or_revoke(credentials, look_up_then_save, transport)
+    replacement = _run_or_revoke(
+        credentials, lambda: save_notion_returning_the_replaced(credentials), transport
+    )
     warnings: list[str] = []
-    if before.replaced is not None:
-        revoke_warning = _revoke_replaced_token(before.replaced, credentials, transport)
+    if replacement.replaced is not None:
+        revoke_warning = _revoke_replaced_token(replacement.replaced, credentials, transport)
         warnings.extend([] if revoke_warning is None else [revoke_warning])
-    if before.older_sign_in_without_a_workspace_id:
+    if replacement.older_sign_in_without_a_workspace_id:
         warnings.append(OLDER_SIGN_IN_NOTICE)
     return warnings
 

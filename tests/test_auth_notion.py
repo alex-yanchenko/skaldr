@@ -1,23 +1,29 @@
+import _thread
 import errno
+import json
 import os
 import re
 import socket
+import threading
 import time
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import keyring
 import pytest
+from filelock import FileLock
 from keyring.errors import KeyringError
+from typing_extensions import override
 
 from skaldr.auth import notion as notion_module
+from skaldr.auth import store
 from skaldr.auth.notion import (
     revoke_notion_token,
     save_notion_replacing_the_old_sign_in,
-    save_or_revoke_notion,
     sign_in_to_notion,
 )
-from skaldr.auth.store import NotionCredentials
+from skaldr.auth.store import NotionCredentials, save_notion
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
@@ -433,10 +439,126 @@ def revoke_answering(answer: int | None, seen: list[httpx2.Request]) -> httpx2.B
     return fake_api({"/v1/oauth/revoke": (answer, {})}, seen)
 
 
+class SlowLookupKeyring(InMemoryKeyring):
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        stored = super().get_password(service, username)
+        if username == f"notion:{WORKSPACE_ID}":
+            time.sleep(0.05)
+        return stored
+
+
+def revoked_tokens(seen: list[httpx2.Request]) -> list[str]:
+    return [str(json.loads(request.content)["token"]) for request in seen]
+
+
+def test_two_sign_ins_to_one_workspace_leave_exactly_one_token_unrevoked_and_it_is_the_stored_one() -> None:
+    slow = SlowLookupKeyring()
+    keyring.set_keyring(slow)
+    save_notion(make_notion_credentials(access_token="T0"))
+    seen: list[httpx2.Request] = []
+    transport = revoke_answering(200, seen)
+    sign_ins = [
+        threading.Thread(
+            target=save_notion_replacing_the_old_sign_in,
+            args=(make_notion_credentials(access_token=token),),
+            kwargs={"transport": transport},
+        )
+        for token in ("TA", "TB")
+    ]
+
+    for sign_in_thread in sign_ins:
+        sign_in_thread.start()
+    for sign_in_thread in sign_ins:
+        sign_in_thread.join()
+
+    stored = json.loads(slow.entries[("skaldr", f"notion:{WORKSPACE_ID}")])["access_token"]
+    assert sorted([*revoked_tokens(seen), stored]) == ["T0", "TA", "TB"]
+
+
+def test_looking_up_the_replaced_token_and_saving_the_new_one_hold_the_lock_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    acquisitions: list[str] = []
+
+    class CountingLock(FileLock):
+        @override
+        def acquire(self, *args: Any, **kwargs: Any) -> Any:
+            acquisitions.append("acquired")
+            return super().acquire(*args, **kwargs)
+
+    monkeypatch.setattr(store, "FileLock", CountingLock)
+    save_notion(make_notion_credentials(access_token="T0"))
+    acquisitions.clear()
+    seen: list[httpx2.Request] = []
+
+    save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (acquisitions, revoked_tokens(seen)) == (["acquired"], ["T0"])
+
+
+class SlowSaveKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.released = threading.Event()
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.released.wait(5)
+        self.entries[(service, username)] = password
+
+
+def test_a_keychain_timeout_during_the_save_does_not_revoke_the_token_the_save_may_still_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
+    slow = SlowSaveKeyring()
+    keyring.set_keyring(slow)
+    seen: list[httpx2.Request] = []
+
+    try:
+        with pytest.raises(AuthError) as raised:
+            save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+    finally:
+        slow.released.set()
+
+    assert (str(raised.value), seen) == (
+        "The system keychain did not answer within 0.2 seconds; unlock it or answer its prompt, then run "
+        "the command again. A change skaldr asked for may still be applied if the keychain answers later. "
+        "The token Notion issued was not revoked, because the save may still complete; run "
+        "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
+        "Settings, Connections if it is not.",
+        [],
+    )
+
+
+def test_an_interrupt_while_waiting_for_the_save_does_not_revoke_the_token_the_save_may_still_store(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    slow = SlowSaveKeyring()
+    keyring.set_keyring(slow)
+    seen: list[httpx2.Request] = []
+    threading.Timer(0.3, _thread.interrupt_main).start()
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+    finally:
+        slow.released.set()
+
+    assert (seen, capsys.readouterr().err) == (
+        [],
+        "warning: the keychain save may still complete, so the token Notion issued was not revoked; run "
+        "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
+        "Settings, Connections if it is not\n",
+    )
+
+
 def test_a_saved_sign_in_is_not_revoked(keychain: InMemoryKeyring) -> None:
     seen: list[httpx2.Request] = []
 
-    save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+    save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
 
     assert (keychain.entries, seen) == (
         {
@@ -459,7 +581,7 @@ def test_a_save_that_fails_with_any_other_exception_revokes_the_token_and_lets_i
     seen: list[httpx2.Request] = []
 
     with pytest.raises(type(failure)) as raised:
-        save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
 
     assert (raised.value, [summarise(request) for request in seen]) == (
         failure,
@@ -525,7 +647,7 @@ def test_a_save_that_fails_says_whether_the_token_was_revoked(
     seen: list[httpx2.Request] = []
 
     with pytest.raises(AuthError) as raised:
-        save_or_revoke_notion(ISSUED, transport=revoke_answering(revoke_answer, seen))
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(revoke_answer, seen))
 
     error = raised.value
     assert (

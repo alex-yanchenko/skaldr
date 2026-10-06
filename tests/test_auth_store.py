@@ -1,11 +1,15 @@
 import json
+import os
+import sys
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 import keyring
 import pytest
+from filelock import FileLock
 from keyring.backend import KeyringBackend
 from keyring.backends import fail, null
 from keyring.backends.chainer import ChainerBackend
@@ -32,11 +36,13 @@ from skaldr.auth.store import (
     require_notion,
     save_jira,
     save_notion,
+    save_notion_to,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
 )
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
+    HEX_WORKSPACE_ID,
     OTHER_WORKSPACE_ID,
     SITE_REFUSALS,
     SITE_WITH_A_PASSWORD,
@@ -60,6 +66,8 @@ LEGACY_JIRA_UNREADABLE = (
     "The keychain entry for jira is unreadable; run `skaldr auth logout jira legacy` to remove it, "
     "then run `skaldr auth jira` again"
 )
+REAL_LOCK_FILE = store.lock_file
+WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain.\n"
 AN_ENTRY = StoredEntry[JiraCredentials]("jira", "jira:https://example.atlassian.net", None)
 WAITING_FOR_THE_KEYCHAIN = (
     "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
@@ -485,18 +493,19 @@ def test_two_processes_migrating_at_once_do_not_lose_an_index_row() -> None:
 def test_a_sign_in_missing_from_the_index_is_found_by_its_name_and_listed_again(
     keychain: InMemoryKeyring,
 ) -> None:
+    hex_workspace = make_notion_credentials(workspace_id=HEX_WORKSPACE_ID)
     save_jira(make_jira_credentials())
-    save_notion(make_notion_credentials())
+    save_notion(hex_workspace)
     del keychain.entries[("skaldr", "index")]
 
     assert (
         load_jira("example.atlassian.net"),
-        load_notion(WORKSPACE_ID.upper()),
+        load_notion(HEX_WORKSPACE_ID.upper()),
         keychain.entries[("skaldr", "index")],
     ) == (
         SignIn(make_jira_credentials(), "keychain"),
-        SignIn(make_notion_credentials(), "keychain"),
-        index_of(jira=["jira:https://example.atlassian.net"], notion=[f"notion:{WORKSPACE_ID}"]),
+        SignIn(hex_workspace, "keychain"),
+        index_of(jira=["jira:https://example.atlassian.net"], notion=[f"notion:{HEX_WORKSPACE_ID}"]),
     )
 
 
@@ -506,7 +515,9 @@ def test_a_workspace_id_that_is_not_a_uuid_is_refused() -> None:
 
 
 def test_a_workspace_id_is_stored_in_its_canonical_form() -> None:
-    assert make_notion_credentials(workspace_id=WORKSPACE_ID.upper()).workspace_id == UUID(WORKSPACE_ID)
+    upper_case = make_notion_credentials(workspace_id=HEX_WORKSPACE_ID.upper())
+
+    assert str(upper_case.workspace_id) == HEX_WORKSPACE_ID
 
 
 def test_an_unreadable_legacy_entry_stays_where_it_is_and_is_listed_as_unreadable(
@@ -585,8 +596,9 @@ def test_forgetting_a_sign_in_deletes_its_entry_and_leaves_the_others(keychain: 
     save_jira(other)
     [first, _] = stored_jira_sign_ins()
 
-    forget(first)
+    removed = forget(first)
 
+    assert removed is True
     assert stored_jira_sign_ins() == [StoredEntry("jira", "jira:https://other.atlassian.net", other)]
     assert keychain.entries[("skaldr", "index")] == index_of(jira=["jira:https://other.atlassian.net"])
 
@@ -595,10 +607,175 @@ def test_forgetting_an_entry_that_is_already_gone_is_not_an_error(keychain: InMe
     save_jira(make_jira_credentials())
     [entry] = stored_jira_sign_ins()
 
-    forget(entry)
-    forget(entry)
+    results = (forget(entry), forget(entry))
 
-    assert keychain.entries == {("skaldr", "index"): index_of()}
+    assert (results, keychain.entries) == ((True, True), {("skaldr", "index"): index_of()})
+
+
+def test_forgetting_an_entry_whose_stored_value_changed_since_it_was_read_keeps_the_new_value(
+    keychain: InMemoryKeyring,
+) -> None:
+    save_notion(make_notion_credentials(access_token="old-access"))
+    [read_before_the_sign_in] = stored_notion_sign_ins()
+    newer = make_notion_credentials(access_token="newer-access")
+    save_notion(newer)
+
+    removed = forget(read_before_the_sign_in)
+
+    assert (removed, [entry.credentials for entry in stored_notion_sign_ins()]) == (False, [newer])
+    assert keychain.entries[("skaldr", "index")] == index_of(notion=[f"notion:{WORKSPACE_ID}"])
+
+
+class DeleteFailingKeyring(InMemoryKeyring):
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        raise KeyringError("denied")
+
+
+def test_forgetting_deletes_the_entry_before_it_unlists_it() -> None:
+    failing = DeleteFailingKeyring()
+    keyring.set_keyring(failing)
+    save_jira(make_jira_credentials())
+    entries_before = dict(failing.entries)
+    [entry] = stored_jira_sign_ins()
+
+    with pytest.raises(AuthError, match=r"^The system keychain is unavailable: denied$"):
+        forget(entry)
+
+    assert failing.entries == entries_before
+
+
+def test_saving_notion_credentials_without_a_workspace_id_is_refused_so_no_other_entry_is_overwritten(
+    keychain: InMemoryKeyring,
+) -> None:
+    with pytest.raises(AuthError) as raised:
+        save_notion(make_notion_credentials(workspace_id=None))
+
+    assert (str(raised.value), keychain.entries) == (
+        "A Notion sign-in without a workspace id can only be saved back to the entry it came from",
+        {},
+    )
+
+
+def test_a_refreshed_token_is_saved_back_to_the_entry_it_came_from(keychain: InMemoryKeyring) -> None:
+    first = make_notion_credentials(workspace_id=None, workspace_name="A", access_token="first-access")
+    second = make_notion_credentials(workspace_id=None, workspace_name="B", access_token="second-access")
+    for legacy in (first, second):
+        keychain.entries[("skaldr", "notion")] = legacy_entry_json(legacy)
+        stored_notion_sign_ins()
+    [_, second_entry] = stored_notion_sign_ins()
+    refreshed = second.model_copy(update={"access_token": "refreshed-access"})
+
+    save_notion_to(second_entry, refreshed)
+
+    assert [entry.credentials for entry in stored_notion_sign_ins()] == [first, refreshed]
+
+
+def test_a_refreshed_token_is_refused_by_an_entry_for_another_workspace() -> None:
+    save_notion(make_notion_credentials())
+    [entry] = stored_notion_sign_ins()
+
+    with pytest.raises(AuthError) as raised:
+        save_notion_to(entry, make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID))
+
+    assert (
+        str(raised.value) == "The refreshed Notion sign-in is not for the workspace of the entry it replaces"
+    )
+
+
+def test_a_refreshed_token_is_refused_by_a_legacy_entry_slot() -> None:
+    with pytest.raises(AuthError) as raised:
+        save_notion_to(StoredEntry("notion", "notion", None), make_notion_credentials())
+
+    assert str(raised.value) == "A legacy keychain entry cannot be saved to; run `skaldr auth notion` again"
+
+
+def test_the_repr_of_credentials_and_the_entries_that_hold_them_shows_no_secret() -> None:
+    notion = make_notion_credentials(
+        client_secret="client-secret-value", access_token="access-value", refresh_token="refresh-value"
+    )
+    jira = make_jira_credentials(api_token="api-token-value")
+    shown = " ".join(
+        map(
+            repr,
+            (
+                notion,
+                jira,
+                SignIn(notion, "keychain"),
+                SignIn(jira, "keychain"),
+                StoredEntry("notion", f"notion:{WORKSPACE_ID}", notion),
+                StoredEntry("jira", "jira:https://example.atlassian.net", jira),
+            ),
+        )
+    )
+
+    assert [secret for secret in SECRET_VALUES if secret in shown] == []
+
+
+SECRET_VALUES = ("client-secret-value", "access-value", "refresh-value", "api-token-value")
+
+
+def test_a_keychain_operation_started_inside_another_runs_in_the_lock_already_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "LOCK_TIMEOUT_SECONDS", 0.3)
+    save_jira(make_jira_credentials())
+
+    nested = store._in_the_keychain(lambda: stored_jira_sign_ins())  # pyright: ignore[reportPrivateUsage]
+
+    assert [entry.credentials for entry in nested] == [make_jira_credentials()]
+
+
+def test_a_relative_state_directory_in_the_environment_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_STATE_HOME", "relative/state")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert store.state_directory() == tmp_path / ".local" / "state" / "skaldr"
+
+
+def test_an_absolute_state_directory_in_the_environment_is_used(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+
+    assert store.state_directory() == tmp_path / "skaldr"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="a read-only directory only refuses a user who is not root",
+)
+def test_a_read_only_state_directory_is_named_in_the_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = tmp_path / "skaldr"
+    state.mkdir()
+    state.chmod(0o500)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setattr(store, "lock_file", REAL_LOCK_FILE)
+
+    try:
+        with pytest.raises(AuthError) as raised:
+            stored_jira_sign_ins()
+    finally:
+        state.chmod(0o700)
+
+    assert str(raised.value).startswith(f"skaldr cannot take its keychain lock in {state}: ")
+
+
+def test_waiting_for_another_command_says_so_and_not_that_the_keychain_is_slow(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    other_command = FileLock(store.lock_file(), thread_local=False)
+    other_command.acquire()
+    threading.Timer(0.3, other_command.release).start()
+
+    stored_jira_sign_ins()
+
+    assert capsys.readouterr().err == WAITING_FOR_THE_LOCK
 
 
 def test_nothing_saved_loads_as_signed_out() -> None:

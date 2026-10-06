@@ -183,7 +183,10 @@ def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | 
         print(f"Not signed in to Notion{where}.")
         return
     revoked = _notion_token_was_revoked(entry, transport)
-    forget(entry)
+    if not forget(entry):
+        outcome = "The Notion token was revoked" if revoked else "The Notion token was not revoked"
+        print(f"{outcome}, but a newer sign-in was stored in the meantime and was kept.")
+        return
     outcome = "token revoked and removed from the keychain" if revoked else "removed from the keychain"
     print(f"Signed out of Notion: {outcome}.")
 
@@ -208,7 +211,9 @@ def _log_out_of_jira(site: str | None) -> None:
         where = "" if site is None else f" at {normalise_site(site)}"
         print(f"Not signed in to Jira{where}.")
         return
-    forget(entry)
+    if not forget(entry):
+        print("A newer Jira sign-in was stored in the meantime and was kept.")
+        return
     print(f"Signed out of Jira: removed from the keychain. Revoke the API token itself at {API_TOKENS_PAGE}")
 
 
