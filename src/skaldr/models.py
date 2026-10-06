@@ -2766,10 +2766,6 @@ class Index(FrozenModel):
     )
 
 
-def _no_blocks() -> list[PageBlock]:
-    return []
-
-
 class Report(FrozenModel):
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
@@ -2781,20 +2777,12 @@ class Report(FrozenModel):
         description="Makes this document an index: one page built from other skaldr documents. `blocks` "
         "becomes optional and, when present, opens the page before the first part.",
     )
-    blocks: list[PageBlock] = Field(default_factory=_no_blocks, min_length=1)
+    blocks: list[PageBlock] = Field(default_factory=list[PageBlock], min_length=1)
     publish: Publish | None = Field(
         default=None,
         description="Where the document publishes (Notion pages, Jira issues). Omitted from the source "
         "embedded in a rendered page. Not yet accepted on an index document.",
     )
-
-    @model_validator(mode="after")
-    def _refuse_publish_on_an_index(self) -> "Report":
-        if self.index is not None and self.publish is not None:
-            raise ValueError(
-                "an index document cannot carry `publish` yet; publish each part file on its own"
-            )
-        return self
 
     @model_validator(mode="after")
     def _refuse_a_page_without_blocks(self) -> "Report":
@@ -3027,8 +3015,8 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: li
         raise ReportError(f"invalid YAML in {path}: {err}") from err
 
 
-def _is_an_index(data: object) -> bool:
-    return isinstance(data, Mapping) and "index" in data
+def _index_of(data: object) -> object:
+    return cast("Mapping[str, object]", data).get("index") if isinstance(data, Mapping) else None
 
 
 class _LoadedPart(NamedTuple):
@@ -3044,9 +3032,9 @@ def _parsed_index(data: object) -> Index:
         raise ReportError(_format_validation_error(err, ("index",))) from err
 
 
-def _loaded_part(path: Path, loaded: list[Path]) -> _LoadedPart:
-    data = _load_yaml_with_includes(path, (), loaded)
-    if _is_an_index(data):
+def _loaded_part(path: Path) -> _LoadedPart:
+    data = _load_yaml_with_includes(path, (), [])
+    if _index_of(data) is not None:
         raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
     try:
         report = parse_report(data)
@@ -3090,30 +3078,63 @@ def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
     }
 
 
-def _combined_index(path: Path, data: Mapping[str, Any], loaded: list[Path]) -> dict[str, Any]:
-    index = _parsed_index(data["index"])
-    parts = [_loaded_part(path.parent / part_path, loaded) for part_path in index.parts]
+_INTRO_BLOCKS: Final = TypeAdapter(list[PageBlock])
+
+
+def _intro_blocks(data: Mapping[str, Any]) -> list[object]:
+    intro: object = data.get("blocks", [])
+    try:
+        _INTRO_BLOCKS.validate_python(intro, context={BUILT_BY_AN_INDEX: False})
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("blocks",))) from err
+    return cast("list[object]", intro)
+
+
+class _Document(NamedTuple):
+    data: object
+    parts: tuple[tuple[int, Path], ...] = ()
+
+
+def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Document:
+    if data.get("publish") is not None:
+        raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
+    intro = _intro_blocks(data)
+    parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
-    intro: object = data.get("blocks", [])
-    part_blocks = [_part_block(part, index) for part in parts]
-    blocks = [*cast("list[object]", intro), *part_blocks] if isinstance(intro, list) else intro
-    return {**data, "badges": badges, "blocks": blocks}
+    page = {key: value for key, value in data.items() if key != "index"}
+    combined = {**page, "badges": badges, "blocks": [*intro, *(_part_block(part, index) for part in parts)]}
+    return _Document(combined, tuple(enumerate((part.path for part in parts), start=len(intro))))
 
 
-def _load_document(path: Path, loaded: list[Path]) -> tuple[Any, bool]:
-    data = _load_yaml_with_includes(path, (), loaded)
-    if not _is_an_index(data):
-        return data, False
-    return _combined_index(path, cast("Mapping[str, Any]", data), loaded), True
+def _load_document(path: Path) -> _Document:
+    data = _load_yaml_with_includes(path, (), [])
+    index = _index_of(data)
+    if index is None:
+        return _Document(data)
+    return _combined_index(path, cast("Mapping[str, Any]", data), _parsed_index(index))
+
+
+def _where_the_parts_sit(parts: Sequence[tuple[int, Path]]) -> str:
+    places = [f"blocks.{position} is {path}" for position, path in parts]
+    listed = places[0] if len(places) == 1 else f"{', '.join(places[:-1])} and {places[-1]}"
+    return f"in this index, {listed}"
 
 
 def load_report(path: Path) -> Report:
-    data, built_by_an_index = _load_document(path, [])
-    return parse_report(data, built_by_an_index=built_by_an_index)
+    document = _load_document(path)
+    try:
+        return parse_report(document.data, built_by_an_index=bool(document.parts))
+    except ReportError as err:
+        if not document.parts:
+            raise
+        raise ReportError(f"{err}; {_where_the_parts_sit(document.parts)}") from err
 
 
 def content_files(path: Path) -> tuple[Path, ...]:
     loaded: list[Path] = []
-    _load_document(path, loaded)
+    index = _index_of(_load_yaml_with_includes(path, (), loaded))
+    if index is not None:
+        for part_path in _parsed_index(index).parts:
+            _load_yaml_with_includes(path.parent / part_path, (), loaded)
     return tuple(loaded)

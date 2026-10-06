@@ -1,16 +1,19 @@
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from skaldr import compute
+from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
+from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import Heading, Paragraph, TableOfContents, TocEntry, Toggle
-from skaldr.models import Report, content_files, load_report, parse_report
+from skaldr.models import Report, Text, content_files, load_report, parse_report
 from skaldr.render import render_html
 from tests.factories import (
     make_index_report,
@@ -24,6 +27,10 @@ from tests.factories import (
 
 BADGE_UP = {"label": "up", "tone": "success", "legend": "service is up"}
 BADGE_DOWN = {"label": "down", "tone": "danger", "legend": "service is down"}
+PART_BY_HAND = (
+    "a `part` block is built by an `index`, not written by hand; list the file under `index.parts`, "
+    "or use a `section` or a `heading`"
+)
 
 
 def _text(body: str) -> dict[str, Any]:
@@ -35,7 +42,7 @@ def _part(title: str, *bodies: str, **overrides: Any) -> dict[str, Any]:
 
 
 def _dumped_text(body: str) -> dict[str, Any]:
-    return {"type": "text", "body": body, "muted": False, "span": None}
+    return Text(type="text", body=body).model_dump(mode="json")
 
 
 def _dumped_part(title: str, *bodies: str, collapsed: bool = False) -> dict[str, Any]:
@@ -53,6 +60,12 @@ def _two_part_index(tmp_path: Path, **overrides: Any) -> Path:
         {"one.yaml": _part("Part one", "first"), "two.yaml": _part("Part two", "second")},
         **overrides,
     )
+
+
+def _refusal(path: Path) -> str:
+    with pytest.raises(ReportError) as raised:
+        load_report(path)
+    return str(raised.value)
 
 
 def test_an_index_combines_its_intro_and_one_part_per_file_in_order(tmp_path: Path) -> None:
@@ -84,6 +97,25 @@ def test_an_index_with_collapsed_set_collapses_every_part(tmp_path: Path) -> Non
     report = load_report(index)
 
     assert report.model_dump(mode="json")["blocks"] == [_dumped_part("Part one", "first", collapsed=True)]
+
+
+def test_a_document_with_a_null_index_is_an_ordinary_document(tmp_path: Path) -> None:
+    path = write_report(tmp_path, make_report(index=None, blocks=[_text("plain")]))
+
+    assert load_report(path).model_dump(mode="json")["blocks"] == [_dumped_text("plain")]
+
+
+def test_the_combined_page_carries_no_index_so_its_emitted_json_is_refused_rather_than_expanded_twice(
+    tmp_path: Path,
+) -> None:
+    report = load_report(_two_part_index(tmp_path))
+    emitted = write_report(tmp_path, report.model_dump(mode="json"), "emitted.yaml")
+
+    assert report.index is None
+    assert _refusal(emitted) == (
+        f"invalid content data: blocks.0.part: Value error, {PART_BY_HAND}; "
+        f"blocks.1.part: Value error, {PART_BY_HAND}"
+    )
 
 
 def test_part_paths_resolve_against_the_index_file_not_the_working_directory(
@@ -124,7 +156,38 @@ def test_content_files_lists_the_index_then_every_part(tmp_path: Path) -> None:
     )
 
 
-def test_badges_from_the_index_and_every_part_merge(tmp_path: Path) -> None:
+def test_content_files_lists_a_part_that_does_not_validate(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path, {"one.yaml": make_report(meta={"title": "A"}, blocks=[{"type": "text"}])}
+    )
+
+    assert content_files(index) == (index.resolve(), (tmp_path / "one.yaml").resolve())
+
+
+def test_watch_re_renders_when_a_part_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    index = _two_part_index(tmp_path)
+    out = tmp_path / "out.html"
+    renders: list[str] = []
+
+    def record_render(*_args: object, **_kwargs: object) -> int:
+        renders.append("render")
+        return 0
+
+    def edit_a_part_then_stop(_seconds: float) -> None:
+        if len(renders) > 1:
+            raise KeyboardInterrupt
+        part = tmp_path / "two.yaml"
+        stat = part.stat()
+        os.utime(part, (stat.st_atime, stat.st_mtime + 10))
+
+    monkeypatch.setattr("skaldr.cli._render_once", record_render)
+    monkeypatch.setattr("time.sleep", edit_a_part_then_stop)
+
+    assert main(["--watch", str(index), "-o", str(out)]) == 0
+    assert renders == ["render", "render"]
+
+
+def test_badges_from_every_part_merge(tmp_path: Path) -> None:
     up_part = _part("Up", "first", badges={"UP": BADGE_UP})
     down_part = _part("Down", "second", badges={"DOWN": BADGE_DOWN, "UP": BADGE_UP})
     index = write_index_document(tmp_path, {"one.yaml": up_part, "two.yaml": down_part})
@@ -134,36 +197,70 @@ def test_badges_from_the_index_and_every_part_merge(tmp_path: Path) -> None:
     assert badges == {"UP": {**BADGE_UP, "tone": "green"}, "DOWN": {**BADGE_DOWN, "tone": "red"}}
 
 
-def test_one_badge_key_declared_differently_in_two_files_names_both_files(tmp_path: Path) -> None:
-    other_up = {**BADGE_UP, "tone": "info"}
+def test_the_index_own_badges_merge_with_the_parts_and_a_twin_tone_is_the_same_badge(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": _part("A", "a", badges={"DOWN": BADGE_DOWN, "UP": {**BADGE_UP, "tone": "green"}})},
+        badges={"UP": BADGE_UP},
+    )
+
+    badges = load_report(index).model_dump(mode="json")["badges"]
+
+    assert badges == {"UP": {**BADGE_UP, "tone": "green"}, "DOWN": {**BADGE_DOWN, "tone": "red"}}
+
+
+def test_a_badge_used_inside_a_part_reaches_the_page_legend(tmp_path: Path) -> None:
+    user = make_report(
+        meta={"title": "Uses"},
+        blocks=[{"type": "badge_row", "items": [{"key": "UP"}]}],
+        badges={"UP": BADGE_UP, "DOWN": BADGE_DOWN},
+    )
+    index = write_index_document(tmp_path, {"one.yaml": user})
+
+    assert [key for key, _ in compute.used_badges(load_report(index))] == ["UP"]
+
+
+@pytest.mark.parametrize(
+    ("index_badges", "part_badges", "first", "second"),
+    [
+        pytest.param({}, {"UP": {**BADGE_UP, "tone": "info"}}, "one.yaml", "two.yaml", id="two-parts"),
+        pytest.param({"UP": {**BADGE_UP, "tone": "info"}}, {}, "index.yaml", "one.yaml", id="index-and-part"),
+    ],
+)
+def test_one_badge_key_declared_differently_in_two_files_names_both_files(
+    tmp_path: Path, index_badges: dict[str, Any], part_badges: dict[str, Any], first: str, second: str
+) -> None:
     index = write_index_document(
         tmp_path,
         {
             "one.yaml": _part("A", "a", badges={"UP": BADGE_UP}),
-            "two.yaml": _part("B", "b", badges={"UP": other_up}),
+            "two.yaml": _part("B", "b", badges=part_badges),
         },
+        badges=index_badges,
     )
 
-    with pytest.raises(ReportError) as raised:
-        load_report(index)
-
-    assert str(raised.value) == (
-        f"badge 'UP' is declared differently in {tmp_path / 'one.yaml'} and {tmp_path / 'two.yaml'}; "
+    assert _refusal(index) == (
+        f"badge 'UP' is declared differently in {tmp_path / first} and {tmp_path / second}; "
         "an index merges every part's badges, so give it one label, tone and legend or rename one key"
     )
 
 
-def test_an_id_repeated_across_parts_is_refused_like_a_repeat_in_one_file(tmp_path: Path) -> None:
+def test_an_id_repeated_across_parts_names_the_file_behind_each_part(tmp_path: Path) -> None:
     index = write_index_document(
         tmp_path,
         {
             "one.yaml": make_report(meta={"title": "A"}, blocks=[make_section("shared")]),
             "two.yaml": make_report(meta={"title": "B"}, blocks=[make_section("shared")]),
         },
+        blocks=[_text("intro")],
     )
 
-    with pytest.raises(ReportError, match=r"heading/section id\(s\) used more than once: \['shared'\]"):
-        load_report(index)
+    assert _refusal(index) == (
+        "invalid content data: Value error, heading/section id(s) used more than once: ['shared'], at "
+        "blocks.1.part.blocks.0.section.id, blocks.2.part.blocks.0.section.id; heading and section ids must "
+        f"be unique; in this index, blocks.1 is {tmp_path / 'one.yaml'} "
+        f"and blocks.2 is {tmp_path / 'two.yaml'}"
+    )
 
 
 def test_a_part_that_fails_validation_is_named_with_its_field_path(tmp_path: Path) -> None:
@@ -171,10 +268,7 @@ def test_a_part_that_fails_validation_is_named_with_its_field_path(tmp_path: Pat
         tmp_path, {"one.yaml": make_report(meta={"title": "A"}, blocks=[{"type": "text"}])}
     )
 
-    with pytest.raises(ReportError) as raised:
-        load_report(index)
-
-    assert str(raised.value) == (
+    assert _refusal(index) == (
         f"in part {tmp_path / 'one.yaml'}: invalid content data: blocks.0.text.body: Field required"
     )
 
@@ -182,8 +276,7 @@ def test_a_part_that_fails_validation_is_named_with_its_field_path(tmp_path: Pat
 def test_a_missing_part_file_is_named(tmp_path: Path) -> None:
     index = write_report(tmp_path, make_index_report(["gone.yaml"]), "index.yaml")
 
-    with pytest.raises(ReportError, match=r"file not found: .*gone\.yaml"):
-        load_report(index)
+    assert _refusal(index) == f"file not found: {tmp_path / 'gone.yaml'}"
 
 
 def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
@@ -191,44 +284,69 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
     write_report(tmp_path, make_index_report(["leaf.yaml"]), "inner.yaml")
     index = write_report(tmp_path, make_index_report(["inner.yaml"]), "index.yaml")
 
-    with pytest.raises(ReportError) as raised:
-        load_report(index)
-
-    assert str(raised.value) == (
+    assert _refusal(index) == (
         f"part {tmp_path / 'inner.yaml'} is itself an index; an index lists document files, not other indexes"
     )
 
 
 @pytest.mark.parametrize(
-    ("index", "message"),
+    ("overrides", "message"),
     [
         pytest.param(
-            {"parts": []},
+            {"index": {"parts": []}},
             "invalid content data: index.parts: List should have at least 1 item after validation, not 0",
             id="no-parts",
         ),
         pytest.param(
-            {"parts": ["/abs/part.yaml"]},
+            {"index": {"parts": ["/abs/part.yaml"]}},
             "invalid content data: index.parts.0: Value error, a part path is relative to the index file, "
             "not absolute: /abs/part.yaml",
             id="absolute",
         ),
         pytest.param(
-            {"parts": ["a.yaml"], "layout": "child_pages"},
+            {"index": {"parts": ["  "]}},
+            "invalid content data: index.parts.0: String should match pattern '\\S'",
+            id="blank-path",
+        ),
+        pytest.param(
+            {"index": {"parts": ["one.yaml"], "layout": "child_pages"}},
             "invalid content data: index.layout: Input should be 'one_page'",
             id="child-pages-not-yet",
         ),
+        pytest.param(
+            {"index": ["one.yaml"]},
+            "invalid content data: index: Input should be a valid dictionary or instance of Index",
+            id="index-is-a-list",
+        ),
+        pytest.param(
+            {"blocks": "hello"},
+            "invalid content data: blocks: Input should be a valid list",
+            id="intro-is-not-a-list",
+        ),
+        pytest.param(
+            {"badges": {"UP": {**BADGE_UP, "tone": "nope"}}},
+            "invalid content data: badges.UP.tone: Input should be 'slate', 'blue', 'green', 'amber', 'red', "
+            "'violet', 'teal' or 'sky'",
+            id="index-badge",
+        ),
+        pytest.param(
+            {"blocks": [_text("intro"), {"type": "part", "title": "By hand", "blocks": [_text("x")]}]},
+            f"invalid content data: blocks.1.part: Value error, {PART_BY_HAND}",
+            id="part-in-the-intro",
+        ),
+        pytest.param(
+            {"publish": {"doc_id": "plan", "targets": [make_notion_target()]}},
+            "an index document cannot carry `publish` yet; publish each part file on its own",
+            id="publish",
+        ),
     ],
 )
-def test_an_invalid_index_block_is_refused_naming_the_field(
-    tmp_path: Path, index: dict[str, Any], message: str
+def test_an_invalid_index_document_is_refused_naming_the_field(
+    tmp_path: Path, overrides: dict[str, Any], message: str
 ) -> None:
-    path = write_report(tmp_path, make_index_report([], index=index), "index.yaml")
+    index = write_index_document(tmp_path, {"one.yaml": _part("A", "a")}, **overrides)
 
-    with pytest.raises(ReportError) as raised:
-        load_report(path)
-
-    assert str(raised.value) == message
+    assert _refusal(index) == message
 
 
 def test_a_written_part_block_is_refused_outside_an_index() -> None:
@@ -237,31 +355,18 @@ def test_a_written_part_block_is_refused_outside_an_index() -> None:
     with pytest.raises(ReportError) as raised:
         parse_report(data)
 
-    assert str(raised.value) == (
-        "invalid content data: blocks.0.part: Value error, a `part` block is built by an `index`, "
-        "not written by hand; list the file under `index.parts`, or use a `section` or a `heading`"
-    )
+    assert str(raised.value) == f"invalid content data: blocks.0.part: Value error, {PART_BY_HAND}"
 
 
 def test_the_published_schema_documents_index_and_leaves_part_out() -> None:
-    schema = json.dumps(Report.model_json_schema())
+    schema = Report.model_json_schema()
+    block_types = schema["properties"]["blocks"]["items"]["discriminator"]["mapping"]
 
-    assert '"index"' in schema
-    assert '"Index"' in schema
-    assert '"part"' not in schema
-    assert '"Part"' not in schema
-
-
-def test_an_index_with_a_publish_block_is_refused(tmp_path: Path) -> None:
-    index = _two_part_index(tmp_path, publish={"doc_id": "plan", "targets": [make_notion_target()]})
-
-    with pytest.raises(ReportError) as raised:
-        load_report(index)
-
-    assert str(raised.value) == (
-        "invalid content data: Value error, an index document cannot carry `publish` yet; publish each part "
-        "file on its own"
-    )
+    assert "Index" in schema["$defs"]
+    assert "index" in schema["properties"]
+    assert "Part" not in schema["$defs"]
+    assert "part" not in block_types
+    assert "section" in block_types
 
 
 def test_a_parts_own_publish_block_is_left_out_of_the_combined_page(tmp_path: Path) -> None:
@@ -295,6 +400,10 @@ def _combined(tmp_path: Path, **overrides: Any) -> Report:
     return load_report(write_index_document(tmp_path, parts, **overrides))
 
 
+def _collapsed(tmp_path: Path) -> Report:
+    return _combined(tmp_path, index={"parts": ["one.yaml", "two.yaml"], "collapsed": True})
+
+
 def test_the_toc_lists_intro_headings_then_one_entry_per_part(tmp_path: Path) -> None:
     report = _combined(
         tmp_path, meta={"title": "Combined", "toc": True}, blocks=[{"type": "heading", "text": "Overview"}]
@@ -310,19 +419,39 @@ def test_the_toc_lists_intro_headings_then_one_entry_per_part(tmp_path: Path) ->
 def test_an_open_part_renders_as_a_titled_region_with_its_blocks(tmp_path: Path) -> None:
     html = render_html(_combined(tmp_path))
 
-    assert '<section class="part" id="details"><h1 class="part-title">Details</h1>' in html
+    assert (
+        '<section class="part" id="details"><h1 class="part-title">Details</h1><p class="text">second</p>'
+        in html
+    )
     assert html.index('class="part-title">Overview<') < html.index("Inside one") < html.index("Details")
 
 
-def test_a_collapsed_part_renders_as_a_closed_disclosure_that_expand_opens(tmp_path: Path) -> None:
-    report = _combined(tmp_path, index={"parts": ["one.yaml", "two.yaml"], "collapsed": True})
+def test_a_collapsed_part_renders_as_a_closed_disclosure_holding_its_blocks(tmp_path: Path) -> None:
+    html = render_html(_collapsed(tmp_path))
 
-    closed = '<details class="part" id="details"><summary><span class="part-title">Details</span></summary>'
-    opened = (
-        '<details class="part" id="details" open><summary><span class="part-title">Details</span></summary>'
+    assert (
+        '<details class="part" id="details"><summary><span class="part-title">Details</span></summary>'
+        '<div class="part-body"><p class="text">second</p></div></details>'
+    ) in html
+
+
+def test_expand_opens_a_collapsed_part(tmp_path: Path) -> None:
+    html = render_html(_collapsed(tmp_path), expand=True)
+
+    assert '<details class="part" id="details" open><summary>' in html
+
+
+@pytest.mark.parametrize("collapsed", [False, True])
+def test_a_part_title_is_escaped_in_the_html(tmp_path: Path, collapsed: bool) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": _part('A <b> & "c"', "x")},
+        index={"parts": ["one.yaml"], "collapsed": collapsed},
     )
-    assert closed in render_html(report)
-    assert opened in render_html(report, expand=True)
+
+    html = render_html(load_report(index))
+
+    assert 'class="part-title">A &lt;b&gt; &amp; &#34;c&#34;</' in html
 
 
 def test_an_open_part_lowers_to_a_level_one_heading_before_its_blocks(tmp_path: Path) -> None:
@@ -332,9 +461,7 @@ def test_an_open_part_lowers_to_a_level_one_heading_before_its_blocks(tmp_path: 
 
 
 def test_a_collapsed_part_lowers_to_a_level_one_toggle_heading(tmp_path: Path) -> None:
-    report = _combined(tmp_path, index={"parts": ["one.yaml", "two.yaml"], "collapsed": True})
-
-    assert lower_report(report).body[-1] == Toggle(
+    assert lower_report(_collapsed(tmp_path)).body[-1] == Toggle(
         plain("Details"), 1, (Paragraph(plain("second")),), "details"
     )
 
@@ -361,3 +488,25 @@ def test_the_notion_export_writes_each_part_title_as_a_level_one_heading(tmp_pat
     page = render_notion(lower_report(_combined(tmp_path)).body)
 
     assert page == '# Overview\n## Inside one\n## Inner {toggle="true"}\n\tx\n# Details\nsecond\n'
+
+
+def test_the_github_export_writes_an_open_or_collapsed_part_title_as_a_level_one_heading(
+    tmp_path: Path,
+) -> None:
+    open_page = render_markdown(lower_report(_combined(tmp_path / "open")).body)
+    collapsed_page = render_markdown(lower_report(_collapsed(tmp_path / "collapsed")).body)
+
+    assert open_page.endswith("\n# Details\n\nsecond\n")
+    assert collapsed_page.endswith("\n# Details\n\nsecond\n")
+
+
+def test_emit_json_of_an_index_prints_the_combined_page(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    index = _two_part_index(tmp_path)
+
+    assert main([str(index), "--emit-json"]) == 0
+    assert json.loads(capsys.readouterr().out)["blocks"] == [
+        _dumped_part("Part one", "first"),
+        _dumped_part("Part two", "second"),
+    ]

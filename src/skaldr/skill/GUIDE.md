@@ -981,11 +981,12 @@ blocks:                       # optional: an intro shown before the first part
 ```
 
 - **Parts** are paths relative to the index file. Each part stays a normal skaldr document that still builds alone; an index never edits it.
-- **Each part becomes a part of the page**: its `meta.title` is the part's title, a level 1 heading in the exports and a title band in the HTML, and its blocks follow unchanged. The table of contents lists the index's own headings and sections, then one entry per part.
+- **Each part becomes a part of the page**: its `meta.title` is the part's title, a level 1 heading in the exports and a title band in the HTML, and its blocks follow unchanged. The table of contents lists the index's own headings and sections, then one entry per part. The rest of a part's `meta` (subtitle, source, date, updated, toc and the other options) applies only when the part builds alone; the page takes its header, footer and options from the index's `meta`.
 - **`collapsed: true`** under `index` starts every part collapsed: a collapsible in the HTML, a toggle heading in the Notion export. Parts are open by default.
 - **Badges merge.** The index's `badges` and every part's `badges` combine into one vocabulary and one legend. A key declared with a different label, tone or legend in two files fails the build naming both files; rename one key or make them agree.
-- **Ids are page-wide.** A heading, section, table or matrix id repeated across two parts fails like a repeat inside one file.
-- The rendered page is the combined page, and `--export notion` writes one `page.md` for it. `--if-stale` follows every part file, so an edit to a part rebuilds the index.
+- **Ids are page-wide.** A heading, section, table or matrix id, a reference key or a request label repeated across two parts fails like a repeat inside one file, and the error names the file behind each part it points at.
+- The rendered page is the combined page, and `--export notion` writes one `page.md` for it. `--if-stale` and `--watch` follow every part file and every file a part includes, so an edit to a part rebuilds the index.
+- `--emit-json` prints the combined page, with every part already in place and no `index` key. It is a view of the page, not a source file: building it again is refused, because its `part` blocks were not built by an index. The source embedded in the rendered page is the index file alone, as with `!include`; keep the part files beside it.
 - A part cannot be an index itself, and `index` takes only `layout: one_page` for now. An index document cannot carry `publish` yet, and a part's own `publish` block is left out of the combined page; publish each part file on its own.
 - `part` is the block an index builds; it is not written by hand, and the build refuses one outside an index. To group content inside one file, use a `section` or a `heading`.
 
