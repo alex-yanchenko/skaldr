@@ -3,7 +3,7 @@ import sys
 import webbrowser
 from collections.abc import Callable
 from getpass import getpass
-from typing import get_args
+from typing import NamedTuple, get_args
 
 import httpx2
 
@@ -14,27 +14,34 @@ from skaldr.auth.notion import (
     INTEGRATIONS_PAGE,
     redirect_uri_for,
     revoke_notion_token,
-    save_or_revoke_notion,
+    save_notion_replacing_the_old_sign_in,
     sign_in_to_notion,
 )
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
     Service,
-    SignIn,
-    UnreadableEntryError,
+    StoredEntry,
+    find_jira,
+    find_notion,
     forget,
-    load_jira,
-    load_notion,
+    jira_from_environment,
     normalise_site,
     notion_client_from_environment,
+    notion_from_environment,
     refuse_an_unusable_keychain,
     save_jira,
-    stored_notion,
+    stored_jira_sign_ins,
+    stored_notion_sign_ins,
 )
 from skaldr.errors import AuthError
 
 _UNNAMED_WORKSPACE = "(unnamed workspace)"
+
+
+class _StatusLine(NamedTuple):
+    text: str
+    failed: bool = False
 
 
 def main(
@@ -52,9 +59,9 @@ def main(
         elif args.command == "status":
             return _print_status()
         elif args.command == "logout" and args.service == "notion":
-            _log_out_of_notion(transport)
+            _log_out_of_notion(args.selector, transport)
         elif args.command == "logout" and args.service == "jira":
-            _log_out_of_jira()
+            _log_out_of_jira(args.selector)
         else:
             raise AssertionError(f"skaldr auth has no handler for {args.command!r}")
     except AuthError as exc:
@@ -81,13 +88,16 @@ def _parser() -> argparse.ArgumentParser:
         help=f"the port in the redirect URI you registered with Notion (default {DEFAULT_CALLBACK_PORT})",
     )
     commands.add_parser("jira", help="sign in to Jira Cloud with your account email and an API token")
-    commands.add_parser(
-        "status", help="show who each service is signed in as, and where the credentials live"
-    )
+    commands.add_parser("status", help="list every sign-in, who it is as, and where the credentials live")
     logout = commands.add_parser(
-        "logout", help="remove a service's credentials from the keychain, revoking the Notion token first"
+        "logout", help="remove one sign-in from the keychain, revoking the Notion token first"
     )
     logout.add_argument("service", choices=get_args(Service))
+    logout.add_argument(
+        "selector",
+        nargs="?",
+        help="the Jira site, or the Notion workspace id or name; needed only when several are signed in",
+    )
     return parser
 
 
@@ -105,7 +115,7 @@ def _tcp_port(text: str) -> int:
 def _sign_in_to_notion(
     port: int, transport: httpx2.BaseTransport | None, open_browser: Callable[[str], object]
 ) -> None:
-    refuse_an_unusable_keychain("notion")
+    refuse_an_unusable_keychain()
     print(
         f"Register a public Notion connection once at {INTEGRATIONS_PAGE}, with redirect URI "
         f"{redirect_uri_for(port)}"
@@ -129,13 +139,15 @@ def _sign_in_to_notion(
     credentials = sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
-    save_or_revoke_notion(credentials, transport=transport)
+    warning = save_notion_replacing_the_old_sign_in(credentials, transport=transport)
     workspace = _workspace_name(credentials) or _UNNAMED_WORKSPACE
     print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
+    if warning is not None:
+        print(f"warning: {warning}", file=sys.stderr)
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
-    refuse_an_unusable_keychain("jira")
+    refuse_an_unusable_keychain()
     site = normalise_site(input("Jira site (https://<site>.atlassian.net): "))
     email = _required(input("Atlassian account email: "), "An Atlassian account email is required")
     api_token = _required(getpass(f"API token (from {API_TOKENS_PAGE}): "), "An API token is required")
@@ -151,70 +163,88 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
 
 
 def _print_status() -> int:
+    sections = (("notion", _notion_status_lines), ("jira", _jira_status_lines))
     exit_code = 0
-    lines = (
-        ("notion", lambda: _describe_notion(load_notion())),
-        ("jira", lambda: _describe_jira(load_jira())),
-    )
-    for service, describe in lines:
+    for service, describe in sections:
         try:
-            line = describe()
+            lines = describe()
         except AuthError as exc:
-            line, exit_code = f"error: {exc}", 1
-        print(f"{service:<8}{line}")
+            lines = [_StatusLine(f"error: {exc}", failed=True)]
+        for line in lines:
+            exit_code = exit_code or int(line.failed)
+            print(f"{service:<8}{line.text}")
     return exit_code
 
 
-def _log_out_of_notion(transport: httpx2.BaseTransport | None) -> None:
-    revoked = _notion_token_was_revoked(transport)
-    if not forget("notion"):
-        print("Not signed in to Notion.")
+def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | None) -> None:
+    entry = find_notion(workspace)
+    if entry is None:
+        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
+        print(f"Not signed in to Notion{where}.")
         return
+    revoked = _notion_token_was_revoked(entry, transport)
+    forget(entry)
     outcome = "token revoked and removed from the keychain" if revoked else "removed from the keychain"
     print(f"Signed out of Notion: {outcome}.")
 
 
-def _notion_token_was_revoked(transport: httpx2.BaseTransport | None) -> bool:
-    try:
-        stored = stored_notion()
-    except UnreadableEntryError:
+def _notion_token_was_revoked(
+    entry: StoredEntry[NotionCredentials], transport: httpx2.BaseTransport | None
+) -> bool:
+    if entry.credentials is None:
         print("warning: the stored Notion entry is unreadable, so its token was not revoked", file=sys.stderr)
         return False
-    if stored is None:
-        return False
     try:
-        revoke_notion_token(stored, transport=transport)
+        revoke_notion_token(entry.credentials, transport=transport)
     except AuthError as exc:
         print(f"warning: {exc}", file=sys.stderr)
         return False
     return True
 
 
-def _log_out_of_jira() -> None:
-    if not forget("jira"):
-        print("Not signed in to Jira.")
+def _log_out_of_jira(site: str | None) -> None:
+    entry = find_jira(site)
+    if entry is None:
+        where = "" if site is None else f" at {normalise_site(site)}"
+        print(f"Not signed in to Jira{where}.")
         return
+    forget(entry)
     print(f"Signed out of Jira: removed from the keychain. Revoke the API token itself at {API_TOKENS_PAGE}")
 
 
-def _describe_notion(sign_in: SignIn[NotionCredentials] | None) -> str:
-    if sign_in is None:
-        return "not signed in (run `skaldr auth notion`)"
-    if sign_in.source == "environment":
-        return "access token from NOTION_ACCESS_TOKEN (environment)"
-    return f"signed in to workspace {_workspace_name(sign_in.credentials) or _UNNAMED_WORKSPACE} (keychain)"
+def _notion_status_lines() -> list[_StatusLine]:
+    lines: list[_StatusLine] = []
+    if notion_from_environment() is not None:
+        lines.append(_StatusLine("access token from NOTION_ACCESS_TOKEN (environment)"))
+    lines.extend(_describe_stored_notion(entry) for entry in stored_notion_sign_ins())
+    return lines or [_StatusLine("not signed in (run `skaldr auth notion`)")]
 
 
-def _describe_jira(sign_in: SignIn[JiraCredentials] | None) -> str:
-    if sign_in is None:
-        return "not signed in (run `skaldr auth jira`)"
-    credentials = sign_in.credentials
-    if sign_in.source == "environment":
-        return f"JIRA_EMAIL, JIRA_API_TOKEN for {credentials.site} (environment)"
-    display_name = _display_name(credentials)
+def _jira_status_lines() -> list[_StatusLine]:
+    lines: list[_StatusLine] = []
+    from_environment = jira_from_environment()
+    if from_environment is not None:
+        lines.append(_StatusLine(f"JIRA_EMAIL, JIRA_API_TOKEN for {from_environment.site} (environment)"))
+    lines.extend(_describe_stored_jira(entry) for entry in stored_jira_sign_ins())
+    return lines or [_StatusLine("not signed in (run `skaldr auth jira`)")]
+
+
+def _describe_stored_notion(entry: StoredEntry[NotionCredentials]) -> _StatusLine:
+    if entry.credentials is None:
+        return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
+    workspace = _workspace_name(entry.credentials) or _UNNAMED_WORKSPACE
+    workspace_id = entry.credentials.workspace_id
+    identified = "" if workspace_id is None else f" (id {printable_only(workspace_id)})"
+    return _StatusLine(f"signed in to workspace {workspace}{identified} (keychain)")
+
+
+def _describe_stored_jira(entry: StoredEntry[JiraCredentials]) -> _StatusLine:
+    if entry.credentials is None:
+        return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
+    display_name = _display_name(entry.credentials)
     if display_name is None:
-        return f"signed in to {credentials.site} (keychain)"
-    return f"signed in to {credentials.site} as {display_name} (keychain)"
+        return _StatusLine(f"signed in to {entry.credentials.site} (keychain)")
+    return _StatusLine(f"signed in to {entry.credentials.site} as {display_name} (keychain)")
 
 
 def _workspace_name(credentials: NotionCredentials) -> str | None:

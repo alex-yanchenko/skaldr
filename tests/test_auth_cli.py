@@ -1,4 +1,5 @@
 import builtins
+import json
 import re
 import socket
 import sys
@@ -11,7 +12,17 @@ import pytest
 from keyring.errors import KeyringError
 
 from skaldr.auth import cli as auth_cli
-from skaldr.auth.store import Service, SignIn, load_jira, load_notion, save_jira, save_notion
+from skaldr.auth.store import (
+    NotionCredentials,
+    Service,
+    SignIn,
+    load_jira,
+    load_notion,
+    save_jira,
+    save_notion,
+    stored_jira_sign_ins,
+    stored_notion_sign_ins,
+)
 from skaldr.cli import main
 from tests.factories.auth_factory import (
     MYSELF,
@@ -25,6 +36,7 @@ from tests.factories.auth_factory import (
     fake_api,
     free_port,
     insecure_keyring_refusal,
+    legacy_entry_json,
     make_jira_credentials,
     make_notion_credentials,
     revoke_request_for,
@@ -32,6 +44,7 @@ from tests.factories.auth_factory import (
 )
 
 SIGNED_IN_NOTION = make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+EMPTY_INDEX = {("skaldr", "index"): '{"jira": [], "notion": []}'}
 
 
 def answer_prompts(monkeypatch: pytest.MonkeyPatch, typed: list[str], hidden: list[str]) -> None:
@@ -487,7 +500,7 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
 
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
-        "notion  signed in to workspace (unnamed workspace) (keychain)\n"
+        "notion  signed in to workspace (unnamed workspace) (id workspace-id) (keychain)\n"
         "jira    signed in to https://example.atlassian.net (keychain)\n"
     )
 
@@ -498,7 +511,7 @@ def test_status_prints_only_the_printable_part_of_stored_names(capsys: pytest.Ca
 
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
-        "notion  signed in to workspace Example[2J Workspace (keychain)\n"
+        "notion  signed in to workspace Example[2J Workspace (id workspace-id) (keychain)\n"
         "jira    signed in to https://example.atlassian.net as Example]0;title Reader (keychain)\n"
     )
 
@@ -539,7 +552,7 @@ def test_status_reports_notion_even_when_jira_is_broken(
 
     assert auth_cli.main(["status"]) == 1
     assert capsys.readouterr().out == (
-        "notion  signed in to workspace Example Workspace (keychain)\n"
+        "notion  signed in to workspace Example Workspace (id workspace-id) (keychain)\n"
         "jira    error: JIRA_SITE, JIRA_EMAIL, JIRA_API_TOKEN go together; "
         "missing JIRA_SITE, JIRA_API_TOKEN\n"
     )
@@ -553,30 +566,39 @@ def test_logout_notion_revokes_the_token_and_forgets_it(
 
     exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (200, {})}, seen))
 
-    assert (exit_code, keychain.entries, len(seen)) == (0, {}, 1)
+    assert (exit_code, keychain.entries, len(seen)) == (0, EMPTY_INDEX, 1)
     assert capsys.readouterr().out == "Signed out of Notion: token revoked and removed from the keychain.\n"
 
 
 @pytest.mark.parametrize(
-    ("stored", "warning"),
+    ("stored", "warning", "left_in_keychain"),
     [
-        (make_notion_credentials().model_dump_json(), "Notion did not revoke the token: HTTP 400"),
         (
-            make_notion_credentials(client_id=None).model_dump_json(),
-            "The Notion token cannot be revoked without the client ID and secret",
+            legacy_entry_json(make_notion_credentials()),
+            "Notion did not revoke the token: HTTP 400",
+            EMPTY_INDEX,
         ),
-        ("not json", "the stored Notion entry is unreadable, so its token was not revoked"),
+        (
+            legacy_entry_json(make_notion_credentials(client_id=None)),
+            "The Notion token cannot be revoked without the client ID and secret",
+            EMPTY_INDEX,
+        ),
+        ("not json", "the stored Notion entry is unreadable, so its token was not revoked", {}),
     ],
     ids=["revoke refused", "no client", "unreadable entry"],
 )
 def test_logout_notion_still_forgets_a_token_it_could_not_revoke(
-    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str], stored: str, warning: str
+    keychain: InMemoryKeyring,
+    capsys: pytest.CaptureFixture[str],
+    stored: str,
+    warning: str,
+    left_in_keychain: dict[tuple[str, str], str],
 ) -> None:
     keychain.entries[("skaldr", "notion")] = stored
 
     exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (400, {})}, []))
 
-    assert (exit_code, keychain.entries) == (0, {})
+    assert (exit_code, keychain.entries) == (0, left_in_keychain)
     captured = capsys.readouterr()
     assert (captured.out, captured.err) == (
         "Signed out of Notion: removed from the keychain.\n",
@@ -599,7 +621,7 @@ def test_logout_jira_forgets_the_token_and_points_at_revoking_it(
     save_jira(make_jira_credentials())
 
     assert auth_cli.main(["logout", "jira"]) == 0
-    assert keychain.entries == {}
+    assert keychain.entries == EMPTY_INDEX
     assert capsys.readouterr().out == (
         "Signed out of Jira: removed from the keychain. Revoke the API token itself at "
         "https://id.atlassian.com/manage-profile/security/api-tokens\n"
@@ -612,6 +634,346 @@ def test_logout_when_signed_out_says_so(
 ) -> None:
     assert auth_cli.main(["logout", service]) == 0
     assert capsys.readouterr().out == f"Not signed in to {name}.\n"
+
+
+OTHER_NOTION = make_notion_credentials(
+    workspace_id="other-id", workspace_name="Other Workspace", access_token="other-access"
+)
+OTHER_JIRA = make_jira_credentials(site="https://other.atlassian.net", display_name="Other Reader")
+
+
+def test_status_lists_every_stored_sign_in(capsys: pytest.CaptureFixture[str]) -> None:
+    save_notion(make_notion_credentials())
+    save_notion(OTHER_NOTION)
+    save_jira(make_jira_credentials())
+    save_jira(OTHER_JIRA)
+
+    assert auth_cli.main(["status"]) == 0
+    assert capsys.readouterr().out == (
+        "notion  signed in to workspace Example Workspace (id workspace-id) (keychain)\n"
+        "notion  signed in to workspace Other Workspace (id other-id) (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n"
+    )
+
+
+def test_status_lists_the_environment_beside_the_stored_sign_ins(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_jira(OTHER_JIRA)
+    monkeypatch.setenv("JIRA_SITE", "https://example.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+    monkeypatch.setenv("JIRA_API_TOKEN", "env-token")
+
+    assert auth_cli.main(["status"]) == 0
+    assert capsys.readouterr().out == (
+        "notion  not signed in (run `skaldr auth notion`)\n"
+        "jira    JIRA_EMAIL, JIRA_API_TOKEN for https://example.atlassian.net (environment)\n"
+        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n"
+    )
+
+
+def test_status_names_a_stored_entry_it_cannot_read_and_still_lists_the_others(
+    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_jira(make_jira_credentials())
+    keychain.entries[("skaldr", "jira:https://other.atlassian.net")] = "not json"
+    keychain.entries[("skaldr", "index")] = json.dumps(
+        {"jira": ["jira:https://example.atlassian.net", "jira:https://other.atlassian.net"], "notion": []}
+    )
+
+    assert auth_cli.main(["status"]) == 1
+    assert capsys.readouterr().out == (
+        "notion  not signed in (run `skaldr auth notion`)\n"
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+        "jira    error: The keychain entry for jira https://other.atlassian.net is unreadable; "
+        "run `skaldr auth jira` again\n"
+    )
+
+
+def test_status_migrates_a_legacy_entry_and_lists_it(
+    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keychain.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
+    keychain.entries[("skaldr", "notion")] = legacy_entry_json(make_notion_credentials())
+
+    assert auth_cli.main(["status"]) == 0
+    assert capsys.readouterr().out == (
+        "notion  signed in to workspace Example Workspace (keychain)\n"
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+    )
+    assert sorted(keychain.entries) == [
+        ("skaldr", "index"),
+        ("skaldr", "jira:https://example.atlassian.net"),
+        ("skaldr", "notion:unidentified"),
+    ]
+
+
+def test_auth_jira_for_a_second_site_keeps_the_first(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    save_jira(make_jira_credentials())
+    answer_prompts(monkeypatch, ["other.atlassian.net", "reader@example.com"], ["other-token"])
+    myself = {**MYSELF, "displayName": "Other Reader"}
+
+    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
+
+    assert (exit_code, [entry.credentials for entry in stored_jira_sign_ins()]) == (
+        0,
+        [
+            make_jira_credentials(),
+            make_jira_credentials(site="https://other.atlassian.net", api_token="other-token").model_copy(
+                update={"display_name": "Other Reader"}
+            ),
+        ],
+    )
+    assert capsys.readouterr().out == (
+        "Signed in to Jira at https://other.atlassian.net as Other Reader. Saved to the keychain.\n"
+    )
+
+
+def run_notion_sign_in(
+    monkeypatch: pytest.MonkeyPatch,
+    seen: list[httpx2.Request],
+    *,
+    token: dict[str, object] = TOKEN_RESPONSE,
+    revoke_status: int = 200,
+) -> int:
+    notion_client_in_environment(monkeypatch)
+    browser = FakeBrowser(approving)
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, token),
+        "/v1/oauth/revoke": (revoke_status, {}),
+    }
+    exit_code = auth_cli.main(
+        ["notion", "--port", str(free_port())], transport=fake_api(routes, seen), open_browser=browser
+    )
+    assert browser.finished() == [200]
+    return exit_code
+
+
+def test_auth_notion_for_a_workspace_already_stored_revokes_the_token_it_replaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_notion(make_notion_credentials(access_token="old-access", refresh_token="old-refresh"))
+    save_notion(OTHER_NOTION)
+    seen: list[httpx2.Request] = []
+
+    exit_code = run_notion_sign_in(monkeypatch, seen)
+
+    assert (
+        exit_code,
+        revokes_among(seen),
+        [entry.credentials for entry in stored_notion_sign_ins()],
+    ) == (0, [revoke_request_for("old-access")], [SIGNED_IN_NOTION, OTHER_NOTION])
+
+
+def test_auth_notion_for_another_workspace_keeps_the_first_and_revokes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_notion(OTHER_NOTION)
+    seen: list[httpx2.Request] = []
+
+    exit_code = run_notion_sign_in(monkeypatch, seen)
+
+    assert (
+        exit_code,
+        revokes_among(seen),
+        [entry.credentials for entry in stored_notion_sign_ins()],
+    ) == (0, [], [OTHER_NOTION, SIGNED_IN_NOTION])
+
+
+def test_auth_notion_does_not_revoke_a_token_that_is_the_one_it_just_received(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_notion(SIGNED_IN_NOTION)
+    seen: list[httpx2.Request] = []
+
+    exit_code = run_notion_sign_in(monkeypatch, seen)
+
+    assert (exit_code, revokes_among(seen), [e.credentials for e in stored_notion_sign_ins()]) == (
+        0,
+        [],
+        [SIGNED_IN_NOTION],
+    )
+
+
+@pytest.mark.parametrize(
+    ("stored", "revoke_status", "warning"),
+    [
+        (
+            make_notion_credentials(access_token="old-access"),
+            400,
+            "warning: Notion did not revoke the token: HTTP 400. The token this sign-in replaced is "
+            "still valid; remove the old connection in Notion under Settings, Connections\n",
+        ),
+        (
+            make_notion_credentials(access_token="old-access", client_id=None),
+            200,
+            "warning: The Notion token cannot be revoked without the client ID and secret. The token this "
+            "sign-in replaced is still valid; remove the old connection in Notion under Settings, "
+            "Connections\n",
+        ),
+    ],
+    ids=["notion refuses", "the old entry has no client"],
+)
+def test_auth_notion_keeps_the_new_sign_in_and_warns_when_the_replaced_token_cannot_be_revoked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stored: NotionCredentials,
+    revoke_status: int,
+    warning: str,
+) -> None:
+    save_notion(stored)
+
+    exit_code = run_notion_sign_in(monkeypatch, [], revoke_status=revoke_status)
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.err, [e.credentials for e in stored_notion_sign_ins()]) == (
+        0,
+        warning,
+        [SIGNED_IN_NOTION],
+    )
+    assert captured.out.endswith("Signed in to Notion workspace Example Workspace. Saved to the keychain.\n")
+
+
+def test_auth_notion_replaces_a_legacy_sign_in_for_the_same_named_workspace(
+    monkeypatch: pytest.MonkeyPatch, keychain: InMemoryKeyring
+) -> None:
+    legacy = make_notion_credentials(workspace_id=None, access_token="legacy-access")
+    keychain.entries[("skaldr", "notion")] = legacy_entry_json(legacy)
+    seen: list[httpx2.Request] = []
+
+    exit_code = run_notion_sign_in(monkeypatch, seen)
+
+    assert (
+        exit_code,
+        revokes_among(seen),
+        [entry.credentials for entry in stored_notion_sign_ins()],
+        sorted(keychain.entries),
+    ) == (
+        0,
+        [revoke_request_for("legacy-access")],
+        [SIGNED_IN_NOTION],
+        [("skaldr", "index"), ("skaldr", "notion:workspace-id")],
+    )
+
+
+def test_auth_notion_warns_that_it_could_not_read_the_entry_it_replaces(
+    monkeypatch: pytest.MonkeyPatch, keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keychain.entries[("skaldr", "notion:workspace-id")] = "not json"
+    keychain.entries[("skaldr", "index")] = json.dumps({"jira": [], "notion": ["notion:workspace-id"]})
+    seen: list[httpx2.Request] = []
+
+    exit_code = run_notion_sign_in(monkeypatch, seen)
+
+    assert (exit_code, revokes_among(seen), capsys.readouterr().err) == (
+        0,
+        [],
+        "warning: the Notion entry this sign-in replaced was unreadable, so its token was not revoked\n",
+    )
+
+
+def test_logout_notion_with_several_workspaces_asks_which(capsys: pytest.CaptureFixture[str]) -> None:
+    save_notion(make_notion_credentials())
+    save_notion(OTHER_NOTION)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({}, seen))
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err, seen, len(stored_notion_sign_ins())) == (
+        1,
+        "",
+        "error: Signed in to several Notion workspaces (Example Workspace (workspace-id), "
+        "Other Workspace (other-id)); name one\n",
+        [],
+        2,
+    )
+
+
+@pytest.mark.parametrize("selector", ["other-id", "Other Workspace"], ids=["by id", "by name"])
+def test_logout_notion_with_a_workspace_revokes_and_removes_only_that_one(
+    capsys: pytest.CaptureFixture[str], selector: str
+) -> None:
+    save_notion(make_notion_credentials())
+    save_notion(OTHER_NOTION)
+    seen: list[httpx2.Request] = []
+
+    exit_code = auth_cli.main(
+        ["logout", "notion", selector], transport=fake_api({"/v1/oauth/revoke": (200, {})}, seen)
+    )
+
+    assert (exit_code, revokes_among(seen), [e.credentials for e in stored_notion_sign_ins()]) == (
+        0,
+        [revoke_request_for("other-access")],
+        [make_notion_credentials()],
+    )
+    assert capsys.readouterr().out == "Signed out of Notion: token revoked and removed from the keychain.\n"
+
+
+def test_logout_notion_for_a_workspace_nobody_signed_in_to_says_so(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    save_notion(make_notion_credentials())
+
+    assert auth_cli.main(["logout", "notion", "unknown-id"]) == 0
+    assert capsys.readouterr().out == "Not signed in to Notion workspace unknown-id.\n"
+    assert len(stored_notion_sign_ins()) == 1
+
+
+def test_logout_jira_with_several_sites_asks_which(capsys: pytest.CaptureFixture[str]) -> None:
+    save_jira(make_jira_credentials())
+    save_jira(OTHER_JIRA)
+
+    assert auth_cli.main(["logout", "jira"]) == 1
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err, len(stored_jira_sign_ins())) == (
+        "",
+        "error: Signed in to several Jira sites (https://example.atlassian.net, "
+        "https://other.atlassian.net); name one\n",
+        2,
+    )
+
+
+def test_logout_jira_with_a_site_removes_only_that_one(capsys: pytest.CaptureFixture[str]) -> None:
+    save_jira(make_jira_credentials())
+    save_jira(OTHER_JIRA)
+
+    assert auth_cli.main(["logout", "jira", "other.atlassian.net"]) == 0
+    assert [entry.credentials for entry in stored_jira_sign_ins()] == [make_jira_credentials()]
+    assert capsys.readouterr().out == (
+        "Signed out of Jira: removed from the keychain. Revoke the API token itself at "
+        "https://id.atlassian.com/manage-profile/security/api-tokens\n"
+    )
+
+
+def test_logout_jira_for_a_site_nobody_signed_in_to_says_so(capsys: pytest.CaptureFixture[str]) -> None:
+    save_jira(make_jira_credentials())
+
+    assert auth_cli.main(["logout", "jira", "other.atlassian.net"]) == 0
+    assert capsys.readouterr().out == "Not signed in to Jira at https://other.atlassian.net.\n"
+    assert len(stored_jira_sign_ins()) == 1
+
+
+def test_logout_refuses_a_jira_site_that_is_not_a_jira_cloud_origin(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert auth_cli.main(["logout", "jira", "https://evil.example"]) == 1
+    assert capsys.readouterr().err == (
+        "error: The Jira site must be an https URL like https://<site>.atlassian.net, "
+        "not 'https://evil.example'\n"
+    )
+
+
+def test_logout_removes_a_legacy_sign_in_that_nobody_has_read_yet(
+    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keychain.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
+
+    assert auth_cli.main(["logout", "jira"]) == 0
+    assert (keychain.entries, capsys.readouterr().out.startswith("Signed out of Jira")) == (EMPTY_INDEX, True)
 
 
 NOBODY_SIGNED_IN = (

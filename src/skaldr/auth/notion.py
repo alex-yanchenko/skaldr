@@ -20,7 +20,13 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import Self, override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
-from skaldr.auth.store import NotionCredentials, save_notion
+from skaldr.auth.store import (
+    NotionCredentials,
+    StoredEntry,
+    forget,
+    save_notion,
+    stored_notion_replaced_by,
+)
 from skaldr.errors import AuthError
 
 INTEGRATIONS_PAGE = "https://www.notion.so/profile/integrations"
@@ -43,6 +49,7 @@ _OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
 class _NotionToken(BaseModel):
     access_token: str
     refresh_token: str | None = None
+    workspace_id: str
     workspace_name: str | None = None
 
 
@@ -81,6 +88,7 @@ def sign_in_to_notion(
         client_secret=client_secret,
         access_token=token.access_token,
         refresh_token=token.refresh_token,
+        workspace_id=token.workspace_id,
         workspace_name=token.workspace_name,
     )
 
@@ -118,6 +126,38 @@ def save_or_revoke_notion(
         if isinstance(unsaved, AuthError):
             raise AuthError(_sentences(str(unsaved), "The token Notion issued has been revoked")) from unsaved
         raise
+
+
+def save_notion_replacing_the_old_sign_in(
+    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
+) -> str | None:
+    replaced = stored_notion_replaced_by(credentials)
+    save_or_revoke_notion(credentials, transport=transport)
+    if replaced is None:
+        return None
+    if replaced.identifier != credentials.workspace_id:
+        forget(replaced)
+    return _revoke_replaced_token(replaced, credentials, transport)
+
+
+def _revoke_replaced_token(
+    replaced: StoredEntry[NotionCredentials],
+    credentials: NotionCredentials,
+    transport: httpx2.BaseTransport | None,
+) -> str | None:
+    old = replaced.credentials
+    if old is None:
+        return "the Notion entry this sign-in replaced was unreadable, so its token was not revoked"
+    if old.access_token == credentials.access_token:
+        return None
+    try:
+        revoke_notion_token(old, transport=transport)
+    except AuthError as exc:
+        return (
+            f"{exc}. The token this sign-in replaced is still valid; remove the old connection in Notion "
+            "under Settings, Connections"
+        )
+    return None
 
 
 def _save_failure(unsaved: BaseException) -> str:

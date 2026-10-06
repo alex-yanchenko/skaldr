@@ -269,10 +269,11 @@ def test_a_failed_token_request_without_an_oauth_error_names_the_status(status: 
 @pytest.mark.parametrize(
     ("answer", "fields"),
     [
-        ({"refresh_token": "secret-refresh-value"}, "access_token"),
+        ({"refresh_token": "secret-refresh-value", "workspace_id": "workspace-id"}, "access_token"),
+        ({"refresh_token": "secret-refresh-value", "access_token": "a"}, "workspace_id"),
         (["secret-refresh-value"], "(the whole answer)"),
     ],
-    ids=["no access token", "not an object"],
+    ids=["no access token", "no workspace id", "not an object"],
 )
 def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: object, fields: str) -> None:
     with pytest.raises(AuthError) as raised:
@@ -367,7 +368,13 @@ def test_a_saved_sign_in_is_not_revoked(keychain: InMemoryKeyring) -> None:
 
     save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
 
-    assert (keychain.entries, seen) == ({("skaldr", "notion"): ISSUED.model_dump_json()}, [])
+    assert (keychain.entries, seen) == (
+        {
+            ("skaldr", "notion:workspace-id"): ISSUED.model_dump_json(),
+            ("skaldr", "index"): '{"jira": [], "notion": ["notion:workspace-id"]}',
+        },
+        [],
+    )
 
 
 @pytest.mark.parametrize(

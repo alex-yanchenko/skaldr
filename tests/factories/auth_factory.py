@@ -357,10 +357,15 @@ def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
         "client_secret": "client-secret",
         "access_token": "access-token",
         "refresh_token": "refresh-token",
+        "workspace_id": "workspace-id",
         "workspace_name": "Example Workspace",
     }
     _refuse_unknown_fields(overrides, fields)
     return NotionCredentials.model_validate({**fields, **overrides})
+
+
+def legacy_entry_json(credentials: NotionCredentials | JiraCredentials) -> str:
+    return credentials.model_dump_json(exclude={"workspace_id"})
 
 
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
