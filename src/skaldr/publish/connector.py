@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from types import MappingProxyType
 from typing import Protocol
 
 from skaldr.errors import ConnectorError
@@ -23,12 +24,13 @@ def _service_of_a_listed_target(target_type: type[TargetBase]) -> Service:
 
 class ConnectorRegistry:
     def __init__(self, connectors: Iterable[Connector]) -> None:
-        self._by_service: dict[Service, Connector] = {}
+        by_service: dict[Service, Connector] = {}
         for connector in connectors:
             service = _service_of_a_listed_target(connector.target_type)
-            if service in self._by_service:
+            if service in by_service:
                 raise ConnectorError(f"two connectors publish to {service}")
-            self._by_service[service] = connector
+            by_service[service] = connector
+        self._by_service: Mapping[Service, Connector] = MappingProxyType(by_service)
 
     def for_target(self, target: TargetBase) -> Connector:
         service = target.service()

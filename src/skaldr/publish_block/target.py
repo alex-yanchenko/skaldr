@@ -4,7 +4,7 @@ from typing import get_args
 from pydantic import ConfigDict, Field, JsonValue
 
 from skaldr.frozen_model import FrozenModel
-from skaldr.services import Service
+from skaldr.services import SERVICES, Service
 
 JsonFields = dict[str, JsonValue]
 Location = tuple[str, ...]
@@ -40,8 +40,14 @@ class TargetBase(FrozenModel):
 
     @classmethod
     def service(cls) -> Service:
-        (name,) = get_args(cls.model_fields["to"].annotation)
-        return name
+        to_field = cls.model_fields.get("to")
+        names = () if to_field is None else get_args(to_field.annotation)
+        if len(names) != 1 or names[0] not in SERVICES:
+            raise TypeError(
+                f"{cls.__name__} names no service: its `to` field must be a Literal of one of "
+                f"{', '.join(SERVICES)}"
+            )
+        return names[0]
 
     @abstractmethod
     def location_key(self) -> Location: ...
