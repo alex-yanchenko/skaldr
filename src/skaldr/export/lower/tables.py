@@ -1,16 +1,16 @@
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Final, cast
+from typing import Final
 
 from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import Lowering, plain_cells, spaced, tone_named, tone_of, with_bold_label
+from skaldr.export.lower.context import Lowering, plain_cells, spaced, with_bold_label
 from skaldr.export.runs import Break, CheckMark, ExportRich, ExportRun, IndicatorMark, SwimlaneMark
 from skaldr.export.tree import Node, Paragraph, TableCell, TableColumn, TableNode, TableRow, ToneName
+from skaldr.models import ToneLiteral
 from skaldr.richtext import Link, Plain
 
-Row = Mapping[str, Any]
 EMPTY_GROUP_LABEL: Final = "none"
 
 
@@ -27,91 +27,79 @@ def _blank_cells(count: int) -> tuple[TableCell, ...]:
     return tuple(TableCell(()) for _ in range(count))
 
 
-def _cell_text(value: object, lowering: Lowering) -> ExportRich:
-    if value is None or value == "":
+def _cell_text(value: str, lowering: Lowering) -> ExportRich:
+    if not value:
         return ()
-    return _joined_by_breaks(lowering.prose_lines(str(value)))
+    return _joined_by_breaks(lowering.prose_lines(value))
 
 
-def _subrows(row: Row) -> list[Row]:
-    return cast("list[Row]", row.get("subrows") or [])
-
-
-def _title_cell(block: models.Table, row: Row, value: object, lowering: Lowering) -> TableCell:
+def _title_cell(block: models.Table, row: models.Row, lowering: Lowering) -> TableCell:
     chips = [
-        lowering.chips(keys)
-        for badge_column in block.title_badges
-        if (keys := block.badge_keys(row, badge_column.key))
+        lowering.chips(keys) for badge_column in block.title_badges if (keys := row.badges[badge_column.key])
     ]
-    title = spaced([part for part in (_cell_text(value, lowering), *chips) if part])
-    subrows = [
-        lowering.rich(str(sub["label"])) + plain(f": {compute.fmt(sub['value'])}") for sub in _subrows(row)
-    ]
+    title = spaced([part for part in (_cell_text(row.texts[block.title_key], lowering), *chips) if part])
+    subrows = [lowering.rich(sub.label) + plain(f": {compute.fmt(sub.value)}") for sub in row.subrows]
     return TableCell(_joined_by_breaks([title, *subrows]))
 
 
-def _number_cell(block: models.Table, column: models.Column, value: object) -> TableCell:
-    parts = [plain(compute.fmt(value)) if value is not None else ()]
-    if column.pct_of_total and block.reconcile and isinstance(value, int | float):
+def _number_cell(block: models.Table, column: models.Column, value: float) -> TableCell:
+    parts = [plain(compute.fmt(value))]
+    if column.pct_of_total and block.reconcile:
         parts.append(plain(f"({compute.pct(value, block.reconcile.total)} of total)"))
-    return TableCell(spaced([part for part in parts if part]))
+    return TableCell(spaced(parts))
 
 
-def _indicator_cell(value: object) -> TableCell:
-    tone = tone_of(str(value or "").strip())
+def _indicator_cell(tone: ToneLiteral | None) -> TableCell:
     return TableCell((IndicatorMark(tone),), tone) if tone else TableCell(())
 
 
-def _row_tone(block: models.Table, row: Row, lowering: Lowering) -> ToneName | None:
-    explicit_tone = row.get("tone")
-    if explicit_tone:
-        return tone_named(explicit_tone)
+def _row_tone(block: models.Table, row: models.Row, lowering: Lowering) -> ToneName | None:
+    if row.tone:
+        return row.tone
     tint_key = block.row_tint_key(row)
     return models.BADGE_COLOR_TONE[lowering.report.badges[tint_key].tone] if tint_key else None
 
 
-def _body_cell(block: models.Table, column: models.Column, row: Row, lowering: Lowering) -> TableCell:
-    value = row.get(column.key)
+def _body_cell(block: models.Table, column: models.Column, row: models.Row, lowering: Lowering) -> TableCell:
     if column.key == block.title_key:
-        return _title_cell(block, row, value, lowering)
+        return _title_cell(block, row, lowering)
     match column.kind:
         case "number":
-            return _number_cell(block, column, value)
+            return _number_cell(block, column, row.numbers[column.key])
         case "indicator":
-            return _indicator_cell(value)
+            return _indicator_cell(row.indicators[column.key])
         case "badge":
-            return TableCell(lowering.chips(block.badge_keys(row, column.key)))
+            return TableCell(lowering.chips(row.badges[column.key]))
         case "text" | "rich":
-            return TableCell(_cell_text(value, lowering))
+            return TableCell(_cell_text(row.texts[column.key], lowering))
         case _:
             assert_never(column.kind)
 
 
-def _table_row(block: models.Table, row: Row, lowering: Lowering) -> TableRow:
+def _table_row(block: models.Table, row: models.Row, lowering: Lowering) -> TableRow:
     row_cells = tuple(_body_cell(block, column, row, lowering) for column in block.cell_columns)
     return TableRow(row_cells, _row_tone(block, row, lowering))
 
 
 def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
-    if block.groups is None:
-        return [_table_row(block, row, lowering) for row in block.all_rows()]
+    if block.row_groups is None:
+        return [_table_row(block, row, lowering) for row in block.body_rows]
     width = len(block.cell_columns)
     rows: list[TableRow] = []
-    for group in block.groups:
-        group_rows = cast("list[dict[str, Any]]", group.rows)
+    for group in block.row_groups:
         label = plain(group.name)
         if block.sum_key:
-            label = spaced([label, plain(f"({compute.fmt(compute.col_sum(group_rows, block.sum_key))})")])
+            label = spaced([label, plain(f"({compute.fmt(compute.col_sum(group.rows, block.sum_key))})")])
         rows.append(TableRow((TableCell(label), *_blank_cells(width - 1)), emphasis="group"))
-        if group_rows:
-            rows += [_table_row(block, row, lowering) for row in group_rows]
+        if group.rows:
+            rows += [_table_row(block, row, lowering) for row in group.rows]
         else:
             rows.append(TableRow((TableCell(italic(plain(EMPTY_GROUP_LABEL))), *_blank_cells(width - 1))))
     return rows
 
 
 def _totals_row(block: models.Table, total_key: str) -> TableRow:
-    total = compute.fmt(compute.col_sum(block.all_rows(), total_key))
+    total = compute.fmt(compute.col_sum(block.body_rows, total_key))
     label_key = block.totals_label_key
     return TableRow(
         tuple(

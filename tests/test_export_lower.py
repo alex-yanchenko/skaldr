@@ -4,7 +4,7 @@ import pytest
 
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
-from skaldr.export.lower.context import spaced, tone_named, tone_of, with_bold_label
+from skaldr.export.lower.context import spaced, with_bold_label
 from skaldr.export.lower.prose import code_language
 from skaldr.export.runs import (
     Break,
@@ -52,7 +52,7 @@ from skaldr.export.tree import (
     capped_heading_level,
     heading_of,
 )
-from skaldr.models import SwimlaneStepState, ToneLiteral, parse_report
+from skaldr.models import SwimlaneStepState, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -2140,23 +2140,6 @@ def test_a_toned_cell_of_an_inner_grid_becomes_a_callout_inside_the_outer_column
             )
         ),
     )
-
-
-@pytest.mark.parametrize(
-    ("value", "tone", "named"),
-    [
-        pytest.param(None, None, None, id="none"),
-        pytest.param("", None, None, id="empty"),
-        pytest.param("success", "success", "success", id="a-tone-passes-through"),
-        pytest.param("muted", None, "muted", id="muted-is-a-row-tone-only"),
-        pytest.param("green", None, None, id="a-palette-name-is-not-a-tone"),
-        pytest.param(["info"], None, None, id="not-a-string"),
-    ],
-)
-def test_an_untyped_value_reads_as_a_tone_only_when_it_is_one(
-    value: object, tone: ToneLiteral | None, named: ToneName | None
-) -> None:
-    assert (tone_of(value), tone_named(value)) == (tone, named)
 
 
 def test_a_blank_indicator_cell_is_empty_and_untoned() -> None:

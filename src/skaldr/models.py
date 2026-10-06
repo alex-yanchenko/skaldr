@@ -14,11 +14,12 @@ import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass, field
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, NamedTuple, cast, get_args
+from typing import Annotated, Any, Final, Literal, NamedTuple, TypeGuard, cast, get_args
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -168,18 +169,10 @@ def _to_badge_color(value: Any) -> Any:
     return _TONE_TO_PALETTE.get(value, value) if isinstance(value, str) else value
 
 
-def _tone_names(tone_type: Any) -> tuple[str, ...]:
-    """The canonical string values of a tone Literal wrapped in Annotated[Literal[...], validator]:
-    for the manually-validated tones (table row + indicator cell) that aren't plain typed fields."""
-    return get_args(get_args(tone_type)[0])
-
-
 # Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
 # colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
 Tone = Annotated[ToneLiteral, BeforeValidator(_to_tone)]
-RowTone = Annotated[
-    Literal["muted", "danger"], BeforeValidator(_to_tone)
-]  # row emphasis: dim a rejected row, or flag a bad one (red aliases to danger)
+RowTone = Literal["muted", "danger"]
 # Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
 _ROW_RESERVED_KEYS = frozenset({"subrows", "tone"})
 BadgeColor = Annotated[BadgeColorLiteral, BeforeValidator(_to_badge_color)]
@@ -1012,9 +1005,34 @@ class Rollup(FrozenModel):
     label: str | None = Field(default=None, description="Optional label shown before the counted chips.")
 
 
-def col_sum(rows: Sequence[dict[str, Any]], key: str) -> float:
-    """Sum a number column's raw values (ints stay ints; floats are not truncated)."""
-    return sum(row[key] for row in rows)
+@dataclass(frozen=True)
+class Subrow:
+    label: str
+    value: int | float | str
+
+
+@dataclass(frozen=True)
+class Row:
+    texts: Mapping[str, str] = field(default_factory=dict[str, str])
+    numbers: Mapping[str, int | float] = field(default_factory=dict[str, "int | float"])
+    badges: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, "tuple[str, ...]"])
+    indicators: Mapping[str, ToneLiteral | None] = field(default_factory=dict[str, "ToneLiteral | None"])
+    tone: RowTone | None = None
+    subrows: tuple[Subrow, ...] = ()
+
+    def first_badge(self, key: str) -> str | None:
+        return next(iter(self.badges[key]), None)
+
+
+@dataclass(frozen=True)
+class RowGroup:
+    name: str
+    rows: tuple[Row, ...]
+
+
+def col_sum(rows: Sequence[Row], key: str) -> float:
+    """Sum a number column's values (ints stay ints; floats are not truncated)."""
+    return sum(row.numbers[key] for row in rows)
 
 
 def _as_badge_list(value: Any) -> list[Any]:
@@ -1022,71 +1040,120 @@ def _as_badge_list(value: Any) -> list[Any]:
     return cast("list[Any]", value) if isinstance(value, list) else [value]
 
 
-def _trimmed_badge_keys(value: Any) -> list[str]:
-    return ["" if key is None else str(key).strip() for key in _as_badge_list(value)]
+def _is_row_tone(value: object) -> TypeGuard[RowTone]:
+    return value in get_args(RowTone)
 
 
-def _validate_rows(rows: Sequence[dict[str, Any]], columns: Sequence[Column], loc: str) -> None:
+def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
+    return value in get_args(ToneLiteral)
+
+
+def _row_tone(value: object, loc: str) -> RowTone | None:
+    if value is None:
+        return None
+    if not _is_row_tone(value):
+        raise ValueError(f"{loc}.tone: row tone must be 'muted' or 'danger'")
+    return value
+
+
+def _string_cell(value: object, kind: ColumnKind, loc: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{loc}: {kind} column needs a string value")
+    return value
+
+
+def _number_cell(value: object, loc: str) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"{loc}: number column needs a numeric value")
+    _refuse_an_unusable_number(value, loc)
+    return value
+
+
+def _badge_cell(value: object, placement: ColumnPlacement, loc: str) -> tuple[str, ...]:
+    if placement == "title":
+        keys: list[Any] = [_string_cell(value, "badge", loc)]
+    else:
+        keys = _as_badge_list(value)
+        if not keys or not all(isinstance(key, str) for key in keys):
+            raise ValueError(f"{loc}: cell badge needs a key or a non-empty list of keys")
+    return tuple(key.strip() for key in cast("list[str]", keys) if key.strip())
+
+
+def _indicator_cell(value: object, loc: str) -> ToneLiteral | None:
+    if not _string_cell(value, "indicator", loc).strip():
+        return None
+    if not _is_tone(value):
+        raise ValueError(
+            f"{loc}: indicator value must be a tone name "
+            "(neutral·info·success·warning·danger·accent·teal·sky) or blank"
+        )
+    return value
+
+
+def _subrow(raw_subrow: object, loc: str) -> Subrow:
+    if not isinstance(raw_subrow, dict) or set(cast("dict[str, Any]", raw_subrow)) != {"label", "value"}:
+        raise ValueError(f"{loc}: must be {{label, value}}")
+    subrow = cast("dict[str, Any]", raw_subrow)
+    label, value = subrow["label"], subrow["value"]
+    if not isinstance(label, str):
+        raise ValueError(f"{loc}.label: must be a string")
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise ValueError(f"{loc}.value: must be a number or string")
+    if not isinstance(value, str):
+        _refuse_an_unusable_number(value, f"{loc}.value")
+    return Subrow(label, value)
+
+
+def _subrows(raw_subrows: object, loc: str) -> tuple[Subrow, ...]:
+    if raw_subrows is None:
+        return ()
+    if not isinstance(raw_subrows, list):
+        raise ValueError(f"{loc}.subrows: must be a list")
+    return tuple(
+        _subrow(raw_subrow, f"{loc}.subrows.{index}")
+        for index, raw_subrow in enumerate(cast("list[Any]", raw_subrows))
+    )
+
+
+def _parsed_row(row: MappedRow, columns: Sequence[Column], loc: str) -> Row:
     keys = {column.key for column in columns}
-    for index, row in enumerate(rows):
-        present = set(row) - _ROW_RESERVED_KEYS
-        missing = keys - present
-        extra = present - keys
-        if missing:
-            raise ValueError(f"{loc}.{index}: missing column value(s): {sorted(missing)}")
-        if extra:
-            raise ValueError(f"{loc}.{index}: unknown key(s): {sorted(extra)}")
-        row_tone = row.get("tone")
-        if row_tone is not None:
-            row["tone"] = _to_tone(row_tone)  # normalise an alias (e.g. red → danger) for rendering
-            if row["tone"] not in _tone_names(RowTone):
-                raise ValueError(f"{loc}.{index}.tone: row tone must be 'muted' or 'danger'")
-        for column in columns:
-            value = row[column.key]
-            if column.kind == "number":
-                if isinstance(value, bool) or not isinstance(value, int | float):
-                    raise ValueError(f"{loc}.{index}.{column.key}: number column needs a numeric value")
-                _refuse_an_unusable_number(value, f"{loc}.{index}.{column.key}")
-            elif column.kind == "badge" and column.placement == "cell":
-                # an in-cell badge holds one key or a list of keys (several wrapping chips)
-                badge_vals = _as_badge_list(value)
-                if not badge_vals or not all(isinstance(key, str) for key in badge_vals):
-                    raise ValueError(
-                        f"{loc}.{index}.{column.key}: cell badge needs a key or a non-empty list of keys"
-                    )
-            else:
-                if not isinstance(value, str):
-                    raise ValueError(f"{loc}.{index}.{column.key}: {column.kind} column needs a string value")
-                # An indicator value is normalised to a canonical Tone here (or blank), so the rendered
-                # `<span class="dot {value}">` class is always a known tone (a palette alias like `green`
-                # becomes `success`).
-                if column.kind == "indicator" and value.strip():
-                    value = _to_tone(value)
-                    row[column.key] = value
-                    if value not in _tone_names(Tone):
-                        raise ValueError(
-                            f"{loc}.{index}.{column.key}: indicator value must be a tone name "
-                            "(neutral·info·success·warning·danger·accent·teal·sky) or blank"
-                        )
-        raw_subrows = row.get("subrows")
-        if raw_subrows is not None:
-            if not isinstance(raw_subrows, list):
-                raise ValueError(f"{loc}.{index}.subrows: must be a list")
-            for sub_index, raw_subrow in enumerate(cast("list[Any]", raw_subrows)):
-                sub_loc = f"{loc}.{index}.subrows.{sub_index}"
-                if not isinstance(raw_subrow, dict) or set(cast("dict[str, Any]", raw_subrow)) != {
-                    "label",
-                    "value",
-                }:
-                    raise ValueError(f"{sub_loc}: must be {{label, value}}")
-                subrow = cast("dict[str, Any]", raw_subrow)
-                if not isinstance(subrow["label"], str):
-                    raise ValueError(f"{sub_loc}.label: must be a string")
-                sub_value = subrow["value"]
-                if isinstance(sub_value, bool) or not isinstance(sub_value, int | float | str):
-                    raise ValueError(f"{sub_loc}.value: must be a number or string")
-                if not isinstance(sub_value, str):
-                    _refuse_an_unusable_number(sub_value, f"{sub_loc}.value")
+    present = set(row) - _ROW_RESERVED_KEYS
+    missing = keys - present
+    extra = present - keys
+    if missing:
+        raise ValueError(f"{loc}: missing column value(s): {sorted(missing)}")
+    if extra:
+        raise ValueError(f"{loc}: unknown key(s): {sorted(extra)}")
+    tone = _row_tone(row.get("tone"), loc)
+    texts: dict[str, str] = {}
+    numbers: dict[str, int | float] = {}
+    badges: dict[str, tuple[str, ...]] = {}
+    indicators: dict[str, ToneLiteral | None] = {}
+    for column in columns:
+        value, cell_loc = row[column.key], f"{loc}.{column.key}"
+        match column.kind:
+            case "number":
+                numbers[column.key] = _number_cell(value, cell_loc)
+            case "badge":
+                badges[column.key] = _badge_cell(value, column.placement, cell_loc)
+            case "indicator":
+                indicators[column.key] = _indicator_cell(value, cell_loc)
+            case "text" | "rich":
+                texts[column.key] = _string_cell(value, column.kind, cell_loc)
+            case _:
+                assert_never(column.kind)
+    return Row(texts, numbers, badges, indicators, tone, _subrows(row.get("subrows"), loc))
+
+
+def _parsed_rows(rows: Sequence[MappedRow], columns: Sequence[Column], loc: str) -> tuple[Row, ...]:
+    return tuple(_parsed_row(row, columns, f"{loc}.{index}") for index, row in enumerate(rows))
+
+
+def _tone_aliases_resolved(row: MappedRow, indicator_keys: AbstractSet[str]) -> MappedRow:
+    return {
+        key: _to_tone(value) if key == "tone" or key in indicator_keys else value
+        for key, value in row.items()
+    }
 
 
 # A table row is authored as a mapping (column key → value) OR a positional list of values in column
@@ -1153,7 +1220,9 @@ class Table(_Block):
     def _expand_positional_rows(cls, data: Any) -> Any:
         """Normalise a positional (list) row to a mapping before field validation: zip its values with
         the column keys in declared order. A list whose length doesn't match the columns is an error
-        (a silent zip would drop or blank cells). Mapping rows pass through untouched."""
+        (a silent zip would drop or blank cells). Every mapping row, expanded or authored, then has its
+        row tone and indicator values read through the palette aliases (red → danger), so the model and
+        the typed rows hold canonical tones."""
         if not isinstance(data, dict):
             return data
         fields = cast("dict[str, Any]", data)
@@ -1161,11 +1230,14 @@ class Table(_Block):
         if not isinstance(raw_columns, list):
             return fields  # malformed columns — let field validation report it
         keys: list[str] = []
+        indicator_keys: set[str] = set()
         for col in cast("list[Any]", raw_columns):
             key = cast("dict[str, Any]", col).get("key") if isinstance(col, dict) else None
             if not isinstance(key, str):
                 return fields  # a column missing a string key — let Column validation report it precisely
             keys.append(key)
+            if cast("dict[str, Any]", col).get("kind") == "indicator":
+                indicator_keys.add(key)
 
         def _expand_row_list(rows: Any, loc: str) -> Any:
             if not isinstance(rows, list):
@@ -1179,7 +1251,11 @@ class Table(_Block):
                             f"{loc}.{index}: a positional row needs exactly {len(keys)} values, one per "
                             f"column; got {len(values)}"
                         )
-                    expanded.append(dict(zip(keys, values, strict=True)))
+                    expanded.append(
+                        _tone_aliases_resolved(dict(zip(keys, values, strict=True)), indicator_keys)
+                    )
+                elif isinstance(row, dict):
+                    expanded.append(_tone_aliases_resolved(cast("MappedRow", row), indicator_keys))
                 else:
                     expanded.append(row)
             return expanded
@@ -1240,24 +1316,15 @@ class Table(_Block):
         widthed = [c for c in self.cell_columns if c.width is not None]
         if widthed and len(widthed) != len(self.cell_columns):
             raise ValueError("set width on every in-cell column, or none")
-        # casts: rows are mappings post-expansion (guaranteed by `_expand_positional_rows`).
-        if self.groups is not None:
-            for group_index, group in enumerate(self.groups):
-                _validate_rows(
-                    cast("Sequence[dict[str, Any]]", group.rows), self.columns, f"groups.{group_index}.rows"
-                )
-        if self.rows is not None:
-            _validate_rows(cast("Sequence[dict[str, Any]]", self.rows), self.columns, "rows")
+        rows = self.body_rows
         if self.rollup is not None:
-            # Rows are validated above, so every row carries `by` as a string. Both checks run here so
-            # the "has values" test sees well-formed rows (a malformed row reports its own error first).
             badge_keys = {column.key for column in self.columns if column.kind == "badge"}
             if self.rollup.by not in badge_keys:
                 raise ValueError(f"rollup.by '{self.rollup.by}' must be a badge column")
             self._refuse_list_cells(
                 f"rollup.by '{self.rollup.by}' counts each row under one badge", self.rollup.by
             )
-            if not any(row[self.rollup.by].strip() for _, row in self.located_rows()):
+            if not any(row.badges[self.rollup.by] for row in rows):
                 raise ValueError(
                     f"rollup.by '{self.rollup.by}' has no values to count: every row is blank there"
                 )
@@ -1299,22 +1366,32 @@ class Table(_Block):
         """Badge columns whose chip renders under the row title (placement 'title')."""
         return [c for c in self.columns if c.kind == "badge" and c.placement == "title"]
 
-    def located_rows(self) -> list[tuple[str, dict[str, Any]]]:
+    def located_rows(self) -> list[tuple[str, MappedRow]]:
         if self.groups is not None:
             return [
-                (f"groups.{group_index}.rows.{row_index}", cast("dict[str, Any]", row))
+                (f"groups.{group_index}.rows.{row_index}", row)
                 for group_index, group in enumerate(self.groups)
-                for row_index, row in enumerate(group.rows)
+                for row_index, row in enumerate(_mapped_rows(group.rows))
             ]
-        return [(f"rows.{index}", row) for index, row in enumerate(self.all_rows())]
+        return [(f"rows.{index}", row) for index, row in enumerate(_mapped_rows(self.rows or []))]
 
-    def badge_keys(self, row: Mapping[str, Any], key: str) -> list[str]:
-        return [badge for badge in _trimmed_badge_keys(row.get(key)) if badge]
+    @cached_property
+    def row_groups(self) -> tuple[RowGroup, ...] | None:
+        if self.groups is None:
+            return None
+        return tuple(
+            RowGroup(group.name, _parsed_rows(_mapped_rows(group.rows), self.columns, f"groups.{index}.rows"))
+            for index, group in enumerate(self.groups)
+        )
 
-    def row_tint_key(self, row: Mapping[str, Any]) -> str:
-        if self.tint_by is None:
-            return ""
-        return next(iter(_trimmed_badge_keys(row.get(self.tint_by))), "")
+    @cached_property
+    def body_rows(self) -> tuple[Row, ...]:
+        if self.row_groups is not None:
+            return tuple(row for group in self.row_groups for row in group.rows)
+        return _parsed_rows(_mapped_rows(self.rows or []), self.columns, "rows")
+
+    def row_tint_key(self, row: Row) -> str | None:
+        return None if self.tint_by is None else row.first_badge(self.tint_by)
 
     @property
     def title_key(self) -> str:
@@ -1325,20 +1402,17 @@ class Table(_Block):
     def rich_cells(self) -> Iterator[tuple[FieldPath, str, RichTextMarker]]:
         keys = [column.key for column in self.columns if column.kind in RICH_COLUMN_KINDS]
         row_sets = (
-            [(("rows",), self.all_rows())]
-            if self.groups is None
-            else [
-                (("groups", str(index), "rows"), _mapped_rows(group.rows))
-                for index, group in enumerate(self.groups)
-            ]
+            [(("rows",), self.body_rows)]
+            if self.row_groups is None
+            else [(("groups", str(index), "rows"), group.rows) for index, group in enumerate(self.row_groups)]
         )
         for rows_path, rows in row_sets:
             for index, row in enumerate(rows):
                 row_path = (*rows_path, str(index))
                 for key in keys:
-                    yield (*row_path, key), row[key], RICH_PROSE
-                for sub_index, subrow in enumerate(_mapped_rows(row.get("subrows") or [])):
-                    yield (*row_path, "subrows", str(sub_index), "label"), subrow["label"], RICH_TEXT
+                    yield (*row_path, key), row.texts[key], RICH_PROSE
+                for sub_index, subrow in enumerate(row.subrows):
+                    yield (*row_path, "subrows", str(sub_index), "label"), subrow.label, RICH_TEXT
 
     @property
     def sum_key(self) -> str | None:
@@ -1352,17 +1426,11 @@ class Table(_Block):
             return None
         return next(column.key for column in self.cell_columns if column.key != self.totals.column)
 
-    def all_rows(self) -> list[dict[str, Any]]:
-        # casts: rows are mappings post-expansion (see `_expand_positional_rows`).
-        if self.groups is not None:
-            return cast("list[dict[str, Any]]", [row for group in self.groups for row in group.rows])
-        return cast("list[dict[str, Any]]", self.rows or [])
-
     def _reconcile(self) -> None:
         if self.reconcile is None:
             return
         column = self.reconcile.column
-        total = col_sum(self.all_rows(), column)
+        total = col_sum(self.body_rows, column)
         handled = self.reconcile.handled.value if self.reconcile.handled else 0
         grand = total + handled
         # Exact when the column is integer-valued (the norm) — the "off by even one" guarantee must
