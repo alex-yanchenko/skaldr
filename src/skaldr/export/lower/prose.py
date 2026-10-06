@@ -1,11 +1,11 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import PurePosixPath
-from typing import Final, Literal
+from typing import Literal
 
 from typing_extensions import assert_never
 
 from skaldr import compute, models
+from skaldr.code_language import block_code_language
 from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
@@ -22,28 +22,6 @@ from skaldr.export.tree import (
     ToneName,
 )
 from skaldr.richtext import Code, Link, Plain
-
-CODE_LANGUAGE_BY_SUFFIX: Final[Mapping[str, str]] = {
-    ".ts": "typescript",
-    ".tsx": "typescript",
-    ".js": "javascript",
-    ".mjs": "javascript",
-    ".py": "python",
-    ".sh": "bash",
-    ".bash": "bash",
-    ".json": "json",
-    ".yaml": "yaml",
-    ".yml": "yaml",
-    ".sql": "sql",
-    ".go": "go",
-    ".rs": "rust",
-    ".java": "java",
-    ".rb": "ruby",
-    ".css": "css",
-    ".html": "html",
-    ".toml": "toml",
-    ".md": "markdown",
-}
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -230,15 +208,9 @@ def lower_range(block: models.Range, lowering: Lowering) -> list[Node]:
     ]
 
 
-def code_language(label: str | None) -> str:
-    if not label:
-        return ""
-    return CODE_LANGUAGE_BY_SUFFIX.get(PurePosixPath(label.strip()).suffix.lower(), "")
-
-
 def lower_code(block: models.Code) -> list[Node]:
     label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
-    language = "diff" if block.mode == "diff" else block.lang or code_language(block.label)
+    language = "diff" if block.mode == "diff" else block_code_language(block)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
 
