@@ -5,12 +5,9 @@ from typing import Final
 from skaldr.export.markup import styled, styled_in_tags
 from skaldr.richtext import MarkerStyle
 
-LINE_EDGE: Final = ""
+NO_CHARACTER: Final = ""
+LINE_EDGE: Final = "\n"
 EMPHASIS_OPENER_STAND_IN: Final = "*"
-
-
-def _is_whitespace(character: str) -> bool:
-    return character == LINE_EDGE or character.isspace()
 
 
 def _is_certainly_punctuation(character: str) -> bool:
@@ -22,22 +19,18 @@ def _might_be_punctuation(character: str) -> bool:
 
 
 def _opens(first_inside: str, before: str) -> bool:
-    if _is_whitespace(first_inside):
-        return False
     if not _might_be_punctuation(first_inside):
         return True
-    return _is_whitespace(before) or _is_certainly_punctuation(before)
+    return before.isspace() or _is_certainly_punctuation(before)
 
 
 def _closes(last_inside: str, after: str) -> bool:
-    if _is_whitespace(last_inside):
-        return False
     if not _might_be_punctuation(last_inside):
         return True
-    return _is_whitespace(after) or _is_certainly_punctuation(after)
+    return after.isspace() or _is_certainly_punctuation(after)
 
 
-def emphasis_github_reads(style: MarkerStyle, inner: str, before: str, after: str) -> str:
+def written_emphasis(style: MarkerStyle, inner: str, before: str, after: str) -> str:
     core = inner.strip()
     if not core:
         return inner

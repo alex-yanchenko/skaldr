@@ -6,6 +6,8 @@ from markdown_it import MarkdownIt
 
 from skaldr.errors import ReportError
 from skaldr.export import ExportResult, export_markdown
+from skaldr.export import markdown as markdown_module
+from skaldr.export.flanking import written_emphasis
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
 from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
 from skaldr.export.runs import (
@@ -899,6 +901,155 @@ def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
 
 
 @pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "*(a)*[**b**]{tone=info}",
+            "*(a)*<strong>b</strong>\n",
+            "<p><em>(a)</em><strong>b</strong></p>\n",
+            id="italic-then-bold",
+        ),
+        pytest.param(
+            "**(a)**[*b*]{tone=info}",
+            "**(a)**<em>b</em>\n",
+            "<p><strong>(a)</strong><em>b</em></p>\n",
+            id="bold-then-italic",
+        ),
+        pytest.param(
+            "**(a)**[**b**]{tone=info}",
+            "**(a)**<strong>b</strong>\n",
+            "<p><strong>(a)</strong><strong>b</strong></p>\n",
+            id="bold-then-bold",
+        ),
+        pytest.param(
+            "~~(a)~~[~~b~~]{tone=info}",
+            "~~(a)~~<del>b</del>\n",
+            "<p><s>(a)</s><del>b</del></p>\n",
+            id="strike-then-strike",
+        ),
+        pytest.param(
+            "**(a)**[~~b~~]{tone=info}",
+            "**(a)**~~b~~\n",
+            "<p><strong>(a)</strong><s>b</s></p>\n",
+            id="different-marker-characters-do-not-merge",
+        ),
+        pytest.param(
+            "**(a)** [**b**]{tone=info}",
+            "**(a)** **b**\n",
+            "<p><strong>(a)</strong> <strong>b</strong></p>\n",
+            id="a-space-keeps-the-markers-apart",
+        ),
+    ],
+)
+def test_emphasis_written_straight_after_emphasis_never_merges_its_markers_into_one_run(
+    body: str, markdown: str, html: str
+) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "“**(a)**” and —**(b)**—",
+            "“**(a)**” and —**(b)**—\n",
+            "<p>“<strong>(a)</strong>” and —<strong>(b)</strong>—</p>\n",
+            id="non-ascii-punctuation",
+        ),
+    ],
+)
+def test_emphasis_beside_non_ascii_punctuation_keeps_its_markers(body: str, markdown: str, html: str) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("inner", "before", "after", "written"),
+    [
+        pytest.param(
+            "(a)", "€", "\n", "<strong>(a)</strong>", id="a-currency-symbol-before-is-not-certain-punctuation"
+        ),
+        pytest.param(
+            "(a)", "\n", "€", "<strong>(a)</strong>", id="a-currency-symbol-after-is-not-certain-punctuation"
+        ),
+        pytest.param(
+            "€a",
+            "x",
+            "\n",
+            "<strong>€a</strong>",
+            id="a-symbol-opening-the-text-needs-a-punctuation-neighbour",
+        ),
+        pytest.param("€a", " ", "\n", "**€a**", id="a-symbol-opening-the-text-after-a-space"),
+        pytest.param(
+            "a€", "\n", "x", "<strong>a€</strong>", id="a-symbol-closing-the-text-needs-a-neighbour"
+        ),
+        pytest.param(" (a) ", "x", "y", " **(a)** ", id="spaces-inside-the-emphasis-count-as-its-neighbours"),
+        pytest.param("(a)", "x", "y", "<strong>(a)</strong>", id="no-spaces-inside-and-letters-around"),
+        pytest.param("a", "x", "y", "**a**", id="letters-inside-need-no-neighbour"),
+        pytest.param("  ", "x", "y", "  ", id="only-spaces-is-no-emphasis"),
+    ],
+)
+def test_bold_is_written_with_markers_only_when_the_neighbours_let_github_close_it(
+    inner: str, before: str, after: str, written: str
+) -> None:
+    assert written_emphasis("bold", inner, before, after) == written
+
+
+@pytest.mark.parametrize(
+    ("following", "written"),
+    [
+        pytest.param(".", "**(x)**.\n", id="before-punctuation"),
+        pytest.param("y", "<strong>(x)</strong>y\n", id="before-a-letter"),
+    ],
+)
+def test_a_bold_chip_directly_before_text_is_written_as_the_neighbour_allows(
+    following: str, written: str
+) -> None:
+    assert render_markdown([Paragraph((Chip("(x)", "blue"), Plain(following)))]) == written
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        pytest.param(
+            [_bullets("a"), Toggle((), None, (_bullets("x"),)), _bullets("z")],
+            id="toggle-with-an-empty-title",
+        ),
+        pytest.param(
+            [_bullets("a"), Tabs((Tab((), (_bullets("x"),)),)), _bullets("z")], id="tab-with-an-empty-title"
+        ),
+    ],
+)
+def test_a_list_either_side_of_a_block_with_an_empty_title_stays_a_separate_list(nodes: list[Node]) -> None:
+    assert render_markdown(nodes) == "- a\n\n* x\n\n- z\n"
+
+
+def test_a_tab_with_an_empty_title_passes_the_list_before_it_through() -> None:
+    tabs = Tabs((Tab((Plain("A"),), (_bullets("x"),)), Tab((), (_bullets("y"),))))
+
+    assert render_markdown([tabs]) == "**A**\n\n- x\n\n* y\n"
+
+
+def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    rendered: list[str] = []
+
+    def spy(text: str) -> str:
+        rendered.append(text)
+        return text
+
+    monkeypatch.setattr(markdown_module, "escape_block_start", spy)
+    inner = Callout("info", (_para("deep"),))
+    outer = Callout("info", (Callout("info", (inner,)),))
+
+    render_markdown([outer])
+
+    assert rendered == ["deep"]
+
+
+@pytest.mark.parametrize(
     ("node", "markdown"),
     [
         pytest.param(Callout("info", (ListNode("bullet", ()),)), "> 💡\n", id="callout-with-nothing-to-say"),
@@ -1104,6 +1255,12 @@ def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
         pytest.param("नमस्ते दुनिया", "नमस्ते-दुनिया", id="combining-marks-stay"),
         pytest.param("Café", "café", id="decomposed-accent-stays"),
         pytest.param("x² ½ ①", "x--", id="other-numbers-go"),
+        pytest.param("a⓪b", "ab", id="circled-zero-just-after-the-circled-letters-goes"),
+        pytest.param("a⒵b", "ab", id="parenthesized-z-just-before-the-circled-letters-goes"),
+        pytest.param("a🅊b", "ab", id="squared-letter-range-end-goes"),
+        pytest.param("a🄯b", "ab", id="copyleft-just-before-the-squared-letters-goes"),
+        pytest.param("a🅪b", "ab", id="raised-mc-sign-after-the-circled-negative-letters-goes"),
+        pytest.param("a🆊b", "ab", id="crossed-negative-squared-p-after-the-negative-squared-letters-goes"),
         pytest.param("Step ① one", "step--one", id="circled-digit-goes"),
         pytest.param("Ⅻ and ٣", "ⅻ-and-٣", id="letter-numbers-and-decimal-digits-stay"),
         pytest.param("Ⓔⓘ 🄺", "ⓔⓘ-🄺", id="circled-and-squared-letters-stay"),

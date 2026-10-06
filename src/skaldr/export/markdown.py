@@ -7,11 +7,12 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, emphasis_github_reads
+from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, written_emphasis
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     CALLOUT_ICON,
     DIVIDER_LINE,
+    STYLE_MARKER,
     MarkupRuns,
     body_cell_texts,
     code_block_lines,
@@ -19,6 +20,7 @@ from skaldr.export.markup import (
     escape_block_start,
     indent_lines,
     styled,
+    styled_in_tags,
     tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
@@ -125,7 +127,7 @@ def _first_character(pieces: Sequence[_Piece]) -> str:
             written = piece.inner if not piece.inner.strip() else EMPHASIS_OPENER_STAND_IN
         if written:
             return written[0]
-    return LINE_EDGE
+    return NO_CHARACTER
 
 
 class _MarkdownRuns(MarkupRuns):
@@ -135,12 +137,23 @@ class _MarkdownRuns(MarkupRuns):
     def write(self, runs: ExportRich, before: str = LINE_EDGE, after: str = LINE_EDGE) -> str:
         pieces = self._pieces(runs)
         written = ""
+        open_marker_character = NO_CHARACTER
         for index, piece in enumerate(pieces):
             if isinstance(piece, str):
                 written += piece
+                open_marker_character = NO_CHARACTER
                 continue
-            following = _first_character(pieces[index + 1 :]) or after
-            written += emphasis_github_reads(piece.style, piece.inner, written[-1:] or before, following)
+            marker = STYLE_MARKER[piece.style]
+            runs_into_the_previous_marker = (
+                marker[0] == open_marker_character and piece.inner == piece.inner.lstrip()
+            )
+            if runs_into_the_previous_marker:
+                emphasis = styled_in_tags(piece.style, piece.inner)
+            else:
+                following = _first_character(pieces[index + 1 :]) or after
+                emphasis = written_emphasis(piece.style, piece.inner, written[-1:] or before, following)
+            written += emphasis
+            open_marker_character = marker[0] if emphasis.endswith(marker) else NO_CHARACTER
         return written
 
     def _inside_delimiters(self, runs: ExportRich) -> str:
@@ -184,7 +197,7 @@ class _MarkdownRuns(MarkupRuns):
         return code_span("{{" + name + "}}")
 
     def chip(self, run: Chip, /) -> str:
-        return styled("bold", self.escape(run.label))
+        return self.write((run,))
 
     def underline(self, inner: str, /) -> str:
         return f"<ins>{inner}</ins>"
@@ -225,8 +238,13 @@ class _ListTail:
 
 @dataclass(frozen=True)
 class _Written:
-    lines: list[str]
+    lines: tuple[str, ...]
     tail: _ListTail | None = None
+    opens_with_a_paragraph: bool = False
+
+    @classmethod
+    def of(cls, lines: Sequence[str], tail: _ListTail | None = None) -> "_Written":
+        return cls(tuple(lines), tail)
 
 
 def _marker_family(node: Node) -> MarkerFamily | None:
@@ -318,18 +336,17 @@ class _MarkdownWriter:
         gap = [] if after_a_bare_marker or isinstance(entry.children[0], ListNode) else [""]
         return gap + indent_lines(children, " " * width)
 
-    def titled(self, title: str, children: Sequence[Node]) -> _Written:
+    def titled(self, title: str, children: Sequence[Node], after: _ListTail | None) -> _Written:
+        if not title:
+            return self.blocks_after(children, after)
         body = self.blocks_after(children, None)
-        return _Written([title, *_spaced(body.lines)], body.tail)
-
-    def opens_with_a_paragraph(self, nodes: Sequence[Node]) -> bool:
-        first_written = next((node for node in nodes if self.written(node, None).lines), None)
-        return isinstance(first_written, Paragraph)
+        return _Written.of([title, *_spaced(body.lines)], body.tail)
 
     def callout_lines(self, node: Callout) -> list[str]:
         icon = node.icon or CALLOUT_ICON[node.tone]
-        lines = self.blocks(node.children)
-        if lines and self.opens_with_a_paragraph(node.children):
+        body = self.blocks_after(node.children, None)
+        lines = list(body.lines)
+        if lines and body.opens_with_a_paragraph:
             lines[0] = f"{icon} {lines[0]}"
         else:
             lines = [icon, *_spaced(lines)]
@@ -341,15 +358,17 @@ class _MarkdownWriter:
             parts.append(styled("italic", self.inline(node.cite)))
         return _quoted(_joined([[part] for part in parts]))
 
-    def tabs_written(self, node: Tabs) -> _Written:
-        sections: list[_Written] = []
+    def tabs_written(self, node: Tabs, after: _ListTail | None) -> _Written:
+        sections: list[Sequence[str]] = []
+        tail = after
         for tab in node.tabs:
             icon = tab_icon(tab.tone)
             title = self.inline(tab.title)
-            sections.append(self.titled(styled("bold", f"{icon} {title}" if icon else title), tab.children))
-        return _Written(
-            _joined([section.lines for section in sections]), sections[-1].tail if sections else None
-        )
+            section = self.titled(styled("bold", f"{icon} {title}" if icon else title), tab.children, tail)
+            if section.lines:
+                sections.append(section.lines)
+                tail = section.tail
+        return _Written.of(_joined(sections), tail)
 
     def toc_lines(self, node: TableOfContents, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)
@@ -362,55 +381,60 @@ class _MarkdownWriter:
         alternate = _must_alternate_markers(_marker_family(node), after)
         match node:
             case Heading():
-                return _Written([self.heading_line(node.level, node.text)])
+                return _Written.of([self.heading_line(node.level, node.text)])
             case Paragraph():
                 text = self.block_text(node.text)
-                return _Written([text] if text else [])
+                return _Written.of([text] if text else [])
             case ListNode():
                 family = MARKER_FAMILY[node.kind]
-                return _Written(self.list_lines(node, alternate), _ListTail(family, alternate))
+                return _Written.of(self.list_lines(node, alternate), _ListTail(family, alternate))
             case TableNode():
-                return _Written(self.table_lines(node))
+                return _Written.of(self.table_lines(node))
             case CodeBlock():
-                return _Written(code_block_lines(node))
+                return _Written.of(code_block_lines(node))
             case DisplayMath():
-                return _Written(code_block_lines(CodeBlock(node.expression, "math")))
+                return _Written.of(code_block_lines(CodeBlock(node.expression, "math")))
             case Callout():
-                return _Written(self.callout_lines(node))
+                return _Written.of(self.callout_lines(node))
             case Quote():
-                return _Written(self.quote_lines(node))
+                return _Written.of(self.quote_lines(node))
             case Divider():
-                return _Written([DIVIDER_LINE])
+                return _Written.of([DIVIDER_LINE])
             case Toggle():
                 if node.heading_level is not None:
-                    return self.titled(self.heading_line(node.heading_level, node.title), node.children)
-                return self.titled(styled("bold", self.inline(node.title)), node.children)
+                    return self.titled(
+                        self.heading_line(node.heading_level, node.title), node.children, after
+                    )
+                return self.titled(styled("bold", self.inline(node.title)), node.children, after)
             case Columns():
-                return self.blocks_after(nested_nodes(node), after)
+                columns = self.blocks_after(nested_nodes(node), after)
+                return _Written(columns.lines, columns.tail)
             case Tabs():
-                return self.tabs_written(node)
+                return self.tabs_written(node, after)
             case Diagram():
                 supplement = self.blocks_after(node.supplement, None)
-                return _Written(
+                return _Written.of(
                     [*mermaid_fence_lines(node.figure), *_spaced(supplement.lines)], supplement.tail
                 )
             case TableOfContents():
-                return _Written(self.toc_lines(node, alternate), _ListTail("dash", alternate))
+                return _Written.of(self.toc_lines(node, alternate), _ListTail("dash", alternate))
             case _:
                 assert_never(node)
 
     def blocks_after(self, nodes: Sequence[Node], after: _ListTail | None) -> _Written:
-        rendered: list[list[str]] = []
+        rendered: list[Sequence[str]] = []
         tail = after
+        opens_with_a_paragraph = False
         for node in nodes:
             written = self.written(node, tail)
             if written.lines:
+                opens_with_a_paragraph = opens_with_a_paragraph if rendered else isinstance(node, Paragraph)
                 rendered.append(written.lines)
                 tail = written.tail
-        return _Written(_joined(rendered), tail)
+        return _Written(tuple(_joined(rendered)), tail, opens_with_a_paragraph)
 
     def blocks(self, nodes: Sequence[Node]) -> list[str]:
-        return self.blocks_after(nodes, None).lines
+        return list(self.blocks_after(nodes, None).lines)
 
 
 def render_markdown(nodes: Sequence[Node]) -> str:
