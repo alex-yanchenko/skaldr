@@ -1,4 +1,3 @@
-import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -7,35 +6,14 @@ from urllib.parse import quote
 
 from typing_extensions import assert_never
 
-from skaldr.export.runs import (
-    CheckMark,
-    Chip,
-    DecisionMark,
-    Gauge,
-    IndicatorMark,
-    Mark,
-    StatusMark,
-    SwimlaneMark,
-)
-from skaldr.export.tree import CodeBlock, TableNode, TableRow, ToneName
-from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName
+from skaldr.export.glyphs import gauge_bar, mark_glyph
+from skaldr.export.runs import Chip, Gauge, Mark
+from skaldr.export.tree import CodeBlock, TableNode, TableRow
+from skaldr.models import ToneLiteral
+from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName, TextRunWriter
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
-CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
-    "info": "💡",
-    "success": "✅",
-    "warning": "⚠️",
-    "danger": "🛑",
-    "accent": "📌",
-    "neutral": "📝",
-    "muted": "📝",
-    "teal": "💡",
-    "sky": "💡",
-}
-TAB_TONES: Final[frozenset[ToneName]] = frozenset({"success", "info", "warning", "danger"})
-GAUGE_CELLS: Final = 10
 DIVIDER_LINE: Final = "---"
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
@@ -108,106 +86,11 @@ def encode_url(url: str) -> str:
     return quote(url, safe=URL_SAFE_CHARACTERS + "\\").replace("\\", "\\\\")
 
 
-def gauge_bar(value: float, maximum: float) -> str:
-    filled = max(0, min(GAUGE_CELLS, math.floor(value / maximum * GAUGE_CELLS + 0.5)))
-    return "█" * filled + "░" * (GAUGE_CELLS - filled)
-
-
-def tab_icon(tone: ToneName | None) -> str | None:
-    return CALLOUT_ICON[tone] if tone in TAB_TONES else None
-
-
-def status_glyph(state: StatusState) -> str:
-    match state:
-        case "done":
-            return "✅"
-        case "current":
-            return "🔵"
-        case "pending":
-            return "⚪"
-        case "failed":
-            return "❌"
-        case "blocked":
-            return "⛔"
-        case _:
-            assert_never(state)
-
-
-def swimlane_glyph(state: SwimlaneStepState) -> str:
-    match state:
-        case "done":
-            return "✅"
-        case "current":
-            return "🔵"
-        case "todo":
-            return "⚪"
-        case "blocked":
-            return "⛔"
-        case "deferred":
-            return "⏸️"
-        case _:
-            assert_never(state)
-
-
-def indicator_glyph(tone: ToneLiteral) -> str:
-    match tone:
-        case "success" | "teal":
-            return "🟢"
-        case "warning":
-            return "🟡"
-        case "danger":
-            return "🔴"
-        case "info" | "sky":
-            return "🔵"
-        case "neutral":
-            return "⚪"
-        case "accent":
-            return "🟣"
-        case _:
-            assert_never(tone)
-
-
-def check_glyph(checked: bool) -> str:
-    match checked:
-        case True:
-            return "✓"
-        case False:
-            return "✗"
-        case _:
-            assert_never(checked)
-
-
-def decision_glyph(decided: bool) -> str:
-    match decided:
-        case True:
-            return "☑️"
-        case False:
-            return "❓"
-        case _:
-            assert_never(decided)
-
-
-def mark_glyph(mark: Mark) -> str:
-    match mark:
-        case StatusMark():
-            return status_glyph(mark.state)
-        case SwimlaneMark():
-            return swimlane_glyph(mark.state)
-        case IndicatorMark():
-            return indicator_glyph(mark.tone)
-        case CheckMark():
-            return check_glyph(mark.checked)
-        case DecisionMark():
-            return decision_glyph(mark.decided)
-        case _:
-            assert_never(mark)
-
-
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
 
-class MarkupRuns(ABC):
+class MarkupRuns(TextRunWriter, ABC):
     @abstractmethod
     def escape(self, text: str, /) -> str: ...
 

@@ -6,8 +6,8 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr.export.apportion import apportioned
+from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
-    CALLOUT_ICON,
     DIVIDER_LINE,
     MarkupRuns,
     bang_cannot_open_an_image,
@@ -17,7 +17,6 @@ from skaldr.export.markup import (
     indent_lines,
     is_emphasised_body_cell,
     styled,
-    tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs

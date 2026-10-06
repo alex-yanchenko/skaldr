@@ -37,6 +37,7 @@ from skaldr.richtext import (
     RichContext,
     ScriptPosition,
     StyleName,
+    TextRunWriter,
     parse_rich,
     write_runs,
 )
@@ -106,7 +107,7 @@ def recorded_render(html: str) -> RecordedRender:
     return RecordedRender(None, _body_live(reader.body_live))
 
 
-class _HtmlRuns:
+class _HtmlRuns(TextRunWriter):
     def __init__(self, cited: set[str], placeholders: set[str] | None) -> None:
         self.cited = cited
         self.placeholders = placeholders

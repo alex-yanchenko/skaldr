@@ -8,9 +8,9 @@ from typing import Final, Literal
 from typing_extensions import assert_never
 
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, written_emphasis
+from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
-    CALLOUT_ICON,
     DIVIDER_LINE,
     STYLE_MARKER,
     MarkupRuns,
@@ -21,7 +21,6 @@ from skaldr.export.markup import (
     indent_lines,
     styled,
     styled_in_tags,
-    tab_icon,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_run

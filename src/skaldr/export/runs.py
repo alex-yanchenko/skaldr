@@ -5,7 +5,7 @@ from typing_extensions import assert_never
 
 from skaldr.export.inline import one_line
 from skaldr.models import BadgeColor, StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Run, RunWriter, VisibleText, write_run
+from skaldr.richtext import Run, RunWriter, VisibleText, Written, write_run
 
 
 @dataclass(frozen=True)
@@ -65,17 +65,17 @@ def holds_a_chip(runs: ExportRich) -> bool:
     return any(isinstance(run, Chip) for run in runs)
 
 
-class ExportRunWriter(RunWriter, Protocol):
-    def chip(self, run: Chip, /) -> str: ...
+class ExportRunWriter(RunWriter[Written], Protocol[Written]):
+    def chip(self, run: Chip, /) -> Written: ...
 
-    def line_break(self) -> str: ...
+    def line_break(self) -> Written: ...
 
-    def mark(self, run: Mark, /) -> str: ...
+    def mark(self, run: Mark, /) -> Written: ...
 
-    def gauge(self, run: Gauge, /) -> str: ...
+    def gauge(self, run: Gauge, /) -> Written: ...
 
 
-def write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
+def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Written:
     match run:
         case Chip():
             return writer.chip(run)
@@ -89,8 +89,8 @@ def write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
             return write_run(run, writer)
 
 
-def write_export_runs(runs: ExportRich, writer: ExportRunWriter) -> str:
-    return "".join(write_export_run(run, writer) for run in runs)
+def write_export_runs(runs: ExportRich, writer: ExportRunWriter[Written]) -> Written:
+    return writer.concat([write_export_run(run, writer) for run in runs])
 
 
 def mark_name(mark: Mark) -> str:
