@@ -75,7 +75,7 @@ class ExportRunWriter(RunWriter, Protocol):
     def gauge(self, run: Gauge, /) -> str: ...
 
 
-def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
+def write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
     match run:
         case Chip():
             return writer.chip(run)
@@ -90,7 +90,7 @@ def _write_export_run(run: ExportRun, writer: ExportRunWriter) -> str:
 
 
 def write_export_runs(runs: ExportRich, writer: ExportRunWriter) -> str:
-    return "".join(_write_export_run(run, writer) for run in runs)
+    return "".join(write_export_run(run, writer) for run in runs)
 
 
 def mark_name(mark: Mark) -> str:
