@@ -746,11 +746,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.part-title{display:block; font-size:24px; font-weight:650; letter-spacing:-0.01em; text-wrap:balance;
 		padding-block-end:var(--s2); margin-block-end:var(--s4); border-block-end:2px solid var(--line)}
 	details.part{
-		& > summary{cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:var(--s2)}
+		& > summary{cursor:pointer; list-style:none; display:flex; align-items:center; gap:var(--s3)}
 		& > summary::-webkit-details-marker{display:none}
-		& > summary::before{content:"▸"; color:var(--muted); font-size:16px}
-		&[open] > summary::before{content:"▾"}
-		& > summary .part-title{flex:1}}
+		& > summary::before{content:""; flex:none; inline-size:9px; block-size:9px; margin-block-end:var(--s2);
+			border-inline-end:2px solid var(--muted); border-block-end:2px solid var(--muted); transform:rotate(-45deg)}
+		&[open] > summary::before{transform:translateY(-7px) rotate(45deg)}
+		& > summary .part-title{flex:1}
+		&:not([open]){margin-block:var(--s4)}
+		&:not([open]) .part-title{margin-block-end:0}}
 
 	/* panel: an always-open titled card (one per 'slide'), unlike the collapsible section. */
 	.panel-card{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow)}
@@ -1047,6 +1050,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   fragment) on modern Chromium. */
 		details::details-content{content-visibility:visible !important}
 		details:not([open])>summary::before{content:"▾"}
+		details.part:not([open])>summary::before{content:""; transform:translateY(-7px) rotate(45deg)}
 	}
 }
 
