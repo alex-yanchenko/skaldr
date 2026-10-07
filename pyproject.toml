@@ -41,6 +41,7 @@ Issues = "https://github.com/alex-yanchenko/skaldr/issues"
 [project.optional-dependencies]
 publish = [
     "authlib>=1.8.0",
+    "filelock>=4.0",
     "httpx2>=2.13.1",
     "keyring>=25.7.0",
 ]
