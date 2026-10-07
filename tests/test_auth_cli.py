@@ -20,7 +20,6 @@ from skaldr.auth.store import (
     load_jira,
     load_notion,
     save_jira,
-    save_notion,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
 )
@@ -44,6 +43,7 @@ from tests.factories.auth_factory import (
     make_jira_credentials,
     make_notion_credentials,
     revoke_request_for,
+    seed_notion,
     summarise,
 )
 
@@ -507,7 +507,7 @@ def test_status_with_nobody_signed_in(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureFixture[str]) -> None:
-    save_notion(make_notion_credentials(workspace_name=None))
+    seed_notion(make_notion_credentials(workspace_name=None))
     save_jira(make_jira_credentials(display_name=None))
 
     assert auth_cli.main(["status"]) == 0
@@ -518,7 +518,7 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
 
 
 def test_status_prints_only_the_printable_part_of_stored_names(capsys: pytest.CaptureFixture[str]) -> None:
-    save_notion(make_notion_credentials(workspace_name="Example\x1b[2J Workspace"))
+    seed_notion(make_notion_credentials(workspace_name="Example\x1b[2J Workspace"))
     save_jira(make_jira_credentials(display_name="Example\x1b]0;title\x07 Reader"))
 
     assert auth_cli.main(["status"]) == 0
@@ -593,7 +593,7 @@ def test_status_without_environment_credentials_fails_when_the_keychain_is_unava
 def test_status_reports_notion_even_when_jira_is_broken(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
 
     assert auth_cli.main(["status"]) == 1
@@ -607,7 +607,7 @@ def test_status_reports_notion_even_when_jira_is_broken(
 def test_logout_notion_revokes_the_token_and_forgets_it(
     keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     seen: list[httpx2.Request] = []
 
     exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (200, {})}, seen))
@@ -691,8 +691,8 @@ OTHER_JIRA = make_jira_credentials(site="https://other.atlassian.net", display_n
 
 
 def test_status_lists_every_stored_sign_in(capsys: pytest.CaptureFixture[str]) -> None:
-    save_notion(make_notion_credentials())
-    save_notion(OTHER_NOTION)
+    seed_notion(make_notion_credentials())
+    seed_notion(OTHER_NOTION)
     save_jira(make_jira_credentials())
     save_jira(OTHER_JIRA)
 
@@ -804,8 +804,8 @@ def run_notion_sign_in(
 def test_auth_notion_for_a_workspace_already_stored_revokes_the_token_it_replaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    save_notion(make_notion_credentials(access_token="old-access", refresh_token="old-refresh"))
-    save_notion(OTHER_NOTION)
+    seed_notion(make_notion_credentials(access_token="old-access", refresh_token="old-refresh"))
+    seed_notion(OTHER_NOTION)
     seen: list[httpx2.Request] = []
 
     exit_code = run_notion_sign_in(monkeypatch, seen)
@@ -820,7 +820,7 @@ def test_auth_notion_for_a_workspace_already_stored_revokes_the_token_it_replace
 def test_auth_notion_for_another_workspace_keeps_the_first_and_revokes_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    save_notion(OTHER_NOTION)
+    seed_notion(OTHER_NOTION)
     seen: list[httpx2.Request] = []
 
     exit_code = run_notion_sign_in(monkeypatch, seen)
@@ -831,7 +831,7 @@ def test_auth_notion_for_another_workspace_keeps_the_first_and_revokes_nothing(
 def test_auth_notion_does_not_revoke_a_token_that_is_the_one_it_just_received(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    save_notion(SIGNED_IN_NOTION)
+    seed_notion(SIGNED_IN_NOTION)
     seen: list[httpx2.Request] = []
 
     exit_code = run_notion_sign_in(monkeypatch, seen)
@@ -845,15 +845,16 @@ def test_auth_notion_does_not_revoke_a_token_that_is_the_one_it_just_received(
         (
             make_notion_credentials(access_token="old-access"),
             400,
-            "warning: Notion did not revoke the token: HTTP 400. The token this sign-in replaced is "
-            "still valid; remove the old connection in Notion under Settings, Connections\n",
+            "warning: Notion did not revoke the token: HTTP 400. If the token this sign-in replaced was "
+            "not already revoked, it is still valid; remove the old connection in Notion under Settings, "
+            "Connections\n",
         ),
         (
             make_notion_credentials(access_token="old-access", client_id=None),
             200,
-            "warning: The Notion token cannot be revoked without the client ID and secret. The token this "
-            "sign-in replaced is still valid; remove the old connection in Notion under Settings, "
-            "Connections\n",
+            "warning: The Notion token cannot be revoked without the client ID and secret. If the token "
+            "this sign-in replaced was not already revoked, it is still valid; remove the old connection "
+            "in Notion under Settings, Connections\n",
         ),
     ],
     ids=["notion refuses", "the old entry has no client"],
@@ -865,7 +866,7 @@ def test_auth_notion_keeps_the_new_sign_in_and_warns_when_the_replaced_token_can
     revoke_status: int,
     warning: str,
 ) -> None:
-    save_notion(stored)
+    seed_notion(stored)
 
     exit_code = run_notion_sign_in(monkeypatch, [], revoke_status=revoke_status)
 
@@ -930,8 +931,8 @@ def test_auth_notion_warns_that_it_could_not_read_the_entry_it_replaces(
 
 
 def test_logout_notion_with_several_workspaces_asks_which(capsys: pytest.CaptureFixture[str]) -> None:
-    save_notion(make_notion_credentials())
-    save_notion(OTHER_NOTION)
+    seed_notion(make_notion_credentials())
+    seed_notion(OTHER_NOTION)
     seen: list[httpx2.Request] = []
 
     exit_code = auth_cli.main(["logout", "notion"], transport=fake_api({}, seen))
@@ -953,8 +954,8 @@ def test_logout_notion_with_several_workspaces_asks_which(capsys: pytest.Capture
 def test_logout_notion_with_a_workspace_revokes_and_removes_only_that_one(
     capsys: pytest.CaptureFixture[str], selector: str
 ) -> None:
-    save_notion(make_notion_credentials())
-    save_notion(OTHER_NOTION)
+    seed_notion(make_notion_credentials())
+    seed_notion(OTHER_NOTION)
     seen: list[httpx2.Request] = []
 
     exit_code = auth_cli.main(
@@ -972,7 +973,7 @@ def test_logout_notion_with_a_workspace_revokes_and_removes_only_that_one(
 def test_logout_notion_keeps_a_sign_in_stored_while_the_old_token_was_being_revoked(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    save_notion(make_notion_credentials(access_token="old-access"))
+    seed_notion(make_notion_credentials(access_token="old-access"))
     newer = make_notion_credentials(access_token="newer-access")
     real_revoke = auth_cli.revoke_notion_token
 
@@ -980,7 +981,7 @@ def test_logout_notion_keeps_a_sign_in_stored_while_the_old_token_was_being_revo
         credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
     ) -> None:
         real_revoke(credentials, transport=transport)
-        save_notion(newer)
+        seed_notion(newer)
 
     monkeypatch.setattr(auth_cli, "revoke_notion_token", revoke_then_let_another_sign_in_land)
     seen: list[httpx2.Request] = []
@@ -1021,7 +1022,7 @@ def test_logout_jira_keeps_a_sign_in_stored_after_it_was_read(
 def test_logout_notion_for_a_workspace_nobody_signed_in_to_says_so(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
 
     assert auth_cli.main(["logout", "notion", "unknown-id"]) == 0
     assert capsys.readouterr().out == "Not signed in to Notion workspace unknown-id.\n"

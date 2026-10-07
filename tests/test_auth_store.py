@@ -22,7 +22,6 @@ from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
     SignIn,
-    StoredEntry,
     entry_for_workspace,
     find_jira,
     find_notion,
@@ -35,8 +34,6 @@ from skaldr.auth.store import (
     require_jira,
     require_notion,
     save_jira,
-    save_notion,
-    save_notion_to,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
 )
@@ -55,11 +52,14 @@ from tests.factories.auth_factory import (
     PlaintextKeyringSubclass,
     ReadRecordingKeyring,
     SlowKeyring,
+    SlowSaveKeyring,
     assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
     legacy_entry_json,
     make_jira_credentials,
     make_notion_credentials,
+    seed_notion,
+    stored_entry,
 )
 
 LEGACY_JIRA_UNREADABLE = (
@@ -68,7 +68,7 @@ LEGACY_JIRA_UNREADABLE = (
 )
 REAL_LOCK_FILE = store.lock_file
 WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain.\n"
-AN_ENTRY = StoredEntry[JiraCredentials]("jira", "jira:https://example.atlassian.net", None)
+AN_ENTRY = stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())
 WAITING_FOR_THE_KEYCHAIN = (
     "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
     "unlock it or answer there.\n"
@@ -80,7 +80,7 @@ def index_of(*, jira: list[str] | None = None, notion: list[str] | None = None) 
 
 
 def test_saved_notion_credentials_load_back_from_the_keychain(keychain: InMemoryKeyring) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
 
     assert load_notion() == SignIn(make_notion_credentials(), "keychain")
     assert keychain.entries == {
@@ -108,8 +108,8 @@ def test_a_second_jira_site_is_kept_beside_the_first(keychain: InMemoryKeyring) 
     save_jira(other)
 
     assert stored_jira_sign_ins() == [
-        StoredEntry("jira", "jira:https://example.atlassian.net", make_jira_credentials()),
-        StoredEntry("jira", "jira:https://other.atlassian.net", other),
+        stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials()),
+        stored_entry("jira", "jira:https://other.atlassian.net", other),
     ]
     assert keychain.entries[("skaldr", "index")] == index_of(
         jira=["jira:https://example.atlassian.net", "jira:https://other.atlassian.net"]
@@ -131,12 +131,12 @@ def test_a_second_notion_workspace_is_kept_beside_the_first() -> None:
     other = make_notion_credentials(
         workspace_id="22222222-2222-4222-8222-222222222222", workspace_name="Other Workspace"
     )
-    save_notion(make_notion_credentials())
-    save_notion(other)
+    seed_notion(make_notion_credentials())
+    seed_notion(other)
 
     assert stored_notion_sign_ins() == [
-        StoredEntry("notion", "notion:11111111-1111-4111-8111-111111111111", make_notion_credentials()),
-        StoredEntry("notion", "notion:22222222-2222-4222-8222-222222222222", other),
+        stored_entry("notion", "notion:11111111-1111-4111-8111-111111111111", make_notion_credentials()),
+        stored_entry("notion", "notion:22222222-2222-4222-8222-222222222222", other),
     ]
 
 
@@ -145,10 +145,10 @@ def test_saving_a_notion_workspace_again_replaces_only_that_workspace() -> None:
         workspace_id="22222222-2222-4222-8222-222222222222", workspace_name="Other Workspace"
     )
     replacement = make_notion_credentials(access_token="replacement-access")
-    save_notion(make_notion_credentials())
-    save_notion(other)
+    seed_notion(make_notion_credentials())
+    seed_notion(other)
 
-    save_notion(replacement)
+    seed_notion(replacement)
 
     assert [entry.credentials for entry in stored_notion_sign_ins()] == [replacement, other]
 
@@ -238,7 +238,7 @@ def test_the_jira_environment_answers_for_its_own_site_and_the_keychain_for_the_
 
 
 def test_the_only_stored_notion_sign_in_is_found_without_naming_a_workspace() -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
 
     assert load_notion() == SignIn(make_notion_credentials(), "keychain")
 
@@ -247,8 +247,8 @@ def test_a_notion_workspace_is_found_by_its_id_or_its_name() -> None:
     other = make_notion_credentials(
         workspace_id="22222222-2222-4222-8222-222222222222", workspace_name="Other Workspace"
     )
-    save_notion(make_notion_credentials())
-    save_notion(other)
+    seed_notion(make_notion_credentials())
+    seed_notion(other)
 
     assert (
         load_notion("22222222-2222-4222-8222-222222222222"),
@@ -262,14 +262,14 @@ def test_a_notion_workspace_is_found_by_its_id_or_its_name() -> None:
 
 
 def test_a_notion_workspace_nobody_signed_in_to_finds_nothing() -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
 
     assert load_notion("unknown-id") is None
 
 
 def test_several_notion_workspaces_without_a_named_workspace_are_refused_with_the_choices() -> None:
-    save_notion(make_notion_credentials())
-    save_notion(
+    seed_notion(make_notion_credentials())
+    seed_notion(
         make_notion_credentials(workspace_id="22222222-2222-4222-8222-222222222222", workspace_name=None)
     )
 
@@ -283,8 +283,8 @@ def test_several_notion_workspaces_without_a_named_workspace_are_refused_with_th
 
 
 def test_two_workspaces_with_one_name_are_refused_when_the_name_is_the_selector() -> None:
-    save_notion(make_notion_credentials())
-    save_notion(make_notion_credentials(workspace_id="22222222-2222-4222-8222-222222222222"))
+    seed_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials(workspace_id="22222222-2222-4222-8222-222222222222"))
 
     with pytest.raises(AuthError) as raised:
         load_notion("Example Workspace")
@@ -298,7 +298,7 @@ def test_two_workspaces_with_one_name_are_refused_when_the_name_is_the_selector(
 def test_a_notion_access_token_in_the_environment_is_skipped_when_a_workspace_is_named(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", "env-access")
 
     assert load_notion("11111111-1111-4111-8111-111111111111") == SignIn(
@@ -333,7 +333,7 @@ def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
 
 def test_requiring_a_sign_in_returns_the_matching_one() -> None:
     save_jira(make_jira_credentials())
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
 
     assert (
         require_jira("example.atlassian.net"),
@@ -413,9 +413,9 @@ def test_a_different_legacy_notion_token_is_kept_reachable_beside_the_unidentifi
         stored_notion_sign_ins()
 
     assert stored_notion_sign_ins() == [
-        StoredEntry("notion", "notion:unidentified", first),
-        StoredEntry("notion", "notion:unidentified-2", second),
-        StoredEntry("notion", "notion:unidentified-3", third),
+        stored_entry("notion", "notion:unidentified", first),
+        stored_entry("notion", "notion:unidentified-2", second),
+        stored_entry("notion", "notion:unidentified-3", third),
     ]
     assert ("skaldr", "notion") not in keychain.entries
 
@@ -495,7 +495,7 @@ def test_a_sign_in_missing_from_the_index_is_found_by_its_name_and_listed_again(
 ) -> None:
     hex_workspace = make_notion_credentials(workspace_id=HEX_WORKSPACE_ID)
     save_jira(make_jira_credentials())
-    save_notion(hex_workspace)
+    seed_notion(hex_workspace)
     del keychain.entries[("skaldr", "index")]
 
     assert (
@@ -525,7 +525,7 @@ def test_an_unreadable_legacy_entry_stays_where_it_is_and_is_listed_as_unreadabl
 ) -> None:
     keychain.entries[("skaldr", "jira")] = "not json"
 
-    assert stored_jira_sign_ins() == [StoredEntry("jira", "jira", None)]
+    assert stored_jira_sign_ins() == [stored_entry("jira", "jira", None)]
     assert keychain.entries == {("skaldr", "jira"): "not json"}
 
 
@@ -535,8 +535,8 @@ def test_an_unreadable_legacy_entry_is_found_with_the_selector_legacy(keychain: 
     save_jira(make_jira_credentials())
 
     assert (find_jira("legacy"), find_notion("legacy")) == (
-        StoredEntry("jira", "jira", None),
-        StoredEntry("notion", "notion", None),
+        stored_entry("jira", "jira", None),
+        stored_entry("notion", "notion", None),
     )
 
 
@@ -579,8 +579,8 @@ def test_a_notion_sign_in_is_replaced_only_by_the_workspace_id_it_names() -> Non
     legacy = make_notion_credentials(workspace_id=None, access_token="legacy-access")
     other = make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace")
     entries = [
-        StoredEntry("notion", "notion:unidentified", legacy),
-        StoredEntry("notion", f"notion:{OTHER_WORKSPACE_ID}", other),
+        stored_entry("notion", "notion:unidentified", legacy),
+        stored_entry("notion", f"notion:{OTHER_WORKSPACE_ID}", other),
     ]
 
     assert (
@@ -599,7 +599,7 @@ def test_forgetting_a_sign_in_deletes_its_entry_and_leaves_the_others(keychain: 
     removed = forget(first)
 
     assert removed is True
-    assert stored_jira_sign_ins() == [StoredEntry("jira", "jira:https://other.atlassian.net", other)]
+    assert stored_jira_sign_ins() == [stored_entry("jira", "jira:https://other.atlassian.net", other)]
     assert keychain.entries[("skaldr", "index")] == index_of(jira=["jira:https://other.atlassian.net"])
 
 
@@ -615,10 +615,10 @@ def test_forgetting_an_entry_that_is_already_gone_is_not_an_error(keychain: InMe
 def test_forgetting_an_entry_whose_stored_value_changed_since_it_was_read_keeps_the_new_value(
     keychain: InMemoryKeyring,
 ) -> None:
-    save_notion(make_notion_credentials(access_token="old-access"))
+    seed_notion(make_notion_credentials(access_token="old-access"))
     [read_before_the_sign_in] = stored_notion_sign_ins()
     newer = make_notion_credentials(access_token="newer-access")
-    save_notion(newer)
+    seed_notion(newer)
 
     removed = forget(read_before_the_sign_in)
 
@@ -649,45 +649,45 @@ def test_saving_notion_credentials_without_a_workspace_id_is_refused_so_no_other
     keychain: InMemoryKeyring,
 ) -> None:
     with pytest.raises(AuthError) as raised:
-        save_notion(make_notion_credentials(workspace_id=None))
+        seed_notion(make_notion_credentials(workspace_id=None))
 
     assert (str(raised.value), keychain.entries) == (
-        "A Notion sign-in without a workspace id can only be saved back to the entry it came from",
+        "A Notion sign-in without a workspace id cannot be saved",
         {},
     )
 
 
-def test_a_refreshed_token_is_saved_back_to_the_entry_it_came_from(keychain: InMemoryKeyring) -> None:
-    first = make_notion_credentials(workspace_id=None, workspace_name="A", access_token="first-access")
-    second = make_notion_credentials(workspace_id=None, workspace_name="B", access_token="second-access")
-    for legacy in (first, second):
-        keychain.entries[("skaldr", "notion")] = legacy_entry_json(legacy)
-        stored_notion_sign_ins()
-    [_, second_entry] = stored_notion_sign_ins()
-    refreshed = second.model_copy(update={"access_token": "refreshed-access"})
-
-    save_notion_to(second_entry, refreshed)
-
-    assert [entry.credentials for entry in stored_notion_sign_ins()] == [first, refreshed]
-
-
-def test_a_refreshed_token_is_refused_by_an_entry_for_another_workspace() -> None:
-    save_notion(make_notion_credentials())
-    [entry] = stored_notion_sign_ins()
-
-    with pytest.raises(AuthError) as raised:
-        save_notion_to(entry, make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID))
-
-    assert (
-        str(raised.value) == "The refreshed Notion sign-in is not for the workspace of the entry it replaces"
+def test_the_test_session_holds_an_in_memory_keyring_and_never_the_real_keychain() -> None:
+    assert (type(keyring.get_keyring()), os.environ["PYTHON_KEYRING_BACKEND"]) == (
+        InMemoryKeyring,
+        "keyring.backends.null.Keyring",
     )
 
 
-def test_a_refreshed_token_is_refused_by_a_legacy_entry_slot() -> None:
-    with pytest.raises(AuthError) as raised:
-        save_notion_to(StoredEntry("notion", "notion", None), make_notion_credentials())
+def test_the_remaining_steps_of_a_timed_out_operation_land_in_the_keychain_it_started_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
+    started_with = SlowSaveKeyring()
+    keyring.set_keyring(started_with)
 
-    assert str(raised.value) == "A legacy keychain entry cannot be saved to; run `skaldr auth notion` again"
+    with pytest.raises(AuthError, match=r"^The system keychain did not answer within 0\.2 seconds"):
+        save_jira(make_jira_credentials())
+    swapped_in = InMemoryKeyring()
+    keyring.set_keyring(swapped_in)
+    started_with.released.set()
+    for thread in threading.enumerate():
+        if thread.name == "skaldr-keychain":
+            thread.join(timeout=5)
+
+    assert (started_with.entries, swapped_in.entries) == (
+        {
+            ("skaldr", "jira:https://example.atlassian.net"): make_jira_credentials().model_dump_json(),
+            ("skaldr", "index"): index_of(jira=["jira:https://example.atlassian.net"]),
+        },
+        {},
+    )
 
 
 def test_the_repr_of_credentials_and_the_entries_that_hold_them_shows_no_secret() -> None:
@@ -703,8 +703,8 @@ def test_the_repr_of_credentials_and_the_entries_that_hold_them_shows_no_secret(
                 jira,
                 SignIn(notion, "keychain"),
                 SignIn(jira, "keychain"),
-                StoredEntry("notion", f"notion:{WORKSPACE_ID}", notion),
-                StoredEntry("jira", "jira:https://example.atlassian.net", jira),
+                stored_entry("notion", f"notion:{WORKSPACE_ID}", notion),
+                stored_entry("jira", "jira:https://example.atlassian.net", jira),
             ),
         )
     )
@@ -785,7 +785,7 @@ def test_nothing_saved_loads_as_signed_out() -> None:
 def test_a_notion_access_token_in_the_environment_wins_over_the_keychain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", "env-access")
     monkeypatch.setenv("NOTION_CLIENT_ID", "env-client")
     monkeypatch.setenv("NOTION_CLIENT_SECRET", "env-secret")
@@ -841,7 +841,7 @@ def test_a_notion_access_token_with_half_a_client_names_the_missing_variable(
 
 
 def test_a_blank_notion_access_token_falls_back_to_the_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     monkeypatch.setenv("NOTION_ACCESS_TOKEN", "  ")
     monkeypatch.setenv("NOTION_CLIENT_ID", "env-client")
 
@@ -960,7 +960,7 @@ def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_tr
 @pytest.mark.parametrize(
     "operation",
     [
-        lambda: save_notion(make_notion_credentials()),
+        lambda: seed_notion(make_notion_credentials()),
         load_jira,
         lambda: forget(AN_ENTRY),
         refuse_an_unusable_keychain,
@@ -991,7 +991,7 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
 @pytest.mark.parametrize(
     "operation",
     [
-        pytest.param(lambda: save_notion(make_notion_credentials()), id="save"),
+        pytest.param(lambda: seed_notion(make_notion_credentials()), id="save"),
         pytest.param(load_jira, id="load"),
         pytest.param(lambda: forget(AN_ENTRY), id="forget"),
         pytest.param(refuse_an_unusable_keychain, id="the check before sign-in"),
@@ -1018,7 +1018,7 @@ def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
 
 @pytest.mark.usefixtures("keychain")
 def test_a_prompt_keychain_prints_nothing(capsys: pytest.CaptureFixture[str]) -> None:
-    save_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials())
     load_notion()
 
     assert capsys.readouterr().err == ""
@@ -1091,7 +1091,7 @@ def test_a_refused_plaintext_keyring_receives_nothing() -> None:
     keyring.set_keyring(plaintext)
 
     with pytest.raises(AuthError) as raised:
-        save_notion(make_notion_credentials())
+        seed_notion(make_notion_credentials())
 
     assert (str(raised.value), plaintext.entries) == (
         insecure_keyring_refusal("keyrings.alt.file.PlaintextKeyring"),

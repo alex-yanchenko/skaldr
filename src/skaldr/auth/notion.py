@@ -48,15 +48,17 @@ _CALLBACK_PATH = "/callback"
 _IDLE_CONNECTION_TIMEOUT_SECONDS = 5.0
 _BASIC_AUTH_WITH_JSON_BODY = "client_secret_basic_json"
 _OAUTH_ERROR_CODE = re.compile(r"[a-z_]+")
+_WHICH_TOKEN_IS_STORED = (
+    "run `skaldr auth status` to see which sign-in is stored, then remove the other connection in Notion "
+    "under Settings, Connections"
+)
 _NOT_REVOKED_AFTER_AN_INTERRUPT = (
-    "the keychain save may still complete, so the token Notion issued was not revoked; run "
-    "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
-    "Settings, Connections if it is not"
+    "the keychain save may still complete, so neither the token Notion issued nor the token it may "
+    f"replace was revoked; {_WHICH_TOKEN_IS_STORED}"
 )
 _NOT_REVOKED_AFTER_A_TIMEOUT = (
-    "The token Notion issued was not revoked, because the save may still complete; run "
-    "`skaldr auth status` to see whether it is stored, and remove the connection in Notion under "
-    "Settings, Connections if it is not"
+    "Neither the token Notion issued nor the token it may replace was revoked, because the save may "
+    f"still complete; {_WHICH_TOKEN_IS_STORED}"
 )
 _UNUSABLE_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
 OLDER_SIGN_IN_NOTICE = (
@@ -209,8 +211,8 @@ def _revoke_replaced_token(
         revoke_notion_token(old, transport=transport)
     except AuthError as exc:
         return (
-            f"{exc}. The token this sign-in replaced is still valid; remove the old connection in Notion "
-            "under Settings, Connections"
+            f"{exc}. If the token this sign-in replaced was not already revoked, it is still valid; "
+            "remove the old connection in Notion under Settings, Connections"
         )
     return None
 

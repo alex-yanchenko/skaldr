@@ -133,7 +133,7 @@ class StoredEntry(Generic[CredentialsT]):
     service: Service
     username: str
     credentials: CredentialsT | None
-    raw: str | None = field(default=None, compare=False, repr=False)
+    raw: str = field(compare=False, repr=False)
 
     @property
     def identifier(self) -> str | None:
@@ -163,20 +163,17 @@ class NotionReplacement:
     older_sign_in_without_a_workspace_id: bool
 
 
-def save_notion(credentials: NotionCredentials) -> None:
-    _refuse_credentials_without_a_workspace_id(credentials)
-    _save(_NOTION, credentials)
-
-
 def save_notion_returning_the_replaced(credentials: NotionCredentials) -> NotionReplacement:
-    _refuse_credentials_without_a_workspace_id(credentials)
+    if credentials.workspace_id is None:
+        raise AuthError("A Notion sign-in without a workspace id cannot be saved")
     _refuse_an_insecure_keyring()
+    workspace = str(credentials.workspace_id)
     username = _username(_NOTION, credentials)
 
     def look_up_then_write() -> NotionReplacement:
         entries = _entries(_NOTION)
         replacement = NotionReplacement(
-            entry_for_workspace(entries, credentials.workspace_id),
+            entry_for_workspace(entries, credentials.workspace_id) or _entry_named(_NOTION, workspace),
             any(
                 entry.credentials is not None and entry.credentials.workspace_id is None for entry in entries
             ),
@@ -185,28 +182,6 @@ def save_notion_returning_the_replaced(credentials: NotionCredentials) -> Notion
         return replacement
 
     return _in_the_keychain(look_up_then_write)
-
-
-def save_notion_to(entry: StoredEntry[NotionCredentials], credentials: NotionCredentials) -> None:
-    if entry.identifier is None:
-        raise AuthError("A legacy keychain entry cannot be saved to; run `skaldr auth notion` again")
-    if not _is_for_the_workspace_of(entry.identifier, credentials):
-        raise AuthError("The refreshed Notion sign-in is not for the workspace of the entry it replaces")
-    _refuse_an_insecure_keyring()
-    _in_the_keychain(lambda: _write(_NOTION, entry.username, credentials))
-
-
-def _refuse_credentials_without_a_workspace_id(credentials: NotionCredentials) -> None:
-    if credentials.workspace_id is None:
-        raise AuthError(
-            "A Notion sign-in without a workspace id can only be saved back to the entry it came from"
-        )
-
-
-def _is_for_the_workspace_of(identifier: str, credentials: NotionCredentials) -> bool:
-    if identifier.startswith(_UNIDENTIFIED_WORKSPACE):
-        return credentials.workspace_id is None
-    return str(credentials.workspace_id) == identifier
 
 
 def save_jira(credentials: JiraCredentials) -> None:
@@ -295,7 +270,7 @@ def notion_client_from_environment() -> tuple[str | None, str | None]:
 def forget(entry: AnyStoredEntry) -> bool:
     def delete_unless_changed_then_unlist() -> bool:
         stored = _get(entry.username)
-        if stored is not None and entry.raw is not None and stored != entry.raw:
+        if stored is not None and stored != entry.raw:
             return False
         _delete(entry.username)
         _unlist(entry.service, entry.username)
@@ -369,18 +344,26 @@ def _username(kind: _Kind[CredentialsT], credentials: CredentialsT) -> str:
     return f"{kind.service}:{kind.identify(credentials)}"
 
 
+_operation = threading.local()
+
+
+def _operation_backend() -> KeyringBackend:
+    return cast("KeyringBackend", _operation.backend)
+
+
 def _get(username: str) -> str | None:
-    return keyring.get_password(KEYCHAIN_SERVICE, username)
+    return _operation_backend().get_password(KEYCHAIN_SERVICE, username)
 
 
 def _set(username: str, secret: str) -> None:
-    _refuse_an_insecure_backend(keyring.get_keyring())
-    keyring.set_password(KEYCHAIN_SERVICE, username, secret)
+    backend = _operation_backend()
+    _refuse_an_insecure_backend(backend)
+    backend.set_password(KEYCHAIN_SERVICE, username, secret)  # pyright: ignore[reportUnknownMemberType]
 
 
 def _delete(username: str) -> None:
     try:
-        keyring.delete_password(KEYCHAIN_SERVICE, username)
+        _operation_backend().delete_password(KEYCHAIN_SERVICE, username)
     except PasswordDeleteError:
         return
 
@@ -554,7 +537,7 @@ class _LockWait:
 _holding_the_lock = threading.local()
 
 
-def _under_the_lock(operation: Callable[[], Answer], wait: _LockWait) -> Answer:
+def _under_the_lock(operation: Callable[[], Answer], wait: _LockWait, backend: KeyringBackend) -> Answer:
     try:
         lock = FileLock(lock_file())
         lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
@@ -567,6 +550,7 @@ def _under_the_lock(operation: Callable[[], Answer], wait: _LockWait) -> Answer:
         raise AuthError(f"skaldr cannot take its keychain lock in {state_directory()}: {exc}") from exc
     wait.waiting = False
     _holding_the_lock.held = True
+    _operation.backend = backend
     try:
         return operation()
     finally:
@@ -579,7 +563,8 @@ def _in_the_keychain(operation: Callable[[], Answer]) -> Answer:
         return operation()
     wait = _LockWait()
     with _keychain_errors_as_auth_errors():
-        return _from_the_keychain(lambda: _under_the_lock(operation, wait), lambda: wait.waiting)
+        backend = _from_the_keychain(keyring.get_keyring)
+        return _from_the_keychain(lambda: _under_the_lock(operation, wait, backend), lambda: wait.waiting)
 
 
 def refuse_an_unusable_keychain() -> None:

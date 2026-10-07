@@ -15,7 +15,14 @@ from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
-from skaldr.auth.store import JiraCredentials, NotionCredentials
+from skaldr.auth.store import (
+    CredentialsT,
+    JiraCredentials,
+    NotionCredentials,
+    StoredEntry,
+    save_notion_returning_the_replaced,
+)
+from skaldr.services import Service
 
 WORKSPACE_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
@@ -369,6 +376,28 @@ def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
 
 def legacy_entry_json(credentials: NotionCredentials | JiraCredentials) -> str:
     return credentials.model_dump_json(exclude={"workspace_id"})
+
+
+def stored_entry(
+    service: Service, username: str, credentials: CredentialsT | None
+) -> StoredEntry[CredentialsT]:
+    raw = "not json" if credentials is None else credentials.model_dump_json()
+    return StoredEntry(service, username, credentials, raw)
+
+
+def seed_notion(credentials: NotionCredentials) -> None:
+    save_notion_returning_the_replaced(credentials)
+
+
+class SlowSaveKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.released = threading.Event()
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.released.wait(5)
+        self.entries[(service, username)] = password
 
 
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:

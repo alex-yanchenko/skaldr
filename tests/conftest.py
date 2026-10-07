@@ -1,3 +1,7 @@
+import os
+
+os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
+
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -11,17 +15,36 @@ from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
 from tests.factories.auth_factory import InMemoryKeyring, PlaintextKeyring
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+KEYCHAIN_THREAD_NAME = "skaldr-keychain"
+KEYCHAIN_THREAD_JOIN_SECONDS = 10.0
+
+keyring.set_keyring(InMemoryKeyring())
+
+
+def _refuse_a_keyring_that_is_not_in_memory(when: str) -> None:
+    backend = keyring.get_keyring()
+    if not isinstance(backend, InMemoryKeyring):
+        pytest.exit(f"{when}: the test session has {type(backend).__module__}.{type(backend).__qualname__}")
+
+
+def _finish_keychain_threads() -> list[str]:
+    running = [thread for thread in threading.enumerate() if thread.name == KEYCHAIN_THREAD_NAME]
+    for thread in running:
+        thread.join(timeout=KEYCHAIN_THREAD_JOIN_SECONDS)
+    return [thread.name for thread in running if thread.is_alive()]
 
 
 @pytest.fixture(autouse=True)
 def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
     for name in (*NOTION_ENVIRONMENT, *JIRA_ENVIRONMENT):
         monkeypatch.delenv(name, raising=False)
-    previous = keyring.get_keyring()
+    _refuse_a_keyring_that_is_not_in_memory("before the test")
     in_memory = InMemoryKeyring()
     keyring.set_keyring(in_memory)
     yield in_memory
-    keyring.set_keyring(previous)
+    unfinished = _finish_keychain_threads()
+    keyring.set_keyring(InMemoryKeyring())
+    assert unfinished == []
 
 
 @pytest.fixture(autouse=True)
