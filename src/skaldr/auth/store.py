@@ -19,6 +19,7 @@ from pydantic_core import PydanticCustomError
 
 from skaldr.auth import CaughtWithoutChaining, printable_only
 from skaldr.errors import AuthError
+from skaldr.services import Service
 
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
@@ -36,7 +37,6 @@ KEYCHAIN_WAIT_NOTICE = (
 LOCK_WAIT_NOTICE = "Waiting for another skaldr command to finish with the keychain."
 Answer = TypeVar("Answer")
 
-Service = Literal["notion", "jira"]
 Source = Literal["keychain", "environment"]
 
 _NOTION_ACCESS_TOKEN = "NOTION_ACCESS_TOKEN"

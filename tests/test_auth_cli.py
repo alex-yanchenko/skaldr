@@ -15,7 +15,6 @@ from skaldr.auth import cli as auth_cli
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
-    Service,
     SignIn,
     StoredEntry,
     load_jira,
@@ -26,6 +25,7 @@ from skaldr.auth.store import (
     stored_notion_sign_ins,
 )
 from skaldr.cli import main
+from skaldr.services import Service
 from tests.factories.auth_factory import (
     MYSELF,
     OTHER_WORKSPACE_ID,

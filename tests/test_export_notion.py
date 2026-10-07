@@ -265,6 +265,20 @@ def test_an_attribute_span_is_a_notion_color_span(text: str, notion: str) -> Non
     assert notion_inline(parse_rich(text)) == notion
 
 
+def test_emphasis_beside_a_notion_color_span_keeps_its_markers_because_the_span_tag_closes_it() -> None:
+    body = "**(bold)**[t]{tone=danger} and [a]{tone=info}*(x)* y"
+
+    assert notion_of([{"type": "text", "body": body}]) == (
+        '**(bold)**<span color="red">t</span> and <span color="blue">a</span>*(x)* y\n'
+    )
+
+
+def test_a_notion_callout_with_an_empty_first_paragraph_keeps_its_list_a_list() -> None:
+    callout = Callout("info", (Paragraph(()), ListNode("bullet", (ListEntry((Plain("first"),)),))))
+
+    assert render_notion([callout]) == '<callout icon="💡" color="blue_bg">\n\t- first\n</callout>\n'
+
+
 def test_inline_math_is_notion_inline_math_while_prose_dollars_stay_escaped() -> None:
     assert notion_inline(parse_rich("costs $5, so $`x_i < 2`$ holds")) == "costs \\$5, so $`x_i < 2`$ holds"
 
