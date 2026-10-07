@@ -3,8 +3,16 @@ from typing import Any
 
 import pytest
 
+from skaldr.errors import RegionNotFoundError
 from skaldr.export.inline import plain
-from skaldr.export.lower import assemble_page, lower_region, lower_regions, lower_report, lowering_for
+from skaldr.export.lower import (
+    assemble_page,
+    lower_region,
+    lower_regions,
+    lower_report,
+    lowering_for,
+    region_for_section,
+)
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import render_notion
 from skaldr.export.runs import Chip
@@ -133,6 +141,51 @@ def test_one_top_level_section_lowers_on_its_own() -> None:
     lowering = lowering_for(_field_guide())
 
     assert (lower_region(lowering, 1), lower_region(lowering, 2)) == (SET_UP, FIRST_WEEK)
+
+
+@pytest.mark.parametrize("source_index", [5, -1], ids=["past-the-end", "negative"])
+def test_a_region_index_outside_the_top_level_blocks_is_refused(source_index: int) -> None:
+    with pytest.raises(RegionNotFoundError) as refusal:
+        lower_region(lowering_for(_field_guide()), source_index)
+
+    assert str(refusal.value) == f"the report has no top-level block {source_index}; its blocks are 0 to 4"
+
+
+def test_a_section_id_finds_its_region() -> None:
+    regions = (INTRO, SET_UP, FIRST_WEEK, WRAP_UP, CLOSING)
+
+    assert region_for_section(regions, "st1") == SET_UP
+
+
+def test_a_section_id_with_no_region_is_refused() -> None:
+    with pytest.raises(RegionNotFoundError) as refusal:
+        region_for_section((INTRO, SET_UP), "st2")
+
+    assert str(refusal.value) == "no top-level section has the id 'st2'"
+
+
+def test_only_a_top_level_section_id_is_a_section_id() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {"type": "heading", "text": "Costs", "id": "costs"},
+                make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}], id="spend"),
+            ]
+        )
+    )
+
+    assert lower_regions(lowering_for(report)) == (
+        BlockRegion(0, (Heading(2, plain("Costs"), "costs"),), anchor="costs"),
+        replace(TABLE, source_index=1),
+    )
+
+
+def test_assembling_keeps_an_empty_region_and_drops_an_empty_page_part() -> None:
+    lowering = lowering_for(parse_report(make_report()))
+
+    assert assemble_page([BlockRegion(0, ())], lowering) == LoweredDocument(
+        "Test Report", (BlockRegion(0, ()),)
+    )
 
 
 def test_the_page_puts_the_header_before_the_regions_and_the_footer_after() -> None:

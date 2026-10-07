@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from typing_extensions import assert_never
 
 from skaldr import compute, models
+from skaldr.errors import RegionNotFoundError
 from skaldr.export.apportion import apportioned
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, lowering_for, spaced, toned
@@ -67,8 +68,20 @@ def lower_regions(lowering: Lowering) -> tuple[BlockRegion, ...]:
     return tuple(lower_region(lowering, index) for index in range(len(lowering.report.blocks)))
 
 
+def region_for_section(regions: Sequence[BlockRegion], section_id: str) -> BlockRegion:
+    found = next((region for region in regions if region.section_id == section_id), None)
+    if found is None:
+        raise RegionNotFoundError(f"no top-level section has the id '{section_id}'")
+    return found
+
+
 def lower_region(lowering: Lowering, source_index: int) -> BlockRegion:
-    block = lowering.report.blocks[source_index]
+    blocks = lowering.report.blocks
+    if source_index not in range(len(blocks)):
+        raise RegionNotFoundError(
+            f"the report has no top-level block {source_index}; its blocks are 0 to {len(blocks) - 1}"
+        )
+    block = blocks[source_index]
     return BlockRegion(
         source_index,
         tuple(_lower_block(block, lowering, depth=0)),
@@ -81,8 +94,8 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
     report = lowering.report
     header = PagePart("header", (*_subtitle(report), *_table_of_contents(report, lowering)))
     legend = PagePart("legend", tuple(_legend(lowering)))
-    footer = PagePart("footer", _footer(report, lowering))
-    page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), footer]
+    closing = PagePart("footer", _footer(report, lowering))
+    page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
     return LoweredDocument(
         report.meta.title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
     )
