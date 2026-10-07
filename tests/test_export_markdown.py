@@ -2,9 +2,12 @@ from pathlib import Path
 from typing import Any, get_args
 
 import pytest
+from markdown_it import MarkdownIt
 
 from skaldr.errors import ReportError
 from skaldr.export import ExportResult, export_markdown
+from skaldr.export import markdown as markdown_module
+from skaldr.export.flanking import written_emphasis
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
 from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
 from skaldr.export.runs import (
@@ -23,9 +26,11 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
+    Columns,
     Diagram,
     Graph,
     GraphNode,
+    GridColumn,
     Heading,
     ListEntry,
     ListKind,
@@ -721,6 +726,348 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
     assert markdown_of(blocks) == "- a\n\n* b\n\n- [ ] c\n\n1. d\n\n1) e\n"
 
 
+def _bullets(*texts: str) -> ListNode:
+    return ListNode("bullet", tuple(ListEntry((Plain(text),)) for text in texts))
+
+
+def _para(text: str) -> Paragraph:
+    return Paragraph((Plain(text),))
+
+
+def _columns(*cells: tuple[Node, ...]) -> Columns:
+    return Columns(tuple(GridColumn(1, cell) for cell in cells))
+
+
+@pytest.mark.parametrize(
+    ("nodes", "markdown"),
+    [
+        pytest.param(
+            [_bullets("a", "b"), _columns((_bullets("c", "d"),), (_para("t"),))],
+            "- a\n- b\n\n* c\n* d\n\nt\n",
+            id="list-then-a-grid-opening-with-a-list",
+        ),
+        pytest.param(
+            [_columns((_para("t"),), (_bullets("c"),)), _bullets("d")],
+            "t\n\n- c\n\n* d\n",
+            id="grid-ending-with-a-list-then-a-list",
+        ),
+        pytest.param(
+            [_columns((_bullets("a"),)), _columns((_bullets("b"),)), _bullets("c")],
+            "- a\n\n* b\n\n- c\n",
+            id="a-chain-of-lists-through-grids",
+        ),
+        pytest.param(
+            [_bullets("a"), _columns((_para(""),)), _bullets("b")],
+            "- a\n\n* b\n",
+            id="a-grid-with-nothing-to-say-between-two-lists",
+        ),
+        pytest.param(
+            [
+                Tabs((Tab((Plain("A"),), (_para("a"),)), Tab((Plain("B"),), (_bullets("x"),)))),
+                _bullets("z"),
+            ],
+            "**A**\n\na\n\n**B**\n\n- x\n\n* z\n",
+            id="tabs-ending-with-a-list-then-a-list",
+        ),
+        pytest.param(
+            [
+                _bullets("a"),
+                Tabs((Tab((Plain("A"),), (_bullets("x"),)), Tab((Plain("B"),), (_bullets("y"),)))),
+            ],
+            "- a\n\n**A**\n\n- x\n\n**B**\n\n- y\n",
+            id="a-tab-title-already-separates-lists",
+        ),
+        pytest.param(
+            [Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_bullets("p"),)), _bullets("z")],
+            '```mermaid\nflowchart LR\n    s1["A"]\n```\n\n- p\n\n* z\n',
+            id="diagram-ending-with-a-list-then-a-list",
+        ),
+        pytest.param(
+            [Toggle((Plain("T"),), None, (_bullets("x"),)), _bullets("z")],
+            "**T**\n\n- x\n\n* z\n",
+            id="toggle-ending-with-a-list-then-a-list",
+        ),
+        pytest.param(
+            [
+                ListNode("number", (ListEntry((Plain("a"),)),)),
+                _columns((ListNode("number", (ListEntry((Plain("b"),)),)),)),
+            ],
+            "1. a\n\n1) b\n",
+            id="ordered-lists-either-side-of-a-grid",
+        ),
+        pytest.param(
+            [_bullets("a"), _columns((Callout("info", (_bullets("b"),)),)), _bullets("c")],
+            "- a\n\n> 💡\n>\n> - b\n\n- c\n",
+            id="a-quoted-list-in-a-grid-separates-the-lists-around-it",
+        ),
+    ],
+)
+def test_lists_on_either_side_of_a_grid_tabs_toggle_or_diagram_stay_separate_lists(
+    nodes: list[Node], markdown: str
+) -> None:
+    assert render_markdown(nodes) == markdown
+
+
+def test_lists_around_an_authored_grid_stay_separate_lists_in_github() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "list", "items": ["c", "d"]}]},
+            {"span": 3, "blocks": [{"type": "text", "body": "t"}]},
+        ],
+    }
+    blocks = [{"type": "list", "items": ["a", "b"]}, grid, {"type": "list", "items": ["e"]}]
+
+    assert markdown_of(blocks) == "- a\n- b\n\n* c\n* d\n\nt\n\n- e\n"
+
+
+def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_that_follows() -> None:
+    callout = Callout("info", (Paragraph(()), _bullets("first", "second")))
+
+    assert render_markdown([callout]) == "> 💡\n>\n> - first\n> - second\n"
+
+
+def test_a_callout_with_an_empty_first_paragraph_puts_its_icon_before_a_later_paragraph() -> None:
+    callout = Callout("info", (Paragraph(()), _para("later")))
+
+    assert render_markdown([callout]) == "> 💡 later\n"
+
+
+def _github_html(markdown: str) -> str:
+    return MarkdownIt("commonmark").enable("strikethrough").render(markdown)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "**(bold)**[t]{tone=danger}",
+            "<strong>(bold)</strong>t\n",
+            "<p><strong>(bold)</strong>t</p>\n",
+            id="bold-before-a-tinted-span",
+        ),
+        pytest.param(
+            "*(it)*[u]{tone=info}",
+            "<em>(it)</em>u\n",
+            "<p><em>(it)</em>u</p>\n",
+            id="italic-before-a-tinted-span",
+        ),
+        pytest.param(
+            "~~(b)~~[c]{bg=amber}",
+            "<del>(b)</del>c\n",
+            "<p><del>(b)</del>c</p>\n",
+            id="strike-before-a-tinted-span",
+        ),
+        pytest.param(
+            "[a]{tone=info}**(x)** y",
+            "a<strong>(x)</strong> y\n",
+            "<p>a<strong>(x)</strong> y</p>\n",
+            id="bold-after-a-tinted-span",
+        ),
+        pytest.param(
+            "**(x)** y and **`api`**.",
+            "**(x)** y and **`api`**.\n",
+            "<p><strong>(x)</strong> y and <strong><code>api</code></strong>.</p>\n",
+            id="markers-stay-when-the-neighbours-allow-them",
+        ),
+        pytest.param(
+            "**a** [b]{tone=info}",
+            "**a** b\n",
+            "<p><strong>a</strong> b</p>\n",
+            id="a-tinted-span-after-a-space-changes-nothing",
+        ),
+        pytest.param(
+            "*a **(x)**[t]{tone=info}* z",
+            "*a <strong>(x)</strong>t* z\n",
+            "<p><em>a <strong>(x)</strong>t</em> z</p>\n",
+            id="nested-emphasis-falls-back-on-its-own",
+        ),
+        pytest.param(
+            "[**(x)**[t]{tone=info}](https://x.io)",
+            "[<strong>(x)</strong>t](https://x.io)\n",
+            '<p><a href="https://x.io"><strong>(x)</strong>t</a></p>\n',
+            id="inside-a-link-label",
+        ),
+    ],
+)
+def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
+    body: str, markdown: str, html: str
+) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "*(a)*[**b**]{tone=info}",
+            "*(a)*<strong>b</strong>\n",
+            "<p><em>(a)</em><strong>b</strong></p>\n",
+            id="italic-then-bold",
+        ),
+        pytest.param(
+            "**(a)**[*b*]{tone=info}",
+            "**(a)**<em>b</em>\n",
+            "<p><strong>(a)</strong><em>b</em></p>\n",
+            id="bold-then-italic",
+        ),
+        pytest.param(
+            "**(a)**[**b**]{tone=info}",
+            "**(a)**<strong>b</strong>\n",
+            "<p><strong>(a)</strong><strong>b</strong></p>\n",
+            id="bold-then-bold",
+        ),
+        pytest.param(
+            "~~(a)~~[~~b~~]{tone=info}",
+            "~~(a)~~<del>b</del>\n",
+            "<p><s>(a)</s><del>b</del></p>\n",
+            id="strike-then-strike",
+        ),
+        pytest.param(
+            "**(a)**[~~b~~]{tone=info}",
+            "**(a)**~~b~~\n",
+            "<p><strong>(a)</strong><s>b</s></p>\n",
+            id="different-marker-characters-do-not-merge",
+        ),
+        pytest.param(
+            "**(a)** [**b**]{tone=info}",
+            "**(a)** **b**\n",
+            "<p><strong>(a)</strong> <strong>b</strong></p>\n",
+            id="a-space-keeps-the-markers-apart",
+        ),
+    ],
+)
+def test_emphasis_written_straight_after_emphasis_never_merges_its_markers_into_one_run(
+    body: str, markdown: str, html: str
+) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "“**(a)**” and —**(b)**—",
+            "“**(a)**” and —**(b)**—\n",
+            "<p>“<strong>(a)</strong>” and —<strong>(b)</strong>—</p>\n",
+            id="non-ascii-punctuation",
+        ),
+    ],
+)
+def test_emphasis_beside_non_ascii_punctuation_keeps_its_markers(body: str, markdown: str, html: str) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("inner", "before", "after", "written"),
+    [
+        pytest.param(
+            "(a)", "€", "\n", "<strong>(a)</strong>", id="a-currency-symbol-before-is-not-certain-punctuation"
+        ),
+        pytest.param(
+            "(a)", "\n", "€", "<strong>(a)</strong>", id="a-currency-symbol-after-is-not-certain-punctuation"
+        ),
+        pytest.param(
+            "€a",
+            "x",
+            "\n",
+            "<strong>€a</strong>",
+            id="a-symbol-opening-the-text-needs-a-punctuation-neighbour",
+        ),
+        pytest.param("€a", " ", "\n", "**€a**", id="a-symbol-opening-the-text-after-a-space"),
+        pytest.param(
+            "a€", "\n", "x", "<strong>a€</strong>", id="a-symbol-closing-the-text-needs-a-neighbour"
+        ),
+        pytest.param(" (a) ", "x", "y", " **(a)** ", id="spaces-inside-the-emphasis-count-as-its-neighbours"),
+        pytest.param("(a)", "x", "y", "<strong>(a)</strong>", id="no-spaces-inside-and-letters-around"),
+        pytest.param("a", "x", "y", "**a**", id="letters-inside-need-no-neighbour"),
+        pytest.param("  ", "x", "y", "  ", id="only-spaces-is-no-emphasis"),
+        pytest.param("(a)", "", "", "<strong>(a)</strong>", id="an-empty-neighbour-is-not-punctuation"),
+        pytest.param(
+            "(a)", "", " ", "<strong>(a)</strong>", id="an-empty-neighbour-before-is-not-punctuation"
+        ),
+        pytest.param(
+            "(a)", " ", "", "<strong>(a)</strong>", id="an-empty-neighbour-after-is-not-punctuation"
+        ),
+        pytest.param("a", "", "", "**a**", id="letters-inside-need-no-neighbour-at-all"),
+        pytest.param("(a)", "$", "!", "**(a)**", id="ascii-punctuation-neighbours"),
+    ],
+)
+def test_bold_is_written_with_markers_only_when_the_neighbours_let_github_close_it(
+    inner: str, before: str, after: str, written: str
+) -> None:
+    assert written_emphasis("bold", inner, before, after) == written
+
+
+@pytest.mark.parametrize(
+    ("following", "written"),
+    [
+        pytest.param(".", "**(x)**.\n", id="before-punctuation"),
+        pytest.param("y", "<strong>(x)</strong>y\n", id="before-a-letter"),
+    ],
+)
+def test_a_bold_chip_directly_before_text_is_written_as_the_neighbour_allows(
+    following: str, written: str
+) -> None:
+    assert render_markdown([Paragraph((Chip("(x)", "blue"), Plain(following)))]) == written
+
+
+def test_a_table_of_contents_alternates_markers_with_the_bullet_lists_around_it() -> None:
+    contents = TableOfContents((TocEntry("x", (Plain("Intro"),)),))
+
+    assert render_markdown([_bullets("a"), contents, _bullets("b")]) == "- a\n\n* Intro\n\n- b\n"
+
+
+def test_bold_after_a_dollar_sign_keeps_its_markers_because_ascii_punctuation_closes_the_gap() -> None:
+    written = markdown_of([{"type": "text", "body": "$**(a)**"}])
+
+    assert (written, _github_html(written)) == ("\\$**(a)**\n", "<p>$<strong>(a)</strong></p>\n")
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        pytest.param(
+            [_bullets("a"), Toggle((), None, (_bullets("x"),)), _bullets("z")],
+            id="toggle-with-an-empty-title",
+        ),
+        pytest.param(
+            [_bullets("a"), Tabs((Tab((), (_bullets("x"),)),)), _bullets("z")], id="tab-with-an-empty-title"
+        ),
+    ],
+)
+def test_a_list_either_side_of_a_block_with_an_empty_title_stays_a_separate_list(nodes: list[Node]) -> None:
+    assert render_markdown(nodes) == "- a\n\n* x\n\n- z\n"
+
+
+def test_a_tab_with_an_empty_title_passes_the_list_before_it_through() -> None:
+    tabs = Tabs((Tab((Plain("A"),), (_bullets("x"),)), Tab((), (_bullets("y"),))))
+
+    assert render_markdown([tabs]) == "**A**\n\n- x\n\n* y\n"
+
+
+def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    rendered: list[str] = []
+
+    def spy(text: str) -> str:
+        rendered.append(text)
+        return text
+
+    monkeypatch.setattr(markdown_module, "escape_block_start", spy)
+    inner = Callout("info", (_para("deep"),))
+    outer = Callout("info", (Callout("info", (inner,)),))
+
+    render_markdown([outer])
+
+    assert rendered == ["deep"]
+
+
 @pytest.mark.parametrize(
     ("node", "markdown"),
     [
@@ -895,10 +1242,10 @@ def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
 def test_every_badge_and_state_block_becomes_github_markdown() -> None:
     assert markdown_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         "**Legend: badges used on this page**\n\n- **api** the API\n\n"
-        "- **Site**: West\n- **Owner**: ops\n\n"
-        "* **Lead**: **Ana**\n\n"
-        "- **Drift**: first\n\n  second\n- **Gap**\n\n"
-        "* **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n* **Lag**: 3 days → flat\n\n"
+        "* **Site**: West\n* **Owner**: ops\n\n"
+        "- **Lead**: **Ana**\n\n"
+        "* **Drift**: first\n\n  second\n* **Gap**\n\n"
+        "- **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
         "**Affects**: **api** **ops**\n\n"
         "- **Owners**: **web**\n\n"
         "* ✅ Ship\n* ⛔ Vendor\n\n"
@@ -926,7 +1273,23 @@ def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
         pytest.param("Ship it 🚀", "ship-it-", id="emoji-dropped"),
         pytest.param("नमस्ते दुनिया", "नमस्ते-दुनिया", id="combining-marks-stay"),
         pytest.param("Café", "café", id="decomposed-accent-stays"),
-        pytest.param("x² ½", "x²-½", id="other-numbers-stay"),
+        pytest.param("x² ½ ①", "x--", id="other-numbers-go"),
+        pytest.param("a⓪b", "ab", id="circled-zero-just-after-the-circled-letters-goes"),
+        pytest.param("a⒵b", "ab", id="parenthesized-z-just-before-the-circled-letters-goes"),
+        pytest.param("a🅊b", "ab", id="squared-letter-range-end-goes"),
+        pytest.param("a🄯b", "ab", id="copyleft-just-before-the-squared-letters-goes"),
+        pytest.param("a🅪b", "ab", id="raised-mc-sign-after-the-circled-negative-letters-goes"),
+        pytest.param("a🆊b", "ab", id="crossed-negative-squared-p-after-the-negative-squared-letters-goes"),
+        pytest.param("a🅏b", "ab", id="squared-wc-just-before-the-circled-negative-letters-goes"),
+        pytest.param("a🅩b", "a🅩b", id="last-circled-negative-letter-stays"),
+        pytest.param("a🅯b", "ab", id="circled-human-figure-after-the-circled-negative-letters-goes"),
+        pytest.param("a🅐b", "a🅐b", id="first-circled-negative-letter-stays"),
+        pytest.param("Step ① one", "step--one", id="circled-digit-goes"),
+        pytest.param("Ⅻ and ٣", "ⅻ-and-٣", id="letter-numbers-and-decimal-digits-stay"),
+        pytest.param("Ⓔⓘ 🄺", "ⓔⓘ-🄺", id="circled-and-squared-letters-stay"),
+        pytest.param("Ⓐ-Ⓩ", "ⓐ-ⓩ", id="the-first-and-last-circled-capitals-stay"),
+        pytest.param("🄰🅉 🅐🆉 🅰🆉", "🄰🅉-🅐🆉-🅰🆉", id="squared-and-negative-letters-stay"),
+        pytest.param("a ☎ ✅ b", "a---b", id="other-symbols-go"),
     ],
 )
 def test_a_heading_slug_follows_github(heading: str, slug: str) -> None:

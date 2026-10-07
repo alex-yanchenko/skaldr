@@ -6,6 +6,10 @@ class AuthError(Exception):
     pass
 
 
+class ConnectorError(Exception):
+    pass
+
+
 class ReadOnlyFileError(PermissionError):
     pass
 
