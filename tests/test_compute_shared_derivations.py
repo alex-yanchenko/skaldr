@@ -130,28 +130,19 @@ def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_c
     assert [(table.title_key, table.sum_key) for table in tables] == [("r", "n"), ("t", "n"), ("t", None)]
 
 
-def test_a_row_tints_by_the_first_key_of_its_tint_column_and_a_blank_first_key_tints_nothing() -> None:
-    table = parsed_block(
-        Table, make_table(TAGGED_COLUMNS, tint_by="tag", rows=[{"a": "x", "tag": "API"}]), badges=API_BADGES
-    )
-    rows: list[dict[str, Any]] = [{"tag": " API "}, {"tag": ["API", ""]}, {"tag": ["", "API"]}, {}]
+def test_a_row_tints_by_the_trimmed_key_of_its_tint_column_and_a_blank_key_tints_nothing() -> None:
+    rows = [{"a": "x", "tag": " API "}, {"a": "y", "tag": ""}]
+    table = parsed_block(Table, make_table(TAGGED_COLUMNS, tint_by="tag", rows=rows), badges=API_BADGES)
 
-    assert [table.row_tint_key(row) for row in rows] == ["API", "API", "", ""]
+    assert [table.row_tint_key(row) for row in table.body_rows] == ["API", None]
 
 
 def test_a_badge_cell_reads_one_key_or_a_list_trimmed_with_blanks_dropped() -> None:
-    table = parsed_block(
-        Table, make_table(TAGGED_COLUMNS, rows=[{"a": "x", "tag": "API"}]), badges=API_BADGES
-    )
-    rows: list[dict[str, Any]] = [
-        {"tag": " API "},
-        {"tag": ["API", " ", "OPS "]},
-        {"tag": ""},
-        {"tag": None},
-        {},
-    ]
+    rows = [{"a": "x", "tag": " API "}, {"a": "y", "tag": ["API", " ", "OPS "]}, {"a": "z", "tag": ""}]
+    badges = {**API_BADGES, "OPS": {"label": "ops", "tone": "red", "legend": False}}
+    table = parsed_block(Table, make_table(TAGGED_COLUMNS, rows=rows), badges=badges)
 
-    assert [table.badge_keys(row, "tag") for row in rows] == [["API"], ["API", "OPS"], [], [], []]
+    assert [row.badges["tag"] for row in table.body_rows] == [("API",), ("API", "OPS"), ()]
 
 
 def test_a_swimlane_places_each_step_by_lane_column_and_resolved_group() -> None:

@@ -1,13 +1,12 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, TypeGuard
+from typing import Final
 
 from skaldr import compute
 from skaldr.export.inline import bold, one_line, plain, rich_line
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
 from skaldr.models import (
-    TONE_BADGE_COLOR,
     AnyBlock,
     BadgeLiteral,
     BadgeRef,
@@ -20,18 +19,6 @@ from skaldr.richtext import Plain, Rich, RichContext, Tinted
 
 TEXT_BULLET: Final = "• "
 NESTED_TEXT_BULLET: Final = "◦ "
-
-
-def _is_tone(value: object) -> TypeGuard[ToneLiteral]:
-    return isinstance(value, str) and value in TONE_BADGE_COLOR
-
-
-def tone_of(value: object) -> ToneLiteral | None:
-    return value if _is_tone(value) else None
-
-
-def tone_named(value: object) -> ToneName | None:
-    return "muted" if value == "muted" else tone_of(value)
 
 
 @dataclass(frozen=True)

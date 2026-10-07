@@ -32,7 +32,7 @@
 {%- endmacro %}
 
 {% macro table_row(b, row, cell_cols, title_badges, title_key) %}
-{% set rtone = row.get("tone") %}
+{% set rtone = row.tone %}
 {# tint_by: an explicit row tone wins, so only resolve a tint when the row sets none. A cell-badge value
    can be a list; the row's tint takes the first key's tone. A blank cell leaves the row untinted. #}
 {% set tinttone = none %}
@@ -40,18 +40,18 @@
 <tr class="row{% if rtone %} {{ rtone }}{% endif %}{% if tinttone %} tint {{ tinttone }}{% endif %}">
 {% for c in cell_cols %}
 {% if c.key == title_key %}
-<td class="title">{{ rich_cell(row[c.key]) }}
-{% for bc in title_badges %}{% for bkey in b.badge_keys(row, bc.key) %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endfor %}{% endfor %}
-{% set subs = row.get("subrows") %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+<td class="title">{{ rich_cell(row.texts[c.key]) }}
+{% for bc in title_badges %}{% for bkey in row.badges[bc.key] %}<div><span class="chip {{ badges[bkey].tone }}">{{ badges[bkey].label }}</span></div>{% endfor %}{% endfor %}
+{% set subs = row.subrows %}{% if subs %}<table class="subtable"><tbody>{% for s in subs %}<tr><td>{{ s.label | richtext }}</td><td class="sv">{{ s.value | fmt }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </td>
 {% elif c.kind == "number" %}
-<td class="num">{{ row[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
+<td class="num">{{ row.numbers[c.key] | fmt }}{% if c.pct_of_total and b.reconcile %}<span class="pct">{{ pct(row.numbers[c.key], b.reconcile.total) }} of total</span>{% endif %}</td>
 {% elif c.kind == "indicator" %}
-<td class="ind">{% set t = row[c.key] | trim %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
+<td class="ind">{% set t = row.indicators[c.key] %}{% if t %}<span class="dot {{ t }}" title="{{ t }}"></span>{% endif %}</td>
 {% elif c.kind == "badge" %}
-<td class="bc">{% for k in b.badge_keys(row, c.key) %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endfor %}</td>
+<td class="bc">{% for k in row.badges[c.key] %}<span class="chip {{ badges[k].tone }}">{{ badges[k].label }}</span>{% endfor %}</td>
 {% else %}
-<td>{{ rich_cell(row[c.key]) }}</td>
+<td>{{ rich_cell(row.texts[c.key]) }}</td>
 {% endif %}
 {% endfor %}
 </tr>
@@ -68,17 +68,17 @@
 <colgroup>{% for c in cell_cols %}{% set share = b.column_width_shares[loop.index0] %}<col{% if c.tone %} class="tint {{ c.tone }}"{% endif %}{% if share is not none %} style="width:{{ (share * 100) | round(1) if c.width else "%g" | format((share * 100) | round(1)) }}%"{% endif %}>{% endfor %}</colgroup>
 <thead><tr>{% for c in cell_cols %}<th{% if c.kind == "number" %} class="num"{% elif c.kind == "indicator" %} class="ind"{% endif %}>{{ c.label }}</th>{% endfor %}</tr></thead>
 <tbody>
-{% if b.groups is not none %}
-{% for g in b.groups %}
+{% if b.row_groups is not none %}
+{% for g in b.row_groups %}
 <tr class="group"><td colspan="{{ cell_cols | length }}">{{ g.name }}{% if sum_key %}<span class="st">{{ col_sum(g.rows, sum_key) | fmt }}</span>{% endif %}</td></tr>
 {% if g.rows %}{% for row in g.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
 {% else %}<tr class="empty"><td colspan="{{ cell_cols | length }}">none</td></tr>{% endif %}
 {% endfor %}
 {% else %}
-{% for row in b.rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
+{% for row in b.body_rows %}{{ table_row(b, row, cell_cols, title_badges, title_key) }}{% endfor %}
 {% endif %}
 </tbody>
-{% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.all_rows(), b.totals.column) | fmt }}{% elif c.key == b.totals_label_key %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
+{% if b.totals %}<tfoot><tr>{% for c in cell_cols %}<td{% if c.kind == "number" %} class="num"{% endif %}>{% if c.key == b.totals.column %}{{ col_sum(b.body_rows, b.totals.column) | fmt }}{% elif c.key == b.totals_label_key %}Total{% endif %}</td>{% endfor %}</tr></tfoot>{% endif %}
 </table></div>
 {% set buckets = table_rollup(b) %}
 {% if buckets %}<div class="rollup">{% if b.rollup.label %}<span class="rollup-lab">{{ b.rollup.label }}</span>{% endif %}{% for r in buckets %}<span class="rollup-item"><span class="chip {{ badges[r.key].tone }}">{{ badges[r.key].label }}</span><span class="rollup-n">{{ r.count }}</span></span>{% endfor %}</div>{% endif %}

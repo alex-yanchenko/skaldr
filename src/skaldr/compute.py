@@ -46,6 +46,7 @@ from skaldr.models import (
     RequestLike,
     RequestResponse,
     RichTextMarker,
+    Row,
     Section,
     Swimlane,
     SwimlaneStepState,
@@ -756,13 +757,13 @@ class RollupBucket(TypedDict):
     count: int
 
 
-def _rollup_counts(rows: Sequence[dict[str, Any]], by: str) -> Counter[str]:
+def _rollup_counts(rows: Sequence[Row], by: str) -> Counter[str]:
     """Count rows by a badge column's value, in first-appearance order (a blank cell counts toward no
     badge). The one tally rule shared by a table's own `rollup` strip and its `of_tables` contribution,
     so the two views of the same table can never drift apart."""
     counts: Counter[str] = Counter()
     for row in rows:
-        key = row[by].strip()
+        key = row.first_badge(by)
         if key:
             counts[key] += 1
     return counts
@@ -774,7 +775,7 @@ def table_rollup(table: Table) -> list[RollupBucket] | None:
     blank in that column contributes to no bucket; the table validator guarantees at least one is set."""
     if table.rollup is None:
         return None
-    counts = _rollup_counts(table.all_rows(), table.rollup.by)
+    counts = _rollup_counts(table.body_rows, table.rollup.by)
     return [{"key": key, "count": count} for key, count in counts.items()]
 
 
@@ -807,7 +808,7 @@ def table_tallies(report: Report) -> dict[str, DerivedTally]:
     for table in iter_tables(report.blocks):
         if table.id is None or table.rollup is None:
             continue
-        rows = table.all_rows()
+        rows = table.body_rows
         tallies[table.id] = {"counts": dict(_rollup_counts(rows, table.rollup.by)), "total": len(rows)}
     return tallies
 
@@ -1086,7 +1087,7 @@ def produced_names(flow: RequestFlow) -> list[tuple[RequestCapture, int]]:
 def reconcile_line(table: Table) -> str:
     if table.reconcile is None:
         return ""
-    total = col_sum(table.all_rows(), table.reconcile.column)
+    total = col_sum(table.body_rows, table.reconcile.column)
     handled = table.reconcile.handled
     if handled is not None:
         return (

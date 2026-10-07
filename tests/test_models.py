@@ -42,6 +42,7 @@ from skaldr.models import (
     Report,
     Request,
     RequestFlow,
+    Row,
     Section,
     SectionBlock,
     Swimlane,
@@ -1794,7 +1795,10 @@ def test_positional_and_mapping_rows_mix_in_one_table() -> None:
     cols = [{"key": "a", "label": "A", "kind": "text"}, {"key": "n", "label": "N", "kind": "number"}]
     table = Table.model_validate(make_table(columns=cols, rows=[["x", 1], {"a": "y", "n": 2}]))
 
-    assert table.all_rows() == [{"a": "x", "n": 1}, {"a": "y", "n": 2}]
+    assert table.body_rows == (
+        Row(texts={"a": "x"}, numbers={"n": 1}),
+        Row(texts={"a": "y"}, numbers={"n": 2}),
+    )
 
 
 def test_positional_rows_expand_inside_groups() -> None:
@@ -1803,7 +1807,10 @@ def test_positional_rows_expand_inside_groups() -> None:
         make_table(columns=cols, groups=[{"name": "G", "rows": [["x", 1], ["y", 2]]}])
     )
 
-    assert table.all_rows() == [{"a": "x", "n": 1}, {"a": "y", "n": 2}]
+    assert table.body_rows == (
+        Row(texts={"a": "x"}, numbers={"n": 1}),
+        Row(texts={"a": "y"}, numbers={"n": 2}),
+    )
 
 
 def test_positional_row_preserves_a_list_cell_value() -> None:
@@ -1813,7 +1820,7 @@ def test_positional_row_preserves_a_list_cell_value() -> None:
     ]
     table = Table.model_validate(make_table(columns=cols, rows=[["Supplier ledger", ["WRITE", "READ"]]]))
 
-    assert table.all_rows() == [{"name": "Supplier ledger", "access": ["WRITE", "READ"]}]
+    assert table.body_rows == (Row(texts={"name": "Supplier ledger"}, badges={"access": ("WRITE", "READ")}),)
 
 
 @pytest.mark.parametrize("row", [["x"], ["x", 1, "extra"]], ids=["too-few", "too-many"])
@@ -3150,7 +3157,7 @@ def test_cell_badge_column_takes_a_width_and_accepts_a_key_or_list() -> None:
     )
     parsed = report.blocks[0]
     assert isinstance(parsed, Table)
-    assert [row["acc"] for row in parsed.all_rows()] == ["W", ["W", "R"]]
+    assert [row.badges["acc"] for row in parsed.body_rows] == [("W",), ("W", "R")]
 
 
 def test_cell_badge_undeclared_key_in_a_list_still_fails() -> None:

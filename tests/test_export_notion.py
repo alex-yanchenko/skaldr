@@ -9,7 +9,7 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.apportion import apportioned
-from skaldr.export.markup import CALLOUT_ICON
+from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
     NotionChunks,

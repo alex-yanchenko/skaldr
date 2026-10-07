@@ -1,12 +1,11 @@
-from typing import Any, get_args
+from typing import Any
 
 import pytest
 
 from skaldr.code_language import code_language
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
-from skaldr.export.lower.context import spaced, tone_named, tone_of, with_bold_label
-from skaldr.export.markup import check_glyph, decision_glyph, indicator_glyph, status_glyph, swimlane_glyph
+from skaldr.export.lower.context import spaced, with_bold_label
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -55,7 +54,7 @@ from skaldr.export.tree import (
     capped_heading_level,
     heading_of,
 )
-from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral, parse_report
+from skaldr.models import SwimlaneStepState, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -1107,51 +1106,6 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
     )
 
 
-def test_a_state_glyph_is_a_coloured_emoji_because_markdown_has_no_css_class_to_colour_it() -> None:
-    assert {state: status_glyph(state) for state in get_args(StatusState)} == {
-        "done": "✅",
-        "current": "🔵",
-        "pending": "⚪",
-        "failed": "❌",
-        "blocked": "⛔",
-    }
-
-
-def test_a_swimlane_step_glyph_is_a_coloured_emoji_for_every_step_state() -> None:
-    assert {state: swimlane_glyph(state) for state in get_args(SwimlaneStepState)} == {
-        "done": "✅",
-        "current": "🔵",
-        "todo": "⚪",
-        "blocked": "⛔",
-        "deferred": "⏸️",
-    }
-
-
-def test_an_indicator_glyph_is_a_coloured_dot_for_every_tone() -> None:
-    assert {tone: indicator_glyph(tone) for tone in get_args(ToneLiteral)} == {
-        "neutral": "⚪",
-        "info": "🔵",
-        "success": "🟢",
-        "warning": "🟡",
-        "danger": "🔴",
-        "accent": "🟣",
-        "teal": "🟢",
-        "sky": "🔵",
-    }
-
-
-def test_a_check_glyph_is_a_tick_or_a_cross() -> None:
-    assert (check_glyph(checked=True), check_glyph(checked=False)) == ("✓", "✗")
-
-
-def test_a_decision_glyph_is_a_tick_for_decided_and_a_question_mark_for_open() -> None:
-    assert (decision_glyph(decided=True), decision_glyph(decided=False)) == ("☑️", "❓")
-
-
-def test_a_decided_glyph_differs_from_the_done_status_and_the_checked_glyphs() -> None:
-    assert decision_glyph(decided=True) not in {status_glyph("done"), check_glyph(checked=True)}
-
-
 @pytest.mark.parametrize(
     "options",
     [pytest.param({}, id="numbering-left-out"), pytest.param({"numbering": "decimal"}, id="decimal")],
@@ -2165,23 +2119,6 @@ def test_a_toned_cell_of_an_inner_grid_becomes_a_callout_inside_the_outer_column
             )
         ),
     )
-
-
-@pytest.mark.parametrize(
-    ("value", "tone", "named"),
-    [
-        pytest.param(None, None, None, id="none"),
-        pytest.param("", None, None, id="empty"),
-        pytest.param("success", "success", "success", id="a-tone-passes-through"),
-        pytest.param("muted", None, "muted", id="muted-is-a-row-tone-only"),
-        pytest.param("green", None, None, id="a-palette-name-is-not-a-tone"),
-        pytest.param(["info"], None, None, id="not-a-string"),
-    ],
-)
-def test_an_untyped_value_reads_as_a_tone_only_when_it_is_one(
-    value: object, tone: ToneLiteral | None, named: ToneName | None
-) -> None:
-    assert (tone_of(value), tone_named(value)) == (tone, named)
 
 
 def test_a_blank_indicator_cell_is_empty_and_untoned() -> None:

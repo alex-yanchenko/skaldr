@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, TypeVar
 
 from markdown_it.token import Token
 from typing_extensions import assert_never
@@ -32,6 +32,7 @@ MarkerStyle = Literal["bold", "italic", "strike"]
 StyleName = Literal[MarkerStyle, "underline"]
 ScriptPosition = Literal["subscript", "superscript"]
 SCRIPT_HTML_TAG: Final[Mapping[ScriptPosition, str]] = {"subscript": "sub", "superscript": "sup"}
+Written = TypeVar("Written")
 
 
 @dataclass(frozen=True)
@@ -182,29 +183,38 @@ def _merged(runs: Iterable[Run]) -> Rich:
     return tuple(merged)
 
 
-class RunWriter(Protocol):
-    def text(self, text: str, /) -> str: ...
+class RunWriter(Protocol[Written]):
+    def concat(self, parts: Sequence[Written], /) -> Written: ...
 
-    def code(self, text: str, /) -> str: ...
+    def text(self, text: str, /) -> Written: ...
 
-    def link(self, label: str, url: str, /) -> str: ...
+    def code(self, text: str, /) -> Written: ...
 
-    def anchor_link(self, label: str, anchor: str, /) -> str: ...
+    def link(self, label: Written, url: str, /) -> Written: ...
 
-    def citation(self, run: Citation, /) -> str: ...
+    def anchor_link(self, label: Written, anchor: str, /) -> Written: ...
 
-    def placeholder(self, name: str, /) -> str: ...
+    def citation(self, run: Citation, /) -> Written: ...
 
-    def styled(self, style: StyleName, inner: str, /) -> str: ...
+    def placeholder(self, name: str, /) -> Written: ...
 
-    def script(self, position: ScriptPosition, text: str, /) -> str: ...
+    def styled(self, style: StyleName, inner: Written, /) -> Written: ...
 
-    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str: ...
+    def script(self, position: ScriptPosition, text: str, /) -> Written: ...
 
-    def math(self, expression: str, /) -> str: ...
+    def tinted(
+        self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: Written, /
+    ) -> Written: ...
+
+    def math(self, expression: str, /) -> Written: ...
 
 
-def write_run(run: Run, writer: RunWriter) -> str:
+class TextRunWriter:
+    def concat(self, parts: Sequence[str], /) -> str:
+        return "".join(parts)
+
+
+def write_run(run: Run, writer: RunWriter[Written]) -> Written:
     match run:
         case Plain():
             return writer.text(run.text)
@@ -230,11 +240,11 @@ def write_run(run: Run, writer: RunWriter) -> str:
             assert_never(run)
 
 
-def write_runs(runs: Rich, writer: RunWriter) -> str:
-    return "".join(write_run(run, writer) for run in runs)
+def write_runs(runs: Rich, writer: RunWriter[Written]) -> Written:
+    return writer.concat([write_run(run, writer) for run in runs])
 
 
-class VisibleText:
+class VisibleText(TextRunWriter):
     def text(self, text: str, /) -> str:
         return text
 

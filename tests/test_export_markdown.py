@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any
 
 import pytest
 from markdown_it import MarkdownIt
@@ -9,7 +9,7 @@ from skaldr.export import ExportResult, export_markdown
 from skaldr.export import markdown as markdown_module
 from skaldr.export.flanking import written_emphasis
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
-from skaldr.export.markup import CALLOUT_ICON, code_block_lines, code_span, gauge_bar, styled
+from skaldr.export.markup import code_block_lines, code_span, styled
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -352,22 +352,6 @@ def test_the_github_footer_shows_rich_text_from_the_source_and_plain_facts() -> 
     assert page.splitlines()[-1] == "see `app.ts` · 5 Oct"
 
 
-@pytest.mark.parametrize(
-    ("value", "maximum", "bar"),
-    [
-        pytest.param(5, 10, "█████░░░░░", id="half"),
-        pytest.param(0, 10, "░░░░░░░░░░", id="empty"),
-        pytest.param(12, 10, "██████████", id="over-the-maximum-stays-full"),
-        pytest.param(-1, 10, "░░░░░░░░░░", id="below-zero-stays-empty"),
-        pytest.param(1, 4, "███░░░░░░░", id="two-and-a-half-cells-fill-three"),
-        pytest.param(3, 4, "████████░░", id="seven-and-a-half-cells-fill-eight"),
-        pytest.param(5, 100, "█░░░░░░░░░", id="a-half-cell-fills-one-so-a-small-share-shows"),
-    ],
-)
-def test_a_gauge_is_ten_cells_filled_in_proportion(value: float, maximum: float, bar: str) -> None:
-    assert gauge_bar(value, maximum) == bar
-
-
 def test_visible_text_of_export_runs_reads_chips_and_states_as_words() -> None:
     runs: ExportRich = (Chip("api", "blue"), Plain(" "), StatusMark("done"), Gauge(1, 2))
 
@@ -698,10 +682,6 @@ def test_a_subtitle_led_by_spaces_and_a_dash_stays_a_paragraph() -> None:
     assert markdown_of([{"type": "text", "body": "b"}], meta={"title": "T", "subtitle": ["  - draft"]}) == (
         "\\- draft\n\nb\n"
     )
-
-
-def test_every_tone_has_a_callout_icon() -> None:
-    assert sorted(CALLOUT_ICON) == sorted(get_args(ToneName))
 
 
 def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:

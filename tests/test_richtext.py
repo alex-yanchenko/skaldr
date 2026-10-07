@@ -21,6 +21,7 @@ from skaldr.richtext import (
     ScriptText,
     Styled,
     StyleName,
+    TextRunWriter,
     Tinted,
     parse_rich,
     visible_text,
@@ -959,7 +960,7 @@ def test_visible_text_reads_every_run_as_a_reader_would() -> None:
     assert visible_text(runs) == "a b[2]who! H2O 3 hot x_i"
 
 
-class _TaggedRuns:
+class _TaggedRuns(TextRunWriter):
     def text(self, text: str, /) -> str:
         return text
 
