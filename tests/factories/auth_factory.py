@@ -15,8 +15,18 @@ from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
-from skaldr.auth.store import JiraCredentials, NotionCredentials
+from skaldr.auth.store import (
+    CredentialsT,
+    JiraCredentials,
+    NotionCredentials,
+    StoredEntry,
+    save_notion_returning_the_replaced,
+)
+from skaldr.services import Service
 
+WORKSPACE_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
+HEX_WORKSPACE_ID = "abcdef01-2345-4678-89ab-cdef01234567"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
 
 
@@ -140,7 +150,7 @@ TOKEN_RESPONSE: dict[str, object] = {
     "token_type": "bearer",
     "refresh_token": "new-refresh",
     "bot_id": "bot-id",
-    "workspace_id": "workspace-id",
+    "workspace_id": "11111111-1111-4111-8111-111111111111",
     "workspace_name": "Example Workspace",
     "owner": {"type": "user"},
 }
@@ -357,10 +367,37 @@ def make_notion_credentials(**overrides: str | None) -> NotionCredentials:
         "client_secret": "client-secret",
         "access_token": "access-token",
         "refresh_token": "refresh-token",
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
         "workspace_name": "Example Workspace",
     }
     _refuse_unknown_fields(overrides, fields)
     return NotionCredentials.model_validate({**fields, **overrides})
+
+
+def legacy_entry_json(credentials: NotionCredentials | JiraCredentials) -> str:
+    return credentials.model_dump_json(exclude={"workspace_id"})
+
+
+def stored_entry(
+    service: Service, username: str, credentials: CredentialsT | None
+) -> StoredEntry[CredentialsT]:
+    raw = "not json" if credentials is None else credentials.model_dump_json()
+    return StoredEntry(service, username, credentials, raw)
+
+
+def seed_notion(credentials: NotionCredentials) -> None:
+    save_notion_returning_the_replaced(credentials)
+
+
+class SlowSaveKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.released = threading.Event()
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.released.wait(5)
+        self.entries[(service, username)] = password
 
 
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:

@@ -1000,7 +1000,7 @@ blocks:                       # optional: an intro shown before the first part
 
 ## Where it publishes: `publish`
 
-An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, so writing the block and signing in with `skaldr auth` changes nothing about what a render or an export does. `where` has a different shape for each service; the other keys mean the same thing everywhere.
+An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, so writing the block and signing in with `skaldr auth` changes nothing about what a render or an export does. `skaldr auth` keeps one sign-in per Jira site and per Notion workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>` and `skaldr auth logout notion <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
 
 ```yaml
 publish:
