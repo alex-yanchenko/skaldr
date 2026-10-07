@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ReportError
-from skaldr.models import Row, RowGroup, Subrow, Table, parse_report
+from skaldr.models import Row, RowGroup, Subrow, Table, ToneLiteral, parse_report
 from tests.factories import make_report, make_table, parsed_block
 
 EVERY_KIND_COLUMNS: list[dict[str, Any]] = [
@@ -63,15 +63,21 @@ def test_a_blank_indicator_reads_as_no_tone_and_a_blank_badge_as_no_keys() -> No
     )
 
 
-def test_a_positional_row_is_typed_by_the_column_in_its_position() -> None:
-    rows = [["x", "y", 3, "warning", ["R"], "W"]]
+@pytest.mark.parametrize(
+    ("authored", "resolved"),
+    [pytest.param("warning", "warning", id="tone-name"), pytest.param("green", "success", id="tone-alias")],
+)
+def test_a_positional_row_is_typed_by_the_column_in_its_position(
+    authored: str, resolved: ToneLiteral
+) -> None:
+    rows = [["x", "y", 3, authored, ["R"], "W"]]
 
     assert _table(rows).body_rows == (
         Row(
             texts={"a": "x", "note": "y"},
             numbers={"n": 3},
             badges={"acc": ("R",), "tag": ("W",)},
-            indicators={"ok": "warning"},
+            indicators={"ok": resolved},
         ),
     )
 
