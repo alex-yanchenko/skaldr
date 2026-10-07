@@ -1,9 +1,10 @@
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import Field, StringConstraints
 
 from skaldr.frozen_model import FrozenModel
-from skaldr.publish.target import JsonFields, Location, TargetBase
+from skaldr.publish_block.target import JsonFields, Location, TargetBase
+from skaldr.services import JiraService
 
 JIRA_PROJECT_KEY_PATTERN = r"[A-Z][A-Z0-9_]+"
 JIRA_ISSUE_KEY_PATTERN = rf"{JIRA_PROJECT_KEY_PATTERN}-[1-9][0-9]*"
@@ -31,7 +32,7 @@ class JiraWhere(FrozenModel):
 
 
 class JiraTarget(TargetBase):
-    to: Literal["jira"] = Field(description="Publish to Jira: `jira`.")
+    to: JiraService = Field(description="Publish to Jira: `jira`.")
     where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
 
     def location_key(self) -> Location:

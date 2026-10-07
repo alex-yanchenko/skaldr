@@ -52,7 +52,7 @@ from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
 from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
-from skaldr.publish import Publish, section_choice_errors
+from skaldr.publish_block import Publish, section_choice_errors
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
 # URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
@@ -719,17 +719,19 @@ class Range(_Block):
 
 class Code(_Block):
     type: Literal["code"]
-    content: str = Field(description="Code/log/config text; rendered verbatim, no highlighting.")
+    content: str = Field(
+        description="Code/log/config text; shown verbatim, highlighted in the HTML if the language is known."
+    )
     label: str | None = Field(default=None, description="Optional label header above the block.")
     mode: Literal["plain", "diff"] = Field(
         default="plain", description="plain, or diff (+/- lines tinted success/danger)."
     )
     lang: CodeLanguage | None = Field(
         default=None,
-        description="Optional language the Markdown exports put on the code fence, such as `shell`, `python` "
-        "or `plain text`. Unset, the language comes from a file name in `label` (`deploy.sh` is bash); "
-        "with neither, the GitHub fence has none and the Notion fence says `plain text`. `mode: diff` "
-        "always exports as `diff`. The HTML shows code without highlighting either way.",
+        description="Optional language of the code, such as `shell`, `python` or `plain text`: the Markdown "
+        "exports put it on the code fence and the HTML highlights with it. Unset, the language comes from a "
+        "file name in `label` (`deploy.sh` is bash); with neither, the HTML shows plain code, the GitHub "
+        "fence has no language and the Notion fence says `plain text`. `mode: diff` exports as `diff`.",
     )
 
 

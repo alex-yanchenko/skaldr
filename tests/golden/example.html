@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;3.2.0&#34;}">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;3.2.1&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
@@ -91,6 +91,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   white, so a white code body vanished into it. A light grey reads as a code panel on both the
 		   white paper and the tinted on-screen page. Dark is unchanged — it already sits above the page. */
 		--code-bg:light-dark(#f4f4f5,#171d28); --code-hdr:light-dark(#e6e6e8,#1b212b);
+		--tok-kw:var(--accent-fg); --tok-str:var(--success-fg); --tok-num:var(--warning-fg); --tok-com:var(--muted);
+		--tok-fn:var(--info-fg); --tok-cls:var(--teal-fg); --tok-op:var(--sky-fg); --tok-pun:var(--muted);
 		/* Spacing + radius scales — the recurring geometry, tokenised so a block never hand-picks a
 		   magic number. --r-inner is a panel's radius minus its 1px border, for a child that sits flush. */
 		--s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px;
@@ -431,7 +433,15 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .diff .add::before{content:"+ "; color:var(--diff-add-fg); font-weight:700}
 		& .diff .del{background:var(--diff-del-bg); border-inline-start-color:var(--diff-del-bar)}
 		& .diff .del::before{content:"- "; color:var(--diff-del-fg); font-weight:700}
-		& .diff .ctx::before{content:"  "}}
+		& .diff .ctx::before{content:"  "}
+		& .t-kw{color:var(--tok-kw)}
+		& .t-str{color:var(--tok-str)}
+		& .t-num{color:var(--tok-num)}
+		& .t-com{color:var(--tok-com); font-style:italic}
+		& .t-fn{color:var(--tok-fn)}
+		& .t-cls{color:var(--tok-cls)}
+		& .t-op{color:var(--tok-op)}
+		& .t-pun{color:var(--tok-pun)}}
 
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
@@ -1228,11 +1238,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <p class="text">A zone&#39;s drift is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mfrac><mrow><mo stretchy="false">|</mo><mi>c</mi><mo>−</mo><mi>e</mi><mo stretchy="false">|</mo></mrow><mrow><mi>e</mi></mrow></mfrac></mrow></math>, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>c</mi></mrow></math> is the counted units and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>e</mi></mrow></math> the expected units; the page reports the mean over the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> zones, with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> as its spread.</p>
 <div class="math"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mrow><mi>d</mi></mrow><mo stretchy="true">¯</mo></mover><mo>=</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>n</mi></mrow></mfrac><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mrow><mi>n</mi></mrow></munderover><mfrac><mrow><mo stretchy="false">|</mo><msub><mi>c</mi><mi>i</mi></msub><mo>−</mo><msub><mi>e</mi><mi>i</mi></msub><mo stretchy="false">|</mo></mrow><mrow><msub><mi>e</mi><mi>i</mi></msub></mrow></mfrac></mrow></math></div>
 
-<div class="code"><div class="code-label">reconciliation.sql</div><pre>SELECT reason, count(*) AS n
-FROM count_audit
-WHERE cycle_id = &#39;Q3-2026&#39;
-GROUP BY reason
-ORDER BY n DESC;
+<div class="code"><div class="code-label">reconciliation.sql</div><pre><span class="t-kw">SELECT</span> reason<span class="t-pun">,</span> <span class="t-kw">count</span><span class="t-pun">(</span><span class="t-op">*</span><span class="t-pun">)</span> <span class="t-kw">AS</span> n
+<span class="t-kw">FROM</span> count_audit
+<span class="t-kw">WHERE</span> cycle_id <span class="t-op">=</span> <span class="t-str">&#39;Q3-2026&#39;</span>
+<span class="t-kw">GROUP</span> <span class="t-kw">BY</span> reason
+<span class="t-kw">ORDER</span> <span class="t-kw">BY</span> n <span class="t-kw">DESC</span><span class="t-pun">;</span>
 </pre></div>
 
 <div class="code"><div class="code-label">dedupe.ts · tiebreak fix</div><pre class="diff"><span class="ln ctx">function pickWinner(a, b) {</span><span class="ln del">  return a.code.localeCompare(b.code);</span><span class="ln add">  if (isPlaceholder(a) !== isPlaceholder(b))</span><span class="ln add">    return isPlaceholder(a) ? 1 : -1;</span><span class="ln add">  return a.code.localeCompare(b.code);</span><span class="ln ctx">}</span><span class="ln ctx"></span></pre></div>

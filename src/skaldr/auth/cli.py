@@ -20,7 +20,6 @@ from skaldr.auth.notion import (
 from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
-    Service,
     SignIn,
     UnreadableEntryError,
     forget,
@@ -33,6 +32,7 @@ from skaldr.auth.store import (
     stored_notion,
 )
 from skaldr.errors import AuthError
+from skaldr.services import Service
 
 _UNNAMED_WORKSPACE = "(unnamed workspace)"
 

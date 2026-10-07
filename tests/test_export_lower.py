@@ -2,10 +2,10 @@ from typing import Any
 
 import pytest
 
+from skaldr.code_language import code_language
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report, place_legend
 from skaldr.export.lower.context import spaced, with_bold_label
-from skaldr.export.lower.prose import code_language
 from skaldr.export.runs import (
     Break,
     CheckMark,

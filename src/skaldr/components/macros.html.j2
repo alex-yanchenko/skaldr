@@ -307,7 +307,7 @@
 {% elif block.type == "range" %}
 {{ range_bar(block) }}
 {% elif block.type == "code" %}
-<div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for line in block.content.split("\n") %}<span class="ln {{ 'add' if line.startswith('+') else 'del' if line.startswith('-') else 'ctx' }}">{{ line[1:] if (line.startswith('+') or line.startswith('-')) else line }}</span>{% endfor %}</pre>{% else %}<pre>{{ block.content }}</pre>{% endif %}</div>
+<div class="code">{% if block.label %}<div class="code-label">{{ block.label }}</div>{% endif %}{% if block.mode == "diff" %}<pre class="diff">{% for kind, line in highlighted_diff_lines(block) %}<span class="ln {{ kind }}">{{ line }}</span>{% endfor %}</pre>{% else %}<pre>{{ highlighted_code(block) }}</pre>{% endif %}</div>
 {% elif block.type == "math" %}
 <div class="math">{{ display_math(block.expression) }}</div>
 {% elif block.type == "quote" %}
