@@ -204,10 +204,34 @@ Node = (
 )
 
 
+PagePartKind = Literal["header", "legend", "footer"]
+
+
+@dataclass(frozen=True)
+class PagePart:
+    kind: PagePartKind
+    nodes: tuple[Node, ...]
+
+
+@dataclass(frozen=True)
+class BlockRegion:
+    source_index: int
+    nodes: tuple[Node, ...]
+    section_id: str | None = None
+    anchor: str | None = None
+
+
+Region = PagePart | BlockRegion
+
+
 @dataclass(frozen=True)
 class LoweredDocument:
     title: str
-    body: tuple[Node, ...]
+    regions: tuple[Region, ...]
+
+    @property
+    def body(self) -> tuple[Node, ...]:
+        return tuple(node for region in self.regions for node in region.nodes)
 
 
 def capped_heading_level(level: int) -> HeadingLevel:

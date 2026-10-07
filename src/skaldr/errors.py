@@ -10,6 +10,10 @@ class ConnectorError(Exception):
     pass
 
 
+class RegionNotFoundError(LookupError):
+    pass
+
+
 class ReadOnlyFileError(PermissionError):
     pass
 

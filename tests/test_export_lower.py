@@ -4,7 +4,7 @@ import pytest
 
 from skaldr.code_language import code_language
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower import lower_report, place_legend
+from skaldr.export.lower import lower_report
 from skaldr.export.lower.context import spaced, with_bold_label
 from skaldr.export.runs import (
     Break,
@@ -18,6 +18,7 @@ from skaldr.export.runs import (
     SwimlaneMark,
 )
 from skaldr.export.tree import (
+    BlockRegion,
     Callout,
     CodeBlock,
     Columns,
@@ -34,6 +35,7 @@ from skaldr.export.tree import (
     ListNode,
     LoweredDocument,
     Node,
+    PagePart,
     Paragraph,
     PieChart,
     PieSlice,
@@ -91,7 +93,10 @@ def test_a_report_lowers_to_its_title_and_body() -> None:
 
     assert lower_report(report) == LoweredDocument(
         "Count",
-        (Paragraph((Plain("Sub **bold** {{blank}}"),), "muted"), Paragraph((Plain("Hello."),))),
+        (
+            PagePart("header", (Paragraph((Plain("Sub **bold** {{blank}}"),), "muted"),)),
+            BlockRegion(0, (Paragraph((Plain("Hello."),)),)),
+        ),
     )
 
 
@@ -832,32 +837,6 @@ def test_the_badge_legend_comes_right_after_the_table_of_contents_when_the_page_
         Heading(2, (Plain("A"),), "a"),
         Paragraph((Chip("api", "blue"),)),
     )
-
-
-@pytest.mark.parametrize(
-    ("legend_at", "nodes"),
-    [
-        pytest.param(
-            None,
-            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
-            id="no-top-level-table-puts-it-first",
-        ),
-        pytest.param(
-            2,
-            [Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), API_LEGEND, Paragraph((Plain("table"),))],
-            id="right-before-the-first-top-level-table",
-        ),
-        pytest.param(
-            0,
-            [API_LEGEND, Paragraph((Plain("a"),)), Paragraph((Plain("b"),)), Paragraph((Plain("table"),))],
-            id="table-first",
-        ),
-    ],
-)
-def test_the_badge_legend_goes_where_the_html_puts_it(legend_at: int | None, nodes: list[Node]) -> None:
-    blocks = [[Paragraph((Plain("a"),))], [Paragraph((Plain("b"),))], [Paragraph((Plain("table"),))]]
-
-    assert place_legend(blocks, [API_LEGEND], legend_at) == nodes
 
 
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:

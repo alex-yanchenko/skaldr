@@ -1,23 +1,36 @@
+import _thread
 import errno
+import json
 import os
 import re
 import socket
+import threading
 import time
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import keyring
 import pytest
+from filelock import FileLock
 from keyring.errors import KeyringError
+from typing_extensions import override
 
 from skaldr.auth import notion as notion_module
-from skaldr.auth.notion import revoke_notion_token, save_or_revoke_notion, sign_in_to_notion
+from skaldr.auth import store
+from skaldr.auth.notion import (
+    revoke_notion_token,
+    save_notion_replacing_the_old_sign_in,
+    sign_in_to_notion,
+)
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
+    WORKSPACE_ID,
     FakeBrowser,
     InMemoryKeyring,
+    SlowSaveKeyring,
     Visit,
     WriteFailingKeyring,
     answerless,
@@ -37,6 +50,7 @@ from tests.factories.auth_factory import (
     refusing_with_an_escape_sequence,
     refusing_without_state,
     revoke_request_for,
+    seed_notion,
     summarise,
 )
 
@@ -269,7 +283,7 @@ def test_a_failed_token_request_without_an_oauth_error_names_the_status(status: 
 @pytest.mark.parametrize(
     ("answer", "fields"),
     [
-        ({"refresh_token": "secret-refresh-value"}, "access_token"),
+        ({"refresh_token": "secret-refresh-value", "workspace_id": WORKSPACE_ID}, "access_token"),
         (["secret-refresh-value"], "(the whole answer)"),
     ],
     ids=["no access token", "not an object"],
@@ -280,6 +294,71 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
 
     assert str(raised.value) == f"Notion's token answer is missing or has invalid fields: {fields}"
     assert_secret_not_in_error_chain(raised.value, "secret-refresh-value")
+
+
+WITHOUT_A_WORKSPACE_ID = {key: value for key, value in TOKEN_RESPONSE.items() if key != "workspace_id"}
+REFUSED_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        WITHOUT_A_WORKSPACE_ID,
+        {**TOKEN_RESPONSE, "workspace_id": None},
+        {**TOKEN_RESPONSE, "workspace_id": "not-a-uuid"},
+        {**TOKEN_RESPONSE, "workspace_id": "a\x1b[2Jb"},
+    ],
+    ids=["missing", "null", "not a uuid", "an escape sequence"],
+)
+def test_a_token_answer_without_a_usable_workspace_id_has_its_token_revoked_before_it_is_refused(
+    answer: dict[str, object],
+) -> None:
+    seen: list[httpx2.Request] = []
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, answer),
+        "/v1/oauth/revoke": (200, {}),
+    }
+
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), transport=fake_api(routes, seen))
+
+    assert (str(raised.value), [summarise(request) for request in seen if "revoke" in request.url.path]) == (
+        f"{REFUSED_WORKSPACE_ID}. The token Notion issued has been revoked.",
+        [revoke_request_for("new-access")],
+    )
+
+
+def test_a_token_answer_without_a_workspace_id_whose_revoke_fails_says_to_remove_the_connection() -> None:
+    routes: dict[str, tuple[int, object]] = {
+        "/v1/oauth/token": (200, WITHOUT_A_WORKSPACE_ID),
+        "/v1/oauth/revoke": (400, {}),
+    }
+
+    with pytest.raises(AuthError) as raised:
+        sign_in(FakeBrowser(approving), transport=fake_api(routes, []))
+
+    assert str(raised.value) == (
+        f"{REFUSED_WORKSPACE_ID}. The token Notion issued could not be revoked (Notion did not revoke the "
+        "token: HTTP 400), so remove the connection in Notion under Settings, Connections."
+    )
+
+
+def test_an_unreadable_index_after_the_oauth_exchange_revokes_the_token_it_cannot_save(
+    keychain: InMemoryKeyring,
+) -> None:
+    keychain.entries[("skaldr", "index")] = "not json"
+    seen: list[httpx2.Request] = []
+
+    with pytest.raises(AuthError) as raised:
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (str(raised.value), [summarise(request) for request in seen], keychain.entries) == (
+        "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry named "
+        "index under skaldr, then name each Jira site or Notion workspace to find its sign-in again. "
+        "The token Notion issued has been revoked.",
+        [revoke_request_for("new-access")],
+        {("skaldr", "index"): "not json"},
+    )
 
 
 def test_a_token_answer_that_is_not_json_is_named() -> None:
@@ -362,12 +441,142 @@ def revoke_answering(answer: int | None, seen: list[httpx2.Request]) -> httpx2.B
     return fake_api({"/v1/oauth/revoke": (answer, {})}, seen)
 
 
+class SlowLookupKeyring(InMemoryKeyring):
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        stored = super().get_password(service, username)
+        if username == f"notion:{WORKSPACE_ID}":
+            time.sleep(0.05)
+        return stored
+
+
+def revoked_tokens(seen: list[httpx2.Request]) -> list[str]:
+    return [str(json.loads(request.content)["token"]) for request in seen]
+
+
+def test_two_sign_ins_to_one_workspace_leave_exactly_one_token_unrevoked_and_it_is_the_stored_one() -> None:
+    slow = SlowLookupKeyring()
+    keyring.set_keyring(slow)
+    seed_notion(make_notion_credentials(access_token="T0"))
+    seen: list[httpx2.Request] = []
+    transport = revoke_answering(200, seen)
+    sign_ins = [
+        threading.Thread(
+            target=save_notion_replacing_the_old_sign_in,
+            args=(make_notion_credentials(access_token=token),),
+            kwargs={"transport": transport},
+        )
+        for token in ("TA", "TB")
+    ]
+
+    for sign_in_thread in sign_ins:
+        sign_in_thread.start()
+    for sign_in_thread in sign_ins:
+        sign_in_thread.join()
+
+    stored = json.loads(slow.entries[("skaldr", f"notion:{WORKSPACE_ID}")])["access_token"]
+    assert sorted([*revoked_tokens(seen), stored]) == ["T0", "TA", "TB"]
+
+
+def test_looking_up_the_replaced_token_and_saving_the_new_one_hold_the_lock_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    acquisitions: list[str] = []
+
+    class CountingLock(FileLock):
+        @override
+        def acquire(self, *args: Any, **kwargs: Any) -> Any:
+            acquisitions.append("acquired")
+            return super().acquire(*args, **kwargs)
+
+    monkeypatch.setattr(store, "FileLock", CountingLock)
+    seed_notion(make_notion_credentials(access_token="T0"))
+    acquisitions.clear()
+    seen: list[httpx2.Request] = []
+
+    save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (acquisitions, revoked_tokens(seen)) == (["acquired"], ["T0"])
+
+
+def test_a_keychain_timeout_during_the_save_does_not_revoke_the_token_the_save_may_still_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
+    slow = SlowSaveKeyring()
+    keyring.set_keyring(slow)
+    seen: list[httpx2.Request] = []
+
+    try:
+        with pytest.raises(AuthError) as raised:
+            save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+    finally:
+        slow.released.set()
+
+    assert (str(raised.value), seen) == (
+        "The system keychain did not answer within 0.2 seconds; unlock it or answer its prompt, then run "
+        "the command again. A change skaldr asked for may still be applied if the keychain answers later. "
+        "Neither the token Notion issued nor the token it may replace was revoked, because the save may "
+        "still complete; run `skaldr auth status` to see which sign-in is stored, then remove the other "
+        "connection in Notion under Settings, Connections.",
+        [],
+    )
+
+
+def test_an_interrupt_while_waiting_for_the_save_does_not_revoke_the_token_the_save_may_still_store(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    slow = SlowSaveKeyring()
+    keyring.set_keyring(slow)
+    seen: list[httpx2.Request] = []
+    threading.Timer(0.3, _thread.interrupt_main).start()
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+    finally:
+        slow.released.set()
+
+    assert (seen, capsys.readouterr().err) == (
+        [],
+        "warning: the keychain save may still complete, so neither the token Notion issued nor the token "
+        "it may replace was revoked; run `skaldr auth status` to see which sign-in is stored, then remove "
+        "the other connection in Notion under Settings, Connections\n",
+    )
+
+
+def test_signing_in_again_to_a_workspace_missing_from_the_index_revokes_the_token_it_replaces(
+    keychain: InMemoryKeyring,
+) -> None:
+    old = make_notion_credentials(access_token="old-access")
+    keychain.entries[("skaldr", f"notion:{WORKSPACE_ID}")] = old.model_dump_json()
+    seen: list[httpx2.Request] = []
+
+    warnings = save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
+
+    assert (warnings, revoked_tokens(seen), keychain.entries) == (
+        [],
+        ["old-access"],
+        {
+            ("skaldr", f"notion:{WORKSPACE_ID}"): ISSUED.model_dump_json(),
+            ("skaldr", "index"): f'{{"jira": [], "notion": ["notion:{WORKSPACE_ID}"]}}',
+        },
+    )
+
+
 def test_a_saved_sign_in_is_not_revoked(keychain: InMemoryKeyring) -> None:
     seen: list[httpx2.Request] = []
 
-    save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+    save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
 
-    assert (keychain.entries, seen) == ({("skaldr", "notion"): ISSUED.model_dump_json()}, [])
+    assert (keychain.entries, seen) == (
+        {
+            ("skaldr", f"notion:{WORKSPACE_ID}"): ISSUED.model_dump_json(),
+            ("skaldr", "index"): f'{{"jira": [], "notion": ["notion:{WORKSPACE_ID}"]}}',
+        },
+        [],
+    )
 
 
 @pytest.mark.parametrize(
@@ -382,7 +591,7 @@ def test_a_save_that_fails_with_any_other_exception_revokes_the_token_and_lets_i
     seen: list[httpx2.Request] = []
 
     with pytest.raises(type(failure)) as raised:
-        save_or_revoke_notion(ISSUED, transport=revoke_answering(200, seen))
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(200, seen))
 
     assert (raised.value, [summarise(request) for request in seen]) == (
         failure,
@@ -448,7 +657,7 @@ def test_a_save_that_fails_says_whether_the_token_was_revoked(
     seen: list[httpx2.Request] = []
 
     with pytest.raises(AuthError) as raised:
-        save_or_revoke_notion(ISSUED, transport=revoke_answering(revoke_answer, seen))
+        save_notion_replacing_the_old_sign_in(ISSUED, transport=revoke_answering(revoke_answer, seen))
 
     error = raised.value
     assert (
