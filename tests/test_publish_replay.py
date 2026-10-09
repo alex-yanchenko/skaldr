@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
-from skaldr.publish.connector import WriteGranularity
+from skaldr.publish.connector import ConnectorRegistry, WriteGranularity
 from skaldr.publish.content import ItemContent, section_part
 from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
@@ -21,7 +21,7 @@ from skaldr.publish.engine import (
 )
 from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import held_state_lock, load_state, state_path_for
-from skaldr.publish_block import JiraTarget, NotionTarget
+from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
 from tests.factories.publish_factory import (
     DOC_ID,
     DROPPED_AFTER_WRITE,
@@ -30,6 +30,7 @@ from tests.factories.publish_factory import (
     LOST_WRITE,
     REFUSED_WRITE,
     TARGET_LABEL,
+    FakeConnector,
     FakeTransport,
     fake_registry,
     make_garden_blocks,
@@ -90,6 +91,24 @@ def test_a_create_with_an_unknown_outcome_stops_the_next_run_naming_the_parent_a
         [],
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, None, ("create interrupted",))),
     )
+
+
+NOT_SIGNED_IN = "not signed in to notion"
+
+
+class _ConnectorThatCannotSignIn(FakeConnector):
+    def open_transport(self, _target: TargetBase, /) -> FakeTransport:
+        raise ConnectorError(NOT_SIGNED_IN)
+
+
+def test_a_connection_that_never_opened_leaves_no_pending_create(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    registry = ConnectorRegistry([_ConnectorThatCannotSignIn(NotionTarget)])
+
+    with pytest.raises(ConnectorError, match=f"^{NOT_SIGNED_IN}$"):
+        apply_publish(prepare_publish(path, registry))
+
+    assert load_state(state_path_for(path), DOC_ID).pending_creates == []
 
 
 def test_a_create_the_service_rejected_is_forgotten_and_made_on_the_next_run(tmp_path: Path) -> None:
