@@ -6,7 +6,7 @@ import pytest
 
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
 from skaldr.publish.connector import ConnectorRegistry, WriteGranularity
-from skaldr.publish.content import ItemContent, section_part
+from skaldr.publish.content import ItemContent, Part, section_part
 from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
     Applied,
@@ -459,6 +459,42 @@ def test_overwrite_after_a_diff_ignores_a_new_service_marker_on_the_same_unchang
     transport.report_an_edit_without_changing_content("page-1", section_part("planting"))
 
     assert _publish(path, transport, overwrite=True) == Applied(("update   document: planting (blocks[2])",))
+
+
+class ReportsEverySectionThatDiffers(FakeTransport):
+    def parts_edited_after(
+        self, item_id: str, marker: str | None, keyed_like: ItemContent, /
+    ) -> tuple[Part, ...]:
+        reported = super().parts_edited_after(item_id, marker, keyed_like)
+        if not reported:
+            return ()
+        current = self.items[item_id].content.sections
+        keys = dict.fromkeys([*keyed_like.sections, *current])
+        return tuple(section_part(key) for key in keys if keyed_like.sections.get(key) != current.get(key))
+
+
+def test_overwrite_after_a_landed_write_that_dropped_its_answer_needs_one_run(tmp_path: Path) -> None:
+    transport = ReportsEverySectionThatDiffers()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-1", INTRO_KEY, "Welcome, gardeners.\n")
+
+    refused = _publish(path, transport)
+    transport.forget_calls()
+    overwritten = _publish(path, transport, overwrite=True)
+
+    assert (
+        [edit.part for edit in refused.edits] if isinstance(refused, Refused) else [],
+        overwritten,
+        transport.writes(),
+    ) == (
+        [section_part(INTRO_KEY)],
+        Applied((f"update   document: {INTRO_KEY} (blocks[0])",)),
+        [("write_section", "page-1", INTRO_KEY)],
+    )
 
 
 def test_overwrite_after_a_diff_refuses_when_the_service_reports_another_part_edited(tmp_path: Path) -> None:

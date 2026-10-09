@@ -243,11 +243,13 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             published = _published_view(item)
             reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
             compared = with_fields_named(read.comparable, published.fields)
-            edited = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
-            settled, edited = _settled(item, remote, edited, transport)
+            unsettled = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
+            settled, edited = _settled(item, remote, unsettled, transport)
             if settled != item:
                 state = with_item(state, ref, prepared.target_named(label), settled)
-            readings.append(Reading(ref, settled, remote, edited, reported))
+            landed = set(unsettled) - set(edited)
+            still_reported = tuple(part for part in reported if part not in landed)
+            readings.append(Reading(ref, settled, remote, edited, still_reported))
     return PublishedReadings(readings, state, missing)
 
 
