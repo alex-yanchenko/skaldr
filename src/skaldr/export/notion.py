@@ -38,7 +38,6 @@ from skaldr.export.tree import (
     Quote,
     Region,
     TableCell,
-    TableColumn,
     TableNode,
     TableOfContents,
     TableRow,
@@ -472,9 +471,7 @@ def chunk_notion(
     oversized: list[str] = []
     current_chunk = _Piece("", budget.nothing)
     for section in sections:
-        pieces = _section_pieces(
-            _rendered_blocks(_with_long_tables_split(section, budget, room), room), budget
-        )
+        pieces = _section_pieces(_rendered_blocks(section, room), budget)
         if any(not budget.allows(piece.cost) for piece in pieces):
             oversized.append(_section_label(section))
         for piece in pieces:
@@ -500,10 +497,6 @@ def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlo
         blocks.append(RenderedBlock(node, (*separator, *node_lines)))
         previous_kind = kind
     return blocks
-
-
-def _cost_alone(node: Node, budget: Budget, room: TableRoom) -> Cost:
-    return budget.cost(RenderedBlock(node, tuple(_notion_lines(node, room))))
 
 
 def _text_of(blocks: Sequence[RenderedBlock]) -> str:
@@ -540,62 +533,3 @@ def _section_pieces(blocks: Sequence[RenderedBlock], budget: Budget) -> list[_Pi
         groups[-1].append(block)
         spent += cost
     return [_piece_of(group, budget) for group in groups if group]
-
-
-def _with_long_tables_split(nodes: Sequence[Node], budget: Budget, room: TableRoom) -> list[Node]:
-    split: list[Node] = []
-    headings = budget.nothing
-    for node in nodes:
-        if isinstance(node, TableNode) and not budget.allows(_cost_alone(node, budget, room)):
-            split += _table_parts(node, budget, budget.less(headings), room)
-        else:
-            split.append(node)
-        headings = headings + _cost_alone(node, budget, room) if isinstance(node, Heading) else budget.nothing
-    return split
-
-
-def _carried_row_count(rows: Sequence[TableRow], part: Sequence[int], next_row: TableRow) -> int:
-    count = 0
-    if next_row.emphasis == "total":
-        while count < len(part) and rows[part[len(part) - 1 - count]].emphasis == "total":
-            count += 1
-        count += 1
-    while count < len(part) and rows[part[len(part) - 1 - count]].emphasis == "group":
-        count += 1
-    return count
-
-
-def _table_parts(table: TableNode, budget: Budget, first_budget: Budget, room: TableRoom) -> list[TableNode]:
-    if not table.rows:
-        return [table]
-    fixed = _with_its_widths_fixed(table, room)
-    shell = _cost_alone(replace(fixed, rows=()), budget, room)
-    row_costs = [_cost_alone(replace(fixed, rows=(row,)), budget, room) - shell for row in fixed.rows]
-    parts: list[list[int]] = [[]]
-    spent = shell
-    for index, row in enumerate(fixed.rows):
-        part = parts[-1]
-        room_left = first_budget if len(parts) == 1 else budget
-        if part and not room_left.allows(spent + row_costs[index]):
-            carried = _carried_row_count(fixed.rows, part, row)
-            if len(part) > carried:
-                parts[-1] = part[: len(part) - carried]
-                parts.append(part[len(part) - carried :])
-                spent = shell + budget.total(row_costs[kept] for kept in parts[-1])
-        parts[-1].append(index)
-        spent += row_costs[index]
-    return [replace(fixed, rows=tuple(fixed.rows[index] for index in part)) for part in parts if part]
-
-
-def _with_its_widths_fixed(table: TableNode, room: TableRoom) -> TableNode:
-    widths = _column_widths(table, room)
-    if all(width is None for width in widths):
-        return table
-    columns = table.columns or tuple(TableColumn() for _ in table.header)
-    return replace(
-        table,
-        columns=tuple(
-            replace(column, share=None if width is None else width / room.width)
-            for column, width in zip(columns, widths, strict=True)
-        ),
-    )

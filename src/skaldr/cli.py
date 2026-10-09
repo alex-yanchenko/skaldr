@@ -224,8 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="with --export notion: split the page into files of at most N characters, counted in Unicode "
         "code points rather than bytes, for a tool or a paste box that caps its input size. Whole sections "
-        "go together where they fit; a longer section splits between its blocks, and a longer table into "
-        "tables that repeat its header. A single block longer than N stays whole.",
+        "go together where they fit; a longer section splits between its blocks. A single block longer "
+        "than N, a table included, stays whole.",
     )
     parser.add_argument(
         "--write-schema",
