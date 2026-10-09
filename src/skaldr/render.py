@@ -193,6 +193,7 @@ def html_environment() -> Environment:
     globals_.update(
         pct=compute.pct,
         link_card=compute.link_card,
+        favicon_href=compute.favicon_href,
         col_sum=compute.col_sum,
         reconcile_line=compute.reconcile_line,
         table_rollup=compute.table_rollup,

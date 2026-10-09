@@ -15,6 +15,7 @@
      keeping the policy string constant means --live can't weaken it. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
    earlier ones regardless of specificity, so the print overrides never fight the cascade by accident.
@@ -149,6 +150,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
+	.title-icon{margin-inline-end:0.4em}
+	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 }
@@ -1089,7 +1092,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 </script></head>
 <body>
 <div class="wrap">
-<header class="hero"><h1>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience: ops reads the impact, the floor team reads the fix.</p></header>
+<header class="hero"><h1><span class="title-icon" aria-hidden="true">📦</span>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience: ops reads the impact, the floor team reads the fix.</p><p class="cover"><a href="https://example.com/covers/warehouse.png">Cover image</a></p></header>
 <nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#appendix-discrepancy-reason-raw-counts">Appendix: discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#reconciling-a-bin-against-the-live-system">Reconciling a bin against the live system</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>

@@ -1,4 +1,6 @@
-# Q3 Warehouse Inventory Count: Discrepancies & Fixes
+# 📦 Q3 Warehouse Inventory Count: Discrepancies & Fixes
+
+[Cover image](https://example.com/covers/warehouse.png)
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 

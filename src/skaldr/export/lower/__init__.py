@@ -98,7 +98,10 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
     closing = PagePart("footer", _footer(report, lowering))
     page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
     return LoweredDocument(
-        report.meta.title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
+        report.meta.title,
+        tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes),
+        icon=report.meta.icon,
+        cover=report.meta.cover,
     )
 
 

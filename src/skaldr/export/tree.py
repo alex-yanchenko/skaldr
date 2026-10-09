@@ -228,6 +228,8 @@ Region = PagePart | BlockRegion
 class LoweredDocument:
     title: str
     regions: tuple[Region, ...]
+    icon: str | None = None
+    cover: str | None = None
 
     @property
     def body(self) -> tuple[Node, ...]:

@@ -73,6 +73,8 @@ PLAIN_TEXT_FIELDS = frozenset(
         "Meta.title",
         "Meta.subtitle",
         "Meta.date",
+        "Meta.icon",
+        "Meta.cover",
         "Meta.updated",
         "MeterItem.label",
         "Note.title",

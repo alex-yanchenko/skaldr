@@ -2894,6 +2894,32 @@
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
           "title": "Hero",
           "type": "boolean"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
+          "title": "Icon"
+        },
+        "cover": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An http:// or https:// image address for the page cover. The HTML page allows no remote images, so it shows a 'Cover image' link under the title instead; the Notion page cover.",
+          "title": "Cover"
         }
       },
       "required": [

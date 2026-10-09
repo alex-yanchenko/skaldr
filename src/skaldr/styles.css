@@ -132,6 +132,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
+	.title-icon{margin-inline-end:0.4em}
+	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 }

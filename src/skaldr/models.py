@@ -325,6 +325,21 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
+    icon: Icon | None = Field(
+        default=None,
+        description="One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
+    )
+    cover: str | None = Field(
+        default=None,
+        description="An http:// or https:// image address for the page cover. The HTML page allows no remote "
+        "images, so it shows a 'Cover image' link under the title instead; the Notion page cover.",
+    )
+
+    @model_validator(mode="after")
+    def _cover_is_a_web_url(self) -> "Meta":
+        if self.cover is not None:
+            _require_web_url(self.cover, "'cover'")
+        return self
 
 
 class Heading(_Block):

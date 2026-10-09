@@ -12,6 +12,8 @@ meta:
   updated: "18 Jul 2026"
   toc: true
   hero: true
+  icon: "📦"
+  cover: "https://example.com/covers/warehouse.png"
 
 badges:
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
