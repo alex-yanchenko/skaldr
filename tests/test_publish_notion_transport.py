@@ -1,11 +1,13 @@
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent
+from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
 from skaldr.publish.notion.transport import NotionTransport
 from skaldr.publish.transport import (
@@ -215,6 +217,39 @@ def test_a_page_over_one_create_is_finished_by_appends_before_the_stamp_and_no_s
         [_update(STAMP_LINE, f"{sheds}{STAMP_LINE}")],
         f"{beds}{paths}{sheds}{STAMP_LINE}",
         ["beds", "paths", "sheds"],
+    )
+
+
+@dataclass
+class RefusedRenewal:
+    access_token: str = "access-token"
+
+    def renew(self) -> None:
+        raise AuthError("Notion refused to renew the sign-in: invalid_grant; run `skaldr auth notion` again")
+
+
+def test_a_sign_in_refused_while_following_a_create_is_not_a_rejected_write_because_the_page_may_exist() -> (
+    None
+):
+    notion = _notion()
+    notion.scripted = [
+        Scripted(
+            401,
+            {"object": "error", "status": 401, "code": "unauthorized", "message": "expired"},
+            method="GET",
+            path_prefix="/v1/async_tasks/",
+        )
+    ]
+    transport = NotionTransport(NotionApi(RefusedRenewal(), transport=notion.mock(), sleep=lambda _: None))
+
+    with pytest.raises(ConnectorError) as caught:
+        transport.create_item(NewItem(PAGE_TARGET, STAMP, CONTENT))
+
+    assert (type(caught.value), str(caught.value)) == (
+        ConnectorError,
+        "Notion accepted the request to create a page as task task-2 but skaldr could not follow it: Notion "
+        "refused to renew the sign-in: invalid_grant; run `skaldr auth notion` again; the change may still "
+        "land, so read the page before publishing again",
     )
 
 

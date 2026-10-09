@@ -118,9 +118,11 @@ class Scripted:
     body: Any
     headers: dict[str, str] = field(default_factory=dict[str, str])
     method: str | None = None
+    path_prefix: str = "/"
 
     def answers(self, request: httpx2.Request) -> bool:
-        return self.method is None or self.method == request.method
+        method_matches = self.method is None or self.method == request.method
+        return method_matches and request.url.path.startswith(self.path_prefix)
 
 
 @dataclass

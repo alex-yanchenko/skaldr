@@ -53,6 +53,11 @@ class Answer:
     status: int
     body: Any
     headers: dict[str, str] = field(default_factory=dict[str, str])
+    failure: type[httpx2.TransportError] | None = None
+
+
+def _failing(failure: type[httpx2.TransportError]) -> Answer:
+    return Answer(0, None, failure=failure)
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,10 @@ class ScriptedNotion:
             )
         )
         answer = self.answers.pop(0)
+        if answer.failure is not None:
+            raise answer.failure(
+                "timed out" if "Timeout" in answer.failure.__name__ else "reset", request=request
+            )
         return httpx2.Response(answer.status, json=answer.body, headers=answer.headers)
 
 
@@ -377,3 +386,106 @@ def test_a_markdown_read_reports_a_page_notion_cut_short() -> None:
         r"document further with `split`$",
     ):
         harness.api.page_markdown(PAGE_ID)
+
+
+UNFOLLOWED = (
+    "Notion accepted the request to create a page as task task-1 but skaldr could not follow it: {}; the "
+    "change may still land, so read the page before publishing again"
+)
+
+
+@pytest.mark.parametrize(
+    ("polled", "cause"),
+    [
+        pytest.param(
+            [Answer(404, _error(404, "object_not_found", "gone"))],
+            "Notion could not read the progress of task task-1: it has no such object, or this sign-in "
+            "cannot see it",
+            id="task-gone",
+        ),
+        pytest.param(
+            [Answer(401, _error(401, "unauthorized", "expired"))] * 2,
+            "Notion refused the renewed sign-in; run `skaldr auth notion` again",
+            id="sign-in-refused",
+        ),
+        pytest.param(
+            [_failing(httpx2.ReadTimeout)] * 6,
+            "Notion could not read the progress of task task-1: could not reach Notion (timed out)",
+            id="unreachable",
+        ),
+    ],
+)
+def test_a_failure_while_following_an_accepted_task_says_the_change_may_still_land(
+    polled: list[Answer], cause: str
+) -> None:
+    harness = _harness(Answer(202, _task("queued", poll_after_seconds=1)), *polled)
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.create_page({"parent": {"page_id": PAGE_ID}})
+
+    assert (type(caught.value), str(caught.value)) == (ConnectorError, UNFOLLOWED.format(cause))
+
+
+def test_a_read_that_cannot_reach_notion_is_tried_again() -> None:
+    harness = _harness(_failing(httpx2.ConnectError), _failing(httpx2.ReadTimeout), Answer(200, BOT))
+
+    harness.api.me()
+
+    assert (len(harness.notion.sent), harness.sleeps) == (3, [1.0, 2.0])
+
+
+def test_a_write_whose_answer_never_arrived_is_not_tried_again_because_it_may_have_landed() -> None:
+    harness = _harness(_failing(httpx2.ReadTimeout))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.update_page(PAGE_ID, {"in_trash": True})
+
+    assert (type(caught.value), str(caught.value), len(harness.notion.sent)) == (
+        ConnectorError,
+        f"Notion could not change page {PAGE_ID}: no answer arrived (timed out); the change may have landed, "
+        "so read the page before publishing again",
+        1,
+    )
+
+
+def test_a_write_that_never_reached_notion_says_so() -> None:
+    harness = _harness(_failing(httpx2.ConnectError))
+
+    with pytest.raises(
+        ConnectorError, match=rf"^Notion could not change page {PAGE_ID}: could not reach Notion \(reset\)$"
+    ):
+        harness.api.update_page(PAGE_ID, {"in_trash": True})
+    assert len(harness.notion.sent) == 1
+
+
+@pytest.mark.parametrize(
+    ("call", "refusal"),
+    [
+        pytest.param(
+            "write",
+            WriteRejectedError(
+                f"Notion asked skaldr to wait 120 seconds before it may change page {PAGE_ID}, longer than "
+                "the 60 seconds skaldr waits; publish again later"
+            ),
+            id="write",
+        ),
+        pytest.param(
+            "read",
+            ConnectorError(
+                "Notion asked skaldr to wait 120 seconds before it may read the signed-in bot, longer than "
+                "the 60 seconds skaldr waits; publish again later"
+            ),
+            id="read",
+        ),
+    ],
+)
+def test_a_retry_after_longer_than_a_minute_is_not_waited_for(call: str, refusal: ConnectorError) -> None:
+    harness = _harness(Answer(429, _error(429, "rate_limited", "slow down"), {"Retry-After": "120"}))
+
+    with pytest.raises(ConnectorError) as caught:
+        if call == "write":
+            harness.api.update_page(PAGE_ID, {"in_trash": True})
+        else:
+            harness.api.me()
+
+    assert (type(caught.value), str(caught.value), harness.sleeps) == (type(refusal), str(refusal), [])

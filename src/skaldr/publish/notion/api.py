@@ -7,7 +7,14 @@ from typing import Final, Protocol, TypeVar
 
 import httpx2
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from tenacity import RetryCallState, Retrying, retry_if_result, stop_after_attempt, wait_exponential
+from tenacity import (
+    RetryCallState,
+    Retrying,
+    retry_if_exception,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable_only
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
@@ -32,6 +39,8 @@ RETRY_ATTEMPTS: Final = 6
 LONGEST_BACKOFF_SECONDS: Final = 30.0
 SHORTEST_POLL_SECONDS: Final = 0.5
 LONGEST_TASK_WAIT_SECONDS: Final = 600.0
+LONGEST_RETRY_AFTER_SECONDS: Final = 60.0
+NOT_SENT: Final = (httpx2.ConnectError, httpx2.ConnectTimeout)
 ALWAYS_RETRIED: Final = frozenset({HTTPStatus.TOO_MANY_REQUESTS, 529})
 REFUSED_WRITE_STATUSES: Final = frozenset(
     {HTTPStatus.BAD_REQUEST, HTTPStatus.FORBIDDEN, HTTPStatus.CONFLICT, HTTPStatus.TOO_MANY_REQUESTS}
@@ -67,6 +76,10 @@ def _retry_after_seconds(response: httpx2.Response) -> float | None:
 _BACKOFF = wait_exponential(multiplier=1, max=LONGEST_BACKOFF_SECONDS)
 
 
+class _UnreachableError(ConnectorError):
+    pass
+
+
 def _wait_before_retrying(state: RetryCallState) -> float:
     outcome = state.outcome
     response = None if outcome is None or outcome.failed else outcome.result()
@@ -81,13 +94,30 @@ def _last_answer(state: RetryCallState) -> httpx2.Response:
     return answer
 
 
+def _asks_for_too_long_a_wait(response: httpx2.Response) -> float | None:
+    told = _retry_after_seconds(response)
+    too_long = (
+        response.status_code in ALWAYS_RETRIED and told is not None and told > LONGEST_RETRY_AFTER_SECONDS
+    )
+    return told if too_long else None
+
+
 def _deserves_a_retry(method: str) -> Callable[[httpx2.Response], bool]:
     def deserves(response: httpx2.Response) -> bool:
         status = response.status_code
         server_error = HTTPStatus.INTERNAL_SERVER_ERROR <= status < 600
+        if _asks_for_too_long_a_wait(response) is not None:
+            return False
         return status in ALWAYS_RETRIED or (server_error and method == "GET")
 
     return deserves
+
+
+def _unreachable_on_a_read(method: str) -> Callable[[BaseException], bool]:
+    def unreachable(exc: BaseException) -> bool:
+        return method == "GET" and isinstance(exc, _UnreachableError)
+
+    return unreachable
 
 
 def _error_body(response: httpx2.Response) -> ErrorBody:
@@ -188,6 +218,13 @@ class NotionApi:
         return _validated(shape, self._succeeded(self._send("GET", path, None, action), action), action)
 
     def _succeeded(self, answer: httpx2.Response, action: _Action) -> object:
+        wait = _asks_for_too_long_a_wait(answer)
+        if wait is not None:
+            refused = action.writes and answer.status_code == HTTPStatus.TOO_MANY_REQUESTS
+            raise (WriteRejectedError if refused else ConnectorError)(
+                f"Notion asked skaldr to wait {wait:g} seconds before it may {action.to_do}, longer than the "
+                f"{LONGEST_RETRY_AFTER_SECONDS:g} seconds skaldr waits; publish again later"
+            )
         if not answer.is_success:
             raise notion_failure(answer.status_code, _error_body(answer), action)
         try:
@@ -210,14 +247,23 @@ class NotionApi:
                 )
             self._sleep(pause)
             waited += pause
-            progress = _Action(f"read the progress of task {task.id}", "reading", writes=False)
-            polled = self._succeeded(
-                self._send("GET", f"/v1/async_tasks/{task.id}", None, progress), progress
-            )
-            task = _validated(_ASYNC_TASK, polled, progress)
+            task = self._followed(task.id, action)
         if isinstance(task, FailedTask):
             raise notion_failure(task.error.status or HTTPStatus.BAD_REQUEST, task.error, action)
         return task.result
+
+    def _followed(self, task_id: str, action: _Action) -> PendingTask | SucceededTask | FailedTask:
+        progress = _Action(f"read the progress of task {task_id}", "reading", writes=False)
+        try:
+            polled = self._succeeded(
+                self._send("GET", f"/v1/async_tasks/{task_id}", None, progress), progress
+            )
+            return _validated(_ASYNC_TASK, polled, progress)
+        except (ConnectorError, AuthError) as exc:
+            raise ConnectorError(
+                f"Notion accepted the request to {action.to_do} as task {task_id} but skaldr could not "
+                f"follow it: {exc}; the change may still land, so read the page before publishing again"
+            ) from exc
 
     def _send(self, method: str, path: str, body: JsonFields | None, action: _Action) -> httpx2.Response:
         answer = self._with_retries(method, path, body, action)
@@ -235,7 +281,8 @@ class NotionApi:
         retrying = Retrying(
             stop=stop_after_attempt(RETRY_ATTEMPTS),
             wait=_wait_before_retrying,
-            retry=retry_if_result(_deserves_a_retry(method)),
+            retry=retry_if_result(_deserves_a_retry(method))
+            | retry_if_exception(_unreachable_on_a_read(method)),
             sleep=self._sleep,
             retry_error_callback=_last_answer,
         )
@@ -247,4 +294,11 @@ class NotionApi:
         try:
             return self._client.request(method, path, json=body, headers=headers)
         except httpx2.TransportError as exc:
-            raise ConnectorError(f"Notion could not {action.to_do}: could not reach Notion ({exc})") from None
+            if method != "GET" and not isinstance(exc, NOT_SENT):
+                raise ConnectorError(
+                    f"Notion could not {action.to_do}: no answer arrived ({exc}); the change may have "
+                    "landed, so read the page before publishing again"
+                ) from None
+            raise _UnreachableError(
+                f"Notion could not {action.to_do}: could not reach Notion ({exc})"
+            ) from None
