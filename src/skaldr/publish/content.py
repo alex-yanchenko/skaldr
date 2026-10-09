@@ -1,6 +1,6 @@
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Literal
@@ -35,6 +35,11 @@ class ItemContent(FrozenModel):
     title: str
     sections: dict[str, str] = Field(default_factory=dict[str, str])
     fields: JsonFields = Field(default_factory=JsonFields)
+
+
+def with_fields_named(content: ItemContent, names: Collection[str]) -> ItemContent:
+    owned = {name: value for name, value in content.fields.items() if name in names}
+    return content.model_copy(update={"fields": owned})
 
 
 def _canonical_json(value: JsonValue) -> str:

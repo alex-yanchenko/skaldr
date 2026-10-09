@@ -1,13 +1,21 @@
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from pydantic import JsonValue
 from typing_extensions import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError
-from skaldr.publish.content import ItemContent, Part, comparable, differing_parts, placed_section
+from skaldr.publish.content import (
+    ItemContent,
+    Part,
+    comparable,
+    differing_parts,
+    placed_section,
+    with_fields_named,
+)
+from skaldr.publish.drafts import ItemDraft
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState
@@ -135,6 +143,11 @@ def _retired_already(item: PublishedItem, remote: RemoteItem | None) -> bool:
     return item.retiring == "release" and remote.doc_id is None and not _has_content(remote)
 
 
+def _owned_view(item: PublishedItem, draft: ItemDraft | None) -> ItemContent:
+    names = [*item.remote.fields, *item.rendered.fields, *(draft.content.fields if draft is not None else ())]
+    return item.remote.model_copy(update={"fields": {name: item.remote.fields.get(name) for name in names}})
+
+
 def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -> RemoteItem | None:
     try:
         return transport.read_item(item_id, keyed_like)
@@ -182,15 +195,17 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
         transport = transports.for_target(label)
         for section_id, item in published_target.held_items():
             ref = ItemRef(label, section_id)
-            remote = _read_or_none(transport, item.item_id, item.remote)
-            if _retired_already(item, remote):
+            owned = _owned_view(item, prepared.draft_of(ref))
+            read = _read_or_none(transport, item.item_id, owned)
+            if _retired_already(item, read):
                 state = with_item(state, ref, prepared.target_named(label), None)
                 continue
-            if remote is None:
+            if read is None:
                 missing.append(MissingItem(ref, item.item_id))
                 continue
-            refuse_another_documents_item(ref, remote, prepared.doc_id)
-            reported = tuple(transport.remote_edits_since(item.item_id, item.marker))
+            refuse_another_documents_item(ref, read, prepared.doc_id)
+            remote = replace(read, comparable=with_fields_named(read.comparable, owned.fields))
+            reported = tuple(transport.parts_edited_after(item.item_id, item.marker, owned))
             edited = tuple(dict.fromkeys([*differing_parts(item.remote, remote.comparable), *reported]))
             settled, edited = _settled(item, remote, edited, transport)
             if settled != item:

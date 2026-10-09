@@ -69,6 +69,24 @@ SectionWrite = AddSection | ReplaceSection | RemoveSection
 
 
 @dataclass(frozen=True)
+class SectionRequest:
+    change: SectionWrite
+    raw_sections: RawSections
+
+
+@dataclass(frozen=True)
+class ContentWrite:
+    sections: Mapping[str, str]
+    raw_sections: RawSections
+
+
+@dataclass(frozen=True)
+class Release:
+    raw_sections: RawSections
+    field_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FieldsWrite:
     title: str
     fields: JsonFields
@@ -94,24 +112,22 @@ class FieldsWrite:
 
 
 class Transport(Protocol):
-    def create_item(self, item: NewItem, /) -> RemoteItem: ...
-
-    def read_item(self, item_id: str, published: ItemContent, /) -> RemoteItem: ...
+    def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem: ...
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent: ...
 
-    def write_section(
-        self, item_id: str, write: SectionWrite, raw_sections: RawSections, /
-    ) -> RemoteItem: ...
+    def create_item(self, request: NewItem, /) -> RemoteItem: ...
 
-    def write_content(
-        self, item_id: str, sections: Mapping[str, str], raw_sections: RawSections, /
-    ) -> RemoteItem: ...
+    def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem: ...
 
-    def write_fields(self, item_id: str, write: FieldsWrite, /) -> RemoteItem: ...
+    def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem: ...
+
+    def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem: ...
 
     def archive_item(self, item_id: str, /) -> None: ...
 
-    def release_item(self, item_id: str, raw_sections: RawSections, /) -> None: ...
+    def release_item(self, item_id: str, request: Release, /) -> None: ...
 
-    def remote_edits_since(self, item_id: str, marker: str | None, /) -> tuple[Part, ...]: ...
+    def parts_edited_after(
+        self, item_id: str, marker: str | None, keyed_like: ItemContent, /
+    ) -> tuple[Part, ...]: ...

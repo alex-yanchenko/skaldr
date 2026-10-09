@@ -1,10 +1,10 @@
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from typing_extensions import assert_never
 
 from skaldr.errors import PublishError, WriteRejectedError
-from skaldr.publish.content import ItemContent, Part, placed_section, section_part
+from skaldr.publish.content import ItemContent, Part, placed_section, section_part, with_fields_named
 from skaldr.publish.plan import (
     ArchiveStep,
     CreateStep,
@@ -33,12 +33,15 @@ from skaldr.publish.state import (
 from skaldr.publish.transport import (
     NO_SECTIONS,
     AddSection,
+    ContentWrite,
     FieldsWrite,
     NewItem,
     RawSections,
+    Release,
     RemoteItem,
     RemoveSection,
     ReplaceSection,
+    SectionRequest,
     SectionWrite,
     Stamp,
 )
@@ -115,8 +118,11 @@ class Applier:
     def _after_write(
         self, target_plan: TargetPlan, ref: ItemRef, rendered: ItemContent, remote: RemoteItem
     ) -> PublishState:
+        item = self._item(ref)
+        owned = [*rendered.fields, *item.remote.fields]
+        remote = replace(remote, comparable=with_fields_named(remote.comparable, owned))
         self.remote[ref] = remote
-        written = self._item(ref).model_copy(
+        written = item.model_copy(
             update={
                 "rendered": rendered,
                 "remote": remote.comparable,
@@ -166,7 +172,7 @@ class Applier:
             target_plan,
             ref,
             ([section_part(key)], rendered),
-            lambda item_id: transport.write_section(item_id, write, raw_sections),
+            lambda item_id: transport.write_section(item_id, SectionRequest(write, raw_sections)),
         )
 
     def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
@@ -179,7 +185,9 @@ class Applier:
             target_plan,
             step.item,
             (parts, rendered),
-            lambda item_id: transport.write_content(item_id, step.content.sections, raw_sections),
+            lambda item_id: transport.write_content(
+                item_id, ContentWrite(step.content.sections, raw_sections)
+            ),
         )
 
     def _write_fields(self, target_plan: TargetPlan, step: WriteFieldsStep) -> PublishState:
@@ -189,7 +197,7 @@ class Applier:
             step.content.title,
             step.content.fields,
             now.title,
-            now.fields,
+            with_fields_named(now, item.rendered.fields).fields,
             Stamp(self.prepared.doc_id, step.item.section_id),
         )
         rendered = item.rendered.model_copy(
@@ -238,12 +246,9 @@ class Applier:
                 )
             case ReleaseStep():
                 transport = self.transports.for_target(target_plan.label)
-                raw_sections = self._raw_sections(step.item)
+                release = Release(self._raw_sections(step.item), tuple(self._item(step.item).rendered.fields))
                 return self._retired(
-                    target_plan,
-                    step.item,
-                    "release",
-                    lambda: transport.release_item(step.item_id, raw_sections),
+                    target_plan, step.item, "release", lambda: transport.release_item(step.item_id, release)
                 )
             case _:
                 assert_never(step)
@@ -275,6 +280,7 @@ class Applier:
         except WriteRejectedError:
             self._save(before)
             raise
+        remote = replace(remote, comparable=with_fields_named(remote.comparable, step.draft.content.fields))
         self.remote[step.item] = remote
         created = PublishedItem(
             item_id=remote.item_id,

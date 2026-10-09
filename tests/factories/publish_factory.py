@@ -1,5 +1,4 @@
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -14,12 +13,14 @@ from skaldr.publish.content import FIELDS, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.transport import (
     AddSection,
+    ContentWrite,
     FieldsWrite,
     NewItem,
     RawSections,
+    Release,
     RemoteItem,
     RemoveSection,
-    SectionWrite,
+    SectionRequest,
     Stamp,
 )
 from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
@@ -112,13 +113,22 @@ class FakeItem:
         return ItemContent(title=self.title, sections=sections, fields=self.fields)
 
 
+@dataclass(frozen=True)
+class HandEdit:
+    item_id: str
+    revision: int
+    part: Part
+    field_names: tuple[str, ...] = ()
+
+
 @dataclass
 class FakeTransport:
     reads_list_fields_reversed: bool = False
     strips_trailing_whitespace: bool = False
+    service_fields: JsonFields = field(default_factory=JsonFields)
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
-    hand_edits: list[tuple[str, int, Part]] = field(default_factory=list[tuple[str, int, Part]])
+    hand_edits: list[HandEdit] = field(default_factory=list[HandEdit])
     _revision: int = 0
     _items_made: int = 0
     _writes: int = 0
@@ -126,19 +136,6 @@ class FakeTransport:
     _dropping_after_write: int | None = None
     _losing_write: int | None = None
     _landing_one_section_of: int | None = None
-
-    def lose_the_next_write(self) -> None:
-        self._losing_write = self._writes + 1
-
-    def land_only_the_first_section_of_the_next_content_write(self) -> None:
-        self._landing_one_section_of = self._writes + 1
-
-    def comparable_form(self, content: ItemContent, /) -> ItemContent:
-        sections = {key: self._stored(text) for key, text in content.sections.items()}
-        return content.model_copy(update={"sections": sections})
-
-    def _stored(self, text: str) -> str:
-        return text.rstrip() if self.strips_trailing_whitespace else text
 
     def seed(
         self,
@@ -161,6 +158,12 @@ class FakeTransport:
 
     def drop_the_connection_after_write(self, count_from_now: int) -> None:
         self._dropping_after_write = self._writes + count_from_now
+
+    def lose_the_next_write(self) -> None:
+        self._losing_write = self._writes + 1
+
+    def land_only_the_first_section_of_the_next_content_write(self) -> None:
+        self._landing_one_section_of = self._writes + 1
 
     def stop_failing(self) -> None:
         self._failing_write = None
@@ -185,13 +188,18 @@ class FakeTransport:
         del self.items[item_id]
 
     def edit_fields_by_hand(self, item_id: str, fields: JsonFields) -> None:
-        self.items[item_id].fields = fields
-        self.report_an_edit_without_changing_content(item_id, FIELDS)
+        item = self.items[item_id]
+        names = {*item.fields, *fields}
+        changed = tuple(sorted(name for name in names if item.fields.get(name) != fields.get(name)))
+        item.fields = fields
+        item.revision = self._bump()
+        self.hand_edits.append(HandEdit(item_id, item.revision, FIELDS, changed))
 
     def report_an_edit_without_changing_content(self, item_id: str, part: Part) -> None:
         item = self.items[item_id]
         item.revision = self._bump()
-        self.hand_edits.append((item_id, item.revision, part))
+        names = tuple(item.fields) if part == FIELDS else ()
+        self.hand_edits.append(HandEdit(item_id, item.revision, part, names))
 
     def writes(self) -> list[tuple[str, ...]]:
         return [call for call in self.calls if call[0] not in ("read", "edits_since")]
@@ -199,23 +207,11 @@ class FakeTransport:
     def forget_calls(self) -> None:
         self.calls.clear()
 
-    def create_item(self, item: NewItem, /) -> RemoteItem:
-        self._write(("create", item.content.title, item.parent_id or "", item.into_id or ""))
-        if item.into_id is not None:
-            self._refuse_a_stale_layout(item.into_id, item.into_raw_sections)
-        item_id = item.into_id or self._new_item_id()
-        content = self.comparable_form(item.content)
-        self.items[item_id] = FakeItem(
-            content.title,
-            dict(content.sections),
-            dict(content.fields),
-            item.stamp,
-            item.parent_id,
-            self._bump(),
-        )
-        return self._after_write(item_id)
+    def comparable_form(self, content: ItemContent, /) -> ItemContent:
+        sections = {key: self._stored(text) for key, text in content.sections.items()}
+        return content.model_copy(update={"sections": sections})
 
-    def read_item(self, item_id: str, _published: ItemContent, /) -> RemoteItem:
+    def read_item(self, item_id: str, _keyed_like: ItemContent, /) -> RemoteItem:
         self.calls.append(("read", item_id))
         if item_id not in self.items or self.items[item_id].archived:
             raise ItemNotFoundError(f"{item_id} is not on the service")
@@ -229,30 +225,52 @@ class FakeTransport:
         }
         return replace(remote, comparable=comparable.model_copy(update={"fields": reversed_fields}))
 
-    def write_section(self, item_id: str, write: SectionWrite, raw_sections: RawSections, /) -> RemoteItem:
-        self._write(("write_section", item_id, write.key))
-        self._refuse_a_stale_layout(item_id, raw_sections)
+    def create_item(self, request: NewItem, /) -> RemoteItem:
+        self._write(("create", request.content.title, request.parent_id or "", request.into_id or ""))
+        content = self.comparable_form(request.content)
+        if request.into_id is not None:
+            self._refuse_a_stale_layout(request.into_id, request.into_raw_sections)
+            existing = self.items[request.into_id]
+            existing.title = content.title
+            existing.raw_sections = dict(content.sections)
+            existing.fields = {**existing.fields, **content.fields}
+            existing.stamp = request.stamp
+            existing.revision = self._bump()
+            return self._after_write(request.into_id)
+        item_id = self._new_item_id()
+        self.items[item_id] = FakeItem(
+            content.title,
+            dict(content.sections),
+            {**self.service_fields, **content.fields},
+            request.stamp,
+            request.parent_id,
+            self._bump(),
+        )
+        return self._after_write(item_id)
+
+    def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
+        change = request.change
+        self._write(("write_section", item_id, change.key))
+        self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
         sections = dict(item.raw_sections)
-        if not isinstance(write, AddSection):
-            if sections.get(write.key) != write.raw_current:
-                raise WriteRejectedError(f"no matches found for section {write.key}")
-            del sections[write.key]
-        if not isinstance(write, RemoveSection):
+        if not isinstance(change, AddSection):
+            if sections.get(change.key) != change.raw_current:
+                raise WriteRejectedError(f"no matches found for section {change.key}")
+            del sections[change.key]
+        if not isinstance(change, RemoveSection):
             pairs = list(sections.items())
-            at = 0 if write.follows is None else list(sections).index(write.follows) + 1
-            sections = dict([*pairs[:at], (write.key, self._stored(write.text)), *pairs[at:]])
+            at = 0 if change.follows is None else list(sections).index(change.follows) + 1
+            sections = dict([*pairs[:at], (change.key, self._stored(change.text)), *pairs[at:]])
         item.raw_sections = sections
         item.revision = self._bump()
         return self._after_write(item_id)
 
-    def write_content(
-        self, item_id: str, sections: Mapping[str, str], raw_sections: RawSections, /
-    ) -> RemoteItem:
+    def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         self._write(("write_content", item_id))
-        self._refuse_a_stale_layout(item_id, raw_sections)
+        self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
-        stored = {key: self._stored(text) for key, text in sections.items()}
+        stored = {key: self._stored(text) for key, text in request.sections.items()}
         if self._writes == self._landing_one_section_of:
             changed = next(key for key, text in stored.items() if item.raw_sections.get(key) != text)
             item.raw_sections = {**item.raw_sections, changed: stored[changed]}
@@ -262,17 +280,17 @@ class FakeTransport:
         item.revision = self._bump()
         return self._after_write(item_id)
 
-    def write_fields(self, item_id: str, write: FieldsWrite, /) -> RemoteItem:
-        title = ("title",) if write.changes_the_title else ()
-        changed = tuple(f"set {name}" for name in sorted(write.changed_fields))
-        cleared = tuple(f"clear {name}" for name in sorted(write.cleared_fields))
+    def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
+        title = ("title",) if request.changes_the_title else ()
+        changed = tuple(f"set {name}" for name in sorted(request.changed_fields))
+        cleared = tuple(f"clear {name}" for name in sorted(request.cleared_fields))
         self._write(("write_fields", item_id, *title, *changed, *cleared))
         item = self.items[item_id]
-        if item.stamp is None or item.stamp.doc_id != write.stamp.doc_id:
-            raise ConnectorError(f"{item_id} is not stamped with {write.stamp.doc_id}")
-        kept = {name: value for name, value in item.fields.items() if name not in write.cleared_fields}
-        item.fields = {**kept, **write.changed_fields}
-        item.title = write.title
+        if item.stamp is None or item.stamp.doc_id != request.stamp.doc_id:
+            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
+        kept = {name: value for name, value in item.fields.items() if name not in request.cleared_fields}
+        item.fields = {**kept, **request.changed_fields}
+        item.title = request.title
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -281,26 +299,35 @@ class FakeTransport:
         self.items[item_id].archived = True
         self._drop_the_connection_if_asked()
 
-    def release_item(self, item_id: str, raw_sections: RawSections, /) -> None:
+    def release_item(self, item_id: str, request: Release, /) -> None:
         self._write(("release", item_id))
-        self._refuse_a_stale_layout(item_id, raw_sections)
+        self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
         item.raw_sections = {}
-        item.fields = {}
+        item.fields = {name: value for name, value in item.fields.items() if name not in request.field_names}
         item.stamp = None
         item.revision = self._bump()
         self._drop_the_connection_if_asked()
 
-    def remote_edits_since(self, item_id: str, marker: str | None, /) -> tuple[Part, ...]:
+    def parts_edited_after(
+        self, item_id: str, marker: str | None, keyed_like: ItemContent, /
+    ) -> tuple[Part, ...]:
         self.calls.append(("edits_since", item_id))
         since = int(marker or "0")
         return tuple(
-            part for edited, revision, part in self.hand_edits if edited == item_id and revision > since
+            edit.part
+            for edit in self.hand_edits
+            if edit.item_id == item_id
+            and edit.revision > since
+            and (edit.part != FIELDS or any(name in keyed_like.fields for name in edit.field_names))
         )
+
+    def _stored(self, text: str) -> str:
+        return text.rstrip() if self.strips_trailing_whitespace else text
 
     def _refuse_a_stale_layout(self, item_id: str, raw_sections: RawSections) -> None:
         if list(raw_sections.items()) != list(self.items[item_id].raw_sections.items()):
-            raise ConnectorError(f"the layout skaldr sent for {item_id} is not the one on the service")
+            raise WriteRejectedError(f"the layout skaldr sent for {item_id} is not the one on the service")
 
     def _write(self, call: tuple[str, ...]) -> None:
         self._writes += 1

@@ -6,7 +6,7 @@ import pytest
 
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
 from skaldr.publish.connector import WriteGranularity
-from skaldr.publish.content import FIELDS, ItemContent, section_part
+from skaldr.publish.content import ItemContent, section_part
 from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
     Applied,
@@ -26,6 +26,7 @@ from tests.factories.publish_factory import (
     DOC_ID,
     DROPPED_AFTER_WRITE,
     INTO_LABEL,
+    INTRO_KEY,
     LOST_WRITE,
     REFUSED_WRITE,
     TARGET_LABEL,
@@ -418,7 +419,7 @@ def test_overwrite_after_a_diff_refuses_when_the_service_reports_another_part_ed
     path = _published_then_rewritten(tmp_path, transport)
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
     diff_publish(prepare_publish(path, fake_registry(transport)))
-    transport.report_an_edit_without_changing_content("page-1", FIELDS)
+    transport.report_an_edit_without_changing_content("page-1", section_part(INTRO_KEY))
 
     outcome = _publish(path, transport, overwrite=True)
 

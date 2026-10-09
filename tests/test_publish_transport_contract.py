@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from skaldr.errors import PublishError
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import ItemContent
 from skaldr.publish.drafts import draft_targets, load_authored
@@ -11,6 +13,7 @@ from skaldr.publish.transport import FieldsWrite, ReplaceSection, Stamp
 from skaldr.publish_block.target import JsonFields
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTO_LABEL,
     FakeTransport,
     fake_registry,
     make_garden_blocks,
@@ -176,6 +179,46 @@ def test_overwriting_a_field_edit_writes_that_field_back(tmp_path: Path) -> None
         [("write_fields", "page-1", "set Area")],
         SHED,
     )
+
+
+def test_a_field_skaldr_does_not_own_changing_in_the_service_is_not_an_edit(tmp_path: Path) -> None:
+    transport = FakeTransport(service_fields={"Board": "Sprint 4"})
+    path = _republished(tmp_path, transport, _with_fields(SHED), _with_fields(SHED))
+    transport.edit_fields_by_hand("page-1", {**SHED, "Board": "Sprint 5"})
+
+    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+
+
+def test_overwriting_a_field_edit_never_clears_a_field_skaldr_does_not_own(tmp_path: Path) -> None:
+    transport = FakeTransport(service_fields={"Board": "Sprint 4"})
+    path = _republished(tmp_path, transport, _with_fields(SHED), _with_fields(SHED))
+    transport.edit_fields_by_hand("page-1", {**SHED, "Area": "Barn", "Board": "Sprint 5"})
+
+    refused = _publish(path, transport)
+    overwritten = _publish(path, transport, overwrite=True)
+
+    assert (type(refused), overwritten, transport.writes(), transport.items["page-1"].fields) == (
+        Refused,
+        Applied(("update   document: fields",)),
+        [("write_fields", "page-1", "set Area")],
+        {**SHED, "Board": "Sprint 5"},
+    )
+
+
+def test_overwrite_cannot_bring_back_a_page_written_into_that_is_gone(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    into = {"publish": make_notion_publish(where={"page": NOTION_PAGE_ID})}
+    path = _republished(tmp_path, transport, into, into)
+    transport.delete_item_by_hand(NOTION_PAGE_ID)
+    expected = (
+        f"{INTO_LABEL}, document: the page {NOTION_PAGE_ID} the target names is not in Notion; name an "
+        "existing empty page, or publish under one with `parent_page` instead"
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
+        _publish(path, transport, overwrite=True)
+    assert transport.writes() == []
 
 
 def test_the_doc_id_stamp_survives_an_override_of_the_labels(tmp_path: Path) -> None:

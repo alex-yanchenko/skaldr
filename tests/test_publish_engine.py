@@ -176,10 +176,36 @@ def test_overwrite_refuses_an_edit_no_diff_has_shown_and_proceeds_once_it_has(tm
 def test_an_edit_the_service_reports_without_a_visible_change_still_stops_the_publish(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport)
+    transport.report_an_edit_without_changing_content("page-1", section_part("planting"))
+
+    assert _publish(path, transport) == Refused(
+        (RemoteEdit(DOCUMENT, section_part("planting"), "blocks[2]", SPRING, SPRING, None, None),), "edited"
+    )
+
+
+def test_a_field_edit_the_service_reports_counts_only_for_fields_skaldr_publishes(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    owned = {
+        "publish": make_notion_publish(
+            split=["tools"], where={"parent_page": NOTION_PAGE_ID, "fields": {"Area": "Shed"}}
+        )
+    }
+    path = write_garden_report(tmp_path, **owned)
+    _publish(path, transport)
     transport.report_an_edit_without_changing_content("page-1", FIELDS)
 
     assert _publish(path, transport) == Refused(
-        (RemoteEdit(DOCUMENT, FIELDS, "publish.targets[0].where.fields", "{}\n", "{}\n", None, None),),
+        (
+            RemoteEdit(
+                DOCUMENT,
+                FIELDS,
+                "publish.targets[0].where.fields",
+                '{\n  "Area": "Shed"\n}\n',
+                '{\n  "Area": "Shed"\n}\n',
+                None,
+                None,
+            ),
+        ),
         "edited",
     )
 
