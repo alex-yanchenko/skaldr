@@ -38,6 +38,7 @@ from skaldr.replace_file import replace_file
 from skaldr.richtext import (
     SCRIPT_HTML_TAG,
     Citation,
+    PartAnchor,
     RichContext,
     ScriptPosition,
     StyleName,
@@ -184,7 +185,7 @@ def render_richtext(
     placeholders: set[str] | None = None,
     people: Mapping[str, Person] | None = None,
     jira_site: str | None = None,
-    part_anchors: Mapping[str, str] | None = None,
+    part_anchors: Mapping[str, PartAnchor] | None = None,
 ) -> Markup:
     """Rich text as HTML: `parse_rich` reads the inline subset and every other character is escaped.
     `[^key]` markers resolve to a superscript number only for keys `ref_numbers` declares; an unknown

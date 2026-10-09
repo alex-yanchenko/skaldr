@@ -47,13 +47,10 @@ def _dumped_text(body: str) -> dict[str, Any]:
     return Text(type="text", body=body).model_dump(mode="json")
 
 
-def _dumped_part(
-    title: str, *bodies: str, collapsed: bool = False, doc_id: str | None = None
-) -> dict[str, Any]:
+def _dumped_part(title: str, *bodies: str, collapsed: bool = False) -> dict[str, Any]:
     return {
         "type": "part",
         "title": title,
-        "doc_id": doc_id,
         "collapsed": collapsed,
         "blocks": [_dumped_text(body) for body in bodies],
     }
@@ -741,6 +738,116 @@ def test_a_document_link_to_a_document_outside_the_index_stays_a_file_link(tmp_p
     report = load_report(_index_with_a_linked_part(tmp_path, "[other](doc:elsewhere#s1)"))
 
     assert 'href="elsewhere.html#s1">other</a>' in render_html(report)
+
+
+def _plan(doc_id: str, title: str, *section_ids: str, **overrides: Any) -> dict[str, Any]:
+    report = make_publish_report(
+        {"doc_id": doc_id, "targets": [make_notion_target()]}, section_ids=section_ids
+    )
+    return {**report, "meta": {"title": title}, **overrides}
+
+
+def _two_plans(tmp_path: Path, intro: str, plan_a_blocks: list[dict[str, Any]] | None = None) -> Path:
+    plan_a = _plan("plan-a", "Plan A", "sa")
+    if plan_a_blocks is not None:
+        plan_a["blocks"] = [*plan_a["blocks"], *plan_a_blocks]
+    return write_index_document(
+        tmp_path, {"a.yaml": plan_a, "b.yaml": _plan("plan-b", "Plan B", "sb")}, blocks=[_text(intro)]
+    )
+
+
+def test_a_document_link_reaches_only_the_sections_of_its_own_part(tmp_path: Path) -> None:
+    report = load_report(_two_plans(tmp_path, "[a](doc:plan-a#sa) [b](doc:plan-b#sb)"))
+
+    html = render_html(report)
+
+    assert 'href="#sa">a</a>' in html
+    assert 'href="#sb">b</a>' in html
+
+
+def test_a_document_link_to_a_section_of_another_part_fails_naming_it(tmp_path: Path) -> None:
+    report = load_report(_two_plans(tmp_path, "[x](doc:plan-a#sb)"))
+
+    with pytest.raises(ReportError) as raised:
+        render_html(report)
+
+    assert str(raised.value) == "blocks.0.body: rich text links to unknown section 'sb' of document 'plan-a'"
+
+
+def test_a_document_link_to_a_heading_of_its_part_fails_since_only_section_ids_count(
+    tmp_path: Path,
+) -> None:
+    heading = {"type": "heading", "text": "Intro", "id": "intro"}
+    report = load_report(_two_plans(tmp_path, "[x](doc:plan-a#intro)", [heading]))
+
+    with pytest.raises(ReportError) as raised:
+        render_html(report)
+
+    assert str(raised.value) == (
+        "blocks.0.body: rich text links to unknown section 'intro' of document 'plan-a'"
+    )
+
+
+def test_two_parts_with_one_doc_id_fail_naming_both_files(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"a.yaml": _plan("plan-a", "Plan A", "sa"), "b.yaml": _plan("plan-a", "Plan B", "sb")},
+    )
+
+    assert _refusal(index) == (
+        f"doc_id 'plan-a' is published by both {tmp_path / 'a.yaml'} and {tmp_path / 'b.yaml'}; "
+        "an index needs each part's publish.doc_id to be different"
+    )
+
+
+def test_emit_json_leaves_a_parts_doc_id_out(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    index = write_index_document(tmp_path, {"a.yaml": _plan("plan-a", "Plan A", "sa")})
+
+    assert main([str(index), "--emit-json"]) == 0
+
+    [part] = json.loads(capsys.readouterr().out)["blocks"]
+    assert "doc_id" not in part
+
+
+def test_the_index_own_people_are_validated_with_the_meta_path(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": _part("One", "a")},
+        meta={"title": "Combined", "people": {"ada": {"notion": "not-a-uri"}}},
+    )
+
+    assert _refusal(index) == (
+        "invalid content data: meta.people.ada.notion: String should match pattern '^user://[0-9A-Fa-f-]+$'"
+    )
+
+
+def test_the_index_jira_site_conflicting_with_a_part_names_both_files(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": make_report(meta={"title": "One", "jira_site": SITE}, blocks=[_text("a")])},
+        meta={"title": "Combined", "jira_site": "https://other.example.net"},
+    )
+
+    assert _refusal(index) == (
+        f"jira_site is declared differently in {tmp_path / 'index.yaml'} and {tmp_path / 'one.yaml'}; "
+        "an index points every issue link at one site, so give each part the same address"
+    )
+
+
+def test_a_trailing_slash_does_not_make_two_jira_sites_differ(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": make_report(meta={"title": "One", "jira_site": f"{SITE}/"}, blocks=[_text("a")])},
+        meta={"title": "Combined", "jira_site": SITE},
+    )
+
+    assert load_report(index).meta.jira_site == SITE
+
+
+def test_parts_that_declare_no_people_or_site_leave_the_index_meta_without_them(tmp_path: Path) -> None:
+    report = load_report(_two_part_index(tmp_path))
+
+    assert (report.meta.people, report.meta.jira_site) == ({}, None)
 
 
 def test_a_document_link_to_a_section_the_part_lacks_fails_naming_it(tmp_path: Path) -> None:

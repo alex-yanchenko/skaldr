@@ -2685,7 +2685,7 @@ def _is_built_by_an_index(info: ValidationInfo) -> bool:
 class Part(FrozenModel):
     type: Literal["part"]
     title: NonBlank
-    doc_id: str | None = None
+    doc_id: str | None = Field(default=None, exclude=True)
     collapsed: bool = False
     blocks: list[Block] = Field(min_length=1)
 
@@ -3310,6 +3310,20 @@ def _merged_index_meta(path: Path, data: Mapping[str, Any], parts: Sequence[_Loa
     }
 
 
+def _refuse_a_doc_id_published_twice(parts: Sequence[_LoadedPart]) -> None:
+    first_part_with: dict[str, Path] = {}
+    for part in parts:
+        if part.report.publish is None:
+            continue
+        doc_id = part.report.publish.doc_id
+        if doc_id in first_part_with:
+            raise ReportError(
+                f"doc_id {doc_id!r} is published by both {first_part_with[doc_id]} and {part.path}; "
+                "an index needs each part's publish.doc_id to be different"
+            )
+        first_part_with[doc_id] = part.path
+
+
 def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
     publish = part.report.publish
     return {
@@ -3343,6 +3357,7 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
     parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
     page = {key: value for key, value in data.items() if key != "index"}

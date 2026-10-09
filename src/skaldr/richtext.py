@@ -161,13 +161,19 @@ _SCRIPT_TOKENS: Final[Mapping[str, ScriptPosition]] = {SUBSCRIPT: "subscript", S
 
 
 @dataclass(frozen=True)
+class PartAnchor:
+    anchor: str
+    section_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
 class RichContext:
     reference_numbers: Mapping[str, int] | None = None
     reference_urls: Mapping[str, str | None] = field(default_factory=dict[str, "str | None"])
     anchor_ids: frozenset[str] | None = None
     people: Mapping[str, Person] = field(default_factory=dict[str, Person])
     jira_site: str | None = None
-    part_anchors: Mapping[str, str] = field(default_factory=dict[str, str])
+    part_anchors: Mapping[str, PartAnchor] = field(default_factory=dict[str, PartAnchor])
 
 
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
@@ -221,12 +227,12 @@ def _typed_link_run(url: str, label: Rich, rules: RichContext) -> Run | None:
 
 
 def _document_run(target: DocumentTarget, label: Rich, rules: RichContext) -> Run:
-    part_anchor = rules.part_anchors.get(target.doc_id)
-    if part_anchor is None:
+    part = rules.part_anchors.get(target.doc_id)
+    if part is None:
         return DocumentLink(label, target.doc_id, target.section)
     if target.section is None:
-        return AnchorLink(label, part_anchor)
-    if rules.anchor_ids is not None and target.section not in rules.anchor_ids:
+        return AnchorLink(label, part.anchor)
+    if target.section not in part.section_ids:
         raise ReportError(
             f"rich text links to unknown section '{target.section}' of document '{target.doc_id}'"
         )
