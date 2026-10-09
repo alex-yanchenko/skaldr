@@ -285,15 +285,17 @@ def test_a_document_without_a_publish_block_fails_with_the_reason(
     )
 
 
-@pytest.mark.parametrize("command", ["publish", "diff", "status"])
-def test_skaldr_hands_the_publish_commands_to_the_publish_cli(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str
+def test_skaldr_hands_the_publish_commands_to_the_publish_cli_with_its_notion_connector(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     path = write_garden_report(tmp_path)
 
-    exit_code = skaldr_main([command, str(path)])
+    exit_code = skaldr_main(["status", str(path)])
 
-    assert (exit_code, capsys.readouterr().err) == (1, "error: no connector publishes to notion\n")
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        f"{TARGET_LABEL}, document: never published\n{TARGET_LABEL}, section tools: never published\n",
+    )
 
 
 def test_one_applied_step_is_counted_in_the_singular(

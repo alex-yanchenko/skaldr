@@ -311,7 +311,14 @@ class InMemoryNotion:
         if refusal is not None:
             return refusal
         self.pages[page.page_id] = page
+        if "page_id" in parent:
+            self._list_child_page(self.pages[notion_page_id(parent["page_id"]) or parent["page_id"]], page)
         return self._answer(body, page.as_json())
+
+    def _list_child_page(self, parent: StoredPage, child: StoredPage) -> None:
+        reference = f'<page url="https://www.notion.so/{child.page_id}">{child.title}</page>'
+        parent.markdown = as_notion_stores(f"{parent.markdown}\n{reference}")
+        self._touch(parent, BOT_ID)
 
     def _block(self, method: str, block_id: str, _body: dict[str, Any]) -> httpx2.Response:
         key = notion_page_id(block_id) or block_id

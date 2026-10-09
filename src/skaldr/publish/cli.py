@@ -2,7 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from skaldr.errors import ConnectorError, PublishError, ReportError
+from skaldr.errors import AuthError, ConnectorError, PublishError, ReportError
 from skaldr.publish.connector import ConnectorRegistry
 from skaldr.publish.engine import (
     Applied,
@@ -14,12 +14,13 @@ from skaldr.publish.engine import (
     publish_status,
     refusal_message,
 )
+from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
 
 
 def installed_connectors() -> ConnectorRegistry:
-    return ConnectorRegistry(())
+    return ConnectorRegistry([NotionConnector()])
 
 
 def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
@@ -108,6 +109,6 @@ def main(argv: list[str], *, registry: ConnectorRegistry | None = None) -> int:
         publish_parser.error("--overwrite replaces remote edits while publishing, so it needs --apply")
     try:
         return _run(args, registry if registry is not None else installed_connectors())
-    except (ReportError, PublishError, ConnectorError, OSError) as exc:
+    except (ReportError, PublishError, ConnectorError, AuthError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
