@@ -44,6 +44,7 @@ from skaldr.models import (
     RequestCase,
     RequestFlow,
     RequestLike,
+    RequestQuery,
     RequestResponse,
     RichTextMarker,
     Row,
@@ -986,10 +987,8 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
     return " \\\n".join(parts)
 
 
-def query_for(core: RequestLike, case: RequestCase) -> str:
-    if core.query is None:
-        raise ReportError(f"request '{core.label}' records no query")
-    return resolve_case(core.query.content, core, case)
+def query_text_for(query: RequestQuery, core: RequestLike, case: RequestCase) -> str:
+    return resolve_case(query.content, core, case)
 
 
 CASE_LABEL_CHAR = 7.3

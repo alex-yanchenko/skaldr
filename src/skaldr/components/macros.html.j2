@@ -238,7 +238,7 @@
 {% endmacro %}
 
 {% macro query_pane(core, case) %}
-{% set text = query_for(core, case) %}
+{% set text = query_text_for(core.query, core, case) %}
 {% set marked = highlighted_query(text, core.query.lang) %}
 <div class="rq-pane"><div class="rq-pane-hd"><span>Query</span><span class="rq-runner">{{ core.query.runner }}</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button></span></div><pre class="rq-cmd rq-query">{% if marked is none %}{{ variable_slots(text) }}{% else %}{{ marked }}{% endif %}</pre></div>
 {% endmacro %}

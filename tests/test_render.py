@@ -8,7 +8,7 @@ from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -5217,12 +5217,70 @@ def test_each_case_of_a_query_request_with_a_case_axis_shows_its_own_value_writt
     ]
 
 
-def test_a_slot_the_lexer_cannot_read_around_is_shown_plain_and_still_a_slot() -> None:
+def test_a_query_holding_both_stand_in_texts_is_shown_plain_with_its_slot_and_its_own_text() -> None:
+    content = "SELECT '7000007', 'SKALDRSLOT0X', {{n}}"
+    query = {"runner": "psql", "lang": "sql", "content": content}
+    html = _query_page(query=query, variables=[{"name": "n"}])
+
+    assert _pane_text(html, "rq-cmd rq-query") == [f"SELECT '7000007', 'SKALDRSLOT0X', {_empty_slot('n')}"]
+    assert 'class="t-' not in _query_case(html)
+    assert html.count('data-rq-slot="n" data-rq-quote="none"') == 1
+
+
+def test_a_slot_in_a_number_position_renders_highlighted_and_still_a_slot() -> None:
     query = {"runner": "mongosh", "lang": "json", "content": '[{"$limit": {{n}}}]'}
     html = _query_page(query=query, variables=[{"name": "n"}])
 
     assert _pane_text(html, "rq-cmd rq-query") == [f'[{{"$limit": {_empty_slot("n")}}}]']
+    assert 'class="t-pun"' in _query_case(html)
     assert html.count('data-rq-slot="n" data-rq-quote="none"') == 1
+
+
+HOSTILE_RUNNER = "<script>alert(1)</script> & co"
+ESCAPED_RUNNER_HEADER = (
+    '<div class="rq-pane-hd"><span>Query</span>'
+    '<span class="rq-runner">&lt;script&gt;alert(1)&lt;/script&gt; &amp; co</span>'
+)
+
+
+def test_a_hostile_runner_and_query_are_escaped_on_the_highlighted_path() -> None:
+    query = {"runner": HOSTILE_RUNNER, "lang": "json", "content": '["<script>&"]'}
+    case = _query_case(_query_page(query=query))
+
+    assert ESCAPED_RUNNER_HEADER in case
+    assert (
+        '<pre class="rq-cmd rq-query"><span class="t-pun">[</span>'
+        '<span class="t-str">&#34;&lt;script&gt;&amp;&#34;</span><span class="t-pun">]</span></pre>'
+    ) in case
+    assert "<script>" not in case
+
+
+def test_a_hostile_runner_and_query_are_escaped_on_the_plain_path() -> None:
+    content = "<b>x</b> & 7000007 SKALDRSLOT0X {{n}}"
+    query = {"runner": HOSTILE_RUNNER, "lang": "json", "content": content}
+    case = _query_case(_query_page(query=query, variables=[{"name": "n"}]))
+
+    assert ESCAPED_RUNNER_HEADER in case
+    assert (
+        '<pre class="rq-cmd rq-query">&lt;b&gt;x&lt;/b&gt; &amp; 7000007 SKALDRSLOT0X '
+        '<span class="rq-slot" data-rq-slot="n" data-rq-quote="none">&lsaquo;n&rsaquo;</span></pre>'
+    ) in case
+    assert "<b>" not in case
+
+
+def test_a_request_flow_step_can_record_a_query_with_no_paste_pane() -> None:
+    step: dict[str, Any] = {
+        "label": "Count open orders",
+        "query": {"runner": "psql", "lang": "sql", "content": "SELECT count(*) FROM orders"},
+        "cases": [{"label": "open", "response": {"body": "12"}}],
+    }
+    later_query = {"runner": "psql", "lang": "sql", "content": "SELECT 0"}
+    later = {**step, "label": "Count closed orders", "query": later_query}
+    html = render_html(parse_report(make_report(blocks=[make_flow(variables=[], steps=[step, later])])))
+
+    assert _pane_text(html, "rq-cmd rq-query") == ["SELECT count(*) FROM orders", "SELECT 0"]
+    assert "rq-paste" not in html.split('<section class="rq-step">', 1)[1]
+    assert "Copy + capture" not in html
 
 
 def test_a_slot_standing_where_a_name_would_in_a_query_stays_a_slot() -> None:

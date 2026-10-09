@@ -110,6 +110,18 @@ def test_a_query_request_exports_a_fenced_block_in_its_language_labelled_with_th
     )
 
 
+def test_a_query_holding_backticks_gets_a_longer_fence() -> None:
+    query = {"runner": "psql", "lang": "sql", "content": "SELECT '```' AS fence"}
+
+    assert markdown_of([make_query_request(query=query)]) == (
+        "**Open orders in the shop database**\n\n"
+        "*open orders*\n\n"
+        "**Query**: psql\n\n"
+        "````sql\nSELECT '```' AS fence\n````\n\n"
+        '**Recorded output**\n\n```json\n[\n  {\n    "n": 12\n  }\n]\n```\n'
+    )
+
+
 @pytest.mark.parametrize(
     ("tone", "title"),
     [

@@ -410,8 +410,32 @@ def test_a_query_highlights_around_a_slot_and_leaves_the_slot_whole_inside_a_str
     )
 
 
-def test_a_query_the_lexer_cannot_read_around_its_slots_is_left_for_the_plain_path() -> None:
-    assert highlight.highlighted_query_keeping_slots_whole('[{"$limit": {{n}}}]', "json") is None
+SLOT_N = '<span class="rq-slot" data-rq-slot="n" data-rq-quote="none">&lsaquo;n&rsaquo;</span>'
+
+
+def test_a_slot_in_a_number_position_keeps_the_whole_query_highlighted() -> None:
+    marked = highlight.highlighted_query_keeping_slots_whole('[{"$limit": {{n}}}]', "json")
+
+    assert marked == Markup(
+        '<span class="t-pun">[{</span>&#34;$limit&#34;<span class="t-pun">:</span> '
+        f'<span class="t-num">{SLOT_N}</span><span class="t-pun">}}]</span>'
+    )
+
+
+def test_a_query_that_already_contains_the_number_stand_in_is_highlighted_with_the_word_stand_in() -> None:
+    marked = highlight.highlighted_query_keeping_slots_whole('["7000007", "{{n}}"]', "json")
+
+    assert marked == Markup(
+        '<span class="t-pun">[</span><span class="t-str">&#34;7000007&#34;</span>'
+        '<span class="t-pun">,</span> '
+        f'<span class="t-str">&#34;{SLOT_N}&#34;</span><span class="t-pun">]</span>'
+    )
+
+
+def test_a_query_that_contains_both_stand_ins_is_left_for_the_plain_path() -> None:
+    content = '["7000007", "SKALDRSLOT0X", {{n}}]'
+
+    assert highlight.highlighted_query_keeping_slots_whole(content, "json") is None
 
 
 def test_a_query_past_the_size_cap_is_left_for_the_plain_path() -> None:

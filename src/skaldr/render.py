@@ -213,7 +213,7 @@ def html_environment() -> Environment:
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,
-        query_for=compute.query_for,
+        query_text_for=compute.query_text_for,
         highlighted_query=highlighted_query_keeping_slots_whole,
         highlighted_code=highlighted_code,
         highlighted_diff_lines=highlighted_diff_lines,

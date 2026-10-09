@@ -4503,8 +4503,13 @@ def test_a_command_refuses_the_fields_a_composed_curl_is_built_from(composed: di
 def test_a_request_without_a_command_still_needs_a_method_and_a_url(missing: str) -> None:
     block = make_request()
     del block[missing]
-    with pytest.raises(ReportError, match=r"needs `method` and `url` to build a curl, or a `command`"):
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value).endswith(
+        "request 'Read an endpoint' needs `method` and `url` to build a curl, or a `command` to run as "
+        "written, or a `query` to record as written"
+    )
 
 
 def test_a_blank_command_is_rejected() -> None:
@@ -4714,6 +4719,15 @@ def test_a_language_pygments_has_no_lexer_for_is_rejected_by_name() -> None:
     assert "blocks.0.request.query.lang: Value error, `no-such-lexer` is not a Pygments lexer name" in (
         _query_error(query=query)
     )
+
+
+def test_a_lexer_name_is_accepted_in_any_letter_case_and_kept_as_written() -> None:
+    query = {"runner": "mongosh", "lang": "JSON", "content": "[]"}
+
+    block = _parsed_request(make_query_request(query=query))
+
+    assert block.query is not None
+    assert block.query.lang == "JSON"
 
 
 @pytest.mark.parametrize("language", ["json", "sql", "postgresql", "js", "graphql"])

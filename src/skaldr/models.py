@@ -1941,7 +1941,7 @@ def _command_without_block_scalar_trailing_newline(text: str) -> str:
 CommandText = Annotated[str, AfterValidator(_command_without_block_scalar_trailing_newline)]
 
 
-def _query_without_block_scalar_trailing_newline(text: str) -> str:
+def _non_blank_query_without_block_scalar_trailing_newline(text: str) -> str:
     trimmed = text.rstrip("\n")
     if not trimmed.strip():
         raise ValueError("query must not be blank (omit it instead)")
@@ -1963,7 +1963,7 @@ class RequestQuery(FrozenModel):
         description="The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It "
         "highlights the query on the page and labels the fence in the Markdown exports."
     )
-    content: Annotated[str, AfterValidator(_query_without_block_scalar_trailing_newline)] = Field(
+    content: Annotated[str, AfterValidator(_non_blank_query_without_block_scalar_trailing_newline)] = Field(
         description="The query text the reader copies and runs in the named tool. May carry "
         "`{{variable}}` tokens, written in as the reader types them."
     )
@@ -2264,7 +2264,7 @@ class _RequestCore(FrozenModel):
         if self.method is None or self.url is None:
             raise ValueError(
                 f"request '{self.label}' needs `method` and `url` to build a curl, or a `command` to run "
-                "as written"
+                "as written, or a `query` to record as written"
             )
         for case in self.cases:
             if case.command is not None:

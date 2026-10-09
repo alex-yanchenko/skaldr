@@ -40,7 +40,7 @@ def _response_caption(core: RequestLike, case: RequestCase) -> Paragraph:
 def _query_nodes(core: RequestLike, case: RequestCase, query: RequestQuery) -> list[Node]:
     return [
         Paragraph(with_bold_label("Query", plain(query.runner))),
-        CodeBlock(compute.query_for(core, case), query.lang),
+        CodeBlock(compute.query_text_for(query, core, case), query.lang),
     ]
 
 

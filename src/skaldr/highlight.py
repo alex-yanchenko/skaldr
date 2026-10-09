@@ -1,4 +1,4 @@
-import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -93,8 +93,15 @@ def highlighted_code(block: Code) -> Markup:
     return Markup("\n").join(plain_lines(text) if lines is None else lines)
 
 
-def held_slot(index: int) -> str:
+def number_stand_in(index: int) -> str:
+    return f"7{index:05d}7"
+
+
+def word_stand_in(index: int) -> str:
     return f"SKALDRSLOT{index}X"
+
+
+StandIn = Callable[[int], str]
 
 
 def slot_markup(name: str) -> Markup:
@@ -103,26 +110,34 @@ def slot_markup(name: str) -> Markup:
     ).format(name, name)
 
 
+def highlighted_with_stand_ins(
+    plain: str, names: list[str], lexer: Lexer, stand_in: StandIn
+) -> Markup | None:
+    if any(stand_in(index) in plain for index in range(len(names))):
+        return None
+    numbering = iter(range(len(names)))
+    lines = lexed_lines(VARIABLE_TOKEN.sub(lambda _: stand_in(next(numbering)), plain), lexer)
+    if lines is None:
+        return None
+    markup = Markup("\n").join(lines)
+    if any(markup.count(stand_in(index)) != 1 for index in range(len(names))):
+        return None
+    for index, name in enumerate(names):
+        markup = markup.replace(stand_in(index), slot_markup(name))
+    return markup
+
+
 def highlighted_query_keeping_slots_whole(text: str, language: str) -> Markup | None:
     plain = with_line_feeds(text)
     lexer = lexer_for(language, len(plain))
     if lexer is None:
         return None
-    names: list[str] = []
-
-    def hold(match: re.Match[str]) -> str:
-        names.append(match.group(1))
-        return held_slot(len(names) - 1)
-
-    lines = lexed_lines(VARIABLE_TOKEN.sub(hold, plain), lexer)
-    if lines is None:
-        return None
-    markup = Markup("\n").join(lines)
-    if any(markup.count(held_slot(index)) != 1 for index in range(len(names))):
-        return None
-    for index, name in enumerate(names):
-        markup = markup.replace(held_slot(index), slot_markup(name))
-    return markup
+    names = [match.group(1) for match in VARIABLE_TOKEN.finditer(plain)]
+    for stand_in in (number_stand_in, word_stand_in):
+        marked = highlighted_with_stand_ins(plain, names, lexer, stand_in)
+        if marked is not None:
+            return marked
+    return None
 
 
 def diff_row(line: str) -> DiffRow:
