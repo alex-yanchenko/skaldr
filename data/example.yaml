@@ -12,6 +12,8 @@ meta:
   updated: "18 Jul 2026"
   toc: true
   hero: true
+  icon: "📦"
+  cover: "https://example.com/covers/warehouse.png"
 
 badges:
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
@@ -265,6 +267,10 @@ blocks:
     alt: "Discrepancy volume by zone"
     caption: "Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts)."
     src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+"
+  - type: link
+    url: "https://example.com/runbooks/aggregate-lots"
+    title: "Aggregate lot runbook"
+    caption: "Revision 7"
   - type: quote
     body: "These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone."
     cite: "Floor lead, ticket OPS-1234"

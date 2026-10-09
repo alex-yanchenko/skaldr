@@ -8,7 +8,7 @@ from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -46,6 +46,7 @@ from tests.factories import (
     make_flow,
     make_grid,
     make_label_table,
+    make_query_request,
     make_reconciled_table,
     make_report,
     make_step,
@@ -5115,6 +5116,187 @@ def test_a_composed_request_still_labels_a_missing_status() -> None:
 
     assert "<span>Recorded response</span>" in html
     assert '<span class="rq-status neutral">no status line</span>' in html
+
+
+def _query_page(**overrides: object) -> str:
+    return render_html(parse_report(make_report(blocks=[make_query_request(**overrides)])))
+
+
+def _empty_slot(name: str) -> str:
+    return chr(0x2039) + name + chr(0x203A)
+
+
+def _query_case(html: str) -> str:
+    start = html.index('<section class="rq-case"')
+    return html[start : html.index("</section>", start) + len("</section>")]
+
+
+def test_a_query_request_shows_the_query_highlighted_under_its_runner_with_a_copy_button() -> None:
+    case = _query_case(_query_page())
+
+    assert case == (
+        '<section class="rq-case" data-rq-case="0">\n'
+        '<h4 class="rq-case-hd">open orders</h4>\n'
+        '<div class="rq-pane"><div class="rq-pane-hd"><span>Query</span>'
+        '<span class="rq-runner">mongosh, orders database</span>'
+        '<span class="rq-btns"><button type="button" class="rq-copy">Copy</button></span></div>'
+        '<pre class="rq-cmd rq-query"><span class="t-pun">[{</span>'
+        '&#34;$match&#34;<span class="t-pun">:</span> '
+        '<span class="t-pun">{</span>&#34;status&#34;<span class="t-pun">:</span> '
+        '<span class="t-str">&#34;open&#34;</span><span class="t-pun">}},</span> '
+        '<span class="t-pun">{</span>&#34;$count&#34;<span class="t-pun">:</span> '
+        '<span class="t-str">&#34;n&#34;</span><span class="t-pun">}]</span></pre></div>\n'
+        '<div class="rq-pane"><div class="rq-pane-hd"><span>Recorded output</span></div>\n'
+        '<pre class="rq-resp">[\n  {\n    &#34;n&#34;: 12\n  }\n]</pre></div>\n'
+        "</section>"
+    )
+
+
+def test_a_query_request_has_no_run_affordance_capture_pane_or_composed_request() -> None:
+    html = _query_page()
+
+    assert [
+        marker
+        for marker in (
+            "Run this",
+            "Copy + capture",
+            "rq-catch",
+            "rq-paste",
+            "rq-in",
+            "rq-live",
+            "rq-wire",
+            "curl -i -X",
+            "rq-pipe",
+            "tee /dev/tty",
+        )
+        if marker in _query_case(html)
+    ] == []
+
+
+def test_the_copy_button_of_a_query_reads_the_query_text_with_its_slots_filled() -> None:
+    query = {
+        "runner": "psql",
+        "lang": "sql",
+        "content": "SELECT count(*) FROM orders WHERE status = '{{status}}'",
+    }
+    html = _query_page(
+        query=query,
+        variables=[{"name": "status", "example": "open"}],
+        cases=[{"label": "open orders", "response": {"body": "12"}}],
+    )
+
+    assert _pane_text(html, "rq-cmd rq-query") == [
+        f"SELECT count(*) FROM orders WHERE status = '{_empty_slot('status')}'"
+    ]
+    assert (
+        '<span class="rq-slot" data-rq-slot="status" data-rq-quote="none">&lsaquo;status&rsaquo;</span>'
+        in html
+    )
+    assert 'data-rq-var="status"' in html
+
+
+def test_a_query_slot_inside_a_highlighted_string_stays_one_slot_with_no_shell_quoting() -> None:
+    query = {"runner": "mongosh", "lang": "json", "content": '[{"$match": {"status": "{{status}}"}}]'}
+    html = _query_page(query=query, variables=[{"name": "status"}])
+
+    assert _pane_text(html, "rq-cmd rq-query") == [f'[{{"$match": {{"status": "{_empty_slot("status")}"}}}}]']
+    assert html.count('data-rq-slot="status" data-rq-quote="none"') == 1
+
+
+def test_each_case_of_a_query_request_with_a_case_axis_shows_its_own_value_written_in() -> None:
+    query = {"runner": "mongosh", "lang": "json", "content": '[{"$match": {"status": "{{status}}"}}]'}
+    cases = [
+        {"label": "open", "tone": "warning", "response": {"body": '[{"n": 12}]'}},
+        {"label": "closed", "tone": "success", "response": {"body": '[{"n": 3}]'}},
+    ]
+    html = _query_page(query=query, case_variable="status", cases=cases)
+
+    assert _pane_text(html, "rq-cmd rq-query") == [
+        '[{"$match": {"status": "open"}}]',
+        '[{"$match": {"status": "closed"}}]',
+    ]
+
+
+def test_a_query_holding_both_stand_in_texts_is_shown_plain_with_its_slot_and_its_own_text() -> None:
+    content = "SELECT '7000007', 'SKALDRSLOT0X', {{n}}"
+    query = {"runner": "psql", "lang": "sql", "content": content}
+    html = _query_page(query=query, variables=[{"name": "n"}])
+
+    assert _pane_text(html, "rq-cmd rq-query") == [f"SELECT '7000007', 'SKALDRSLOT0X', {_empty_slot('n')}"]
+    assert 'class="t-' not in _query_case(html)
+    assert html.count('data-rq-slot="n" data-rq-quote="none"') == 1
+
+
+def test_a_slot_in_a_number_position_renders_highlighted_and_still_a_slot() -> None:
+    query = {"runner": "mongosh", "lang": "json", "content": '[{"$limit": {{n}}}]'}
+    html = _query_page(query=query, variables=[{"name": "n"}])
+
+    assert _pane_text(html, "rq-cmd rq-query") == [f'[{{"$limit": {_empty_slot("n")}}}]']
+    assert 'class="t-pun"' in _query_case(html)
+    assert html.count('data-rq-slot="n" data-rq-quote="none"') == 1
+
+
+HOSTILE_RUNNER = "<script>alert(1)</script> & co"
+ESCAPED_RUNNER_HEADER = (
+    '<div class="rq-pane-hd"><span>Query</span>'
+    '<span class="rq-runner">&lt;script&gt;alert(1)&lt;/script&gt; &amp; co</span>'
+)
+
+
+def test_a_hostile_runner_and_query_are_escaped_on_the_highlighted_path() -> None:
+    query = {"runner": HOSTILE_RUNNER, "lang": "json", "content": '["<script>&"]'}
+    case = _query_case(_query_page(query=query))
+
+    assert ESCAPED_RUNNER_HEADER in case
+    assert (
+        '<pre class="rq-cmd rq-query"><span class="t-pun">[</span>'
+        '<span class="t-str">&#34;&lt;script&gt;&amp;&#34;</span><span class="t-pun">]</span></pre>'
+    ) in case
+    assert "<script>" not in case
+
+
+def test_a_hostile_runner_and_query_are_escaped_on_the_plain_path() -> None:
+    content = "<b>x</b> & 7000007 SKALDRSLOT0X {{n}}"
+    query = {"runner": HOSTILE_RUNNER, "lang": "json", "content": content}
+    case = _query_case(_query_page(query=query, variables=[{"name": "n"}]))
+
+    assert ESCAPED_RUNNER_HEADER in case
+    assert (
+        '<pre class="rq-cmd rq-query">&lt;b&gt;x&lt;/b&gt; &amp; 7000007 SKALDRSLOT0X '
+        '<span class="rq-slot" data-rq-slot="n" data-rq-quote="none">&lsaquo;n&rsaquo;</span></pre>'
+    ) in case
+    assert "<b>" not in case
+
+
+def test_a_request_flow_step_can_record_a_query_with_no_paste_pane() -> None:
+    step: dict[str, Any] = {
+        "label": "Count open orders",
+        "query": {"runner": "psql", "lang": "sql", "content": "SELECT count(*) FROM orders"},
+        "cases": [{"label": "open", "response": {"body": "12"}}],
+    }
+    later_query = {"runner": "psql", "lang": "sql", "content": "SELECT 0"}
+    later = {**step, "label": "Count closed orders", "query": later_query}
+    html = render_html(parse_report(make_report(blocks=[make_flow(variables=[], steps=[step, later])])))
+
+    assert _pane_text(html, "rq-cmd rq-query") == ["SELECT count(*) FROM orders", "SELECT 0"]
+    assert "rq-paste" not in html.split('<section class="rq-step">', 1)[1]
+    assert "Copy + capture" not in html
+
+
+def test_a_slot_standing_where_a_name_would_in_a_query_stays_a_slot() -> None:
+    query = {"runner": "psql", "lang": "sql", "content": "SELECT {{column}}"}
+    html = _query_page(query=query, variables=[{"name": "column"}])
+
+    assert _pane_text(html, "rq-cmd rq-query") == [f"SELECT {_empty_slot('column')}"]
+
+
+def test_a_query_case_reads_recorded_output_and_a_tone_the_way_a_command_case_does() -> None:
+    cases = [{"label": "open", "tone": "warning", "response": {"body": '[{"n": 12}]'}, "verdict": "Twelve."}]
+    html = _query_page(cases=cases)
+
+    assert "<span>Recorded output</span>" in html
+    assert '<span class="rq-status' not in html
+    assert re.findall(r'<div class="rq-verdict (\w+)">', html) == ["warning"]
 
 
 def test_a_command_note_renders_under_the_command_as_rich_text() -> None:

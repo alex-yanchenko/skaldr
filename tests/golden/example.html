@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;3.2.1&#34;}">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;3.3.0&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
@@ -15,6 +15,7 @@
      keeping the policy string constant means --live can't weaken it. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-hcV8TnaegODNfJP97qOIqYq2XhRKBJxNrwNyF1pWQ/c=' 'sha256-/RYfvjqao8TOXkUifKva4X56GWtUUHno+rHbgETon9U=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
    Organised as cascade layers (reset → tokens → base → components → print): later layers win over
    earlier ones regardless of specificity, so the print overrides never fight the cascade by accident.
@@ -149,6 +150,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
+	.title-icon{margin-inline-end:0.4em}
+	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 }
@@ -439,7 +442,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .diff .add::before{content:"+ "; color:var(--diff-add-fg); font-weight:700}
 		& .diff .del{background:var(--diff-del-bg); border-inline-start-color:var(--diff-del-bar)}
 		& .diff .del::before{content:"- "; color:var(--diff-del-fg); font-weight:700}
-		& .diff .ctx::before{content:"  "}
+		& .diff .ctx::before{content:"  "}}
+
+	:is(.rq-query, .code){
 		& .t-kw{color:var(--tok-kw)}
 		& .t-str{color:var(--tok-str)}
 		& .t-num{color:var(--tok-num)}
@@ -453,6 +458,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
 		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
+
+	a.link-card{display:flex; flex-direction:column; gap:2px; margin-block:var(--s4); max-width:680px; padding:14px 18px;
+		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
+		color:var(--ink); text-decoration:none;
+		&:hover .lc-title{text-decoration:underline; text-underline-offset:2px}
+		& .lc-title{font-weight:650; color:var(--info-fg); overflow-wrap:anywhere}
+		& .lc-domain,& .lc-caption,& .lc-note{font-size:12.5px; color:var(--muted)}
+		& .lc-note{font-style:italic; margin-top:var(--s1)}}
 
 	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
 	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
@@ -935,6 +948,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			flex-wrap:wrap; padding:6px var(--s3); background:var(--panel); border-bottom:1px solid var(--line);
 			font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted)}
 		& .rq-btns{display:flex; gap:var(--s2); flex-wrap:wrap}
+		& .rq-runner{flex:1; font-family:var(--mono); font-weight:500; letter-spacing:0; text-transform:none}
 		& .rq-copy{background:var(--info-bg); color:var(--info-fg); border:0; border-radius:var(--r-sm);
 			font:inherit; font-size:11.5px; font-weight:650; padding:4px 11px; cursor:pointer;
 			box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 22%, transparent)}
@@ -1019,6 +1033,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
 		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
+		a.link-card{break-inside:avoid}
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}
 		p{orphans:2; widows:2}
@@ -1086,7 +1101,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 </script></head>
 <body>
 <div class="wrap">
-<header class="hero"><h1>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience: ops reads the impact, the floor team reads the fix.</p></header>
+<header class="hero"><h1><span class="title-icon" aria-hidden="true">📦</span>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</h1><p class="subtitle">Reconciled review of the 10,000-unit cycle count: what didn&#39;t match, why, and the fix for each category.</p><p class="subtitle">Mixed audience: ops reads the impact, the floor team reads the fix.</p><p class="cover"><a href="https://example.com/covers/warehouse.png">Cover image</a></p></header>
 <nav class="toc"><a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#recount-followup">Recount Zone C</a><a href="#appendix-raw-counts">Appendix: discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#reconciling-a-bin-against-the-live-system">Reconciling a bin against the live system</a><a href="#sources">Sources</a></nav><div class="facts"><span class="fact"><span class="k">Source</span><span>WMS export</span></span><span class="fact"><span class="k">Period</span><span>Q3 2026</span></span><span class="fact"><span class="k">Site</span><span>DC-West</span></span><span class="fact"><span class="k">Owner</span><span>Inventory Ops</span></span></div>
 
 <h2 id="overview">Overview<span class="hsub">Reconciled review of the 10,000-unit Q3 cycle count.</span></h2>
@@ -1254,6 +1269,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <div class="code"><div class="code-label">dedupe.ts · tiebreak fix</div><pre class="diff"><span class="ln ctx">function pickWinner(a, b) {</span><span class="ln del">  return a.code.localeCompare(b.code);</span><span class="ln add">  if (isPlaceholder(a) !== isPlaceholder(b))</span><span class="ln add">    return isPlaceholder(a) ? 1 : -1;</span><span class="ln add">  return a.code.localeCompare(b.code);</span><span class="ln ctx">}</span><span class="ln ctx"></span></pre></div>
 
 <figure class="fig"><div class="frame"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+" alt="Discrepancy volume by zone"></div><figcaption>Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).</figcaption></figure>
+
+<a class="link-card" href="https://example.com/runbooks/aggregate-lots"><span class="lc-title">Aggregate lot runbook</span><span class="lc-domain">example.com</span><span class="lc-caption">Revision 7</span></a>
 
 <blockquote class="quote"><div>These bins are aggregate lots, so we can&#39;t split <code>AGG-07</code> into individual SKUs from the dock scan alone.</div><span class="cite">Floor lead, ticket OPS-1234</span></blockquote>
 

@@ -132,6 +132,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
+	.title-icon{margin-inline-end:0.4em}
+	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
 	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
 }
@@ -422,7 +424,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .diff .add::before{content:"+ "; color:var(--diff-add-fg); font-weight:700}
 		& .diff .del{background:var(--diff-del-bg); border-inline-start-color:var(--diff-del-bar)}
 		& .diff .del::before{content:"- "; color:var(--diff-del-fg); font-weight:700}
-		& .diff .ctx::before{content:"  "}
+		& .diff .ctx::before{content:"  "}}
+
+	:is(.rq-query, .code){
 		& .t-kw{color:var(--tok-kw)}
 		& .t-str{color:var(--tok-str)}
 		& .t-num{color:var(--tok-num)}
@@ -436,6 +440,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
 		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
+
+	a.link-card{display:flex; flex-direction:column; gap:2px; margin-block:var(--s4); max-width:680px; padding:14px 18px;
+		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
+		color:var(--ink); text-decoration:none;
+		&:hover .lc-title{text-decoration:underline; text-underline-offset:2px}
+		& .lc-title{font-weight:650; color:var(--info-fg); overflow-wrap:anywhere}
+		& .lc-domain,& .lc-caption,& .lc-note{font-size:12.5px; color:var(--muted)}
+		& .lc-note{font-style:italic; margin-top:var(--s1)}}
 
 	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
 	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
@@ -918,6 +930,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			flex-wrap:wrap; padding:6px var(--s3); background:var(--panel); border-bottom:1px solid var(--line);
 			font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted)}
 		& .rq-btns{display:flex; gap:var(--s2); flex-wrap:wrap}
+		& .rq-runner{flex:1; font-family:var(--mono); font-weight:500; letter-spacing:0; text-transform:none}
 		& .rq-copy{background:var(--info-bg); color:var(--info-fg); border:0; border-radius:var(--r-sm);
 			font:inherit; font-size:11.5px; font-weight:650; padding:4px 11px; cursor:pointer;
 			box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 22%, transparent)}
@@ -1002,6 +1015,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
 		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
+		a.link-card{break-inside:avoid}
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}
 		p{orphans:2; widows:2}

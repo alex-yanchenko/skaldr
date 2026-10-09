@@ -21,7 +21,7 @@ from skaldr.export.tree import (
     Quote,
     ToneName,
 )
-from skaldr.richtext import AnchorLink, Code, Link, Plain
+from skaldr.richtext import AnchorLink, Code, Link, Plain, Styled
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -239,6 +239,15 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
 
 def lower_image(block: models.Image) -> list[Node]:
     return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
+
+
+def lower_link(block: models.Link) -> list[Node]:
+    card = compute.link_card(block)
+    link = Link(plain(card.title), card.url)
+    if block.display == "inline":
+        return [Paragraph((link,))]
+    detail = " · ".join(part for part in (card.domain, card.caption) if part)
+    return [Quote(((Styled("bold", (link,)),),), plain(detail))]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:

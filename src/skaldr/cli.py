@@ -15,8 +15,9 @@ from typing import Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import PageFetchError, ReportError
+from skaldr.errors import PageFetchError, ReportError, UnknownGuideTopicError
 from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import (
@@ -74,13 +75,25 @@ def _flag_name(dest: str) -> str:
     return "the content file" if dest == "data" else "--" + dest.replace("_", "-")
 
 
+def _return_a_swallowed_content_file(args: argparse.Namespace) -> None:
+    value = args.guide
+    if isinstance(value, str) and Path(value).is_file() and not is_topic(value, _guide_source()):
+        args.data = [value, *args.data]
+        args.guide = True
+
+
+def _refuse_a_list_without_the_whole_guide(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.list and args.guide is not True:
+        parser.error("--list lists the guide; use it as `--guide --list`")
+
+
 def _refuse_company_for_a_standalone_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     defaults = vars(parser.parse_args([]))
     given = [dest for dest, value in vars(args).items() if value != defaults[dest]]
     mode = next((dest for dest in given if dest in _STANDALONE_MODES), None)
     if mode is None:
         return
-    others = [_flag_name(dest) for dest in given if dest != mode]
+    others = [_flag_name(dest) for dest in given if dest != mode and not (mode == "guide" and dest == "list")]
     if others:
         parser.error(f"{_flag_name(mode)} runs on its own; drop {', '.join(others)}")
 
@@ -224,8 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="with --export notion: split the page into files of at most N characters, counted in Unicode "
         "code points rather than bytes, for a tool or a paste box that caps its input size. Whole sections "
-        "go together where they fit; a longer section splits between its blocks, and a longer table into "
-        "tables that repeat its header. A single block longer than N stays whole.",
+        "go together where they fit; a longer section splits between its blocks. A single block longer "
+        "than N, a table included, stays whole.",
     )
     parser.add_argument(
         "--write-schema",
@@ -234,8 +247,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--guide",
+        nargs="?",
+        const=True,
+        metavar="NAME",
+        help="print the authoring guide (blocks, rules, a complete example) and exit; give a block name "
+        "(`--guide request`) to print just that block's row, its guide section and its fields, or a "
+        'section title (`--guide "rich text"`) to print just that section',
+    )
+    parser.add_argument(
+        "--list",
         action="store_true",
-        help="print the authoring guide (blocks, rules, a complete example) and exit",
+        help="with --guide: list the guide's sections and the block names, one per line",
     )
     parser.add_argument(
         "--install-skill",
@@ -250,7 +272,9 @@ def main(argv: list[str] | None = None) -> int:
         "working plans as live skaldr docs (delete the marked block to remove), then exit",
     )
     args = parser.parse_args(arguments)
+    _return_a_swallowed_content_file(args)
     _refuse_company_for_a_standalone_mode(parser, args)
+    _refuse_a_list_without_the_whole_guide(parser, args)
 
     # Opportunistically refresh already-installed skills that drifted after an upgrade. Fail-safe and
     # silent unless it writes; `--install-skill` below does its own (create-or-refresh) pass.
@@ -263,9 +287,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.install_plan_rule:
         return install_plan_rule()
 
-    if args.guide:
+    if args.guide is not None:
         try:
-            print(_guide_text())
+            print(_guide_output(args.guide, args.list))
+        except UnknownGuideTopicError as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 1
         except OSError as err:
             print(f"error: could not read the bundled guide: {err}", file=sys.stderr)
             return 1
@@ -627,6 +654,18 @@ def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
     if failed:
         print(f"\n{_plural(failed, 'file')} failed", file=sys.stderr)
     return 1 if failed else 0
+
+
+def _guide_source() -> str:
+    return package_text("skill/GUIDE.md")
+
+
+def _guide_output(topic: str | Literal[True], list_topics_only: bool) -> str:
+    if list_topics_only:
+        return list_topics(_guide_source())
+    if topic is True:
+        return _guide_text()
+    return lookup(topic, _guide_source())
 
 
 def _guide_text() -> str:
