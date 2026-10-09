@@ -444,51 +444,63 @@ def test_notion_reports_no_edit_the_text_comparison_does_not_already_show_and_as
     assert (edited, notion.requests) == ((), [])
 
 
-def test_creating_into_a_page_sets_its_title_and_fields_then_replaces_its_content() -> None:
-    notion = _notion()
+def _write_into_the_empty_row(notion: InMemoryNotion, fields: dict[str, Any]) -> None:
     transport = notion.transport()
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
     notion.requests.clear()
-    content = CONTENT.model_copy(update={"fields": {"Area": "Shed"}})
-
-    created = transport.create_item(
-        NewItem(DATABASE_TARGET, STAMP, content, into_id=EMPTY_ROW, into_raw_sections=raw)
-    )
-
-    assert ([(method, body) for method, _, body in _sent(notion) if method != "GET"], created.item_id) == (
-        [
-            ("PATCH", {"properties": {**_title("Garden handbook", "Name"), "Area": _text("Shed")}}),
-            (
-                "PATCH",
-                {
-                    "type": "replace_content",
-                    "replace_content": {"new_str": f"{WELCOME}{PLANTING}{STAMP_LINE}\n"},
-                    "allow_async": True,
-                },
-            ),
-        ],
-        EMPTY_ROW,
-    )
+    content = CONTENT.model_copy(update={"fields": fields})
+    transport.create_item(NewItem(DATABASE_TARGET, STAMP, content, into_id=EMPTY_ROW, into_raw_sections=raw))
 
 
-def test_creating_into_a_page_whose_property_notion_refuses_writes_nothing() -> None:
+def test_creating_into_a_page_replaces_its_content_with_the_stamp_then_sets_its_title_and_fields() -> None:
     notion = _notion()
-    transport = notion.transport()
-    raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
-    notion.scripted = [Scripted(400, _refusal("Shed is not a valid option."), method="PATCH")]
-    content = CONTENT.model_copy(update={"fields": {"Area": "Shed"}})
 
-    with pytest.raises(
-        WriteRejectedError,
-        match=f"^Notion refused to change page {EMPTY_ROW}: Shed is not a valid option. "
-        r"\(validation_error\)$",
-    ):
-        transport.create_item(
-            NewItem(DATABASE_TARGET, STAMP, content, into_id=EMPTY_ROW, into_raw_sections=raw)
-        )
-    assert (notion.markdown_of(EMPTY_ROW), notion.pages[EMPTY_ROW].properties["Area"]) == (
-        "",
-        ("rich_text", None),
+    _write_into_the_empty_row(notion, {"Area": "Shed"})
+
+    assert [(method, body) for method, _, body in _sent(notion) if method != "GET"] == [
+        (
+            "PATCH",
+            {
+                "type": "replace_content",
+                "replace_content": {"new_str": f"{WELCOME}{PLANTING}{STAMP_LINE}\n"},
+                "allow_async": True,
+            },
+        ),
+        ("PATCH", {"properties": {**_title("Garden handbook", "Name"), "Area": _text("Shed")}}),
+    ]
+
+
+def test_a_write_into_a_page_whose_content_request_fails_leaves_its_title_and_fields_alone() -> None:
+    notion = _notion()
+    failure = {"object": "error", "status": 500, "code": "internal_server_error", "message": "oops"}
+    notion.scripted = [Scripted(500, failure, method="PATCH")]
+
+    with pytest.raises(ConnectorError) as caught:
+        _write_into_the_empty_row(notion, {"Area": "Shed"})
+
+    assert (type(caught.value), str(caught.value), notion.pages[EMPTY_ROW].properties) == (
+        ConnectorError,
+        f"Notion could not change the content of page {EMPTY_ROW}: HTTP 500 internal_server_error: oops",
+        {
+            "Name": ("title", "Blank page"),
+            "Area": ("rich_text", None),
+            "Owner": ("rich_text", None),
+            "Status": ("select", None),
+        },
+    )
+
+
+def test_a_write_into_a_page_whose_property_notion_refuses_leaves_a_stamped_page_to_adopt() -> None:
+    notion = _notion()
+    refusal = _refusal("Shed is not a valid option.")
+    notion.scripted = [Scripted(400, refusal, method="PATCH", path=f"/v1/pages/{EMPTY_ROW}")]
+
+    with pytest.raises(ConnectorError) as caught:
+        _write_into_the_empty_row(notion, {"Area": "Shed"})
+
+    assert (type(caught.value), notion.transport().read_item(EMPTY_ROW, CONTENT).stamp) == (
+        ConnectorError,
+        STAMP,
     )
 
 
@@ -709,6 +721,22 @@ def test_a_fields_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() 
         STAMP,
         f"{WELCOME}{PLANTING}{STAMP_LINE}",
     )
+
+
+def test_a_fields_write_refused_before_sending_does_not_put_a_deleted_stamp_back() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+    notion.requests.clear()
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=r"^the Notion property 'Status' is a select property, so skaldr sends it a text, not 3$",
+    ):
+        transport.write_fields(
+            created.item_id, FieldsWrite(CONTENT.title, {"Status": 3}, CONTENT.title, {}, STAMP)
+        )
+    assert notion.writes() == []
 
 
 def test_a_fields_write_to_a_page_this_transport_never_read_is_refused() -> None:

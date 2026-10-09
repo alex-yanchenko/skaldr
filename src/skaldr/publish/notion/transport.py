@@ -261,11 +261,11 @@ class NotionTransport:
             raise WriteRejectedError(
                 f"Notion page {item_id} is not stamped with doc_id '{request.stamp.doc_id}'"
             )
-        if stamp is None:
-            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp)
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
         properties = {**title, **self._property_requests(page, values)}
+        if stamp is None:
+            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp)
         if properties:
             page = self._api.update_page(item_id, {"properties": properties})
         return self._remote(item_id, page, markdown, layout)
@@ -444,10 +444,12 @@ class NotionTransport:
         stamp = stamp_line(request.stamp)
         batches = _create_batches(list(content.sections.values()), stamp)
         properties = _with_nothing_sent(lambda: self._into_properties(item_id, request))
-        _refused_or_unknown(lambda: self._api.update_page(item_id, {"properties": properties}))
+        _refused_or_unknown(
+            lambda: self._api.update_markdown(item_id, _replace_content(joined([*batches[0], stamp])))
+        )
 
         def finish() -> RemoteItem:
-            self._api.update_markdown(item_id, _replace_content(joined([*batches[0], stamp])))
+            self._api.update_page(item_id, {"properties": properties})
             return self._finish_create(item_id, content, batches[1:])
 
         return _finished_after_a_change(item_id, content.title, finish)

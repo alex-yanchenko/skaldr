@@ -119,10 +119,12 @@ class Scripted:
     headers: dict[str, str] = field(default_factory=dict[str, str])
     method: str | None = None
     path_prefix: str = "/"
+    path: str | None = None
 
     def answers(self, request: httpx2.Request) -> bool:
         method_matches = self.method is None or self.method == request.method
-        return method_matches and request.url.path.startswith(self.path_prefix)
+        path_matches = request.url.path.startswith(self.path_prefix) and self.path in (None, request.url.path)
+        return method_matches and path_matches
 
 
 @dataclass
