@@ -85,6 +85,17 @@ def _require_url_scheme(url: str | None, subject: str) -> None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
 
 
+WEB_URL_SCHEMES = ("http://", "https://")
+
+
+def _require_web_url(url: str, subject: str) -> None:
+    if not url.startswith(WEB_URL_SCHEMES):
+        raise ValueError(f"{subject} must be an http:// or https:// link")
+    defect = _url_defect(url)
+    if defect is not None:
+        raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
 # render.py; both derive from this one class so key-validation and marker-matching can't drift.
 REFERENCE_KEY_PATTERN = r"[A-Za-z0-9_-]+"
@@ -787,6 +798,34 @@ class Image(_Block):
     def _data_uri_only(self) -> "Image":
         if not self.src.startswith("data:"):
             raise ValueError("'src' must be a data: URI")
+        return self
+
+
+LinkDisplay = Literal["inline", "card", "embed"]
+
+
+class Link(_Block):
+    type: Literal["link"]
+    url: str = Field(description="An http:// or https:// address.")
+    display: LinkDisplay = Field(
+        default="card",
+        description="`inline` is a plain link in a line of text; `card` is a bordered card with the title, "
+        "the domain and the caption; `embed` asks for the page to be shown in place. The HTML page loads "
+        "nothing from outside, so an embed renders as the card with a note, and both Markdown exports "
+        "write an embed as the card.",
+    )
+    title: NonBlank | None = Field(
+        default=None, description="Link text or card title; the URL without its scheme when omitted."
+    )
+    caption: NonBlank | None = Field(
+        default=None, description="A line under a card or embed; not allowed on an inline link."
+    )
+
+    @model_validator(mode="after")
+    def _web_url_and_no_inline_caption(self) -> "Link":
+        _require_web_url(self.url, "'url'")
+        if self.display == "inline" and self.caption is not None:
+            raise ValueError("a link shown inline takes no caption; use display: card or display: embed")
         return self
 
 
@@ -2466,6 +2505,7 @@ _Simple = (
     | Note
     | Divider
     | Image
+    | Link
     | Timeline
     | Flow
     | Fan
@@ -2692,6 +2732,7 @@ def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
             | Note()
             | Divider()
             | Image()
+            | Link()
             | Timeline()
             | Flow()
             | Fan()

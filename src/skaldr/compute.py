@@ -18,6 +18,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cache
 from http import HTTPStatus
 from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
+from urllib.parse import urlsplit
 
 import roman
 from pydantic import BaseModel
@@ -34,6 +35,7 @@ from skaldr.models import (
     DeltaDirection,
     FieldPath,
     Heading,
+    Link,
     ListNumbering,
     Matrix,
     MatrixCell,
@@ -64,11 +66,13 @@ from skaldr.prose_blocks import rendered_strings
 from skaldr.richtext import RichContext, parse_rich
 
 __all__ = [
+    "LinkCard",
     "Provenance",
     "anchor_slugs",
     "col_sum",
     "first_table_index",
     "fmt",
+    "link_card",
     "list_label",
     "matrix_grid",
     "matrix_tallies",
@@ -633,6 +637,21 @@ def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
     if has_groups:
         return f"var(--swim-poke) {body} var(--swim-pokeb)"
     return body
+
+
+class LinkCard(NamedTuple):
+    url: str
+    title: str
+    domain: str | None
+    caption: str | None
+
+
+def link_card(block: Link) -> LinkCard:
+    parts = urlsplit(block.url)
+    host = parts.hostname or ""
+    if block.title is not None:
+        return LinkCard(block.url, block.title, host, block.caption)
+    return LinkCard(block.url, block.url.split("://", 1)[1], None, block.caption)
 
 
 class Provenance(NamedTuple):

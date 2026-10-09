@@ -448,6 +448,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& img,& svg{display:block; width:100%; height:auto}
 		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
 
+	a.link-card{display:flex; flex-direction:column; gap:2px; margin-block:var(--s4); max-width:680px; padding:14px 18px;
+		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
+		color:var(--ink); text-decoration:none;
+		&:hover .lc-title{text-decoration:underline; text-underline-offset:2px}
+		& .lc-title{font-weight:650; color:var(--info-fg); overflow-wrap:anywhere}
+		& .lc-domain,& .lc-caption,& .lc-note{font-size:12.5px; color:var(--muted)}
+		& .lc-note{font-style:italic; margin-top:var(--s1)}}
+
 	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
 	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
 	   stay theme-aware. Legend swatches match series colours (assigned in charts.py). */
@@ -1013,6 +1021,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
 		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}
 		/* Keep a block whole across a page break — a split card/callout/row/list-item reads as broken. */
+		a.link-card{break-inside:avoid}
 		.card,.callout,figure.fig,blockquote.quote,.tl li,.status-list li,.list li,
 		.flow .seg,.flow .step,.walk .wstep,.kv,.range .rbar,.badge-groups{break-inside:avoid}
 		p{orphans:2; widows:2}
@@ -1248,6 +1257,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <div class="code"><div class="code-label">dedupe.ts · tiebreak fix</div><pre class="diff"><span class="ln ctx">function pickWinner(a, b) {</span><span class="ln del">  return a.code.localeCompare(b.code);</span><span class="ln add">  if (isPlaceholder(a) !== isPlaceholder(b))</span><span class="ln add">    return isPlaceholder(a) ? 1 : -1;</span><span class="ln add">  return a.code.localeCompare(b.code);</span><span class="ln ctx">}</span><span class="ln ctx"></span></pre></div>
 
 <figure class="fig"><div class="frame"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+" alt="Discrepancy volume by zone"></div><figcaption>Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).</figcaption></figure>
+
+<a class="link-card" href="https://example.com/runbooks/aggregate-lots"><span class="lc-title">Aggregate lot runbook</span><span class="lc-domain">example.com</span><span class="lc-caption">Revision 7</span></a>
 
 <blockquote class="quote"><div>These bins are aggregate lots, so we can&#39;t split <code>AGG-07</code> into individual SKUs from the dock scan alone.</div><span class="cite">Floor lead, ticket OPS-1234</span></blockquote>
 

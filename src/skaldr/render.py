@@ -192,6 +192,7 @@ def html_environment() -> Environment:
     globals_ = cast("dict[str, Any]", env.globals)
     globals_.update(
         pct=compute.pct,
+        link_card=compute.link_card,
         col_sum=compute.col_sum,
         reconcile_line=compute.reconcile_line,
         table_rollup=compute.table_rollup,

@@ -225,6 +225,7 @@ or to keep a small block from stretching across the whole page.
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
 | `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
+| `link` | A link to another page, as a plain link, a card or an embed (see below) | `url` (http or https), `display?: inline\|card\|embed` (default `card`), `title?`, `caption?` (not on `inline`) |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
@@ -267,6 +268,19 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
 - type: matrix
   id: readiness
   # rows / columns / cells …
+```
+
+A `link` block points at a page the reader can open. `display: inline` writes a plain link in a line of text, `card` (the default) a bordered card with the title, the domain and an optional caption, and `embed` asks for the page to be shown in place. The page skaldr writes loads nothing from outside, so it cannot show an embedded page: an `embed` renders as the same card with a note that the page cannot load embedded content, and the card opens the link. Without a `title` the link text is the URL without its scheme, and a card shows no domain line. The `url` must be an `http://` or `https://` address. An `inline` link takes no `caption`.
+
+```yaml
+- type: link
+  url: "https://example.com/runbook"
+  title: "Counting runbook"
+  caption: "rev. 7"
+- type: link
+  url: "https://example.com/board"
+  display: inline
+  title: "the live board"
 ```
 
 Images must be self-contained `data:` URIs. skaldr
@@ -1081,6 +1095,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
 | `image` | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |

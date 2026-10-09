@@ -217,6 +217,10 @@ function pickWinner(a, b) {
 
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
 
+> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**
+>
+> *example.com · Revision 7*
+
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.
 >
 > *Floor lead, ticket OPS-1234*

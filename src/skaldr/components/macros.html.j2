@@ -318,6 +318,13 @@
 <hr class="divider">
 {% elif block.type == "image" %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
+{% elif block.type == "link" %}
+{% set card = link_card(block) %}
+{% if block.display == "inline" %}
+<p class="text"><a href="{{ card.url }}">{{ card.title }}</a></p>
+{% else %}
+<a class="link-card{% if block.display == "embed" %} embed{% endif %}" href="{{ card.url }}"><span class="lc-title">{{ card.title }}</span>{% if card.domain %}<span class="lc-domain">{{ card.domain }}</span>{% endif %}{% if card.caption %}<span class="lc-caption">{{ card.caption }}</span>{% endif %}{% if block.display == "embed" %}<span class="lc-note">This page cannot load embedded content; the card opens the link.</span>{% endif %}</a>
+{% endif %}
 {% elif block.type == "timeline" %}
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}
