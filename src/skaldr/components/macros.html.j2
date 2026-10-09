@@ -261,7 +261,7 @@
 {% macro request(block) %}
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
-{% if block.variables %}{{ variables_form(block.id or block.label, block.variables, []) }}{% endif %}
+{% set fields = reader_variables(block) %}{% if fields %}{{ variables_form(block.id or block.label, fields, []) }}{% endif %}
 {{ request_cases(block) }}
 </section>
 {% endmacro %}
@@ -269,7 +269,9 @@
 {% macro request_flow(block) %}
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span></div>
-{{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
+{% set fields = reader_variables(block) %}
+{% set produced = produced_names(block) %}
+{{ variables_form(block.id or block.label, fields, produced) if fields or produced }}
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
 <section class="rq-step">
