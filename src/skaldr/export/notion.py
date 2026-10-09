@@ -6,6 +6,7 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr.export.apportion import apportioned
+from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -35,6 +36,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Region,
     TableCell,
     TableColumn,
     TableNode,
@@ -445,54 +447,49 @@ class NotionChunks:
     oversized_sections: tuple[str, ...]
 
 
-def chunk_notion(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "normal") -> NotionChunks:
-    room = TableRoom.on_page(page_width)
+@dataclass(frozen=True)
+class _Piece:
+    text: str
+    cost: Cost
+
+
+def _sections(regions: Sequence[Region]) -> list[list[Node]]:
     sections: list[list[Node]] = [[]]
-    for node in nodes:
-        if _chunk_heading(node) is not None and sections[-1]:
-            sections.append([])
-        sections[-1].append(node)
+    for region in regions:
+        for node in region.nodes:
+            if _chunk_heading(node) is not None and sections[-1]:
+                sections.append([])
+            sections[-1].append(node)
+    return sections
+
+
+def chunk_notion(
+    regions: Sequence[Region], budget: Budget, page_width: NotionWidth = "normal"
+) -> NotionChunks:
+    room = TableRoom.on_page(page_width)
+    sections = _sections(regions)
     chunks: list[str] = []
     oversized: list[str] = []
-    current_chunk = ""
+    current_chunk = _Piece("", budget.nothing)
     for section in sections:
-        pieces = _section_pieces(_rendered_blocks(_with_long_tables_split(section, limit, room), room), limit)
-        if any(len(piece) > limit for piece in pieces):
+        pieces = _section_pieces(
+            _rendered_blocks(_with_long_tables_split(section, budget, room), room), budget
+        )
+        if any(not budget.allows(piece.cost) for piece in pieces):
             oversized.append(_section_label(section))
         for piece in pieces:
-            if current_chunk and len(current_chunk) + len(piece) > limit:
-                chunks.append(current_chunk)
-                current_chunk = ""
-            current_chunk += piece
-    if current_chunk:
-        chunks.append(current_chunk)
-    return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))
+            if current_chunk.text and not budget.allows(current_chunk.cost + piece.cost):
+                chunks.append(current_chunk.text)
+                current_chunk = _Piece("", budget.nothing)
+            current_chunk = _Piece(current_chunk.text + piece.text, current_chunk.cost + piece.cost)
+    if current_chunk.text:
+        chunks.append(current_chunk.text)
+    whole_page = render_notion([node for section in sections for node in section], page_width)
+    return NotionChunks(tuple(chunks) or (whole_page,), tuple(oversized))
 
 
-@dataclass(frozen=True)
-class _RenderedBlock:
-    node: Node
-    lines: tuple[str, ...]
-
-    @property
-    def size(self) -> int:
-        return _size_of_lines(self.lines)
-
-    @property
-    def is_a_heading(self) -> bool:
-        return isinstance(self.node, Heading)
-
-
-def _size_of_lines(lines: Sequence[str]) -> int:
-    return sum(len(line) + 1 for line in lines)
-
-
-def _block_size(node: Node, room: TableRoom) -> int:
-    return _size_of_lines(_notion_lines(node, room))
-
-
-def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[_RenderedBlock]:
-    blocks: list[_RenderedBlock] = []
+def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlock]:
+    blocks: list[RenderedBlock] = []
     previous_kind: ListKind | None = None
     for node in nodes:
         node_lines = _notion_lines(node, room)
@@ -500,50 +497,60 @@ def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[_RenderedBl
             continue
         kind = _list_kind(node)
         separator = [EMPTY_BLOCK] if kind is not None and kind == previous_kind else []
-        blocks.append(_RenderedBlock(node, (*separator, *node_lines)))
+        blocks.append(RenderedBlock(node, (*separator, *node_lines)))
         previous_kind = kind
     return blocks
 
 
-def _text_of(blocks: Sequence[_RenderedBlock]) -> str:
+def _cost_alone(node: Node, budget: Budget, room: TableRoom) -> Cost:
+    return budget.cost(RenderedBlock(node, tuple(_notion_lines(node, room))))
+
+
+def _text_of(blocks: Sequence[RenderedBlock]) -> str:
     return _page([line for block in blocks for line in block.lines]) if blocks else ""
 
 
-def _trailing_headings(blocks: Sequence[_RenderedBlock]) -> list[_RenderedBlock]:
+def _piece_of(blocks: Sequence[RenderedBlock], budget: Budget) -> _Piece:
+    return _Piece(_text_of(blocks), budget.total(budget.cost(block) for block in blocks))
+
+
+def _trailing_headings(blocks: Sequence[RenderedBlock]) -> list[RenderedBlock]:
     count = 0
-    while count < len(blocks) and blocks[len(blocks) - 1 - count].is_a_heading:
+    while count < len(blocks) and isinstance(blocks[len(blocks) - 1 - count].node, Heading):
         count += 1
     return list(blocks[len(blocks) - count :])
 
 
-def _section_pieces(blocks: Sequence[_RenderedBlock], limit: int) -> list[str]:
-    if sum(block.size for block in blocks) <= limit:
-        return [_text_of(blocks)] if blocks else []
-    groups: list[list[_RenderedBlock]] = [[]]
-    size = 0
+def _section_pieces(blocks: Sequence[RenderedBlock], budget: Budget) -> list[_Piece]:
+    whole = _piece_of(blocks, budget)
+    if budget.allows(whole.cost):
+        return [whole] if blocks else []
+    groups: list[list[RenderedBlock]] = [[]]
+    spent = budget.nothing
     for block in blocks:
         group = groups[-1]
-        if group and size + block.size > limit:
+        cost = budget.cost(block)
+        if group and not budget.allows(spent + cost):
             carried = _trailing_headings(group)
             kept = group[: len(group) - len(carried)]
             if kept:
                 groups[-1] = kept
                 groups.append(carried)
-                size = sum(member.size for member in carried)
+                spent = budget.total(budget.cost(member) for member in carried)
         groups[-1].append(block)
-        size += block.size
-    return [_text_of(group) for group in groups if group]
+        spent += cost
+    return [_piece_of(group, budget) for group in groups if group]
 
 
-def _with_long_tables_split(nodes: Sequence[Node], limit: int, room: TableRoom) -> list[Node]:
+def _with_long_tables_split(nodes: Sequence[Node], budget: Budget, room: TableRoom) -> list[Node]:
     split: list[Node] = []
-    headings_size = 0
+    headings = budget.nothing
     for node in nodes:
-        if isinstance(node, TableNode) and _block_size(node, room) > limit:
-            split += _table_parts(node, limit, limit - headings_size, room)
+        if isinstance(node, TableNode) and not budget.allows(_cost_alone(node, budget, room)):
+            split += _table_parts(node, budget, budget.less(headings), room)
         else:
             split.append(node)
-        headings_size = headings_size + _block_size(node, room) if isinstance(node, Heading) else 0
+        headings = headings + _cost_alone(node, budget, room) if isinstance(node, Heading) else budget.nothing
     return split
 
 
@@ -558,25 +565,25 @@ def _carried_row_count(rows: Sequence[TableRow], part: Sequence[int], next_row: 
     return count
 
 
-def _table_parts(table: TableNode, limit: int, first_limit: int, room: TableRoom) -> list[TableNode]:
+def _table_parts(table: TableNode, budget: Budget, first_budget: Budget, room: TableRoom) -> list[TableNode]:
     if not table.rows:
         return [table]
     fixed = _with_its_widths_fixed(table, room)
-    shell = _block_size(replace(fixed, rows=()), room)
-    row_sizes = [_block_size(replace(fixed, rows=(row,)), room) - shell for row in fixed.rows]
+    shell = _cost_alone(replace(fixed, rows=()), budget, room)
+    row_costs = [_cost_alone(replace(fixed, rows=(row,)), budget, room) - shell for row in fixed.rows]
     parts: list[list[int]] = [[]]
-    size = shell
+    spent = shell
     for index, row in enumerate(fixed.rows):
         part = parts[-1]
-        room_left = first_limit if len(parts) == 1 else limit
-        if part and size + row_sizes[index] > room_left:
+        room_left = first_budget if len(parts) == 1 else budget
+        if part and not room_left.allows(spent + row_costs[index]):
             carried = _carried_row_count(fixed.rows, part, row)
             if len(part) > carried:
                 parts[-1] = part[: len(part) - carried]
                 parts.append(part[len(part) - carried :])
-                size = shell + sum(row_sizes[kept] for kept in parts[-1])
+                spent = shell + budget.total(row_costs[kept] for kept in parts[-1])
         parts[-1].append(index)
-        size += row_sizes[index]
+        spent += row_costs[index]
     return [replace(fixed, rows=tuple(fixed.rows[index] for index in part)) for part in parts if part]
 
 
