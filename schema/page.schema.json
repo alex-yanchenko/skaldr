@@ -2316,6 +2316,19 @@
           "description": "An existing issue key the document's issue is created under, e.g. PLAN-100.",
           "title": "Parent"
         },
+        "site": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The https URL of the signed-in Jira site this target publishes to, e.g. https://example.atlassian.net. Needed only when you are signed in to several sites. Part of the target's place: changing it is a move.",
+          "title": "Site"
+        },
         "fields": {
           "additionalProperties": {
             "$ref": "#/$defs/JsonValue"

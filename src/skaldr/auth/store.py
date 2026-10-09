@@ -14,11 +14,12 @@ from filelock import FileLock, Timeout
 from keyring.backend import KeyringBackend
 from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
 from skaldr.auth import CaughtWithoutChaining, printable_only
-from skaldr.errors import AuthError
+from skaldr.auth.site import https_origin, normalise_site, site_refusal
+from skaldr.errors import AuthError, SeveralSignInsError
 from skaldr.services import Service
 
 KEYCHAIN_SERVICE = "skaldr"
@@ -48,9 +49,7 @@ _JIRA_SITE = "JIRA_SITE"
 _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
 JIRA_ENVIRONMENT = (_JIRA_SITE, _JIRA_EMAIL, _JIRA_API_TOKEN)
-_JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
 _INSECURE_KEYRING_MODULES = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
-_SITE_REQUIREMENT = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
 class UnreadableEntryError(AuthError):
@@ -79,9 +78,9 @@ class JiraCredentials(BaseModel):
     @field_validator("site")
     @classmethod
     def _site_is_an_https_origin(cls, site: str) -> str:
-        origin = _https_origin(site)
+        origin = https_origin(site)
         if origin is None:
-            raise PydanticCustomError("https_origin", "{refusal}", {"refusal": _site_refusal(site)})
+            raise PydanticCustomError("https_origin", "{refusal}", {"refusal": site_refusal(site)})
         return origin
 
 
@@ -92,13 +91,6 @@ CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials)
 class SignIn(Generic[CredentialsT]):
     credentials: CredentialsT
     source: Source
-
-
-def normalise_site(typed: str) -> str:
-    origin = _https_origin(typed)
-    if origin is None:
-        raise AuthError(_site_refusal(typed))
-    return origin
 
 
 def jira_credentials(
@@ -296,7 +288,9 @@ def _the_only_match(
 ) -> StoredEntry[CredentialsT] | None:
     chosen = entries if selector is None else [entry for entry in entries if matches(entry, selector)]
     if len(chosen) > 1:
-        raise AuthError(f"Signed in to several {plural} ({', '.join(map(describe, chosen))}); name one")
+        raise SeveralSignInsError(
+            f"Signed in to several {plural} ({', '.join(map(describe, chosen))}); name one"
+        )
     return chosen[0] if chosen else None
 
 
@@ -432,36 +426,6 @@ def _entries(kind: _Kind[CredentialsT]) -> list[StoredEntry[CredentialsT]]:
         if stored is not None:
             entries.append(StoredEntry(kind.service, username, _parse(stored, kind.model), stored))
     return entries
-
-
-def _https_origin(typed: str) -> str | None:
-    text = typed.strip()
-    if "\\" in text:
-        return None
-    try:
-        url = HttpUrl(text if "://" in text else f"https://{text}")
-    except ValidationError:
-        return None
-    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host):
-        return None
-    if _carries_userinfo_query_or_fragment(url):
-        return None
-    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
-
-
-def _is_a_jira_cloud_host(host: str | None) -> bool:
-    return host is not None and host.endswith(_JIRA_CLOUD_HOST_SUFFIX)
-
-
-def _carries_userinfo_query_or_fragment(url: HttpUrl) -> bool:
-    parts = (url.username, url.password, url.query, url.fragment)
-    return any(part is not None for part in parts)
-
-
-def _site_refusal(typed: str) -> str:
-    if "@" in typed:
-        return f"{_SITE_REQUIREMENT}, with no user name or password before the host"
-    return f"{_SITE_REQUIREMENT}, not {typed!r}"
 
 
 @dataclass

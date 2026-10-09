@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from pydantic import JsonValue
 
+from skaldr.auth.store import save_jira
 from skaldr.errors import ConnectorError, PublishError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, render_adf_regions
 from skaldr.export.lower import lower_report
@@ -35,13 +36,18 @@ def _exactly(message: str) -> str:
 
 def _connector(jira: FakeJira) -> JiraConnector:
     return JiraConnector(
-        sign_in=make_jira_credentials, http_transport=jira.transport(), sleep=jira.sleeps.append
+        sign_in=lambda _site: make_jira_credentials(),
+        http_transport=jira.transport(),
+        sleep=jira.sleeps.append,
     )
 
 
+def _jira_where() -> dict[str, Any]:
+    return {"project": "DEMO", "issue_type": "Task", "fields": {"labels": ["garden"]}}
+
+
 def _jira_publish(**target: Any) -> dict[str, Any]:
-    where = {"project": "DEMO", "issue_type": "Task", "fields": {"labels": ["garden"]}}
-    return {"doc_id": DOC_ID, "targets": [{"to": "jira", "where": where, **target}]}
+    return {"doc_id": DOC_ID, "targets": [{"to": "jira", "where": _jira_where(), **target}]}
 
 
 def _publish(path: Path, jira: FakeJira, *, overwrite: bool = False) -> ApplyOutcome:
@@ -110,6 +116,75 @@ def test_the_transport_signs_in_with_the_jira_environment_variables(monkeypatch:
     assert {request.headers["authorization"] for request in jira.requests} == {
         basic_auth_header("builder@example.com", "ci-token")
     }
+
+
+OTHER_SITE = "https://other.atlassian.net"
+
+
+def _signed_in_to(*sites: str) -> None:
+    for site in sites:
+        save_jira(make_jira_credentials(site=site, api_token=f"token-for-{site.removeprefix('https://')}"))
+
+
+def _authorization_sent_for(site: str | None) -> set[str | None]:
+    jira = FakeJira()
+    jira.seed("DEMO-1", summary="Garden handbook")
+    where = {"project": "DEMO", "issue_type": "Task", **({} if site is None else {"site": site})}
+    target = JiraTarget.model_validate(make_jira_target(where=where))
+
+    JiraConnector(http_transport=jira.transport()).open_transport(target).read_item(
+        "DEMO-1", ItemContent(title="")
+    )
+
+    return {request.headers["authorization"] for request in jira.requests}
+
+
+def test_a_target_without_a_site_uses_the_one_jira_sign_in() -> None:
+    _signed_in_to(SITE)
+
+    assert _authorization_sent_for(None) == {
+        basic_auth_header("reader@example.com", "token-for-example.atlassian.net")
+    }
+
+
+def test_several_jira_sign_ins_and_no_site_on_the_target_name_the_key_to_set() -> None:
+    _signed_in_to(SITE, OTHER_SITE)
+    target = JiraTarget.model_validate(make_jira_target())
+
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly(
+            f"Signed in to several Jira sites ({SITE}, {OTHER_SITE}); "
+            "name one with `site` in the target's `where`"
+        ),
+    ):
+        JiraConnector().open_transport(target)
+
+
+def test_several_jira_sign_ins_and_a_site_on_the_target_use_that_site() -> None:
+    _signed_in_to(SITE, OTHER_SITE)
+
+    assert _authorization_sent_for("other.atlassian.net") == {
+        basic_auth_header("reader@example.com", "token-for-other.atlassian.net")
+    }
+
+
+def test_a_site_with_no_jira_sign_in_lists_the_sites_that_are_signed_in() -> None:
+    _signed_in_to(SITE, OTHER_SITE)
+    target = JiraTarget.model_validate(
+        make_jira_target(
+            where={"project": "DEMO", "issue_type": "Task", "site": "https://third.atlassian.net"}
+        )
+    )
+
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly(
+            "Not signed in to Jira at https://third.atlassian.net; "
+            f"signed in to {SITE}, {OTHER_SITE}; run `skaldr auth jira` to add it"
+        ),
+    ):
+        JiraConnector().open_transport(target)
 
 
 def test_the_transport_reads_each_field_in_the_shape_the_target_or_an_override_writes_it() -> None:
@@ -265,6 +340,26 @@ def test_a_section_that_leaves_the_split_is_archived_by_closing_its_issue(tmp_pa
         ("update   document: page legend (badges), tools (blocks[1])", "archive  section tools (DEMO-2)"),
         DONE,
     )
+
+
+def test_changing_the_site_of_a_target_is_a_move_that_writes_nothing(tmp_path: Path) -> None:
+    jira = FakeJira()
+    path = write_garden_report(tmp_path, publish=_jira_publish())
+    _publish(path, jira)
+    write_garden_report(tmp_path, publish=_jira_publish(where={**_jira_where(), "site": OTHER_SITE}))
+    jira.forget_requests()
+
+    with pytest.raises(
+        PublishError,
+        match=_exactly(
+            f"the Jira target moved from {TARGET_LABEL} to {TARGET_LABEL} on {OTHER_SITE}; skaldr does not "
+            "move pages or issues, so nothing was written. Publish once with the old target removed from the "
+            "`publish` block, which archives the items skaldr created there and releases any page it wrote "
+            "into, then add the new target and publish again"
+        ),
+    ):
+        _publish(path, jira)
+    assert _writes(jira) == []
 
 
 def test_a_document_over_the_description_limit_stops_before_anything_is_sent(tmp_path: Path) -> None:

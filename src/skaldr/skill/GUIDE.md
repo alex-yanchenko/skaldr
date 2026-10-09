@@ -1181,7 +1181,7 @@ error: 1 part was edited in the service since the last publish, so nothing was w
 
 ## Publishing to Jira
 
-**Sign in once.** Run `skaldr auth jira`: it asks for your Jira Cloud site (`https://example.atlassian.net`), your Atlassian account email and an API token you create at id.atlassian.com under Security, API tokens, checks them against the site and keeps them in the system keychain. In CI, set `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` (all three) instead; they win over the keychain. skaldr publishes with your one Jira sign-in, so if you are signed in to more than one site, set the three variables to the site this document publishes to. Every issue skaldr creates or edits is created or edited by you, and Jira notifies watchers as it does for your own edits.
+**Sign in once.** Run `skaldr auth jira`: it asks for your Jira Cloud site (`https://example.atlassian.net`), your Atlassian account email and an API token you create at id.atlassian.com under Security, API tokens, checks them against the site and keeps them in the system keychain. In CI, set `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` (all three) instead; they win over the keychain. skaldr publishes with your one Jira sign-in; if you are signed in to more than one site, name the site this target publishes to with `site` in its `where` (an https site URL, written the way `skaldr auth` takes it), which is part of the target's place, so changing it is a move. Every issue skaldr creates or edits is created or edited by you, and Jira notifies watchers as it does for your own edits.
 
 ```yaml
 publish:
