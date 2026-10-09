@@ -1090,6 +1090,30 @@ case, where the page is shared as a URL an agent later has to read back.
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it, and a table longer than N splits into consecutive tables that each repeat the header row (at `notion_width: full` every part keeps the whole table's column widths). A table part never ends on a `group` row, and a `total` row keeps the row before it. A part that still cannot fit in N, such as a long code block, one long table row, or a heading together with the block after it, stays whole, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
+## Exporting as ADF for Jira
+
+`skaldr report.yaml --export adf` writes the document as Atlassian Document Format, the JSON a Jira issue description takes, to `out/<name>.adf/page.adf.json` (or the folder `--export-dir` names). It lets you inspect what a Jira publish would send, and nothing is sent anywhere. Jira renders ADF panels, expands, task lists and status lozenges, which Markdown cannot carry, so Jira gets ADF built by skaldr rather than Markdown. Like the Notion export, the file holds the body only: the title is the issue's summary. The folder keeps its `.skaldr-export.json` list, with the same overwrite rules as the Markdown exports. `--chunk` does not apply.
+
+| Block | ADF |
+| --- | --- |
+| `heading` | a heading of the same level |
+| `text`, and prose in other blocks | a paragraph; a toned paragraph gets the tone's text colour |
+| a list | a bullet, ordered (with its start number) or task list, nested as written |
+| `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
+| `code` | a code block with its language; a `math` block is a code block in `latex` |
+| `quote` | a block quote, the citation in italics |
+| `divider` | a rule |
+| `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
+| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
+| `grid` | its cells one after another |
+| `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
+| `chart` | its data table |
+| badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
+| a table of contents | a bulleted list of the titles, without links |
+| `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped |
+
+ADF limits what each container may hold, and skaldr does not guess. A walkthrough step or list item whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and a numbered list carries on from the right number. A block ADF cannot place at all stops the export with an error naming the block and where it was, for example a table inside a panel or an expand nested three deep.
+
 ## What you never write
 
 Colours, CSS, fonts, pixel sizes, HTML, the legend, the TOC, percentages, subtotals, the
