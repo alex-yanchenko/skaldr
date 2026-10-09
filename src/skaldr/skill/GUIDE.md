@@ -232,7 +232,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell: a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below), which runs any shell line, including a secret-manager wrapper such as `doppler run`, `op run` or `vault-run`, so the credential never enters the page | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
 | `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases, captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -708,9 +708,10 @@ pretty-printed on the page; a body you laid out across lines keeps your layout.
 ### Running an exact command: `command`
 
 Give `command` instead of `method`/`url`/`headers`/`body` when the call needs something those fields
-cannot say: a secret manager that supplies the credential so the reader never handles one, a proxy, a
-`| jq` that makes the evidence visible. The Copy button hands over the command exactly as you wrote it,
-every line and every quote, so one copy, one paste, one run reproduces what you saw.
+cannot say: a secret manager (`doppler run`, `op run`, `vault-run`) that supplies the credential so
+the reader never handles one, a proxy, a `| jq` that makes the evidence visible. The Copy button hands
+over the command exactly as you wrote it, every line and every quote, so one copy, one paste, one run
+reproduces what you saw.
 
 ```yaml
 - type: request
@@ -731,6 +732,13 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
       response:
         body: '[{"code":"EU","mappedValue":"eu-west-1"}]'
       verdict: "Same endpoint, same credentials, and the value comes back. Access is not the explanation."
+    - label: "REGION through Doppler"
+      command: |
+        doppler run -p example-service -c prd -- sh -c 'curl -s -u "$PARTNER_USER:$PARTNER_PASS" "https://api.partner.example/v1/mappings?label=REGION"' | jq 'map({code, mappedValue})'
+      tone: success
+      response:
+        body: '[{"code":"EU","mappedValue":"eu-west-1"}]'
+      verdict: "Doppler injects the credentials for the one command, so none of them appears on the page."
 ```
 
 - **Pick `command` when a copied curl would fail or mislead.** If the reader would run skaldr's curl
