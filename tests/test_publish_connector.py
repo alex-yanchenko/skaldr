@@ -51,8 +51,8 @@ def test_a_target_whose_to_names_no_single_service_is_refused(target_type: type[
         target_type.service()
 
 
-def test_the_export_flavors_stay_notion_and_markdown() -> None:
-    assert get_args(ExportTarget) == ("notion", "markdown")
+def test_the_export_flavors_are_notion_markdown_and_adf() -> None:
+    assert get_args(ExportTarget) == ("notion", "markdown", "adf")
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,7424 @@
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Mixed audience: ops reads the impact, the floor team reads the fix.",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Overview"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Discrepancies & fixes"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Count progress"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verification"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Rollout"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Method"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "At a glance"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Appendix: discrepancy-reason raw counts"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Counts at a glance"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Count methods compared"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Readiness by zone"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Where the count comes from"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "How to run the recount"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Pulling a bin from the WMS yourself"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reconciling a bin against the live system"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Sources"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Source",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": WMS export"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Period",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Q3 2026"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Site",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": DC-West"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Owner",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Inventory Ops"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Overview"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reconciled review of the 10,000-unit Q3 cycle count.",
+          "marks": [
+            {
+              "type": "em"
+            },
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Count date",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 2026-07-09 14:22 UTC"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Units expected",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 10,000"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Method",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": "
+                },
+                {
+                  "type": "text",
+                  "text": "full cycle count",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Mode",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": strict"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Matched cleanly",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#00875A"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 8,500 (85.0%) "
+                },
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "▲ +3%",
+                    "color": "green"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Floor: fixable",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 1,100 (11.0%) "
+                },
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "Floor",
+                    "color": "yellow"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Miscounts + mislabeled bins we can correct.",
+                  "marks": [
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#6B778C"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Vendor: escalate",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 400 (4.0%) "
+                },
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "▼ −90",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "Vendor",
+                    "color": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Count status",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#6554C0"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": HEALTHY"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Total units",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#6B778C"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 10,000"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Matched cleanly",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#00875A"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 85.0%, 8,500 units"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Floor-fixable",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#FF8B00"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 11.0%, 1,100"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Vendor",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#DE350B"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": 4.0%, 400"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a "
+        },
+        {
+          "type": "text",
+          "text": "hard gate",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ": a page that does not balance "
+        },
+        {
+          "type": "text",
+          "text": "will not build",
+          "marks": [
+            {
+              "type": "em"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". The old "
+        },
+        {
+          "type": "text",
+          "text": "bin > 12",
+          "marks": [
+            {
+              "type": "strike"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " scan rule is under review; see the "
+        },
+        {
+          "type": "text",
+          "text": "method",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com/runbook"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Every bin label now ends in a "
+        },
+        {
+          "type": "text",
+          "text": "check digit",
+          "marks": [
+            {
+              "type": "underline"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". The cold room logged H"
+        },
+        {
+          "type": "text",
+          "text": "2",
+          "marks": [
+            {
+              "type": "subsup",
+              "attrs": {
+                "type": "sub"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "O condensation on 3 of 10"
+        },
+        {
+          "type": "text",
+          "text": "2",
+          "marks": [
+            {
+              "type": "subsup",
+              "attrs": {
+                "type": "sup"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " shelves, so its scans run twice; C++ tooling and ~2 days of rescans are out of scope."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Zone C is "
+        },
+        {
+          "type": "text",
+          "text": "behind schedule",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#DE350B"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", its recount is due Friday, and the "
+        },
+        {
+          "type": "text",
+          "text": "vendor lots",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6554C0"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " stay open until the supplier replies."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Count pipeline"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "1: Scan → 2: Reconcile"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "2: Reconcile → 3: Flag"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "3: Flag → 4: Fix"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "4: Fix → 5: Recount"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "5: Recount → 1: Scan (loop back)"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Flag",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "System",
+                    "color": "blue"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Discrepancy resolution across teams"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Lane"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Detect"
+                    },
+                    {
+                      "type": "hardBreak"
+                    },
+                    {
+                      "type": "text",
+                      "text": "In-house"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Investigate"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Resolve"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Escalate"
+                    },
+                    {
+                      "type": "hardBreak"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Vendor claim"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "done",
+                        "color": "green"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " "
+                    },
+                    {
+                      "type": "text",
+                      "text": "1",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " Recount bin"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "deferred",
+                        "color": "purple"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " "
+                    },
+                    {
+                      "type": "text",
+                      "text": "2b",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " Re-label"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "System"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "current",
+                        "color": "blue"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " "
+                    },
+                    {
+                      "type": "text",
+                      "text": "2a",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " Check scan log"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "3",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " Reconcile"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Vendor"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "blocked",
+                        "color": "yellow"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " "
+                    },
+                    {
+                      "type": "text",
+                      "text": "4",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " Escalate short-ship"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "status",
+          "attrs": {
+            "text": "done",
+            "color": "green"
+          }
+        },
+        {
+          "type": "text",
+          "text": " done · ",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "current",
+            "color": "blue"
+          }
+        },
+        {
+          "type": "text",
+          "text": " current · ",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "blocked",
+            "color": "yellow"
+          }
+        },
+        {
+          "type": "text",
+          "text": " blocked · ",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "deferred",
+            "color": "purple"
+          }
+        },
+        {
+          "type": "text",
+          "text": " deferred",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "warning"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Action needed before the next count",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The "
+            },
+            {
+              "type": "text",
+              "text": "bin > 12",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Counts below are per distinct discrepancy class, not per unit."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Discrepancies & fixes"
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "Legend: badges used on this page"
+      },
+      "content": [
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Floor",
+                        "color": "yellow"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " Fixable on the floor before the next count."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "System",
+                        "color": "blue"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " Defect in the scanning/labeling pipeline."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Vendor",
+                        "color": "red"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " Depends on the vendor to resolve."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Discrepancy"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Risk"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Units"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "What the problem is"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Proposed fix"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor: fixable (1,100)",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Double-counted units "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Floor",
+                        "color": "yellow"
+                      }
+                    },
+                    {
+                      "type": "hardBreak"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Skipped, bin > 12: 260"
+                    },
+                    {
+                      "type": "hardBreak"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Same-window re-scan: 340"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "🟡"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "600 (6.0% of total)"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "The same pallet is scanned twice when a picker re-enters an aisle within the count window."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "De-duplicate on the pallet ID ("
+                    },
+                    {
+                      "type": "text",
+                      "text": "pallet_id",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": ") before totalling; keep the most recent scan."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Mislabeled bin codes "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "System",
+                        "color": "blue"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "🟡"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "500 (5.0% of total)"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Vendor: escalation (400)",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Short shipment "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Vendor",
+                        "color": "red"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "🔴"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "400 (4.0% of total)"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Escalated to the vendor (ticket "
+                    },
+                    {
+                      "type": "text",
+                      "text": "OPS-1234",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": "); hold the line until a corrected ASN arrives."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Correctly counted: no action (0)",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "none",
+                      "marks": [
+                        {
+                          "type": "em"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Discrepancies by owner",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ": "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "Floor",
+            "color": "yellow"
+          }
+        },
+        {
+          "type": "text",
+          "text": " 1 · "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "System",
+            "color": "blue"
+          }
+        },
+        {
+          "type": "text",
+          "text": " 1 · "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "Vendor",
+            "color": "red"
+          }
+        },
+        {
+          "type": "text",
+          "text": " 1"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reconciles: 1,500 + 8,500 matched cleanly = 10,000.",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Count progress"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Zone A",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#0052CC"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": ██████████ 100.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Zone B",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#00875A"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": █████████░ 92.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Zone C",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#FF8B00"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": █████████░ 85.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Overflow",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#DE350B"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": ░░░░░░░░░░ 4.0%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Counted"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Variance"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Note"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone A"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "3,100"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "0"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Matched the system count."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone B"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2,760"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "12"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Two mislabeled bins, re-scanned."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Overflow"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "120"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "260"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Skipped by the "
+                    },
+                    {
+                      "type": "text",
+                      "text": "bin > 12",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " rule."
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Affects",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ": "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "inventory",
+            "color": "green"
+          }
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "scan-app",
+            "color": "blue"
+          }
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "text": "DC-West",
+            "color": "purple"
+          }
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Verification"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "done",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Reconciliation gate passes (10,000 = 10,000)."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "done",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " De-dup validated on a 1,000-pallet sample."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "current",
+                    "color": "blue"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Overflow bins being re-counted by hand right now."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "pending",
+                    "color": "neutral"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Overflow re-scan scheduled for the next count."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "failed",
+                    "color": "red"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Vendor short-ship: blocked, cannot count."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "blocked",
+                    "color": "yellow"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Vendor escalation awaiting "
+                },
+                {
+                  "type": "text",
+                  "text": "OPS-1234",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " response."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Follow-up checklist"
+        }
+      ]
+    },
+    {
+      "type": "taskList",
+      "attrs": {
+        "localId": "skaldr-task-list-1"
+      },
+      "content": [
+        {
+          "type": "taskItem",
+          "attrs": {
+            "localId": "skaldr-task-2",
+            "state": "DONE"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Confirm the "
+            },
+            {
+              "type": "text",
+              "text": "bin > 12",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " scan rule with the site lead."
+            }
+          ]
+        },
+        {
+          "type": "taskItem",
+          "attrs": {
+            "localId": "skaldr-task-3",
+            "state": "TODO"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Ship the 9-digit bin-code widening behind the scan flag."
+            }
+          ]
+        },
+        {
+          "type": "taskList",
+          "attrs": {
+            "localId": "skaldr-task-list-4"
+          },
+          "content": [
+            {
+              "type": "taskItem",
+              "attrs": {
+                "localId": "skaldr-task-5",
+                "state": "TODO"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Stage on the pilot aisle first."
+                }
+              ]
+            },
+            {
+              "type": "taskItem",
+              "attrs": {
+                "localId": "skaldr-task-6",
+                "state": "TODO"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Watch the mis-scan rate for one shift before widening."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskItem",
+          "attrs": {
+            "localId": "skaldr-task-7",
+            "state": "TODO"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Re-run the count and re-verify reconciliation."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 4
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Sign-off and rollback"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Owner",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Inventory Ops. "
+                },
+                {
+                  "type": "text",
+                  "text": "@site-lead",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " signs off each fix."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Rollback",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Re-disable the scan flag; the widened bins fall back to the 5-digit read."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "rule"
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "note"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "For the read-out",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Lead with the reconciliation gate: it is the one number leadership tracks."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Re-count procedure, from step iv"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "iv. Freeze inbound moves in the overflow aisles."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "v. Re-scan every bin with the widened reader."
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "i. Start with the aisles that held the 260 skipped units."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "vi. Re-run reconciliation and compare against the first count."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Decisions"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "☑️ De-duplicate on the pallet ID and keep the most recent scan."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "☑️ Hold the vendor line until a corrected ASN arrives."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "❓ Whether overflow aisles get a count window of their own."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Rollout"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "done",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "2026-06-30",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Initial full count"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "12,400 units scanned; 88% matched clean."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "done",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "2026-07-02",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Root-caused the double-count bug"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Lexical tiebreak in "
+                },
+                {
+                  "type": "text",
+                  "text": "dedupe.ts",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "current",
+                    "color": "blue"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "2026-07-09",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Fix drafted, awaiting re-count"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Placeholder-aware ordering; recovers 1,140 units."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "pending",
+                    "color": "neutral"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "next count",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Re-verify reconciliation"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Method"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "A zone's drift is "
+        },
+        {
+          "type": "text",
+          "text": "d = \\frac{|c - e|}{e}",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", where "
+        },
+        {
+          "type": "text",
+          "text": "c",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " is the counted units and "
+        },
+        {
+          "type": "text",
+          "text": "e",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " the expected units; the page reports the mean over the "
+        },
+        {
+          "type": "text",
+          "text": "n",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " zones, with "
+        },
+        {
+          "type": "text",
+          "text": "\\sigma",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " as its spread."
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "latex"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "\\bar{d} = \\frac{1}{n} \\sum_{i=1}^{n} \\frac{|c_i - e_i|}{e_i}"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "reconciliation.sql",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "sql"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "SELECT reason, count(*) AS n\nFROM count_audit\nWHERE cycle_id = 'Q3-2026'\nGROUP BY reason\nORDER BY n DESC;"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "dedupe.ts · tiebreak fix",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "diff"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "function pickWinner(a, b) {\n-  return a.code.localeCompare(b.code);\n+  if (isPlaceholder(a) !== isPlaceholder(b))\n+    return isPlaceholder(a) ? 1 : -1;\n+  return a.code.localeCompare(b.code);\n}"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).",
+          "marks": [
+            {
+              "type": "em"
+            },
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "These bins are aggregate lots, so we can't split "
+            },
+            {
+              "type": "text",
+              "text": "AGG-07",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " into individual SKUs from the dock scan alone."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Floor lead, ticket OPS-1234",
+              "marks": [
+                {
+                  "type": "em"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "At a glance"
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "note"
+      },
+      "content": [
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Matched cleanly",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        },
+                        {
+                          "type": "textColor",
+                          "attrs": {
+                            "color": "#00875A"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": ": 8,500 (85.0%)"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Needs work",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        },
+                        {
+                          "type": "textColor",
+                          "attrs": {
+                            "color": "#FF8B00"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": ": 1,500 (15.0%)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Reading this section",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The cards on the left summarise; the panels below break down count progress and checks side by side."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Zone C",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#FF8B00"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": █████████░ 88.0%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "done",
+                    "color": "green"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Reconciliation gate passes."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "blocked",
+                    "color": "yellow"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " Awaiting "
+                },
+                {
+                  "type": "text",
+                  "text": "OPS-1234",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "Appendix: discrepancy-reason raw counts"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "updated 18 Jul 2026",
+              "marks": [
+                {
+                  "type": "em"
+                },
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Double-count (same-window re-scan): 340"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Double-count (bin > 12 skip): 260"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Mislabeled bin code (9-digit truncation): 500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Short shipment (vendor): 400"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.",
+              "marks": [
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "nestedExpand",
+          "attrs": {
+            "title": "How the raw counts were pulled"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "One pass over the scan-stage audit log for cycle "
+                },
+                {
+                  "type": "text",
+                  "text": "Q3-2026",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ", grouped by the reason code each scanner attached."
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Scans with no reason code count as matched."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "A pallet scanned in two aisles counts once, under its first aisle."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Counts at a glance"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Clean vs discrepant units by zone",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Series"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone A"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone B"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone C"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone D"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Clean"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2,100"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "1,850"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2,320"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2,230"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Discrepant"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "180"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "340"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "90"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "210"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Open discrepancies over the count window",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Series"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Day 1"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Day 2"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Day 3"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Day 4"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Day 5"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Open"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "1,500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "1,180"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "760"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "410"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "150"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "How discrepancies resolved",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Slice"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Value"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Share"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Fixed on floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "900"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "44%"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "System defect"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "760"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "37%"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Vendor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "400"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "19%"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Total",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2,060",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Count methods compared"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "★ Full cycle"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Sampling"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Continuous"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Catches every bin"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✓"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✗"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✓"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Effort"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "high"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "low"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "medium"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reconciles exactly"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✓"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✗"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✗"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Disrupts picking"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✓"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✗"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "✓"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#E3FCEF"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Readiness by zone"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "Floor",
+                    "color": "yellow"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ": 7 (43.8%)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "System",
+                    "color": "blue"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ": 2 (12.5%)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "status",
+                  "attrs": {
+                    "text": "Vendor",
+                    "color": "red"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ": 2 (12.5%)"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Awaiting the vendor's corrected ASN.",
+                  "marks": [
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#6B778C"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Scanned"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reconciled"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Re-labeled"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Signed off"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone A"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone B"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "System"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Zone C"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFFAE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "System"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#DEEBFF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "n/a"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Overflow"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Vendor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Vendor"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#FFEBE6"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "Floor"
+      },
+      "content": [
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Re-label the Zone B bins the scanner misread."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Recount Zone C by hand before sign-off."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "System"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "Vendor"
+      },
+      "content": [
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "error"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Where the count comes from"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reconciled count"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Handheld scans: per-aisle, live → Reconciled count"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Fixed-reader gates → Reconciled count"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Manual recount: overflow aisles only → Reconciled count"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "How to run the recount"
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Freeze the aisle and pull the expected list",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#0052CC"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " ",
+                  "marks": [
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#0052CC"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "before any scanning",
+                  "marks": [
+                    {
+                      "type": "em"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#0052CC"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Lock the aisle in the WMS so no picks land mid-count, then export the expected units."
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "One row per bin, with the expected quantity."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Flag overflow bins ("
+                        },
+                        {
+                          "type": "text",
+                          "text": "bin > 12",
+                          "marks": [
+                            {
+                              "type": "code"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": "): they take the manual path."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Scan every bin twice, reconcile on the pallet ID",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#6554C0"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Two independent passes; de-duplicate on "
+                },
+                {
+                  "type": "text",
+                  "text": "pallet_id",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " so a same-window re-scan can't double-count."
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "reconcile",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "codeBlock",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "counted = dedupe(scans, key=\"pallet_id\")\nassert sum(counted) == expected"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Escalate anything that still won't balance",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    },
+                    {
+                      "type": "textColor",
+                      "attrs": {
+                        "color": "#FF8B00"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "warning"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Pulling a bin from the WMS yourself"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The counts above come from the export, but a disputed bin is quicker to settle against the live API. Fill in your own warehouse and token, copy the command, and run it. What you type stays in your browser tab and is never written back into this page."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Read one bin's expected quantity",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Values you supply",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{warehouse}}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " warehouse code: for example NW-04"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{bin}}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " bin: for example A-17-3"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{token}}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " API token: a secret, supply your own"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "a bin that balances"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "curl -i -X GET \\\n  -H 'Authorization: Bearer {{token}}' \\\n  -H 'Accept: application/json' \\\n  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded response",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": 200 OK"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "http"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "content-type: application/json\n\n{\n  \"bin\": \"A-17-3\",\n  \"expected\": 48,\n  \"counted\": 48,\n  \"lastCount\": \"2026-07-14T09:12:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "success"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Expected and counted agree, so the bin needs no recount."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "an overflow bin"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "curl -i -X GET \\\n  -H 'Authorization: Bearer {{token}}' \\\n  -H 'Accept: application/json' \\\n  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded response",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": 200 OK"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "http"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "content-type: application/json\n\n{\n  \"bin\": \"A-17-9\",\n  \"expected\": 120,\n  \"counted\": 96,\n  \"overflow\": true\n}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "success"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": A 24-unit gap on a bin flagged "
+                },
+                {
+                  "type": "text",
+                  "text": "overflow: true",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ". These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "a bin the token cannot read"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "curl -i -X GET \\\n  -H 'Accept: application/json' \\\n  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded response",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": 401 Unauthorized"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "http"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "content-type: application/json\n\n{\n  \"error\": \"missing_credentials\",\n  \"message\": \"This endpoint requires a bearer token.\"\n}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "warning"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Every overflow bin in one warehouse",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "NW-04, the finding"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "vault-run --env prod -- sh -c 'curl -s -H \"Authorization: Bearer $WMS_TOKEN\" \"https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true\"' | jq -c 'map({bin, gap: (.expected - .counted)})'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The ",
+              "marks": [
+                {
+                  "type": "em"
+                },
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "jq",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " computes the gap per bin, so a bin the export double-counted shows up as a negative number.",
+              "marks": [
+                {
+                  "type": "em"
+                },
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded output",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "json"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "[\n  {\n    \"bin\": \"A-17-9\",\n    \"gap\": 24\n  },\n  {\n    \"bin\": \"C-02-1\",\n    \"gap\": 2\n  }\n]"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "warning"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Two overflow bins short, 26 units between them, matching the manual-path queue."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "NW-02, the control"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "vault-run --env prod -- sh -c 'curl -s -H \"Authorization: Bearer $WMS_TOKEN\" \"https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true\"' | jq -c 'map({bin, gap: (.expected - .counted)})'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The ",
+              "marks": [
+                {
+                  "type": "em"
+                },
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "jq",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " computes the gap per bin, so a bin the export double-counted shows up as a negative number.",
+              "marks": [
+                {
+                  "type": "em"
+                },
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "#6B778C"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded output",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "json"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "[\n  {\n    \"bin\": \"B-11-4\",\n    \"gap\": 0\n  }\n]"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "success"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Reconciling a bin against the live system"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The bin lookup above assumes you already hold a token. Getting one is its own call, so the two together are the shape worth recording: exchange the key for a session token, then spend it."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Session token, then a bin lookup",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Values you supply",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{warehouse}}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " warehouse code: for example NW-04"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{api_key}}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " API key: a secret, supply your own"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Step 1 of 2: Exchange the API key for a session token",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", captures "
+        },
+        {
+          "type": "text",
+          "text": "session_token",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " from "
+        },
+        {
+          "type": "text",
+          "text": "$.token",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "200",
+          "marks": [
+            {
+              "type": "em"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "bash"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "curl -i -X POST \\\n  -H 'Content-Type: application/json' \\\n  --data '{\"key\":\"{{api_key}}\",\"scope\":\"inventory.read\"}' \\\n  https://wms.example.com/v2/sessions"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Recorded response",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ": 200 OK"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "http"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "content-type: application/json\n\n{\n  \"token\": \"sess_8f21c4…\",\n  \"expiresIn\": 900\n}"
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "success"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Verdict",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": Tokens last fifteen minutes, so a long recount needs this step again partway through."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Step 2 of 2: Read the bins that did not balance",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "with the token"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "curl -i -X GET \\\n  -H 'Authorization: Bearer {{session_token}}' \\\n  -H 'Accept: application/json' \\\n  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded response",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": 200 OK"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "http"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "content-type: application/json\nx-total-count: 3\n\n{\n  \"bins\": [\n    { \"bin\": \"A-17-9\", \"expected\": 120, \"counted\": 96, \"overflow\": true },\n    { \"bin\": \"C-02-1\", \"expected\": 30, \"counted\": 28 }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "success"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "expand",
+      "attrs": {
+        "title": "once the token has expired"
+      },
+      "content": [
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "bash"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "curl -i -X GET \\\n  -H 'Authorization: Bearer {{session_token}}' \\\n  -H 'Accept: application/json' \\\n  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Recorded response",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ": 401 Unauthorized"
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "http"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "content-type: application/json\n\n{\n  \"error\": \"token_expired\",\n  \"message\": \"Start a new session.\"\n}"
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "attrs": {
+            "panelType": "warning"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Verdict",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ": Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": {
+        "panelType": "note"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Before the next count",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskList",
+          "attrs": {
+            "localId": "skaldr-task-list-8"
+          },
+          "content": [
+            {
+              "type": "taskItem",
+              "attrs": {
+                "localId": "skaldr-task-9",
+                "state": "DONE"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Confirm the "
+                },
+                {
+                  "type": "text",
+                  "text": "bin > 12",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " rule with the site lead"
+                }
+              ]
+            },
+            {
+              "type": "taskItem",
+              "attrs": {
+                "localId": "skaldr-task-10",
+                "state": "TODO"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Re-label the 9-digit bins in aisle C"
+                }
+              ]
+            },
+            {
+              "type": "taskItem",
+              "attrs": {
+                "localId": "skaldr-task-11",
+                "state": "TODO"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Book the vendor call for the short shipment"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Sources"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Method definitions follow the warehouse counting SOP [1]; the discrepancy thresholds come from the Q2 reconciliation audit "
+        },
+        {
+          "type": "text",
+          "text": "[2]",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com/q2-audit"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[1] "
+                },
+                {
+                  "type": "text",
+                  "text": "Warehouse Counting SOP",
+                  "marks": [
+                    {
+                      "type": "em"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ", rev. 7, §3 Cycle vs sampling."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[2] Q2 Reconciliation Audit, p. 12. "
+                },
+                {
+                  "type": "text",
+                  "text": "source",
+                  "marks": [
+                    {
+                      "type": "link",
+                      "attrs": {
+                        "href": "https://example.com/q2-audit"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.",
+          "marks": [
+            {
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

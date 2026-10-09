@@ -16,7 +16,14 @@ from typing import Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import PageFetchError, ReportError, UnknownGuideTopicError
-from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export import (
+    EXPORT_MANIFEST,
+    EXPORT_TARGETS,
+    ExportTarget,
+    export_adf,
+    export_markdown,
+    export_notion,
+)
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
@@ -239,8 +246,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--export",
         choices=EXPORT_TARGETS,
-        help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
-        "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
+        help="write the document as Markdown or ADF instead of HTML: `notion` writes Notion-flavored "
+        "Markdown for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or "
+        "a wiki; `adf` writes the Atlassian Document Format JSON a Jira issue description takes.",
     )
     parser.add_argument(
         "--export-dir",
@@ -618,6 +626,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
                 result = export_notion(report, out_dir, chunk=chunk)
             case "markdown":
                 result = export_markdown(report, out_dir)
+            case "adf":
+                result = export_adf(report, out_dir)
             case _:
                 assert_never(target)
     except (ReportError, OSError) as exc:
@@ -629,9 +639,12 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
             file=sys.stderr,
         )
-    for heading in result.oversized_sections:
+    for oversized in result.oversized_sections:
+        if target == "adf":
+            print(f"warning: {oversized}", file=sys.stderr)
+            continue
         print(
-            f"warning: section '{heading}' holds a part that cannot be split to fit --chunk {chunk} "
+            f"warning: section '{oversized}' holds a part that cannot be split to fit --chunk {chunk} "
             "(one block, or a heading with the block after it); that part stays whole",
             file=sys.stderr,
         )
