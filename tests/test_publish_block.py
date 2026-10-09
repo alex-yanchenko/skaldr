@@ -405,8 +405,15 @@ def test_a_doc_id_is_a_slug_of_at_least_two_characters(doc_id: str, message: str
     _rejects({"doc_id": doc_id, "targets": [make_notion_target()]}, message)
 
 
-def test_a_publish_block_needs_a_target() -> None:
-    _rejects({"doc_id": "plan", "targets": []}, "publish.targets: List should have at least 1 item")
+def test_a_publish_block_with_no_targets_retires_the_document() -> None:
+    publish = _parse({"doc_id": "plan", "targets": []})
+
+    assert publish is not None
+    assert publish.model_dump(mode="json") == {"doc_id": "plan", "targets": []}
+
+
+def test_a_publish_block_still_needs_its_targets_key() -> None:
+    _rejects({"doc_id": "plan"}, "publish.targets: Field required")
 
 
 def test_the_publish_block_its_leading_comments_and_every_line_up_to_the_next_key_are_left_out() -> None:

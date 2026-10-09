@@ -17,6 +17,10 @@ from skaldr.publish.engine import (
 from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
 
+NOTHING_PUBLISHED = (
+    "Nothing to publish: the `publish` block has no targets and no item of this document is published."
+)
+
 
 def installed_connectors() -> ConnectorRegistry:
     return ConnectorRegistry(())
@@ -57,8 +61,15 @@ def _print_step(target: str, described: str) -> None:
     print(f"{target}: {described}", flush=True)
 
 
+def _has_no_target_and_no_published_item(prepared: Prepared) -> bool:
+    return not prepared.plan.targets
+
+
 def _dry_run(prepared: Prepared, document: Path) -> int:
     dry_run = dry_run_publish(prepared)
+    if _has_no_target_and_no_published_item(prepared) and dry_run.refusal is None:
+        print(NOTHING_PUBLISHED)
+        return 0
     print("\n".join(describe_plan(dry_run.plan)))
     if dry_run.edits:
         print("\n".join(remote_edit_lines(dry_run.edits)))
@@ -75,6 +86,9 @@ def _publish(prepared: Prepared, document: Path, *, apply: bool, overwrite: bool
         return _dry_run(prepared, document)
     outcome = apply_publish(prepared, overwrite=overwrite, on_step=_print_step)
     if isinstance(outcome, Applied):
+        if not outcome.steps and _has_no_target_and_no_published_item(prepared):
+            print(NOTHING_PUBLISHED)
+            return 0
         if not outcome.steps:
             print("Nothing to publish: every item matches the YAML.")
             return 0
