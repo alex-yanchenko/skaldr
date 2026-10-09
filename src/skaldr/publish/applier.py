@@ -265,11 +265,12 @@ class Applier:
             service=target_plan.target.service(),
             target_as_written=target_plan.target.model_dump(mode="json"),
         )
+        transport = self.transports.for_target(target_plan.label)
         before = self.state
         self._save(before.model_copy(update={"pending_creates": [*before.pending_creates, pending]}))
         written_into = self.remote.get(step.item)
         try:
-            remote = self.transports.for_target(target_plan.label).create_item(
+            remote = transport.create_item(
                 NewItem(
                     target_plan.target,
                     Stamp(self.prepared.doc_id, step.item.section_id),
