@@ -25,9 +25,9 @@ class Publish(FrozenModel):
         "at least two characters, lowercase letters and digits joined by single hyphens.",
     )
     targets: list[PublishTarget] = Field(
-        min_length=1,
         description="One entry per place the document publishes to; each is built from the document on "
-        "its own.",
+        "its own. An empty list retires the document: publishing archives every item it created and "
+        "releases every page it wrote into.",
     )
 
     @model_validator(mode="after")
