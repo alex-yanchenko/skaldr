@@ -44,6 +44,7 @@ from skaldr.models import (
     RequestCase,
     RequestFlow,
     RequestLike,
+    RequestQuery,
     RequestResponse,
     RequestVariable,
     RichTextMarker,
@@ -887,10 +888,10 @@ class ResponseCaption(NamedTuple):
 
 
 def response_caption(core: RequestLike, response: RequestResponse) -> ResponseCaption:
-    runs_command = core.command is not None
+    records_output = core.command is not None or core.query is not None
     return ResponseCaption(
-        "Recorded output" if runs_command else "Recorded response",
-        shows_status=not runs_command or response.status is not None,
+        "Recorded output" if records_output else "Recorded response",
+        shows_status=not records_output or response.status is not None,
     )
 
 
@@ -929,7 +930,7 @@ def reader_variables(owner: Request | RequestFlow) -> list[RequestVariable]:
         match.group(1)
         for core in cores
         for case in core.cases
-        for match in VARIABLE_TOKEN.finditer(command_for(core, case))
+        for match in VARIABLE_TOKEN.finditer(sent_text_for(core, case))
     }
     return [
         variable for variable in owner.variables if variable.name not in bound or variable.name in open_names
@@ -992,6 +993,16 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
         parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
     parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
+
+
+def query_text_for(query: RequestQuery, core: RequestLike, case: RequestCase) -> str:
+    return resolve_case(query.content, core, case)
+
+
+def sent_text_for(core: RequestLike, case: RequestCase) -> str:
+    if core.query is not None:
+        return query_text_for(core.query, core, case)
+    return command_for(core, case)
 
 
 CASE_LABEL_CHAR = 7.3

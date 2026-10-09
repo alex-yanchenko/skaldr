@@ -192,7 +192,7 @@ def test_string_and_integer_literals_print_with_their_repr(capsys: pytest.Captur
 
     assert (
         "  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | null, default null. "
-        "The HTTP method. Required unless the call runs a `command`."
+        "The HTTP method. Required unless the call runs a `command` or records a `query`."
     ) in request_lines
     assert next(line for line in heading_lines if line.startswith("  level:")).startswith(
         "  level: 2 | 3 | 4, default 2."

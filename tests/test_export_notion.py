@@ -73,6 +73,7 @@ from tests.factories import (
     lowered,
     make_command_request,
     make_label_table,
+    make_query_request,
     make_report,
     make_section,
     make_table,
@@ -579,6 +580,19 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
         "\t\t```plain text\n\t\tnone\n\t\t```\n"
         "\t</tab>\n"
         "</tabs>\n"
+    )
+
+
+def test_a_query_request_becomes_a_notion_code_block_in_its_language_labelled_with_the_runner() -> None:
+    query = {"runner": "psql, reporting replica", "lang": "sql", "content": "SELECT 1"}
+
+    assert notion_of([make_query_request(query=query)]) == (
+        "**Open orders in the shop database**\n"
+        "*open orders*\n"
+        "**Query**: psql, reporting replica\n"
+        "```sql\nSELECT 1\n```\n"
+        "**Recorded output**\n"
+        '```json\n[\n  {\n    "n": 12\n  }\n]\n```\n'
     )
 
 

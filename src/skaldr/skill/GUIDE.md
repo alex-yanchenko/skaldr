@@ -234,8 +234,8 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell: a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below), which runs any shell line, including a secret-manager wrapper such as `doppler run`, `op run` or `vault-run`, so the credential never enters the page | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value? or values?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
-| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases (each with value? or values?, as in a request), captures?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below), which runs any shell line, including a secret-manager wrapper such as `doppler run`, `op run` or `vault-run`, so the credential never enters the page, or a `query` for a database, SQL or MCP call | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`, **or** `query: {runner, lang, content}`; `variables?`, `case_variable?`, `cases: [{label, value? or values?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command or query, case_variable?, cases (each with value? or values?, as in a request), captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card, one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -828,6 +828,43 @@ request blocks on a page may share one: they would share the reader's values. Gi
 two blocks legitimately carry the same label, and keep that `id` fixed if you want the values to
 survive a rename.
 
+### Evidence that is not a shell command: `query`
+
+Give `query` when the evidence is a database aggregation, a SQL statement or an MCP tool call, run in
+some named tool rather than a shell. The page shows the query highlighted, labelled with the tool it
+runs in, and the cases record its real output the way they do for any other request.
+
+```yaml
+- type: request
+  label: "Orders by status in the shop database"
+  query:
+    runner: "mongosh, orders database"    # free text, shown with the query
+    lang: json                             # a Pygments lexer name: json, sql, js, ...
+    content: '[{"$match": {"status": "{{status}}"}}, {"$count": "n"}]'
+  variables: [{ name: status, example: "open" }]
+  cases:
+    - label: "Open orders"
+      tone: warning
+      response: { body: '[{"n": 12}]' }
+      verdict: "Twelve orders are still open, so the nightly close has not run for them."
+```
+
+- **Copy hands over the query text**, with `{{name}}` filled in exactly as the reader typed it, so
+  pasting it into the tool re-runs what you ran. A `{{name}}` works from `variables` and
+  `case_variable` the same way it does in a `command`.
+- **There is nothing to run or capture on the page.** A query shows no "Run this" shell line, no
+  "Copy + capture" and no field to paste output into, because the page cannot run a query. Record the
+  output you got as the case's `response`.
+- **`lang` is checked when the file is read.** A name Pygments has no lexer for fails the build naming
+  it. The same name highlights the query on the page and labels its fence in the Markdown exports,
+  where the query is a fenced block under the runner's name.
+- **`query` excludes `method`, `url`, `headers`, `body` and `command`**, and a case of a query request
+  cannot set `command`, `headers` or `headers_add`; nor can it replace the query. A request that sets
+  `query` together with any of them fails the build with a message naming that field. `command_note`
+  is refused too: say it in a `verdict`. A `request_flow` step may record a `query` but cannot capture
+  from one.
+- Cases, responses, `tone` and `verdict` work exactly as they do for a `command` request.
+
 ## The `request_flow`
 
 Calls that depend on each other: get a token, then use it. A step says what its response produces, and
@@ -927,6 +964,9 @@ A flow needs at least two steps. One step is a `request`.
 
 A step may run an exact `command` on the same terms as a `request`, and its captures read from the
 output the reader pastes back, so `vault-run -- mint-token` can hand its token to the next step.
+
+A step may instead record a `query` (see the `request` section), shown with its runner and a Copy
+button. A query has nowhere to paste output, so a step that records one cannot capture from it.
 
 ## The `references`
 
@@ -1168,7 +1208,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
-Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command, with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
 ## What you never write
 

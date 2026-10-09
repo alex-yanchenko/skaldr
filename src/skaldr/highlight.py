@@ -1,14 +1,14 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, Literal
 
 from markupsafe import Markup, escape
 from pygments.lexer import Lexer
-from pygments.lexers import get_lexer_by_name  # pyright: ignore[reportUnknownVariableType]
 from pygments.token import Token, _TokenType  # pyright: ignore[reportPrivateUsage]
-from pygments.util import ClassNotFound
 
 from skaldr.code_language import block_code_language
-from skaldr.models import Code
+from skaldr.lexers import find_lexer
+from skaldr.models import VARIABLE_TOKEN, Code
 
 MAX_HIGHLIGHTED_CHARACTERS: Final = 20_000
 
@@ -41,10 +41,7 @@ def token_class(kind: _TokenType) -> str:
 def lexer_for(language: str, size: int) -> Lexer | None:
     if not language or size > MAX_HIGHLIGHTED_CHARACTERS:
         return None
-    try:
-        return get_lexer_by_name(language, ensurenl=True, stripnl=False)
-    except ClassNotFound:
-        return None
+    return find_lexer(language)
 
 
 def with_line_feeds(text: str) -> str:
@@ -94,6 +91,53 @@ def highlighted_code(block: Code) -> Markup:
     lexer = lexer_for(block_code_language(block), len(text))
     lines = lexed_lines(text, lexer) if lexer else None
     return Markup("\n").join(plain_lines(text) if lines is None else lines)
+
+
+def number_stand_in(index: int) -> str:
+    return f"7{index:05d}7"
+
+
+def word_stand_in(index: int) -> str:
+    return f"SKALDRSLOT{index}X"
+
+
+StandIn = Callable[[int], str]
+
+
+def slot_markup(name: str) -> Markup:
+    return Markup(
+        '<span class="rq-slot" data-rq-slot="{}" data-rq-quote="none">&lsaquo;{}&rsaquo;</span>'
+    ).format(name, name)
+
+
+def highlighted_with_stand_ins(
+    plain: str, names: list[str], lexer: Lexer, stand_in: StandIn
+) -> Markup | None:
+    if any(stand_in(index) in plain for index in range(len(names))):
+        return None
+    numbering = iter(range(len(names)))
+    lines = lexed_lines(VARIABLE_TOKEN.sub(lambda _: stand_in(next(numbering)), plain), lexer)
+    if lines is None:
+        return None
+    markup = Markup("\n").join(lines)
+    if any(markup.count(stand_in(index)) != 1 for index in range(len(names))):
+        return None
+    for index, name in enumerate(names):
+        markup = markup.replace(stand_in(index), slot_markup(name))
+    return markup
+
+
+def highlighted_query_keeping_slots_whole(text: str, language: str) -> Markup | None:
+    plain = with_line_feeds(text)
+    lexer = lexer_for(language, len(plain))
+    if lexer is None:
+        return None
+    names = [match.group(1) for match in VARIABLE_TOKEN.finditer(plain)]
+    for stand_in in (number_stand_in, word_stand_in):
+        marked = highlighted_with_stand_ins(plain, names, lexer, stand_in)
+        if marked is not None:
+            return marked
+    return None
 
 
 def diff_row(line: str) -> DiffRow:
