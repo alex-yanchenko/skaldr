@@ -65,7 +65,8 @@ def _publish(prepared: Prepared, document: Path, *, apply: bool, overwrite: bool
         if not outcome.steps:
             print("Nothing to publish: every item matches the YAML.")
             return 0
-        print(f"Published {len(outcome.steps)} steps. The publish state is in {prepared.state_path}.")
+        steps = "1 step" if len(outcome.steps) == 1 else f"{len(outcome.steps)} steps"
+        print(f"Published {steps}. The publish state is in {prepared.state_path}.")
         return 0
     print("\n".join(remote_edit_lines(outcome.edits)))
     print(f"error: {refusal_message(outcome)}", file=sys.stderr)

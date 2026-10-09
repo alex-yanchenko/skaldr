@@ -6,7 +6,7 @@ import pytest
 
 from skaldr.errors import ConnectorError, PublishError
 from skaldr.models import load_report
-from skaldr.publish.content import FIELDS, ItemContent, section_part
+from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
 from skaldr.publish.drafts import draft_targets
 from skaldr.publish.engine import (
     Applied,
@@ -45,6 +45,12 @@ SPRING = "## Planting\nSow in spring.\n"
 LATE_SPRING = "## Planting\nSow in late spring.\n"
 TOOLS_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
 RAKE_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Rake.\n'
+LEGEND_TEXT = (
+    "<details>\n"
+    "<summary>Legend: badges used on this page</summary>\n"
+    '\t- <span color="blue">**api**</span> the API\n'
+    "</details>\n"
+)
 FIRST_PUBLISH = ('create   document "Garden handbook"', 'create   section tools "Tools"')
 
 
@@ -282,6 +288,51 @@ def test_the_diff_shows_remote_edits_and_what_the_yaml_would_change(tmp_path: Pa
             (YamlChange(TOOLS, section_part("tools"), "blocks[1]", TOOLS_TEXT, RAKE_TEXT),),
         ),
         [],
+    )
+
+
+def test_the_diff_shows_a_changed_title_with_its_yaml_location(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=make_garden_blocks(tools_title="Garden tools")
+    )
+
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert diff == PublishDiff(
+        (),
+        (
+            YamlChange(TOOLS, TITLE, "blocks[1].title", "Tools\n", "Garden tools\n"),
+            YamlChange(
+                TOOLS,
+                section_part("tools"),
+                "blocks[1]",
+                TOOLS_TEXT,
+                TOOLS_TEXT.replace("Tools", "Garden tools"),
+            ),
+        ),
+    )
+
+
+def test_the_diff_lists_every_part_of_an_item_never_published_and_of_an_item_removed(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
+    path = _published_then_rewritten(
+        tmp_path, transport, publish=make_notion_publish(split=["planting"]), blocks=without_tools
+    )
+
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert diff == PublishDiff(
+        (),
+        (
+            YamlChange(DOCUMENT, section_part("planting"), None, SPRING, None),
+            YamlChange(PLANTING, TITLE, "blocks[1].title", None, "Planting\n"),
+            YamlChange(PLANTING, section_part("planting"), "blocks[1]", None, SPRING),
+            YamlChange(TOOLS, TITLE, None, "Tools\n", None),
+            YamlChange(TOOLS, section_part("page legend"), None, LEGEND_TEXT, None),
+            YamlChange(TOOLS, section_part("tools"), None, TOOLS_TEXT, None),
+        ),
     )
 
 

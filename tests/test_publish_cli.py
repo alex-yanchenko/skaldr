@@ -295,6 +295,38 @@ def test_skaldr_hands_the_publish_commands_to_the_publish_cli(
     assert (exit_code, capsys.readouterr().err) == (1, "error: no connector publishes to notion\n")
 
 
+def test_one_applied_step_is_counted_in_the_singular(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+
+    exit_code = _run(["publish", str(path), "--apply"], FakeTransport())
+
+    assert (exit_code, capsys.readouterr().out.splitlines()[-1]) == (
+        0,
+        f"Published 1 step. The publish state is in {state_path_for(path)}.",
+    )
+
+
+def test_diff_json_keeps_non_ascii_text_as_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    _run(["publish", str(path), "--apply"], transport)
+    write_garden_report(tmp_path, blocks=make_garden_blocks(tools="Gießkanne."))
+    capsys.readouterr()
+
+    _run(["diff", str(path), "--json"], transport)
+
+    out = capsys.readouterr().out
+    assert (json.loads(out)["yaml_changes"][0]["next"], "\\u00df" in out, "Gießkanne" in out) == (
+        '## Tools\n<span color="blue">**api**</span>\n- Gießkanne.\n',
+        False,
+        True,
+    )
+
+
 def test_a_publish_command_without_the_publish_extra_names_the_install_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

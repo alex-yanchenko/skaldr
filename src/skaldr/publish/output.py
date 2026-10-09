@@ -112,7 +112,7 @@ def diff_json(diff: PublishDiff) -> str:
             for change in diff.yaml_changes
         ],
     }
-    return json.dumps(payload, indent=2)
+    return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
 @dataclass(frozen=True)
