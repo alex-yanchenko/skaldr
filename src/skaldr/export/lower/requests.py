@@ -89,11 +89,15 @@ def _step_title(step: RequestStep, index: int, count: int) -> ExportRich:
 
 
 def lower_request(block: Request, lowering: Lowering) -> list[Node]:
-    return [Paragraph(bold(block.label)), *_variables(block.variables), *_cases(block, lowering)]
+    return [
+        Paragraph(bold(block.label)),
+        *_variables(compute.reader_variables(block)),
+        *_cases(block, lowering),
+    ]
 
 
 def lower_request_flow(block: RequestFlow, lowering: Lowering) -> list[Node]:
-    nodes: list[Node] = [Paragraph(bold(block.label)), *_variables(block.variables)]
+    nodes: list[Node] = [Paragraph(bold(block.label)), *_variables(compute.reader_variables(block))]
     for index, step in enumerate(block.steps, start=1):
         nodes.append(Paragraph(_step_title(step, index, len(block.steps))))
         nodes += _cases(step, lowering)

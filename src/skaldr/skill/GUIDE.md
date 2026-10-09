@@ -232,8 +232,8 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell: a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
-| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases, captures?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value? or values?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases (each with value? or values?, as in a request), captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card, one per "slide" in a deck-style doc | `title`, `blocks[]` |
@@ -693,6 +693,38 @@ what you got, what it means. That is the one part a reader cannot work out for t
 usually varies one value through `case_variable`; set `headers` on it to replace the request's headers
 instead, which is how you record what happens with the auth header removed.
 
+**Cases that differ by several values use `values`.** `case_variable` fills one name per case. When a
+case changes more than one thing, declare each in `variables` and give every case a `values` map from
+variable name to value. The `command` (or the built call) is written once, and each case's tab shows it
+with that case's values written in, so it runs as copied:
+
+```yaml
+- type: request
+  label: "One record, two terms"
+  command: |
+    vault-run -- curl -s "https://api.example.test/v1/records?id={{id}}&term={{term}}&seq={{seq}}" | jq '.'
+  variables: [{ name: id }, { name: term }, { name: seq }]
+  cases:
+    - label: "Second term"
+      values: { id: A100, term: "2", seq: "1" }
+      tone: warning
+      response: { body: '{ "records": [] }' }
+      verdict: "The record exists in term 1 and is missing from term 2."
+    - label: "Control"
+      values: { id: A100, term: "1", seq: "1" }
+      tone: success
+      response: { body: '{ "records": [{ "id": "A100" }] }' }
+```
+
+A case sets `values` or `value`, never both, and `values` requires the request to declare no
+`case_variable`. Every key of `values` must be a name declared in `variables`; a case that sets a key
+that is not declared fails the build naming the case and the key. A variable a case binds is written
+into that case's command and is not a field on that tab. A variable no case binds, or that a case
+leaves out, is still a field the reader fills on that tab, and `--check --strict` still leaves it alone
+as a declared name, so a case may bind only some of the variables. Once every case that uses a variable
+binds it, the variable is no longer listed in the fields at all. `values` works the same for a built
+call (the url, header values and body take the `{{name}}` tokens) and for a case's own `command`.
+
 **`headers` replaces, `headers_add` layers.** Cases that share a credential and differ in one header
 write the shared one once on the request and the difference under `headers_add`, which replaces the
 names it lists and leaves the rest. `headers` stays a replacement, because `headers: {}` is what records
@@ -736,7 +768,7 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
 - **Pick `command` when a copied curl would fail or mislead.** If the reader would run skaldr's curl
   and get a 403 because the credential, proxy or filter is missing, the button is manufacturing
   counter-evidence. Write the command you ran.
-- **A `{{name}}` still works** inside `command`, from `variables` or `case_variable`, and is written in
+- **A `{{name}}` still works** inside `command`, from `variables`, `case_variable` or a case's `values`, and is written in
   exactly as the reader types it, with no shell quoting added. You own the quoting, so put the token
   where the shell will read it the way you mean.
 - **`command` excludes `method`, `url`, `headers` and `body`**, and a case of a command request cannot
@@ -838,6 +870,38 @@ capture name may not also be a declared variable, since the flow produces it.
 steps read. A step that captures nothing may record as many as it likes, and takes `case_variable` like
 a `request` does: one step authenticates, the next tabs through every resource that token reaches, and
 the reader supplies the credential once rather than to two separate blocks.
+
+**A step's cases take `values` as a `request`'s do.** A step that tabs through several outcomes by more
+than one value gives each case a `values` map over the flow's `variables`, under the same rules: `value`
+and `values` are never both, `values` requires the step to have no `case_variable`, and a key must be a
+declared variable. A name a step captures is not declared, so a case cannot bind it. Captures still read
+from the response pasted into the step, and a variable every case of every step binds is no longer
+listed in the flow's fields.
+
+```yaml
+- type: request_flow
+  label: "Sign in, then read a record"
+  variables: [{ name: id }, { name: term }]
+  steps:
+    - label: "Sign in"
+      command: "vault-run -- curl -s https://api.example.test/v1/session"
+      captures: [{ name: session, source: body, secret: true }]
+      cases:
+        - label: "200"
+          tone: success
+          response: { body: "abc123" }
+    - label: "Read the record"
+      command: "vault-run -- curl -s -H 'X-Session: {{session}}' https://api.example.test/v1/records/{{id}}/{{term}}"
+      cases:
+        - label: "Second term"
+          values: { id: A100, term: "2" }
+          tone: warning
+          response: { body: "{}" }
+        - label: "Control"
+          values: { id: A100, term: "1" }
+          tone: success
+          response: { body: '{ "id": "A100" }' }
+```
 
 **Each step's Copy gives that one call**, with every value written out (the reader's fields and any
 value an earlier step captured alike), so it runs exactly as it is pasted. The reader works down the
@@ -1088,7 +1152,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
-Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it, and a table longer than N splits into consecutive tables that each repeat the header row (at `notion_width: full` every part keeps the whole table's column widths). A table part never ends on a `group` row, and a `total` row keeps the row before it. A part that still cannot fit in N, such as a long code block, one long table row, or a heading together with the block after it, stays whole, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command, with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it, and a table longer than N splits into consecutive tables that each repeat the header row (at `notion_width: full` every part keeps the whole table's column widths). A table part never ends on a `group` row, and a `total` row keeps the row before it. A part that still cannot fit in N, such as a long code block, one long table row, or a heading together with the block after it, stays whole, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
 ## What you never write
 

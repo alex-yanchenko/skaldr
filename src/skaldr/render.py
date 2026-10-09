@@ -202,6 +202,7 @@ def html_environment() -> Environment:
         request_wire=compute.request_wire,
         command_for=compute.command_for,
         produced_names=compute.produced_names,
+        reader_variables=compute.reader_variables,
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,

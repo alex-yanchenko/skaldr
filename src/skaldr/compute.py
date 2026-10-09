@@ -45,6 +45,7 @@ from skaldr.models import (
     RequestFlow,
     RequestLike,
     RequestResponse,
+    RequestVariable,
     RichTextMarker,
     Row,
     Section,
@@ -912,20 +913,31 @@ def recorded_body(body: str) -> str:
     return read_recorded_body(body).text
 
 
-def case_value(block: RequestLike, case: RequestCase) -> str | None:
-    """What this case supplies for the block's case axis, defaulting to its label."""
-    return None if block.case_variable is None else (case.value or case.label)
-
-
 def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
-    """`text` with the case axis filled in. The case variable is known when the page is built, so it
-    is substituted here; every other `{{name}}` stays for the reader to supply at read time."""
-    value = case_value(block, case)
-    if value is None:
+    """`text` with what the case binds filled in: its case variable, or each name under its `values`.
+    These are known when the page is built, so they are substituted here; every other `{{name}}` stays
+    for the reader to supply at read time."""
+    bindings = block.case_bindings(case)
+    if not bindings:
         return text
-    return VARIABLE_TOKEN.sub(
-        lambda match: value if match.group(1) == block.case_variable else match.group(0), text
-    )
+    return VARIABLE_TOKEN.sub(lambda match: bindings.get(match.group(1), match.group(0)), text)
+
+
+def reader_variables(owner: Request | RequestFlow) -> list[RequestVariable]:
+    """The declared variables the reader still fills. One a case binds through `values` is written into
+    that case's command, so it stops being a field once no case leaves it open; one no case binds stays
+    a field whatever the cases say, as it always has."""
+    cores = [owner] if isinstance(owner, Request) else owner.steps
+    bound = {name for core in cores for case in core.cases for name in (case.values or {})}
+    open_names = {
+        match.group(1)
+        for core in cores
+        for case in core.cases
+        for match in VARIABLE_TOKEN.finditer(command_for(core, case))
+    }
+    return [
+        variable for variable in owner.variables if variable.name not in bound or variable.name in open_names
+    ]
 
 
 def variable_parts(text: str) -> list[tuple[str, str]]:
