@@ -55,16 +55,8 @@ def characters(block: RenderedBlock) -> int:
     return sum(len(line) + 1 for line in block.lines)
 
 
-def block_text(block: RenderedBlock) -> str:
-    return "".join(f"{line}\n" for line in block.lines)
-
-
 def json_string_bytes(text: str) -> int:
     return len(json.dumps(text, ensure_ascii=False)[1:-1].encode("utf-8"))
-
-
-def json_bytes(block: RenderedBlock) -> int:
-    return json_string_bytes(block_text(block))
 
 
 def character_budget(most: int) -> Budget:

@@ -6,7 +6,7 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr.export.apportion import apportioned
-from skaldr.export.budget import Budget, Cost, RenderedBlock, block_text
+from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -529,10 +529,6 @@ def notion_block_count(text: str) -> int:
         closer = notion_fence_closer(stripped)
         count += 1
     return count
-
-
-def notion_blocks(block: RenderedBlock) -> int:
-    return notion_block_count(block_text(block))
 
 
 def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:

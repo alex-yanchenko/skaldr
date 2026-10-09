@@ -2,10 +2,8 @@ import json
 
 import pytest
 
-from skaldr.export.budget import RenderedBlock, json_bytes, json_string_bytes
-from skaldr.export.notion import notion_block_count, notion_blocks
-from skaldr.export.tree import Paragraph
-from skaldr.richtext import Plain
+from skaldr.export.budget import json_string_bytes
+from skaldr.export.notion import notion_block_count
 
 TABLE = (
     '<table fit-page-width="true" header-row="true">\n'
@@ -55,21 +53,13 @@ def test_notion_blocks_count_each_block_a_line_opens(text: str, blocks: int) -> 
     assert notion_block_count(text) == blocks
 
 
-def test_the_notion_block_measure_counts_the_lines_of_a_rendered_block() -> None:
-    block = RenderedBlock(Paragraph((Plain("x"),)), ("## Tools", "- Spade.", "```", "- code", "```"))
-
-    assert notion_blocks(block) == notion_block_count("## Tools\n- Spade.\n```\n- code\n```\n")
-
-
 def test_json_string_bytes_count_the_escaped_utf8_text_without_its_quotes() -> None:
     text = 'Sow "early".\n\tRake é 🌱\n'
 
     assert json_string_bytes(text) == len(json.dumps(text, ensure_ascii=False).encode("utf-8")) - 2
 
 
-def test_json_bytes_add_up_across_blocks_because_the_splitter_sums_block_costs() -> None:
-    first = RenderedBlock(Paragraph((Plain("a"),)), ('Say "hi"', "é"))
-    second = RenderedBlock(Paragraph((Plain("b"),)), ("\tTab",))
-    written_together = RenderedBlock(first.node, (*first.lines, *second.lines))
+def test_json_string_bytes_add_up_across_sections_because_a_request_budget_sums_them() -> None:
+    first, second = 'Say "hi"\né\n', "\tTab\n"
 
-    assert json_bytes(written_together) == json_bytes(first) + json_bytes(second)
+    assert json_string_bytes(first + second) == json_string_bytes(first) + json_string_bytes(second)
