@@ -2,9 +2,11 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
+from urllib.parse import quote, urlsplit
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ConnectorError
 from skaldr.export.adf.colors import BADGE_LOZENGE, TEXT_COLOR
 from skaldr.export.adf.nodes import (
     AdfCode,
@@ -40,11 +42,12 @@ from skaldr.export.runs import (
     write_export_runs,
 )
 from skaldr.export.tree import ToneName
-from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
+from skaldr.models import ALLOWED_URL_SCHEMES, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, ScriptPosition, StyleName
 
 AdfInlines = tuple[AdfInline, ...]
 
+PROJECT_KEY: Final = re.compile(r"[A-Z][A-Z0-9_]+")
 MARK_RANK: Final[Mapping[str, int]] = {
     "link": 0,
     "strong": 1,
@@ -76,8 +79,21 @@ class IssueLinks:
     site_url: str
     project_keys: frozenset[str]
 
+    def __post_init__(self) -> None:
+        site = urlsplit(self.site_url)
+        if site.scheme != "https" or not site.hostname or "@" in site.netloc:
+            raise ConnectorError(
+                f"issue links need an https site URL with a host and no user info, got '{self.site_url}'"
+            )
+        for key in sorted(self.project_keys):
+            if not PROJECT_KEY.fullmatch(key):
+                raise ConnectorError(
+                    f"'{key}' is not a Jira project key: capital letters, digits and underscores, "
+                    "starting with a letter, at least two characters"
+                )
+
     def url_of(self, key: str) -> str:
-        return f"{self.site_url.rstrip('/')}/browse/{key}"
+        return f"{self.site_url.rstrip('/')}/browse/{quote(key, safe='')}"
 
 
 def _issue_key_pattern(links: IssueLinks) -> re.Pattern[str]:
@@ -202,6 +218,8 @@ class AdfRuns:
         return (AdfText(type="text", text=text, marks=[AdfCode(type="code")]),)
 
     def link(self, label: AdfInlines, url: str, /) -> AdfInlines:
+        if not url.startswith(ALLOWED_URL_SCHEMES):
+            return label
         mark = AdfLink(type="link", attrs=AdfLinkAttrs(href=url))
         return with_mark(tuple(map(_as_text_in_a_link, label)), mark)
 

@@ -1,9 +1,11 @@
 import json
+import re
 from collections.abc import Mapping
 from typing import get_args
 
 import pytest
 
+from skaldr.errors import ConnectorError
 from skaldr.export.adf import IssueLinks, write_adf_runs
 from skaldr.export.adf.colors import BADGE_LOZENGE
 from skaldr.export.runs import (
@@ -290,3 +292,74 @@ def test_text_is_carried_verbatim_and_survives_a_json_round_trip(text: str) -> N
     nodes = write_adf_runs((Plain(text),), None)
 
     assert json.loads(json.dumps(list(nodes))) == [{"type": "text", "text": text}]
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["javascript:alert(1)", "data:text/html;base64,AAAA", "/relative/path", "ftp://example.com/x", "#frag"],
+)
+def test_a_link_to_an_unsafe_or_relative_url_is_written_as_its_label_alone(url: str) -> None:
+    assert _written((Link((Styled("bold", (Plain("x"),)),), url),)) == [_text("x", STRONG)]
+
+
+@pytest.mark.parametrize("url", ["http://example.com", "https://example.com/a?b=c", "mailto:a@example.com"])
+def test_a_link_to_an_allowed_scheme_is_kept(url: str) -> None:
+    assert _written((Link((Plain("x"),), url),)) == [_text("x", _link(url))]
+
+
+def test_a_citation_with_an_unsafe_url_is_its_number_alone() -> None:
+    assert _written((Citation("k", 2, "javascript:alert(1)"),)) == [_text("[2]")]
+
+
+def test_a_text_node_with_a_link_strong_and_em_carries_them_in_the_fixed_order() -> None:
+    runs = (Styled("italic", (Styled("bold", (Link((Plain("x"),), "https://example.com"),)),)),)
+
+    assert _written(runs) == [_text("x", _link("https://example.com"), STRONG, EM)]
+
+
+def test_two_adjacent_links_to_different_urls_stay_separate_nodes() -> None:
+    runs = (Link((Plain("a"),), "https://example.com/1"), Link((Plain("b"),), "https://example.com/2"))
+
+    assert _written(runs) == [
+        _text("a", _link("https://example.com/1")),
+        _text("b", _link("https://example.com/2")),
+    ]
+
+
+@pytest.mark.parametrize(
+    "site",
+    [
+        "http://example.atlassian.net",
+        "example.atlassian.net",
+        "https://",
+        "https://user:secret@example.atlassian.net",
+        "https://user@example.atlassian.net",
+        "",
+    ],
+)
+def test_issue_links_refuse_a_site_that_is_not_https_with_a_host_and_no_user_info(site: str) -> None:
+    with pytest.raises(
+        ConnectorError,
+        match=re.escape(f"issue links need an https site URL with a host and no user info, got '{site}'"),
+    ):
+        IssueLinks(site, frozenset({"PLAN"}))
+
+
+@pytest.mark.parametrize("key", ["", "P", "plan", "1PLAN", "PL AN", "PLAN-1", "PLAN/../x"])
+def test_issue_links_refuse_a_project_key_that_is_not_a_jira_project_key(key: str) -> None:
+    with pytest.raises(
+        ConnectorError,
+        match=re.escape(
+            f"'{key}' is not a Jira project key: capital letters, digits and underscores, "
+            "starting with a letter, at least two characters"
+        ),
+    ):
+        IssueLinks(SITE, frozenset({"PLAN", key}))
+
+
+def test_issue_links_accept_keys_with_digits_and_underscores() -> None:
+    links = IssueLinks(SITE, frozenset({"AB_2"}))
+
+    assert _written((Plain("AB_2-7"),), links) == [
+        {"type": "inlineCard", "attrs": {"url": f"{SITE}/browse/AB_2-7"}}
+    ]

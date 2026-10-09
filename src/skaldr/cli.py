@@ -596,9 +596,12 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
             file=sys.stderr,
         )
-    for heading in result.oversized_sections:
+    for oversized in result.oversized_sections:
+        if target == "adf":
+            print(f"warning: {oversized}", file=sys.stderr)
+            continue
         print(
-            f"warning: section '{heading}' holds a part that cannot be split to fit --chunk {chunk} "
+            f"warning: section '{oversized}' holds a part that cannot be split to fit --chunk {chunk} "
             "(one block, or a heading with the block after it); that part stays whole",
             file=sys.stderr,
         )

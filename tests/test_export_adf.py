@@ -14,7 +14,7 @@ from skaldr.export.adf import (
     render_adf,
     render_adf_document,
 )
-from skaldr.export.adf.blocks import unmapped_node
+from skaldr.export.adf import blocks as blocks_module
 from skaldr.export.adf.colors import PANEL_TYPE
 from skaldr.export.inline import plain
 from skaldr.export.runs import Chip, ExportRich
@@ -57,7 +57,7 @@ from skaldr.export.tree import (
 from skaldr.richtext import Code, Plain, Styled
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import flow_graph as _flow
-from tests.factories.adf_factory import minimal_nodes
+from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
 from tests.factories.adf_factory import text_entry as _text_entry
 
@@ -227,10 +227,60 @@ def test_a_numbered_list_continues_its_numbers_after_a_hoisted_block() -> None:
 def test_a_hoisted_block_the_container_cannot_hold_fails() -> None:
     node = Callout("info", (ListNode("bullet", (_text_entry("a", Callout("info", (_para("x"),))),)),))
 
-    with pytest.raises(
-        AdfUnsupportedError, match=_exactly("ADF cannot place panel (from Callout) inside a panel")
-    ):
+    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a callout inside a callout")):
         _rendered(node)
+
+
+def test_a_nested_list_that_cannot_fit_ends_only_its_own_list_and_the_rest_follows() -> None:
+    inner = ListNode(
+        "bullet",
+        (_text_entry("x"), _text_entry("y", Callout("info", (_para("c"),))), _text_entry("z")),
+    )
+    node = ListNode("bullet", (_text_entry("a", inner), _text_entry("b")))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "bulletList",
+            "content": [
+                _item(
+                    _words("a"),
+                    {"type": "bulletList", "content": [_item(_words("x")), _item(_words("y"))]},
+                )
+            ],
+        },
+        {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("c")]},
+        {"type": "bulletList", "content": [_item(_words("z"))]},
+        {"type": "bulletList", "content": [_item(_words("b"))]},
+    )
+
+
+def test_a_toggle_in_a_list_entry_inside_a_toggle_follows_the_list_as_a_nested_expand() -> None:
+    inner = Toggle(plain("deep"), None, (_para("d"),))
+    node = Toggle(plain("outer"), None, (ListNode("bullet", (_text_entry("a", inner),)),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "outer"},
+            "content": [
+                {"type": "bulletList", "content": [_item(_words("a"))]},
+                {"type": "nestedExpand", "attrs": {"title": "deep"}, "content": [_words("d")]},
+            ],
+        }
+    )
+
+
+def test_a_list_hoisting_a_block_inside_a_panel_fails_naming_the_block_and_the_heading_above() -> None:
+    refused = (
+        Heading(2, plain("Plan")),
+        Callout("info", (ListNode("bullet", (_text_entry("a", Toggle(plain("t"), None, (_para("x"),))),)),)),
+    )
+
+    with pytest.raises(
+        AdfUnsupportedError,
+        match=_exactly("ADF cannot place a toggle inside a callout, under the heading 'Plan'"),
+    ):
+        _rendered(*refused)
 
 
 def test_an_entry_with_no_text_is_an_empty_paragraph() -> None:
@@ -296,14 +346,102 @@ def test_a_task_item_with_no_text_has_no_content() -> None:
     )
 
 
-def test_a_task_item_cannot_hold_anything_but_a_nested_task_list() -> None:
-    node = ListNode("check", (ListEntry(plain("a"), children=(_para("detail"),)),))
+def _task_item(local_id: int, state: str, text: str) -> Json:
+    return {
+        "type": "taskItem",
+        "attrs": {"localId": f"skaldr-task-{local_id}", "state": state},
+        "content": [_text(text)],
+    }
 
-    with pytest.raises(
-        AdfUnsupportedError,
-        match=_exactly("ADF cannot place Paragraph inside a task item; only a task list fits"),
-    ):
+
+def _task_list(local_id: int, *content: Json) -> Json:
+    return {
+        "type": "taskList",
+        "attrs": {"localId": f"skaldr-task-list-{local_id}"},
+        "content": list(content),
+    }
+
+
+def test_a_task_entry_with_detail_ends_the_task_list_and_the_detail_follows_it() -> None:
+    node = ListNode(
+        "check",
+        (
+            ListEntry(
+                plain("a"),
+                children=(
+                    ListNode("check", (ListEntry(plain("sub")),)),
+                    _para("detail"),
+                    Callout("info", (_para("c"),)),
+                ),
+            ),
+            ListEntry(plain("b"), checked=True),
+        ),
+    )
+
+    assert _rendered(node) == _doc(
+        _task_list(1, _task_item(2, "TODO", "a"), _task_list(3, _task_item(4, "TODO", "sub"))),
+        _words("detail"),
+        {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("c")]},
+        _task_list(5, _task_item(6, "DONE", "b")),
+    )
+
+
+def test_a_task_entry_whose_nested_task_list_cannot_fit_ends_the_lists_there() -> None:
+    nested = ListNode("check", (ListEntry(plain("x"), children=(_para("detail"),)), ListEntry(plain("y"))))
+    node = ListNode("check", (ListEntry(plain("a"), children=(nested,)),))
+
+    assert _rendered(node) == _doc(
+        _task_list(1, _task_item(2, "TODO", "a"), _task_list(3, _task_item(4, "TODO", "x"))),
+        _words("detail"),
+        _task_list(5, _task_item(6, "TODO", "y")),
+    )
+
+
+def test_a_task_entry_with_detail_inside_a_panel_keeps_the_detail_in_the_panel() -> None:
+    node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(_para("detail"),)),)),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [_task_list(1, _task_item(2, "TODO", "a")), _words("detail")],
+        }
+    )
+
+
+def test_a_task_entry_holding_a_toggle_inside_a_toggle_follows_the_list_as_a_nested_expand() -> None:
+    detail = Toggle(plain("deep"), None, (_para("d"),))
+    node = Toggle(plain("outer"), None, (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "outer"},
+            "content": [
+                _task_list(1, _task_item(2, "TODO", "a")),
+                {"type": "nestedExpand", "attrs": {"title": "deep"}, "content": [_words("d")]},
+            ],
+        }
+    )
+
+
+def test_a_task_entry_holding_a_toggle_inside_a_panel_fails() -> None:
+    detail = Toggle(plain("t"), None, (_para("x"),))
+    node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
+
+    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a toggle inside a callout")):
         _rendered(node)
+
+
+def test_rendering_the_same_tree_twice_is_byte_identical_and_local_ids_never_repeat() -> None:
+    tree = (*showcase_nodes(), *showcase_nodes())
+
+    first, second = adf_json(render_adf(tree)), adf_json(render_adf(tree))
+    local_ids = re.findall(r'"localId": "([^"]+)"', first)
+
+    assert first == second
+    assert local_ids != []
+    assert len(local_ids) == len(set(local_ids))
 
 
 @pytest.mark.parametrize("tone", list(get_args(ToneName)))
@@ -363,9 +501,7 @@ def test_an_empty_callout_holds_an_empty_paragraph() -> None:
 def test_a_callout_cannot_hold_a_table() -> None:
     table = TableNode((TableCell(plain("h")),), ())
 
-    with pytest.raises(
-        AdfUnsupportedError, match=_exactly("ADF cannot place table (from TableNode) inside a panel")
-    ):
+    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a table inside a callout")):
         _rendered(Callout("info", (table,)))
 
 
@@ -563,7 +699,7 @@ def test_a_toggle_two_levels_down_has_no_form() -> None:
 
     with pytest.raises(
         AdfUnsupportedError,
-        match=_exactly("ADF cannot place nestedExpand (from Toggle) inside a nested expand"),
+        match=_exactly("ADF cannot place a toggle inside a toggle that is itself inside a toggle"),
     ):
         _rendered(node)
 
@@ -571,9 +707,7 @@ def test_a_toggle_two_levels_down_has_no_form() -> None:
 def test_a_toggle_in_a_panel_has_no_form() -> None:
     node = Callout("info", (Toggle(plain("a"), None, (_para("x"),)),))
 
-    with pytest.raises(
-        AdfUnsupportedError, match=_exactly("ADF cannot place expand (from Toggle) inside a panel")
-    ):
+    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a toggle inside a callout")):
         _rendered(node)
 
 
@@ -590,7 +724,8 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
         }
     )
     with pytest.raises(
-        AdfUnsupportedError, match=_exactly("ADF cannot place table (from TableNode) inside a nested expand")
+        AdfUnsupportedError,
+        match=_exactly("ADF cannot place a table inside a toggle that is itself inside a toggle"),
     ):
         _rendered(refused)
 
@@ -686,13 +821,11 @@ class FutureBlock:
     pass
 
 
-def test_a_lowered_node_with_no_adf_form_fails_naming_it() -> None:
-    error = unmapped_node(FutureBlock())
+def test_a_lowered_node_with_no_adf_form_fails_naming_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(blocks_module, "Divider", FutureBlock)
 
-    assert (type(error), str(error)) == (
-        AdfUnsupportedError,
-        "ADF has no form for the lowered node FutureBlock",
-    )
+    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF has no form for the lowered node Divider")):
+        render_adf((Divider(),))
 
 
 def test_the_unsupported_error_is_a_report_error() -> None:
@@ -706,11 +839,33 @@ def test_every_lowered_node_type_has_a_minimal_example_so_a_new_one_fails_here()
     assert set(MINIMAL_NODES) == set(get_args(Node))
 
 
+FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
+    Heading: "heading",
+    Paragraph: "paragraph",
+    ListNode: "bulletList",
+    TableNode: "table",
+    CodeBlock: "codeBlock",
+    DisplayMath: "codeBlock",
+    Callout: "panel",
+    Quote: "blockquote",
+    Divider: "rule",
+    Toggle: "expand",
+    Columns: "paragraph",
+    Tabs: "expand",
+    Diagram: "bulletList",
+    TableOfContents: "bulletList",
+}
+
+
+def test_each_minimal_node_type_has_an_expected_first_block() -> None:
+    assert set(FIRST_BLOCK_OF_EACH_NODE_TYPE) == set(MINIMAL_NODES)
+
+
 @pytest.mark.parametrize("node", MINIMAL_NODES.values(), ids=lambda node: type(node).__name__)
-def test_every_lowered_node_type_writes_at_least_one_adf_block(node: Node) -> None:
+def test_every_lowered_node_type_writes_its_expected_first_block(node: Node) -> None:
     content = render_adf((node,))["content"]
 
-    assert content != [{"type": "paragraph"}]
+    assert content[0]["type"] == FIRST_BLOCK_OF_EACH_NODE_TYPE[type(node)]
 
 
 @pytest.mark.parametrize("kind", list(get_args(ListKind)))

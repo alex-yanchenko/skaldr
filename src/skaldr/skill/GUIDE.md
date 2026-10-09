@@ -1055,7 +1055,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names). Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1110,9 +1110,10 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `chart` | its data table |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | a table of contents | a bulleted list of the titles, without links |
-| `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped |
+| `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
+| an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
 
-ADF limits what each container may hold, and skaldr does not guess. A walkthrough step or list item whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and a numbered list carries on from the right number. A block ADF cannot place at all stops the export with an error naming the block and where it was, for example a table inside a panel or an expand nested three deep.
+ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). A nested list that cannot fit ends only itself the same way. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, and the nearest heading above it, for example `ADF cannot place a table inside a callout, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle`. Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
 ## What you never write
 

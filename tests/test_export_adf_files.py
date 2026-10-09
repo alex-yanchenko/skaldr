@@ -5,6 +5,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_adf
+from skaldr.export.adf import compact_adf_length
 from skaldr.models import load_report
 from tests.conftest import REPO_ROOT
 from tests.factories import folder_texts, make_report, make_toggle, write_report
@@ -110,8 +111,47 @@ def test_the_cli_names_the_block_adf_cannot_place_and_writes_nothing(
     captured = capsys.readouterr()
     assert (captured.out, captured.err, export_dir.exists()) == (
         "",
-        "error: ADF cannot place nestedExpand (from Toggle) inside a nested expand\n",
+        "error: ADF cannot place a toggle inside a toggle that is itself inside a toggle\n",
         False,
+    )
+
+
+def _oversize_warning(size: int) -> str:
+    return f"the ADF description is {size:,} characters, over Jira's limit of 32,767"
+
+
+def test_the_compact_length_counts_characters_of_the_json_a_description_field_receives() -> None:
+    accented = {**HI_DOCUMENT, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "é"}]}]}
+
+    assert (compact_adf_length(HI_DOCUMENT), compact_adf_length(accented)) == (100, 98)
+
+
+def test_an_adf_export_over_the_jira_limit_names_the_size_and_the_limit(tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+
+    result = export_adf(load_report(EXAMPLE), out_dir)
+
+    written = json.loads((out_dir / "page.adf.json").read_text(encoding="utf-8"))
+    assert result.oversized_sections == (_oversize_warning(compact_adf_length(written)),)
+    assert compact_adf_length(written) > 32_767
+
+
+def test_an_adf_export_within_the_limit_has_no_warning(tmp_path: Path) -> None:
+    report = load_report(write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "Hi."}])))
+
+    assert export_adf(report, tmp_path / "out").oversized_sections == ()
+
+
+def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(
+    export_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([str(EXAMPLE), "--export", "adf", "--export-dir", str(export_dir)]) == 0
+
+    written = json.loads((export_dir / "page.adf.json").read_text(encoding="utf-8"))
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == (
+        f"OK  {export_dir / 'page.adf.json'}\n",
+        f"warning: {_oversize_warning(compact_adf_length(written))}\n",
     )
 
 

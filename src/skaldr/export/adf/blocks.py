@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import count
+from itertools import count, takewhile
 from typing import Final, Literal
 
 from typing_extensions import Never
@@ -69,25 +69,39 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Plain
 
-Container = Literal["doc", "list_item", "panel", "blockquote", "expand", "nested_expand"]
+Container = Literal["doc", "panel", "expand", "nested_expand"]
 
+JIRA_DESCRIPTION_LIMIT: Final = 32_767
 _TEXT_BLOCKS: Final = frozenset({"paragraph", "heading", "bulletList", "orderedList", "taskList"})
 _FENCED_BLOCKS: Final = frozenset({"codeBlock", "rule", "panel", "blockquote"})
-ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
+_ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
     "doc": _TEXT_BLOCKS | _FENCED_BLOCKS | {"table", "expand"},
     "expand": _TEXT_BLOCKS | _FENCED_BLOCKS | {"table", "nestedExpand"},
     "nested_expand": _TEXT_BLOCKS | _FENCED_BLOCKS,
     "panel": _TEXT_BLOCKS | {"codeBlock", "rule"},
-    "blockquote": frozenset({"paragraph", "bulletList", "orderedList", "codeBlock"}),
-    "list_item": frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"}),
 }
-CONTAINER_LABEL: Final[Mapping[Container, str]] = {
+_LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
+_CONTAINER_TERM: Final[Mapping[Container, str]] = {
     "doc": "the document",
-    "expand": "an expand",
-    "nested_expand": "a nested expand",
-    "panel": "a panel",
-    "blockquote": "a block quote",
-    "list_item": "a list item",
+    "panel": "a callout",
+    "expand": "a toggle",
+    "nested_expand": "a toggle that is itself inside a toggle",
+}
+_NODE_TERM: Final[Mapping[type, str]] = {
+    Heading: "heading",
+    Paragraph: "text",
+    ListNode: "list",
+    TableNode: "table",
+    CodeBlock: "code block",
+    DisplayMath: "math block",
+    Callout: "callout",
+    Quote: "quote",
+    Divider: "divider",
+    Toggle: "toggle",
+    Columns: "grid",
+    Tabs: "set of tabs",
+    Diagram: "diagram",
+    TableOfContents: "table of contents",
 }
 LATEX_LANGUAGE: Final = "latex"
 LOOP_BACK_NOTE: Final = " (loop back)"
@@ -95,8 +109,8 @@ LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
-def unmapped_node(node: object) -> AdfUnsupportedError:
-    return AdfUnsupportedError(f"ADF has no form for the lowered node {type(node).__name__}")
+def _fits_in_a_list_item(block: AdfBlock) -> bool:
+    return block["type"] in _LIST_ITEM_BLOCKS
 
 
 def _empty_paragraph() -> AdfParagraph:
@@ -127,6 +141,7 @@ class _AdfBlocks:
     def __init__(self, issue_links: IssueLinks | None) -> None:
         self.runs = AdfRuns(issue_links)
         self.local_ids = count(1)
+        self.heading = ""
 
     def local_id(self, kind: str) -> str:
         return f"skaldr-{kind}-{next(self.local_ids)}"
@@ -138,16 +153,19 @@ class _AdfBlocks:
         content = self.inline(runs)
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()
 
+    def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
+        for block in produced:
+            if block["type"] not in _ALLOWED_BLOCKS[container]:
+                message = f"ADF cannot place a {_NODE_TERM[type(node)]} inside {_CONTAINER_TERM[container]}"
+                if self.heading:
+                    message += f", under the heading '{self.heading}'"
+                raise AdfUnsupportedError(message)
+
     def blocks(self, nodes: Iterable[Node], container: Container) -> list[AdfBlock]:
         written: list[AdfBlock] = []
         for node in nodes:
             produced = self.node_blocks(node, container)
-            for block in produced:
-                if block["type"] not in ALLOWED_BLOCKS[container]:
-                    raise AdfUnsupportedError(
-                        f"ADF cannot place {block['type']} (from {type(node).__name__}) "
-                        f"inside {CONTAINER_LABEL[container]}"
-                    )
+            self.require_places(node, produced, container)
             written += produced
         return written
 
@@ -155,6 +173,7 @@ class _AdfBlocks:
         match node:
             case Heading():
                 content = self.inline(node.text)
+                self.heading = export_visible_text(node.text).strip() or self.heading
                 level = AdfHeadingAttrs(level=node.level)
                 return [AdfHeading(type="heading", attrs=level, content=content)] if content else []
             case Paragraph():
@@ -176,7 +195,10 @@ class _AdfBlocks:
             case Divider():
                 return [AdfRule(type="rule")]
             case Toggle():
-                return [self.expand(container, export_visible_text(node.title), node.children)]
+                title = export_visible_text(node.title)
+                if node.heading_level is not None:
+                    self.heading = title.strip() or self.heading
+                return [self.expand(container, title, node.children)]
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
@@ -190,7 +212,7 @@ class _AdfBlocks:
                 return self.list_blocks(ListNode("bullet", entries), container)
             case _:
                 exhausted: Never = node
-                raise unmapped_node(exhausted)
+                raise AdfUnsupportedError(f"ADF has no form for the lowered node {type(exhausted).__name__}")
 
     def paragraph_blocks(self, node: Paragraph) -> list[AdfBlock]:
         content = self.inline(node.text)
@@ -234,15 +256,15 @@ class _AdfBlocks:
         if not node.entries:
             return []
         if node.kind == "check":
-            return [self.task_list(node)]
+            return self.task_blocks(node, container)
         written: list[AdfBlock] = []
         items: list[AdfListItem] = []
         first_number = node.start
         for number, entry in enumerate(node.entries, start=node.start):
-            item, hoisted = self.list_item(entry, container)
+            item, overflow = self.list_item(entry, container)
             items.append(item)
-            if hoisted:
-                written += [self.listed(node.kind, items, first_number), *hoisted]
+            if overflow:
+                written += [self.listed(node.kind, items, first_number), *overflow]
                 items = []
                 first_number = number + 1
         if items:
@@ -258,41 +280,60 @@ class _AdfBlocks:
 
     def list_item(self, entry: ListEntry, container: Container) -> tuple[AdfListItem, list[AdfBlock]]:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
-        hoisted: list[AdfBlock] = []
+        overflow: list[AdfBlock] = []
         for child in entry.children:
-            fitted = None if hoisted else self.fitted_in_a_list_item(child)
-            if fitted is None:
-                hoisted += self.blocks([child], container)
-            else:
-                content += fitted
-        return AdfListItem(type="listItem", content=content), hoisted
+            produced = self.node_blocks(child, container)
+            fitting = [] if overflow else list(takewhile(_fits_in_a_list_item, produced))
+            content += fitting
+            beyond = produced[len(fitting) :]
+            self.require_places(child, beyond, container)
+            overflow += beyond
+        return AdfListItem(type="listItem", content=content), overflow
 
-    def fitted_in_a_list_item(self, node: Node) -> list[AdfBlock] | None:
-        try:
-            return self.blocks([node], "list_item")
-        except AdfUnsupportedError:
-            return None
-
-    def task_list(self, node: ListNode) -> AdfTaskList:
-        list_attrs = AdfTaskListAttrs(localId=self.local_id("task-list"))
+    def task_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
+        written: list[AdfBlock] = []
+        list_id: str | None = None
         content: list[AdfTaskItem | AdfTaskList] = []
         for entry in node.entries:
-            state = "DONE" if entry.checked else "TODO"
-            item = AdfTaskItem(
-                type="taskItem", attrs=AdfTaskItemAttrs(localId=self.local_id("task"), state=state)
-            )
-            text = self.inline(entry.text)
-            if text:
-                item["content"] = text
-            content.append(item)
-            for child in entry.children:
-                if not (isinstance(child, ListNode) and child.kind == "check"):
-                    raise AdfUnsupportedError(
-                        f"ADF cannot place {type(child).__name__} inside a task item; only a task list fits"
-                    )
-                if child.entries:
-                    content.append(self.task_list(child))
-        return AdfTaskList(type="taskList", attrs=list_attrs, content=content)
+            list_id = list_id or self.local_id("task-list")
+            content.append(self.task_item(entry))
+            nested, overflow = self.task_details(entry.children, container)
+            content += nested
+            if overflow:
+                attrs = AdfTaskListAttrs(localId=list_id)
+                written += [AdfTaskList(type="taskList", attrs=attrs, content=content), *overflow]
+                list_id, content = None, []
+        if list_id is not None:
+            attrs = AdfTaskListAttrs(localId=list_id)
+            written.append(AdfTaskList(type="taskList", attrs=attrs, content=content))
+        return written
+
+    def task_item(self, entry: ListEntry) -> AdfTaskItem:
+        state = "DONE" if entry.checked else "TODO"
+        item = AdfTaskItem(
+            type="taskItem", attrs=AdfTaskItemAttrs(localId=self.local_id("task"), state=state)
+        )
+        text = self.inline(entry.text)
+        if text:
+            item["content"] = text
+        return item
+
+    def task_details(
+        self, children: Sequence[Node], container: Container
+    ) -> tuple[list[AdfTaskList], list[AdfBlock]]:
+        nested: list[AdfTaskList] = []
+        overflow: list[AdfBlock] = []
+        for child in children:
+            produced = self.node_blocks(child, container)
+            is_a_task_list = isinstance(child, ListNode) and child.kind == "check"
+            if produced and is_a_task_list and not overflow:
+                first = produced[0]
+                if first["type"] == "taskList":
+                    nested.append(first)
+                    produced = produced[1:]
+            self.require_places(child, produced, container)
+            overflow += produced
+        return nested, overflow
 
     def cell_paragraph(self, cell: TableCell, bold: bool) -> AdfParagraph:
         content = self.inline(cell.text)
@@ -351,3 +392,7 @@ def render_adf_document(document: LoweredDocument, issue_links: IssueLinks | Non
 
 def adf_json(document: AdfDoc) -> str:
     return json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+
+
+def compact_adf_length(document: Mapping[str, object]) -> int:
+    return len(json.dumps(document, separators=(",", ":"), ensure_ascii=False))

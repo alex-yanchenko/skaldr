@@ -1,5 +1,4 @@
 import os
-import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +7,7 @@ from typing import Annotated, Final, Literal, get_args
 from pydantic import StringConstraints, ValidationError
 
 from skaldr.errors import ReportError
-from skaldr.export.adf import adf_json, render_adf_document
+from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
@@ -32,7 +31,7 @@ EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 ADF_PAGE_NAME: Final = "page.adf.json"
 ExportedPageName = Annotated[
-    str, StringConstraints(pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|" + re.escape(ADF_PAGE_NAME) + ")$")
+    str, StringConstraints(pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|page\.adf\.json)$")
 ]
 
 
@@ -141,4 +140,11 @@ def export_markdown(report: Report, out_dir: Path) -> ExportResult:
 
 def export_adf(report: Report, out_dir: Path) -> ExportResult:
     document = lower_report(report)
-    return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(render_adf_document(document))})
+    adf = render_adf_document(document)
+    size = compact_adf_length(adf)
+    over_the_limit = (
+        (f"the ADF description is {size:,} characters, over Jira's limit of {JIRA_DESCRIPTION_LIMIT:,}",)
+        if size > JIRA_DESCRIPTION_LIMIT
+        else ()
+    )
+    return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
