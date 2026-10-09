@@ -1,5 +1,5 @@
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
@@ -32,6 +32,7 @@ from skaldr.export.tree import (
     HeadingLevel,
     ListKind,
     ListNode,
+    LoweredDocument,
     Node,
     Paragraph,
     Quote,
@@ -491,18 +492,30 @@ def _block_size(node: Node, room: TableRoom) -> int:
     return _size_of_lines(_notion_lines(node, room))
 
 
-def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[_RenderedBlock]:
-    blocks: list[_RenderedBlock] = []
+def _rendered_blocks_by_position(
+    nodes: Sequence[Node], room: TableRoom
+) -> Iterator[tuple[int, _RenderedBlock]]:
     previous_kind: ListKind | None = None
-    for node in nodes:
+    for position, node in enumerate(nodes):
         node_lines = _notion_lines(node, room)
         if not node_lines:
             continue
         kind = _list_kind(node)
         separator = [EMPTY_BLOCK] if kind is not None and kind == previous_kind else []
-        blocks.append(_RenderedBlock(node, (*separator, *node_lines)))
+        yield position, _RenderedBlock(node, (*separator, *node_lines))
         previous_kind = kind
-    return blocks
+
+
+def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[_RenderedBlock]:
+    return [block for _, block in _rendered_blocks_by_position(nodes, room)]
+
+
+def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:
+    region_of_node = [position for position, region in enumerate(document.regions) for _ in region.nodes]
+    lines_by_region: list[list[str]] = [[] for _ in document.regions]
+    for node_position, block in _rendered_blocks_by_position(document.body, TableRoom.on_page(page_width)):
+        lines_by_region[region_of_node[node_position]] += block.lines
+    return tuple(_page(lines) if lines else "" for lines in lines_by_region)
 
 
 def _text_of(blocks: Sequence[_RenderedBlock]) -> str:
