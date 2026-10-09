@@ -584,22 +584,17 @@ def test_an_image_src_that_is_neither_a_data_uri_nor_a_web_url_is_refused(src: s
     )
 
 
-def test_an_image_without_alt_text_is_refused() -> None:
-    assert _refusal({"type": "image", "src": "https://example.com/x.png"}) == (
-        "invalid content data: blocks.0.image.alt: Field required"
-    )
-
-
 @pytest.mark.parametrize(
-    ("alt", "complaint"),
+    "alt",
     [
-        pytest.param("", "String should have at least 1 character", id="empty"),
-        pytest.param("   ", "String should match pattern '\\S'", id="spaces"),
+        pytest.param({}, id="missing"),
+        pytest.param({"alt": ""}, id="empty"),
+        pytest.param({"alt": "  \t"}, id="whitespace"),
     ],
 )
-def test_an_image_with_blank_alt_text_is_refused(alt: str, complaint: str) -> None:
-    assert _refusal({"type": "image", "src": "https://example.com/x.png", "alt": alt}) == (
-        f"invalid content data: blocks.0.image.alt: {complaint}"
+def test_an_image_without_visible_alt_text_is_refused(alt: dict[str, str]) -> None:
+    assert _refusal({"type": "image", "src": "https://example.com/x.png", **alt}) == (
+        "invalid content data: blocks.0.image: Value error, 'alt' must hold visible text"
     )
 
 

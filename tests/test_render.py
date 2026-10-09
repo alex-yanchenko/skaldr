@@ -41,6 +41,8 @@ from skaldr.render import (
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    in_a_grid_cell,
+    in_an_open_section,
     make_cell,
     make_command_request,
     make_flow,
@@ -4414,7 +4416,7 @@ def test_a_web_image_renders_as_a_link_card_with_its_alt_host_and_caption() -> N
     }
 
     assert (
-        '<figure class="fig remote"><div class="frame">'
+        '<figure class="fig"><div class="frame">'
         '<a class="media-card" href="https://cdn.example.com/aisle.png?v=2" rel="noopener noreferrer">'
         '<span class="media-kind">Image</span>'
         '<span class="media-title">Aisle 12 &lt;overflow&gt;</span>'
@@ -4427,7 +4429,7 @@ def test_a_web_image_with_a_max_width_and_no_caption_keeps_the_width_and_drops_t
     block = {"type": "image", "src": "https://example.com/a.png", "alt": "A", "max_width": 300}
 
     assert (
-        '<figure class="fig remote" style="max-width:300px"><div class="frame">'
+        '<figure class="fig" style="max-width:300px"><div class="frame">'
         '<a class="media-card" href="https://example.com/a.png" rel="noopener noreferrer">'
         '<span class="media-kind">Image</span><span class="media-title">A</span>'
         '<span class="media-host">example.com</span></a></div></figure>'
@@ -4447,12 +4449,35 @@ def test_a_media_block_renders_as_a_link_card_titled_by_its_caption(kind: str, l
     block = {"type": "media", "kind": kind, "src": "https://files.example.com/walk", "caption": "Dock walk"}
 
     assert (
-        '<figure class="fig remote"><div class="frame">'
+        '<figure class="fig"><div class="frame">'
         '<a class="media-card" href="https://files.example.com/walk" rel="noopener noreferrer">'
         f'<span class="media-kind">{label}</span>'
         '<span class="media-title">Dock walk</span>'
         '<span class="media-host">files.example.com</span></a></div></figure>'
     ) in _html_of(block)
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(in_an_open_section, id="section"),
+        pytest.param(in_a_grid_cell, id="grid"),
+    ],
+)
+def test_a_web_image_and_a_media_block_render_their_cards_inside_a_section_or_a_grid_cell(
+    container: Callable[[list[dict[str, Any]]], dict[str, Any]],
+) -> None:
+    blocks = [
+        {"type": "image", "src": "https://example.com/a.png", "alt": "A"},
+        {"type": "media", "kind": "pdf", "src": "https://example.com/s.pdf", "caption": "Sheet"},
+    ]
+
+    html = _html_of(container(blocks))
+
+    assert (html.count('<figure class="fig"><div class="frame"><a class="media-card"'), "<img" in html) == (
+        2,
+        False,
+    )
 
 
 def test_a_media_block_without_a_caption_is_titled_by_its_url() -> None:

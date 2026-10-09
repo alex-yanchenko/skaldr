@@ -76,7 +76,9 @@ def _url_defect(url: str) -> str | None:
     return None
 
 
+LINK_URL_WORDING = "an http://, https://, or mailto: link"
 WEB_URL_SCHEMES = ("http://", "https://")
+WEB_URL_WORDING = "an http:// or https:// URL"
 
 
 def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, ...], wording: str) -> None:
@@ -88,16 +90,12 @@ def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, 
 
 
 def _require_web_url(url: str, subject: str) -> None:
-    _require_scheme_and_well_formed(url, subject, WEB_URL_SCHEMES, "an http:// or https:// URL")
+    _require_scheme_and_well_formed(url, subject, WEB_URL_SCHEMES, WEB_URL_WORDING)
 
 
 def _require_url_scheme(url: str | None, subject: str) -> None:
-    """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
-    field so the gate (and message) can't drift; `subject` names the field in the error."""
     if url is not None:
-        _require_scheme_and_well_formed(
-            url, subject, ALLOWED_URL_SCHEMES, "an http://, https://, or mailto: link"
-        )
+        _require_scheme_and_well_formed(url, subject, ALLOWED_URL_SCHEMES, LINK_URL_WORDING)
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
@@ -796,9 +794,20 @@ class Image(_Block):
         "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. "
         "A URL may not carry a username or password."
     )
-    alt: NonBlank = Field(description="Alt text for the image. Required.")
+    alt: str = Field(description="Alt text for the image. Required, and it must hold visible text.")
     caption: str | None = Field(default=None, description="Optional caption shown below the image.")
     max_width: Count | None = Field(default=None, description="Optional max width in pixels.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _alt_must_hold_visible_text(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        alt = fields.get("alt", "")
+        if isinstance(alt, str) and not alt.strip():
+            raise ValueError("'alt' must hold visible text")
+        return fields
 
     @model_validator(mode="after")
     def _data_uri_or_web_url(self) -> "Image":

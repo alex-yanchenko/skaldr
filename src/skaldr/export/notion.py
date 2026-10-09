@@ -1,7 +1,6 @@
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from html import escape
 from typing import Final
 
 from typing_extensions import assert_never
@@ -344,7 +343,7 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
 def _media_line(node: Media) -> str:
     if node.kind == "image":
         return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
-    return f'<{node.kind} src="{escape(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
 
 
 def _quote_line(node: Quote) -> str:
