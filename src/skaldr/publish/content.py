@@ -1,11 +1,12 @@
 import hashlib
 import json
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Literal
 
 from pydantic import Field, JsonValue
+from typing_extensions import assert_never
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields
@@ -112,6 +113,25 @@ def placed_section(
         return dict(others)
     at = _place_after(follows, [other for other, _ in others])
     return dict([*others[:at], (key, text), *others[at:]])
+
+
+def with_parts(before: ItemContent, after: ItemContent, parts: Sequence[Part]) -> ItemContent:
+    content = before
+    order = list(after.sections)
+    for part in parts:
+        match part.kind:
+            case "title":
+                content = content.model_copy(update={"title": after.title})
+            case "fields":
+                content = content.model_copy(update={"fields": after.fields})
+            case "section":
+                text = after.sections.get(part.key)
+                follows = order[order.index(part.key) - 1] if part.key in order[1:] else None
+                sections = placed_section(content.sections, part.key, text, follows)
+                content = content.model_copy(update={"sections": sections})
+            case _:
+                assert_never(part.kind)
+    return content
 
 
 def _place_after(follows: str | None, keys: list[str]) -> int:

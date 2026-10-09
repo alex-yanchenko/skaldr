@@ -11,10 +11,10 @@ from skaldr.publish.content import (
     Part,
     comparable,
     differing_parts,
-    placed_section,
     same_fields,
     set_fields,
     with_fields_named,
+    with_parts,
 )
 from skaldr.publish.drafts import ItemDraft
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
@@ -90,25 +90,6 @@ def _has_content(remote: RemoteItem) -> bool:
     )
 
 
-def _with_parts(before: ItemContent, after: ItemContent, parts: Sequence[Part]) -> ItemContent:
-    content = before
-    order = list(after.sections)
-    for part in parts:
-        match part.kind:
-            case "title":
-                content = content.model_copy(update={"title": after.title})
-            case "fields":
-                content = content.model_copy(update={"fields": after.fields})
-            case "section":
-                text = after.sections.get(part.key)
-                follows = order[order.index(part.key) - 1] if part.key in order[1:] else None
-                sections = placed_section(content.sections, part.key, text, follows)
-                content = content.model_copy(update={"sections": sections})
-            case _:
-                assert_never(part.kind)
-    return content
-
-
 def _settled(
     item: PublishedItem, remote: RemoteItem, edited: tuple[Part, ...], transport: Transport
 ) -> tuple[PublishedItem, tuple[Part, ...]]:
@@ -121,7 +102,7 @@ def _settled(
         if part.part in edited and part_text(remote.comparable, part.part) == part_text(expected, part.part)
     ]
     rest = tuple(part for part in edited if part not in landed)
-    rendered = _with_parts(item.rendered, item.writing.rendered, landed)
+    rendered = with_parts(item.rendered, item.writing.rendered, landed)
     if not rest:
         settled = item.model_copy(
             update={
@@ -138,7 +119,7 @@ def _settled(
     settled = item.model_copy(
         update={
             "rendered": rendered,
-            "remote": _with_parts(item.remote, remote.comparable, landed),
+            "remote": with_parts(item.remote, remote.comparable, landed),
             "writing": still_writing if landed else item.writing,
         }
     )

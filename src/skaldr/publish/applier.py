@@ -4,7 +4,14 @@ from dataclasses import dataclass, field, replace
 from typing_extensions import assert_never
 
 from skaldr.errors import PublishError, WriteRejectedError
-from skaldr.publish.content import ItemContent, Part, placed_section, section_part, with_fields_named
+from skaldr.publish.content import (
+    ItemContent,
+    Part,
+    placed_section,
+    section_part,
+    with_fields_named,
+    with_parts,
+)
 from skaldr.publish.plan import (
     ArchiveStep,
     CreateStep,
@@ -64,6 +71,11 @@ def _section_write(
     return ReplaceSection(key, raw_current, text, follows)
 
 
+def _raw_with_written_parts(read: RawSections, read_back: RawSections, parts: Sequence[Part]) -> RawSections:
+    written = {part.key for part in parts if part.kind == "section"}
+    return {key: text if key in written or key not in read else read[key] for key, text in read_back.items()}
+
+
 @dataclass
 class Applier:
     prepared: Prepared
@@ -116,16 +128,25 @@ class Applier:
         return item
 
     def _after_write(
-        self, target_plan: TargetPlan, ref: ItemRef, rendered: ItemContent, remote: RemoteItem
+        self,
+        target_plan: TargetPlan,
+        ref: ItemRef,
+        intent: tuple[Sequence[Part], ItemContent],
+        remote: RemoteItem,
     ) -> PublishState:
+        parts, rendered = intent
         item = self._item(ref)
         owned = list(rendered.fields)
-        remote = replace(remote, comparable=with_fields_named(remote.comparable, owned))
-        self.remote[ref] = remote
+        read_back = with_fields_named(remote.comparable, owned)
+        self.remote[ref] = replace(
+            remote,
+            comparable=with_parts(self._comparable(ref, item), read_back, parts),
+            raw_sections=_raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts),
+        )
         written = item.model_copy(
             update={
                 "rendered": rendered,
-                "remote": remote.comparable,
+                "remote": with_parts(item.remote, read_back, parts),
                 "marker": remote.marker,
                 "shown_remote": None,
                 "writing": None,
@@ -135,6 +156,9 @@ class Applier:
 
     def _raw_sections(self, ref: ItemRef) -> RawSections:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
+
+    def _comparable(self, ref: ItemRef, item: PublishedItem) -> ItemContent:
+        return self.remote[ref].comparable if ref in self.remote else item.remote
 
     def _written(
         self,
@@ -152,7 +176,7 @@ class Applier:
                 with_item(self.state, ref, target_plan.target, item.model_copy(update={"writing": None}))
             )
             raise
-        return self._after_write(target_plan, ref, rendered, remote)
+        return self._after_write(target_plan, ref, intent, remote)
 
     def _write_section(
         self, target_plan: TargetPlan, ref: ItemRef, key: str, text: str | None, follows: str | None

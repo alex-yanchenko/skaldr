@@ -276,6 +276,34 @@ def test_a_write_that_landed_before_the_connection_dropped_is_recorded_and_the_r
     )
 
 
+WELCOMING = "Welcome, gardeners.\n"
+
+
+def test_a_hand_edit_landing_while_skaldr_writes_another_section_is_reported_on_the_next_run(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    published_intro = transport.items["page-1"].raw_sections[INTRO_KEY]
+    transport.edit_by_hand_during_the_next_write("page-1", INTRO_KEY, WELCOMING)
+    assert _publish(path, transport) == Applied(("update   document: planting (blocks[2])",))
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (
+                RemoteEdit(
+                    DOCUMENT, section_part(INTRO_KEY), "blocks[0]", published_intro, WELCOMING, None, None
+                ),
+            ),
+            "edited",
+        ),
+        [],
+    )
+
+
 def test_a_hand_edit_over_an_interrupted_write_is_still_a_remote_edit(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
