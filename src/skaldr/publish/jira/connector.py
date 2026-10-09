@@ -14,6 +14,7 @@ from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import as_blocks, description_length, section_text
 from skaldr.publish.jira.transport import JiraTransport
 from skaldr.publish_block import JiraTarget, TargetBase
+from skaldr.publish_block.target import JsonFields
 
 DESCRIPTION_LIMIT = ContentLimit("item", JIRA_DESCRIPTION_LIMIT, "characters of ADF", description_length)
 
@@ -46,9 +47,17 @@ class JiraConnector:
     def existing_item_id(self, _target: TargetBase, /) -> str | None:
         return None
 
-    def open_transport(self, _target: TargetBase, /) -> JiraTransport:
+    def open_transport(self, target: TargetBase, /) -> JiraTransport:
         try:
             credentials = self.sign_in()
         except AuthError as exc:
             raise ConnectorError(str(exc)) from exc
-        return JiraTransport(JiraClient(credentials, transport=self.http_transport, sleep=self.sleep))
+        client = JiraClient(credentials, transport=self.http_transport, sleep=self.sleep)
+        return JiraTransport(client, _field_shapes(target))
+
+
+def _field_shapes(target: TargetBase) -> JsonFields:
+    shapes = dict(target.where_fields())
+    for override in target.overrides.values():
+        shapes.update(override.fields)
+    return shapes

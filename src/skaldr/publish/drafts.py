@@ -21,6 +21,7 @@ DOCUMENT_ITEM_LABEL = "document"
 PAGE_PART_KEYS = {"header": "page header", "legend": "page legend", "footer": "page footer"}
 PAGE_PART_PATHS = {"header": "meta", "legend": "badges", "footer": "meta"}
 BLOCK_DIGEST_LENGTH = 8
+SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 NO_PUBLISH_BLOCK = (
     "the document has no `publish` block, so it has nowhere to publish; add one (see `skaldr --guide`)"
 )
@@ -164,7 +165,6 @@ def _item_draft(
 def _refuse_what_cannot_fit(
     draft: ItemDraft, limits: Sequence[ContentLimit], label: str, service: str
 ) -> None:
-    advice = "split the document further with `split`, or shorten it"
     for limit in limits:
         measured = (
             [("the item", "".join(draft.content.sections.values()))]
@@ -179,7 +179,7 @@ def _refuse_what_cannot_fit(
             if size > limit.maximum:
                 raise PublishError(
                     f"{label}, {item_label(draft.section_id)}: {what} has {size:,} {limit.unit}, over the "
-                    f"{limit.maximum:,} a {service} {limit.scope} can take; {advice}"
+                    f"{limit.maximum:,} a {service} {limit.scope} can take; {SPLIT_ADVICE}"
                 )
 
 

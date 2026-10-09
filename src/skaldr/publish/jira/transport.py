@@ -1,11 +1,21 @@
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, is_unset, placed_section, section_part
+from skaldr.publish.content import (
+    FIELDS,
+    TITLE,
+    ItemContent,
+    Part,
+    is_unset,
+    placed_section,
+    same_value,
+    section_part,
+)
+from skaldr.publish.drafts import SPLIT_ADVICE
 from skaldr.publish.jira.api import Changelog, EntityProperty, Issue, Status, Transition
 from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import (
@@ -40,10 +50,10 @@ LABEL_PREFIX = "skaldr-"
 SUMMARY = "summary"
 DESCRIPTION = "description"
 LABELS = "labels"
+NO_MARKER = -1
 NOTHING_TO_RELEASE = (
     "Jira has nothing to release: skaldr writes only into issues it created, and archives those"
 )
-SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 
 
 class StampValue(BaseModel):
@@ -98,17 +108,44 @@ def _property(name: str, value: BaseModel) -> EntityProperty:
     return EntityProperty(key=name, value=value.model_dump(mode="json"))
 
 
+def _number(marker: str | None) -> int:
+    return int(marker) if marker is not None and marker.isdigit() else NO_MARKER
+
+
+def _marker(number: int) -> str | None:
+    return None if number == NO_MARKER else str(number)
+
+
+def _newest(history: Iterable[Changelog]) -> int:
+    return max((entry.number for entry in history), default=NO_MARKER)
+
+
+def _names(entry: Changelog) -> set[str]:
+    return {name for item in entry.items for name in item.names}
+
+
 @dataclass(frozen=True)
 class _Read:
     remote: RemoteItem
     layout: Layout | None
     stamp: StampValue | None
+    history: tuple[Changelog, ...]
+
+
+@dataclass(frozen=True)
+class _Written:
+    names: frozenset[str]
+    expected: ItemContent
+    compares: frozenset[Part | str]
 
 
 class JiraTransport:
-    def __init__(self, client: JiraClient) -> None:
+    def __init__(self, client: JiraClient, field_shapes: Mapping[str, JsonValue] | None = None) -> None:
         self._client = client
+        self._target_shapes: dict[str, JsonValue] = dict(field_shapes or {})
         self._field_shapes: dict[str, JsonFields] = {}
+        self._markers: dict[str, int] = {}
+        self._account_id: str | None = None
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         sections = {key: comparable_section(text) for key, text in content.sections.items()}
@@ -116,7 +153,9 @@ class JiraTransport:
 
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         self._remember_shapes(item_id, keyed_like.fields)
-        return self._read(item_id).remote
+        read = self._read(item_id)
+        self._markers[item_id] = _newest(read.history)
+        return read.remote
 
     def create_item(self, request: NewItem, /) -> RemoteItem:
         if request.into_id is not None:
@@ -147,7 +186,13 @@ class JiraTransport:
             fields, [_property(STAMP_PROPERTY, stamp), _property(LAYOUT_PROPERTY, layout)]
         )
         self._remember_shapes(created.key, content.fields)
-        return self._read_after_write(created.key, layout, stamp)
+        read = self._read_after_write(created.key, layout, stamp)
+        expected = self.comparable_form(content)
+        untouched = not self._owned_entries(created.key, read.history) and not self._differs(
+            read.remote.comparable, expected, frozenset({TITLE, FIELDS, DESCRIPTION}), expected.fields
+        )
+        marker = _newest(read.history) if untouched else NO_MARKER
+        return self._handed_over(created.key, read.remote, marker)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         current = self._read_unchanged(item_id, request.raw_sections)
@@ -167,6 +212,7 @@ class JiraTransport:
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         self._remember_shapes(item_id, request.fields)
+        self._refuse_unseen_edits(item_id, self._client.changelog(item_id))
         changes: dict[str, JsonValue] = {SUMMARY: request.title} if request.changes_the_title else {}
         for name, value in request.changed_fields.items():
             changes[name] = _with_doc_label(value, request.stamp.doc_id) if name == LABELS else value
@@ -174,7 +220,10 @@ class JiraTransport:
             changes[name] = [doc_label(request.stamp.doc_id)] if name == LABELS else None
         if changes:
             self._client.edit_issue(item_id, changes)
-        return self._read(item_id).remote
+        expected = ItemContent(title=request.title, fields=request.fields)
+        compared = {name: request.fields.get(name) for name in (*request.fields, *request.cleared_fields)}
+        written = _Written(frozenset(changes), expected, frozenset({TITLE, FIELDS}))
+        return self._verified(item_id, self._read(item_id), written, compared)
 
     def archive_item(self, item_id: str, /) -> None:
         stamp = self._stamp(item_id)
@@ -182,8 +231,9 @@ class JiraTransport:
             return
         status = self._status(self._client.get_issue(item_id, ["status"]))
         if not status.is_done:
-            self._client.transition(item_id, self._done_transition(item_id, status).id)
+            done = self._done_transition(item_id, status)
             self._client.add_comment(item_id, _archive_comment(stamp))
+            self._client.transition(item_id, done.id)
         archived = (stamp or StampValue(doc_id=None)).model_copy(update={"archived": True})
         self._client.put_property(item_id, STAMP_PROPERTY, archived.model_dump(mode="json"))
 
@@ -194,13 +244,12 @@ class JiraTransport:
         self, item_id: str, marker: str | None, keyed_like: ItemContent, /
     ) -> tuple[Part, ...]:
         self._remember_shapes(item_id, keyed_like.fields)
-        since = int(marker) if marker is not None and marker.isdigit() else -1
+        since = _number(marker)
         touched = {
             name
             for entry in self._client.changelog(item_id)
             if entry.number > since
-            for item in entry.items
-            for name in item.names
+            for name in _names(entry)
         }
         parts = [
             *((TITLE,) if SUMMARY in touched else ()),
@@ -219,6 +268,37 @@ class JiraTransport:
             if not is_unset(value) or name not in known:
                 known[name] = value
 
+    def _shape(self, item_id: str, name: str) -> JsonValue:
+        shape = self._field_shapes.get(item_id, {}).get(name)
+        return self._target_shapes.get(name) if is_unset(shape) else shape
+
+    def _owned_names(self, item_id: str) -> set[str]:
+        return {SUMMARY, DESCRIPTION, *self._field_shapes.get(item_id, {})}
+
+    def _owned_entries(self, item_id: str, history: Iterable[Changelog]) -> list[Changelog]:
+        owned = self._owned_names(item_id)
+        return [entry for entry in history if _names(entry) & owned]
+
+    def _account(self) -> str:
+        if self._account_id is None:
+            self._account_id = self._client.myself().account_id
+        return self._account_id
+
+    def _is_skaldrs(self, entry: Changelog, written: frozenset[str]) -> bool:
+        author = None if entry.author is None else entry.author.account_id
+        return bool(written) and _names(entry) <= written and author == self._account()
+
+    def _baseline(self, item_id: str, history: Sequence[Changelog]) -> int:
+        return self._markers.setdefault(item_id, _newest(history))
+
+    def _refuse_unseen_edits(self, item_id: str, history: Sequence[Changelog]) -> None:
+        since = self._baseline(item_id, history)
+        if self._owned_entries(item_id, (entry for entry in history if entry.number > since)):
+            raise WriteRejectedError(
+                f"{item_id} changed in Jira after skaldr read it, so skaldr did not write to it; publish "
+                "again to see the change"
+            )
+
     def _description(self, sections: Mapping[str, Blocks], which: str) -> JsonValue:
         description = description_doc([block for blocks in sections.values() for block in blocks])
         size = compact_adf_length(description) if isinstance(description, dict) else 0
@@ -230,11 +310,11 @@ class JiraTransport:
         return description
 
     def _read_unchanged(self, item_id: str, raw_sections: RawSections) -> dict[str, str]:
-        current = dict(self._read(item_id).remote.raw_sections)
+        current = dict(self._read(item_id, history_first=True).remote.raw_sections)
         if list(current.items()) != list(raw_sections.items()):
             raise WriteRejectedError(
-                f"{item_id} changed in Jira after skaldr read it, so skaldr did not write its description; "
-                "publish again to see the change"
+                f"{item_id} changed in Jira after skaldr read it, so skaldr did not write to it; publish "
+                "again to see the change"
             )
         return current
 
@@ -243,9 +323,53 @@ class JiraTransport:
         description = self._description(blocks, item_id)
         layout = layout_of(blocks)
         self._client.edit_issue(item_id, {DESCRIPTION: description}, [_property(LAYOUT_PROPERTY, layout)])
-        return self._read_after_write(item_id, layout, None)
+        expected = self.comparable_form(ItemContent(title="", sections=dict(sections)))
+        written = _Written(frozenset({DESCRIPTION}), expected, frozenset({DESCRIPTION}))
+        return self._verified(item_id, self._read_after_write(item_id, layout, None), written, {})
 
-    def _read_after_write(self, item_id: str, layout: Layout, stamp: StampValue | None) -> RemoteItem:
+    def _verified(
+        self, item_id: str, read: _Read, written: _Written, compared_fields: Mapping[str, JsonValue]
+    ) -> RemoteItem:
+        since = self._markers.get(item_id, NO_MARKER)
+        later = [entry for entry in read.history if entry.number > since]
+        own = [entry for entry in later if self._is_skaldrs(entry, written.names)]
+        foreign = [entry for entry in self._owned_entries(item_id, later) if entry not in own]
+        if foreign:
+            names = sorted({name for entry in foreign for name in _names(entry)} & self._owned_names(item_id))
+            raise ConnectorError(
+                f"{item_id} was edited in Jira while skaldr wrote to it ({', '.join(names)}); the write "
+                "landed, and the next publish shows the edit"
+            )
+        if self._differs(read.remote.comparable, written.expected, written.compares, compared_fields):
+            raise ConnectorError(
+                f"{item_id} reads back differently from what skaldr wrote to it; the write landed, and the "
+                "next publish shows the difference"
+            )
+        return self._handed_over(item_id, read.remote, _newest(own) if own else since)
+
+    def _differs(
+        self,
+        remote: ItemContent,
+        expected: ItemContent,
+        compares: Collection[Part | str],
+        compared_fields: Mapping[str, JsonValue],
+    ) -> bool:
+        return (
+            (TITLE in compares and remote.title != expected.title)
+            or (DESCRIPTION in compares and list(remote.sections.items()) != list(expected.sections.items()))
+            or (
+                FIELDS in compares
+                and not all(
+                    same_value(value, remote.fields.get(name)) for name, value in compared_fields.items()
+                )
+            )
+        )
+
+    def _handed_over(self, item_id: str, remote: RemoteItem, marker: int) -> RemoteItem:
+        self._markers[item_id] = marker
+        return replace(remote, marker=_marker(marker))
+
+    def _read_after_write(self, item_id: str, layout: Layout, stamp: StampValue | None) -> _Read:
         read = self._read(item_id)
         repairs = [
             *([_property(LAYOUT_PROPERTY, layout)] if read.layout != layout else []),
@@ -253,22 +377,29 @@ class JiraTransport:
         ]
         for repair in repairs:
             self._client.put_property(item_id, repair.key, repair.value)
-        return self._read(item_id).remote if repairs else read.remote
+        return self._read(item_id) if repairs else read
 
-    def _read(self, item_id: str) -> _Read:
-        shapes = self._field_shapes.get(item_id, {})
-        names = list(dict.fromkeys([SUMMARY, DESCRIPTION, *shapes]))
+    def _read(self, item_id: str, *, history_first: bool = False) -> _Read:
+        history = tuple(self._client.changelog(item_id)) if history_first else ()
+        if history_first:
+            self._refuse_unseen_edits(item_id, history)
+            stamp, layout = self._stamp(item_id), self._layout(item_id)
+            issue = self._issue(item_id)
+        else:
+            issue = self._issue(item_id)
+            stamp, layout = self._stamp(item_id), self._layout(item_id)
+            history = tuple(self._client.changelog(item_id))
+        if stamp is not None and stamp.archived:
+            raise ItemNotFoundError(f"skaldr archived {item_id}, so it no longer publishes there")
+        return _Read(self._remote(item_id, issue, layout, stamp, history), layout, stamp, history)
+
+    def _issue(self, item_id: str) -> Issue:
+        names = list(dict.fromkeys([SUMMARY, DESCRIPTION, *self._field_shapes.get(item_id, {})]))
         try:
-            issue = self._client.get_issue(item_id, names)
+            return self._client.get_issue(item_id, names)
         except ItemNotFoundError:
             self._client.myself()
             raise
-        stamp = self._stamp(item_id)
-        if stamp is not None and stamp.archived:
-            raise ItemNotFoundError(f"skaldr archived {item_id}, so it no longer publishes there")
-        layout = self._layout(item_id)
-        history = self._client.changelog(item_id)
-        return _Read(self._remote(item_id, issue, layout, stamp, history), layout, stamp)
 
     def _remote(
         self,
@@ -281,9 +412,11 @@ class JiraTransport:
         sections = split_description(blocks_of(issue.fields.get(DESCRIPTION)), layout)
         raw = {key: section_text(blocks) for key, blocks in sections.items()}
         summary = issue.fields.get(SUMMARY)
-        shapes = self._field_shapes.get(item_id, {})
-        fields = {name: self._read_field(issue, name, shape, stamp) for name, shape in shapes.items()}
-        latest = self._latest_edit(history, {SUMMARY, DESCRIPTION, *shapes})
+        fields = {
+            name: self._read_field(issue, name, self._shape(item_id, name), stamp)
+            for name in self._field_shapes.get(item_id, {})
+        }
+        latest = max(self._owned_entries(item_id, history), key=lambda entry: entry.number, default=None)
         return RemoteItem(
             item_id,
             ItemContent(
@@ -293,7 +426,7 @@ class JiraTransport:
             ),
             raw,
             None if stamp is None else stamp.stamp,
-            str(max(entry.number for entry in history)) if history else None,
+            _marker(_newest(history)),
             edited_by=None if latest is None or latest.author is None else latest.author.display_name,
             edited_at=None if latest is None else latest.created,
             set_properties=tuple(name for name, value in fields.items() if not is_unset(value)),
@@ -305,10 +438,6 @@ class JiraTransport:
             return _projected(value, shape)
         own = None if stamp is None or stamp.doc_id is None else doc_label(stamp.doc_id)
         return [label for label in _labels(value) if label != own]
-
-    def _latest_edit(self, history: Iterable[Changelog], owned: set[str]) -> Changelog | None:
-        touching = [entry for entry in history if any(item.names & owned for item in entry.items)]
-        return max(touching, key=lambda entry: entry.number, default=None)
 
     def _stamp(self, item_id: str) -> StampValue | None:
         found = self._client.get_property(item_id, STAMP_PROPERTY)

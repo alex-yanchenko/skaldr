@@ -112,6 +112,25 @@ def test_the_transport_signs_in_with_the_jira_environment_variables(monkeypatch:
     }
 
 
+def test_the_transport_reads_each_field_in_the_shape_the_target_or_an_override_writes_it() -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-1", summary="Tools", priority={"name": "Low", "id": "4"}, components=[{"name": "Beds"}])
+    where = {"project": "DEMO", "issue_type": "Task", "fields": {"priority": {"name": "High"}}}
+    target = JiraTarget.model_validate(
+        make_jira_target(
+            where=where, split=["tools"], overrides={"tools": {"fields": {"components": [{"name": "Beds"}]}}}
+        )
+    )
+
+    read = (
+        _connector(jira)
+        .open_transport(target)
+        .read_item("DEMO-1", ItemContent(title="", fields={"priority": None, "components": None}))
+    )
+
+    assert read.comparable.fields == {"priority": {"name": "Low"}, "components": [{"name": "Beds"}]}
+
+
 def test_publishing_creates_the_document_issue_then_each_split_section_under_it(tmp_path: Path) -> None:
     jira = FakeJira()
     path = write_garden_report(tmp_path, publish=_jira_publish(split=["tools"]))
@@ -199,6 +218,31 @@ def test_a_description_edited_in_jira_stops_the_publish_until_overwritten(tmp_pa
         [],
         Applied(("update   document: planting (blocks[2])",)),
     )
+
+
+def test_a_title_edited_in_jira_while_skaldr_writes_the_description_stops_the_next_publish(
+    tmp_path: Path,
+) -> None:
+    jira = FakeJira()
+    path = write_garden_report(tmp_path, publish=_jira_publish(split=["tools"]))
+    _publish(path, jira)
+    write_garden_report(
+        tmp_path, publish=_jira_publish(split=["tools"]), blocks=make_garden_blocks(planting="Sow in May.")
+    )
+    jira.edit_right_after_the_next_write("DEMO-1", summary="Garden guide")
+
+    with pytest.raises(
+        ConnectorError, match=r"^DEMO-1 was edited in Jira while skaldr wrote to it \(summary\)"
+    ):
+        _publish(path, jira)
+    jira.forget_requests()
+    again = _publish(path, jira)
+
+    assert (
+        type(again),
+        [edit.part.label for edit in again.edits] if isinstance(again, Refused) else [],
+        _writes(jira),
+    ) == (Refused, ["title"], [])
 
 
 def test_a_section_that_leaves_the_split_is_archived_by_closing_its_issue(tmp_path: Path) -> None:

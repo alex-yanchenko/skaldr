@@ -94,6 +94,10 @@ class FakeJira:
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
     queued: list[Reply | httpx2.TransportError] = field(default_factory=list[Reply | httpx2.TransportError])
     sleeps: list[float] = field(default_factory=list[float])
+    failing: dict[tuple[str, str], Reply] = field(default_factory=dict[tuple[str, str], Reply])
+    edits_during_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
+        default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
+    )
     _issues_made: int = 0
     _history_ids: int = 10_000
     _local_ids: int = 0
@@ -122,6 +126,18 @@ class FakeJira:
     def edit_by_hand(self, key: str, **fields: JsonValue) -> None:
         self._change(self.issues[key], dict(fields), EDITOR)
 
+    def edit_right_after_the_next_write(
+        self, key: str, author: dict[str, JsonValue] = EDITOR, **fields: JsonValue
+    ) -> None:
+        self.edits_during_writes.setdefault(key, []).append((author, dict(fields)))
+
+    def fail_next(self, method: str, path: str, reply: Reply) -> None:
+        self.failing[(method, path)] = reply
+
+    def _edit_after_writing(self, key: str) -> None:
+        for author, fields in self.edits_during_writes.pop(key, []):
+            self._change(self.issues[key], fields, author)
+
     def log_by_hand(self, key: str, *field_ids: str) -> None:
         self._log(key, EDITOR, [{"field": name, "fieldId": name} for name in field_ids])
 
@@ -135,6 +151,9 @@ class FakeJira:
             if isinstance(queued, httpx2.TransportError):
                 raise queued
             return httpx2.Response(queued.status, json=queued.body, headers=dict(queued.headers))
+        failure = self.failing.pop((request.method, unquote(request.url.path)), None)
+        if failure is not None:
+            return httpx2.Response(failure.status, json=failure.body, headers=dict(failure.headers))
         path = request.url.raw_path.decode().partition("?")[0]
         for pattern, method, answer in self._routes():
             matched = re.fullmatch(pattern, path)
@@ -172,7 +191,8 @@ class FakeJira:
         if isinstance(issue_type, dict) and issue_type.get("name") not in self.issue_types:
             errors["issuetype"] = "Specify a valid issue type"
         description = fields.get("description")
-        if description is not None and len(json.dumps(description, separators=(",", ":"))) > 32_767:
+        compact = json.dumps(description, separators=(",", ":"), ensure_ascii=False)
+        if description is not None and len(compact) > 32_767:
             errors["description"] = "CONTENT_LIMIT_EXCEEDED"
         if not errors:
             return None
@@ -189,6 +209,7 @@ class FakeJira:
         issue = self.seed(key, **fields, description=self._stored(body.fields.get("description")))
         if self.honours_properties_on_create:
             issue.properties = {prop.key: prop.value for prop in body.properties}
+        self._edit_after_writing(key)
         return httpx2.Response(201, json={"id": str(10_000 + self._issues_made), "key": key})
 
     def _issue(self, key: str) -> FakeIssue | httpx2.Response:
@@ -222,6 +243,7 @@ class FakeJira:
         self._change(issue, changes, WRITER)
         if self.honours_properties_on_edit:
             issue.properties.update({prop.key: prop.value for prop in body.properties})
+        self._edit_after_writing(key)
         return httpx2.Response(204)
 
     def _change(self, issue: FakeIssue, changes: dict[str, JsonValue], author: dict[str, JsonValue]) -> None:

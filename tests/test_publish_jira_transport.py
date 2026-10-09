@@ -22,7 +22,7 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import JiraTarget
 from tests.factories import make_jira_target
 from tests.factories.auth_factory import summarise
-from tests.factories.jira_factory import DONE, IN_PROGRESS, NOT_FOUND, SITE, FakeJira, Reply
+from tests.factories.jira_factory import DONE, IN_PROGRESS, NOT_FOUND, SITE, WRITER, FakeJira, Reply
 
 DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
@@ -103,6 +103,147 @@ def _read_calls(key: str) -> list[tuple[str, str]]:
         ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.layout"),
         ("GET", f"/rest/api/3/issue/{key}/changelog"),
     ]
+
+
+def _checked_calls(key: str) -> list[tuple[str, str]]:
+    return [
+        ("GET", f"/rest/api/3/issue/{key}/changelog"),
+        ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.stamp"),
+        ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.layout"),
+        ("GET", f"/rest/api/3/issue/{key}"),
+    ]
+
+
+CHANGED_SINCE_READ = (
+    "DEMO-1 changed in Jira after skaldr read it, so skaldr did not write to it; publish again to see the "
+    "change"
+)
+
+
+def _description(*blocks: JsonValue) -> JsonValue:
+    return {"version": 1, "type": "doc", "content": list(blocks)}
+
+
+def test_a_description_edit_made_after_the_read_stops_a_fields_write_before_it_is_sent() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_by_hand(created.item_id, description=_description(INTRO, _table(), SOW_IN_MAY))
+
+    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+        transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-1/changelog")]
+
+
+def test_a_description_edit_landing_during_a_fields_write_is_not_taken_as_published() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_after_the_next_write(
+        created.item_id, description=_description(INTRO, _table(), SOW_IN_MAY)
+    )
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+        transport.write_content(created.item_id, ContentWrite(dict(CONTENT.sections), created.raw_sections))
+
+    assert (type(raised.value), str(raised.value), jira.issues["DEMO-1"].fields["description"]) == (
+        ConnectorError,
+        "DEMO-1 was edited in Jira while skaldr wrote to it (description); the write landed, and the next "
+        "publish shows the edit",
+        _description(INTRO, _table(), SOW_IN_MAY),
+    )
+
+
+def test_an_edit_landing_between_a_content_write_and_its_read_back_is_reported_later() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_after_the_next_write(created.item_id, summary="Garden guide")
+    sections = {"planting": section_text([SOW_IN_MAY])}
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+
+    assert (str(raised.value), transport.parts_edited_after(created.item_id, created.marker, CONTENT)) == (
+        "DEMO-1 was edited in Jira while skaldr wrote to it (summary); the write landed, and the next "
+        "publish shows the edit",
+        (TITLE, section_part("intro"), section_part("planting")),
+    )
+
+
+def test_the_marker_after_a_write_is_skaldrs_own_entry_even_when_others_change_fields_it_does_not_own() -> (
+    None
+):
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_after_the_next_write(created.item_id, status=IN_PROGRESS)
+
+    written = transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+
+    assert (written.marker, [entry["id"] for entry in jira.histories["DEMO-1"]]) == (
+        "10001",
+        ["10001", "10002"],
+    )
+
+
+def test_a_read_back_that_differs_from_the_write_without_another_author_is_not_taken_as_published() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_after_the_next_write(
+        created.item_id, author=WRITER, description=_description(INTRO, _table(), PLANTING)
+    )
+
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly(
+            "DEMO-1 reads back differently from what skaldr wrote to it; the write landed, and the next "
+            "publish shows the difference"
+        ),
+    ):
+        transport.write_content(
+            created.item_id, ContentWrite({"planting": section_text([SOW_IN_MAY])}, created.raw_sections)
+        )
+
+
+def test_a_change_made_to_a_new_issue_right_after_its_create_is_left_for_the_next_publish_to_report() -> None:
+    jira = FakeJira()
+    jira.edit_right_after_the_next_write("DEMO-1", labels=["garden", "triaged", DOC_LABEL])
+    transport = _transport(jira)
+
+    created = transport.create_item(NewItem(TARGET, STAMP, CONTENT))
+
+    assert (created.marker, transport.parts_edited_after(created.item_id, created.marker, CONTENT)) == (
+        None,
+        (FIELDS,),
+    )
+
+
+def test_a_fresh_transport_reads_a_newly_owned_field_in_the_shape_the_target_writes_it() -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-3", summary="Notes", priority={"name": "High", "id": "2"})
+    transport = JiraTransport(jira.client(), field_shapes={"priority": {"name": "High"}})
+
+    read = transport.read_item("DEMO-3", ItemContent(title="", fields={"priority": None}))
+
+    assert read.comparable.fields == {"priority": {"name": "High"}}
+
+
+@pytest.mark.parametrize(("extra", "accepted"), [(0, True), (1, False)], ids=["at-the-limit", "one-over"])
+def test_a_description_of_exactly_the_limit_is_sent_and_one_character_more_is_not(
+    extra: int, accepted: bool
+) -> None:
+    jira = FakeJira()
+    base = compact_adf_length({"version": 1, "type": "doc", "content": [_words("")]})
+    text = _words("x" * (JIRA_DESCRIPTION_LIMIT - base + extra))
+    content = CONTENT.model_copy(update={"sections": {"intro": section_text([text])}})
+    size = compact_adf_length({"version": 1, "type": "doc", "content": [text]})
+
+    if accepted:
+        _transport(jira).create_item(NewItem(TARGET, STAMP, content))
+    else:
+        with pytest.raises(WriteRejectedError):
+            _transport(jira).create_item(NewItem(TARGET, STAMP, content))
+
+    assert (size, "DEMO-1" in jira.issues) == (JIRA_DESCRIPTION_LIMIT + extra, accepted)
 
 
 def test_creating_an_issue_sends_the_description_fields_label_stamp_and_layout_in_one_request() -> None:
@@ -320,7 +461,12 @@ def test_a_content_write_replaces_the_description_and_layout_in_one_request() ->
     written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
 
     assert (jira.calls(), summarise(jira.requests[4])["body"], written.comparable.sections) == (
-        [*_read_calls("DEMO-1"), ("PUT", "/rest/api/3/issue/DEMO-1"), *_read_calls("DEMO-1")],
+        [
+            *_checked_calls("DEMO-1"),
+            ("PUT", "/rest/api/3/issue/DEMO-1"),
+            *_read_calls("DEMO-1"),
+            ("GET", "/rest/api/3/myself"),
+        ],
         {
             "fields": {
                 "description": {"version": 1, "type": "doc", "content": [SOW_IN_MAY, _words("Spade.")]}
@@ -350,6 +496,7 @@ def test_when_jira_drops_the_properties_of_an_edit_skaldr_puts_the_layout_and_re
             *_read_calls("DEMO-1"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.layout"),
             *_read_calls("DEMO-1"),
+            ("GET", "/rest/api/3/myself"),
         ],
     )
 
@@ -359,15 +506,36 @@ def test_a_content_write_against_a_description_edited_since_the_read_is_refused_
     transport, created = _created(jira)
     jira.edit_by_hand(created.item_id, description={"version": 1, "type": "doc", "content": [PLANTING]})
 
-    with pytest.raises(
-        WriteRejectedError,
-        match=_exactly(
-            "DEMO-1 changed in Jira after skaldr read it, so skaldr did not write its description; publish "
-            "again to see the change"
-        ),
-    ):
+    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
         transport.write_content(created.item_id, ContentWrite({"planting": "[]"}, created.raw_sections))
-    assert [method for method, _ in jira.calls()] == ["GET"] * 4
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-1/changelog")]
+
+
+def test_a_block_rewritten_by_hand_inside_a_section_is_refused_unsent() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_by_hand(
+        created.item_id, description=_description(_words("Welcome, gardeners."), _table(), PLANTING)
+    )
+
+    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+        transport.write_content(
+            created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections)
+        )
+    assert (jira.calls(), list(transport.read_item(created.item_id, CONTENT).raw_sections)) == (
+        [("GET", "/rest/api/3/issue/DEMO-1/changelog")],
+        ["intro", "planting"],
+    )
+
+
+def test_a_write_quoting_section_text_jira_does_not_hold_under_the_same_keys_is_refused_unsent() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    stale = {**created.raw_sections, "intro": section_text([_words("Welcome, gardeners.")])}
+
+    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+        transport.write_content(created.item_id, ContentWrite(dict(created.raw_sections), stale))
+    assert jira.calls() == _checked_calls("DEMO-1")
 
 
 def test_an_empty_content_write_clears_the_description() -> None:
@@ -411,7 +579,7 @@ def test_a_section_write_quoting_text_jira_no_longer_holds_is_refused_unsent() -
         transport.write_section(
             created.item_id, SectionRequest(RemoveSection("planting", "[]"), created.raw_sections)
         )
-    assert [method for method, _ in jira.calls()] == ["GET"] * 4
+    assert jira.calls() == _checked_calls("DEMO-1")
 
 
 def _fields_write(fields: dict[str, JsonValue], title: str = "Garden handbook") -> FieldsWrite:
@@ -444,8 +612,8 @@ def test_a_fields_write_sends_only_what_changed(write: FieldsWrite, sent: dict[s
 
     transport.write_fields(created.item_id, write)
 
-    assert (jira.calls()[0], summarise(jira.requests[0])["body"]) == (
-        ("PUT", "/rest/api/3/issue/DEMO-1"),
+    assert (jira.calls()[:2], summarise(jira.requests[1])["body"]) == (
+        [("GET", "/rest/api/3/issue/DEMO-1/changelog"), ("PUT", "/rest/api/3/issue/DEMO-1")],
         {"fields": sent},
     )
 
@@ -456,7 +624,10 @@ def test_a_fields_write_with_nothing_changed_sends_nothing_and_reads_back() -> N
 
     read = transport.write_fields(created.item_id, _fields_write({**FIELDS_WRITTEN, "labels": ["garden"]}))
 
-    assert (jira.calls(), read.comparable) == (_read_calls("DEMO-1"), CONTENT_AS_COMPARED)
+    assert (jira.calls(), read.comparable) == (
+        [("GET", "/rest/api/3/issue/DEMO-1/changelog"), *_read_calls("DEMO-1")],
+        CONTENT_AS_COMPARED,
+    )
 
 
 def test_a_field_jira_does_not_know_is_a_rejected_write() -> None:
@@ -486,8 +657,8 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
             ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             ("GET", "/rest/api/3/issue/DEMO-1"),
             ("GET", "/rest/api/3/issue/DEMO-1/transitions"),
-            ("POST", "/rest/api/3/issue/DEMO-1/transitions"),
             ("POST", "/rest/api/3/issue/DEMO-1/comment"),
+            ("POST", "/rest/api/3/issue/DEMO-1/transitions"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
         ],
         DONE,
@@ -551,7 +722,26 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
 
     transport.archive_item(created.item_id)
 
-    assert summarise(jira.requests[3])["body"] == {"transition": {"id": "31"}}
+    assert summarise(jira.requests[4])["body"] == {"transition": {"id": "31"}}
+
+
+def test_a_transition_that_fails_after_the_comment_keeps_the_comment_and_archiving_again_finishes() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.fail_next("POST", "/rest/api/3/issue/DEMO-1/transitions", Reply(500, {"errorMessages": ["Boom"]}))
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.archive_item(created.item_id)
+    commented = len(jira.issues["DEMO-1"].comments)
+    transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (str(raised.value), commented, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
+        "Jira answered HTTP 500 to POST /rest/api/3/issue/DEMO-1/transitions: Boom",
+        1,
+        DONE,
+        _stamp_value(STAMP, archived=True),
+    )
 
 
 def test_jira_has_nothing_to_release() -> None:
