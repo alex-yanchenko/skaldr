@@ -13,6 +13,7 @@ from skaldr.export.adf import (
     adf_json,
     render_adf,
     render_adf_document,
+    render_adf_regions,
 )
 from skaldr.export.adf import blocks as blocks_module
 from skaldr.export.adf.colors import PANEL_TYPE
@@ -884,6 +885,26 @@ def test_the_document_writer_writes_the_body_without_the_title() -> None:
     )
 
     assert json.loads(json.dumps(render_adf_document(document))) == _doc(_words("one"), _words("two"))
+
+
+def test_the_page_slices_into_the_blocks_of_each_region_numbered_across_the_whole_page() -> None:
+    checklist = ListNode("check", (ListEntry(plain("pack")),))
+    document = LoweredDocument(
+        "Report title",
+        (
+            BlockRegion(0, (_para("one"), checklist)),
+            BlockRegion(1, ()),
+            BlockRegion(2, (checklist, _para("two"))),
+        ),
+    )
+
+    regions = render_adf_regions(document)
+
+    assert json.loads(json.dumps(regions)) == [
+        [_words("one"), _task_list(1, _task_item(2, "TODO", "pack"))],
+        [],
+        [_task_list(3, _task_item(4, "TODO", "pack")), _words("two")],
+    ]
 
 
 def test_the_json_text_is_indented_unescaped_and_ends_in_a_newline() -> None:

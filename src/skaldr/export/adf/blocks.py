@@ -390,6 +390,13 @@ def render_adf_document(document: LoweredDocument, issue_links: IssueLinks | Non
     return render_adf(document.body, issue_links)
 
 
+def render_adf_regions(
+    document: LoweredDocument, issue_links: IssueLinks | None = None
+) -> tuple[list[AdfBlock], ...]:
+    writer = _AdfBlocks(issue_links)
+    return tuple(writer.blocks(region.nodes, "doc") for region in document.regions)
+
+
 def adf_json(document: AdfDoc) -> str:
     return json.dumps(document, ensure_ascii=False, indent=2) + "\n"
 
