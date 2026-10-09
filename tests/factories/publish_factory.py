@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +7,7 @@ from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.models import Report, parse_report
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, section_part
+from skaldr.publish.content import FIELDS, ItemContent, Part, section_part
 from skaldr.publish.transport import NewItem, RemoteItem, SectionWrite
 from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
 from skaldr.publish_block.target import JsonFields
@@ -81,40 +81,32 @@ class FakeItem:
 
 @dataclass
 class FakeTransport:
-    fail_at_write: int | None = None
+    reads_list_fields_reversed: bool = False
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
     hand_edits: list[tuple[str, int, Part]] = field(default_factory=list[tuple[str, int, Part]])
     _revision: int = 0
     _writes: int = 0
+    _failing_write: int | None = None
 
     def seed(self, item_id: str, content: ItemContent, doc_id: str | None) -> None:
         self.items[item_id] = FakeItem(content, doc_id, None, self._bump())
 
-    def edit_by_hand(
-        self,
-        item_id: str,
-        *,
-        section: str | None = None,
-        text: str | None = None,
-        title: str | None = None,
-        fields: JsonFields | None = None,
-    ) -> None:
+    def fail_on_write(self, count_from_now: int) -> None:
+        self._failing_write = self._writes + count_from_now
+
+    def stop_failing(self) -> None:
+        self._failing_write = None
+
+    def edit_section_by_hand(self, item_id: str, key: str, text: str) -> None:
         item = self.items[item_id]
-        content = item.content
-        part = TITLE
-        if section is not None:
-            sections = {**content.sections, section: text or ""}
-            content = content.model_copy(update={"sections": sections})
-            part = section_part(section)
-        if title is not None:
-            content = content.model_copy(update={"title": title})
-        if fields is not None:
-            content = content.model_copy(update={"fields": fields})
-            part = FIELDS
-        item.content = content
-        item.revision = self._bump()
-        self.hand_edits.append((item_id, item.revision, part))
+        item.content = item.content.model_copy(update={"sections": {**item.content.sections, key: text}})
+        self.report_an_edit_without_changing_content(item_id, section_part(key))
+
+    def edit_fields_by_hand(self, item_id: str, fields: JsonFields) -> None:
+        item = self.items[item_id]
+        item.content = item.content.model_copy(update={"fields": fields})
+        self.report_an_edit_without_changing_content(item_id, FIELDS)
 
     def report_an_edit_without_changing_content(self, item_id: str, part: Part) -> None:
         item = self.items[item_id]
@@ -124,6 +116,9 @@ class FakeTransport:
     def writes(self) -> list[tuple[str, ...]]:
         return [call for call in self.calls if call[0] not in ("read", "edits_since")]
 
+    def forget_calls(self) -> None:
+        self.calls.clear()
+
     def create_item(self, item: NewItem, /) -> RemoteItem:
         self._write(("create", item.content.title, item.parent_id or "", item.into_id or ""))
         item_id = item.into_id or f"page-{len(self.items) + 1}"
@@ -132,7 +127,14 @@ class FakeTransport:
 
     def read_item(self, item_id: str, _published: ItemContent, /) -> RemoteItem:
         self.calls.append(("read", item_id))
-        return self._remote(item_id)
+        remote = self._remote(item_id)
+        if not self.reads_list_fields_reversed:
+            return remote
+        reversed_fields: JsonFields = {
+            name: list(reversed(value)) if isinstance(value, list) else value
+            for name, value in remote.content.fields.items()
+        }
+        return replace(remote, content=remote.content.model_copy(update={"fields": reversed_fields}))
 
     def write_section(self, item_id: str, write: SectionWrite, /) -> RemoteItem:
         self._write(("write_section", item_id, write.key))
@@ -171,7 +173,7 @@ class FakeTransport:
 
     def _write(self, call: tuple[str, ...]) -> None:
         self._writes += 1
-        if self._writes == self.fail_at_write:
+        if self._writes == self._failing_write:
             raise ConnectorError(REFUSED_WRITE)
         self.calls.append(call)
 

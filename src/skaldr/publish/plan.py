@@ -1,5 +1,6 @@
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from typing_extensions import assert_never
 
@@ -119,7 +120,12 @@ def item_steps(
     return ItemSteps(tuple(writes), tuple(RemoveSectionStep(item, key) for key in removed))
 
 
-def _target_plan(draft: TargetDraft, published: PublishedTarget | None, connector: Connector) -> TargetPlan:
+def _target_plan(
+    draft: TargetDraft,
+    published: PublishedTarget | None,
+    connector: Connector,
+    rewritten: Mapping[ItemRef, Collection[Part]],
+) -> TargetPlan:
     creates: list[Step] = []
     writes: list[Step] = []
     removals: list[Step] = []
@@ -130,7 +136,7 @@ def _target_plan(draft: TargetDraft, published: PublishedTarget | None, connecto
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
             creates.append(CreateStep(ref, item, into_id))
             continue
-        steps = item_steps(ref, existing.rendered, item)
+        steps = item_steps(ref, existing.rendered, item, rewritten.get(ref, ()))
         writes += steps.writes
         removals += steps.removals
     drafted = {item.section_id for item in draft.sections}
@@ -156,10 +162,7 @@ def _removed_target_plan(label: str, published: PublishedTarget, registry: Conne
 def _refuse_shared_items(state: PublishState) -> None:
     first_holder: dict[tuple[str, str], ItemRef] = {}
     for label, published in state.targets.items():
-        held = [(None, published.document), *published.sections.items()]
-        for section_id, item in held:
-            if item is None:
-                continue
+        for section_id, item in published.held_items():
             ref = ItemRef(label, section_id)
             holder = first_holder.setdefault((published.service, item.item_id), ref)
             if holder != ref:
@@ -170,14 +173,19 @@ def _refuse_shared_items(state: PublishState) -> None:
 
 
 def plan_publish(
-    drafts: Sequence[TargetDraft], state: PublishState, registry: ConnectorRegistry
+    drafts: Sequence[TargetDraft],
+    state: PublishState,
+    registry: ConnectorRegistry,
+    rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
 ) -> PublishPlan:
     _refuse_shared_items(state)
     drafted = {draft.label for draft in drafts}
     return PublishPlan(
         (
             *(
-                _target_plan(draft, state.targets.get(draft.label), registry.for_target(draft.target))
+                _target_plan(
+                    draft, state.targets.get(draft.label), registry.for_target(draft.target), rewritten
+                )
                 for draft in drafts
             ),
             *(

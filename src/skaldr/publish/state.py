@@ -27,6 +27,12 @@ class PublishedTarget(FrozenModel):
     document: PublishedItem | None = None
     sections: dict[str, PublishedItem] = Field(default_factory=dict[str, PublishedItem])
 
+    def held_items(self) -> list[tuple[str | None, PublishedItem]]:
+        document: list[tuple[str | None, PublishedItem]] = (
+            [] if self.document is None else [(None, self.document)]
+        )
+        return [*document, *self.sections.items()]
+
 
 class PublishState(FrozenModel):
     version: Literal[1] = 1

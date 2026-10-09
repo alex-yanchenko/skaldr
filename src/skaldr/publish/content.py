@@ -75,6 +75,17 @@ def section_changes(old: Mapping[str, str], new: Mapping[str, str]) -> SectionCh
     )
 
 
+def placed_section(
+    sections: Mapping[str, str], key: str, text: str | None, follows: str | None
+) -> dict[str, str]:
+    others = [(other, other_text) for other, other_text in sections.items() if other != key]
+    if text is None:
+        return dict(others)
+    keys = [other for other, _ in others]
+    at = keys.index(follows) + 1 if follows in keys else 0 if follows is None else len(others)
+    return dict([*others[:at], (key, text), *others[at:]])
+
+
 def differing_parts(published: ItemContent, current: ItemContent) -> tuple[Part, ...]:
     changes = section_changes(published.sections, current.sections)
     return (

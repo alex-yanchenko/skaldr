@@ -9,10 +9,32 @@ from skaldr.publish.content import (
     comparable,
     content_digest,
     differing_parts,
+    placed_section,
     same_fields,
     section_changes,
     section_part,
 )
+
+
+@pytest.mark.parametrize(
+    ("key", "text", "follows", "expected"),
+    [
+        pytest.param("n", "N", None, {"n": "N", "a": "A", "b": "B"}, id="added-first"),
+        pytest.param("n", "N", "a", {"a": "A", "n": "N", "b": "B"}, id="added-after-a-section"),
+        pytest.param("b", "B2", None, {"b": "B2", "a": "A"}, id="moved-first"),
+        pytest.param("a", "A2", "b", {"b": "B", "a": "A2"}, id="moved-after-a-section"),
+        pytest.param("a", None, None, {"b": "B"}, id="removed"),
+        pytest.param(
+            "n", "N", "gone", {"a": "A", "b": "B", "n": "N"}, id="after-a-missing-section-goes-last"
+        ),
+    ],
+)
+def test_a_section_is_placed_after_the_section_it_follows(
+    key: str, text: str | None, follows: str | None, expected: dict[str, str]
+) -> None:
+    placed = placed_section({"a": "A", "b": "B"}, key, text, follows)
+
+    assert list(placed.items()) == list(expected.items())
 
 
 @pytest.mark.parametrize(
