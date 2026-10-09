@@ -16,14 +16,11 @@ ANY_NODE: Final = "*"
 LEADING_GROUP: Final = -1
 SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
     (ANY_NODE, "localId"): None,
-    ("table", "width"): None,
     ("table", "displayMode"): None,
     ("table", "isNumberColumnEnabled"): (False,),
     ("table", "layout"): ("default", "center"),
-    ("tableCell", "colwidth"): None,
     ("tableCell", "colspan"): (1,),
     ("tableCell", "rowspan"): (1,),
-    ("tableHeader", "colwidth"): None,
     ("tableHeader", "colspan"): (1,),
     ("tableHeader", "rowspan"): (1,),
     ("orderedList", "order"): (1,),

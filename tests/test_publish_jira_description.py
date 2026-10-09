@@ -118,7 +118,7 @@ def test_the_comparable_form_drops_what_jira_adds_or_reorders_and_keeps_the_rest
     }
 
 
-def test_the_comparable_form_drops_attributes_an_editor_save_fills_in_with_their_defaults() -> None:
+def test_the_comparable_form_drops_default_attributes_and_keeps_widths_skaldr_never_writes() -> None:
     cell: JsonValue = {"type": "tableCell", "content": [_words("Shed")]}
     saved: JsonValue = [
         {
@@ -142,7 +142,11 @@ def test_the_comparable_form_drops_attributes_an_editor_save_fills_in_with_their
     ]
 
     assert comparable_node(saved) == [
-        {"type": "table", "content": [{"type": "tableRow", "content": [cell]}]},
+        {
+            "type": "table",
+            "attrs": {"width": 760},
+            "content": [{"type": "tableRow", "content": [{**cell, "attrs": {"colwidth": [120]}}]}],
+        },
         {"type": "orderedList"},
         {"type": "orderedList", "attrs": {"order": 4}},
         {"type": "tableCell", "attrs": {"colspan": 2}},
