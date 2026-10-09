@@ -14,6 +14,10 @@ class RegionNotFoundError(LookupError):
     pass
 
 
+class UnknownGuideTopicError(LookupError):
+    pass
+
+
 class ReadOnlyFileError(PermissionError):
     pass
 

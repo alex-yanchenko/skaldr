@@ -8,6 +8,7 @@ from tests.factories.export_factory import (
     markdown_of,
     notion_of,
     parsed_block,
+    rendered_block_count,
     write_index_document,
     write_report,
 )
@@ -68,6 +69,7 @@ __all__ = [
     "markdown_of",
     "notion_of",
     "parsed_block",
+    "rendered_block_count",
     "write_index_document",
     "write_report",
 ]

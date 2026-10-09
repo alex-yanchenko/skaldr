@@ -3875,6 +3875,25 @@
           "description": "What this case supplies for the block's `case_variable`. Defaults to `label`, which is what you want when the cases are resource names.",
           "title": "Value"
         },
+        "values": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What this case supplies for several of the block's declared `variables` at once, as a map of variable name to value. Each name must be a declared variable. Use it when cases differ by more than one value, so a shared `command` or built call is written once. A declared variable the case leaves out stays a field the reader fills on this case's tab. Cannot be combined with `value`, or on a request that declares a `case_variable`.",
+          "title": "Values"
+        },
         "headers": {
           "anyOf": [
             {
