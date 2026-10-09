@@ -24,10 +24,12 @@ from typing_extensions import Self, override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
 from skaldr.auth.store import (
+    NOTION_ACCESS_TOKEN_VARIABLE,
     Answer,
     KeychainTimeoutError,
     KeychainWaitInterrupted,
     NotionCredentials,
+    SignIn,
     StoredEntry,
     save_notion_returning_the_replaced,
 )
@@ -38,6 +40,8 @@ DEFAULT_CALLBACK_PORT = 8765
 SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
+_TOKEN_ENDPOINT = f"{_NOTION_API}/v1/oauth/token"
+_SIGN_IN_AGAIN = "; run `skaldr auth notion` again"
 CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
 
 _REDIRECT_HOST = "localhost"
@@ -99,7 +103,7 @@ def sign_in_to_notion(
             _refuse_a_denied_consent(query)
             token = _parse_token(
                 lambda: client.fetch_token(
-                    f"{_NOTION_API}/v1/oauth/token",
+                    _TOKEN_ENDPOINT,
                     authorization_response=f"{redirect_uri}?{query}",
                     state=state,
                 )
@@ -245,6 +249,7 @@ def _oauth_client(
     )
     client.register_client_auth_method((_BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
     client.register_compliance_hook("access_token_response", _refuse_a_failed_token_status)
+    client.register_compliance_hook("refresh_token_response", _refuse_a_failed_token_status)
     return client
 
 
@@ -273,7 +278,10 @@ def _basic_auth_with_json_body(
     return encode_client_secret_basic(auth, method, uri, headers, json.dumps(dict(parse_qsl(form))))
 
 
-def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
+def _parse_token(
+    request: Callable[[], Mapping[str, object]],
+    refused: Callable[[AuthlibBaseError], AuthError] = lambda exc: _refused_sign_in(exc),
+) -> _NotionToken:
     with CaughtWithoutChaining(ValidationError) as invalid:
         try:
             return _NotionToken.model_validate(request())
@@ -283,7 +291,7 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
                     "Notion refused the client ID or secret (invalid_client); copy both from the connection "
                     f"page at {INTEGRATIONS_PAGE} again"
                 ) from exc
-            raise _refused_sign_in(exc) from exc
+            raise refused(exc) from exc
         except httpx2.HTTPError as exc:
             raise _unreachable(exc) from exc
         except json.JSONDecodeError as exc:
@@ -296,11 +304,60 @@ def _parse_token(request: Callable[[], Mapping[str, object]]) -> _NotionToken:
     )
 
 
-def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
+def _oauth_error_named(exc: AuthlibBaseError) -> str:
     code = printable_only(exc.error or "") or "(unnamed error)"
     description = printable_only(exc.description or "")
-    detail = f" ({description})" if description else ""
-    return AuthError(f"Notion refused the sign-in: {code}{detail}")
+    return f"{code} ({description})" if description else code
+
+
+def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
+    return AuthError(f"Notion refused the sign-in: {_oauth_error_named(exc)}")
+
+
+def _refused_renewal(exc: AuthlibBaseError) -> AuthError:
+    return AuthError(f"Notion refused to renew the sign-in: {_oauth_error_named(exc)}{_SIGN_IN_AGAIN}")
+
+
+def renewed_notion_credentials(
+    credentials: NotionCredentials, *, transport: httpx2.BaseTransport | None = None
+) -> NotionCredentials:
+    refresh_token = credentials.refresh_token
+    if refresh_token is None:
+        raise AuthError(f"Notion refused the stored sign-in and it holds no refresh token{_SIGN_IN_AGAIN}")
+    if not (credentials.client_id and credentials.client_secret):
+        raise AuthError(
+            "Notion refused the stored sign-in and it cannot be renewed without the client ID and secret"
+            f"{_SIGN_IN_AGAIN}"
+        )
+    with _oauth_client(credentials.client_id, credentials.client_secret, transport) as client:
+        token = _parse_token(
+            lambda: client.refresh_token(_TOKEN_ENDPOINT, refresh_token=refresh_token), _refused_renewal
+        )
+    return credentials.model_copy(
+        update={"access_token": token.access_token, "refresh_token": token.refresh_token or refresh_token}
+    )
+
+
+class NotionSession:
+    def __init__(
+        self, sign_in: SignIn[NotionCredentials], *, transport: httpx2.BaseTransport | None = None
+    ) -> None:
+        self._sign_in = sign_in
+        self._transport = transport
+
+    @property
+    def access_token(self) -> str:
+        return self._sign_in.credentials.access_token
+
+    def renew(self) -> None:
+        if self._sign_in.source == "environment":
+            raise AuthError(
+                f"Notion refused {NOTION_ACCESS_TOKEN_VARIABLE}; set a current token in "
+                f"{NOTION_ACCESS_TOKEN_VARIABLE}"
+            )
+        renewed = renewed_notion_credentials(self._sign_in.credentials, transport=self._transport)
+        save_notion_returning_the_replaced(renewed)
+        self._sign_in = SignIn(renewed, self._sign_in.source)
 
 
 def _unreachable(exc: httpx2.HTTPError) -> AuthError:

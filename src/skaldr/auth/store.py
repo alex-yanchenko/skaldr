@@ -39,11 +39,11 @@ Answer = TypeVar("Answer")
 
 Source = Literal["keychain", "environment"]
 
-_NOTION_ACCESS_TOKEN = "NOTION_ACCESS_TOKEN"
+NOTION_ACCESS_TOKEN_VARIABLE = "NOTION_ACCESS_TOKEN"
 _NOTION_CLIENT_ID = "NOTION_CLIENT_ID"
 _NOTION_CLIENT_SECRET = "NOTION_CLIENT_SECRET"
 _NOTION_CLIENT_ENVIRONMENT = (_NOTION_CLIENT_ID, _NOTION_CLIENT_SECRET)
-NOTION_ENVIRONMENT = (_NOTION_ACCESS_TOKEN, *_NOTION_CLIENT_ENVIRONMENT)
+NOTION_ENVIRONMENT = (NOTION_ACCESS_TOKEN_VARIABLE, *_NOTION_CLIENT_ENVIRONMENT)
 _JIRA_SITE = "JIRA_SITE"
 _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
@@ -641,7 +641,7 @@ def _all_or_none_from_environment(names: Sequence[str]) -> Mapping[str, str] | N
 
 
 def notion_from_environment() -> NotionCredentials | None:
-    access_token = _environment(_NOTION_ACCESS_TOKEN)
+    access_token = _environment(NOTION_ACCESS_TOKEN_VARIABLE)
     if access_token is None:
         return None
     client = _all_or_none_from_environment(_NOTION_CLIENT_ENVIRONMENT) or {}
