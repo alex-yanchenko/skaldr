@@ -1,14 +1,14 @@
+import re
 from dataclasses import dataclass
 from typing import Final, Literal
 
 from markupsafe import Markup, escape
 from pygments.lexer import Lexer
-from pygments.lexers import get_lexer_by_name  # pyright: ignore[reportUnknownVariableType]
 from pygments.token import Token, _TokenType  # pyright: ignore[reportPrivateUsage]
-from pygments.util import ClassNotFound
 
 from skaldr.code_language import block_code_language
-from skaldr.models import Code
+from skaldr.lexers import find_lexer
+from skaldr.models import VARIABLE_TOKEN, Code
 
 MAX_HIGHLIGHTED_CHARACTERS: Final = 20_000
 
@@ -41,10 +41,7 @@ def token_class(kind: _TokenType) -> str:
 def lexer_for(language: str, size: int) -> Lexer | None:
     if not language or size > MAX_HIGHLIGHTED_CHARACTERS:
         return None
-    try:
-        return get_lexer_by_name(language, ensurenl=True, stripnl=False)
-    except ClassNotFound:
-        return None
+    return find_lexer(language)
 
 
 def with_line_feeds(text: str) -> str:
@@ -94,6 +91,38 @@ def highlighted_code(block: Code) -> Markup:
     lexer = lexer_for(block_code_language(block), len(text))
     lines = lexed_lines(text, lexer) if lexer else None
     return Markup("\n").join(plain_lines(text) if lines is None else lines)
+
+
+def held_slot(index: int) -> str:
+    return f"SKALDRSLOT{index}X"
+
+
+def slot_markup(name: str) -> Markup:
+    return Markup(
+        '<span class="rq-slot" data-rq-slot="{}" data-rq-quote="none">&lsaquo;{}&rsaquo;</span>'
+    ).format(name, name)
+
+
+def highlighted_query_keeping_slots_whole(text: str, language: str) -> Markup | None:
+    plain = with_line_feeds(text)
+    lexer = lexer_for(language, len(plain))
+    if lexer is None:
+        return None
+    names: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        names.append(match.group(1))
+        return held_slot(len(names) - 1)
+
+    lines = lexed_lines(VARIABLE_TOKEN.sub(hold, plain), lexer)
+    if lines is None:
+        return None
+    markup = Markup("\n").join(lines)
+    if any(markup.count(held_slot(index)) != 1 for index in range(len(names))):
+        return None
+    for index, name in enumerate(names):
+        markup = markup.replace(held_slot(index), slot_markup(name))
+    return markup
 
 
 def diff_row(line: str) -> DiffRow:

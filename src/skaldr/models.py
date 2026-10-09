@@ -50,6 +50,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.lexers import find_lexer
 from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish_block import Publish, section_choice_errors
@@ -1940,6 +1941,34 @@ def _command_without_block_scalar_trailing_newline(text: str) -> str:
 CommandText = Annotated[str, AfterValidator(_command_without_block_scalar_trailing_newline)]
 
 
+def _query_without_block_scalar_trailing_newline(text: str) -> str:
+    trimmed = text.rstrip("\n")
+    if not trimmed.strip():
+        raise ValueError("query must not be blank (omit it instead)")
+    return trimmed
+
+
+def _pygments_lexer_name(language: str) -> str:
+    if find_lexer(language) is None:
+        raise ValueError(f"`{language}` is not a Pygments lexer name")
+    return language
+
+
+class RequestQuery(FrozenModel):
+    runner: NonBlank = Field(
+        description="Free-text label for the tool the query runs in, shown with it, such as "
+        "`mongosh, orders database` or `psql, reporting replica`."
+    )
+    lang: Annotated[str, AfterValidator(_pygments_lexer_name)] = Field(
+        description="The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It "
+        "highlights the query on the page and labels the fence in the Markdown exports."
+    )
+    content: Annotated[str, AfterValidator(_query_without_block_scalar_trailing_newline)] = Field(
+        description="The query text the reader copies and runs in the named tool. May carry "
+        "`{{variable}}` tokens, written in as the reader types them."
+    )
+
+
 class ComposedCall(NamedTuple):
     method: HttpMethod
     url: str
@@ -2091,13 +2120,14 @@ class _RequestCore(FrozenModel):
 
     label: NonBlank = Field(description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
-        default=None, description="The HTTP method. Required unless the call runs a `command`."
+        default=None,
+        description="The HTTP method. Required unless the call runs a `command` or records a `query`.",
     )
     url: str | None = Field(
         default=None,
         min_length=1,
         description="The full URL. May carry `{{variable}}` tokens. Required unless the call runs a "
-        "`command`.",
+        "`command` or records a `query`.",
     )
     command: CommandText | None = Field(
         default=None,
@@ -2111,6 +2141,13 @@ class _RequestCore(FrozenModel):
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
+    )
+    query: RequestQuery | None = Field(
+        default=None,
+        description="Evidence that is not a shell command: a database aggregation, a SQL query or an MCP "
+        "call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and "
+        "the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` "
+        "or `command`.",
     )
     headers: dict[str, str] = Field(
         default_factory=dict,
@@ -2151,6 +2188,7 @@ class _RequestCore(FrozenModel):
             (
                 self.url or "",
                 self.command or "",
+                self.query.content if self.query else "",
                 *self.headers.values(),
                 self.body or "",
                 *case_headers,
@@ -2184,11 +2222,43 @@ class _RequestCore(FrozenModel):
                         "so there is nothing for it to fill"
                     )
         check_header_map(self.headers, "request header")
-        if self.command is None:
+        if self.query is not None:
+            self._check_query_call()
+        elif self.command is None:
             self._check_composed_call()
         else:
             self._check_command_call()
         return self
+
+    def _check_query_call(self) -> None:
+        composed_fields = {
+            "method": self.method,
+            "url": self.url,
+            "headers": self.headers or None,
+            "body": self.body,
+            "command": self.command,
+        }
+        for name, value in composed_fields.items():
+            if value is not None:
+                raise ValueError(
+                    f"request '{self.label}' sets `query` and `{name}`: a query is recorded as written, "
+                    f"so skaldr builds no curl and `{name}` would never reach it"
+                )
+        if self.command_note is not None:
+            raise ValueError(
+                f"request '{self.label}' sets a command_note on a query: put the note in a verdict"
+            )
+        for case in self.cases:
+            for name, value in (
+                ("command", case.command),
+                ("headers", case.headers),
+                ("headers_add", case.headers_add),
+            ):
+                if value is not None:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` on a request that records a query, which has "
+                        "no command or headers of its own: write the change into the query"
+                    )
 
     def _check_composed_call(self) -> None:
         if self.method is None or self.url is None:
@@ -2323,6 +2393,11 @@ class RequestStep(_RequestCore):
             raise ValueError(
                 f"step '{self.label}' captures a value and records {len(self.cases)} cases; a capture "
                 "reads one definite response, so a step that produces a value keeps a single case"
+            )
+        if self.captures and self.query is not None:
+            raise ValueError(
+                f"step '{self.label}' captures a value but records a query: a capture reads a response "
+                "the reader pastes, and a query has nowhere to paste one"
             )
         return self
 

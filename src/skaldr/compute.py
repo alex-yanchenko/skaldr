@@ -886,10 +886,10 @@ class ResponseCaption(NamedTuple):
 
 
 def response_caption(core: RequestLike, response: RequestResponse) -> ResponseCaption:
-    runs_command = core.command is not None
+    records_output = core.command is not None or core.query is not None
     return ResponseCaption(
-        "Recorded output" if runs_command else "Recorded response",
-        shows_status=not runs_command or response.status is not None,
+        "Recorded output" if records_output else "Recorded response",
+        shows_status=not records_output or response.status is not None,
     )
 
 
@@ -984,6 +984,12 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
         parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
     parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
+
+
+def query_for(core: RequestLike, case: RequestCase) -> str:
+    if core.query is None:
+        raise ReportError(f"request '{core.label}' records no query")
+    return resolve_case(core.query.content, core, case)
 
 
 CASE_LABEL_CHAR = 7.3

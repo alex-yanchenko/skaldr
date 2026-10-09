@@ -400,6 +400,26 @@ def test_common_languages_are_highlighted_and_keep_their_text(language: str, sni
     assert visible_text(panel) == snippet
 
 
+def test_a_query_highlights_around_a_slot_and_leaves_the_slot_whole_inside_a_string() -> None:
+    marked = highlight.highlighted_query_keeping_slots_whole("SELECT 1 WHERE b = '{{b}}'", "sql")
+
+    assert marked == Markup(
+        '<span class="t-kw">SELECT</span> <span class="t-num">1</span> <span class="t-kw">WHERE</span> b '
+        '<span class="t-op">=</span> <span class="t-str">&#39;'
+        '<span class="rq-slot" data-rq-slot="b" data-rq-quote="none">&lsaquo;b&rsaquo;</span>&#39;</span>'
+    )
+
+
+def test_a_query_the_lexer_cannot_read_around_its_slots_is_left_for_the_plain_path() -> None:
+    assert highlight.highlighted_query_keeping_slots_whole('[{"$limit": {{n}}}]', "json") is None
+
+
+def test_a_query_past_the_size_cap_is_left_for_the_plain_path() -> None:
+    oversized = "SELECT 1 " * highlight.MAX_HIGHLIGHTED_CHARACTERS
+
+    assert highlight.highlighted_query_keeping_slots_whole(oversized, "sql") is None
+
+
 @pytest.mark.parametrize(("language", "unit"), [("perl", "<<"), ("rust", 'r#"')])
 def test_a_pathological_block_at_the_size_cap_renders_within_a_bound(language: str, unit: str) -> None:
     content = unit * (highlight.MAX_HIGHLIGHTED_CHARACTERS // len(unit))

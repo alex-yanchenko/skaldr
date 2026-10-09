@@ -66,6 +66,7 @@ from tests.factories import (
     BADGE_AND_STATE_BLOCKS,
     folder_texts,
     make_command_request,
+    make_query_request,
     make_report,
     make_tab,
     make_tabs,
@@ -94,6 +95,18 @@ def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> No
         "**Tier mappings on the partner API**\n\n"
         "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n"
         "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n"
+    )
+
+
+def test_a_query_request_exports_a_fenced_block_in_its_language_labelled_with_the_runner() -> None:
+    request = make_query_request()
+
+    assert markdown_of([request]) == (
+        "**Open orders in the shop database**\n\n"
+        "*open orders*\n\n"
+        "**Query**: mongosh, orders database\n\n"
+        '```json\n[{"$match": {"status": "open"}}, {"$count": "n"}]\n```\n\n'
+        '**Recorded output**\n\n```json\n[\n  {\n    "n": 12\n  }\n]\n```\n'
     )
 
 

@@ -11,6 +11,7 @@ from skaldr.models import (
     RequestCase,
     RequestFlow,
     RequestLike,
+    RequestQuery,
     RequestStep,
     RequestVariable,
 )
@@ -36,10 +37,26 @@ def _response_caption(core: RequestLike, case: RequestCase) -> Paragraph:
     return Paragraph(with_bold_label(caption.label, status))
 
 
-def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tuple[Node, ...]:
+def _query_nodes(core: RequestLike, case: RequestCase, query: RequestQuery) -> list[Node]:
+    return [
+        Paragraph(with_bold_label("Query", plain(query.runner))),
+        CodeBlock(compute.query_for(core, case), query.lang),
+    ]
+
+
+def _command_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> list[Node]:
     nodes: list[Node] = [CodeBlock(compute.command_for(core, case), "bash")]
     if core.command_note:
         nodes.append(Paragraph(italic(lowering.rich(core.command_note)), "muted"))
+    return nodes
+
+
+def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tuple[Node, ...]:
+    nodes = (
+        _query_nodes(core, case, core.query)
+        if core.query is not None
+        else _command_nodes(core, case, lowering)
+    )
     nodes += [_response_caption(core, case), _response_block(case)]
     if case.verdict:
         verdict = Paragraph(with_bold_label("Verdict", lowering.rich(case.verdict)))

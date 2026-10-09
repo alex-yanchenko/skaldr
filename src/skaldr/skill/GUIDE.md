@@ -232,7 +232,7 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell: a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command`, or a `query` for a database, SQL or MCP call (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`, **or** `query: {runner, lang, content}`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
 | `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases, captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
 | `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
@@ -779,6 +779,43 @@ That store is keyed by the block's `id`, or by its `label` when it sets none, wh
 request blocks on a page may share one: they would share the reader's values. Give one an `id` when
 two blocks legitimately carry the same label, and keep that `id` fixed if you want the values to
 survive a rename.
+
+### Evidence that is not a shell command: `query`
+
+Give `query` when the evidence is a database aggregation, a SQL statement or an MCP tool call, run in
+some named tool rather than a shell. The page shows the query highlighted, labelled with the tool it
+runs in, and the cases record its real output the way they do for any other request.
+
+```yaml
+- type: request
+  label: "Orders by status in the shop database"
+  query:
+    runner: "mongosh, orders database"    # free text, shown with the query
+    lang: json                             # a Pygments lexer name: json, sql, js, ...
+    content: '[{"$match": {"status": "{{status}}"}}, {"$count": "n"}]'
+  variables: [{ name: status, example: "open" }]
+  cases:
+    - label: "Open orders"
+      tone: warning
+      response: { body: '[{"n": 12}]' }
+      verdict: "Twelve orders are still open, so the nightly close has not run for them."
+```
+
+- **Copy hands over the query text**, with `{{name}}` filled in exactly as the reader typed it, so
+  pasting it into the tool re-runs what you ran. A `{{name}}` works from `variables` and
+  `case_variable` the same way it does in a `command`.
+- **There is nothing to run or capture on the page.** A query shows no "Run this" shell line, no
+  "Copy + capture" and no field to paste output into, because the page cannot run a query. Record the
+  output you got as the case's `response`.
+- **`lang` is checked when the file is read.** A name Pygments has no lexer for fails the build naming
+  it. The same name highlights the query on the page and labels its fence in the Markdown exports,
+  where the query is a fenced block under the runner's name.
+- **`query` excludes `method`, `url`, `headers`, `body` and `command`**, and a case of a query request
+  cannot set `command`, `headers` or `headers_add`; nor can it replace the query. A request that sets
+  `query` together with any of them fails the build with a message naming that field. `command_note`
+  is refused too: say it in a `verdict`. A `request_flow` step may record a `query` but cannot capture
+  from one.
+- Cases, responses, `tone` and `verdict` work exactly as they do for a `command` request.
 
 ## The `request_flow`
 
