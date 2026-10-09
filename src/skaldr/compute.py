@@ -17,7 +17,7 @@ from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cache
 from http import HTTPStatus
-from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
+from typing import Any, Final, Literal, NamedTuple, TypedDict, cast, get_args, get_type_hints
 
 import roman
 from pydantic import BaseModel
@@ -48,6 +48,7 @@ from skaldr.models import (
     RichTextMarker,
     Row,
     Section,
+    SectionFields,
     Swimlane,
     SwimlaneStepState,
     Table,
@@ -78,6 +79,8 @@ __all__ = [
     "reconcile_line",
     "reference_numbers",
     "rich_text_strings",
+    "section_facts",
+    "section_titles_by_id",
     "swimlane_layout",
     "table_rollup",
     "table_tallies",
@@ -706,6 +709,62 @@ def validate_rich_text_fields(report: Report, context: RichContext) -> None:
             parse_rich(text, context)
         except ReportError as error:
             raise ReportError(f"{'.'.join(path)}: {error}") from error
+
+
+FactValueKind = Literal["chip", "person", "date", "text", "link"]
+
+
+class FactValue(NamedTuple):
+    kind: FactValueKind
+    text: str
+    tone: BadgeColorLiteral | None = None
+    anchor: str | None = None
+
+
+class SectionFact(NamedTuple):
+    label: str
+    values: tuple[FactValue, ...]
+
+
+def section_titles_by_id(report: Report) -> dict[str, str]:
+    return {
+        block.id: block.title
+        for _, block in report.located_blocks
+        if isinstance(block, Section) and block.id is not None
+    }
+
+
+def _extra_fact_value(value: str | int | float) -> FactValue:
+    return FactValue("chip", fmt(value), "slate")
+
+
+def section_facts(fields: SectionFields, titles: Mapping[str, str]) -> tuple[SectionFact, ...]:
+    facts: list[SectionFact] = []
+    if fields.status is not None:
+        facts.append(SectionFact("Status", (FactValue("chip", fields.status, "blue"),)))
+    if fields.priority is not None:
+        facts.append(SectionFact("Priority", (FactValue("chip", fields.priority, "amber"),)))
+    if fields.assignee is not None:
+        facts.append(SectionFact("Assignee", (FactValue("person", fields.assignee),)))
+    if fields.due is not None:
+        facts.append(SectionFact("Due", (FactValue("date", fields.due.isoformat()),)))
+    if fields.labels is not None:
+        facts.append(
+            SectionFact("Labels", tuple(FactValue("chip", label, "slate") for label in fields.labels))
+        )
+    if fields.estimate is not None:
+        facts.append(SectionFact("Estimate", (FactValue("text", fmt(fields.estimate)),)))
+    for link_type, targets in fields.links.items():
+        facts.append(
+            SectionFact(
+                link_type.capitalize(),
+                tuple(FactValue("link", titles[target], anchor=target) for target in targets),
+            )
+        )
+    for name, value in fields.extras.items():
+        values = value if isinstance(value, list) else [value]
+        facts.append(SectionFact(name, tuple(_extra_fact_value(item) for item in values)))
+    return tuple(facts)
 
 
 def fmt(value: Any) -> str:

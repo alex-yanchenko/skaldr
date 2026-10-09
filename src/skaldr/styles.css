@@ -142,6 +142,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.facts .fact:not(:last-child)::after{content:"·"; margin-inline:var(--s3); color:var(--rule)}
 	.facts .fact .k{font-weight:600; color:var(--ink)}
 
+	.sfields{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); align-items:center; font-size:12.5px; color:var(--muted); margin-block:var(--s3);
+		& .sf{display:inline-flex; flex-wrap:wrap; gap:var(--s1) 6px; align-items:center}
+		& .sf .k{font-weight:600; color:var(--ink)}
+		& .sf a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
+		& .person{display:inline-block; padding:2px 9px; border-radius:var(--r-pill); background:var(--neutral-bg); color:var(--neutral-fg); font-weight:600}}
+
 	.kv{display:grid; grid-template-columns:max-content 1fr; gap:9px 24px; font-size:13.5px; margin-block:var(--s4); max-width:640px}
 	.kv dt{color:var(--muted)}
 	.kv dd{font-weight:400; font-variant-numeric:tabular-nums}

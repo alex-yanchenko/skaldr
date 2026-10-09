@@ -24,6 +24,7 @@ from skaldr.export.lower.prose import (
     lower_quote,
     lower_range,
     lower_references,
+    lower_section_fields,
     lower_status_list,
     lower_timeline,
 )
@@ -238,7 +239,8 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     updated: list[Node] = (
         [Paragraph(italic(plain(f"updated {block.updated}")), "muted")] if block.updated else []
     )
-    children = [*updated, *_lower_blocks(block.blocks, lowering, depth + 1)]
+    facts = lower_section_fields(block.fields, lowering) if block.fields else []
+    children = [*updated, *facts, *_lower_blocks(block.blocks, lowering, depth + 1)]
     anchor = lowering.anchor_of(block)
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]

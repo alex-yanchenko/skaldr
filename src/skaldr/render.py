@@ -24,6 +24,7 @@ from skaldr.highlight import highlighted_code, highlighted_diff_lines
 from skaldr.mathml import mathml
 from skaldr.models import (
     Report,
+    SectionFields,
     ToneLiteral,
     iter_requests,
     package_text,
@@ -263,6 +264,12 @@ def _render(
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
     globals_["strip_of"] = strip_of
+    section_titles = compute.section_titles_by_id(report)
+
+    def section_facts_of(fields: SectionFields) -> tuple[compute.SectionFact, ...]:
+        return compute.section_facts(fields, section_titles)
+
+    globals_["section_facts"] = section_facts_of
     globals_["expand_details"] = expand
     globals_["reference_numbers"] = ref_numbers
     globals_["cited_references"] = cited_references

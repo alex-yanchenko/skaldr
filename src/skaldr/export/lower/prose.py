@@ -21,7 +21,7 @@ from skaldr.export.tree import (
     Quote,
     ToneName,
 )
-from skaldr.richtext import Code, Link, Plain
+from skaldr.richtext import AnchorLink, Code, Link, Plain
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -83,6 +83,21 @@ def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Loweri
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:
     return [bullets(ListEntry(with_bold_label(fact.label, plain(fact.value))) for fact in block.facts)]
+
+
+def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> list[Node]:
+    facts = compute.section_facts(fields, compute.section_titles_by_id(lowering.report))
+    return (
+        [bullets(ListEntry(with_bold_label(fact.label, _fact_values(fact))) for fact in facts)]
+        if facts
+        else []
+    )
+
+
+def _fact_values(fact: compute.SectionFact) -> ExportRich:
+    if all(value.kind != "link" for value in fact.values):
+        return plain(", ".join(value.text for value in fact.values))
+    return spaced(tuple((AnchorLink(plain(value.text), value.anchor or ""),) for value in fact.values), ", ")
 
 
 def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:
