@@ -87,6 +87,9 @@ class NotionTarget(TargetBase):
     to: NotionService = Field(description="Publish to Notion: `notion`.")
     where: NotionWhere = Field(description="The Notion page the document goes under or into.")
 
+    def where_fields(self) -> JsonFields:
+        return self.where.fields
+
     def location_key(self) -> Location:
         return ("notion", self.where.page_id)
 

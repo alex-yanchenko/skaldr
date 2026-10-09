@@ -10,6 +10,10 @@ class ConnectorError(Exception):
     pass
 
 
+class PublishError(Exception):
+    pass
+
+
 class RegionNotFoundError(LookupError):
     pass
 

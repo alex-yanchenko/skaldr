@@ -1,6 +1,5 @@
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any, Literal, get_args
 
 import pytest
@@ -11,11 +10,7 @@ from skaldr.publish import ConnectorRegistry
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, JiraTarget, NotionTarget, TargetBase
 from skaldr.services import SERVICES
 from tests.factories import make_jira_target, make_notion_target
-
-
-@dataclass(frozen=True)
-class StubConnector:
-    target_type: type[TargetBase]
+from tests.factories.publish_factory import FakeConnector
 
 
 class UnlistedNotionTarget(NotionTarget):
@@ -68,14 +63,14 @@ def test_the_export_flavors_stay_notion_and_markdown() -> None:
 def test_a_target_finds_the_connector_registered_for_its_service(
     target_type: type[TargetBase], authored: Callable[[], dict[str, Any]]
 ) -> None:
-    connectors = {listed_type: StubConnector(listed_type) for listed_type in PUBLISH_TARGET_TYPES}
+    connectors = {listed_type: FakeConnector(listed_type) for listed_type in PUBLISH_TARGET_TYPES}
     registry = ConnectorRegistry(connectors.values())
 
     assert registry.for_target(target_type.model_validate(authored())) is connectors[target_type]
 
 
 def test_a_target_whose_service_has_no_connector_is_refused() -> None:
-    registry = ConnectorRegistry([StubConnector(NotionTarget)])
+    registry = ConnectorRegistry([FakeConnector(NotionTarget)])
 
     with pytest.raises(ConnectorError, match=r"^no connector publishes to jira$"):
         registry.for_target(JiraTarget.model_validate(make_jira_target()))
@@ -83,7 +78,7 @@ def test_a_target_whose_service_has_no_connector_is_refused() -> None:
 
 def test_two_connectors_for_one_service_are_refused() -> None:
     with pytest.raises(ConnectorError, match=r"^two connectors publish to notion$"):
-        ConnectorRegistry([StubConnector(NotionTarget), StubConnector(NotionTarget)])
+        ConnectorRegistry([FakeConnector(NotionTarget), FakeConnector(NotionTarget)])
 
 
 def test_a_connector_for_a_target_the_publish_block_does_not_list_is_refused() -> None:
@@ -93,4 +88,4 @@ def test_a_connector_for_a_target_the_publish_block_does_not_list_is_refused() -
     )
 
     with pytest.raises(ConnectorError, match=f"^{re.escape(expected)}$"):
-        ConnectorRegistry([StubConnector(UnlistedNotionTarget)])
+        ConnectorRegistry([FakeConnector(UnlistedNotionTarget)])

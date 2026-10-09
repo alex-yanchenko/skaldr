@@ -35,6 +35,9 @@ class JiraTarget(TargetBase):
     to: JiraService = Field(description="Publish to Jira: `jira`.")
     where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
 
+    def where_fields(self) -> JsonFields:
+        return self.where.fields
+
     def location_key(self) -> Location:
         return ("jira", self.where.project, self.where.parent or "")
 

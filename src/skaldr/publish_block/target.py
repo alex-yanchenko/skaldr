@@ -50,6 +50,13 @@ class TargetBase(FrozenModel):
         return names[0]
 
     @abstractmethod
+    def where_fields(self) -> JsonFields: ...
+
+    def fields_for(self, section_id: str | None) -> JsonFields:
+        override = None if section_id is None else self.overrides.get(section_id)
+        return {**self.where_fields(), **(override.fields if override is not None else {})}
+
+    @abstractmethod
     def location_key(self) -> Location: ...
 
     @abstractmethod

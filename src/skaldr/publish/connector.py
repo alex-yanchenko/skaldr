@@ -1,15 +1,38 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Protocol
+from typing import Literal, Protocol
 
 from skaldr.errors import ConnectorError
+from skaldr.export.tree import LoweredDocument
+from skaldr.models import Report
+from skaldr.publish.transport import Transport
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
 from skaldr.services import Service
+
+LimitScope = Literal["section", "item"]
+
+
+@dataclass(frozen=True)
+class ContentLimit:
+    scope: LimitScope
+    maximum: int
+    unit: str
+    measure: Callable[[str], int] = len
 
 
 class Connector(Protocol):
     @property
     def target_type(self) -> type[TargetBase]: ...
+
+    @property
+    def limits(self) -> tuple[ContentLimit, ...]: ...
+
+    def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
+
+    def existing_item_id(self, target: TargetBase, /) -> str | None: ...
+
+    def open_transport(self, target: TargetBase, /) -> Transport: ...
 
 
 def _service_of_a_listed_target(target_type: type[TargetBase]) -> Service:
@@ -32,9 +55,11 @@ class ConnectorRegistry:
             by_service[service] = connector
         self._by_service: Mapping[Service, Connector] = MappingProxyType(by_service)
 
-    def for_target(self, target: TargetBase) -> Connector:
-        service = target.service()
+    def for_service(self, service: Service) -> Connector:
         connector = self._by_service.get(service)
         if connector is None:
             raise ConnectorError(f"no connector publishes to {service}")
         return connector
+
+    def for_target(self, target: TargetBase) -> Connector:
+        return self.for_service(target.service())
