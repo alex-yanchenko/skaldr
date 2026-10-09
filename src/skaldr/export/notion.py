@@ -1,5 +1,5 @@
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
@@ -33,6 +33,7 @@ from skaldr.export.tree import (
     HeadingLevel,
     ListKind,
     ListNode,
+    LoweredDocument,
     Node,
     Paragraph,
     Quote,
@@ -486,18 +487,30 @@ def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth 
     return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))
 
 
-def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlock]:
-    blocks: list[RenderedBlock] = []
+def _rendered_blocks_by_position(
+    nodes: Sequence[Node], room: TableRoom
+) -> Iterator[tuple[int, RenderedBlock]]:
     previous_kind: ListKind | None = None
-    for node in nodes:
+    for position, node in enumerate(nodes):
         node_lines = _notion_lines(node, room)
         if not node_lines:
             continue
         kind = _list_kind(node)
         separator = [EMPTY_BLOCK] if kind is not None and kind == previous_kind else []
-        blocks.append(RenderedBlock(node, (*separator, *node_lines)))
+        yield position, RenderedBlock(node, (*separator, *node_lines))
         previous_kind = kind
-    return blocks
+
+
+def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlock]:
+    return [block for _, block in _rendered_blocks_by_position(nodes, room)]
+
+
+def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:
+    region_of_node = [position for position, region in enumerate(document.regions) for _ in region.nodes]
+    lines_by_region: list[list[str]] = [[] for _ in document.regions]
+    for node_position, block in _rendered_blocks_by_position(document.body, TableRoom.on_page(page_width)):
+        lines_by_region[region_of_node[node_position]] += block.lines
+    return tuple(_page(lines) if lines else "" for lines in lines_by_region)
 
 
 def _piece_of(costed: Sequence[_CostedBlock], budget: Budget) -> _Piece:

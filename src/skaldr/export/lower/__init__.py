@@ -93,11 +93,37 @@ def lower_region(lowering: Lowering, source_index: int) -> BlockRegion:
 def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> LoweredDocument:
     report = lowering.report
     header = PagePart("header", (*_subtitle(report), *_table_of_contents(report, lowering)))
-    legend = PagePart("legend", tuple(_legend(lowering)))
+    legend = PagePart("legend", tuple(_legend(lowering, compute.used_badges(report))))
     closing = PagePart("footer", _footer(report, lowering))
     page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
+    return _without_empty_parts(report.meta.title, page)
+
+
+def assemble_item_page(
+    title: str, regions: Sequence[BlockRegion], lowering: Lowering, *, opens_the_document: bool
+) -> LoweredDocument:
+    report = lowering.report
+    blocks = [report.blocks[region.source_index] for region in regions]
+    used = compute.used_badges(report.model_copy(update={"blocks": blocks}))
+    first_table = next(
+        (
+            region.source_index
+            for region, block in zip(regions, blocks, strict=True)
+            if isinstance(block, models.Table)
+        ),
+        None,
+    )
+    header = PagePart(
+        "header", (*_subtitle(report), *_table_of_contents(report, lowering)) if opens_the_document else ()
+    )
+    legend = PagePart("legend", tuple(_legend(lowering, used)))
+    closing = PagePart("footer", _footer(report, lowering) if opens_the_document else ())
+    return _without_empty_parts(title, [header, *_with_the_legend(regions, legend, first_table), closing])
+
+
+def _without_empty_parts(title: str, page: Sequence[Region]) -> LoweredDocument:
     return LoweredDocument(
-        report.meta.title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
+        title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
     )
 
 
@@ -273,8 +299,7 @@ def _walkthrough_entry(step: models.WalkthroughStep, lowering: Lowering, depth: 
     return ListEntry(toned(step.tone, title), children=tuple(_lower_blocks(step.detail, lowering, depth)))
 
 
-def _legend(lowering: Lowering) -> list[Node]:
-    used = compute.used_badges(lowering.report)
+def _legend(lowering: Lowering, used: Sequence[tuple[str, models.Badge]]) -> list[Node]:
     if not used:
         return []
     entries = tuple(

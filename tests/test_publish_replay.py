@@ -1,0 +1,513 @@
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
+from skaldr.publish.connector import ConnectorRegistry, WriteGranularity
+from skaldr.publish.content import ItemContent, Part, section_part
+from skaldr.publish.drafts import draft_targets, load_authored
+from skaldr.publish.engine import (
+    Applied,
+    ApplyOutcome,
+    ItemStatus,
+    Refused,
+    RemoteEdit,
+    apply_publish,
+    diff_publish,
+    prepare_publish,
+    publish_status,
+)
+from skaldr.publish.plan import ItemRef
+from skaldr.publish.state import held_state_lock, load_state, state_path_for
+from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
+from tests.factories.publish_factory import (
+    DOC_ID,
+    DROPPED_AFTER_WRITE,
+    INTO_LABEL,
+    INTRO_KEY,
+    LOST_WRITE,
+    REFUSED_WRITE,
+    TARGET_LABEL,
+    FakeConnector,
+    FakeTransport,
+    fake_registry,
+    make_garden_blocks,
+    make_notion_publish,
+    write_garden_report,
+)
+from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
+
+DOCUMENT = ItemRef(TARGET_LABEL, None)
+TOOLS = ItemRef(TARGET_LABEL, "tools")
+LATE_SPRING = "## Planting\nSow in late spring.\n"
+JIRA_LABEL = "jira project PLAN under no parent issue"
+
+
+def _publish(
+    path: Path, transport: FakeTransport, *, overwrite: bool = False, writes: WriteGranularity = "section"
+) -> ApplyOutcome:
+    registry = fake_registry(transport, target_types=(NotionTarget, JiraTarget), writes=writes)
+    return apply_publish(prepare_publish(path, registry), overwrite=overwrite)
+
+
+def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
+    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
+    return next(item.content for item in target.items if item.section_id == section_id)
+
+
+def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, **rewritten: Any) -> Path:
+    path = write_garden_report(tmp_path)
+    _publish(path, transport)
+    write_garden_report(tmp_path, **rewritten)
+    transport.forget_calls()
+    return path
+
+
+def _interrupted_create(path: Path) -> str:
+    return (
+        f'{TARGET_LABEL}, section tools: skaldr stopped while creating "Tools" under page-1, so it cannot '
+        'tell whether that item exists. Look under page-1 for an item titled "Tools" stamped with doc_id '
+        f"'{DOC_ID}' and archive it if it is there; then delete its entry from `pending_creates` in "
+        f"{state_path_for(path)} and publish again"
+    )
+
+
+def test_a_create_with_an_unknown_outcome_stops_the_next_run_naming_the_parent_and_title_to_check(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    transport.drop_the_connection_after_write(2)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    with pytest.raises(PublishError, match=f"^{re.escape(_interrupted_create(path))}$"):
+        _publish(path, transport)
+    assert (transport.writes(), publish_status(prepare_publish(path, fake_registry(transport)))) == (
+        [],
+        (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, None, ("create interrupted",))),
+    )
+
+
+NOT_SIGNED_IN = "not signed in to notion"
+
+
+class _ConnectorThatCannotSignIn(FakeConnector):
+    def open_transport(self, _target: TargetBase, /) -> FakeTransport:
+        raise ConnectorError(NOT_SIGNED_IN)
+
+
+def test_a_connection_that_never_opened_leaves_no_pending_create(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    registry = ConnectorRegistry([_ConnectorThatCannotSignIn(NotionTarget)])
+
+    with pytest.raises(ConnectorError, match=f"^{NOT_SIGNED_IN}$"):
+        apply_publish(prepare_publish(path, registry))
+
+    assert load_state(state_path_for(path), DOC_ID).pending_creates == []
+
+
+def test_a_create_the_service_rejected_is_forgotten_and_made_on_the_next_run(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    transport.fail_on_write(2)
+    with pytest.raises(WriteRejectedError, match=f"^{REFUSED_WRITE}$"):
+        _publish(path, transport)
+    pending = load_state(state_path_for(path), DOC_ID).pending_creates
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (pending, outcome, transport.writes()) == (
+        [],
+        Applied(('create   section tools "Tools"',)),
+        [("create", "Tools", "page-1", "")],
+    )
+
+
+def test_a_write_the_service_rejected_leaves_no_in_flight_record(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.fail_on_write(1)
+    with pytest.raises(WriteRejectedError, match=f"^{REFUSED_WRITE}$"):
+        _publish(path, transport)
+
+    document = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].document
+
+    assert (document and document.writing, document and document.rendered.sections["planting"]) == (
+        None,
+        "## Planting\nSow in spring.\n",
+    )
+
+
+def test_a_write_that_partly_landed_records_only_what_landed_and_writes_the_rest(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    _publish(path, transport, writes="content")
+    write_garden_report(
+        tmp_path,
+        publish=make_notion_publish(),
+        blocks=make_garden_blocks(tools="Rake.", planting="Sow in May."),
+    )
+    transport.land_only_the_first_section_of_the_next_content_write()
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport, writes="content")
+    transport.forget_calls()
+
+    outcome = _publish(path, transport, writes="content")
+
+    assert (outcome, transport.writes(), transport.items["page-1"].content) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        [("write_content", "page-1")],
+        _drafted(path),
+    )
+
+
+def test_a_landed_write_on_a_service_that_normalises_text_is_recognised_as_skaldrs_own(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport(strips_trailing_whitespace=True)
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=make_garden_blocks(tools="Rake.", planting="Sow in May.")
+    )
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Applied(("update   section tools: tools (blocks[1])",)),
+        [("write_section", "page-2", "tools")],
+    )
+
+
+def test_a_release_that_landed_before_the_connection_dropped_is_forgotten(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
+    _publish(path, transport)
+    write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": [make_jira_target()]})
+    transport.drop_the_connection_after_write(2)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes(), list(load_state(state_path_for(path), DOC_ID).targets)) == (
+        Applied(()),
+        [],
+        [JIRA_LABEL],
+    )
+
+
+def test_an_interrupted_write_into_a_page_that_landed_is_recorded_as_adopted(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+    document = load_state(state_path_for(path), DOC_ID).targets[INTO_LABEL].document
+
+    assert (outcome, transport.writes(), document and (document.item_id, document.origin)) == (
+        Applied(()),
+        [],
+        (NOTION_PAGE_ID, "adopted"),
+    )
+
+
+def test_an_interrupted_write_into_a_page_that_never_landed_is_tried_again(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
+    transport.lose_the_next_write()
+    with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Applied((f'create   document "Garden handbook" into {NOTION_PAGE_ID}',)),
+        [("create", "Garden handbook", "", NOTION_PAGE_ID)],
+    )
+
+
+def test_a_write_that_landed_before_the_connection_dropped_is_recorded_and_the_run_carries_on(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=make_garden_blocks(tools="Rake.", planting="Sow in May.")
+    )
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (
+        outcome,
+        transport.writes(),
+        transport.items["page-1"].content,
+        transport.items["page-2"].content,
+    ) == (
+        Applied(("update   section tools: tools (blocks[1])",)),
+        [("write_section", "page-2", "tools")],
+        _drafted(path),
+        _drafted(path, "tools"),
+    )
+
+
+WELCOMING = "Welcome, gardeners.\n"
+
+
+def test_a_hand_edit_landing_while_skaldr_writes_another_section_is_reported_on_the_next_run(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    published_intro = transport.items["page-1"].raw_sections[INTRO_KEY]
+    transport.edit_by_hand_during_the_next_write("page-1", INTRO_KEY, WELCOMING)
+    assert _publish(path, transport) == Applied(("update   document: planting (blocks[2])",))
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (
+                RemoteEdit(
+                    DOCUMENT, section_part(INTRO_KEY), "blocks[0]", published_intro, WELCOMING, None, None
+                ),
+            ),
+            "edited",
+        ),
+        [],
+    )
+
+
+def test_a_hand_edit_over_an_interrupted_write_is_still_a_remote_edit(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (
+                RemoteEdit(
+                    DOCUMENT,
+                    section_part("planting"),
+                    "blocks[2]",
+                    "## Planting\nSow in spring.\n",
+                    LATE_SPRING,
+                    None,
+                    None,
+                ),
+            ),
+            "edited",
+        ),
+        [],
+    )
+
+
+def test_an_archive_that_landed_before_the_connection_dropped_is_forgotten(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
+    path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (
+        outcome,
+        transport.writes(),
+        list(load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].sections),
+    ) == (Applied(()), [], [])
+
+
+def test_an_archive_that_never_landed_is_sent_again(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
+    path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
+    transport.lose_the_next_write()
+    with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Applied(("archive  section tools (page-2)",)),
+        [("archive", "page-2")],
+    )
+
+
+def test_a_target_removed_from_the_publish_block_has_every_item_archived(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    jira = {"doc_id": DOC_ID, "targets": [{**make_jira_target(), "split": ["tools"]}]}
+    path = write_garden_report(tmp_path, publish=jira)
+    _publish(path, transport)
+    write_garden_report(tmp_path)
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()[2:], list(load_state(state_path_for(path), DOC_ID).targets)) == (
+        Applied(
+            (
+                'create   document "Garden handbook"',
+                'create   section tools "Tools"',
+                "archive  section tools (page-2)",
+                "archive  document (page-1)",
+            )
+        ),
+        [("archive", "page-2"), ("archive", "page-1")],
+        [TARGET_LABEL],
+    )
+
+
+def test_a_section_already_gone_from_the_service_is_removed_without_a_write(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    without_planting = [block for block in make_garden_blocks() if block.get("id") != "planting"]
+    path = _published_then_rewritten(tmp_path, transport, blocks=without_planting)
+    transport.delete_section_by_hand("page-1", "planting")
+    _publish(path, transport)
+    transport.forget_calls()
+
+    outcome = _publish(path, transport, overwrite=True)
+
+    assert (outcome, transport.writes(), transport.items["page-1"].content) == (
+        Applied(("remove   document: planting",)),
+        [],
+        _drafted(path),
+    )
+
+
+def test_a_state_target_this_skaldr_cannot_read_is_refused(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    _publish(path, transport)
+    state_path = state_path_for(path)
+    text = state_path.read_text(encoding="utf-8").replace('"to": "notion"', '"to": "notion", "colour": "red"')
+    state_path.write_text(text, encoding="utf-8")
+    write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": [make_jira_target()]})
+    expected = (
+        f"the state file records the target '{TARGET_LABEL}' in a form this version of skaldr cannot read, "
+        "so skaldr cannot archive its items; publish with the version of skaldr that wrote it, or put the "
+        "target back in the `publish` block"
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
+        prepare_publish(path, fake_registry(transport, target_types=(NotionTarget, JiraTarget)))
+
+
+def test_a_publish_is_refused_while_another_holds_the_state_lock(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    expected = (
+        f"`skaldr publish --apply` cannot run on {path}: another skaldr run holds "
+        f"{state_path_for(path)}.lock; wait for it to finish, then run this again"
+    )
+
+    with (
+        held_state_lock(state_path_for(path), path, "diff"),
+        pytest.raises(PublishError, match=f"^{re.escape(expected)}$"),
+    ):
+        _publish(path, transport)
+    assert transport.calls == []
+
+
+def test_overwrite_after_a_diff_ignores_a_new_service_marker_on_the_same_unchanged_edit(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+    diff_publish(prepare_publish(path, fake_registry(transport)))
+    transport.report_an_edit_without_changing_content("page-1", section_part("planting"))
+
+    assert _publish(path, transport, overwrite=True) == Applied(("update   document: planting (blocks[2])",))
+
+
+class ReportsEverySectionThatDiffers(FakeTransport):
+    def parts_edited_after(
+        self, item_id: str, marker: str | None, keyed_like: ItemContent, /
+    ) -> tuple[Part, ...]:
+        reported = super().parts_edited_after(item_id, marker, keyed_like)
+        if not reported:
+            return ()
+        current = self.items[item_id].content.sections
+        keys = dict.fromkeys([*keyed_like.sections, *current])
+        return tuple(section_part(key) for key in keys if keyed_like.sections.get(key) != current.get(key))
+
+
+def test_overwrite_after_a_landed_write_that_dropped_its_answer_needs_one_run(tmp_path: Path) -> None:
+    transport = ReportsEverySectionThatDiffers()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.drop_the_connection_after_write(1)
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-1", INTRO_KEY, "Welcome, gardeners.\n")
+
+    refused = _publish(path, transport)
+    transport.forget_calls()
+    overwritten = _publish(path, transport, overwrite=True)
+
+    assert (
+        [edit.part for edit in refused.edits] if isinstance(refused, Refused) else [],
+        overwritten,
+        transport.writes(),
+    ) == (
+        [section_part(INTRO_KEY)],
+        Applied((f"update   document: {INTRO_KEY} (blocks[0])",)),
+        [("write_section", "page-1", INTRO_KEY)],
+    )
+
+
+def test_overwrite_after_a_diff_refuses_when_the_service_reports_another_part_edited(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+    diff_publish(prepare_publish(path, fake_registry(transport)))
+    transport.report_an_edit_without_changing_content("page-1", section_part(INTRO_KEY))
+
+    outcome = _publish(path, transport, overwrite=True)
+
+    assert (type(outcome), outcome.reason if isinstance(outcome, Refused) else None, transport.writes()) == (
+        Refused,
+        "changed since the diff",
+        [],
+    )

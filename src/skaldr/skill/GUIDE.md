@@ -1120,7 +1120,7 @@ blocks:                       # optional: an intro shown before the first part
 
 ## Where it publishes: `publish`
 
-An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, so writing the block and signing in with `skaldr auth` changes nothing about what a render or an export does. `skaldr auth` keeps one sign-in per Jira site and per Notion workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>` and `skaldr auth logout notion <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
+An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. The block changes nothing about what a render or an export does; the `skaldr publish`, `skaldr diff` and `skaldr status` commands read it (see Publishing below). `skaldr auth` keeps one sign-in per Jira site and per Notion workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>` and `skaldr auth logout notion <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
 
 ```yaml
 publish:
@@ -1144,7 +1144,7 @@ publish:
 | `where` (Jira) | A `project` key, an `issue_type`, an optional `parent` issue key, and `fields` for labels, priority, components and custom fields. |
 | `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
 | `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
-| `overrides` | Per-item `fields`, keyed by a split section id. |
+| `overrides` | Per-item `fields`, keyed by a split section id; each key it names replaces that key of `where.fields` whole. |
 
 `skaldr --check` holds the block to these rules and names the target in every message:
 
@@ -1154,6 +1154,68 @@ publish:
 - no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
 
 A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+
+## Publishing
+
+This version of skaldr has the publish commands but no Notion or Jira connection yet, so each of them stops with `error: no connector publishes to notion` (or `jira`) until a release adds the connections. What follows is how the commands behave.
+
+```bash
+skaldr publish garden.yaml                      # dry run: reads the services, prints the plan, writes nothing
+skaldr publish garden.yaml --apply              # publishes; stops with a diff if an item was edited in the service
+skaldr publish garden.yaml --apply --overwrite  # replaces the remote edits the last diff showed
+skaldr diff garden.yaml                         # remote edits since the last publish, then what the YAML would change
+skaldr diff garden.yaml --json                  # the same facts as JSON
+skaldr status garden.yaml                       # per item: in sync, edited remotely, changed in the YAML, removed, missing remotely, never published
+```
+
+**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, then each item's updates (its title and fields, each section it writes, and each section it removes from the item), then the items it would archive or release. `--apply` carries the plan out one step at a time and prints each step as it lands.
+
+The dry run reads every service the document publishes to, with your stored sign-in, and never writes to a service or to the state file. It reads each item skaldr published and the page a target writes into, so its plan is the one `--apply` would carry out. When `--apply` would not go ahead, the dry run says so and exits with status 1: after remote edits it prints each edit and `error: --apply would stop: ...`, and for any other reason (a stamp from another document, a page that already holds content, an item missing in the service, an interrupted create) it prints `error: --apply would refuse: ...` with the reason.
+
+```text
+notion page 0123456789abcdef0123456789abcdef: 1 to create, 3 to update, 1 to archive
+  create   section planting "Planting"
+  update   document: fields
+  update   document: watering (blocks[1])
+  remove   document: page legend
+  archive  section tools (page-2)
+```
+
+A Notion page takes one write per changed section. A connector that can only replace an item's whole content, such as a Jira description, takes one write per changed item instead, and the plan lists every section that write changes on one line.
+
+**What goes where.** The document's own page or issue holds the subtitle, the table of contents, every top-level block that `from` keeps and `split` does not take, and the footer. A split section's page or issue holds that section alone, titled by it. Only the document's item has a table of contents. Each item has its own badge legend, listing only the badges that item uses, placed before its first top-level table as on the HTML page. Within an item, each top-level block is a section of its own for updates: a `section` by its `id`, a heading by its anchor, any other block by its content (a short hash of the block as the YAML parser reads it, so anchors, merge keys, quoting and key order do not change it, with a `#2` suffix for a second identical block), plus the `page header`, `page legend` and `page footer`. So adding or deleting a block writes only that block, and changing the text of a block that has no id, or of a heading (whose anchor follows its text), writes it as one block added and one removed. A newer skaldr keys the same YAML the same way. Publishing again writes only the sections whose text changed and leaves the rest of the item as it is. A section that moved is written again at its new place, and a section that left the item is removed from it. An item whose section left the YAML or the `split` list is archived, and so is every item of a target removed from the `publish` block. Lists of plain values (labels, components, numbers) and the keys of field values compare as sorted sets, so `[seeds, soil]` and `[soil, seeds]` are the same value and reordering them publishes nothing; a list of objects or of lists keeps its order. skaldr owns only the fields it has published: only those are compared for remote edits, so a field the service or a person sets that skaldr never published (a Jira board or sprint, say) never counts as a remote edit and is never cleared, even by `--overwrite`. A field newly added to the YAML is written over whatever the service holds, without counting that value as an edit. Removing a field from the YAML clears it in the service. An empty value (null, an empty string, list or object) is the same as no value, so a service that reads a cleared field back as null, or drops an empty one, causes no change. `fields` from `where` apply to every item. A split section's `overrides` replace them key by key: a key the override names takes the override's value whole (a `labels` list in an override replaces the `labels` of `where`, it does not add to it), and every other key keeps the value from `where`. skaldr's own stamp of the `doc_id` is not a field, so no override can remove it.
+
+**The state file.** `--apply` keeps a state file next to the YAML: `garden.skaldr-state.json` for `garden.yaml`. It records each page and issue skaldr made, with its id, the text skaldr last rendered for each section, the copy the service returned right after skaldr's write, and a marker the connector uses to spot later edits. `skaldr diff` updates it too, to remember which remote edits it showed you. skaldr writes it whole to a new file beside it, flushes that to disk and only then puts it in place, so a crash never leaves half a file; a folder skaldr cannot write to stops the run before anything is sent. While `--apply` or `skaldr diff` runs, it holds `garden.skaldr-state.json.lock`, and it reads the state file and the YAML only once it holds the lock, so it always plans from what the previous run left. A second run on the same document stops at once, naming the command it blocked, instead of racing the first.
+
+skaldr saves the state after every step and notes each write, archive and release before sending it, so a run that stops halfway, for example on a network error, carries on from the failed step when you run it again. On the next run, each part of an interrupted write that the service now holds exactly as skaldr was writing it (compared in the service's own formatting) is recorded as published, even when someone also edited another part of the item; the parts that did not land are written again, and only the other changes count as remote edits. An interrupted archive or release whose item is already archived, gone, or released (unstamped, with no content and none of the fields skaldr set) is simply forgotten; otherwise it is sent again, without checking the item for edits, since the document no longer holds it. If the section comes back into the YAML before that, skaldr tracks the item again as usual. A write the service rejected outright leaves no trace and is tried again on the next run. `--apply` plans again once it holds the lock and stops if the YAML changed after the plan was made.
+
+A create is different: if a run stops while creating a page or issue and the service's answer never arrived, skaldr cannot tell whether it was made, so the next `--apply` stops and names the parent and the title to look for, rather than risk creating it twice. Archive the item if it is there, delete its entry from `pending_creates` in the state file, and publish again. Writing into a page that a target names with `page` resolves itself, even if the target has since left the `publish` block: if the page carries this document's stamp, skaldr records it as adopted, and if it is unstamped but empty, or holds exactly what skaldr was writing, skaldr writes into it again. Every item skaldr creates is stamped with the `doc_id` and the id of the section it holds, so a later version of skaldr can find such an item by itself.
+
+Keep the file: without it skaldr no longer knows which items it made. It names pages and issues by id, so in a public repository add `*.skaldr-state.json` and `*.skaldr-state.json.lock` to `.gitignore` and keep a copy of the state file elsewhere. A state file that records another `doc_id` is refused; the usual cause is a changed `doc_id`, so change it back. A target in the state file that this version of skaldr cannot read stops the run with an error before anything is written.
+
+**Only what this document owns.** skaldr writes only to items in the state file and to the page a Notion target names in `page`. Every one of them is read before the first write, and an item stamped with another document's `doc_id` stops the run, naming both documents, before anything is sent.
+
+A page that a target names with `page` was not made by skaldr, so skaldr writes into it only while it is empty: a page that already holds content, child pages or properties the service reports as set, and carries no skaldr stamp, is refused, naming it. In the state file and in every message, such a target reads as `notion page <id> (written into)`. The state file records such a page as adopted, and skaldr never archives it. When its target leaves the `publish` block, skaldr releases it instead: it clears what skaldr wrote and removes the stamp, leaving the page itself in place. Every item skaldr created is archived as before.
+
+**Moved targets.** A target is known by its place: the Notion `parent_page`, or the Notion `page` it writes into (so switching one page between `parent_page` and `page` is a move too), or the Jira `project` and `parent`. When a target's place changes, skaldr does not move pages or issues: `--apply` stops before writing anything, naming the old place and the new one, and the dry run says it would. `skaldr diff` and `skaldr status` still run, showing the old target's items as removed and the new target's as never published. To move, publish once with the old target removed from the `publish` block, which archives the items skaldr created there and releases any page it wrote into, then add the new target and publish again. A target removed from the block with no new target for the same service in its place is not a move: its created items are archived and an adopted page is released.
+
+**Items deleted in the service.** An item skaldr published that is no longer in the service shows as missing remotely in `skaldr status`, and under "Missing remotely" in `skaldr diff` (`missing_remotely` in `--json`). `--apply` stops, naming it. `--apply --overwrite` creates it again under its parent and records its new id, or forgets it when the YAML no longer has it. A page a target wrote into cannot be created again: `--apply --overwrite` stops, naming the page, so name an existing empty page or publish under one with `parent_page`.
+
+**Edits made in the service.** Before writing, skaldr reads every item it published and compares the service's copy now with the copy the service returned right after skaldr's last write, so formatting the service adds is never mistaken for an edit; a connector can also report an edit the text does not show. When an item was edited, `--apply` writes nothing, prints each edited part as a unified diff and exits with status 1. Then choose: leave it, copy the edit into the YAML, or replace it with `--apply --overwrite`, which writes the YAML's content over exactly the edits the last diff showed, whether that diff came from `--apply` or from `skaldr diff`. If the item changed again after that diff, or no diff has shown the edit yet, `--overwrite` writes nothing either and prints the new diff, so an edit you have not seen is never overwritten.
+
+```text
+--- notion page 0123456789abcdef0123456789abcdef, document: planting (blocks[2]), as published
++++ notion page 0123456789abcdef0123456789abcdef, document: planting (blocks[2]), now
+@@ -1,2 +1,2 @@
+ ## Planting
+-Sow in spring.
++Sow in late spring.
+error: 1 part was edited in the service since the last publish, so nothing was written. To keep the edit, copy it into the YAML first; to replace it, publish with --apply --overwrite.
+```
+
+**`skaldr diff --json`** prints three lists, `remote_edits`, `yaml_changes` and `missing_remotely` (each missing item's `target`, `item` and `item_id`). Each entry names its `target`, `item` (`document` or `section <id>`), `part` (`section`, `title` or `fields`), `section` id, `yaml_path` and the `published` text; a remote edit adds the `current` text and, when the service says, `edited_by` and `edited_at`; a YAML change adds the `next` text. An item never published shows `null` as its published text, and an item the YAML removed shows `null` as its next text.
+
+**Limits.** A connector can declare a limit on a section or on a whole item, such as a character count. Content over it stops the plan before anything is sent, naming the target, the item, the section and the limit, and suggesting a further `split`.
 
 ## The render carries its own source
 

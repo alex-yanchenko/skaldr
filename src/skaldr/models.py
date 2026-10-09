@@ -3383,9 +3383,14 @@ def _parts_named_in(message: str, parts: Sequence[tuple[int, Path]]) -> str | No
 
 
 def load_report(path: Path) -> Report:
+    report, _ = load_report_and_source(path)
+    return report
+
+
+def load_report_and_source(path: Path) -> tuple[Report, Any]:
     document = _load_document(path)
     try:
-        return parse_report(document.data, built_by_an_index=bool(document.parts))
+        return parse_report(document.data, built_by_an_index=bool(document.parts)), document.data
     except ReportError as err:
         where = _parts_named_in(str(err), document.parts)
         if where is None:
