@@ -14,7 +14,7 @@ from skaldr.publish.cli import installed_connectors
 from skaldr.publish.content import ItemContent
 from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
 from skaldr.publish.jira import JiraConnector
-from skaldr.publish.jira.description import description_length, section_text
+from skaldr.publish.jira.description import as_blocks, description_length, section_text
 from skaldr.publish_block import JiraTarget
 from tests.factories import make_jira_target
 from tests.factories.auth_factory import basic_auth_header, make_jira_credentials
@@ -85,7 +85,7 @@ def test_each_region_renders_as_its_adf_blocks() -> None:
     page = lower_report(report)
 
     assert JiraConnector().render_regions(report, page) == tuple(
-        section_text(blocks) for blocks in render_adf_regions(page)
+        section_text(as_blocks(blocks)) for blocks in render_adf_regions(page)
     )
 
 

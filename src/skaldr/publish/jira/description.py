@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from difflib import SequenceMatcher
 from typing import Final
@@ -9,9 +10,24 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, Valid
 from skaldr.errors import ConnectorError
 from skaldr.export.adf import compact_adf_length
 
-UNKEYED_SECTION: Final = "description"
-IGNORED_ATTRS: Final = frozenset({"localId"})
+UNKEYED_SECTION: Final = "(description)"
 BLOCK_DIGEST_LENGTH: Final = 16
+ANY_NODE: Final = "*"
+LEADING_GROUP: Final = -1
+SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
+    (ANY_NODE, "localId"): None,
+    ("table", "width"): None,
+    ("table", "displayMode"): None,
+    ("table", "isNumberColumnEnabled"): (False,),
+    ("table", "layout"): ("default", "center"),
+    ("tableCell", "colwidth"): None,
+    ("tableCell", "colspan"): (1,),
+    ("tableCell", "rowspan"): (1,),
+    ("tableHeader", "colwidth"): None,
+    ("tableHeader", "colspan"): (1,),
+    ("tableHeader", "rowspan"): (1,),
+    ("orderedList", "order"): (1,),
+}
 
 Blocks = list[JsonValue]
 _BLOCKS: Final = TypeAdapter(Blocks)
@@ -31,10 +47,16 @@ class Layout(BaseModel):
     sections: list[LayoutSection] = Field(default_factory=list[LayoutSection])
 
 
-def section_text(blocks: Sequence[object]) -> str:
+def section_text(blocks: Sequence[JsonValue]) -> str:
     if not blocks:
         return ""
     return json.dumps(list(blocks), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _not_blocks(text: str) -> ConnectorError:
+    return ConnectorError(
+        f"a Jira section holds a JSON list of ADF blocks, and this one does not: {text[:40]!r}"
+    )
 
 
 def section_blocks(text: str) -> Blocks:
@@ -43,20 +65,32 @@ def section_blocks(text: str) -> Blocks:
     try:
         return _BLOCKS.validate_json(text)
     except ValidationError as exc:
-        raise ConnectorError(
-            f"a Jira section holds a JSON list of ADF blocks, and this one does not: {text[:40]!r}"
-        ) from exc
+        raise _not_blocks(text) from exc
+
+
+def as_blocks(blocks: object) -> Blocks:
+    return _BLOCKS.validate_python(blocks)
 
 
 def _canonical(node: JsonValue) -> str:
     return json.dumps(node, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
 
-def _comparable_attrs(attrs: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+def _filled_in_by_jira(node_type: str, name: str, value: JsonValue) -> bool:
+    for key in ((ANY_NODE, name), (node_type, name)):
+        if key in SAVED_ATTRS:
+            defaults = SAVED_ATTRS[key]
+            if defaults is None:
+                return True
+            return any(value == default and type(value) is type(default) for default in defaults)
+    return False
+
+
+def _comparable_attrs(node_type: str, attrs: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
     return {
         name: comparable_node(value)
         for name, value in attrs.items()
-        if name not in IGNORED_ATTRS and value is not None
+        if value is not None and not _filled_in_by_jira(node_type, name, value)
     }
 
 
@@ -68,7 +102,8 @@ def comparable_node(node: JsonValue) -> JsonValue:
     kept: dict[str, JsonValue] = {}
     for name, value in node.items():
         if name == "attrs" and isinstance(value, dict):
-            attrs = _comparable_attrs(value)
+            node_type = node.get("type")
+            attrs = _comparable_attrs(node_type if isinstance(node_type, str) else "", value)
             if attrs:
                 kept[name] = attrs
         elif name == "marks" and isinstance(value, list):
@@ -116,8 +151,11 @@ def _joined_blocks(joined: str) -> Blocks:
         position += len(rest) - len(rest.lstrip())
         if position >= len(joined):
             return blocks
-        decoded, position = _DECODER.raw_decode(joined, position)
-        blocks += _BLOCKS.validate_python(decoded)
+        try:
+            decoded, position = _DECODER.raw_decode(joined, position)
+            blocks += _BLOCKS.validate_python(decoded)
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise _not_blocks(joined[position:]) from exc
 
 
 def description_length(joined: str) -> int:
@@ -135,21 +173,58 @@ def layout_of(sections: Mapping[str, Iterable[JsonValue]]) -> Layout:
     )
 
 
-def _owners(blocks: Blocks, layout: Layout) -> list[str]:
-    keys = [section.key for section in layout.sections for _ in section.blocks]
-    if not keys:
-        return [UNKEYED_SECTION] * len(blocks)
-    expected = [digest for section in layout.sections for digest in section.blocks]
-    remote = [block_digest(block) for block in blocks]
+def _matched_owners(remote: Sequence[str], sections: Sequence[LayoutSection]) -> list[str]:
+    keys = [section.key for section in sections for _ in section.blocks]
+    expected = [digest for section in sections for digest in section.blocks]
     owners: list[str] = []
     for tag, first, end, remote_first, remote_end in SequenceMatcher(
-        None, expected, remote, autojunk=False
+        None, expected, list(remote), autojunk=False
     ).get_opcodes():
         for position in range(remote_first, remote_end):
             if tag == "insert":
                 owners.append(keys[max(first - 1, 0)])
             elif tag != "delete":
                 owners.append(keys[min(first + position - remote_first, end - 1)])
+    return owners
+
+
+def _anchors(sections: Sequence[LayoutSection], remote: Sequence[str]) -> dict[int, int]:
+    expected = Counter(digest for section in sections for digest in section.blocks)
+    found = Counter(remote)
+    return {
+        index: remote.index(section.blocks[0])
+        for index, section in enumerate(sections)
+        if expected[section.blocks[0]] == 1 and found[section.blocks[0]] == 1
+    }
+
+
+def _anchored_groups(
+    sections: Sequence[LayoutSection], anchors: Mapping[int, int]
+) -> dict[int, list[LayoutSection]]:
+    groups: dict[int, list[LayoutSection]] = {LEADING_GROUP: []}
+    current = LEADING_GROUP
+    for index, section in enumerate(sections):
+        if index in anchors:
+            current = index
+            groups[current] = []
+        groups[current].append(section)
+    return groups
+
+
+def _owners(blocks: Blocks, layout: Layout) -> list[str]:
+    sections = [section for section in layout.sections if section.blocks]
+    if not sections:
+        return [UNKEYED_SECTION] * len(blocks)
+    remote = [block_digest(block) for block in blocks]
+    anchors = _anchors(sections, remote)
+    groups = _anchored_groups(sections, anchors)
+    starts = sorted((position, index) for index, position in anchors.items())
+    leading = groups[LEADING_GROUP] or groups[starts[0][1]]
+    bounds = [0, *(position for position, _ in starts), len(blocks)]
+    chosen = [leading, *(groups[index] for _, index in starts)]
+    owners: list[str] = []
+    for begin, end, group in zip(bounds[:-1], bounds[1:], chosen, strict=True):
+        owners += _matched_owners(remote[begin:end], group)
     return owners
 
 

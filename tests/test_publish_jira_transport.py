@@ -62,7 +62,15 @@ CONTENT = ItemContent(
     sections={"intro": section_text([INTRO, _table()]), "planting": section_text([PLANTING])},
     fields=FIELDS_WRITTEN,
 )
-COMPARABLE_CONTENT = CONTENT
+TABLE_AS_COMPARED: JsonValue = {
+    "type": "table",
+    "content": [{"type": "tableRow", "content": [{"type": "tableHeader", "content": [_words("Tool")]}]}],
+}
+CONTENT_AS_COMPARED = CONTENT.model_copy(
+    update={
+        "sections": {"intro": section_text([INTRO, TABLE_AS_COMPARED]), "planting": section_text([PLANTING])}
+    }
+)
 RAW_AFTER_CREATE = {
     "intro": section_text([INTRO, _table("jira-0001")]),
     "planting": section_text([PLANTING]),
@@ -125,7 +133,7 @@ def test_creating_an_issue_sends_the_description_fields_label_stamp_and_layout_i
         f"{SITE}/rest/api/3/issue/DEMO-1?fields=summary%2Cdescription%2Clabels%2Cpriority",
     )
     assert created == RemoteItem(
-        "DEMO-1", COMPARABLE_CONTENT, RAW_AFTER_CREATE, STAMP, None, set_properties=("labels", "priority")
+        "DEMO-1", CONTENT_AS_COMPARED, RAW_AFTER_CREATE, STAMP, None, set_properties=("labels", "priority")
     )
 
 
@@ -299,7 +307,7 @@ def test_a_description_without_a_layout_reads_as_one_section() -> None:
     read = _transport(jira).read_item("DEMO-3", ItemContent(title=""))
 
     assert (read.comparable, read.stamp) == (
-        ItemContent(title="Notes", sections={"description": section_text([INTRO])}),
+        ItemContent(title="Notes", sections={"(description)": section_text([INTRO])}),
         None,
     )
 
@@ -448,7 +456,7 @@ def test_a_fields_write_with_nothing_changed_sends_nothing_and_reads_back() -> N
 
     read = transport.write_fields(created.item_id, _fields_write({**FIELDS_WRITTEN, "labels": ["garden"]}))
 
-    assert (jira.calls(), read.comparable) == (_read_calls("DEMO-1"), COMPARABLE_CONTENT)
+    assert (jira.calls(), read.comparable) == (_read_calls("DEMO-1"), CONTENT_AS_COMPARED)
 
 
 def test_a_field_jira_does_not_know_is_a_rejected_write() -> None:
@@ -630,5 +638,7 @@ def test_the_comparable_form_normalises_each_section_and_drops_empty_ones() -> N
     )
 
     assert _transport(FakeJira()).comparable_form(content) == ItemContent(
-        title="Garden handbook", sections={"intro": section_text([INTRO, _table()])}, fields=FIELDS_WRITTEN
+        title="Garden handbook",
+        sections={"intro": section_text([INTRO, TABLE_AS_COMPARED])},
+        fields=FIELDS_WRITTEN,
     )

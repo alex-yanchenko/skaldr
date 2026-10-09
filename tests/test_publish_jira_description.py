@@ -60,7 +60,7 @@ def test_a_section_that_is_not_a_list_of_adf_blocks_is_refused(text: str) -> Non
 def test_the_comparable_form_drops_what_jira_adds_or_reorders_and_keeps_the_rest() -> None:
     node: JsonValue = {
         "type": "table",
-        "attrs": {"isNumberColumnEnabled": False, "layout": "default", "localId": "jira-0001"},
+        "attrs": {"isNumberColumnEnabled": True, "layout": "wide", "localId": "jira-0001"},
         "content": [
             {
                 "type": "tableRow",
@@ -90,7 +90,7 @@ def test_the_comparable_form_drops_what_jira_adds_or_reorders_and_keeps_the_rest
 
     assert comparable_node(node) == {
         "type": "table",
-        "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
+        "attrs": {"isNumberColumnEnabled": True, "layout": "wide"},
         "content": [
             {
                 "type": "tableRow",
@@ -118,6 +118,37 @@ def test_the_comparable_form_drops_what_jira_adds_or_reorders_and_keeps_the_rest
     }
 
 
+def test_the_comparable_form_drops_attributes_an_editor_save_fills_in_with_their_defaults() -> None:
+    cell: JsonValue = {"type": "tableCell", "content": [_words("Shed")]}
+    saved: JsonValue = [
+        {
+            "type": "table",
+            "attrs": {
+                "isNumberColumnEnabled": False,
+                "layout": "center",
+                "width": 760,
+                "displayMode": "default",
+            },
+            "content": [
+                {
+                    "type": "tableRow",
+                    "content": [{**cell, "attrs": {"colspan": 1, "rowspan": 1, "colwidth": [120]}}],
+                }
+            ],
+        },
+        {"type": "orderedList", "attrs": {"order": 1}, "content": []},
+        {"type": "orderedList", "attrs": {"order": 4}},
+        {"type": "tableCell", "attrs": {"colspan": 2}},
+    ]
+
+    assert comparable_node(saved) == [
+        {"type": "table", "content": [{"type": "tableRow", "content": [cell]}]},
+        {"type": "orderedList"},
+        {"type": "orderedList", "attrs": {"order": 4}},
+        {"type": "tableCell", "attrs": {"colspan": 2}},
+    ]
+
+
 def test_a_comparable_section_is_the_section_text_of_its_comparable_blocks() -> None:
     task: JsonValue = {"type": "taskList", "attrs": {"localId": "skaldr-task-list-1"}, "content": []}
 
@@ -142,6 +173,14 @@ def test_the_blocks_of_a_description_are_its_content_and_none_for_an_empty_one()
 def test_a_description_that_is_not_an_adf_document_is_refused() -> None:
     with pytest.raises(ConnectorError, match=r"^the description Jira returned is not an ADF document$"):
         blocks_of("Welcome.")
+
+
+def test_joined_sections_that_are_not_adf_block_lists_are_refused() -> None:
+    with pytest.raises(
+        ConnectorError,
+        match=f"^{re.escape('a Jira section holds a JSON list of ADF blocks, and this one does not: ')}",
+    ):
+        description_length(section_text([INTRO]) + "Welcome.\n")
 
 
 def test_the_description_limit_measures_the_compact_document_of_the_joined_sections() -> None:
@@ -214,8 +253,26 @@ def test_a_section_whose_blocks_were_deleted_is_left_out() -> None:
     assert _split(INTRO, PLANTING) == {"intro": [INTRO], "planting": [PLANTING]}
 
 
-def test_without_a_layout_the_whole_description_is_one_unkeyed_section() -> None:
-    assert split_description([INTRO, TOOLS], None) == {UNKEYED_SECTION: [INTRO, TOOLS]}
+def test_without_a_layout_the_whole_description_is_one_section_under_a_key_no_block_can_have() -> None:
+    assert (UNKEYED_SECTION, split_description([INTRO, TOOLS], None)) == (
+        "(description)",
+        {"(description)": [INTRO, TOOLS]},
+    )
+
+
+def test_sections_moved_around_in_jira_keep_their_own_blocks_in_the_order_jira_has_them() -> None:
+    split = _split(PLANTING, TOOLS, RAKE, INTRO)
+
+    assert (list(split), split) == (
+        ["planting", "tools", "intro"],
+        {"planting": [PLANTING], "tools": [TOOLS, RAKE], "intro": [INTRO]},
+    )
+
+
+def test_a_moved_section_whose_first_block_was_also_edited_joins_the_section_before_it() -> None:
+    hoe = _words("Hoe.")
+
+    assert _split(PLANTING, hoe, RAKE, INTRO) == {"planting": [PLANTING, hoe, RAKE], "intro": [INTRO]}
 
 
 def test_an_empty_description_has_no_sections() -> None:

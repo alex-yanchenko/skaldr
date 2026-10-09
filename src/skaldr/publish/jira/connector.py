@@ -11,7 +11,7 @@ from skaldr.export.tree import LoweredDocument
 from skaldr.models import Report
 from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.jira.client import JiraClient
-from skaldr.publish.jira.description import description_length, section_text
+from skaldr.publish.jira.description import as_blocks, description_length, section_text
 from skaldr.publish.jira.transport import JiraTransport
 from skaldr.publish_block import JiraTarget, TargetBase
 
@@ -41,7 +41,7 @@ class JiraConnector:
         return "content"
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
-        return tuple(section_text(blocks) for blocks in render_adf_regions(page))
+        return tuple(section_text(as_blocks(blocks)) for blocks in render_adf_regions(page))
 
     def existing_item_id(self, _target: TargetBase, /) -> str | None:
         return None
