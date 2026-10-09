@@ -158,7 +158,7 @@ def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path
     assert (refused, refused_writes, overwritten, transport.writes(), transport.items["page-1"].content) == (
         Refused((_planting_edit(),), "edited"),
         [],
-        Applied(("update   document: blocks[0] (blocks[0])", "update   document: planting (blocks[2])")),
+        Applied(("update   document: blocks[0]", "update   document: planting (blocks[2])")),
         [("write_section", "page-1", "blocks[0]"), ("write_section", "page-1", "planting")],
         _drafted(path),
     )

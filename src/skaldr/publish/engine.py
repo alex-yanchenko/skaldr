@@ -48,6 +48,7 @@ from skaldr.publish.transport import NewItem, RemoteItem, SectionWrite, Transpor
 from skaldr.publish_block import TargetBase
 
 RefusalReason = Literal["edited", "changed since the diff"]
+StepListener = Callable[[str, str], None]
 NOT_YET_PUBLISHED = ItemContent(title="")
 
 
@@ -265,7 +266,7 @@ class _Applier:
     prepared: Prepared
     transports: _Transports
     remote: dict[ItemRef, RemoteItem]
-    on_step: Callable[[str], None]
+    on_step: StepListener
     state: PublishState
     done: list[str] = field(default_factory=list[str])
 
@@ -275,7 +276,7 @@ class _Applier:
                 self.state = self._applied(target_plan, step)
                 save_state(self.prepared.state_path, self.state)
                 self.done.append(describe_step(step))
-                self.on_step(describe_step(step))
+                self.on_step(target_plan.label, describe_step(step))
         self._keep_each_target_as_written()
         return Applied(tuple(self.done))
 
@@ -368,12 +369,12 @@ class _Applier:
         return _with_item(self.state, step.item, target_plan.target, created)
 
 
-def _ignore_step(_described: str) -> None:
+def _ignore_step(_target: str, _described: str) -> None:
     return None
 
 
 def apply_publish(
-    prepared: Prepared, *, overwrite: bool = False, on_step: Callable[[str], None] = _ignore_step
+    prepared: Prepared, *, overwrite: bool = False, on_step: StepListener = _ignore_step
 ) -> ApplyOutcome:
     transports = _Transports(prepared)
     readings = _read_published(prepared, transports)

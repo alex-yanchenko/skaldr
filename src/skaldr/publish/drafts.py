@@ -23,6 +23,10 @@ def item_label(section_id: str | None) -> str:
     return DOCUMENT_ITEM_LABEL if section_id is None else f"section {section_id}"
 
 
+def section_label(key: str, path: str | None) -> str:
+    return key if path is None or path == key else f"{key} ({path})"
+
+
 def region_key(region: Region) -> str:
     match region:
         case BlockRegion():

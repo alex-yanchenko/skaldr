@@ -15,7 +15,7 @@ from skaldr.publish.content import (
     section_changes,
     section_part,
 )
-from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label
+from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label, section_label
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
 from skaldr.publish_block import TargetBase
 
@@ -207,7 +207,7 @@ def describe_step(step: Step) -> str:
                 f"update   {item_label(step.item.section_id)}: {', '.join(part.label for part in step.parts)}"
             )
         case WriteSectionStep():
-            return f"update   {item_label(step.item.section_id)}: {step.key} ({step.path})"
+            return f"update   {item_label(step.item.section_id)}: {section_label(step.key, step.path)}"
         case ArchiveStep():
             return f"archive  {item_label(step.item.section_id)} ({step.item_id})"
         case RemoveSectionStep():

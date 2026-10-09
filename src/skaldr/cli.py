@@ -65,6 +65,7 @@ def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
+_PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
 _STANDALONE_MODES = frozenset(
     {"write_schema", "guide", "install_skill", "install_plan_rule", "extract_source"}
 )
@@ -116,9 +117,14 @@ def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     if arguments[:1] == ["auth"]:
         return _run_auth(arguments[1:])
+    if arguments[:1] and arguments[0] in _PUBLISH_COMMANDS:
+        from skaldr.publish.cli import main as publish_main
+
+        return publish_main(arguments)
     parser = argparse.ArgumentParser(
         description="Render a skaldr content file to an HTML page.",
-        epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`.",
+        epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
+        "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`.",
     )
     parser.add_argument(
         "--version",

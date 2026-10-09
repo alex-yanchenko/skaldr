@@ -1,0 +1,291 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from skaldr.cli import main as skaldr_main
+from skaldr.publish.cli import main
+from skaldr.publish.state import state_path_for
+from tests.factories.publish_factory import (
+    TARGET_LABEL,
+    FakeTransport,
+    fake_registry,
+    make_garden_blocks,
+    make_notion_publish,
+    write_garden_report,
+)
+
+SPRING = "## Planting\nSow in spring.\n"
+LATE_SPRING = "## Planting\nSow in late spring.\n"
+NEW_INTRO = "Welcome, new members."
+
+
+def _run(argv: list[str], transport: FakeTransport) -> int:
+    return main(argv, registry=fake_registry(transport))
+
+
+def _published_then_edited(tmp_path: Path, transport: FakeTransport) -> Path:
+    path = write_garden_report(tmp_path)
+    _run(["publish", str(path), "--apply"], transport)
+    write_garden_report(tmp_path, blocks=make_garden_blocks(intro=NEW_INTRO))
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+    transport.forget_calls()
+    return path
+
+
+def test_a_dry_run_prints_the_plan_and_sends_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+
+    exit_code = _run(["publish", str(path)], transport)
+
+    assert (exit_code, capsys.readouterr().out, transport.calls, state_path_for(path).exists()) == (
+        0,
+        f"{TARGET_LABEL}: 2 to create, 0 to update, 0 to archive, 0 to delete\n"
+        '  create   document "Garden handbook"\n'
+        '  create   section tools "Tools"\n'
+        f"Dry run: nothing was sent. Publish with `skaldr publish {path} --apply`.\n",
+        [],
+        False,
+    )
+
+
+def test_apply_prints_each_step_as_it_lands_and_where_the_state_is(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = write_garden_report(tmp_path)
+
+    exit_code = _run(["publish", str(path), "--apply"], FakeTransport())
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        f'{TARGET_LABEL}: create   document "Garden handbook"\n'
+        f'{TARGET_LABEL}: create   section tools "Tools"\n'
+        f"Published 2 steps. The publish state is in {state_path_for(path)}.\n",
+    )
+
+
+def test_apply_with_nothing_changed_says_so(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _run(["publish", str(path), "--apply"], transport)
+    capsys.readouterr()
+
+    exit_code = _run(["publish", str(path), "--apply"], transport)
+
+    assert (exit_code, capsys.readouterr().out) == (0, "Nothing to publish: every item matches the YAML.\n")
+
+
+def test_apply_over_a_remote_edit_prints_the_edit_and_fails_writing_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    capsys.readouterr()
+
+    exit_code = _run(["publish", str(path), "--apply"], transport)
+
+    assert (exit_code, capsys.readouterr(), transport.writes()) == (
+        1,
+        (
+            f"--- {TARGET_LABEL}, document: planting (blocks[2]), as published\n"
+            f"+++ {TARGET_LABEL}, document: planting (blocks[2]), now\n"
+            "@@ -1,2 +1,2 @@\n"
+            " ## Planting\n"
+            "-Sow in spring.\n"
+            "+Sow in late spring.\n",
+            "error: 1 part was edited in the service since the last publish, so nothing was written. To keep "
+            "the edit, copy it into the YAML first; to replace it, publish with --apply --overwrite.\n",
+        ),
+        [],
+    )
+
+
+def test_the_refusal_counts_several_edited_parts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    transport.edit_section_by_hand("page-2", "tools", "## Tools\n- Rake.\n")
+    capsys.readouterr()
+
+    exit_code = _run(["publish", str(path), "--apply"], transport)
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: 2 parts were edited in the service since the last publish, so nothing was written. To keep "
+        "the edits, copy them into the YAML first; to replace them, publish with --apply --overwrite.\n",
+    )
+
+
+def test_overwrite_after_the_refusal_replaces_the_edit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    _run(["publish", str(path), "--apply"], transport)
+    capsys.readouterr()
+
+    exit_code = _run(["publish", str(path), "--apply", "--overwrite"], transport)
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        f"{TARGET_LABEL}: update   document: blocks[0]\n"
+        f"{TARGET_LABEL}: update   document: planting (blocks[2])\n"
+        f"Published 2 steps. The publish state is in {state_path_for(path)}.\n",
+    )
+
+
+def test_overwrite_of_an_edit_no_diff_has_shown_fails_and_says_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    capsys.readouterr()
+
+    exit_code = _run(["publish", str(path), "--apply", "--overwrite"], transport)
+
+    assert (exit_code, capsys.readouterr().err, transport.writes()) == (
+        1,
+        "error: 1 part edited in the service changed after the last diff showed it, or no diff has shown it "
+        "yet, so nothing was written. Read the diff above, then publish with --apply --overwrite again.\n",
+        [],
+    )
+
+
+def test_overwrite_needs_apply(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = write_garden_report(tmp_path)
+
+    with pytest.raises(SystemExit) as stopped:
+        _run(["publish", str(path), "--overwrite"], FakeTransport())
+
+    assert (stopped.value.code, capsys.readouterr().err.splitlines()[-1]) == (
+        2,
+        "skaldr publish: error: --overwrite replaces remote edits while publishing, so it needs --apply",
+    )
+
+
+def test_diff_prints_the_remote_edits_then_what_the_yaml_would_change(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    capsys.readouterr()
+
+    exit_code = _run(["diff", str(path)], transport)
+
+    assert (exit_code, capsys.readouterr().out, transport.writes()) == (
+        0,
+        "Remote edits since the last publish:\n"
+        f"--- {TARGET_LABEL}, document: planting (blocks[2]), as published\n"
+        f"+++ {TARGET_LABEL}, document: planting (blocks[2]), now\n"
+        "@@ -1,2 +1,2 @@\n"
+        " ## Planting\n"
+        "-Sow in spring.\n"
+        "+Sow in late spring.\n"
+        "What this YAML would change:\n"
+        f"--- {TARGET_LABEL}, document: blocks[0], as published\n"
+        f"+++ {TARGET_LABEL}, document: blocks[0], in the YAML\n"
+        "@@ -1 +1 @@\n"
+        "-Welcome to the garden.\n"
+        f"+{NEW_INTRO}\n",
+        [],
+    )
+
+
+def test_diff_of_a_document_in_sync_says_there_is_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _run(["publish", str(path), "--apply"], transport)
+    capsys.readouterr()
+
+    exit_code = _run(["diff", str(path)], transport)
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        "Remote edits since the last publish: none\nWhat this YAML would change: nothing\n",
+    )
+
+
+def test_diff_json_holds_the_same_facts_as_the_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_edited(tmp_path, transport)
+    capsys.readouterr()
+    expected = {
+        "remote_edits": [
+            {
+                "target": TARGET_LABEL,
+                "item": "document",
+                "part": "section",
+                "section": "planting",
+                "yaml_path": "blocks[2]",
+                "published": SPRING,
+                "current": LATE_SPRING,
+                "edited_by": None,
+                "edited_at": None,
+            }
+        ],
+        "yaml_changes": [
+            {
+                "target": TARGET_LABEL,
+                "item": "document",
+                "part": "section",
+                "section": "blocks[0]",
+                "yaml_path": "blocks[0]",
+                "published": "Welcome to the garden.\n",
+                "next": f"{NEW_INTRO}\n",
+            }
+        ],
+    }
+
+    exit_code = _run(["diff", str(path), "--json"], transport)
+
+    assert (exit_code, capsys.readouterr().out) == (0, json.dumps(expected, indent=2) + "\n")
+
+
+def test_status_prints_one_line_per_item(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _run(["publish", str(path), "--apply"], transport)
+    write_garden_report(tmp_path, publish=make_notion_publish(split=["tools", "planting"]))
+    transport.edit_section_by_hand("page-2", "tools", "## Tools\n- Rake.\n")
+    capsys.readouterr()
+
+    exit_code = _run(["status", str(path)], transport)
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        f"{TARGET_LABEL}, document (page-1): changed in the YAML\n"
+        f"{TARGET_LABEL}, section tools (page-2): edited remotely\n"
+        f"{TARGET_LABEL}, section planting: never published\n",
+    )
+
+
+def test_a_document_without_a_publish_block_fails_with_the_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "plain.yaml"
+    path.write_text("version: 1\nmeta: {title: Plain}\nblocks: [{type: text, body: Hi.}]\n", encoding="utf-8")
+
+    exit_code = _run(["status", str(path)], FakeTransport())
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: the document has no `publish` block, so it has nowhere to publish; add one (see `skaldr "
+        "--guide`)\n",
+    )
+
+
+@pytest.mark.parametrize("command", ["publish", "diff", "status"])
+def test_skaldr_hands_the_publish_commands_to_the_publish_cli(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str
+) -> None:
+    path = write_garden_report(tmp_path)
+
+    exit_code = skaldr_main([command, str(path)])
+
+    assert (exit_code, capsys.readouterr().err) == (1, "error: no connector publishes to notion\n")
