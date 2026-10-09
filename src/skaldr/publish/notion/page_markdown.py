@@ -276,6 +276,13 @@ class Replacement:
     old_str: str
     new_str: str
 
+    @property
+    def changes_nothing(self) -> bool:
+        return self.old_str == self.new_str
+
+
+NO_REPLACEMENT: Final = Replacement("", "")
+
 
 def _common_prefix(before: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]]) -> int:
     count = 0
@@ -303,7 +310,7 @@ def section_replacement(
     suffix = _common_suffix(current, after, start)
     end_before, end_after = len(current) - suffix, len(after) - suffix
     if start == end_before and start == end_after:
-        return None
+        return NO_REPLACEMENT
     page = joined([*_texts(current), stamp or ""])
     while True:
         old = joined(_texts(current[start:end_before]))

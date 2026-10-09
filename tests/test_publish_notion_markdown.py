@@ -249,7 +249,7 @@ CURRENT = [("intro", INTRO), ("tools", TOOLS), ("planting", PLANTING)]
             Replacement(INTRO + TOOLS + PLANTING, PLANTING + INTRO + TOOLS),
             id="move-spans-both-places",
         ),
-        pytest.param(CURRENT, None, id="nothing-changes"),
+        pytest.param(CURRENT, Replacement("", ""), id="nothing-changes"),
     ],
 )
 def test_a_section_change_is_one_replacement_of_the_smallest_span_it_touches(

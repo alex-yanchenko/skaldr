@@ -20,7 +20,8 @@ from skaldr.publish.transport import (
     is_unset,
 )
 from skaldr.publish_block import NotionTarget, TargetBase
-from tests.factories import make_notion_target
+from tests.factories import NOTION_PAGE_ID, make_notion_target
+from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import DOC_ID, FakeTransport
 
 STAMP = Stamp(DOC_ID, None)
@@ -57,11 +58,26 @@ def _fake() -> Instance:
     return _fake_instance(FakeTransport(strips_trailing_whitespace=True))
 
 
+def _notion() -> Instance:
+    notion = InMemoryNotion()
+    notion.add_database(NOTION_PAGE_ID)
+    empty_page = notion.add_row(numbered_id(900), "Blank page", NOTION_PAGE_ID)
+
+    def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
+        notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
+
+    return Instance(notion.transport(), empty_page, edit_section_by_hand)
+
+
 TRANSPORTS = [
     pytest.param(
         TransportUnderTest(_fake, NOTION_TARGET, writes_into_pages=True, reports_edits=True),
         id="fake",
-    )
+    ),
+    pytest.param(
+        TransportUnderTest(_notion, NOTION_TARGET, writes_into_pages=True, reports_edits=True),
+        id="notion",
+    ),
 ]
 
 
