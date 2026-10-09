@@ -17,6 +17,7 @@ from skaldr.export.lower.prose import (
     lower_fact_strip,
     lower_image,
     lower_key_value,
+    lower_link,
     lower_list,
     lower_math,
     lower_meter,
@@ -97,7 +98,10 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
     closing = PagePart("footer", _footer(report, lowering))
     page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
     return LoweredDocument(
-        report.meta.title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
+        report.meta.title,
+        tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes),
+        icon=report.meta.icon,
+        cover=report.meta.cover,
     )
 
 
@@ -172,6 +176,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return [Divider()]
         case models.Image():
             return lower_image(block)
+        case models.Link():
+            return lower_link(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
         case models.Flow():
