@@ -301,7 +301,7 @@ class FakeJira:
             return issue
         offered: list[JsonValue] = [
             {"id": transition_id, "name": name, "to": to}
-            for transition_id, name, to in WORKFLOW[self._current_status(issue)]
+            for transition_id, name, to in WORKFLOW.get(self._current_status(issue), [])
         ]
         return httpx2.Response(200, json={"transitions": offered})
 
@@ -310,7 +310,9 @@ class FakeJira:
         if isinstance(issue, httpx2.Response):
             return issue
         wanted = _TransitionBody.model_validate_json(request.content).transition.id
-        offered = {transition_id: to for transition_id, _, to in WORKFLOW[self._current_status(issue)]}
+        offered = {
+            transition_id: to for transition_id, _, to in WORKFLOW.get(self._current_status(issue), [])
+        }
         if wanted not in offered:
             return httpx2.Response(
                 400, json={"errorMessages": [f"Transition id '{wanted}' is not valid for this issue."]}
