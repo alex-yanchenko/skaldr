@@ -19,8 +19,12 @@ from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, stat
 from skaldr.publish.plan import describe_plan
 
 
-def installed_connectors() -> ConnectorRegistry:
-    return ConnectorRegistry([NotionConnector()])
+def installed_connectors(*, saves_renewed_sign_in: bool = True) -> ConnectorRegistry:
+    return ConnectorRegistry([NotionConnector(saves_renewed_sign_in=saves_renewed_sign_in)])
+
+
+def _is_a_dry_run(args: argparse.Namespace) -> bool:
+    return args.command == "publish" and not args.apply
 
 
 def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
@@ -108,7 +112,9 @@ def main(argv: list[str], *, registry: ConnectorRegistry | None = None) -> int:
     if args.command == "publish" and args.overwrite and not args.apply:
         publish_parser.error("--overwrite replaces remote edits while publishing, so it needs --apply")
     try:
-        return _run(args, registry if registry is not None else installed_connectors())
+        if registry is None:
+            registry = installed_connectors(saves_renewed_sign_in=not _is_a_dry_run(args))
+        return _run(args, registry)
     except (ReportError, PublishError, ConnectorError, AuthError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

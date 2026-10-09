@@ -21,13 +21,14 @@ NOTION_LIMITS = (
 
 
 class _SignedInOnFirstUse:
-    def __init__(self, http: httpx2.BaseTransport | None) -> None:
+    def __init__(self, http: httpx2.BaseTransport | None, saves: bool) -> None:
         self._http = http
+        self._saves = saves
         self._session: NotionSession | None = None
 
     def _signed_in(self) -> NotionSession:
         if self._session is None:
-            self._session = NotionSession(require_notion(), transport=self._http)
+            self._session = NotionSession(require_notion(), transport=self._http, saves=self._saves)
         return self._session
 
     @property
@@ -42,6 +43,7 @@ class _SignedInOnFirstUse:
 class NotionConnector:
     http: httpx2.BaseTransport | None = None
     sleep: Sleep = field(default=time.sleep)
+    saves_renewed_sign_in: bool = True
     target_type: type[TargetBase] = NotionTarget
     limits: tuple[ContentLimit, ...] = NOTION_LIMITS
     writes: WriteGranularity = "section"
@@ -55,6 +57,5 @@ class NotionConnector:
         return None
 
     def open_transport(self, _target: TargetBase, /) -> NotionTransport:
-        return NotionTransport(
-            NotionApi(_SignedInOnFirstUse(self.http), transport=self.http, sleep=self.sleep)
-        )
+        tokens = _SignedInOnFirstUse(self.http, self.saves_renewed_sign_in)
+        return NotionTransport(NotionApi(tokens, transport=self.http, sleep=self.sleep))

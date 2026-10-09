@@ -31,6 +31,7 @@ from skaldr.auth.store import (
     NotionCredentials,
     SignIn,
     StoredEntry,
+    find_notion,
     save_notion_returning_the_replaced,
 )
 from skaldr.errors import AuthError
@@ -340,10 +341,15 @@ def renewed_notion_credentials(
 
 class NotionSession:
     def __init__(
-        self, sign_in: SignIn[NotionCredentials], *, transport: httpx2.BaseTransport | None = None
+        self,
+        sign_in: SignIn[NotionCredentials],
+        *,
+        transport: httpx2.BaseTransport | None = None,
+        saves: bool = True,
     ) -> None:
         self._sign_in = sign_in
         self._transport = transport
+        self._saves = saves
 
     @property
     def access_token(self) -> str:
@@ -355,9 +361,32 @@ class NotionSession:
                 f"Notion refused {NOTION_ACCESS_TOKEN_VARIABLE}; set a current token in "
                 f"{NOTION_ACCESS_TOKEN_VARIABLE}"
             )
-        renewed = renewed_notion_credentials(self._sign_in.credentials, transport=self._transport)
-        save_notion_returning_the_replaced(renewed)
+        credentials = self._sign_in.credentials
+        if self._saves and credentials.workspace_id is None:
+            raise AuthError(
+                "Notion refused the stored sign-in, which has no workspace id, so a renewed token could not "
+                f"be saved{_SIGN_IN_AGAIN}"
+            )
+        renewed = self._renewed(credentials)
         self._sign_in = SignIn(renewed, self._sign_in.source)
+        if self._saves:
+            save_notion_returning_the_replaced(renewed)
+
+    def _renewed(self, credentials: NotionCredentials) -> NotionCredentials:
+        try:
+            return renewed_notion_credentials(credentials, transport=self._transport)
+        except AuthError:
+            stored = _stored_for_the_same_workspace(credentials)
+            if stored is None or stored.refresh_token in (None, credentials.refresh_token):
+                raise
+            return renewed_notion_credentials(stored, transport=self._transport)
+
+
+def _stored_for_the_same_workspace(credentials: NotionCredentials) -> NotionCredentials | None:
+    if credentials.workspace_id is None:
+        return None
+    entry = find_notion(str(credentials.workspace_id))
+    return None if entry is None else entry.credentials
 
 
 def _unreachable(exc: httpx2.HTTPError) -> AuthError:
