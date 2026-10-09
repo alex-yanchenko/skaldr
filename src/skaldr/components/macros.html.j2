@@ -245,11 +245,18 @@
 </div>
 {% endmacro %}
 
+{% macro query_pane(core, case) %}
+{% set text = query_text_for(core.query, core, case) %}
+{% set marked = highlighted_query(text, core.query.lang) %}
+<div class="rq-pane"><div class="rq-pane-hd"><span>Query</span><span class="rq-runner">{{ core.query.runner }}</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button></span></div><pre class="rq-cmd rq-query">{% if marked is none %}{{ variable_slots(text) }}{% else %}{{ marked }}{% endif %}</pre></div>
+{% endmacro %}
+
 {% macro request_cases(core) %}
 {% call(index) tab_strip(strip_of(core), "Recorded cases") %}
 {% set case = core.cases[index] %}
 <section class="rq-case" data-rq-case="{{ index }}"{% if core.command is not none %} data-rq-command{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
+{% if core.query is not none %}{{ query_pane(core, case) }}{% else %}
 {% set runs_command = core.command is not none %}
 {% set command = command_for(core, case) %}
 {% if not runs_command %}<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>{% endif %}
@@ -257,6 +264,7 @@
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endif %}{% if core.command_note %}<p class="rq-cnote">{{ core.command_note | richtext }}</p>{% endif %}</div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="{% if runs_command %}Run the command, then paste its output here.{% else %}Run the command, then paste its whole output here. Include the headers if you kept -i.{% endif %}"></textarea></div></div>
 <div class="rq-live" hidden></div>
+{% endif %}
 {% set caption = response_caption(core, case.response) %}<div class="rq-pane"><div class="rq-pane-hd"><span>{{ caption.label }}</span>{% if caption.shows_status %}<span class="rq-status {{ case_tone(case) }}">{{ status_line(case.response) }}</span>{% endif %}</div>
 {% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
 <pre class="rq-resp">{{ recorded_body(case.response.body) }}</pre></div>
@@ -269,7 +277,7 @@
 {% macro request(block) %}
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
-{% if block.variables %}{{ variables_form(block.id or block.label, block.variables, []) }}{% endif %}
+{% set fields = reader_variables(block) %}{% if fields %}{{ variables_form(block.id or block.label, fields, []) }}{% endif %}
 {{ request_cases(block) }}
 </section>
 {% endmacro %}
@@ -277,7 +285,9 @@
 {% macro request_flow(block) %}
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span></div>
-{{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
+{% set fields = reader_variables(block) %}
+{% set produced = produced_names(block) %}
+{{ variables_form(block.id or block.label, fields, produced) if fields or produced }}
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
 <section class="rq-step">

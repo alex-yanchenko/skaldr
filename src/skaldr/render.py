@@ -20,7 +20,7 @@ from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
-from skaldr.highlight import highlighted_code, highlighted_diff_lines
+from skaldr.highlight import highlighted_code, highlighted_diff_lines, highlighted_query_keeping_slots_whole
 from skaldr.mathml import mathml
 from skaldr.models import (
     Report,
@@ -204,6 +204,7 @@ def html_environment() -> Environment:
         request_wire=compute.request_wire,
         command_for=compute.command_for,
         produced_names=compute.produced_names,
+        reader_variables=compute.reader_variables,
         status_line=compute.status_line,
         status_tone=compute.status_tone,
         case_tone=compute.case_tone,
@@ -215,6 +216,8 @@ def html_environment() -> Environment:
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,
+        query_text_for=compute.query_text_for,
+        highlighted_query=highlighted_query_keeping_slots_whole,
         highlighted_code=highlighted_code,
         highlighted_diff_lines=highlighted_diff_lines,
         settings_menu_id=compute.SETTINGS_MENU_ID,

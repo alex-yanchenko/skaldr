@@ -68,6 +68,7 @@ from tests.factories import (
     make_flow,
     make_grid,
     make_label_table,
+    make_query_request,
     make_reconciled_table,
     make_report,
     make_request,
@@ -4502,8 +4503,13 @@ def test_a_command_refuses_the_fields_a_composed_curl_is_built_from(composed: di
 def test_a_request_without_a_command_still_needs_a_method_and_a_url(missing: str) -> None:
     block = make_request()
     del block[missing]
-    with pytest.raises(ReportError, match=r"needs `method` and `url` to build a curl, or a `command`"):
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value).endswith(
+        "request 'Read an endpoint' needs `method` and `url` to build a curl, or a `command` to run as "
+        "written, or a `query` to record as written"
+    )
 
 
 def test_a_blank_command_is_rejected() -> None:
@@ -4633,4 +4639,160 @@ def test_a_flow_step_may_run_a_command_and_capture_from_its_output() -> None:
     assert (
         compute.command_for(flow.steps[0], flow.steps[0].cases[0])
         == "vault-run -- mint-token --audience partner"
+    )
+
+
+def _query_error(**overrides: Any) -> str:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_query_request(**overrides)]))
+    return str(raised.value)
+
+
+def test_a_query_request_needs_no_method_url_or_reader_field() -> None:
+    block = _parsed_request(make_query_request())
+
+    assert (block.method, block.url, block.command, block.variables) == (None, None, None, [])
+    assert block.query is not None
+    assert (block.query.runner, block.query.lang, block.query.content) == (
+        "mongosh, orders database",
+        "json",
+        '[{"$match": {"status": "open"}}, {"$count": "n"}]',
+    )
+
+
+def test_a_query_keeps_its_inner_lines_and_drops_the_trailing_newline_a_block_scalar_adds() -> None:
+    query = {"runner": "psql", "lang": "sql", "content": "SELECT 1\nFROM orders\n"}
+
+    block = _parsed_request(make_query_request(query=query))
+
+    assert block.query is not None
+    assert block.query.content == "SELECT 1\nFROM orders"
+
+
+@pytest.mark.parametrize(
+    "composed",
+    [
+        {"method": "GET"},
+        {"url": "https://api.example.com/a"},
+        {"headers": {"Accept": "application/json"}},
+        {"body": "{}"},
+        {"command": "mongosh --eval 'db.orders.count()'"},
+    ],
+    ids=["method", "url", "headers", "body", "command"],
+)
+def test_a_query_refuses_the_fields_a_curl_or_a_command_is_built_from(composed: dict[str, Any]) -> None:
+    field = next(iter(composed))
+
+    assert _query_error(**composed).endswith(
+        f"request 'Open orders in the shop database' sets `query` and `{field}`: a query is recorded as "
+        f"written, so skaldr builds no curl and `{field}` would never reach it"
+    )
+
+
+def test_a_query_needs_a_runner() -> None:
+    query = {"lang": "json", "content": "[]"}
+
+    assert "blocks.0.request.query.runner: Field required" in _query_error(query=query)
+
+
+def test_a_query_needs_a_language() -> None:
+    query = {"runner": "mongosh", "content": "[]"}
+
+    assert "blocks.0.request.query.lang: Field required" in _query_error(query=query)
+
+
+def test_a_blank_runner_is_rejected() -> None:
+    query = {"runner": "  ", "lang": "json", "content": "[]"}
+
+    assert "blocks.0.request.query.runner: String should match pattern '\\S'" in _query_error(query=query)
+
+
+def test_a_blank_query_is_rejected() -> None:
+    query = {"runner": "mongosh", "lang": "json", "content": "  \n"}
+
+    assert "blocks.0.request.query.content: Value error, query must not be blank" in _query_error(query=query)
+
+
+def test_a_language_pygments_has_no_lexer_for_is_rejected_by_name() -> None:
+    query = {"runner": "mongosh", "lang": "no-such-lexer", "content": "[]"}
+
+    assert "blocks.0.request.query.lang: Value error, `no-such-lexer` is not a Pygments lexer name" in (
+        _query_error(query=query)
+    )
+
+
+def test_a_lexer_name_is_accepted_in_any_letter_case_and_kept_as_written() -> None:
+    query = {"runner": "mongosh", "lang": "JSON", "content": "[]"}
+
+    block = _parsed_request(make_query_request(query=query))
+
+    assert block.query is not None
+    assert block.query.lang == "JSON"
+
+
+@pytest.mark.parametrize("language", ["json", "sql", "postgresql", "js", "graphql"])
+def test_any_pygments_lexer_name_is_accepted_as_the_query_language(language: str) -> None:
+    query = {"runner": "a tool", "lang": language, "content": "x"}
+
+    assert _parsed_request(make_query_request(query=query)).query is not None
+
+
+def test_a_command_note_on_a_query_request_is_rejected() -> None:
+    assert _query_error(command_note="Why this pipeline.").endswith(
+        "request 'Open orders in the shop database' sets a command_note on a query: put the note in a verdict"
+    )
+
+
+@pytest.mark.parametrize("field", ["command", "headers", "headers_add"])
+def test_a_case_of_a_query_request_cannot_set_a_command_or_headers(field: str) -> None:
+    value = "echo hi" if field == "command" else {"Accept": "text/plain"}
+    cases = [{"label": "one", field: value, "response": {"body": "x"}}]
+
+    assert _query_error(cases=cases).endswith(
+        f"case 'one' sets `{field}` on a request that records a query, which has no command or headers "
+        "of its own: write the change into the query"
+    )
+
+
+def test_a_case_cannot_override_the_query() -> None:
+    query = {"runner": "x", "lang": "json", "content": "[]"}
+    cases = [{"label": "one", "query": query, "response": {"body": "x"}}]
+
+    assert "blocks.0.request.cases.0.query: Extra inputs are not permitted" in _query_error(cases=cases)
+
+
+def test_a_query_counts_its_tokens_as_used_and_fills_the_case_axis() -> None:
+    content = '[{"$match": {"status": "{{status}}", "region": "{{region}}"}}]'
+    query = {"runner": "mongosh", "lang": "json", "content": content}
+    block = _parsed_request(
+        make_query_request(
+            query=query,
+            variables=[{"name": "region"}],
+            case_variable="status",
+            cases=[{"label": "open", "response": {"body": "[]"}}],
+        )
+    )
+
+    assert block.referenced_variables() == {"status", "region"}
+    assert block.resolvable_variables() == {"region", "status"}
+
+
+def test_a_variable_declared_but_never_used_by_the_query_is_rejected() -> None:
+    assert _query_error(variables=[{"name": "region"}]).endswith(
+        "request declares region but never uses it; every variable needs a `{{name}}` to fill"
+    )
+
+
+def test_a_flow_step_may_record_a_query_but_cannot_capture_from_it() -> None:
+    step = make_step(captures=[{"name": "n", "source": "body"}])
+    for field in ("method", "url"):
+        del step[field]
+    step["query"] = {"runner": "mongosh", "lang": "json", "content": "[]"}
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[make_flow(steps=[step])]))
+
+    assert str(raised.value).endswith(
+        "step 'A step' captures a value but records a query: a capture reads a response the reader pastes, "
+        "and a query has nowhere to paste one"
     )

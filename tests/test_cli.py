@@ -17,7 +17,7 @@ from skaldr.models import Report, load_report, parse_report
 from skaldr.render import render_embed, render_html
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
-from tests.factories import make_reconciled_table, make_report
+from tests.factories import make_query_request, make_reconciled_table, make_report
 
 _UNKNOWN_TONE_TEXT = "x [a]{tone=x}"
 _UNKNOWN_TONE_MESSAGE = (
@@ -1082,6 +1082,21 @@ def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFix
     assert json.loads(captured.out)["blocks"] == [
         {"type": "text", "body": "from fragment", "muted": False, "span": None}
     ]
+
+
+def test_emit_json_carries_a_requests_query_with_its_runner_language_and_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[make_query_request()]))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["blocks"][0]["query"] == {
+        "runner": "mongosh, orders database",
+        "lang": "json",
+        "content": '[{"$match": {"status": "open"}}, {"$count": "n"}]',
+    }
 
 
 def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

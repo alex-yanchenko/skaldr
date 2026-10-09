@@ -3802,7 +3802,7 @@
             }
           ],
           "default": null,
-          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "description": "The HTTP method. Required unless the call runs a `command` or records a `query`.",
           "title": "Method"
         },
         "url": {
@@ -3816,7 +3816,7 @@
             }
           ],
           "default": null,
-          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command` or records a `query`.",
           "title": "Url"
         },
         "command": {
@@ -3846,6 +3846,18 @@
           "default": null,
           "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
           "title": "Command Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evidence that is not a shell command: a database aggregation, a SQL query or an MCP call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` or `command`."
         },
         "headers": {
           "additionalProperties": {
@@ -3981,6 +3993,25 @@
           "default": null,
           "description": "What this case supplies for the block's `case_variable`. Defaults to `label`, which is what you want when the cases are resource names.",
           "title": "Value"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "minProperties": 1,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What this case supplies for several of the block's declared `variables` at once, as a map of variable name to value. Each name must be a declared variable. Use it when cases differ by more than one value, so a shared `command` or built call is written once. A declared variable the case leaves out stays a field the reader fills on this case's tab. Cannot be combined with `value`, or on a request that declares a `case_variable`.",
+          "title": "Values"
         },
         "headers": {
           "anyOf": [
@@ -4144,6 +4175,35 @@
       "title": "RequestFlow",
       "type": "object"
     },
+    "RequestQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "runner": {
+          "description": "Free-text label for the tool the query runs in, shown with it, such as `mongosh, orders database` or `psql, reporting replica`.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Runner",
+          "type": "string"
+        },
+        "lang": {
+          "description": "The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It highlights the query on the page and labels the fence in the Markdown exports.",
+          "title": "Lang",
+          "type": "string"
+        },
+        "content": {
+          "description": "The query text the reader copies and runs in the named tool. May carry `{{variable}}` tokens, written in as the reader types them.",
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runner",
+        "lang",
+        "content"
+      ],
+      "title": "RequestQuery",
+      "type": "object"
+    },
     "RequestResponse": {
       "additionalProperties": false,
       "properties": {
@@ -4234,7 +4294,7 @@
             }
           ],
           "default": null,
-          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "description": "The HTTP method. Required unless the call runs a `command` or records a `query`.",
           "title": "Method"
         },
         "url": {
@@ -4248,7 +4308,7 @@
             }
           ],
           "default": null,
-          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command` or records a `query`.",
           "title": "Url"
         },
         "command": {
@@ -4278,6 +4338,18 @@
           "default": null,
           "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
           "title": "Command Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evidence that is not a shell command: a database aggregation, a SQL query or an MCP call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` or `command`."
         },
         "headers": {
           "additionalProperties": {

@@ -46,7 +46,9 @@ from skaldr.models import (
     RequestCase,
     RequestFlow,
     RequestLike,
+    RequestQuery,
     RequestResponse,
+    RequestVariable,
     RichTextMarker,
     Row,
     Section,
@@ -912,10 +914,10 @@ class ResponseCaption(NamedTuple):
 
 
 def response_caption(core: RequestLike, response: RequestResponse) -> ResponseCaption:
-    runs_command = core.command is not None
+    records_output = core.command is not None or core.query is not None
     return ResponseCaption(
-        "Recorded output" if runs_command else "Recorded response",
-        shows_status=not runs_command or response.status is not None,
+        "Recorded output" if records_output else "Recorded response",
+        shows_status=not records_output or response.status is not None,
     )
 
 
@@ -938,20 +940,27 @@ def recorded_body(body: str) -> str:
     return read_recorded_body(body).text
 
 
-def case_value(block: RequestLike, case: RequestCase) -> str | None:
-    """What this case supplies for the block's case axis, defaulting to its label."""
-    return None if block.case_variable is None else (case.value or case.label)
-
-
 def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
     """`text` with the case axis filled in. The case variable is known when the page is built, so it
     is substituted here; every other `{{name}}` stays for the reader to supply at read time."""
-    value = case_value(block, case)
-    if value is None:
+    bindings = block.case_bindings(case)
+    if not bindings:
         return text
-    return VARIABLE_TOKEN.sub(
-        lambda match: value if match.group(1) == block.case_variable else match.group(0), text
-    )
+    return VARIABLE_TOKEN.sub(lambda match: bindings.get(match.group(1), match.group(0)), text)
+
+
+def reader_variables(owner: Request | RequestFlow) -> list[RequestVariable]:
+    cores = [owner] if isinstance(owner, Request) else owner.steps
+    bound = {name for core in cores for case in core.cases for name in (case.values or {})}
+    open_names = {
+        match.group(1)
+        for core in cores
+        for case in core.cases
+        for match in VARIABLE_TOKEN.finditer(sent_text_for(core, case))
+    }
+    return [
+        variable for variable in owner.variables if variable.name not in bound or variable.name in open_names
+    ]
 
 
 def variable_parts(text: str) -> list[tuple[str, str]]:
@@ -1010,6 +1019,16 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
         parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
     parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
+
+
+def query_text_for(query: RequestQuery, core: RequestLike, case: RequestCase) -> str:
+    return resolve_case(query.content, core, case)
+
+
+def sent_text_for(core: RequestLike, case: RequestCase) -> str:
+    if core.query is not None:
+        return query_text_for(core.query, core, case)
+    return command_for(core, case)
 
 
 CASE_LABEL_CHAR = 7.3

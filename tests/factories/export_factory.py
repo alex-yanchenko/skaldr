@@ -3,6 +3,7 @@ from typing import Any, TypeVar, get_args
 
 import yaml
 
+from skaldr.export.budget import RenderedBlock
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
@@ -76,6 +77,10 @@ def parsed_block(kind: type[BlockT], block: dict[str, Any], **overrides: Any) ->
 
 def lowered(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Node, ...]:
     return lower_report(parse_report(make_report(blocks=blocks, **overrides))).body
+
+
+def rendered_block_count(block: RenderedBlock) -> int:
+    return 1 if block.lines else 0
 
 
 def notion_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
