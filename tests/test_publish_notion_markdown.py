@@ -8,7 +8,7 @@ from skaldr.publish.notion.page_markdown import (
     comparable_text,
     joined,
     keyed_page,
-    release_replacement,
+    release_replacements,
     section_replacement,
     stamp_line,
     without_comment_markers,
@@ -287,23 +287,62 @@ def test_child_pages_in_a_section_are_carried_into_its_new_text_at_a_block_bound
     assert carried_into(raw, text) == carried
 
 
-def test_releasing_removes_the_published_lines_and_the_stamp_and_keeps_a_persons_text_and_child_pages() -> (
-    None
-):
-    planting = "## Planting\nSow in June.\n"
-    released = _page(INTRO, "A person's note.\n", TOOLS, f"{CHILD}\n", planting, STAMP_LINE)
-
-    replacement = release_replacement(_page(released, "Below.\n"), LAYOUT)
-
-    assert replacement == Replacement(
-        released, f"A person's note.\n{CHILD}\nSow in June.\n", ("intro", "tools", "planting")
-    )
+ANY_SIZE = 450_000
+UNKNOWN = '<unknown url="https://www.notion.so/bookmark" alt="bookmark"/>\n'
 
 
-def test_releasing_a_page_skaldr_already_released_changes_nothing() -> None:
-    assert release_replacement("A person's note.\n", {}) == Replacement(
-        "A person's note.\n", "A person's note.\n", (UNKEYED_SECTION,)
-    )
+def test_releasing_an_unedited_page_removes_everything_above_and_with_the_stamp_in_one_request() -> None:
+    page = _page(INTRO, TOOLS, PLANTING, STAMP_LINE, "Below.\n")
+
+    assert release_replacements(page, LAYOUT, ANY_SIZE) == [
+        Replacement(_page(INTRO, TOOLS, PLANTING, STAMP_LINE), "", ("intro", "tools", "planting"))
+    ]
+
+
+def test_releasing_removes_each_run_of_published_lines_and_never_quotes_what_it_keeps() -> None:
+    page = _page(INTRO, "A person's note.\n", TOOLS, f"{CHILD}\n", "## Planting\nSow in June.\n", UNKNOWN)
+
+    assert release_replacements(_page(page, STAMP_LINE, "Below.\n"), LAYOUT, ANY_SIZE) == [
+        Replacement(INTRO, "", ("intro",)),
+        Replacement(TOOLS, "", ("tools",)),
+        Replacement("## Planting\n", "", ("planting",)),
+        Replacement(STAMP_LINE, ""),
+    ]
+
+
+def test_releasing_keeps_a_whole_table_a_person_edited_one_cell_of() -> None:
+    table = '<table header-row="true">\n\t<tr>\n\t\t<td>Spade</td>\n\t</tr>\n</table>\n'
+    edited = table.replace("Spade", "Hoe")
+    layout = {"intro": INTRO, "tools": f"## Tools\n{table}"}
+
+    assert release_replacements(_page(INTRO, f"## Tools\n{edited}", STAMP_LINE), layout, ANY_SIZE) == [
+        Replacement(f"{INTRO}## Tools\n", "", ("intro", "tools")),
+        Replacement(STAMP_LINE, ""),
+    ]
+
+
+def test_a_release_larger_than_one_request_is_sent_in_requests_of_whole_blocks() -> None:
+    page = _page(INTRO, TOOLS, PLANTING, STAMP_LINE)
+
+    assert release_replacements(page, LAYOUT, 40) == [
+        Replacement(INTRO, "", ("intro",)),
+        Replacement(TOOLS, "", ("tools",)),
+        Replacement(PLANTING, "", ("planting",)),
+        Replacement(STAMP_LINE, ""),
+    ]
+
+
+def test_a_released_run_whose_text_appears_twice_quotes_the_kept_line_beside_it_unchanged() -> None:
+    page = _page("Water.\n", "Water.\n", STAMP_LINE)
+
+    assert release_replacements(page, {"a": "Water.\n"}, ANY_SIZE) == [
+        Replacement("Water.\nWater.\n", "Water.\n", ("a",)),
+        Replacement(STAMP_LINE, ""),
+    ]
+
+
+def test_releasing_a_page_skaldr_already_released_sends_nothing() -> None:
+    assert release_replacements("A person's note.\n", {}, ANY_SIZE) == []
 
 
 def test_a_commented_stamp_is_still_the_stamp() -> None:

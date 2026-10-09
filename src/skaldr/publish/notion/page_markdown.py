@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Final, Literal
 
+from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish.transport import Stamp
@@ -21,10 +22,12 @@ SPAN_TAG: Final = re.compile(r"<span\b([^>]*)>|</span>")
 DISCUSSION_ATTRIBUTE: Final = re.compile(r'\s*discussion-urls="[^"]*"')
 TABLE_OPENING: Final = re.compile(r"<table[\s>]")
 TABLE_CLOSING: Final = "</table>"
+BLOCK_CONTINUATION: Final = re.compile(r"</[a-z_]+>|<summary>.*</summary>")
 INDENTATION: Final = (" ", "\t")
 
 LineRole = Literal["published", "added", "child", "blank", "stamp", "below"]
 KEPT_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"added", "child"})
+REMOVED_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"published", "blank"})
 
 
 def stamp_line(stamp: Stamp) -> str:
@@ -179,6 +182,12 @@ class _PageLine:
         return self.normalised is not None and self.child_url is None
 
     @property
+    def starts_a_block(self) -> bool:
+        if not self.at_top_level or self.normalised is None:
+            return False
+        return BLOCK_CONTINUATION.fullmatch(self.normalised.strip()) is None
+
+    @property
     def unaligned_role(self) -> LineRole:
         return "child" if self.child_url is not None else "blank"
 
@@ -239,6 +248,7 @@ class _Placed:
     line: _PageLine
     key: str | None
     role: LineRole
+    block: int
 
 
 def _placed_lines(markdown: str, layout: Mapping[str, str]) -> list[_Placed]:
@@ -253,13 +263,15 @@ def _placed_lines(markdown: str, layout: Mapping[str, str]) -> list[_Placed]:
     first_key = found[aligned[0]][0] if aligned else shape.fallback
     placed: list[_Placed] = []
     current = first_key
+    block = 0
     for index, line in enumerate(lines):
+        block += 1 if line.starts_a_block or index == stamp_at else 0
         if index >= content_end:
-            placed.append(_Placed(line, None, "stamp" if index == stamp_at else "below"))
+            placed.append(_Placed(line, None, "stamp" if index == stamp_at else "below", block))
             continue
         key, role = found.get(index, (current, line.unaligned_role))
         current = key
-        placed.append(_Placed(line, key, role))
+        placed.append(_Placed(line, key, role, block))
     return placed
 
 
@@ -329,11 +341,82 @@ class Replacement:
 NO_REPLACEMENT: Final = Replacement("", "")
 
 
-def release_replacement(markdown: str, layout: Mapping[str, str]) -> Replacement:
+def _released_runs(placed: Sequence[_Placed]) -> list[tuple[int, int]]:
+    kept_blocks = {line.block for line in placed if line.role in KEPT_WHEN_RELEASED}
+    removed = [
+        line.role == "stamp" or (line.role in REMOVED_WHEN_RELEASED and line.block not in kept_blocks)
+        for line in placed
+    ]
+    runs: list[tuple[int, int]] = []
+    for index, gone in enumerate(removed):
+        if not gone:
+            continue
+        if runs and runs[-1][1] == index:
+            runs[-1] = (runs[-1][0], index + 1)
+        else:
+            runs.append((index, index + 1))
+    return runs
+
+
+def _chunks_of_whole_blocks(
+    placed: Sequence[_Placed], run: tuple[int, int], most_bytes: int
+) -> list[tuple[int, int]]:
+    blocks: dict[int, int] = {}
+    for line in placed[run[0] : run[1]]:
+        blocks[line.block] = blocks.get(line.block, 0) + json_string_bytes(line.line.raw)
+    chunks: list[tuple[int, int]] = []
+    start, size = run[0], 0
+    for index in range(run[0], run[1]):
+        block = placed[index].block
+        opens_a_block = index == run[0] or block != placed[index - 1].block
+        if opens_a_block and size and size + blocks[block] > most_bytes:
+            chunks.append((start, index))
+            start, size = index, 0
+        size += blocks[block] if opens_a_block else 0
+    chunks.append((start, run[1]))
+    return chunks
+
+
+def _raw(placed: Sequence[_Placed]) -> str:
+    return "".join(line.line.raw for line in placed)
+
+
+def _unique_removal(
+    placed: Sequence[_Placed], chunk: tuple[int, int], page: str, gone: set[int]
+) -> Replacement:
+    start, end = chunk
+    removed = placed[start:end]
+    before: list[_Placed] = []
+    after: list[_Placed] = []
+
+    def may_quote(index: int) -> bool:
+        return index not in gone and _quotable(placed[index].line.raw, with_markers=True)
+
+    while page.count(_raw([*before, *removed, *after])) != 1:
+        if start > 0 and may_quote(start - 1):
+            start -= 1
+            before.insert(0, placed[start])
+        elif end < len(placed) and may_quote(end):
+            after.append(placed[end])
+            end += 1
+        else:
+            break
+    quoted = tuple(dict.fromkeys(line.key for line in removed if line.key is not None))
+    return Replacement(_raw([*before, *removed, *after]), _raw([*before, *after]), quoted)
+
+
+def release_replacements(markdown: str, layout: Mapping[str, str], most_bytes: int) -> list[Replacement]:
     placed = [line for line in _placed_lines(markdown, layout) if line.role != "below"]
-    kept = [line.line.raw for line in placed if line.role in KEPT_WHEN_RELEASED]
-    quoted = tuple(dict.fromkeys(line.key for line in placed if line.key is not None))
-    return Replacement("".join(line.line.raw for line in placed), joined(kept), quoted)
+    page = markdown
+    gone: set[int] = set()
+    replacements: list[Replacement] = []
+    for run in _released_runs(placed):
+        for chunk in _chunks_of_whole_blocks(placed, run, most_bytes):
+            replacement = _unique_removal(placed, chunk, page, gone)
+            page = page.replace(replacement.old_str, replacement.new_str, 1)
+            gone |= set(range(*chunk))
+            replacements.append(replacement)
+    return replacements
 
 
 def _common_prefix(before: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]]) -> int:

@@ -17,7 +17,7 @@ from skaldr.publish.notion.page_markdown import (
     holds_an_unknown_block,
     joined,
     keyed_page,
-    release_replacement,
+    release_replacements,
     section_replacement,
     stamp_line,
 )
@@ -261,8 +261,8 @@ class NotionTransport:
     def release_item(self, item_id: str, request: Release, /) -> None:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         key = _page_key(item_id)
-        replacement = release_replacement(markdown, self._published.get(key, request.raw_sections))
-        if not replacement.changes_nothing:
+        layout = self._published.get(key, request.raw_sections)
+        for replacement in release_replacements(markdown, layout, REQUEST_JSON_BYTES):
             self._send(item_id, keyed.raw_sections, replacement)
         self._layouts[key] = {}
         self._published[key] = {}

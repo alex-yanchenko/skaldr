@@ -661,6 +661,36 @@ def test_a_release_keeps_text_a_person_added_and_text_below_the_stamp() -> None:
     assert notion.markdown_of(created.item_id) == "Water weekly.\nA visitor's note."
 
 
+def test_a_release_keeps_a_block_notion_cannot_show_as_markdown_without_quoting_it() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    unknown = '<unknown url="https://www.notion.so/bookmark" alt="bookmark"/>'
+    notion.edit_by_hand(created.item_id, "Sow in spring.", f"Sow in spring.\n{unknown}")
+    read = transport.read_item(created.item_id, created.comparable)
+    notion.requests.clear()
+
+    transport.release_item(created.item_id, Release(read.raw_sections, ()))
+
+    assert (_patches(notion), notion.markdown_of(created.item_id)) == (
+        [_update(f"{WELCOME}{PLANTING}", ""), _update(STAMP_LINE, "")],
+        unknown,
+    )
+
+
+def test_a_page_larger_than_one_request_is_released_in_several() -> None:
+    notion = _notion()
+    sections = {key: f"## {key.upper()}\n{'a' * 150_000}\n" for key in ("a", "b", "c", "d")}
+    transport, created = _created(notion, ItemContent(title="Big", sections=sections))
+
+    transport.release_item(created.item_id, Release(created.raw_sections, ()))
+
+    a, b, c, d = sections.values()
+    assert (_patches(notion), notion.markdown_of(created.item_id)) == (
+        [_update(f"{a}{b}## C\n", ""), _update(f"{c[len('## C') + 1 :]}{d}{STAMP_LINE}", "")],
+        "",
+    )
+
+
 def test_a_fields_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() -> None:
     notion = _notion()
     transport, created = _created(notion)
