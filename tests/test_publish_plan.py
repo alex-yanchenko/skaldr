@@ -23,13 +23,14 @@ from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTO_LABEL,
     INTRO_KEY,
     TARGET_LABEL,
     FakeTransport,
+    authored_garden,
     fake_registry,
     make_garden_blocks,
     make_notion_publish,
-    parse_garden_report,
 )
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
@@ -39,7 +40,7 @@ OLD_TARGET_LABEL = "jira project PLAN under no parent issue"
 
 
 def _drafts(**report: Any) -> tuple[TargetDraft, ...]:
-    return draft_targets(parse_garden_report(**report), fake_registry(FakeTransport()))
+    return draft_targets(authored_garden(**report), fake_registry(FakeTransport()))
 
 
 def _published(draft: ItemDraft, item_id: str) -> PublishedItem:
@@ -188,7 +189,7 @@ def test_a_block_deleted_from_the_middle_removes_only_that_block() -> None:
     )
     (target,) = _drafts(publish=publish, blocks=_plain_texts("Welcome to the garden.", "Weed weekly."))
 
-    assert _plan((target,), state).targets[0].steps == (RemoveSectionStep(DOCUMENT, "block 355f322b"),)
+    assert _plan((target,), state).targets[0].steps == (RemoveSectionStep(DOCUMENT, "block c0327999"),)
 
 
 def test_a_target_removed_from_the_publish_block_archives_its_section_items_then_its_document() -> None:
@@ -224,7 +225,7 @@ def test_a_document_written_into_an_existing_page_creates_into_that_page() -> No
     (target,) = drafts
 
     assert _plan(drafts, PublishState(doc_id=DOC_ID)).targets[0].steps == (
-        CreateStep(DOCUMENT, target.document, NOTION_PAGE_ID),
+        CreateStep(ItemRef(INTO_LABEL, None), target.document, NOTION_PAGE_ID),
     )
 
 

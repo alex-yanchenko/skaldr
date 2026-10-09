@@ -263,8 +263,13 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
     [
         pytest.param(
             [make_notion_target(), make_notion_target(where={"parent_page": OTHER_NOTION_PAGE_ID})],
-            [("notion", NOTION_PAGE_ID), ("notion", OTHER_NOTION_PAGE_ID)],
+            [("notion", "parent_page", NOTION_PAGE_ID), ("notion", "parent_page", OTHER_NOTION_PAGE_ID)],
             id="two-notion-pages",
+        ),
+        pytest.param(
+            [make_notion_target(), make_notion_target(where={"page": OTHER_NOTION_PAGE_ID})],
+            [("notion", "parent_page", NOTION_PAGE_ID), ("notion", "page", OTHER_NOTION_PAGE_ID)],
+            id="a-notion-parent-page-and-a-page-written-into",
         ),
         pytest.param(
             [make_jira_target(), make_jira_target(where={"project": "OPS", "issue_type": "Task"})],

@@ -7,10 +7,11 @@ from typing import Any
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
-from skaldr.models import Report, parse_report
+from skaldr.models import Report
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import FIELDS, ItemContent, Part, section_part
+from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.transport import (
     AddSection,
     FieldsWrite,
@@ -29,11 +30,13 @@ from tests.factories.report_factory import NOTION_PAGE_URL, make_report
 DOC_ID = "garden-handbook"
 OTHER_DOC_ID = "kitchen-rota"
 TARGET_LABEL = "notion page 0123456789abcdef0123456789abcdef"
+INTO_LABEL = f"{TARGET_LABEL} (written into)"
 REFUSED_WRITE = "the service refused the write"
 DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
 LOST_WRITE = "the connection dropped before the service saw the write"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
-INTRO_KEY = "block c9632b59"
+INTRO_KEY = "block 2c7116fc"
+NEW_INTRO_KEY = "block e976d1ce"
 
 
 def make_garden_blocks(**changes: str) -> list[dict[str, Any]]:
@@ -80,8 +83,8 @@ def make_garden_report(
     )
 
 
-def parse_garden_report(**overrides: Any) -> Report:
-    return parse_report(make_garden_report(**overrides))
+def authored_garden(**overrides: Any) -> Authored:
+    return authored_from(make_garden_report(**overrides))
 
 
 def write_garden_report(directory: Path, **overrides: Any) -> Path:
@@ -101,6 +104,7 @@ class FakeItem:
     parent_id: str | None
     revision: int
     archived: bool = False
+    children: tuple[str, ...] = ()
 
     @property
     def content(self) -> ItemContent:
@@ -137,11 +141,20 @@ class FakeTransport:
         return text.rstrip() if self.strips_trailing_whitespace else text
 
     def seed(
-        self, item_id: str, title: str, doc_id: str | None, sections: dict[str, str] | None = None
+        self,
+        item_id: str,
+        title: str,
+        doc_id: str | None,
+        sections: dict[str, str] | None = None,
+        *,
+        children: tuple[str, ...] = (),
+        fields: JsonFields | None = None,
     ) -> None:
         stamp = None if doc_id is None else Stamp(doc_id, None)
         self._items_made += 1
-        self.items[item_id] = FakeItem(title, dict(sections or {}), {}, stamp, None, self._bump())
+        self.items[item_id] = FakeItem(
+            title, dict(sections or {}), dict(fields or {}), stamp, None, self._bump(), children=children
+        )
 
     def fail_on_write(self, count_from_now: int) -> None:
         self._failing_write = self._writes + count_from_now
@@ -273,6 +286,7 @@ class FakeTransport:
         self._refuse_a_stale_layout(item_id, raw_sections)
         item = self.items[item_id]
         item.raw_sections = {}
+        item.fields = {}
         item.stamp = None
         item.revision = self._bump()
         self._drop_the_connection_if_asked()
@@ -315,7 +329,14 @@ class FakeTransport:
     def _remote(self, item_id: str) -> RemoteItem:
         item = self.items[item_id]
         doc_id = None if item.stamp is None else item.stamp.doc_id
-        return RemoteItem(item_id, item.content, dict(item.raw_sections), doc_id, str(item.revision))
+        return RemoteItem(
+            item_id,
+            item.content,
+            dict(item.raw_sections),
+            doc_id,
+            str(item.revision),
+            child_ids=item.children,
+        )
 
 
 @dataclass(frozen=True)

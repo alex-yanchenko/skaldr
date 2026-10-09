@@ -5,9 +5,8 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, PublishError
-from skaldr.models import load_report
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
-from skaldr.publish.drafts import draft_targets
+from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
     Applied,
     ApplyOutcome,
@@ -26,6 +25,7 @@ from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish.transport import Stamp
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTO_LABEL,
     INTRO_KEY,
     OTHER_DOC_ID,
     REFUSED_WRITE,
@@ -59,7 +59,7 @@ def _publish(path: Path, transport: FakeTransport, *, overwrite: bool = False) -
 
 
 def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_report(path), fake_registry(FakeTransport()))
+    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
     return next(item.content for item in target.items if item.section_id == section_id)
 
 
@@ -201,7 +201,7 @@ def test_a_page_stamped_by_another_document_is_refused_naming_both_documents(tmp
     transport.seed(NOTION_PAGE_ID, "Kitchen rota", OTHER_DOC_ID)
     path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
     expected = (
-        f"{TARGET_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
+        f"{INTO_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
         f"to that document and not to '{DOC_ID}'; skaldr writes only to items of the document it publishes"
     )
 
@@ -339,7 +339,7 @@ def test_a_changed_plain_block_shows_as_one_block_added_and_one_removed(tmp_path
         (),
         (
             YamlChange(
-                DOCUMENT, section_part("block 86f0151a"), "blocks[0]", None, "Welcome, new members.\n"
+                DOCUMENT, section_part("block e976d1ce"), "blocks[0]", None, "Welcome, new members.\n"
             ),
             YamlChange(DOCUMENT, section_part(INTRO_KEY), None, "Welcome to the garden.\n", None),
         ),

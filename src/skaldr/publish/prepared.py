@@ -2,9 +2,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from skaldr.errors import PublishError
-from skaldr.models import load_report
 from skaldr.publish.connector import ConnectorRegistry
-from skaldr.publish.drafts import ItemDraft, TargetDraft, draft_targets, published_targets
+from skaldr.publish.drafts import ItemDraft, TargetDraft, draft_targets, load_authored, published_targets
 from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState, load_state, state_path_for
 from skaldr.publish.transport import Transport
@@ -38,11 +37,11 @@ class Prepared:
 
 
 def prepare_publish(document_path: Path, registry: ConnectorRegistry) -> Prepared:
-    report = load_report(document_path)
-    doc_id = published_targets(report).doc_id
+    authored = load_authored(document_path)
+    doc_id = published_targets(authored.report).doc_id
     state_path = state_path_for(document_path)
     state = load_state(state_path, doc_id)
-    drafts = draft_targets(report, registry)
+    drafts = draft_targets(authored, registry)
     plan = plan_publish(drafts, state, registry)
     return Prepared(document_path, state_path, doc_id, state, drafts, plan, registry)
 

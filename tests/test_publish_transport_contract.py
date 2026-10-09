@@ -3,10 +3,9 @@ from typing import Any
 
 import pytest
 
-from skaldr.models import load_report
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import ItemContent
-from skaldr.publish.drafts import draft_targets
+from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
 from skaldr.publish.transport import FieldsWrite, ReplaceSection, Stamp
 from skaldr.publish_block.target import JsonFields
@@ -30,7 +29,7 @@ def _publish(
 
 
 def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_report(path), fake_registry(FakeTransport()))
+    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
     return next(item.content for item in target.items if item.section_id == section_id)
 
 
@@ -80,7 +79,7 @@ def test_a_whole_content_connector_gets_one_content_write_per_item(tmp_path: Pat
 
     assert (outcome, transport.writes(), transport.items["page-1"].content) == (
         Applied(
-            ("update   document: block 86f0151a (blocks[0]), planting (blocks[2]), remove block c9632b59",)
+            ("update   document: block e976d1ce (blocks[0]), planting (blocks[2]), remove block 2c7116fc",)
         ),
         [("write_content", "page-1")],
         _drafted(path),

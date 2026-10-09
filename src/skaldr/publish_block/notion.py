@@ -91,7 +91,18 @@ class NotionTarget(TargetBase):
         return self.where.fields
 
     def location_key(self) -> Location:
-        return ("notion", self.where.page_id)
+        return ("notion", self._mode, self.where.page_id)
 
     def location_label(self) -> str:
+        written_into = " (written into)" if self._mode == "page" else ""
+        return f"{self.place_label()}{written_into}"
+
+    def place_key(self) -> Location:
+        return ("notion", self.where.page_id)
+
+    def place_label(self) -> str:
         return f"notion page {self.where.page_id}"
+
+    @property
+    def _mode(self) -> str:
+        return "parent_page" if self.where.parent_page is not None else "page"

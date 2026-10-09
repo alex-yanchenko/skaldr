@@ -1,7 +1,10 @@
 import hashlib
+import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
 
 from typing_extensions import assert_never
 
@@ -31,26 +34,49 @@ def section_label(key: str, path: str | None) -> str:
     return key if path is None or path == key else f"{key} ({path})"
 
 
-def _block_digest(report: models.Report, region: BlockRegion) -> str:
-    source = report.blocks[region.source_index].model_dump_json(exclude_defaults=True)
-    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:BLOCK_DIGEST_LENGTH]
+@dataclass(frozen=True)
+class Authored:
+    report: models.Report
+    blocks: Sequence[object]
 
 
-def _named_key(report: models.Report, region: Region) -> str:
+def _authored_blocks(data: object) -> list[object]:
+    if not isinstance(data, Mapping):
+        return []
+    blocks = cast("Mapping[str, object]", data).get("blocks")
+    return list(cast("list[object]", blocks)) if isinstance(blocks, list) else []
+
+
+def authored_from(data: Mapping[str, object]) -> Authored:
+    return Authored(models.parse_report(data), _authored_blocks(data))
+
+
+def load_authored(path: Path) -> Authored:
+    report, data = models.load_report_and_source(path)
+    return Authored(report, _authored_blocks(data))
+
+
+def _block_digest(authored_blocks: Sequence[object], region: BlockRegion) -> str:
+    node = authored_blocks[region.source_index]
+    canonical = json.dumps(node, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:BLOCK_DIGEST_LENGTH]
+
+
+def _named_key(authored_blocks: Sequence[object], region: Region) -> str:
     match region:
         case BlockRegion():
-            return region.section_id or region.anchor or f"block {_block_digest(report, region)}"
+            return region.section_id or region.anchor or f"block {_block_digest(authored_blocks, region)}"
         case PagePart():
             return PAGE_PART_KEYS[region.kind]
         case _:
             assert_never(region)
 
 
-def region_keys(report: models.Report, regions: Sequence[Region]) -> list[str]:
+def region_keys(authored_blocks: Sequence[object], regions: Sequence[Region]) -> list[str]:
     seen: Counter[str] = Counter()
     keys: list[str] = []
     for region in regions:
-        key = _named_key(report, region)
+        key = _named_key(authored_blocks, region)
         seen[key] += 1
         keys.append(key if seen[key] == 1 else f"{key} #{seen[key]}")
     return keys
@@ -99,6 +125,7 @@ def _section_title(report: models.Report, region: BlockRegion) -> str:
 @dataclass(frozen=True)
 class _TargetContext:
     report: models.Report
+    authored_blocks: Sequence[object]
     lowering: Lowering
     target: TargetBase
     connector: Connector
@@ -116,7 +143,7 @@ def _item_draft(
     context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
 ) -> ItemDraft:
     texts = context.connector.render_regions(context.report, page)
-    keys = region_keys(context.report, page.regions)
+    keys = region_keys(context.authored_blocks, page.regions)
     return ItemDraft(
         section_id,
         ItemContent(
@@ -190,13 +217,15 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
     return draft
 
 
-def draft_targets(report: models.Report, registry: ConnectorRegistry) -> tuple[TargetDraft, ...]:
+def draft_targets(authored: Authored, registry: ConnectorRegistry) -> tuple[TargetDraft, ...]:
+    report = authored.report
     publish = published_targets(report)
     lowering = lowering_for(report)
     regions = lower_regions(lowering)
     return tuple(
         _target_draft(
-            _TargetContext(report, lowering, target, registry.for_target(target), position), regions
+            _TargetContext(report, authored.blocks, lowering, target, registry.for_target(target), position),
+            regions,
         )
         for position, target in enumerate(publish.targets)
     )

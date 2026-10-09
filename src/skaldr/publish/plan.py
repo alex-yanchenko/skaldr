@@ -203,12 +203,13 @@ def _removed_target_plan(label: str, published: PublishedTarget, registry: Conne
 def _moved_message(service: Service, old: str, new: str) -> str:
     return (
         f"the {SERVICE_NAMES[service]} target moved from {old} to {new}; skaldr does not move pages or "
-        f"issues, so nothing was archived or created. Archive or move the items under {old} by hand, then "
-        f"delete the target '{old}' from the state file and publish again"
+        "issues, so nothing was written. Publish once with the old target removed from the `publish` block, "
+        "which archives the items skaldr created there and releases any page it wrote into, then add the new "
+        "target and publish again"
     )
 
 
-def _refuse_moved_targets(drafts: Sequence[TargetDraft], state: PublishState) -> None:
+def refuse_moved_targets(drafts: Sequence[TargetDraft], state: PublishState) -> None:
     drafted = {draft.label for draft in drafts}
     for service in SERVICES:
         new = [
@@ -244,7 +245,6 @@ def plan_publish(
     missing: Collection[ItemRef] = (),
 ) -> PublishPlan:
     _refuse_shared_items(state)
-    _refuse_moved_targets(drafts, state)
     drafted = {draft.label for draft in drafts}
     facts = _RemoteFacts(rewritten, missing)
     return PublishPlan(

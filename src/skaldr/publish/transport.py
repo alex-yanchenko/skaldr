@@ -25,6 +25,7 @@ class RemoteItem:
     marker: str | None = None
     edited_by: str | None = None
     edited_at: str | None = None
+    child_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

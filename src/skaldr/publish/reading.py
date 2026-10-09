@@ -3,6 +3,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from pydantic import JsonValue
 from typing_extensions import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError
@@ -71,8 +72,16 @@ def missing_message(missing: MissingItem, service: Service) -> str:
     )
 
 
+def _is_set(value: JsonValue) -> bool:
+    return value not in (None, "", [], {})
+
+
 def _has_content(remote: RemoteItem) -> bool:
-    return any(text.strip() for text in remote.comparable.sections.values())
+    return (
+        any(text.strip() for text in remote.comparable.sections.values())
+        or bool(remote.child_ids)
+        or any(_is_set(value) for value in remote.comparable.fields.values())
+    )
 
 
 def _with_parts(before: ItemContent, after: ItemContent, parts: Sequence[Part]) -> ItemContent:

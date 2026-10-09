@@ -26,6 +26,7 @@ from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTO_LABEL,
     OTHER_DOC_ID,
     TARGET_LABEL,
     FakeTransport,
@@ -69,7 +70,7 @@ def test_an_empty_page_the_target_names_is_adopted_and_its_split_sections_are_cr
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
 
     _publish(path, transport)
-    published = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL]
+    published = load_state(state_path_for(path), DOC_ID).targets[INTO_LABEL]
 
     assert (published.document and published.document.origin, published.sections["tools"].origin) == (
         "adopted",
@@ -82,7 +83,7 @@ def test_a_page_with_content_and_no_stamp_is_refused_naming_it(tmp_path: Path) -
     transport.seed(NOTION_PAGE_ID, "Team notes", None, {"notes": "Bring gloves.\n"})
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
     expected = (
-        f"{TARGET_LABEL}, document: {NOTION_PAGE_ID} already holds content and carries no skaldr stamp, so "
+        f"{INTO_LABEL}, document: {NOTION_PAGE_ID} already holds content and carries no skaldr stamp, so "
         "skaldr will not write into it; empty the page, or publish under it with `parent_page` instead"
     )
 
@@ -92,6 +93,27 @@ def test_a_page_with_content_and_no_stamp_is_refused_naming_it(tmp_path: Path) -
         [],
         {"notes": "Bring gloves.\n"},
     )
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        pytest.param({"children": ("child-page",)}, id="a-child-page"),
+        pytest.param({"fields": {"Status": "Draft"}}, id="a-property"),
+    ],
+)
+def test_a_page_with_child_pages_or_properties_is_not_empty(tmp_path: Path, existing: dict[str, Any]) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Team notes", None, **existing)
+    path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
+    expected = (
+        f"{INTO_LABEL}, document: {NOTION_PAGE_ID} already holds content and carries no skaldr stamp, so "
+        "skaldr will not write into it; empty the page, or publish under it with `parent_page` instead"
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
+        _publish(path, transport)
+    assert transport.writes() == []
 
 
 def test_removing_the_target_of_an_adopted_page_releases_it_and_archives_what_skaldr_created(
@@ -112,9 +134,12 @@ def test_removing_the_target_of_an_adopted_page_releases_it_and_archives_what_sk
         (transport.items[NOTION_PAGE_ID].raw_sections, transport.items[NOTION_PAGE_ID].stamp),
         transport.items[NOTION_PAGE_ID].archived,
     ) == (
-        (ArchiveStep(TOOLS, "page-2"), ReleaseStep(DOCUMENT, NOTION_PAGE_ID)),
+        (
+            ArchiveStep(ItemRef(INTO_LABEL, "tools"), "page-2"),
+            ReleaseStep(ItemRef(INTO_LABEL, None), NOTION_PAGE_ID),
+        ),
         [
-            f"{TARGET_LABEL}: 0 to create, 0 to update, 1 to archive, 1 to release",
+            f"{INTO_LABEL}: 0 to create, 0 to update, 1 to archive, 1 to release",
             "  archive  section tools (page-2)",
             f"  release  document ({NOTION_PAGE_ID})",
         ],
@@ -131,28 +156,66 @@ def test_removing_the_target_of_an_adopted_page_releases_it_and_archives_what_sk
     )
 
 
+def _moved(service: str, old: str, new: str) -> str:
+    return (
+        f"the {service} target moved from {old} to {new}; skaldr does not move pages or issues, so nothing "
+        "was written. Publish once with the old target removed from the `publish` block, which archives the "
+        "items skaldr created there and releases any page it wrote into, then add the new target and "
+        "publish again"
+    )
+
+
 @pytest.mark.parametrize(
-    "moved",
+    ("moved", "new_label"),
     [
-        pytest.param({"parent_page": OTHER_PAGE_ID}, id="parent-page"),
-        pytest.param({"page": OTHER_PAGE_ID}, id="page"),
+        pytest.param({"parent_page": OTHER_PAGE_ID}, OTHER_LABEL, id="parent-page"),
+        pytest.param({"page": OTHER_PAGE_ID}, f"{OTHER_LABEL} (written into)", id="page"),
+        pytest.param({"page": NOTION_PAGE_ID}, INTO_LABEL, id="same-page-written-into"),
     ],
 )
-def test_a_target_whose_place_changed_is_refused_and_nothing_is_written(
-    tmp_path: Path, moved: dict[str, str]
+def test_apply_refuses_a_target_whose_place_changed_and_writes_nothing(
+    tmp_path: Path, moved: dict[str, str], new_label: str
 ) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, {}, publish=make_notion_publish(where=moved))
-    expected = (
-        f"the Notion target moved from {TARGET_LABEL} to {OTHER_LABEL}; skaldr does not move pages or "
-        "issues, so nothing was archived or created. Archive or move the items under "
-        f"{TARGET_LABEL} by hand, then delete the target '{TARGET_LABEL}' from the state file and publish "
-        "again"
+
+    with pytest.raises(PublishError, match=f"^{re.escape(_moved('Notion', TARGET_LABEL, new_label))}$"):
+        _publish(path, transport)
+    assert transport.writes() == []
+
+
+def test_a_moved_target_shows_in_status_and_the_dry_run_names_the_refusal(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, {}, publish=make_notion_publish(where={"parent_page": OTHER_PAGE_ID})
     )
 
-    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        prepare_publish(path, _registry(transport))
-    assert transport.calls == []
+    status = publish_status(prepare_publish(path, _registry(transport)))
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+
+    assert (status, dry_run.refusal) == (
+        (
+            ItemStatus(ItemRef(OTHER_LABEL, None), None, ("never published",)),
+            ItemStatus(DOCUMENT, "page-1", ("removed",)),
+            ItemStatus(TOOLS, "page-2", ("removed",)),
+        ),
+        _moved("Notion", TARGET_LABEL, OTHER_LABEL),
+    )
+
+
+def test_a_page_written_into_moving_to_a_parent_page_is_a_move_too(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    path = _published_then_rewritten(
+        tmp_path,
+        transport,
+        {"publish": INTO_THE_PAGE},
+        publish=make_notion_publish(where={"parent_page": NOTION_PAGE_ID}),
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(_moved('Notion', INTO_LABEL, TARGET_LABEL))}$"):
+        _publish(path, transport)
+    assert transport.writes() == []
 
 
 def test_a_jira_target_whose_parent_changed_is_refused(tmp_path: Path) -> None:
@@ -164,14 +227,9 @@ def test_a_jira_target_whose_parent_changed_is_refused(tmp_path: Path) -> None:
     }
     path = _published_then_rewritten(tmp_path, transport, {"publish": first}, publish=then)
     old, new = "jira project PLAN under no parent issue", "jira project PLAN under PLAN-7"
-    expected = (
-        f"the Jira target moved from {old} to {new}; skaldr does not move pages or issues, so nothing was "
-        f"archived or created. Archive or move the items under {old} by hand, then delete the target '{old}' "
-        "from the state file and publish again"
-    )
 
-    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        prepare_publish(path, _registry(transport))
+    with pytest.raises(PublishError, match=f"^{re.escape(_moved('Jira', old, new))}$"):
+        _publish(path, transport)
 
 
 def test_an_item_deleted_in_the_service_shows_as_missing_in_status_and_diff(tmp_path: Path) -> None:
@@ -277,7 +335,7 @@ def test_the_dry_run_names_a_stamp_conflict_apply_would_refuse(tmp_path: Path) -
     dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
 
     assert (dry_run.refusal, transport.writes()) == (
-        f"{TARGET_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
+        f"{INTO_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
         "to "
         f"that document and not to '{DOC_ID}'; skaldr writes only to items of the document it publishes",
         [],

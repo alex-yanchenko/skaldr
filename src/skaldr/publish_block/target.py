@@ -61,3 +61,9 @@ class TargetBase(FrozenModel):
 
     @abstractmethod
     def location_label(self) -> str: ...
+
+    def place_key(self) -> Location:
+        return self.location_key()
+
+    def place_label(self) -> str:
+        return self.location_label()

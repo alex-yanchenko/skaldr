@@ -5,10 +5,9 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
-from skaldr.models import load_report
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import FIELDS, ItemContent, section_part
-from skaldr.publish.drafts import draft_targets
+from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
     Applied,
     ApplyOutcome,
@@ -26,6 +25,7 @@ from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
     DROPPED_AFTER_WRITE,
+    INTO_LABEL,
     LOST_WRITE,
     REFUSED_WRITE,
     TARGET_LABEL,
@@ -51,7 +51,7 @@ def _publish(
 
 
 def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_report(path), fake_registry(FakeTransport()))
+    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
     return next(item.content for item in target.items if item.section_id == section_id)
 
 
@@ -201,7 +201,7 @@ def test_an_interrupted_write_into_a_page_that_landed_is_recorded_as_adopted(tmp
     transport.forget_calls()
 
     outcome = _publish(path, transport)
-    document = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].document
+    document = load_state(state_path_for(path), DOC_ID).targets[INTO_LABEL].document
 
     assert (outcome, transport.writes(), document and (document.item_id, document.origin)) == (
         Applied(()),
