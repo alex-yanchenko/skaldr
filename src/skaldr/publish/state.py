@@ -66,6 +66,8 @@ class PendingCreate(FrozenModel):
     parent_id: str | None
     title: str
     into_id: str | None = None
+    service: Service | None = None
+    target_as_written: JsonFields | None = None
 
 
 class PublishState(FrozenModel):

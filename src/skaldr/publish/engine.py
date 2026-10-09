@@ -164,8 +164,8 @@ class _Preflight:
 
 
 def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
-    refuse_moved_targets(prepared.drafts, prepared.state)
     prepared = prepared.with_state(settle_interrupted_adoptions(prepared, transports))
+    refuse_moved_targets(prepared.drafts, prepared.state)
     _refuse_an_interrupted_create(prepared)
     published = read_published(prepared, transports)
     settled = prepared.with_state(published.state)
@@ -180,6 +180,16 @@ def _refuse_missing_items(preflight: _Preflight) -> None:
         raise PublishError(missing_message(missing, service))
 
 
+def _prepared_again_from_the_same_yaml(prepared: Prepared) -> Prepared:
+    again = prepare_publish(prepared.document_path, prepared.registry)
+    if again.drafts != prepared.drafts:
+        raise PublishError(
+            f"{prepared.document_path} changed after this publish was planned; run it again to plan from the "
+            "YAML as it is now"
+        )
+    return again
+
+
 def _ignore_step(_target: str, _described: str) -> None:
     return None
 
@@ -188,7 +198,7 @@ def apply_publish(
     prepared: Prepared, *, overwrite: bool = False, on_step: StepListener = _ignore_step
 ) -> ApplyOutcome:
     with held_state_lock(prepared.state_path, prepared.document_path, "publish --apply"):
-        prepared = prepare_publish(prepared.document_path, prepared.registry)
+        prepared = _prepared_again_from_the_same_yaml(prepared)
         loaded = prepared.state
         transports = Transports(prepared)
         preflight = _preflight(prepared, transports)

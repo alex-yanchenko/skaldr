@@ -51,10 +51,10 @@ class Transports:
     prepared: Prepared
     opened: dict[str, Transport] = field(default_factory=dict[str, Transport])
 
-    def for_target(self, label: str) -> Transport:
+    def for_target(self, label: str, target: TargetBase | None = None) -> Transport:
         if label not in self.opened:
-            target = self.prepared.target_named(label)
-            self.opened[label] = self.prepared.registry.for_target(target).open_transport(target)
+            named = target if target is not None else self.prepared.target_named(label)
+            self.opened[label] = self.prepared.registry.for_target(named).open_transport(named)
         return self.opened[label]
 
 

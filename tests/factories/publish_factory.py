@@ -136,6 +136,14 @@ class FakeTransport:
     _dropping_after_write: int | None = None
     _losing_write: int | None = None
     _landing_one_section_of: int | None = None
+    _landing_part_of_release: int | None = None
+    _creating_into_without_a_stamp: bool = False
+
+    def land_part_of_the_next_release(self, after_writes: int = 0) -> None:
+        self._landing_part_of_release = self._writes + after_writes + 1
+
+    def land_the_next_create_into_without_its_stamp(self) -> None:
+        self._creating_into_without_a_stamp = True
 
     def seed(
         self,
@@ -170,6 +178,8 @@ class FakeTransport:
         self._dropping_after_write = None
         self._losing_write = None
         self._landing_one_section_of = None
+        self._landing_part_of_release = None
+        self._creating_into_without_a_stamp = False
 
     def comment_on(self, item_id: str, key: str) -> None:
         item = self.items[item_id]
@@ -234,8 +244,10 @@ class FakeTransport:
             existing.title = content.title
             existing.raw_sections = dict(content.sections)
             existing.fields = {**existing.fields, **content.fields}
-            existing.stamp = request.stamp
             existing.revision = self._bump()
+            if self._creating_into_without_a_stamp:
+                raise ConnectorError(DROPPED_AFTER_WRITE)
+            existing.stamp = request.stamp
             return self._after_write(request.into_id)
         item_id = self._new_item_id()
         self.items[item_id] = FakeItem(
@@ -304,6 +316,9 @@ class FakeTransport:
         self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
         item.raw_sections = {}
+        if self._writes == self._landing_part_of_release:
+            item.revision = self._bump()
+            raise ConnectorError(DROPPED_AFTER_WRITE)
         item.fields = {name: value for name, value in item.fields.items() if name not in request.field_names}
         item.stamp = None
         item.revision = self._bump()

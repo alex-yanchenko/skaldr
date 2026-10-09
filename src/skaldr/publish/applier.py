@@ -262,6 +262,8 @@ class Applier:
             parent_id=parent_id,
             title=step.draft.content.title,
             into_id=step.into_id,
+            service=target_plan.target.service(),
+            target_as_written=target_plan.target.model_dump(mode="json"),
         )
         before = self.state
         self._save(before.model_copy(update={"pending_creates": [*before.pending_creates, pending]}))
