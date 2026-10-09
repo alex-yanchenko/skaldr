@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.4.0](https://github.com/alex-yanchenko/skaldr/compare/v3.3.0...v3.4.0) (2026-10-09)
+
+
+### Features
+
+* **cli:** look up one block or section with skaldr --guide &lt;name&gt; ([#190](https://github.com/alex-yanchenko/skaldr/issues/190)) ([bcfd281](https://github.com/alex-yanchenko/skaldr/commit/bcfd281d555f20a74a28f6fb3722213d5f3675b5))
+* **export:** keep a table whole when --chunk splits a notion page ([#191](https://github.com/alex-yanchenko/skaldr/issues/191)) ([6576db6](https://github.com/alex-yanchenko/skaldr/commit/6576db60e1995c529fb2e03db65a6d88826b46af))
+* **link:** add a link block and a page icon and cover ([#194](https://github.com/alex-yanchenko/skaldr/issues/194)) ([d256d64](https://github.com/alex-yanchenko/skaldr/commit/d256d64f41df90aee4d5099e43144406497a40df))
+* **request:** let a case fill several declared variables through values ([#192](https://github.com/alex-yanchenko/skaldr/issues/192)) ([aee0890](https://github.com/alex-yanchenko/skaldr/commit/aee0890d30a473cb7bdf9bb0d556a87a02de4fc2))
+* **request:** record a database, SQL or MCP query as evidence ([#193](https://github.com/alex-yanchenko/skaldr/issues/193)) ([c6cf20d](https://github.com/alex-yanchenko/skaldr/commit/c6cf20d5fbd5e6956ddbadf625199f5bbbff9697))
+
+
+### Bug Fixes
+
+* **auth:** keep one sign-in per jira site and per notion workspace ([#185](https://github.com/alex-yanchenko/skaldr/issues/185)) ([83e4c5b](https://github.com/alex-yanchenko/skaldr/commit/83e4c5bdf2f788f45bb50e1af7cb5df13bf1d510))
+
+
+### Code Refactoring
+
+* **export:** lower each top-level block into its own region ([#186](https://github.com/alex-yanchenko/skaldr/issues/186)) ([7d76d13](https://github.com/alex-yanchenko/skaldr/commit/7d76d13b930bbf1a3ef3f839e645ac1487f321f1))
+* **export:** make the run writers generic and parse table rows once into typed rows ([#187](https://github.com/alex-yanchenko/skaldr/issues/187)) ([e31ece8](https://github.com/alex-yanchenko/skaldr/commit/e31ece8fb01b431788f75834ae310fc332822d7b))
+
 ## [3.3.0](https://github.com/alex-yanchenko/skaldr/compare/v3.2.1...v3.3.0) (2026-10-06)
 
 
