@@ -116,6 +116,24 @@ def _finished_after_a_change(page_id: str, title: str, finish: Callable[[], Answ
         ) from exc
 
 
+def _with_children_of_removed_sections(
+    current: Mapping[str, str], after: Sequence[tuple[str, str]]
+) -> list[tuple[str, str]]:
+    texts = dict(after)
+    order = list(current)
+    for index, key in enumerate(order):
+        children = "" if key in texts else carried_into(current[key], "")
+        if not children:
+            continue
+        earlier = next((other for other in reversed(order[:index]) if other in texts), None)
+        later = next((other for other in [*order[index + 1 :], *texts] if other in texts), None)
+        if earlier is not None:
+            texts[earlier] = joined([texts[earlier], children])
+        elif later is not None:
+            texts[later] = joined([children, texts[later]])
+    return [(key, texts[key]) for key, _ in after]
+
+
 def _quoted_sections(replacement: Replacement) -> str:
     return ", ".join(replacement.quoted) or "none"
 
@@ -208,10 +226,8 @@ class NotionTransport:
         )
         kept = new_text or None if isinstance(change, RemoveSection) else new_text
         after = list(placed_section(current, change.key, kept, follows).items())
-        markdown = self._api.page_markdown(item_id).markdown
-        replacement = section_replacement(
-            list(current.items()), after, markdown, keyed_page(markdown, {}).stamp_line
-        )
+        keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
+        replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
         if replacement is None:
             raise WriteRejectedError(
                 f"Notion page {item_id} holds nothing skaldr can place the section next to"
@@ -221,7 +237,10 @@ class NotionTransport:
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         current = keyed.raw_sections
-        after = [(key, carried_into(current.get(key, ""), text)) for key, text in request.sections.items()]
+        after = _with_children_of_removed_sections(
+            current,
+            [(key, carried_into(current.get(key, ""), text)) for key, text in request.sections.items()],
+        )
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
         if replacement is None:
             raise WriteRejectedError(

@@ -117,14 +117,27 @@ def test_a_hand_edit_inside_a_section_belongs_to_that_section() -> None:
     assert keyed_page(page, LAYOUT).raw_sections == {"intro": INTRO, "tools": edited, "planting": PLANTING}
 
 
-def test_text_added_between_two_sections_belongs_to_the_one_before() -> None:
+def test_text_added_directly_before_a_sections_first_line_belongs_to_that_section() -> None:
     page = _page(INTRO, TOOLS, "A note.\n", PLANTING, STAMP_LINE)
 
     assert keyed_page(page, LAYOUT).raw_sections == {
         "intro": INTRO,
-        "tools": TOOLS + "A note.\n",
-        "planting": PLANTING,
+        "tools": TOOLS,
+        "planting": "A note.\n" + PLANTING,
     }
+
+
+def test_text_added_inside_a_section_belongs_to_it() -> None:
+    page = _page(INTRO, "## Tools\n- Spade.\n- Hoe.\n- Rake.\n", PLANTING, STAMP_LINE)
+
+    assert keyed_page(page, LAYOUT).raw_sections["tools"] == "## Tools\n- Spade.\n- Hoe.\n- Rake.\n"
+
+
+def test_an_anchor_that_appears_once_but_outside_its_section_is_not_used() -> None:
+    current = [("intro", "## Welcome\n"), ("tools", "## Tools\n- Spade.\n")]
+    page = "## Welcome\n- Spade.\n## Tools\n"
+
+    assert section_replacement(current, [*current, SEEDS], page, None) is None
 
 
 def test_text_added_before_the_first_section_belongs_to_it() -> None:

@@ -223,10 +223,13 @@ class _Layout:
             lines += expected
         return cls(keys, lines, next(iter(layout), UNKEYED_SECTION))
 
-    def key_before(self, position: int) -> str:
-        if position > 0:
-            return self.keys[position - 1]
-        return self.keys[0] if self.keys else self.fallback
+    def key_of_inserted(self, position: int) -> str:
+        if not self.keys:
+            return self.fallback
+        opens_a_section = position < len(self.keys) and (
+            position == 0 or self.keys[position] != self.keys[position - 1]
+        )
+        return self.keys[position] if opens_a_section else self.keys[position - 1]
 
     def placed(self, actual: Sequence[str]) -> list[tuple[str, LineRole]]:
         placed: list[tuple[str, LineRole]] = [(self.fallback, "added")] * len(actual)
@@ -239,7 +242,7 @@ class _Layout:
                     position = start + offset * (end - start) // (actual_end - actual_start)
                     placed[index] = (self.keys[position], "added")
                 else:
-                    placed[index] = (self.key_before(start), "added")
+                    placed[index] = (self.key_of_inserted(start), "added")
         return placed
 
 
@@ -446,7 +449,18 @@ def _quotable(line: str, with_markers: bool) -> bool:
     return not holds_an_unknown_block(line) and (with_markers or DISCUSSION_ATTRIBUTE.search(line) is None)
 
 
-def _unique_edge(text: str, page: str, *, from_the_end: bool, with_markers: bool) -> str | None:
+def _offset_of(current: Sequence[tuple[str, str]], index: int) -> int:
+    return len(joined([*_texts(current[:index]), "\0"])) - 1
+
+
+def _found_once_at(page: str, text: str, offset: int) -> bool:
+    return page.count(text) == 1 and page.find(text) == offset
+
+
+def _unique_edge(
+    section: tuple[str, str], offset: int, page: str, *, from_the_end: bool, with_markers: bool
+) -> str | None:
+    text = section[1]
     lines = _raw_lines(text)
     ordered = list(reversed(lines)) if from_the_end else lines
     taken: list[str] = []
@@ -455,7 +469,8 @@ def _unique_edge(text: str, page: str, *, from_the_end: bool, with_markers: bool
             return None
         taken.append(line)
         edge = "".join(reversed(taken)) if from_the_end else "".join(taken)
-        if edge.strip() and page.count(edge) == 1:
+        at = offset + len(text) - len(edge) if from_the_end else offset
+        if edge.strip() and _found_once_at(page, edge, at):
             return edge
     return None
 
@@ -467,11 +482,13 @@ def _anchored_insertion(
     after = current[at] if at < len(current) else None
     for with_markers in (False, True):
         if before is not None:
-            tail = _unique_edge(before[1], page, from_the_end=True, with_markers=with_markers)
+            offset = _offset_of(current, at - 1)
+            tail = _unique_edge(before, offset, page, from_the_end=True, with_markers=with_markers)
             if tail is not None:
                 return Replacement(tail, joined([tail, inserted]), (before[0],))
         if after is not None:
-            head = _unique_edge(after[1], page, from_the_end=False, with_markers=with_markers)
+            offset = _offset_of(current, at)
+            head = _unique_edge(after, offset, page, from_the_end=False, with_markers=with_markers)
             if head is not None:
                 return Replacement(head, joined([inserted, head]), (after[0],))
         if after is None and stamp is not None:
@@ -493,7 +510,7 @@ def section_replacement(
             return anchored
     while True:
         old = joined(_texts(current[start:end_before]))
-        if old and page.count(old) == 1:
+        if old and _found_once_at(page, old, _offset_of(current, start)):
             return Replacement(old, joined(_texts(after[start:end_after])), _keys(current[start:end_before]))
         if start > 0:
             start -= 1

@@ -12,6 +12,7 @@ from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
 from skaldr.publish.notion.transport import NotionTransport
 from skaldr.publish.transport import (
     AddSection,
+    ContentWrite,
     FieldsWrite,
     NewItem,
     Release,
@@ -738,3 +739,36 @@ def test_a_property_named_title_is_a_field_and_never_replaces_the_title() -> Non
         "Garden handbook",
         {"title": "Lowercase"},
     )
+
+
+def test_a_section_write_to_a_page_edited_since_it_was_read_writes_nothing() -> None:
+    notion = _notion()
+    content = ItemContent(
+        title="Garden", sections={"intro": "## Welcome\n- Spade.\n", "tools": "## Tools\n- Spade.\n"}
+    )
+    transport, created = _created(notion, content)
+    notion.edit_by_hand(created.item_id, "## Welcome\n- Spade.\n", "## Welcome\n")
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=f"^Notion page {created.item_id} changed after skaldr read it, so nothing was written; publish "
+        "again$",
+    ):
+        transport.write_section(
+            created.item_id, SectionRequest(AddSection("care", "## Care\n", "tools"), created.raw_sections)
+        )
+    assert notion.writes() == []
+
+
+def test_a_content_write_keeps_the_child_pages_of_a_section_it_removes() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    child = f'<page url="https://www.notion.so/Seeds-{numbered_id(5).replace("-", "")}">Seeds</page>'
+    notion.edit_by_hand(created.item_id, "Welcome to the garden.", f"Welcome to the garden.\n{child}")
+    read = transport.read_item(created.item_id, created.comparable)
+
+    transport.write_content(
+        created.item_id, ContentWrite({"planting": "## Planting\nSow in May.\n"}, read.raw_sections)
+    )
+
+    assert notion.markdown_of(created.item_id) == f"{child}\n## Planting\nSow in May.\n{STAMP_LINE}"
