@@ -184,7 +184,8 @@ def _ignore_step(_target: str, _described: str) -> None:
 def apply_publish(
     prepared: Prepared, *, overwrite: bool = False, on_step: StepListener = _ignore_step
 ) -> ApplyOutcome:
-    with held_state_lock(prepared.state_path, prepared.document_path):
+    with held_state_lock(prepared.state_path, prepared.document_path, "publish --apply"):
+        prepared = prepare_publish(prepared.document_path, prepared.registry)
         loaded = prepared.state
         transports = Transports(prepared)
         preflight = _preflight(prepared, transports)
@@ -268,7 +269,8 @@ def _yaml_changes(prepared: Prepared) -> tuple[YamlChange, ...]:
 
 
 def diff_publish(prepared: Prepared) -> PublishDiff:
-    with held_state_lock(prepared.state_path, prepared.document_path):
+    with held_state_lock(prepared.state_path, prepared.document_path, "diff"):
+        prepared = prepare_publish(prepared.document_path, prepared.registry)
         loaded = prepared.state
         published = read_published(prepared, Transports(prepared))
         prepared = prepared.with_state(published.state)

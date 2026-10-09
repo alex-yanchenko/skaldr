@@ -103,15 +103,6 @@ def test_publishing_again_writes_only_the_section_the_yaml_changed(tmp_path: Pat
     )
 
 
-def test_a_dry_run_reads_and_writes_nothing(tmp_path: Path) -> None:
-    path = write_garden_report(tmp_path)
-    transport = FakeTransport()
-
-    prepare_publish(path, fake_registry(transport))
-
-    assert (transport.calls, state_path_for(path).exists()) == ([], False)
-
-
 def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(

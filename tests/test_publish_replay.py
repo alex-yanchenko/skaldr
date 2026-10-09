@@ -241,12 +241,12 @@ def test_a_publish_is_refused_while_another_holds_the_state_lock(tmp_path: Path)
     transport = FakeTransport()
     path = write_garden_report(tmp_path)
     expected = (
-        f"another skaldr publish of {path} is running and holds {state_path_for(path)}.lock; wait for it to "
-        "finish, then run this again"
+        f"`skaldr publish --apply` cannot run on {path}: another skaldr run holds "
+        f"{state_path_for(path)}.lock; wait for it to finish, then run this again"
     )
 
     with (
-        held_state_lock(state_path_for(path), path),
+        held_state_lock(state_path_for(path), path, "diff"),
         pytest.raises(PublishError, match=f"^{re.escape(expected)}$"),
     ):
         _publish(path, transport)

@@ -107,15 +107,15 @@ def refuse_an_unwritable_directory(path: Path) -> None:
 
 
 @contextmanager
-def held_state_lock(path: Path, document: Path) -> Generator[None, None, None]:
+def held_state_lock(path: Path, document: Path, command: str) -> Generator[None, None, None]:
     refuse_an_unwritable_directory(path)
     lock = FileLock(str(path) + LOCK_FILE_SUFFIX)
     try:
         lock.acquire(timeout=0)
     except Timeout as exc:
         raise PublishError(
-            f"another skaldr publish of {document} is running and holds {lock.lock_file}; wait for it to "
-            "finish, then run this again"
+            f"`skaldr {command}` cannot run on {document}: another skaldr run holds {lock.lock_file}; wait "
+            "for it to finish, then run this again"
         ) from exc
     try:
         yield
@@ -136,3 +136,12 @@ def save_state(path: Path, state: PublishState) -> None:
     except BaseException:
         Path(staged).unlink(missing_ok=True)
         raise
+    _sync_the_directory(path.parent)
+
+
+def _sync_the_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)

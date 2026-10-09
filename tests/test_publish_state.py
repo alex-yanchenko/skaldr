@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import stat
 from pathlib import Path
 
 import pytest
@@ -101,7 +102,7 @@ def test_saving_writes_a_synced_file_beside_the_state_and_then_replaces_the_stat
     real_fsync, real_replace = os.fsync, Path.replace
 
     def fsync(descriptor: int) -> None:
-        order.append("fsync")
+        order.append("fsync folder" if stat.S_ISDIR(os.fstat(descriptor).st_mode) else "fsync file")
         real_fsync(descriptor)
 
     def replace(staged: Path, target: Path) -> Path:
@@ -114,7 +115,7 @@ def test_saving_writes_a_synced_file_beside_the_state_and_then_replaces_the_stat
     save_state(path, _state())
 
     assert (order, load_state(path, DOC_ID), sorted(entry.name for entry in tmp_path.iterdir())) == (
-        ["fsync", "replace True True"],
+        ["fsync file", "replace True True", "fsync folder"],
         _state(),
         ["garden.skaldr-state.json"],
     )
@@ -142,13 +143,13 @@ def test_a_second_publish_of_the_same_document_is_refused_while_the_first_holds_
     path = tmp_path / "garden.skaldr-state.json"
     document = tmp_path / "garden.yaml"
     expected = (
-        f"another skaldr publish of {document} is running and holds {path}.lock; wait for it to finish, then "
-        "run this again"
+        f"`skaldr diff` cannot run on {document}: another skaldr run holds {path}.lock; wait for it to "
+        "finish, then run this again"
     )
 
     with (
-        held_state_lock(path, document),
+        held_state_lock(path, document, "publish --apply"),
         pytest.raises(PublishError, match=f"^{re.escape(expected)}$"),
-        held_state_lock(path, document),
+        held_state_lock(path, document, "diff"),
     ):
         pass
