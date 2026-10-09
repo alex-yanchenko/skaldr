@@ -1135,7 +1135,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names). Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1169,6 +1169,31 @@ case, where the page is shared as a URL an agent later has to read back.
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command, with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+
+## Exporting as ADF for Jira
+
+`skaldr report.yaml --export adf` writes the document as Atlassian Document Format, the JSON a Jira issue description takes, to `out/<name>.adf/page.adf.json` (or the folder `--export-dir` names). It lets you inspect what a Jira publish would send, and nothing is sent anywhere. Jira renders ADF panels, expands, task lists and status lozenges, which Markdown cannot carry, so Jira gets ADF built by skaldr rather than Markdown. Like the Notion export, the file holds the body only: the title is the issue's summary. The folder keeps its `.skaldr-export.json` list, with the same overwrite rules as the Markdown exports. `--chunk` does not apply.
+
+| Block | ADF |
+| --- | --- |
+| `heading` | a heading of the same level |
+| `text`, and prose in other blocks | a paragraph; a toned paragraph gets the tone's text colour |
+| a list | a bullet, ordered (with its start number) or task list, nested as written |
+| `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
+| `code` | a code block with its language; a `math` block is a code block in `latex` |
+| `quote` | a block quote, the citation in italics |
+| `divider` | a rule |
+| `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
+| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
+| `grid` | its cells one after another |
+| `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
+| `chart` | its data table |
+| badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
+| a table of contents | a bulleted list of the titles, without links |
+| `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
+| an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
+
+ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, and the nearest heading above it, for example `ADF cannot place a table inside a callout, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle`. Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
 ## What you never write
 
