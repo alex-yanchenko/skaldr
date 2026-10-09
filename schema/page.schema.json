@@ -2805,6 +2805,29 @@
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
           "title": "Hero",
           "type": "boolean"
+        },
+        "people": {
+          "description": "The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not listed here fails the build.",
+          "patternProperties": {
+            "^[A-Za-z0-9_-]+$": {
+              "$ref": "#/$defs/Person"
+            }
+          },
+          "title": "People",
+          "type": "object"
+        },
+        "jira_site": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The https:// address of your Jira site, such as https://example.atlassian.net. A `[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key is shown as text.",
+          "title": "Jira Site"
         }
       },
       "required": [
@@ -3256,6 +3279,40 @@
         "blocks"
       ],
       "title": "Panel",
+      "type": "object"
+    },
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "notion": {
+          "anyOf": [
+            {
+              "pattern": "^user://[0-9A-Fa-f-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Notion user id as a `user://` URI. The Notion Markdown export writes a `[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+          "title": "Notion"
+        },
+        "jira": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Jira account id, for the Jira writer. Not read when rendering.",
+          "title": "Jira"
+        }
+      },
+      "title": "Person",
       "type": "object"
     },
     "Publish": {

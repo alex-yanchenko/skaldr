@@ -1070,6 +1070,44 @@ def test_check_validates_through_an_include(tmp_path: Path, capsys: pytest.Captu
     assert "oops" in captured.err  # the fragment's bad field, not a generic splice failure
 
 
+def test_emit_json_dumps_the_people_and_the_jira_site(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    meta = {
+        "title": "T",
+        "jira_site": "https://example.atlassian.net",
+        "people": {"ada": {"jira": "5b10a2844c20165700ede21g"}},
+    }
+    data_path = _write(tmp_path, make_report(meta=meta))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    captured = capsys.readouterr()
+    emitted = json.loads(captured.out)["meta"]
+    assert (exit_code, emitted["jira_site"], emitted["people"]) == (
+        0,
+        "https://example.atlassian.net",
+        {"ada": {"notion": None, "jira": "5b10a2844c20165700ede21g"}},
+    )
+
+
+def test_check_fails_a_person_link_missing_from_the_people_map(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "[Ada](user:ada)"}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        (
+            "",
+            f"FAIL  {data_path}: blocks.0.body: rich text links to unknown person 'ada': "
+            "declare it under meta.people\n\n1 file failed\n",
+        ),
+    )
+
+
 def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "blocks.yaml").write_text("- type: text\n  body: from fragment\n", encoding="utf-8")
     main_path = tmp_path / "main.yaml"

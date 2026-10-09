@@ -12,6 +12,9 @@ meta:
   updated: "18 Jul 2026"
   toc: true
   hero: true
+  jira_site: "https://example.atlassian.net"
+  people:
+    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g" }
 
 badges:
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
@@ -60,6 +63,8 @@ blocks:
     body: "Every bin label now ends in a ++check digit++. The cold room logged H~2~O condensation on 3 of 10^2^ shelves, so its scans run twice; C++ tooling and ~2 days of rescans are out of scope."
   - type: text
     body: "Zone C is [behind schedule]{tone=danger}, its recount is [due Friday]{bg=warning}, and the [vendor lots]{tone=accent bg=sky} stay open until the supplier replies."
+  - type: text
+    body: "The recount runs [10 to 14 Jul](date:2026-07-10/2026-07-14), is led by [Ada Park](user:ada), is tracked as [WH-214](jira:WH-214) and follows [the cold room plan](doc:cold-room-plan#recount)."
 
   - type: heading
     level: 3
