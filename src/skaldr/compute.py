@@ -656,10 +656,8 @@ class LinkCard(NamedTuple):
 
 
 def link_card(block: Link) -> LinkCard:
-    parts = urlsplit(block.url)
-    host = parts.hostname or ""
     if block.title is not None:
-        return LinkCard(block.url, block.title, host, block.caption)
+        return LinkCard(block.url, block.title, urlsplit(block.url).hostname, block.caption)
     return LinkCard(block.url, block.url.split("://", 1)[1], None, block.caption)
 
 

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -212,6 +213,64 @@ def test_notion_markdown_writes_a_card_as_a_quote() -> None:
     assert notion_of([link_block(title="Runbook", caption="rev. 7")]) == (
         f"> **[Runbook]({RUNBOOK})**<br>*example.com · rev. 7*\n"
     )
+
+
+@pytest.mark.parametrize("url", ["HTTPS://example.com/a", " https://example.com/a"], ids=repr)
+def test_a_url_with_an_uppercase_scheme_or_a_leading_space_is_refused(url: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[link_block(url=url)]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.link: Value error, 'url' must be an http:// or https:// link"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://user:pw@example.com/a", "https://google.com@evil.com", "https://user@example.com"],
+    ids=str,
+)
+def test_a_url_holding_a_username_or_password_is_refused(url: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[link_block(url=url)]))
+
+    assert str(raised.value) == (
+        f"invalid content data: blocks.0.link: Value error, 'url' {url!r} is not a valid URL "
+        "(it holds a username or password)"
+    )
+
+
+GITHUB_ESCAPES = [
+    pytest.param("a]b", "a\\]b", id="bracket"),
+    pytest.param("a*b*", "a\\*b\\*", id="asterisk"),
+    pytest.param("a_b_", "a\\_b\\_", id="underscore"),
+    pytest.param("a<b", "a\\<b", id="angle"),
+    pytest.param("a|b", "a|b", id="pipe"),
+]
+NOTION_ESCAPES = [*GITHUB_ESCAPES[:4], pytest.param("a|b", "a\\|b", id="pipe")]
+
+
+@pytest.mark.parametrize(("text", "github"), GITHUB_ESCAPES)
+def test_github_markdown_escapes_a_title_and_caption(text: str, github: str) -> None:
+    assert markdown_of([link_block(title=text, caption=text)]) == (
+        f"> **[{github}]({RUNBOOK})**\n>\n> *example.com · {github}*\n"
+    )
+
+
+@pytest.mark.parametrize(("text", "notion"), NOTION_ESCAPES)
+def test_notion_markdown_escapes_a_title_and_caption(text: str, notion: str) -> None:
+    assert notion_of([link_block(title=text, caption=text)]) == (
+        f"> **[{notion}]({RUNBOOK})**<br>*example.com · {notion}*\n"
+    )
+
+
+@pytest.mark.parametrize("writer", [markdown_of, notion_of], ids=["github", "notion"])
+def test_a_url_holding_parentheses_is_percent_encoded_so_the_link_stays_whole(
+    writer: Callable[[list[dict[str, Any]]], str],
+) -> None:
+    written = writer([link_block(url="https://example.com/a(b)c)d", title="T")])
+
+    assert "[T](https://example.com/a%28b%29c%29d)" in written
 
 
 def test_notion_markdown_writes_an_embed_without_an_embed_tag() -> None:

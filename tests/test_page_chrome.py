@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -7,10 +8,10 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import BlockRegion, LoweredDocument, Paragraph
-from skaldr.models import Meta, parse_report
+from skaldr.models import Meta, load_report, parse_report
 from skaldr.render import render_embed, render_html
 from skaldr.richtext import Plain
-from tests.factories import make_report
+from tests.factories import make_report, write_index_document
 
 COVER = "https://example.com/cover.png"
 BEAKER_FAVICON = (
@@ -53,6 +54,47 @@ def test_a_cover_that_is_not_http_or_https_is_refused(cover: str) -> None:
     assert str(raised.value) == (
         "invalid content data: meta: Value error, 'cover' must be an http:// or https:// link"
     )
+
+
+@pytest.mark.parametrize("cover", ["HTTPS://example.com/a.png", " https://example.com/a.png"], ids=repr)
+def test_a_cover_with_an_uppercase_scheme_or_a_leading_space_is_refused(cover: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(report_with(cover=cover))
+
+    assert str(raised.value) == (
+        "invalid content data: meta: Value error, 'cover' must be an http:// or https:// link"
+    )
+
+
+@pytest.mark.parametrize(
+    "cover", ["https://user:pw@example.com/a.png", "https://google.com@evil.com"], ids=str
+)
+def test_a_cover_holding_a_username_or_password_is_refused(cover: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(report_with(cover=cover))
+
+    assert str(raised.value) == (
+        f"invalid content data: meta: Value error, 'cover' {cover!r} is not a valid URL "
+        "(it holds a username or password)"
+    )
+
+
+def test_an_ampersand_in_the_cover_is_escaped_in_the_href() -> None:
+    html = render_html(parse_report(report_with(cover="https://example.com/c.png?w=1&h=2")))
+
+    assert '<p class="cover"><a href="https://example.com/c.png?w=1&amp;h=2">Cover image</a></p>' in html
+
+
+def test_an_index_document_carries_its_icon_and_cover_into_the_lowered_document(tmp_path: Path) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": make_report(meta={"title": "Part one"})},
+        meta={"title": "Combined", "icon": "\U0001f9ea", "cover": COVER},
+    )
+
+    document = lower_report(load_report(index))
+
+    assert (document.title, document.icon, document.cover) == ("Combined", "\U0001f9ea", COVER)
 
 
 def test_a_malformed_cover_is_refused() -> None:

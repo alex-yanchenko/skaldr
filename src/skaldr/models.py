@@ -91,9 +91,14 @@ WEB_URL_SCHEMES = ("http://", "https://")
 def _require_web_url(url: str, subject: str) -> None:
     if not url.startswith(WEB_URL_SCHEMES):
         raise ValueError(f"{subject} must be an http:// or https:// link")
-    defect = _url_defect(url)
+    defect = _url_defect(url) or _userinfo_defect(url)
     if defect is not None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
+def _userinfo_defect(url: str) -> str | None:
+    parsed = _LINK_URL.validate_python(url)
+    return "it holds a username or password" if parsed.username or parsed.password else None
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
