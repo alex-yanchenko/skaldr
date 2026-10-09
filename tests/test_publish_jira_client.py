@@ -159,9 +159,8 @@ def test_a_changelog_page_that_returns_nothing_ends_the_read_even_when_it_claims
     assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == ([], 1)
 
 
-def test_a_changelog_page_that_does_not_move_on_ends_the_read() -> None:
+def test_a_changelog_page_that_does_not_start_where_it_was_asked_to_is_an_error() -> None:
     jira = _seeded()
-    jira.edit_by_hand("DEMO-1", summary="Garden guide")
     stuck: JsonValue = {
         "startAt": 0,
         "total": 9,
@@ -170,7 +169,15 @@ def test_a_changelog_page_that_does_not_move_on_ends_the_read() -> None:
     }
     jira.answer_next(Reply(200, stuck), Reply(200, stuck))
 
-    assert ([entry.id for entry in jira.client().changelog("DEMO-1")], len(jira.requests)) == (["10001"], 2)
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly(
+            "Jira answered GET /rest/api/3/issue/DEMO-1/changelog with a page starting at entry 0 when "
+            "skaldr asked for entry 1, so skaldr cannot read the issue's whole history"
+        ),
+    ):
+        jira.client().changelog("DEMO-1")
+    assert len(jira.requests) == 2
 
 
 def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:

@@ -159,7 +159,10 @@ class JiraClient:
             response = self._send("GET", path, key=key, params=params)
             page = self._parsed(ChangelogPage, response, path, "a page of the issue's changelog")
             if page.start_at != start:
-                return entries
+                raise ConnectorError(
+                    f"Jira answered GET {path} with a page starting at entry {page.start_at} when skaldr "
+                    f"asked for entry {start}, so skaldr cannot read the issue's whole history"
+                )
             entries += page.values
             ended = page.is_last or (page.total is not None and len(entries) >= page.total)
             if ended or not page.values:
