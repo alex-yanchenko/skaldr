@@ -17,7 +17,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import PageFetchError, ReportError, UnknownGuideTopicError
 from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
-from skaldr.guide_lookup import block_fields, block_names, describe_block, list_topics
+from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import (
@@ -32,7 +32,6 @@ from skaldr.render import (
 from skaldr.replace_file import replace_file, resolved_path
 from skaldr.version import skaldr_version
 
-WHOLE_GUIDE = ""
 _FETCH_TIMEOUT_SECONDS = 30
 _FETCH_LIMIT_BYTES = 16 * 1024 * 1024
 _FETCH_CHUNK_BYTES = 64 * 1024
@@ -77,13 +76,14 @@ def _flag_name(dest: str) -> str:
 
 
 def _return_a_swallowed_content_file(args: argparse.Namespace) -> None:
-    if args.guide not in (None, WHOLE_GUIDE) and Path(args.guide).is_file():
-        args.data = [args.guide, *args.data]
-        args.guide = WHOLE_GUIDE
+    value = args.guide
+    if isinstance(value, str) and Path(value).is_file() and not is_topic(value, _guide_source()):
+        args.data = [value, *args.data]
+        args.guide = True
 
 
 def _refuse_a_list_without_the_whole_guide(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
-    if args.list and args.guide != WHOLE_GUIDE:
+    if args.list and args.guide is not True:
         parser.error("--list lists the guide; use it as `--guide --list`")
 
 
@@ -248,10 +248,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--guide",
         nargs="?",
-        const=WHOLE_GUIDE,
-        metavar="BLOCK",
+        const=True,
+        metavar="NAME",
         help="print the authoring guide (blocks, rules, a complete example) and exit; give a block name "
-        "(`--guide request`) to print just that block's row, its guide section and its fields",
+        "(`--guide request`) to print just that block's row, its guide section and its fields, or a "
+        'section title (`--guide "rich text"`) to print just that section',
     )
     parser.add_argument(
         "--list",
@@ -655,12 +656,16 @@ def _check_files(paths: Sequence[str], *, strict: bool = False) -> int:
     return 1 if failed else 0
 
 
-def _guide_output(topic: str, list_topics_only: bool) -> str:
+def _guide_source() -> str:
+    return package_text("skill/GUIDE.md")
+
+
+def _guide_output(topic: str | Literal[True], list_topics_only: bool) -> str:
     if list_topics_only:
-        return list_topics(package_text("skill/GUIDE.md"), names=block_names())
-    if topic == WHOLE_GUIDE:
+        return list_topics(_guide_source())
+    if topic is True:
         return _guide_text()
-    return describe_block(topic, package_text("skill/GUIDE.md"), names=block_names(), fields_of=block_fields)
+    return lookup(topic, _guide_source())
 
 
 def _guide_text() -> str:
