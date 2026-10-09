@@ -396,12 +396,11 @@ class FakeTransport:
 
     def _remote(self, item_id: str) -> RemoteItem:
         item = self.items[item_id]
-        doc_id = None if item.stamp is None else item.stamp.doc_id
         return RemoteItem(
             item_id,
             item.content,
             dict(item.raw_sections),
-            doc_id,
+            item.stamp,
             str(item.revision),
             child_ids=item.children,
             set_properties=item.set_properties,

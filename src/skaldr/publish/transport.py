@@ -39,12 +39,16 @@ class RemoteItem:
     item_id: str
     comparable: ItemContent
     raw_sections: RawSections
-    doc_id: str | None
+    stamp: Stamp | None
     marker: str | None = None
     edited_by: str | None = None
     edited_at: str | None = None
     child_ids: tuple[str, ...] = ()
     set_properties: tuple[str, ...] = ()
+
+    @property
+    def doc_id(self) -> str | None:
+        return None if self.stamp is None else self.stamp.doc_id
 
 
 @dataclass(frozen=True)
