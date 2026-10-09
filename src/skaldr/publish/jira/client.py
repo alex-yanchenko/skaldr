@@ -96,6 +96,15 @@ def _attempts(count: int) -> str:
     return "1 attempt" if count == 1 else f"{count} attempts"
 
 
+def _when_to_try_again(response: httpx2.Response) -> str:
+    retry_after = _retry_after(response)
+    if retry_after is None:
+        return "wait a minute and publish again"
+    seconds = int(retry_after)
+    unit = "second" if seconds == 1 else "seconds"
+    return f"Jira asked to wait {seconds} {unit}, so publish again after that"
+
+
 class JiraClient:
     def __init__(
         self,
@@ -145,9 +154,12 @@ class JiraClient:
         path = issue_path(key, "changelog")
         entries: list[Changelog] = []
         while True:
-            params = {"startAt": len(entries), "maxResults": CHANGELOG_PAGE_SIZE}
+            start = len(entries)
+            params = {"startAt": start, "maxResults": CHANGELOG_PAGE_SIZE}
             response = self._send("GET", path, key=key, params=params)
             page = self._parsed(ChangelogPage, response, path, "a page of the issue's changelog")
+            if page.start_at != start:
+                return entries
             entries += page.values
             ended = page.is_last or (page.total is not None and len(entries) >= page.total)
             if ended or not page.values:
@@ -230,9 +242,10 @@ class JiraClient:
                 f"Jira has no issue {key} that this account can see (HTTP 404 to {where})"
             )
         if status == HTTPStatus.TOO_MANY_REQUESTS:
-            raise ConnectorError(
+            refused = ConnectorError if method in READ_METHODS else WriteRejectedError
+            raise refused(
                 f"Jira kept refusing {where} as too many requests (HTTP 429) after {_attempts(attempts)}; "
-                "wait a minute and publish again"
+                f"{_when_to_try_again(response)}"
             )
         if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
             raise ConnectorError(f"Jira answered HTTP {status} to {where}{explained}")

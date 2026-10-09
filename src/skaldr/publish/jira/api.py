@@ -8,12 +8,10 @@ class JiraModel(BaseModel):
 
 
 class CreatedIssue(JiraModel):
-    id: str
     key: str
 
 
 class Issue(JiraModel):
-    id: str
     key: str
     fields: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
@@ -65,7 +63,6 @@ class ChangelogPage(JiraModel):
 
 class Transition(JiraModel):
     id: str
-    name: str
     to: Status
 
 
@@ -80,4 +77,3 @@ class EntityProperty(JiraModel):
 
 class JiraUser(JiraModel):
     account_id: str = Field(alias="accountId")
-    display_name: str = Field(alias="displayName")

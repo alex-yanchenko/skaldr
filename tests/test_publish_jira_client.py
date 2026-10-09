@@ -54,7 +54,7 @@ def test_creating_an_issue_posts_its_fields_and_properties_with_basic_auth() -> 
     )
 
     assert (created, [summarise(request) for request in jira.requests]) == (
-        CreatedIssue(id="10001", key="DEMO-1"),
+        CreatedIssue(key="DEMO-1"),
         [
             _request(
                 "POST",
@@ -81,7 +81,7 @@ def test_reading_an_issue_asks_for_the_named_fields_only() -> None:
     issue = jira.client().get_issue("DEMO-1", ["summary", "labels"])
 
     assert (issue, [summarise(request) for request in jira.requests]) == (
-        Issue(id="10001", key="DEMO-1", fields={"summary": "Garden handbook", "labels": ["garden"]}),
+        Issue(key="DEMO-1", fields={"summary": "Garden handbook", "labels": ["garden"]}),
         [_request("GET", "/rest/api/3/issue/DEMO-1?fields=summary%2Clabels")],
     )
 
@@ -159,6 +159,20 @@ def test_a_changelog_page_that_returns_nothing_ends_the_read_even_when_it_claims
     assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == ([], 1)
 
 
+def test_a_changelog_page_that_does_not_move_on_ends_the_read() -> None:
+    jira = _seeded()
+    jira.edit_by_hand("DEMO-1", summary="Garden guide")
+    stuck: JsonValue = {
+        "startAt": 0,
+        "total": 9,
+        "isLast": False,
+        "values": [{"id": "10001", "items": [{"field": "summary", "fieldId": "summary"}]}],
+    }
+    jira.answer_next(Reply(200, stuck), Reply(200, stuck))
+
+    assert ([entry.id for entry in jira.client().changelog("DEMO-1")], len(jira.requests)) == (["10001"], 2)
+
+
 def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:
     jira = _seeded()
     client = jira.client()
@@ -190,7 +204,7 @@ def test_transitions_are_listed_and_one_is_taken() -> None:
     done = Status(name="Done", statusCategory=StatusCategory(key="done"))
     status = jira.issues["DEMO-1"].fields["status"]
     assert (offered[1], done.is_done, status, summarise(jira.requests[1])) == (
-        Transition(id=CLOSE, name="Close", to=done),
+        Transition(id=CLOSE, to=done),
         True,
         {"name": "Done", "statusCategory": {"key": "done"}},
         _request("POST", "/rest/api/3/issue/DEMO-1/transitions", {"transition": {"id": CLOSE}}),
@@ -212,7 +226,7 @@ def test_myself_names_the_signed_in_account() -> None:
     jira = FakeJira()
 
     assert (jira.client().myself(), jira.calls()) == (
-        JiraUser(accountId="account-writer", displayName="Example Reader"),
+        JiraUser(accountId="account-writer"),
         [("GET", "/rest/api/3/myself")],
     )
 
@@ -263,18 +277,19 @@ def test_after_four_rate_limited_attempts_the_request_fails_naming_the_limit() -
     jira = _seeded()
     jira.answer_next(*[Reply(429)] * 4)
 
-    with pytest.raises(
-        ConnectorError,
-        match=_exactly(
-            "Jira kept refusing GET /rest/api/3/issue/DEMO-1 as too many requests (HTTP 429) after 4 "
-            "attempts; wait a minute and publish again"
-        ),
-    ):
+    with pytest.raises(ConnectorError) as raised:
         jira.client().get_issue("DEMO-1", ["summary"])
-    assert (jira.sleeps, len(jira.requests)) == ([2.0, 4.0, 8.0], 4)
+
+    assert (type(raised.value), str(raised.value), jira.sleeps, len(jira.requests)) == (
+        ConnectorError,
+        "Jira kept refusing GET /rest/api/3/issue/DEMO-1 as too many requests (HTTP 429) after 4 attempts; "
+        "wait a minute and publish again",
+        [2.0, 4.0, 8.0],
+        4,
+    )
 
 
-def test_a_retry_after_longer_than_a_minute_is_not_waited_for() -> None:
+def test_a_retry_after_longer_than_a_minute_is_not_waited_for_and_is_quoted() -> None:
     jira = _seeded()
     jira.answer_next(Reply(429, {}, {"Retry-After": "3600"}))
 
@@ -282,11 +297,31 @@ def test_a_retry_after_longer_than_a_minute_is_not_waited_for() -> None:
         ConnectorError,
         match=_exactly(
             "Jira kept refusing GET /rest/api/3/issue/DEMO-1 as too many requests (HTTP 429) after 1 "
-            "attempt; wait a minute and publish again"
+            "attempt; Jira asked to wait 3600 seconds, so publish again after that"
         ),
     ):
         jira.client().get_issue("DEMO-1", ["summary"])
     assert (jira.sleeps, len(jira.requests)) == ([], 1)
+
+
+@pytest.mark.parametrize("call", ["create", "edit"])
+def test_a_write_still_rate_limited_after_four_attempts_is_a_rejected_write(call: str) -> None:
+    jira = _seeded()
+    jira.answer_next(*[Reply(429, {}, {"Retry-After": "1"})] * 4)
+    client = jira.client()
+
+    with pytest.raises(WriteRejectedError) as raised:
+        if call == "create":
+            client.create_issue({"summary": "Garden guide"}, [])
+        else:
+            client.edit_issue("DEMO-1", {"summary": "Garden guide"})
+
+    method, path = ("POST", "/rest/api/3/issue") if call == "create" else ("PUT", "/rest/api/3/issue/DEMO-1")
+    assert (str(raised.value), jira.sleeps) == (
+        f"Jira kept refusing {method} {path} as too many requests (HTTP 429) after 4 attempts; Jira asked "
+        "to wait 1 second, so publish again after that",
+        [1.0, 1.0, 1.0],
+    )
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
@@ -426,7 +461,7 @@ def test_a_rejected_sign_in_says_to_sign_in_again(method: str, raised_type: type
 
 def test_an_answer_skaldr_cannot_read_is_a_connector_error() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(200, {"key": "DEMO-1"}))
+    jira.answer_next(Reply(200, {"id": "10001"}))
 
     with pytest.raises(
         ConnectorError,
