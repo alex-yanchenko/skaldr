@@ -148,6 +148,7 @@ class FakeTransport:
     _landing_one_section_of: int | None = None
     _landing_part_of_release: int | None = None
     _creating_into_without_a_stamp: bool = False
+    _editing_during_write: tuple[str, str, str] | None = None
 
     def land_part_of_the_next_release(self, after_writes: int = 0) -> None:
         self._landing_part_of_release = self._writes + after_writes + 1
@@ -382,7 +383,15 @@ class FakeTransport:
         if self._writes == self._dropping_after_write:
             raise ConnectorError(DROPPED_AFTER_WRITE)
 
+    def edit_by_hand_during_the_next_write(self, item_id: str, key: str, text: str) -> None:
+        self._editing_during_write = (item_id, key, text)
+
     def _after_write(self, item_id: str) -> RemoteItem:
+        if self._editing_during_write is not None:
+            edited_id, key, text = self._editing_during_write
+            self._editing_during_write = None
+            self.edit_section_by_hand(edited_id, key, text)
+            self.items[item_id].revision = self._bump()
         self._drop_the_connection_if_asked()
         return self._remote(item_id)
 
