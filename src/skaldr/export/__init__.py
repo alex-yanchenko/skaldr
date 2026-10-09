@@ -8,6 +8,7 @@ from pydantic import StringConstraints, ValidationError
 
 from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
+from skaldr.export.budget import character_budget
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
@@ -129,7 +130,7 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
     page_width = report.meta.notion_width
     if chunk is None:
         return _export_pages(out_dir, document.title, {"page.md": render_notion(document.body, page_width)})
-    split = chunk_notion(document.body, chunk, page_width)
+    split = chunk_notion(document.body, character_budget(chunk), page_width)
     return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
 
 

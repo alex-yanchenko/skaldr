@@ -2,13 +2,14 @@ import json
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, get_args
 
 import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.apportion import apportioned
+from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
@@ -45,6 +46,7 @@ from skaldr.export.tree import (
 from skaldr.models import (
     AnyBlock,
     BadgeColorLiteral,
+    NotionWidth,
     Report,
     load_report,
     parse_report,
@@ -76,6 +78,7 @@ from tests.factories import (
     make_table,
     make_toggle,
     notion_of,
+    rendered_block_count,
 )
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
@@ -97,6 +100,10 @@ NOTION_CHIP_COLOR: dict[str, str] = {
 
 def _section_text(title: str, body: str, rows: int) -> str:
     return f"## {title}\n```plain text\n" + f"{body}\n" * rows + "```\n"
+
+
+def _chunked(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "normal") -> NotionChunks:
+    return chunk_notion(nodes, character_budget(limit), page_width)
 
 
 @pytest.mark.parametrize(
@@ -1165,7 +1172,7 @@ def test_a_panel_inside_a_section_becomes_a_callout_inside_the_toggle_heading() 
 
 
 def test_chunks_split_only_at_a_top_level_heading_and_stay_under_the_limit() -> None:
-    assert chunk_notion(lowered(heading_sections(4, "x = 1\n" * 20)), 400) == NotionChunks(
+    assert _chunked(lowered(heading_sections(4, "x = 1\n" * 20)), 400) == NotionChunks(
         (
             _section_text("Part 0", "x = 1", 20) + _section_text("Part 1", "x = 1", 20),
             _section_text("Part 2", "x = 1", 20) + _section_text("Part 3", "x = 1", 20),
@@ -1181,19 +1188,19 @@ def test_a_collapsed_section_starts_a_chunk_and_a_level_three_heading_does_not()
         {"type": "section", "title": "Shut", "blocks": [{"type": "text", "body": "x"}]},
     ]
 
-    assert chunk_notion(lowered(blocks), 30) == NotionChunks(
+    assert _chunked(lowered(blocks), 30) == NotionChunks(
         ("## Open\n### Inner\n", '## Shut {toggle="true"}\n\tx\n'), ()
     )
 
 
 def test_a_section_exactly_at_the_limit_fits_one_chunk() -> None:
-    assert chunk_notion(lowered([{"type": "heading", "text": "A"}]), len("## A\n")) == NotionChunks(
+    assert _chunked(lowered([{"type": "heading", "text": "A"}]), len("## A\n")) == NotionChunks(
         ("## A\n",), ()
     )
 
 
 def test_a_section_longer_than_the_chunk_stays_whole_and_is_reported_by_its_heading() -> None:
-    assert chunk_notion(lowered(heading_sections(2, "y = 2\n" * 40)), 100) == NotionChunks(
+    assert _chunked(lowered(heading_sections(2, "y = 2\n" * 40)), 100) == NotionChunks(
         (_section_text("Part 0", "y = 2", 40), _section_text("Part 1", "y = 2", 40)),
         ("## Part 0", "## Part 1"),
     )
@@ -1202,7 +1209,7 @@ def test_a_section_longer_than_the_chunk_stays_whole_and_is_reported_by_its_head
 def test_an_oversized_opening_before_the_first_heading_is_named_as_the_opening_section() -> None:
     nodes = (Paragraph((Plain("x" * 50),)), Heading(2, (Plain("A"),)))
 
-    assert chunk_notion(nodes, 20) == NotionChunks(
+    assert _chunked(nodes, 20) == NotionChunks(
         ("x" * 50 + "\n", "## A\n"), ("the opening section, before the first level 1 or 2 heading",)
     )
 
@@ -1210,13 +1217,36 @@ def test_an_oversized_opening_before_the_first_heading_is_named_as_the_opening_s
 def test_an_oversized_section_is_named_by_its_heading_text_not_its_markup() -> None:
     nodes = (Toggle((Plain("Q3 [draft]"),), 2, (Paragraph((Plain("y" * 50),)),)),)
 
-    assert chunk_notion(nodes, 20).oversized_sections == ("## Q3 [draft]",)
+    assert _chunked(nodes, 20).oversized_sections == ("## Q3 [draft]",)
 
 
 def test_two_sections_that_exactly_fill_the_limit_share_one_chunk() -> None:
     nodes = (Heading(2, (Plain("A"),)), Heading(2, (Plain("B"),)))
 
-    assert chunk_notion(nodes, len("## A\n## B\n")) == NotionChunks(("## A\n## B\n",), ())
+    assert _chunked(nodes, len("## A\n## B\n")) == NotionChunks(("## A\n## B\n",), ())
+
+
+def _characters_and_blocks(most_blocks: int) -> Budget:
+    return Budget(
+        (Limit(characters, CHUNK_THAT_HOLDS_THE_WHOLE_PAGE), Limit(rendered_block_count, most_blocks))
+    )
+
+
+def test_a_block_limit_groups_sections_where_a_character_limit_would_not() -> None:
+    assert chunk_notion(lowered(heading_sections(4, "x = 1\n")), _characters_and_blocks(4)) == NotionChunks(
+        (
+            _section_text("Part 0", "x = 1", 1) + _section_text("Part 1", "x = 1", 1),
+            _section_text("Part 2", "x = 1", 1) + _section_text("Part 3", "x = 1", 1),
+        ),
+        (),
+    )
+
+
+def test_a_section_over_the_block_limit_alone_is_reported_though_its_characters_fit() -> None:
+    assert chunk_notion(lowered(heading_sections(2, "x = 1\n")), _characters_and_blocks(1)) == NotionChunks(
+        (_section_text("Part 0", "x = 1", 1), _section_text("Part 1", "x = 1", 1)),
+        ("## Part 0", "## Part 1"),
+    )
 
 
 def test_an_empty_paragraph_writes_no_line() -> None:
@@ -1329,7 +1359,7 @@ SECTIONS_WITH_LISTS = (
     "limit", [pytest.param(limit, id=f"limit-{limit}") for limit in (1, 20, 400, 100000)]
 )
 def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: int) -> None:
-    assert "".join(chunk_notion(nodes, limit).chunks) == render_notion(nodes)
+    assert "".join(_chunked(nodes, limit).chunks) == render_notion(nodes)
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
@@ -1905,23 +1935,26 @@ def _long_table(rows: int) -> TableNode:
     )
 
 
-def _row_names(chunk: str) -> list[str]:
-    return re.findall(r"<td>(row \d+)</td>", chunk)
+def test_a_table_longer_than_the_chunk_stays_one_table_with_its_heading_and_is_reported() -> None:
+    nodes = [Heading(2, (Plain("Big"),)), _long_table(12)]
+
+    assert _chunked(nodes, 400) == NotionChunks((render_notion(nodes),), ("## Big",))
 
 
-def test_a_table_longer_than_the_chunk_splits_into_tables_that_repeat_the_header() -> None:
-    split = chunk_notion([Heading(2, (Plain("Big"),)), _long_table(12)], 400)
-
-    assert split.oversized_sections == ()
-    assert all(len(chunk) <= 400 for chunk in split.chunks)
-    assert all(chunk.count("<td>**Name**</td>") == 1 for chunk in split.chunks)
-    assert [name for chunk in split.chunks for name in _row_names(chunk)] == [
-        f"row {index}" for index in range(12)
+def test_a_long_table_mid_section_gets_a_chunk_of_its_own_and_stays_one_table() -> None:
+    nodes = [
+        Heading(2, (Plain("Big"),)),
+        Paragraph((Plain("before"),)),
+        _long_table(12),
+        Paragraph((Plain("after"),)),
     ]
-    assert split.chunks[0].startswith("## Big\n<table")
+
+    assert _chunked(nodes, 400) == NotionChunks(
+        (render_notion(nodes[:2]), render_notion(nodes[2:3]), render_notion(nodes[3:])), ("## Big",)
+    )
 
 
-def test_the_parts_of_a_split_full_width_table_keep_one_set_of_column_widths() -> None:
+def test_a_long_full_width_table_stays_whole_with_the_widths_of_the_unchunked_page() -> None:
     table = TableNode(
         (TableCell((Plain("Name"),)), TableCell((Plain("Note"),))),
         tuple(
@@ -1932,79 +1965,15 @@ def test_the_parts_of_a_split_full_width_table_keep_one_set_of_column_widths() -
         ),
     )
 
-    split = chunk_notion([table], 400, page_width="full")
-
-    widths = [tuple(re.findall(r'<col width="(\d+)">', chunk)) for chunk in split.chunks]
-    assert "n" * 80 not in split.chunks[0]
-    assert widths == [("141", "1059")] * len(split.chunks)
-
-
-def _table_with(rows: tuple[TableRow, ...]) -> TableNode:
-    return TableNode((TableCell((Plain("Name"),)), TableCell((Plain("Note"),))), rows)
-
-
-def _row(name: str, emphasis: Literal["group", "total"] | None = None) -> TableRow:
-    return TableRow((TableCell((Plain(name),)), TableCell((Plain("n" * 30),))), emphasis=emphasis)
-
-
-def _part_rows(chunk: str) -> list[str]:
-    return re.findall(r"<td>(?:\*\*)?([ab] \d|group|total)(?:\*\*)?</td>", chunk)
-
-
-GROUP = _row("group", "group")
-TOTAL = _row("total", "total")
-
-
-@pytest.mark.parametrize(
-    ("rows", "fitting", "parts"),
-    [
-        pytest.param(
-            (_row("a 0"), _row("a 1"), GROUP, _row("b 0"), _row("b 1")),
-            3,
-            [["a 0", "a 1"], ["group", "b 0", "b 1"]],
-            id="a-group-row-moves-to-the-next-part",
-        ),
-        pytest.param(
-            (_row("a 0"), GROUP, GROUP, _row("b 0")),
-            3,
-            [["a 0"], ["group", "group", "b 0"]],
-            id="consecutive-group-rows-move-together",
-        ),
-        pytest.param(
-            (_row("a 0"), _row("a 1"), _row("a 2"), _row("a 3"), TOTAL),
-            4,
-            [["a 0", "a 1", "a 2"], ["a 3", "total"]],
-            id="a-total-row-keeps-the-row-before-it",
-        ),
-        pytest.param(
-            (_row("a 0"), _row("a 1"), GROUP, _row("b 0"), TOTAL),
-            4,
-            [["a 0", "a 1"], ["group", "b 0", "total"]],
-            id="a-total-row-keeps-its-row-and-that-row-its-group",
-        ),
-        pytest.param(
-            (_row("a 0"), _row("a 1"), _row("a 2"), TOTAL, TOTAL),
-            4,
-            [["a 0", "a 1"], ["a 2", "total", "total"]],
-            id="consecutive-total-rows-keep-the-row-before-them",
-        ),
-    ],
-)
-def test_a_split_table_keeps_group_and_total_rows_with_their_rows(
-    rows: tuple[TableRow, ...], fitting: int, parts: list[list[str]]
-) -> None:
-    limit = len(render_notion([_table_with(rows[:fitting])]))
-
-    split = chunk_notion([_table_with(rows)], limit)
-
-    assert [_part_rows(chunk) for chunk in split.chunks] == parts
-    assert split.oversized_sections == ()
+    assert _chunked([table], 400, page_width="full") == NotionChunks(
+        (render_notion([table], "full"),), ("the opening section, before the first level 1 or 2 heading",)
+    )
 
 
 def test_a_table_with_no_rows_longer_than_the_chunk_stays_and_is_reported() -> None:
     table = TableNode((TableCell((Plain("H" * 100),)),), ())
 
-    split = chunk_notion([Heading(2, (Plain("S"),)), table], 50)
+    split = _chunked([Heading(2, (Plain("S"),)), table], 50)
 
     assert split == NotionChunks((render_notion([Heading(2, (Plain("S"),)), table]),), ("## S",))
 
@@ -2014,7 +1983,7 @@ def test_a_collapsed_toggle_heading_is_a_block_and_does_not_move_with_the_next_o
     nodes = [Heading(2, (Plain("S"),)), toggle, Paragraph((Plain("p" * 40),))]
     first = render_notion(nodes[:2])
 
-    split = chunk_notion(nodes, len(first) + 10)
+    split = _chunked(nodes, len(first) + 10)
 
     assert split.chunks == (first, render_notion(nodes[2:]))
 
@@ -2028,7 +1997,7 @@ def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() 
         Paragraph((Plain("b" * 60),)),
     ]
 
-    split = chunk_notion(nodes, 80)
+    split = _chunked(nodes, 80)
 
     assert split == NotionChunks(("## S\n" + "a" * 30 + "\n", "### H3\n#### H4\n" + "b" * 60 + "\n"), ())
 
@@ -2037,19 +2006,13 @@ def test_blocks_that_fill_the_chunk_exactly_stay_together() -> None:
     nodes = [Heading(2, (Plain("S"),)), Paragraph((Plain("a" * 10),)), Paragraph((Plain("b" * 10),))]
     page = render_notion(nodes)
 
-    assert chunk_notion([*nodes, Paragraph((Plain("c" * 10),))], len(page)).chunks[0] == page
-
-
-def test_a_table_row_longer_than_the_chunk_stays_whole_and_its_section_is_named() -> None:
-    table = _table_with((_row("a 0"), TableRow((TableCell((Plain("x" * 200),)), TableCell(())))))
-
-    assert chunk_notion([Heading(2, (Plain("T"),)), table], 150).oversized_sections == ("## T",)
+    assert _chunked([*nodes, Paragraph((Plain("c" * 10),))], len(page)).chunks[0] == page
 
 
 def test_a_long_section_splits_between_blocks_and_keeps_a_heading_with_the_block_after_it() -> None:
     paragraphs = [Paragraph((Plain(f"paragraph {index} " + "p" * 40),)) for index in range(3)]
 
-    split = chunk_notion([Heading(2, (Plain("Notes"),)), *paragraphs], 100)
+    split = _chunked([Heading(2, (Plain("Notes"),)), *paragraphs], 100)
 
     assert split == NotionChunks(
         (
