@@ -2026,6 +2026,14 @@ class RequestCase(FrozenModel):
         description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
         "which is what you want when the cases are resource names.",
     )
+    values: Annotated[dict[str, NonBlank], Field(min_length=1)] | None = Field(
+        default=None,
+        description="What this case supplies for several of the block's declared `variables` at once, "
+        "as a map of variable name to value. Each name must be a declared variable. Use it when cases "
+        "differ by more than one value, so a shared `command` or built call is written once. A declared "
+        "variable the case leaves out stays a field the reader fills on this case's tab. Cannot be "
+        "combined with `value`, or on a request that declares a `case_variable`.",
+    )
     headers: dict[str, str] | None = Field(
         default=None,
         description="Replace the request's headers for this case alone. Omit to inherit them; give an "
@@ -2176,19 +2184,70 @@ class _RequestCore(FrozenModel):
                 f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
                 f"{len(self.cases)}; split it into blocks a reader can take in"
             )
-        if self.case_variable is None:
-            for case in self.cases:
-                if case.value is not None:
-                    raise ValueError(
-                        f"case '{case.label}' sets a value but the request declares no case_variable, "
-                        "so there is nothing for it to fill"
-                    )
+        for case in self.cases:
+            self._check_how_the_case_fills_its_values(case)
         check_header_map(self.headers, "request header")
         if self.command is None:
             self._check_composed_call()
         else:
             self._check_command_call()
         return self
+
+    def _check_how_the_case_fills_its_values(self, case: RequestCase) -> None:
+        if case.value is not None and case.values is not None:
+            raise ValueError(
+                f"case '{case.label}' sets value and values together: value fills the case_variable and "
+                "values fills declared variables, so give the case one of them"
+            )
+        if case.values is not None and self.case_variable is not None:
+            raise ValueError(
+                f"case '{case.label}' sets values on a request that declares case_variable "
+                f"`{self.case_variable}`: values and case_variable are two ways to fill a case, so use one"
+            )
+        if case.value is not None and self.case_variable is None:
+            raise ValueError(
+                f"case '{case.label}' sets a value but the request declares no case_variable, "
+                "so there is nothing for it to fill"
+            )
+
+    def referenced_by_case(self, case: RequestCase) -> set[str]:
+        headers = case.headers if case.headers is not None else self.headers
+        scan = " ".join(
+            (
+                self.url or "",
+                case.command or self.command or "",
+                *headers.values(),
+                *(case.headers_add or {}).values(),
+                self.body or "",
+            )
+        )
+        return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
+
+    def check_values_keys(self, variables: Sequence[RequestVariable], owner: str) -> None:
+        known = {variable.name: variable for variable in variables}
+        for case in self.cases:
+            used = self.referenced_by_case(case)
+            for name in case.values or {}:
+                if name not in known:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but the {owner} declares no "
+                        f"variable named `{name}`"
+                    )
+                if known[name].secret:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but `{name}` is a secret "
+                        "variable the reader supplies"
+                    )
+                if name not in used:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but nothing it sends uses "
+                        f"`{{{{{name}}}}}`"
+                    )
+
+    def case_bindings(self, case: RequestCase) -> dict[str, str]:
+        if self.case_variable is not None:
+            return {self.case_variable: case.value or case.label}
+        return dict(case.values or {})
 
     def _check_composed_call(self) -> None:
         if self.method is None or self.url is None:
@@ -2265,6 +2324,7 @@ class Request(_RequestCore, _VariableOwner, _Block):
                 f"`{self.case_variable}` is both the case_variable and a declared variable: each case "
                 "supplies it, so it must not also be a field the reader fills"
             )
+        self.check_values_keys(self.variables, "request")
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
@@ -2363,6 +2423,8 @@ class RequestFlow(_VariableOwner, _Block):
         repeated = {name for name in declared if declared.count(name) > 1}
         if repeated:
             raise ValueError(f"flow declares a variable twice: {', '.join(sorted(repeated))}")
+        for step in self.steps:
+            step.check_values_keys(self.variables, "flow")
         captured = [capture.name for step in self.steps for capture in step.captures]
         clashing = {name for name in captured if name in declared}
         if clashing:

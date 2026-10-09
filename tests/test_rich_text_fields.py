@@ -95,6 +95,7 @@ PLAIN_TEXT_FIELDS = frozenset(
         "RequestCapture.json_path",
         "RequestCase.label",
         "RequestCase.value",
+        "RequestCase.values",
         "RequestCase.headers",
         "RequestCase.headers_add",
         "RequestCase.command",
