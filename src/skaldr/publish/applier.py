@@ -119,7 +119,7 @@ class Applier:
         self, target_plan: TargetPlan, ref: ItemRef, rendered: ItemContent, remote: RemoteItem
     ) -> PublishState:
         item = self._item(ref)
-        owned = [*rendered.fields, *item.remote.fields]
+        owned = list(rendered.fields)
         remote = replace(remote, comparable=with_fields_named(remote.comparable, owned))
         self.remote[ref] = remote
         written = item.model_copy(
@@ -197,7 +197,7 @@ class Applier:
             step.content.title,
             step.content.fields,
             now.title,
-            with_fields_named(now, item.rendered.fields).fields,
+            with_fields_named(now, [*item.rendered.fields, *step.content.fields]).fields,
             Stamp(self.prepared.doc_id, step.item.section_id),
         )
         rendered = item.rendered.model_copy(

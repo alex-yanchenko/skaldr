@@ -3,7 +3,25 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
-from skaldr.publish.content import ItemContent, Part, comparable
+from skaldr.publish.content import ItemContent, Part, is_unset, same_value
+
+__all__ = [
+    "NO_SECTIONS",
+    "AddSection",
+    "ContentWrite",
+    "FieldsWrite",
+    "NewItem",
+    "RawSections",
+    "Release",
+    "RemoteItem",
+    "RemoveSection",
+    "ReplaceSection",
+    "SectionRequest",
+    "SectionWrite",
+    "Stamp",
+    "Transport",
+    "is_unset",
+]
 from skaldr.publish_block.target import JsonFields, TargetBase
 
 RawSections = Mapping[str, str]
@@ -26,6 +44,7 @@ class RemoteItem:
     edited_by: str | None = None
     edited_at: str | None = None
     child_ids: tuple[str, ...] = ()
+    set_properties: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -99,12 +118,16 @@ class FieldsWrite:
         return {
             name: value
             for name, value in self.fields.items()
-            if name not in self.previous_fields or comparable(self.previous_fields[name]) != comparable(value)
+            if not same_value(self.previous_fields.get(name), value)
         }
 
     @property
     def cleared_fields(self) -> tuple[str, ...]:
-        return tuple(name for name in self.previous_fields if name not in self.fields)
+        return tuple(
+            name
+            for name, value in self.previous_fields.items()
+            if name not in self.fields and not is_unset(value)
+        )
 
     @property
     def changes_the_title(self) -> bool:

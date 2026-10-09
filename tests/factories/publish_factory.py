@@ -22,6 +22,7 @@ from skaldr.publish.transport import (
     RemoveSection,
     SectionRequest,
     Stamp,
+    is_unset,
 )
 from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
 from skaldr.publish_block.target import JsonFields
@@ -106,6 +107,13 @@ class FakeItem:
     revision: int
     archived: bool = False
     children: tuple[str, ...] = ()
+    reported_set_properties: tuple[str, ...] | None = None
+
+    @property
+    def set_properties(self) -> tuple[str, ...]:
+        if self.reported_set_properties is not None:
+            return self.reported_set_properties
+        return tuple(name for name, value in self.fields.items() if not is_unset(value))
 
     @property
     def content(self) -> ItemContent:
@@ -125,6 +133,8 @@ class HandEdit:
 class FakeTransport:
     reads_list_fields_reversed: bool = False
     strips_trailing_whitespace: bool = False
+    reads_cleared_fields_as_null: bool = False
+    drops_unset_fields: bool = False
     service_fields: JsonFields = field(default_factory=JsonFields)
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
@@ -154,11 +164,19 @@ class FakeTransport:
         *,
         children: tuple[str, ...] = (),
         fields: JsonFields | None = None,
+        set_properties: tuple[str, ...] | None = None,
     ) -> None:
         stamp = None if doc_id is None else Stamp(doc_id, None)
         self._items_made += 1
         self.items[item_id] = FakeItem(
-            title, dict(sections or {}), dict(fields or {}), stamp, None, self._bump(), children=children
+            title,
+            dict(sections or {}),
+            dict(fields or {}),
+            stamp,
+            None,
+            self._bump(),
+            children=children,
+            reported_set_properties=set_properties,
         )
 
     def fail_on_write(self, count_from_now: int) -> None:
@@ -243,7 +261,7 @@ class FakeTransport:
             existing = self.items[request.into_id]
             existing.title = content.title
             existing.raw_sections = dict(content.sections)
-            existing.fields = {**existing.fields, **content.fields}
+            existing.fields = self._kept_fields({**existing.fields, **content.fields})
             existing.revision = self._bump()
             if self._creating_into_without_a_stamp:
                 raise ConnectorError(DROPPED_AFTER_WRITE)
@@ -253,7 +271,7 @@ class FakeTransport:
         self.items[item_id] = FakeItem(
             content.title,
             dict(content.sections),
-            {**self.service_fields, **content.fields},
+            self._kept_fields({**self.service_fields, **content.fields}),
             request.stamp,
             request.parent_id,
             self._bump(),
@@ -300,8 +318,11 @@ class FakeTransport:
         item = self.items[item_id]
         if item.stamp is None or item.stamp.doc_id != request.stamp.doc_id:
             raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
+        nulled: JsonFields = (
+            dict.fromkeys(request.cleared_fields) if self.reads_cleared_fields_as_null else {}
+        )
         kept = {name: value for name, value in item.fields.items() if name not in request.cleared_fields}
-        item.fields = {**kept, **request.changed_fields}
+        item.fields = self._kept_fields({**kept, **nulled, **request.changed_fields})
         item.title = request.title
         item.revision = self._bump()
         return self._after_write(item_id)
@@ -339,6 +360,11 @@ class FakeTransport:
 
     def _stored(self, text: str) -> str:
         return text.rstrip() if self.strips_trailing_whitespace else text
+
+    def _kept_fields(self, fields: JsonFields) -> JsonFields:
+        if not self.drops_unset_fields:
+            return fields
+        return {name: value for name, value in fields.items() if not is_unset(value)}
 
     def _refuse_a_stale_layout(self, item_id: str, raw_sections: RawSections) -> None:
         if list(raw_sections.items()) != list(self.items[item_id].raw_sections.items()):
@@ -378,6 +404,7 @@ class FakeTransport:
             doc_id,
             str(item.revision),
             child_ids=item.children,
+            set_properties=item.set_properties,
         )
 
 

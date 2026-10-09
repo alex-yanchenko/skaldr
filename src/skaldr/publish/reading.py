@@ -3,7 +3,6 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
-from pydantic import JsonValue
 from typing_extensions import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError
@@ -14,6 +13,7 @@ from skaldr.publish.content import (
     differing_parts,
     placed_section,
     same_fields,
+    set_fields,
     with_fields_named,
 )
 from skaldr.publish.drafts import ItemDraft
@@ -54,7 +54,7 @@ def part_text(content: ItemContent | None, part: Part) -> str | None:
         case "title":
             return content.title + "\n"
         case "fields":
-            return json.dumps(comparable(dict(content.fields)), indent=2, ensure_ascii=False) + "\n"
+            return json.dumps(comparable(set_fields(content.fields)), indent=2, ensure_ascii=False) + "\n"
         case "section":
             return content.sections.get(part.key)
         case _:
@@ -82,15 +82,11 @@ def missing_message(missing: MissingItem, service: Service) -> str:
     )
 
 
-def _is_set(value: JsonValue) -> bool:
-    return value not in (None, "", [], {})
-
-
 def _has_content(remote: RemoteItem) -> bool:
     return (
         any(text.strip() for text in remote.comparable.sections.values())
         or bool(remote.child_ids)
-        or any(_is_set(value) for value in remote.comparable.fields.values())
+        or bool(remote.set_properties)
     )
 
 
@@ -150,7 +146,7 @@ def _settled(
 
 
 def _released(remote: RemoteItem, item: PublishedItem) -> bool:
-    owned_set = any(_is_set(remote.comparable.fields.get(name)) for name in item.rendered.fields)
+    owned_set = any(name in remote.set_properties for name in item.rendered.fields)
     blank = not any(text.strip() for text in remote.comparable.sections.values())
     return remote.doc_id is None and blank and not owned_set
 
@@ -163,9 +159,16 @@ def _retired_already(item: PublishedItem, remote: RemoteItem | None) -> bool:
     return item.retiring == "release" and _released(remote, item)
 
 
-def _owned_view(item: PublishedItem, draft: ItemDraft | None) -> ItemContent:
-    names = [*item.remote.fields, *item.rendered.fields, *(draft.content.fields if draft is not None else ())]
+def _keyed_view(item: PublishedItem, names: Sequence[str]) -> ItemContent:
     return item.remote.model_copy(update={"fields": {name: item.remote.fields.get(name) for name in names}})
+
+
+def _published_view(item: PublishedItem) -> ItemContent:
+    return _keyed_view(item, list(item.rendered.fields))
+
+
+def _readable_view(item: PublishedItem, draft: ItemDraft | None) -> ItemContent:
+    return _keyed_view(item, [*item.rendered.fields, *(draft.content.fields if draft is not None else ())])
 
 
 def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -> RemoteItem | None:
@@ -243,7 +246,7 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             item = held.model_copy(update={"retiring": None}) if draft is not None else held
             if item != held:
                 state = with_item(state, ref, prepared.target_named(label), item)
-            owned = _owned_view(item, draft)
+            owned = _readable_view(item, draft)
             read = _read_or_none(transport, item.item_id, owned)
             if _retired_already(item, read):
                 state = with_item(state, ref, prepared.target_named(label), None)
@@ -256,8 +259,10 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             if item.retiring is not None:
                 readings.append(Reading(ref, item, remote, (), ()))
                 continue
-            reported = tuple(transport.parts_edited_after(item.item_id, item.marker, owned))
-            edited = tuple(dict.fromkeys([*differing_parts(item.remote, remote.comparable), *reported]))
+            published = _published_view(item)
+            reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
+            compared = with_fields_named(read.comparable, published.fields)
+            edited = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
             settled, edited = _settled(item, remote, edited, transport)
             if settled != item:
                 state = with_item(state, ref, prepared.target_named(label), settled)

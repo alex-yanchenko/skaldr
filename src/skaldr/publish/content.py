@@ -37,6 +37,17 @@ class ItemContent(FrozenModel):
     fields: JsonFields = Field(default_factory=JsonFields)
 
 
+UNSET_VALUES: tuple[JsonValue, ...] = (None, "", [], {})
+
+
+def is_unset(value: JsonValue) -> bool:
+    return any(value == unset and type(value) is type(unset) for unset in UNSET_VALUES)
+
+
+def set_fields(fields: Mapping[str, JsonValue]) -> JsonFields:
+    return {name: value for name, value in fields.items() if not is_unset(value)}
+
+
 def with_fields_named(content: ItemContent, names: Collection[str]) -> ItemContent:
     owned = {name: value for name, value in content.fields.items() if name in names}
     return content.model_copy(update={"fields": owned})
@@ -63,7 +74,13 @@ def comparable(value: JsonValue) -> JsonValue:
 
 
 def same_fields(published: Mapping[str, JsonValue], current: Mapping[str, JsonValue]) -> bool:
-    return comparable(dict(published)) == comparable(dict(current))
+    return comparable(set_fields(published)) == comparable(set_fields(current))
+
+
+def same_value(published: JsonValue, current: JsonValue) -> bool:
+    if is_unset(published) or is_unset(current):
+        return is_unset(published) and is_unset(current)
+    return comparable(published) == comparable(current)
 
 
 @dataclass(frozen=True)
@@ -119,7 +136,7 @@ def content_digest(content: ItemContent) -> str:
         {
             "title": content.title,
             "sections": [[key, text] for key, text in content.sections.items()],
-            "fields": comparable(dict(content.fields)),
+            "fields": comparable(set_fields(content.fields)),
         }
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
