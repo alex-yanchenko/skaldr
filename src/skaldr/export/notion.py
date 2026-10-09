@@ -13,6 +13,7 @@ from skaldr.export.markup import (
     bang_cannot_open_an_image,
     body_cell_texts,
     code_block_lines,
+    encode_url,
     escape_block_start,
     indent_lines,
     is_emphasised_body_cell,
@@ -32,6 +33,7 @@ from skaldr.export.tree import (
     HeadingLevel,
     ListKind,
     ListNode,
+    Media,
     Node,
     Paragraph,
     Quote,
@@ -338,6 +340,12 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
     return lines
 
 
+def _media_line(node: Media) -> str:
+    if node.kind == "image":
+        return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
+    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+
+
 def _quote_line(node: Quote) -> str:
     body = "<br>".join(_block_text(line) for line in node.lines)
     if node.cite:
@@ -391,6 +399,8 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return code_block_lines(replace(node, language=node.language or NOTION_PLAIN_TEXT_LANGUAGE))
         case DisplayMath():
             return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
+        case Media():
+            return [_media_line(node)]
         case Callout():
             icon = node.icon or CALLOUT_ICON[node.tone]
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'

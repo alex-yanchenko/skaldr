@@ -1465,6 +1465,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1537,6 +1538,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -1765,12 +1769,12 @@
           "type": "string"
         },
         "src": {
-          "description": "A data: URI (self-contained, no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
+          "description": "A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link card on the page, as an image in a Markdown export). Base64-encode a data: payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. A URL may not carry a username or password.",
           "title": "Src",
           "type": "string"
         },
         "alt": {
-          "description": "Alt text for the image.",
+          "description": "Alt text for the image. Required, and it must hold visible text.",
           "title": "Alt",
           "type": "string"
         },
@@ -1917,6 +1921,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1989,6 +1994,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -2115,6 +2123,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -2187,6 +2196,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -2729,6 +2741,67 @@
       "title": "MatrixCell",
       "type": "object"
     },
+    "Media": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "media",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the URL points at: video, audio, file or pdf.",
+          "enum": [
+            "video",
+            "audio",
+            "file",
+            "pdf"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "src": {
+          "description": "An http(s) URL, shown as a link card on the page and as a link in a Markdown export. It may not carry a username or password.",
+          "title": "Src",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption naming the media.",
+          "title": "Caption"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "src"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
     "Meta": {
       "additionalProperties": false,
       "properties": {
@@ -3132,6 +3205,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -3206,6 +3280,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -4387,6 +4464,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -4462,6 +4540,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -4981,6 +5062,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -5053,6 +5135,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5506,6 +5591,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -5581,6 +5667,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5770,6 +5859,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -5842,6 +5932,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5944,6 +6037,7 @@
             "list": "#/$defs/ListBlock",
             "math": "#/$defs/Math",
             "matrix": "#/$defs/Matrix",
+            "media": "#/$defs/Media",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
             "panel": "#/$defs/Panel",
@@ -6021,6 +6115,9 @@
           },
           {
             "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Media"
           },
           {
             "$ref": "#/$defs/Timeline"

@@ -19,6 +19,7 @@ from skaldr.export.lower.prose import (
     lower_key_value,
     lower_list,
     lower_math,
+    lower_media,
     lower_meter,
     lower_note,
     lower_quote,
@@ -172,6 +173,8 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return [Divider()]
         case models.Image():
             return lower_image(block)
+        case models.Media():
+            return lower_media(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
         case models.Flow():

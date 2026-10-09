@@ -1070,6 +1070,37 @@ def test_check_validates_through_an_include(tmp_path: Path, capsys: pytest.Captu
     assert "oops" in captured.err  # the fragment's bad field, not a generic splice failure
 
 
+def test_emit_json_carries_a_web_image_and_a_media_block(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [
+        {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", "caption": "Bins"},
+        {"type": "media", "kind": "video", "src": "https://example.com/walk.mp4", "caption": "Dock walk"},
+    ]
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["blocks"] == [
+        {
+            "type": "image",
+            "src": "https://example.com/aisle.png",
+            "alt": "Aisle 12",
+            "caption": "Bins",
+            "max_width": None,
+            "span": None,
+        },
+        {
+            "type": "media",
+            "kind": "video",
+            "src": "https://example.com/walk.mp4",
+            "caption": "Dock walk",
+            "span": None,
+        },
+    ]
+
+
 def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "blocks.yaml").write_text("- type: text\n  body: from fragment\n", encoding="utf-8")
     main_path = tmp_path / "main.yaml"

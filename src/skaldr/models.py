@@ -20,6 +20,7 @@ from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TypeGuard, cast, get_args
+from urllib.parse import urlsplit
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -70,19 +71,31 @@ def _url_defect(url: str) -> str | None:
         return err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
     if parsed.scheme == "mailto" and not parsed.path:
         return "it names no address"
+    if "@" in urlsplit(url).netloc:
+        return "it holds a username or password"
     return None
 
 
-def _require_url_scheme(url: str | None, subject: str) -> None:
-    """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
-    field so the gate (and message) can't drift; `subject` names the field in the error."""
-    if url is None:
-        return
-    if not url.startswith(ALLOWED_URL_SCHEMES):
-        raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
+LINK_URL_WORDING = "an http://, https://, or mailto: link"
+WEB_URL_SCHEMES = ("http://", "https://")
+WEB_URL_WORDING = "an http:// or https:// URL"
+
+
+def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, ...], wording: str) -> None:
+    if not url.startswith(schemes):
+        raise ValueError(f"{subject} must be {wording}")
     defect = _url_defect(url)
     if defect is not None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
+def _require_web_url(url: str, subject: str) -> None:
+    _require_scheme_and_well_formed(url, subject, WEB_URL_SCHEMES, WEB_URL_WORDING)
+
+
+def _require_url_scheme(url: str | None, subject: str) -> None:
+    if url is not None:
+        _require_scheme_and_well_formed(url, subject, ALLOWED_URL_SCHEMES, LINK_URL_WORDING)
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
@@ -776,17 +789,57 @@ class Divider(_Block):
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
-        description="A data: URI (self-contained, no external fetches). Base64-encode the payload "
-        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render."
+        description="A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link "
+        "card on the page, as an image in a Markdown export). Base64-encode a data: payload "
+        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. "
+        "A URL may not carry a username or password."
     )
-    alt: str = Field(description="Alt text for the image.")
+    alt: str = Field(description="Alt text for the image. Required, and it must hold visible text.")
     caption: str | None = Field(default=None, description="Optional caption shown below the image.")
     max_width: Count | None = Field(default=None, description="Optional max width in pixels.")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _alt_must_hold_visible_text(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        alt = fields.get("alt", "")
+        if isinstance(alt, str) and not alt.strip():
+            raise ValueError("'alt' must hold visible text")
+        return fields
+
     @model_validator(mode="after")
-    def _data_uri_only(self) -> "Image":
-        if not self.src.startswith("data:"):
-            raise ValueError("'src' must be a data: URI")
+    def _data_uri_or_web_url(self) -> "Image":
+        if self.src.startswith("data:"):
+            return self
+        if not self.src.startswith(WEB_URL_SCHEMES):
+            raise ValueError("'src' must be a data: URI or an http:// or https:// URL")
+        _require_web_url(self.src, "'src'")
+        return self
+
+
+MediaKind = Literal["video", "audio", "file", "pdf"]
+MEDIA_KIND_LABELS: Final[Mapping[MediaKind, str]] = {
+    "video": "Video",
+    "audio": "Audio",
+    "file": "File",
+    "pdf": "PDF",
+}
+
+
+class Media(_Block):
+    type: Literal["media"]
+    kind: MediaKind = Field(description="What the URL points at: video, audio, file or pdf.")
+    src: str = Field(
+        description="An http(s) URL, shown as a link card on the page and as a link in a Markdown "
+        "export. It may not carry a username or password."
+    )
+    caption: str | None = Field(default=None, description="Optional caption naming the media.")
+
+    @model_validator(mode="after")
+    def _web_url_only(self) -> "Media":
+        _require_web_url(self.src, "'src'")
         return self
 
 
@@ -2466,6 +2519,7 @@ _Simple = (
     | Note
     | Divider
     | Image
+    | Media
     | Timeline
     | Flow
     | Fan
@@ -2692,6 +2746,7 @@ def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
             | Note()
             | Divider()
             | Image()
+            | Media()
             | Timeline()
             | Flow()
             | Fan()

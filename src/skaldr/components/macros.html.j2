@@ -316,8 +316,12 @@
 <div class="note-block{% if block.icon %} iconed{% endif %}">{% call iconed(block.icon) %}{% if block.title %}<div class="note-block-title">{{ block.title }}</div>{% endif %}<div>{{ prose_paras(block.body) }}</div>{% endcall %}</div>
 {% elif block.type == "divider" %}
 <hr class="divider">
-{% elif block.type == "image" %}
+{% elif block.type == "image" and block.src.startswith("data:") %}
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><img src="{{ block.src }}" alt="{{ block.alt }}"></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
+{% elif block.type == "image" %}
+<figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><a class="media-card" href="{{ block.src }}" rel="noopener noreferrer"><span class="media-kind">Image</span><span class="media-title">{{ block.alt }}</span><span class="media-host">{{ url_host(block.src) }}</span></a></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
+{% elif block.type == "media" %}
+<figure class="fig"><div class="frame"><a class="media-card" href="{{ block.src }}" rel="noopener noreferrer"><span class="media-kind">{{ media_kind_labels[block.kind] }}</span><span class="media-title">{{ block.caption or block.src }}</span><span class="media-host">{{ url_host(block.src) }}</span></a></div></figure>
 {% elif block.type == "timeline" %}
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}

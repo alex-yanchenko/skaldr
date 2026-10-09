@@ -60,6 +60,8 @@ PLAIN_TEXT_FIELDS = frozenset(
         "InnerToggle.title",
         "KVPair.label",
         "Math.expression",
+        "Media.src",
+        "Media.caption",
         "Matrix.rows",
         "Matrix.columns",
         "Matrix.id",

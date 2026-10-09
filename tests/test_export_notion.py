@@ -68,6 +68,8 @@ from tests.factories import (
     authored_block_types,
     folder_texts,
     heading_sections,
+    in_a_grid_cell,
+    in_an_open_section,
     lowered,
     make_command_request,
     make_label_table,
@@ -488,6 +490,78 @@ def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
     blocks = [{"type": "text", "body": "Above"}, {"type": "divider"}, {"type": "text", "body": "Below"}]
 
     assert notion_of(blocks) == "Above\n---\nBelow\n"
+
+
+@pytest.mark.parametrize(
+    ("image", "line"),
+    [
+        pytest.param(
+            {"caption": "Overflow bins"},
+            "![Overflow bins](https://example.com/aisle.png)",
+            id="the-caption-is-the-notion-caption",
+        ),
+        pytest.param({}, "![Aisle 12](https://example.com/aisle.png)", id="alt-stands-in-without-a-caption"),
+    ],
+)
+def test_a_web_image_is_a_notion_image_line(image: dict[str, Any], line: str) -> None:
+    block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
+
+    assert notion_of([block]) == f"{line}\n"
+
+
+@pytest.mark.parametrize("kind", ["video", "audio", "file", "pdf"])
+def test_a_media_block_is_a_notion_tag_holding_its_caption(kind: str) -> None:
+    block = {"type": "media", "kind": kind, "src": "https://example.com/a?x=1&y=2", "caption": "Dock walk"}
+
+    assert notion_of([block]) == f'<{kind} src="https://example.com/a?x=1&y=2">Dock walk</{kind}>\n'
+
+
+def test_a_media_url_is_percent_encoded_in_the_notion_src_so_it_cannot_close_the_attribute() -> None:
+    src = "https://example.com/a(1)?x=\"1\"&y=<2>&z='3'"
+    block = {"type": "media", "kind": "video", "src": src}
+
+    assert notion_of([block]) == (
+        "<video src=\"https://example.com/a%281%29?x=%221%22&y=%3C2%3E&z='3'\"></video>\n"
+    )
+
+
+def test_a_notion_media_caption_cannot_close_the_tag_or_open_another() -> None:
+    block = {
+        "type": "media",
+        "kind": "video",
+        "src": "https://example.com/walk.mp4",
+        "caption": "a </video> b <i>",
+    }
+
+    assert (
+        notion_of([block]) == '<video src="https://example.com/walk.mp4">a \\</video\\> b \\<i\\></video>\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ("container", "heading"),
+    [
+        pytest.param(in_an_open_section, "## part\n", id="section"),
+        pytest.param(in_a_grid_cell, "", id="grid"),
+    ],
+)
+def test_a_web_image_and_a_media_block_nest_in_a_section_or_a_grid_cell(
+    container: Callable[[list[dict[str, Any]]], dict[str, Any]], heading: str
+) -> None:
+    blocks = [
+        {"type": "image", "src": "https://example.com/a.png", "alt": "A", "caption": "Cap"},
+        {"type": "media", "kind": "pdf", "src": "https://example.com/s.pdf", "caption": "Sheet"},
+    ]
+
+    assert notion_of([container(blocks)]) == (
+        f'{heading}![Cap](https://example.com/a.png)\n<pdf src="https://example.com/s.pdf">Sheet</pdf>\n'
+    )
+
+
+def test_a_media_block_without_a_caption_is_an_empty_notion_tag() -> None:
+    block = {"type": "media", "kind": "pdf", "src": "https://example.com/sheet.pdf"}
+
+    assert notion_of([block]) == '<pdf src="https://example.com/sheet.pdf"></pdf>\n'
 
 
 def test_block_nodes_become_notion_blocks() -> None:

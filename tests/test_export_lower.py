@@ -34,6 +34,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListNode,
     LoweredDocument,
+    Media,
     Node,
     PagePart,
     Paragraph,
@@ -1273,6 +1274,42 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
     block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
 
     assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
+
+
+@pytest.mark.parametrize(
+    ("image", "node"),
+    [
+        pytest.param(
+            {"caption": "Overflow bins"},
+            Media("image", "https://example.com/aisle.png", plain("Aisle 12"), plain("Overflow bins")),
+            id="with-a-caption",
+        ),
+        pytest.param({}, Media("image", "https://example.com/aisle.png", plain("Aisle 12")), id="alt-only"),
+    ],
+)
+def test_a_web_image_keeps_its_url_alt_and_caption(image: dict[str, Any], node: Media) -> None:
+    block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
+
+    assert lowered([block]) == (node,)
+
+
+@pytest.mark.parametrize(
+    ("block", "node"),
+    [
+        pytest.param(
+            {"kind": "video", "src": "https://example.com/walk.mp4", "caption": "Dock walk"},
+            Media("video", "https://example.com/walk.mp4", (), plain("Dock walk")),
+            id="video-with-a-caption",
+        ),
+        pytest.param(
+            {"kind": "pdf", "src": "https://example.com/sheet.pdf"},
+            Media("pdf", "https://example.com/sheet.pdf"),
+            id="pdf-without-a-caption",
+        ),
+    ],
+)
+def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], node: Media) -> None:
+    assert lowered([{"type": "media", **block}]) == (node,)
 
 
 @pytest.mark.parametrize(

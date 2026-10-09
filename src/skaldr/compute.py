@@ -18,6 +18,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cache
 from http import HTTPStatus
 from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
+from urllib.parse import urlsplit
 
 import roman
 from pydantic import BaseModel
@@ -706,6 +707,10 @@ def validate_rich_text_fields(report: Report, context: RichContext) -> None:
             parse_rich(text, context)
         except ReportError as error:
             raise ReportError(f"{'.'.join(path)}: {error}") from error
+
+
+def url_host(url: str) -> str:
+    return urlsplit(url).netloc
 
 
 def fmt(value: Any) -> str:

@@ -27,6 +27,7 @@ from skaldr.compute import (
     swimlane_layout,
     table_rollup,
     toc_entries,
+    url_host,
     used_badges,
     variable_parts,
 )
@@ -58,6 +59,20 @@ def _swimlane(**overrides: object) -> Swimlane:
     block = parse_report(make_report(blocks=[{"type": "swimlane", **overrides}])).blocks[0]
     assert isinstance(block, Swimlane)
     return block
+
+
+@pytest.mark.parametrize(
+    ("url", "host"),
+    [
+        pytest.param("https://example.com/a/b?q=1", "example.com", id="plain"),
+        pytest.param("https://example.com:8443/a", "example.com:8443", id="port"),
+        pytest.param("http://[2001:db8::1]:8080/a", "[2001:db8::1]:8080", id="ipv6-with-port"),
+        pytest.param("https://[::1]/a", "[::1]", id="ipv6"),
+        pytest.param("https://bücher.example/a", "bücher.example", id="idn"),
+    ],
+)
+def test_url_host_is_the_authority_as_written(url: str, host: str) -> None:
+    assert url_host(url) == host
 
 
 def test_swimlane_layout_state_legend_lists_used_states_in_canonical_order() -> None:
