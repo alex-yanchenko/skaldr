@@ -149,7 +149,7 @@ def _stored() -> SignIn[NotionCredentials]:
 def test_a_refused_renewal_is_tried_once_more_with_a_refresh_token_another_run_stored() -> None:
     seed_notion(make_notion_credentials())
     session = NotionSession(_stored(), transport=_renewing_only("rotated-refresh", sent := []))
-    seed_notion(make_notion_credentials(access_token="other-access", refresh_token="rotated-refresh"))
+    seed_notion(make_notion_credentials(refresh_token="rotated-refresh"))
 
     session.renew()
 
@@ -200,13 +200,33 @@ def test_a_sign_in_that_could_not_be_saved_after_renewal_is_not_renewed() -> Non
     assert seen == []
 
 
-def test_a_session_that_does_not_save_renews_in_memory_only() -> None:
+def test_a_session_first_takes_a_newer_token_another_run_stored_without_asking_notion() -> None:
     seed_notion(make_notion_credentials())
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), []), saves=False)
+    seen: list[httpx2.Request] = []
+    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen))
+    seed_notion(make_notion_credentials(access_token="other-access", refresh_token="other-refresh"))
 
     session.renew()
 
-    assert (session.access_token, load_notion()) == (
-        "renewed-access",
-        SignIn(make_notion_credentials(), "keychain"),
-    )
+    assert (session.access_token, seen) == ("other-access", [])
+
+
+def test_a_stored_token_that_is_refused_too_is_renewed_with_its_refresh_token() -> None:
+    seed_notion(make_notion_credentials())
+    session = NotionSession(_stored(), transport=_renewing_only("other-refresh", sent := []))
+    seed_notion(make_notion_credentials(access_token="other-access", refresh_token="other-refresh"))
+
+    session.renew()
+    session.renew()
+
+    assert (sent, session.access_token) == (["other-refresh"], "renewed-access")
+
+
+def test_a_session_renews_with_notion_only_once() -> None:
+    seed_notion(make_notion_credentials())
+    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen := []))
+    session.renew()
+
+    with pytest.raises(AuthError, match=re.escape(f"Notion refused the renewed sign-in{RUN_AUTH_AGAIN}")):
+        session.renew()
+    assert len(seen) == 1

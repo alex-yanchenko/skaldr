@@ -10,7 +10,6 @@ from skaldr.errors import AuthError, ConnectorError, PublishError
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish import cli as publish_cli
 from skaldr.publish.cli import installed_connectors, main
 from skaldr.publish.content import ItemContent
 from skaldr.publish.drafts import authored_from, draft_targets
@@ -21,8 +20,6 @@ from tests.factories.auth_factory import basic_auth_header, make_notion_credenti
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import (
     TARGET_LABEL,
-    FakeTransport,
-    fake_registry,
     make_garden_blocks,
     make_notion_publish,
     write_garden_report,
@@ -169,41 +166,24 @@ def test_a_refused_stored_token_is_renewed_saved_to_the_keychain_and_the_read_se
     )
 
 
-def test_a_connector_that_does_not_save_renews_the_sign_in_for_this_run_only() -> None:
-    seed_notion(make_notion_credentials(access_token="lapsed-access"))
-    notion = _notion_with_a_parent_page()
-    connector = NotionConnector(http=notion.mock(), sleep=lambda _: None, saves_renewed_sign_in=False)
-
-    connector.open_transport(NotionTarget.model_validate(make_notion_target())).read_item(
-        NOTION_PAGE_ID, ItemContent(title="")
-    )
-
-    assert load_notion() == SignIn(make_notion_credentials(access_token="lapsed-access"), "keychain")
-
-
-@pytest.mark.parametrize(
-    ("argv", "saves"),
-    [
-        pytest.param(["publish"], False, id="dry-run"),
-        pytest.param(["publish", "--apply"], True, id="apply"),
-        pytest.param(["diff"], True, id="diff"),
-    ],
-)
-def test_only_a_dry_run_keeps_a_renewed_sign_in_out_of_the_keychain(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], saves: bool
+def test_a_dry_run_that_renews_the_sign_in_saves_it_so_a_rotated_refresh_token_is_never_lost(
+    tmp_path: Path,
 ) -> None:
-    asked: list[bool] = []
-
-    def connectors(*, saves_renewed_sign_in: bool) -> ConnectorRegistry:
-        asked.append(saves_renewed_sign_in)
-        return fake_registry(FakeTransport())
-
-    monkeypatch.setattr(publish_cli, "installed_connectors", connectors)
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
     path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.accepted_token = "issued-elsewhere"
 
-    main([argv[0], str(path), *argv[1:]])
+    exit_code = main(["publish", str(path)], registry=_registry(notion))
 
-    assert asked == [saves]
+    assert (exit_code, load_notion()) == (
+        0,
+        SignIn(
+            make_notion_credentials(access_token="renewed-access", refresh_token="renewed-refresh"),
+            "keychain",
+        ),
+    )
 
 
 def test_publishing_creates_the_document_and_its_split_page_and_publishing_again_sends_nothing(

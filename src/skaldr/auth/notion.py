@@ -341,15 +341,12 @@ def renewed_notion_credentials(
 
 class NotionSession:
     def __init__(
-        self,
-        sign_in: SignIn[NotionCredentials],
-        *,
-        transport: httpx2.BaseTransport | None = None,
-        saves: bool = True,
+        self, sign_in: SignIn[NotionCredentials], *, transport: httpx2.BaseTransport | None = None
     ) -> None:
         self._sign_in = sign_in
         self._transport = transport
-        self._saves = saves
+        self._took_the_stored_token = False
+        self._renewed_with_notion = False
 
     @property
     def access_token(self) -> str:
@@ -362,15 +359,26 @@ class NotionSession:
                 f"{NOTION_ACCESS_TOKEN_VARIABLE}"
             )
         credentials = self._sign_in.credentials
-        if self._saves and credentials.workspace_id is None:
+        stored = _stored_for_the_same_workspace(credentials)
+        if (
+            not self._took_the_stored_token
+            and stored is not None
+            and stored.access_token != self.access_token
+        ):
+            self._took_the_stored_token = True
+            self._sign_in = SignIn(stored, self._sign_in.source)
+            return
+        if self._renewed_with_notion:
+            raise AuthError(f"Notion refused the renewed sign-in{_SIGN_IN_AGAIN}")
+        if credentials.workspace_id is None:
             raise AuthError(
                 "Notion refused the stored sign-in, which has no workspace id, so a renewed token could not "
                 f"be saved{_SIGN_IN_AGAIN}"
             )
         renewed = self._renewed(credentials)
+        self._renewed_with_notion = True
         self._sign_in = SignIn(renewed, self._sign_in.source)
-        if self._saves:
-            save_notion_returning_the_replaced(renewed)
+        save_notion_returning_the_replaced(renewed)
 
     def _renewed(self, credentials: NotionCredentials) -> NotionCredentials:
         try:

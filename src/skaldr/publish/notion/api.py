@@ -36,6 +36,7 @@ from skaldr.publish_block.target import JsonFields
 NOTION_API: Final = "https://api.notion.com"
 NOTION_VERSION: Final = "2026-03-11"
 RETRY_ATTEMPTS: Final = 6
+RENEWALS_PER_REQUEST: Final = 2
 LONGEST_BACKOFF_SECONDS: Final = 30.0
 SHORTEST_POLL_SECONDS: Final = 0.5
 LONGEST_TASK_WAIT_SECONDS: Final = 600.0
@@ -267,10 +268,11 @@ class NotionApi:
 
     def _send(self, method: str, path: str, body: JsonFields | None, action: _Action) -> httpx2.Response:
         answer = self._with_retries(method, path, body, action)
-        if answer.status_code != HTTPStatus.UNAUTHORIZED:
-            return answer
-        self._tokens.renew()
-        answer = self._with_retries(method, path, body, action)
+        for _ in range(RENEWALS_PER_REQUEST):
+            if answer.status_code != HTTPStatus.UNAUTHORIZED:
+                return answer
+            self._tokens.renew()
+            answer = self._with_retries(method, path, body, action)
         if answer.status_code == HTTPStatus.UNAUTHORIZED:
             raise AuthError(f"Notion refused the renewed sign-in{SIGN_IN_AGAIN}")
         return answer

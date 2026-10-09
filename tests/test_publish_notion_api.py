@@ -290,18 +290,31 @@ def test_a_refused_token_is_renewed_once_and_the_request_sent_again_with_the_new
     )
 
 
-def test_a_renewed_token_that_is_refused_too_stops_with_advice_to_sign_in_again() -> None:
+def test_a_token_refused_after_a_second_renewal_stops_with_advice_to_sign_in_again() -> None:
     refused = Answer(401, _error(401, "unauthorized", "expired"))
-    harness = _harness(refused, refused)
+    harness = _harness(refused, refused, refused)
 
     with pytest.raises(AuthError) as caught:
         harness.api.me()
 
     assert (str(caught.value), harness.tokens.renewals) == (
         "Notion refused the renewed sign-in; run `skaldr auth notion` again",
-        1,
+        2,
     )
-    assert "second-token" not in rendered_traceback(caught.value)
+    assert "third-token" not in rendered_traceback(caught.value)
+
+
+def test_a_request_refused_once_after_renewal_is_sent_again_after_a_second() -> None:
+    refused = Answer(401, _error(401, "unauthorized", "expired"))
+    harness = _harness(refused, refused, Answer(200, BOT))
+
+    harness.api.me()
+
+    assert [sent.authorization for sent in harness.notion.sent] == [
+        "Bearer first-token",
+        "Bearer second-token",
+        "Bearer third-token",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -404,7 +417,7 @@ UNFOLLOWED = (
             id="task-gone",
         ),
         pytest.param(
-            [Answer(401, _error(401, "unauthorized", "expired"))] * 2,
+            [Answer(401, _error(401, "unauthorized", "expired"))] * 3,
             "Notion refused the renewed sign-in; run `skaldr auth notion` again",
             id="sign-in-refused",
         ),
