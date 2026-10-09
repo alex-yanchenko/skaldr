@@ -33,6 +33,7 @@ class InFlightWrite(FrozenModel):
 
 
 ItemOrigin = Literal["created", "adopted"]
+Retirement = Literal["archive", "release"]
 
 
 class PublishedItem(FrozenModel):
@@ -43,6 +44,7 @@ class PublishedItem(FrozenModel):
     marker: str | None = None
     shown_remote: str | None = None
     writing: InFlightWrite | None = None
+    retiring: Retirement | None = None
 
 
 class PublishedTarget(FrozenModel):
@@ -63,6 +65,7 @@ class PendingCreate(FrozenModel):
     section_id: str | None
     parent_id: str | None
     title: str
+    into_id: str | None = None
 
 
 class PublishState(FrozenModel):

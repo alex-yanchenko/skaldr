@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import assert_never
 
-from skaldr.errors import PublishError
+from skaldr.errors import PublishError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, placed_section, section_part
 from skaldr.publish.plan import (
     ArchiveStep,
@@ -26,6 +26,7 @@ from skaldr.publish.state import (
     PendingCreate,
     PublishedItem,
     PublishState,
+    Retirement,
     WritingPart,
     save_state,
 )
@@ -129,6 +130,24 @@ class Applier:
     def _raw_sections(self, ref: ItemRef) -> RawSections:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
 
+    def _written(
+        self,
+        target_plan: TargetPlan,
+        ref: ItemRef,
+        intent: tuple[Sequence[Part], ItemContent],
+        send: Callable[[str], RemoteItem],
+    ) -> PublishState:
+        parts, rendered = intent
+        item = self._start_writing(target_plan, ref, parts, rendered)
+        try:
+            remote = send(item.item_id)
+        except WriteRejectedError:
+            self._save(
+                with_item(self.state, ref, target_plan.target, item.model_copy(update={"writing": None}))
+            )
+            raise
+        return self._after_write(target_plan, ref, rendered, remote)
+
     def _write_section(
         self, target_plan: TargetPlan, ref: ItemRef, key: str, text: str | None, follows: str | None
     ) -> PublishState:
@@ -142,19 +161,26 @@ class Applier:
             return with_item(
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
-        item = self._start_writing(target_plan, ref, [section_part(key)], rendered)
-        remote = self.transports.for_target(ref.target).write_section(item.item_id, write, raw_sections)
-        return self._after_write(target_plan, ref, rendered, remote)
+        transport = self.transports.for_target(ref.target)
+        return self._written(
+            target_plan,
+            ref,
+            ([section_part(key)], rendered),
+            lambda item_id: transport.write_section(item_id, write, raw_sections),
+        )
 
     def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
         item = self._item(step.item)
         rendered = item.rendered.model_copy(update={"sections": step.content.sections})
         parts = [section_part(key) for key in (*step.written, *step.removed)]
-        item = self._start_writing(target_plan, step.item, parts, rendered)
-        remote = self.transports.for_target(step.item.target).write_content(
-            item.item_id, step.content.sections, self._raw_sections(step.item)
+        transport = self.transports.for_target(step.item.target)
+        raw_sections = self._raw_sections(step.item)
+        return self._written(
+            target_plan,
+            step.item,
+            (parts, rendered),
+            lambda item_id: transport.write_content(item_id, step.content.sections, raw_sections),
         )
-        return self._after_write(target_plan, step.item, rendered, remote)
 
     def _write_fields(self, target_plan: TargetPlan, step: WriteFieldsStep) -> PublishState:
         item = self._item(step.item)
@@ -169,9 +195,29 @@ class Applier:
         rendered = item.rendered.model_copy(
             update={"title": step.content.title, "fields": step.content.fields}
         )
-        item = self._start_writing(target_plan, step.item, step.parts, rendered)
-        remote = self.transports.for_target(step.item.target).write_fields(item.item_id, write)
-        return self._after_write(target_plan, step.item, rendered, remote)
+        transport = self.transports.for_target(step.item.target)
+        return self._written(
+            target_plan,
+            step.item,
+            (step.parts, rendered),
+            lambda item_id: transport.write_fields(item_id, write),
+        )
+
+    def _retired(
+        self, target_plan: TargetPlan, ref: ItemRef, retirement: Retirement, send: Callable[[], None]
+    ) -> PublishState:
+        if ref not in self.remote:
+            return with_item(self.state, ref, target_plan.target, None)
+        item = self._item(ref).model_copy(update={"retiring": retirement})
+        self._save(with_item(self.state, ref, target_plan.target, item))
+        try:
+            send()
+        except WriteRejectedError:
+            self._save(
+                with_item(self.state, ref, target_plan.target, item.model_copy(update={"retiring": None}))
+            )
+            raise
+        return with_item(self.state, ref, target_plan.target, None)
 
     def _applied(self, target_plan: TargetPlan, step: Step) -> PublishState:
         match step:
@@ -186,14 +232,19 @@ class Applier:
             case WriteContentStep():
                 return self._write_content(target_plan, step)
             case ArchiveStep():
-                if step.item in self.remote:
-                    self.transports.for_target(target_plan.label).archive_item(step.item_id)
-                return with_item(self.state, step.item, target_plan.target, None)
+                transport = self.transports.for_target(target_plan.label)
+                return self._retired(
+                    target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id)
+                )
             case ReleaseStep():
-                if step.item in self.remote:
-                    transport = self.transports.for_target(target_plan.label)
-                    transport.release_item(step.item_id, self._raw_sections(step.item))
-                return with_item(self.state, step.item, target_plan.target, None)
+                transport = self.transports.for_target(target_plan.label)
+                raw_sections = self._raw_sections(step.item)
+                return self._retired(
+                    target_plan,
+                    step.item,
+                    "release",
+                    lambda: transport.release_item(step.item_id, raw_sections),
+                )
             case _:
                 assert_never(step)
 
@@ -205,19 +256,25 @@ class Applier:
             section_id=step.item.section_id,
             parent_id=parent_id,
             title=step.draft.content.title,
+            into_id=step.into_id,
         )
-        self._save(self.state.model_copy(update={"pending_creates": [*self.state.pending_creates, pending]}))
+        before = self.state
+        self._save(before.model_copy(update={"pending_creates": [*before.pending_creates, pending]}))
         written_into = self.remote.get(step.item)
-        remote = self.transports.for_target(target_plan.label).create_item(
-            NewItem(
-                target_plan.target,
-                Stamp(self.prepared.doc_id, step.item.section_id),
-                step.draft.content,
-                parent_id=parent_id,
-                into_id=step.into_id,
-                into_raw_sections=NO_SECTIONS if written_into is None else written_into.raw_sections,
+        try:
+            remote = self.transports.for_target(target_plan.label).create_item(
+                NewItem(
+                    target_plan.target,
+                    Stamp(self.prepared.doc_id, step.item.section_id),
+                    step.draft.content,
+                    parent_id=parent_id,
+                    into_id=step.into_id,
+                    into_raw_sections=NO_SECTIONS if written_into is None else written_into.raw_sections,
+                )
             )
-        )
+        except WriteRejectedError:
+            self._save(before)
+            raise
         self.remote[step.item] = remote
         created = PublishedItem(
             item_id=remote.item_id,

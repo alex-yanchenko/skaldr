@@ -32,7 +32,9 @@ class Prepared:
         return next((draft for draft in drafts if draft.section_id == ref.section_id), None)
 
     def with_state(self, state: PublishState) -> "Prepared":
-        return replace(self, state=state)
+        if state == self.state:
+            return self
+        return replace(self, state=state, plan=plan_publish(self.drafts, state, self.registry))
 
 
 def prepare_publish(document_path: Path, registry: ConnectorRegistry) -> Prepared:

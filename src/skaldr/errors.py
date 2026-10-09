@@ -18,6 +18,10 @@ class ItemNotFoundError(ConnectorError):
     pass
 
 
+class WriteRejectedError(ConnectorError):
+    pass
+
+
 class RegionNotFoundError(LookupError):
     pass
 

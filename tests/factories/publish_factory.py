@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from skaldr.errors import ConnectorError, ItemNotFoundError
+from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.models import Report, parse_report
@@ -31,6 +31,7 @@ OTHER_DOC_ID = "kitchen-rota"
 TARGET_LABEL = "notion page 0123456789abcdef0123456789abcdef"
 REFUSED_WRITE = "the service refused the write"
 DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
+LOST_WRITE = "the connection dropped before the service saw the write"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
 INTRO_KEY = "block c9632b59"
 
@@ -110,6 +111,7 @@ class FakeItem:
 @dataclass
 class FakeTransport:
     reads_list_fields_reversed: bool = False
+    strips_trailing_whitespace: bool = False
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
     hand_edits: list[tuple[str, int, Part]] = field(default_factory=list[tuple[str, int, Part]])
@@ -118,6 +120,21 @@ class FakeTransport:
     _writes: int = 0
     _failing_write: int | None = None
     _dropping_after_write: int | None = None
+    _losing_write: int | None = None
+    _landing_one_section_of: int | None = None
+
+    def lose_the_next_write(self) -> None:
+        self._losing_write = self._writes + 1
+
+    def land_only_the_first_section_of_the_next_content_write(self) -> None:
+        self._landing_one_section_of = self._writes + 1
+
+    def comparable_form(self, content: ItemContent, /) -> ItemContent:
+        sections = {key: self._stored(text) for key, text in content.sections.items()}
+        return content.model_copy(update={"sections": sections})
+
+    def _stored(self, text: str) -> str:
+        return text.rstrip() if self.strips_trailing_whitespace else text
 
     def seed(
         self, item_id: str, title: str, doc_id: str | None, sections: dict[str, str] | None = None
@@ -135,6 +152,8 @@ class FakeTransport:
     def stop_failing(self) -> None:
         self._failing_write = None
         self._dropping_after_write = None
+        self._losing_write = None
+        self._landing_one_section_of = None
 
     def comment_on(self, item_id: str, key: str) -> None:
         item = self.items[item_id]
@@ -172,7 +191,7 @@ class FakeTransport:
         if item.into_id is not None:
             self._refuse_a_stale_layout(item.into_id, item.into_raw_sections)
         item_id = item.into_id or self._new_item_id()
-        content = item.content
+        content = self.comparable_form(item.content)
         self.items[item_id] = FakeItem(
             content.title,
             dict(content.sections),
@@ -185,7 +204,7 @@ class FakeTransport:
 
     def read_item(self, item_id: str, _published: ItemContent, /) -> RemoteItem:
         self.calls.append(("read", item_id))
-        if item_id not in self.items:
+        if item_id not in self.items or self.items[item_id].archived:
             raise ItemNotFoundError(f"{item_id} is not on the service")
         remote = self._remote(item_id)
         if not self.reads_list_fields_reversed:
@@ -204,12 +223,12 @@ class FakeTransport:
         sections = dict(item.raw_sections)
         if not isinstance(write, AddSection):
             if sections.get(write.key) != write.raw_current:
-                raise ConnectorError(f"no matches found for section {write.key}")
+                raise WriteRejectedError(f"no matches found for section {write.key}")
             del sections[write.key]
         if not isinstance(write, RemoveSection):
             pairs = list(sections.items())
             at = 0 if write.follows is None else list(sections).index(write.follows) + 1
-            sections = dict([*pairs[:at], (write.key, write.text), *pairs[at:]])
+            sections = dict([*pairs[:at], (write.key, self._stored(write.text)), *pairs[at:]])
         item.raw_sections = sections
         item.revision = self._bump()
         return self._after_write(item_id)
@@ -220,7 +239,13 @@ class FakeTransport:
         self._write(("write_content", item_id))
         self._refuse_a_stale_layout(item_id, raw_sections)
         item = self.items[item_id]
-        item.raw_sections = dict(sections)
+        stored = {key: self._stored(text) for key, text in sections.items()}
+        if self._writes == self._landing_one_section_of:
+            changed = next(key for key, text in stored.items() if item.raw_sections.get(key) != text)
+            item.raw_sections = {**item.raw_sections, changed: stored[changed]}
+            item.revision = self._bump()
+            raise ConnectorError(DROPPED_AFTER_WRITE)
+        item.raw_sections = stored
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -266,7 +291,9 @@ class FakeTransport:
     def _write(self, call: tuple[str, ...]) -> None:
         self._writes += 1
         if self._writes == self._failing_write:
-            raise ConnectorError(REFUSED_WRITE)
+            raise WriteRejectedError(REFUSED_WRITE)
+        if self._writes == self._losing_write:
+            raise ConnectorError(LOST_WRITE)
         self.calls.append(call)
 
     def _drop_the_connection_if_asked(self) -> None:
