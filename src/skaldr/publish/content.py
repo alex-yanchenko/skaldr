@@ -41,13 +41,20 @@ def _canonical_json(value: JsonValue) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
+def _is_scalar(value: JsonValue) -> bool:
+    return not isinstance(value, (dict, list))
+
+
 def comparable(value: JsonValue) -> JsonValue:
     if isinstance(value, dict):
         return {key: comparable(value[key]) for key in sorted(value)}
-    if isinstance(value, list):
-        members = {_canonical_json(member): member for member in map(comparable, value)}
-        return [members[key] for key in sorted(members)]
-    return value
+    if not isinstance(value, list):
+        return value
+    members = [comparable(member) for member in value]
+    if not all(_is_scalar(member) for member in members):
+        return members
+    by_text = {_canonical_json(member): member for member in members}
+    return [by_text[text] for text in sorted(by_text)]
 
 
 def same_fields(published: Mapping[str, JsonValue], current: Mapping[str, JsonValue]) -> bool:
@@ -81,9 +88,16 @@ def placed_section(
     others = [(other, other_text) for other, other_text in sections.items() if other != key]
     if text is None:
         return dict(others)
-    keys = [other for other, _ in others]
-    at = keys.index(follows) + 1 if follows in keys else 0 if follows is None else len(others)
+    at = _place_after(follows, [other for other, _ in others])
     return dict([*others[:at], (key, text), *others[at:]])
+
+
+def _place_after(follows: str | None, keys: list[str]) -> int:
+    if follows is None:
+        return 0
+    if follows in keys:
+        return keys.index(follows) + 1
+    return len(keys)
 
 
 def differing_parts(published: ItemContent, current: ItemContent) -> tuple[Part, ...]:

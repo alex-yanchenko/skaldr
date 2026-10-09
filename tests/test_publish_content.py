@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import JsonValue
 
@@ -44,9 +46,9 @@ def test_a_section_is_placed_after_the_section_it_follows(
         pytest.param({"labels": ["a", "a", "b"]}, {"labels": ["b", "a"]}, id="repeated-member"),
         pytest.param({"a": 1, "b": 2}, {"b": 2, "a": 1}, id="key-order"),
         pytest.param(
-            {"components": [{"name": "web", "id": "2"}, {"name": "api", "id": "1"}]},
-            {"components": [{"id": "1", "name": "api"}, {"id": "2", "name": "web"}]},
-            id="list-of-objects",
+            {"components": [{"name": "web", "id": "2"}]},
+            {"components": [{"id": "2", "name": "web"}]},
+            id="object-key-order-in-a-list",
         ),
         pytest.param({"outer": {"tags": ["y", "x"]}}, {"outer": {"tags": ["x", "y"]}}, id="nested"),
     ],
@@ -63,6 +65,12 @@ def test_fields_compare_as_sorted_sets_with_sorted_keys(
         pytest.param({"labels": ["a", "b"]}, {"labels": ["a", "c"]}, id="different-member"),
         pytest.param({"labels": ["a"]}, {"labels": "a"}, id="list-and-scalar"),
         pytest.param({"priority": "High"}, {}, id="missing-key"),
+        pytest.param(
+            {"components": [{"name": "web"}, {"name": "api"}]},
+            {"components": [{"name": "api"}, {"name": "web"}]},
+            id="objects-in-another-order",
+        ),
+        pytest.param({"steps": [["a"], ["b"]]}, {"steps": [["b"], ["a"]]}, id="lists-in-another-order"),
     ],
 )
 def test_fields_with_different_members_differ(
@@ -71,10 +79,12 @@ def test_fields_with_different_members_differ(
     assert same_fields(published, current) is False
 
 
-def test_the_comparable_form_sorts_keys_and_list_members_and_drops_repeats() -> None:
-    value: JsonValue = {"z": ["b", "a", "b"], "a": [{"k": 2, "j": 1}, 3]}
+def test_the_comparable_form_sorts_scalar_lists_and_keys_and_keeps_other_lists_in_order() -> None:
+    value: JsonValue = {"z": ["b", "a", "b"], "a": [{"k": 2, "j": 1}, 3], "m": [["y", "x"], ["b"]]}
 
-    assert comparable(value) == {"a": [3, {"j": 1, "k": 2}], "z": ["a", "b"]}
+    assert json.dumps(comparable(value)) == json.dumps(
+        {"a": [{"j": 1, "k": 2}, 3], "m": [["x", "y"], ["b"]], "z": ["a", "b"]}
+    )
 
 
 def test_unchanged_sections_need_no_writes() -> None:

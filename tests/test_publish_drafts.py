@@ -8,12 +8,12 @@ from skaldr.models import Report, parse_report
 from skaldr.publish import ContentLimit
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
 from skaldr.publish.drafts import ItemDraft, draft_targets
-from tests.factories import make_report, make_section
+from tests.factories import make_report, make_section, make_table
 from tests.factories.publish_factory import (
+    INTRO_KEY,
     TARGET_LABEL,
     FakeTransport,
     fake_registry,
-    make_garden_blocks,
     make_notion_publish,
     parse_garden_report,
 )
@@ -29,27 +29,7 @@ INTRO = "Welcome to the garden.\n"
 TOOLS = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
 LONG_ITEM = "A spade, a fork and a rake."
 PLANTING = "## Planting\nSow in spring.\n"
-
-
-def _document(sections: dict[str, str], fields_path: str = "publish.targets[0]") -> ItemDraft:
-    return ItemDraft(
-        None,
-        ItemContent(title="Garden handbook", sections=sections),
-        {
-            TITLE: "meta.title",
-            FIELDS: fields_path,
-            **{section_part(key): path for key, path in _PATHS.items() if key in sections},
-        },
-    )
-
-
-_PATHS = {
-    "page header": "meta",
-    "page legend": "badges",
-    "blocks[0]": "blocks[0]",
-    "tools": "blocks[1]",
-    "planting": "blocks[2]",
-}
+WHERE_FIELDS = "publish.targets[0].where.fields"
 
 
 def test_an_unsplit_target_is_one_item_holding_every_region_of_the_page() -> None:
@@ -59,22 +39,33 @@ def test_an_unsplit_target_is_one_item_holding_every_region_of_the_page() -> Non
 
     assert (target.label, target.document, target.sections) == (
         TARGET_LABEL,
-        _document(
+        ItemDraft(
+            None,
+            ItemContent(
+                title="Garden handbook",
+                sections={
+                    "page header": HEADER,
+                    "page legend": LEGEND,
+                    INTRO_KEY: INTRO,
+                    "tools": TOOLS,
+                    "planting": PLANTING,
+                },
+            ),
             {
-                "page header": HEADER,
-                "page legend": LEGEND,
-                "blocks[0]": INTRO,
-                "tools": TOOLS,
-                "planting": PLANTING,
-            }
+                TITLE: "meta.title",
+                FIELDS: WHERE_FIELDS,
+                section_part("page header"): "meta",
+                section_part("page legend"): "badges",
+                section_part(INTRO_KEY): "blocks[0]",
+                section_part("tools"): "blocks[1]",
+                section_part("planting"): "blocks[2]",
+            },
         ),
         (),
     )
 
 
-def test_a_split_parent_keeps_the_report_wide_contents_and_legend_and_the_child_holds_only_its_section() -> (
-    None
-):
+def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_it_uses() -> None:
     report = parse_garden_report(
         publish=make_notion_publish(
             split=["tools"],
@@ -90,20 +81,14 @@ def test_a_split_parent_keeps_the_report_wide_contents_and_legend_and_the_child_
             None,
             ItemContent(
                 title="Garden handbook",
-                sections={
-                    "page header": HEADER,
-                    "page legend": LEGEND,
-                    "blocks[0]": INTRO,
-                    "planting": PLANTING,
-                },
+                sections={"page header": HEADER, INTRO_KEY: INTRO, "planting": PLANTING},
                 fields={"Area": "Shed"},
             ),
             {
                 TITLE: "meta.title",
-                FIELDS: "publish.targets[0]",
+                FIELDS: WHERE_FIELDS,
                 section_part("page header"): "meta",
-                section_part("page legend"): "badges",
-                section_part("blocks[0]"): "blocks[0]",
+                section_part(INTRO_KEY): "blocks[0]",
                 section_part("planting"): "blocks[2]",
             },
         ),
@@ -111,11 +96,50 @@ def test_a_split_parent_keeps_the_report_wide_contents_and_legend_and_the_child_
             ItemDraft(
                 "tools",
                 ItemContent(
-                    title="Tools", sections={"tools": TOOLS}, fields={"Area": "Tool wall", "Owner": "Rowan"}
+                    title="Tools",
+                    sections={"page legend": LEGEND, "tools": TOOLS},
+                    fields={"Area": "Tool wall", "Owner": "Rowan"},
                 ),
-                {TITLE: "blocks[1].title", FIELDS: "publish.targets[0]", section_part("tools"): "blocks[1]"},
+                {
+                    TITLE: "blocks[1].title",
+                    FIELDS: "publish.targets[0].overrides.tools.fields",
+                    section_part("page legend"): "badges",
+                    section_part("tools"): "blocks[1]",
+                },
             ),
         ),
+    )
+
+
+def test_a_split_section_without_overrides_takes_its_fields_from_where() -> None:
+    report = parse_garden_report(
+        publish=make_notion_publish(
+            split=["tools"],
+            where={"parent_page": "0123456789abcdef0123456789abcdef", "fields": {"Area": "Shed"}},
+        )
+    )
+
+    (target,) = draft_targets(report, fake_registry(FakeTransport()))
+
+    assert (target.sections[0].content.fields, target.sections[0].paths[FIELDS]) == (
+        {"Area": "Shed"},
+        WHERE_FIELDS,
+    )
+
+
+def test_an_item_puts_its_legend_right_before_its_own_first_top_level_table() -> None:
+    blocks = [
+        make_section("tools", title="Tools", collapsed=False),
+        {"type": "badge_row", "items": [{"key": "API"}]},
+        make_table([{"key": "a", "label": "A"}], rows=[{"a": "x"}]),
+    ]
+    report = parse_garden_report(publish=make_notion_publish(split=["tools"]), blocks=blocks)
+
+    (target,) = draft_targets(report, fake_registry(FakeTransport()))
+
+    assert (list(target.document.content.sections), list(target.sections[0].content.sections)) == (
+        ["page header", "block e139b771", "page legend", "block 9229c315"],
+        ["tools"],
     )
 
 
@@ -124,20 +148,27 @@ def test_a_target_built_from_some_sections_leaves_the_other_blocks_out() -> None
 
     (target,) = draft_targets(report, fake_registry(FakeTransport()))
 
-    assert target.document.content.sections == {
-        "page header": 'For new members {color="gray"}\n<table_of_contents/>\n',
-        "page legend": LEGEND,
-        "planting": PLANTING,
-    }
+    assert target.document.content.sections == {"page header": HEADER, "planting": PLANTING}
 
 
-def test_a_top_level_block_that_is_not_a_section_is_keyed_by_its_place() -> None:
-    blocks = [*make_garden_blocks(), {"type": "text", "body": "Questions go to the noticeboard."}]
-    report = parse_garden_report(publish=make_notion_publish(split=["tools", "planting"]), blocks=blocks)
+def test_a_heading_is_keyed_by_its_anchor_and_other_blocks_by_their_content() -> None:
+    blocks = [
+        {"type": "heading", "text": "Daily jobs"},
+        {"type": "text", "body": "Water daily."},
+        {"type": "text", "body": "Water daily."},
+        {"type": "text", "body": "Weed weekly."},
+    ]
+    report = parse_garden_report(publish=make_notion_publish(), blocks=blocks)
 
     (target,) = draft_targets(report, fake_registry(FakeTransport()))
 
-    assert list(target.document.content.sections) == ["page header", "page legend", "blocks[0]", "blocks[3]"]
+    assert list(target.document.content.sections) == [
+        "page header",
+        "daily-jobs",
+        "block 355f322b",
+        "block 355f322b #2",
+        "block c6216b93",
+    ]
 
 
 def _plain_garden_report(**target: Any) -> Report:
@@ -155,7 +186,7 @@ def _plain_garden_report(**target: Any) -> Report:
 def test_a_section_over_a_connector_limit_fails_naming_the_section_and_the_limit() -> None:
     registry = fake_registry(FakeTransport(), (ContentLimit("section", 25, "characters"),))
     expected = (
-        f"{TARGET_LABEL}, section tools: section tools (blocks[1]) has 39 characters, over the 25 a notion "
+        f"{TARGET_LABEL}, section tools: section tools (blocks[1]) has 39 characters, over the 25 a Notion "
         "section can take; split the document further with `split`, or shorten it"
     )
 
@@ -166,7 +197,7 @@ def test_a_section_over_a_connector_limit_fails_naming_the_section_and_the_limit
 def test_an_item_over_a_connector_limit_fails_naming_the_item_and_the_limit() -> None:
     registry = fake_registry(FakeTransport(), (ContentLimit("item", 60, "characters"),))
     expected = (
-        f"{TARGET_LABEL}, document: the item has 62 characters, over the 60 a notion item can take; "
+        f"{TARGET_LABEL}, document: the item has 62 characters, over the 60 a Notion item can take; "
         "split the document further with `split`, or shorten it"
     )
 
@@ -182,7 +213,7 @@ def test_content_at_a_connector_limit_fits() -> None:
     (target,) = draft_targets(_plain_garden_report(), registry)
 
     assert target.document.content.sections == {
-        "blocks[0]": "Welcome to the garden.\n",
+        INTRO_KEY: "Welcome to the garden.\n",
         "tools": f"## Tools\n- {LONG_ITEM}\n",
     }
 

@@ -22,6 +22,7 @@ from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTRO_KEY,
     TARGET_LABEL,
     FakeTransport,
     fake_registry,
@@ -95,7 +96,7 @@ def test_one_changed_section_plans_one_section_write_after_the_section_before_it
 
     assert _plan(changed, state).targets[0].steps == (
         WriteSectionStep(
-            DOCUMENT, "planting", "## Planting\nSow after the last frost.\n", "blocks[0]", "blocks[2]"
+            DOCUMENT, "planting", "## Planting\nSow after the last frost.\n", INTRO_KEY, "blocks[2]"
         ),
     )
 
@@ -110,7 +111,7 @@ def test_a_section_title_change_writes_the_title_of_its_own_item() -> None:
             TOOLS,
             "tools",
             '## Garden tools\n<span color="blue">**api**</span>\n- Spade.\n',
-            None,
+            "page legend",
             "blocks[1]",
         ),
     )
@@ -139,29 +140,54 @@ def test_reordered_labels_plan_nothing_and_a_new_label_writes_the_fields() -> No
     )
 
 
-def test_a_split_section_removed_from_the_document_archives_its_item_and_its_badge_leaves_the_legend() -> (
-    None
-):
+def test_a_split_section_removed_from_the_document_archives_its_item() -> None:
     state = _state_of(_drafts())
     without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
 
     assert _plan(_drafts(publish=make_notion_publish(), blocks=without_tools), state).targets[0].steps == (
         ArchiveStep(TOOLS, "page-2"),
-        RemoveSectionStep(DOCUMENT, "page legend"),
     )
 
 
 def test_writes_come_before_archives_and_removed_sections_come_last() -> None:
     state = _state_of(_drafts())
     (target,) = _drafts(publish=make_notion_publish(), blocks=make_garden_blocks()[1:])
+    sections = target.document.content.sections
 
     assert _plan((target,), state).targets[0].steps == (
-        WriteSectionStep(
-            DOCUMENT, "tools", target.document.content.sections["tools"], "page legend", "blocks[0]"
-        ),
+        WriteSectionStep(DOCUMENT, "page legend", sections["page legend"], "page header", "badges"),
+        WriteSectionStep(DOCUMENT, "tools", sections["tools"], "page legend", "blocks[0]"),
         ArchiveStep(TOOLS, "page-2"),
-        RemoveSectionStep(DOCUMENT, "blocks[0]"),
+        RemoveSectionStep(DOCUMENT, INTRO_KEY),
     )
+
+
+def _plain_texts(*bodies: str) -> list[dict[str, Any]]:
+    return [{"type": "text", "body": body} for body in bodies]
+
+
+def test_a_block_inserted_at_the_top_writes_only_that_block() -> None:
+    publish = make_notion_publish()
+    state = _state_of(_drafts(publish=publish, blocks=_plain_texts("Water daily.", "Weed weekly.")))
+    (target,) = _drafts(
+        publish=publish, blocks=_plain_texts("Welcome to the garden.", "Water daily.", "Weed weekly.")
+    )
+
+    assert _plan((target,), state).targets[0].steps == (
+        WriteSectionStep(DOCUMENT, INTRO_KEY, "Welcome to the garden.\n", "page header", "blocks[0]"),
+    )
+
+
+def test_a_block_deleted_from_the_middle_removes_only_that_block() -> None:
+    publish = make_notion_publish()
+    state = _state_of(
+        _drafts(
+            publish=publish, blocks=_plain_texts("Welcome to the garden.", "Water daily.", "Weed weekly.")
+        )
+    )
+    (target,) = _drafts(publish=publish, blocks=_plain_texts("Welcome to the garden.", "Weed weekly."))
+
+    assert _plan((target,), state).targets[0].steps == (RemoveSectionStep(DOCUMENT, "block 355f322b"),)
 
 
 def test_a_target_removed_from_the_publish_block_archives_its_section_items_then_its_document() -> None:
@@ -221,10 +247,11 @@ def test_the_plan_reads_as_creates_updates_archives_and_deletes_with_deletes_las
     (target,) = _drafts(publish=make_notion_publish(), blocks=make_garden_blocks()[1:])
 
     assert describe_plan(_plan((target,), state)) == [
-        f"{TARGET_LABEL}: 0 to create, 1 to update, 1 to archive, 1 to delete",
+        f"{TARGET_LABEL}: 0 to create, 2 to update, 1 to archive, 1 to delete",
+        "  update   document: page legend (badges)",
         "  update   document: tools (blocks[0])",
         "  archive  section tools (page-2)",
-        "  DELETE   document: blocks[0], removed from the item",
+        f"  DELETE   document: {INTRO_KEY}, removed from the item",
     ]
 
 

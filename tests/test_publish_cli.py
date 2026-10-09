@@ -17,7 +17,8 @@ from tests.factories.publish_factory import (
 
 SPRING = "## Planting\nSow in spring.\n"
 LATE_SPRING = "## Planting\nSow in late spring.\n"
-NEW_INTRO = "Welcome, new members."
+TOOLS_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
+RAKE_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Rake.\n'
 
 
 def _run(argv: list[str], transport: FakeTransport) -> int:
@@ -27,7 +28,7 @@ def _run(argv: list[str], transport: FakeTransport) -> int:
 def _published_then_edited(tmp_path: Path, transport: FakeTransport) -> Path:
     path = write_garden_report(tmp_path)
     _run(["publish", str(path), "--apply"], transport)
-    write_garden_report(tmp_path, blocks=make_garden_blocks(intro=NEW_INTRO))
+    write_garden_report(tmp_path, blocks=make_garden_blocks(tools="Rake."))
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
     transport.forget_calls()
     return path
@@ -130,8 +131,8 @@ def test_overwrite_after_the_refusal_replaces_the_edit(
 
     assert (exit_code, capsys.readouterr().out) == (
         0,
-        f"{TARGET_LABEL}: update   document: blocks[0]\n"
         f"{TARGET_LABEL}: update   document: planting (blocks[2])\n"
+        f"{TARGET_LABEL}: update   section tools: tools (blocks[1])\n"
         f"Published 2 steps. The publish state is in {state_path_for(path)}.\n",
     )
 
@@ -184,11 +185,13 @@ def test_diff_prints_the_remote_edits_then_what_the_yaml_would_change(
         "-Sow in spring.\n"
         "+Sow in late spring.\n"
         "What this YAML would change:\n"
-        f"--- {TARGET_LABEL}, document: blocks[0], as published\n"
-        f"+++ {TARGET_LABEL}, document: blocks[0], in the YAML\n"
-        "@@ -1 +1 @@\n"
-        "-Welcome to the garden.\n"
-        f"+{NEW_INTRO}\n",
+        f"--- {TARGET_LABEL}, section tools: tools (blocks[1]), as published\n"
+        f"+++ {TARGET_LABEL}, section tools: tools (blocks[1]), in the YAML\n"
+        "@@ -1,3 +1,3 @@\n"
+        " ## Tools\n"
+        ' <span color="blue">**api**</span>\n'
+        "-- Spade.\n"
+        "+- Rake.\n",
         [],
     )
 
@@ -232,12 +235,12 @@ def test_diff_json_holds_the_same_facts_as_the_text(
         "yaml_changes": [
             {
                 "target": TARGET_LABEL,
-                "item": "document",
+                "item": "section tools",
                 "part": "section",
-                "section": "blocks[0]",
-                "yaml_path": "blocks[0]",
-                "published": "Welcome to the garden.\n",
-                "next": f"{NEW_INTRO}\n",
+                "section": "tools",
+                "yaml_path": "blocks[1]",
+                "published": TOOLS_TEXT,
+                "next": RAKE_TEXT,
             }
         ],
     }

@@ -18,6 +18,7 @@ DOC_ID = "garden-handbook"
 OTHER_DOC_ID = "kitchen-rota"
 TARGET_LABEL = "notion page 0123456789abcdef0123456789abcdef"
 REFUSED_WRITE = "the service refused the write"
+INTRO_KEY = "block c9632b59"
 
 
 def make_garden_blocks(**changes: str) -> list[dict[str, Any]]:

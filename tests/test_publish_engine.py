@@ -25,6 +25,7 @@ from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import load_state, state_path_for
 from tests.factories.publish_factory import (
     DOC_ID,
+    INTRO_KEY,
     OTHER_DOC_ID,
     REFUSED_WRITE,
     TARGET_LABEL,
@@ -41,6 +42,8 @@ TOOLS = ItemRef(TARGET_LABEL, "tools")
 PLANTING = ItemRef(TARGET_LABEL, "planting")
 SPRING = "## Planting\nSow in spring.\n"
 LATE_SPRING = "## Planting\nSow in late spring.\n"
+TOOLS_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
+RAKE_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Rake.\n'
 FIRST_PUBLISH = ('create   document "Garden handbook"', 'create   section tools "Tools"')
 
 
@@ -105,7 +108,7 @@ def test_a_dry_run_reads_and_writes_nothing(tmp_path: Path) -> None:
 def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(
-        tmp_path, transport, blocks=make_garden_blocks(intro="Welcome, new members.", planting="Sow in May.")
+        tmp_path, transport, blocks=make_garden_blocks(tools="Rake.", planting="Sow in May.")
     )
     transport.fail_on_write(2)
 
@@ -116,11 +119,11 @@ def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: 
     transport.stop_failing()
     second_try = _publish(path, transport)
 
-    assert (first_try, second_try, transport.writes(), transport.items["page-1"].content) == (
-        [("write_section", "page-1", "blocks[0]")],
-        Applied(("update   document: planting (blocks[2])",)),
+    assert (first_try, second_try, transport.writes(), transport.items["page-2"].content) == (
         [("write_section", "page-1", "planting")],
-        _drafted(path),
+        Applied(("update   section tools: tools (blocks[1])",)),
+        [("write_section", "page-2", "tools")],
+        _drafted(path, "tools"),
     )
 
 
@@ -146,9 +149,7 @@ def test_a_first_publish_that_fails_midway_creates_only_the_missing_items_on_the
 
 def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path: Path) -> None:
     transport = FakeTransport()
-    path = _published_then_rewritten(
-        tmp_path, transport, blocks=make_garden_blocks(intro="Welcome, new members.")
-    )
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
 
     refused = _publish(path, transport)
@@ -158,8 +159,8 @@ def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path
     assert (refused, refused_writes, overwritten, transport.writes(), transport.items["page-1"].content) == (
         Refused((_planting_edit(),), "edited"),
         [],
-        Applied(("update   document: blocks[0]", "update   document: planting (blocks[2])")),
-        [("write_section", "page-1", "blocks[0]"), ("write_section", "page-1", "planting")],
+        Applied(("update   document: planting (blocks[2])", "update   section tools: tools (blocks[1])")),
+        [("write_section", "page-1", "planting"), ("write_section", "page-2", "tools")],
         _drafted(path),
     )
 
@@ -200,7 +201,8 @@ def test_an_edit_the_service_reports_without_a_visible_change_still_stops_the_pu
     transport.report_an_edit_without_changing_content("page-1", FIELDS)
 
     assert _publish(path, transport) == Refused(
-        (RemoteEdit(DOCUMENT, FIELDS, "publish.targets[0]", "{}\n", "{}\n", None, None),), "edited"
+        (RemoteEdit(DOCUMENT, FIELDS, "publish.targets[0].where.fields", "{}\n", "{}\n", None, None),),
+        "edited",
     )
 
 
@@ -275,8 +277,8 @@ def test_a_section_removed_from_the_yaml_archives_its_item_and_leaves_the_state_
         transport.items["page-2"].archived,
         list(load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].sections),
     ) == (
-        Applied(("archive  section tools (page-2)", "DELETE   document: page legend, removed from the item")),
-        [("archive", "page-2"), ("write_section", "page-1", "page legend")],
+        Applied(("archive  section tools (page-2)",)),
+        [("archive", "page-2")],
         True,
         [],
     )
@@ -284,9 +286,7 @@ def test_a_section_removed_from_the_yaml_archives_its_item_and_leaves_the_state_
 
 def test_the_diff_shows_remote_edits_and_what_the_yaml_would_change(tmp_path: Path) -> None:
     transport = FakeTransport()
-    path = _published_then_rewritten(
-        tmp_path, transport, blocks=make_garden_blocks(intro="Welcome, new members.")
-    )
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
 
     diff = diff_publish(prepare_publish(path, fake_registry(transport)))
@@ -294,17 +294,28 @@ def test_the_diff_shows_remote_edits_and_what_the_yaml_would_change(tmp_path: Pa
     assert (diff, transport.writes()) == (
         PublishDiff(
             (_planting_edit(),),
-            (
-                YamlChange(
-                    DOCUMENT,
-                    section_part("blocks[0]"),
-                    "blocks[0]",
-                    "Welcome to the garden.\n",
-                    "Welcome, new members.\n",
-                ),
-            ),
+            (YamlChange(TOOLS, section_part("tools"), "blocks[1]", TOOLS_TEXT, RAKE_TEXT),),
         ),
         [],
+    )
+
+
+def test_a_changed_plain_block_shows_as_one_block_added_and_one_removed(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=make_garden_blocks(intro="Welcome, new members.")
+    )
+
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert diff == PublishDiff(
+        (),
+        (
+            YamlChange(
+                DOCUMENT, section_part("block 86f0151a"), "blocks[0]", None, "Welcome, new members.\n"
+            ),
+            YamlChange(DOCUMENT, section_part(INTRO_KEY), None, "Welcome to the garden.\n", None),
+        ),
     )
 
 
@@ -343,7 +354,7 @@ def test_the_status_names_an_item_whose_section_left_the_yaml_as_removed(tmp_pat
     path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
 
     assert publish_status(prepare_publish(path, fake_registry(transport))) == (
-        ItemStatus(DOCUMENT, "page-1", ("changed in the YAML",)),
+        ItemStatus(DOCUMENT, "page-1", ("in sync",)),
         ItemStatus(TOOLS, "page-2", ("removed",)),
     )
 
