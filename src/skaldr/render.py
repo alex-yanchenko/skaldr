@@ -23,6 +23,7 @@ from skaldr.frozen_model import FrozenModel
 from skaldr.highlight import highlighted_code, highlighted_diff_lines
 from skaldr.mathml import mathml
 from skaldr.models import (
+    MEDIA_KIND_LABELS,
     Report,
     ToneLiteral,
     iter_requests,
@@ -198,6 +199,8 @@ def html_environment() -> Environment:
         matrix_grid=compute.matrix_grid,
         matrix_cell_display=compute.matrix_cell_display,
         swimlane_layout=compute.swimlane_layout,
+        url_host=compute.url_host,
+        media_kind_labels=MEDIA_KIND_LABELS,
         variable_parts=compute.variable_parts,
         request_wire=compute.request_wire,
         command_for=compute.command_for,

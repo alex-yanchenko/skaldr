@@ -16,6 +16,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListKind,
     ListNode,
+    Media,
     Node,
     Paragraph,
     Quote,
@@ -223,7 +224,13 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
 
 
 def lower_image(block: models.Image) -> list[Node]:
+    if block.src.startswith(models.WEB_URL_SCHEMES):
+        return [Media("image", block.src, plain(block.alt), plain(block.caption or ""))]
     return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
+
+
+def lower_media(block: models.Media) -> list[Node]:
+    return [Media(block.kind, block.src, caption=plain(block.caption or ""))]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:

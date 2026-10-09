@@ -446,7 +446,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
-		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
+		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}
+		& .media-card{display:grid; gap:var(--s1); padding:var(--s4); color:var(--ink); text-decoration:none; overflow-wrap:anywhere;
+			&:hover .media-title{text-decoration:underline}}
+		& .media-kind{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+		& .media-title{font-weight:600}
+		& .media-host{font-size:12px; color:var(--muted)}}
 
 	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
 	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours
@@ -1248,6 +1253,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <div class="code"><div class="code-label">dedupe.ts · tiebreak fix</div><pre class="diff"><span class="ln ctx">function pickWinner(a, b) {</span><span class="ln del">  return a.code.localeCompare(b.code);</span><span class="ln add">  if (isPlaceholder(a) !== isPlaceholder(b))</span><span class="ln add">    return isPlaceholder(a) ? 1 : -1;</span><span class="ln add">  return a.code.localeCompare(b.code);</span><span class="ln ctx">}</span><span class="ln ctx"></span></pre></div>
 
 <figure class="fig"><div class="frame"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+" alt="Discrepancy volume by zone"></div><figcaption>Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).</figcaption></figure>
+
+<figure class="fig remote"><div class="frame"><a class="media-card" href="https://example.com/photos/aisle-12.png" rel="noopener noreferrer"><span class="media-kind">Image</span><span class="media-title">Aisle 12 with overflow bins</span><span class="media-host">example.com</span></a></div><figcaption>Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).</figcaption></figure>
+
+<figure class="fig remote"><div class="frame"><a class="media-card" href="https://example.com/videos/dock-walkthrough.mp4" rel="noopener noreferrer"><span class="media-kind">Video</span><span class="media-title">Dock walkthrough, 4 minutes</span><span class="media-host">example.com</span></a></div></figure>
 
 <blockquote class="quote"><div>These bins are aggregate lots, so we can&#39;t split <code>AGG-07</code> into individual SKUs from the dock scan alone.</div><span class="cite">Floor lead, ticket OPS-1234</span></blockquote>
 

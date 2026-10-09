@@ -429,7 +429,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
-		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
+		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}
+		& .media-card{display:grid; gap:var(--s1); padding:var(--s4); color:var(--ink); text-decoration:none; overflow-wrap:anywhere;
+			&:hover .media-title{text-decoration:underline}}
+		& .media-kind{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+		& .media-title{font-weight:600}
+		& .media-host{font-size:12px; color:var(--muted)}}
 
 	/* chart — render-time inline SVG (bar/line/donut). Flat by design (data viz, not a panel). The
 	   SVG scales to width via viewBox; the .c-* classes style the computed axis/ticks/total so colours

@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
-from skaldr.models import ToneLiteral
+from skaldr.models import MediaKind, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 ListKind = Literal["bullet", "number", "check"]
+MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
@@ -75,6 +76,14 @@ class CodeBlock:
 @dataclass(frozen=True)
 class DisplayMath:
     expression: str
+
+
+@dataclass(frozen=True)
+class Media:
+    kind: MediaNodeKind
+    url: str
+    description: ExportRich = ()
+    caption: ExportRich = ()
 
 
 @dataclass(frozen=True)
@@ -193,6 +202,7 @@ Node = (
     | TableNode
     | CodeBlock
     | DisplayMath
+    | Media
     | Callout
     | Quote
     | Divider
@@ -264,6 +274,7 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             | TableNode()
             | CodeBlock()
             | DisplayMath()
+            | Media()
             | Quote()
             | Divider()
             | TableOfContents()

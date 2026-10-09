@@ -490,6 +490,36 @@ def test_a_divider_is_a_notion_divider_line_between_its_neighbours() -> None:
     assert notion_of(blocks) == "Above\n---\nBelow\n"
 
 
+@pytest.mark.parametrize(
+    ("image", "line"),
+    [
+        pytest.param(
+            {"caption": "Overflow bins"},
+            "![Overflow bins](https://example.com/aisle.png)",
+            id="the-caption-is-the-notion-caption",
+        ),
+        pytest.param({}, "![Aisle 12](https://example.com/aisle.png)", id="alt-stands-in-without-a-caption"),
+    ],
+)
+def test_a_web_image_is_a_notion_image_line(image: dict[str, Any], line: str) -> None:
+    block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
+
+    assert notion_of([block]) == f"{line}\n"
+
+
+@pytest.mark.parametrize("kind", ["video", "audio", "file", "pdf"])
+def test_a_media_block_is_a_notion_tag_holding_its_caption(kind: str) -> None:
+    block = {"type": "media", "kind": kind, "src": "https://example.com/a?x=1&y=2", "caption": "Dock walk"}
+
+    assert notion_of([block]) == f'<{kind} src="https://example.com/a?x=1&amp;y=2">Dock walk</{kind}>\n'
+
+
+def test_a_media_block_without_a_caption_is_an_empty_notion_tag() -> None:
+    block = {"type": "media", "kind": "pdf", "src": "https://example.com/sheet.pdf"}
+
+    assert notion_of([block]) == '<pdf src="https://example.com/sheet.pdf"></pdf>\n'
+
+
 def test_block_nodes_become_notion_blocks() -> None:
     nodes = [
         Paragraph((Plain("muted"),), "muted"),

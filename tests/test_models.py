@@ -27,6 +27,7 @@ from skaldr.models import (
     Grid,
     Group,
     Heading,
+    Image,
     InnerBlock,
     InnerToggle,
     ListBlock,
@@ -34,6 +35,8 @@ from skaldr.models import (
     Math,
     Matrix,
     MatrixCell,
+    Media,
+    MediaKind,
     Meta,
     Meter,
     MeterItem,
@@ -558,11 +561,80 @@ def test_meter_value_out_of_bounds_is_rejected() -> None:
         parse_report(make_report(blocks=[block]))
 
 
-def test_image_src_must_be_data_uri() -> None:
-    block = {"type": "image", "src": "https://example.com/x.png", "alt": "x"}
-
-    with pytest.raises(ReportError, match=r"blocks\.0.*data: URI"):
+def _refusal(block: dict[str, Any]) -> str:
+    with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
+    return str(raised.value)
+
+
+@pytest.mark.parametrize("src", ["https://example.com/aisle.png", "http://example.com/aisle.png"])
+def test_an_image_may_name_a_web_url(src: str) -> None:
+    block = parse_report(make_report(blocks=[{"type": "image", "src": src, "alt": "Aisle 12"}])).blocks[0]
+
+    assert block == Image(type="image", src=src, alt="Aisle 12")
+
+
+@pytest.mark.parametrize(
+    "src", ["ftp://example.com/x.png", "file:///etc/passwd", "javascript:alert(1)", "x.png"]
+)
+def test_an_image_src_that_is_neither_a_data_uri_nor_a_web_url_is_refused(src: str) -> None:
+    assert _refusal({"type": "image", "src": src, "alt": "x"}) == (
+        "invalid content data: blocks.0.image: "
+        "Value error, 'src' must be a data: URI or an http:// or https:// URL"
+    )
+
+
+def test_an_image_without_alt_text_is_refused() -> None:
+    assert _refusal({"type": "image", "src": "https://example.com/x.png"}) == (
+        "invalid content data: blocks.0.image.alt: Field required"
+    )
+
+
+@pytest.mark.parametrize(
+    ("alt", "complaint"),
+    [
+        pytest.param("", "String should have at least 1 character", id="empty"),
+        pytest.param("   ", "String should match pattern '\\S'", id="spaces"),
+    ],
+)
+def test_an_image_with_blank_alt_text_is_refused(alt: str, complaint: str) -> None:
+    assert _refusal({"type": "image", "src": "https://example.com/x.png", "alt": alt}) == (
+        f"invalid content data: blocks.0.image.alt: {complaint}"
+    )
+
+
+@pytest.mark.parametrize("kind", get_args(MediaKind))
+def test_a_media_block_names_a_kind_and_a_web_url(kind: MediaKind) -> None:
+    src = "https://example.com/count-sheet"
+    block = {"type": "media", "kind": kind, "src": src, "caption": "Signed count sheet"}
+
+    assert parse_report(make_report(blocks=[block])).blocks[0] == Media(
+        type="media", kind=kind, src=src, caption="Signed count sheet"
+    )
+
+
+@pytest.mark.parametrize("src", ["data:application/pdf;base64,AA==", "ftp://example.com/a.pdf", "a.pdf"])
+def test_a_media_src_must_be_an_http_or_https_url(src: str) -> None:
+    assert _refusal({"type": "media", "kind": "pdf", "src": src}) == (
+        "invalid content data: blocks.0.media: Value error, 'src' must be an http:// or https:// URL"
+    )
+
+
+def test_a_media_kind_must_be_one_the_block_knows() -> None:
+    assert _refusal({"type": "media", "kind": "embed", "src": "https://example.com/x"}) == (
+        "invalid content data: blocks.0.media.kind: Input should be 'video', 'audio', 'file' or 'pdf'"
+    )
+
+
+@pytest.mark.parametrize("kind", ["image", "media"])
+@pytest.mark.parametrize("src", ["https://clerk:s3cret@example.com/x.png", "https://clerk@example.com/x.png"])
+def test_a_url_carrying_a_username_or_password_is_refused(kind: str, src: str) -> None:
+    extra = {"alt": "x"} if kind == "image" else {"kind": "video"}
+
+    assert _refusal({"type": kind, "src": src, **extra}) == (
+        f"invalid content data: blocks.0.{kind}: "
+        f"Value error, 'src' {src!r} is not a valid URL (it holds a username or password)"
+    )
 
 
 def test_section_may_not_contain_a_section() -> None:
@@ -4074,6 +4146,7 @@ def test_references_rejects_url_with_a_disallowed_scheme() -> None:
         pytest.param("https://x.io/a b", "it holds whitespace", id="space-in-path"),
         pytest.param("https://x.io/a\tb", "it holds whitespace", id="tab-in-path"),
         pytest.param("https://x.io/\n\n# h", "it holds whitespace", id="newline"),
+        pytest.param("https://clerk:s3cret@x.io", "it holds a username or password", id="user-and-password"),
         pytest.param("mailto:", "it names no address", id="bare-mailto"),
         pytest.param("mailto:?subject=hi", "it names no address", id="mailto-with-only-a-query"),
     ],

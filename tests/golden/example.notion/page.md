@@ -258,6 +258,8 @@ function pickWinner(a, b) {
 }
 ```
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
+![Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).](https://example.com/photos/aisle-12.png)
+<video src="https://example.com/videos/dock-walkthrough.mp4">Dock walkthrough, 4 minutes</video>
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.<br>*Floor lead, ticket OPS-1234*
 ## At a glance
 <columns>

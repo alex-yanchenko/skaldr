@@ -8,7 +8,7 @@ from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 
@@ -4399,6 +4399,76 @@ def test_image_max_width_renders_style() -> None:
     html = render_html(report)
 
     assert 'style="max-width:400px"' in html
+
+
+def _html_of(block: dict[str, Any]) -> str:
+    return render_html(parse_report(make_report(blocks=[block])))
+
+
+def test_a_web_image_renders_as_a_link_card_with_its_alt_host_and_caption() -> None:
+    block = {
+        "type": "image",
+        "src": "https://cdn.example.com/aisle.png?v=2",
+        "alt": "Aisle 12 <overflow>",
+        "caption": "Overflow bins",
+    }
+
+    assert (
+        '<figure class="fig remote"><div class="frame">'
+        '<a class="media-card" href="https://cdn.example.com/aisle.png?v=2" rel="noopener noreferrer">'
+        '<span class="media-kind">Image</span>'
+        '<span class="media-title">Aisle 12 &lt;overflow&gt;</span>'
+        '<span class="media-host">cdn.example.com</span></a></div>'
+        "<figcaption>Overflow bins</figcaption></figure>"
+    ) in _html_of(block)
+
+
+def test_a_web_image_with_a_max_width_and_no_caption_keeps_the_width_and_drops_the_caption() -> None:
+    block = {"type": "image", "src": "https://example.com/a.png", "alt": "A", "max_width": 300}
+
+    assert (
+        '<figure class="fig remote" style="max-width:300px"><div class="frame">'
+        '<a class="media-card" href="https://example.com/a.png" rel="noopener noreferrer">'
+        '<span class="media-kind">Image</span><span class="media-title">A</span>'
+        '<span class="media-host">example.com</span></a></div></figure>'
+    ) in _html_of(block)
+
+
+def test_a_web_image_never_becomes_an_img_element_the_csp_would_block() -> None:
+    block = {"type": "image", "src": "https://example.com/a.png", "alt": "A"}
+
+    assert "<img" not in _html_of(block)
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"), [("video", "Video"), ("audio", "Audio"), ("file", "File"), ("pdf", "PDF")]
+)
+def test_a_media_block_renders_as_a_link_card_titled_by_its_caption(kind: str, label: str) -> None:
+    block = {"type": "media", "kind": kind, "src": "https://files.example.com/walk", "caption": "Dock walk"}
+
+    assert (
+        '<figure class="fig remote"><div class="frame">'
+        '<a class="media-card" href="https://files.example.com/walk" rel="noopener noreferrer">'
+        f'<span class="media-kind">{label}</span>'
+        '<span class="media-title">Dock walk</span>'
+        '<span class="media-host">files.example.com</span></a></div></figure>'
+    ) in _html_of(block)
+
+
+def test_a_media_block_without_a_caption_is_titled_by_its_url() -> None:
+    block = {"type": "media", "kind": "pdf", "src": "https://files.example.com/sheet.pdf"}
+
+    assert (
+        '<span class="media-kind">PDF</span>'
+        '<span class="media-title">https://files.example.com/sheet.pdf</span>'
+        '<span class="media-host">files.example.com</span>'
+    ) in _html_of(block)
+
+
+def test_the_page_policy_still_allows_only_data_images() -> None:
+    block = {"type": "media", "kind": "video", "src": "https://example.com/walk.mp4"}
+
+    assert "default-src 'none'; img-src data:;" in _html_of(block)
 
 
 def test_timeline_item_without_state_or_time_renders() -> None:

@@ -1144,6 +1144,38 @@ def test_a_divider_in_a_walkthrough_step_stands_apart_inside_the_list_entry() ->
     assert markdown_of([walkthrough]) == "1. **Go**\n\n   a\n\n   ---\n"
 
 
+def test_a_web_image_is_a_markdown_image_with_its_caption_in_italics_below() -> None:
+    block = {
+        "type": "image",
+        "src": "https://example.com/aisle.png",
+        "alt": "Aisle 12",
+        "caption": "Overflow bins",
+    }
+
+    assert markdown_of([block]) == "![Aisle 12](https://example.com/aisle.png)\n\n*Overflow bins*\n"
+
+
+def test_a_web_image_without_a_caption_is_only_the_markdown_image() -> None:
+    block = {"type": "image", "src": "https://example.com/a(1).png", "alt": "Aisle [12]"}
+
+    assert markdown_of([block]) == "![Aisle \\[12\\]](https://example.com/a%281%29.png)\n"
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"), [("video", "Video"), ("audio", "Audio"), ("file", "File"), ("pdf", "PDF")]
+)
+def test_a_media_block_is_a_labelled_link_to_its_url(kind: str, label: str) -> None:
+    block = {"type": "media", "kind": kind, "src": "https://example.com/walk", "caption": "Dock walk"}
+
+    assert markdown_of([block]) == f"{label}: [Dock walk](https://example.com/walk)\n"
+
+
+def test_a_media_block_without_a_caption_links_its_own_url() -> None:
+    block = {"type": "media", "kind": "pdf", "src": "https://example.com/sheet.pdf"}
+
+    assert markdown_of([block]) == "PDF: [https://example.com/sheet.pdf](https://example.com/sheet.pdf)\n"
+
+
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
     callout = {"type": "callout", "tone": "warning", "title": "Heads up", "body": "one\n\ntwo"}
 

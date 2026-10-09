@@ -140,7 +140,7 @@ an unknown type, a field from the wrong block, or an unknown key each fails with
 **Blocks:** `skaldr --guide` describes each one.
 
 - Prose and metadata: `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` ·
-  `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`
+  `quote` · `note` · `callout` · `code` · `math` · `image` · `media` · `divider` · `references`
 - Numbers and state: `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` ·
   `chart` · `comparison` · `matrix` · `timeline`
 - Processes: `flow` (a directional pipeline in arrow or step style, with an optional loop) ·
