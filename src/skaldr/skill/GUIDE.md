@@ -1093,7 +1093,7 @@ publish:
       where: { project: PLAN, issue_type: Task, parent: PLAN-100, fields: { labels: [onboarding] } }
       from: [st1, st2]               # build this target from these sections only
       split: [st1, st2]              # one child issue per section
-      overrides: { st2: { fields: { priority: High } } }
+      overrides: { st2: { fields: { priority: { name: High } } } }
 ```
 
 | Key | Meaning |
@@ -1117,7 +1117,7 @@ A rendered page embeds its source **without** the `publish` block: the block, th
 
 ## Publishing
 
-This version of skaldr has the publish commands but no Notion or Jira connection yet, so each of them stops with `error: no connector publishes to notion` (or `jira`) until a release adds the connections. What follows is how the commands behave.
+This version of skaldr publishes to Jira (see Publishing to Jira below). It has no Notion connection yet, so a Notion target stops each command with `error: no connector publishes to notion` until a release adds it. What follows is how the commands behave for every service.
 
 ```bash
 skaldr publish garden.yaml                      # dry run: reads the services, prints the plan, writes nothing
@@ -1176,6 +1176,48 @@ error: 1 part was edited in the service since the last publish, so nothing was w
 **`skaldr diff --json`** prints three lists, `remote_edits`, `yaml_changes` and `missing_remotely` (each missing item's `target`, `item` and `item_id`). Each entry names its `target`, `item` (`document` or `section <id>`), `part` (`section`, `title` or `fields`), `section` id, `yaml_path` and the `published` text; a remote edit adds the `current` text and, when the service says, `edited_by` and `edited_at`; a YAML change adds the `next` text. An item never published shows `null` as its published text, and an item the YAML removed shows `null` as its next text.
 
 **Limits.** A connector can declare a limit on a section or on a whole item, such as a character count. Content over it stops the plan before anything is sent, naming the target, the item, the section and the limit, and suggesting a further `split`.
+
+## Publishing to Jira
+
+**Sign in once.** Run `skaldr auth jira`: it asks for your Jira Cloud site (`https://example.atlassian.net`), your Atlassian account email and an API token you create at id.atlassian.com under Security, API tokens, checks them against the site and keeps them in the system keychain. In CI, set `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` (all three) instead; they win over the keychain. skaldr publishes with your one Jira sign-in, so if you are signed in to more than one site, set the three variables to the site this document publishes to. Every issue skaldr creates or edits is created or edited by you, and Jira notifies watchers as it does for your own edits.
+
+```yaml
+publish:
+  doc_id: garden-handbook
+  targets:
+    - to: jira
+      where:
+        project: DEMO
+        issue_type: Task
+        parent: DEMO-100                  # optional: the document's issue goes under it
+        fields:
+          labels: [garden]
+          priority: { name: High }
+          components: [{ name: Beds }]
+          customfield_10010: 3            # a custom field, by its id
+      split: [tools, planting]            # each becomes its own issue under the document's issue
+      overrides: { planting: { fields: { priority: { name: Low } } } }
+```
+
+**`where`.** `project` is the project key and `issue_type` the issue type every created issue gets (a name such as Task or Story). `parent` puts the document's issue under an existing issue; each `split` section becomes an issue whose parent is the document's issue, so the issue type has to be one your project lets sit under that parent. `fields` holds any other field of a Jira create screen, keyed by the field's id as Jira's REST API names it (`labels`, `priority`, `components`, `duedate`, `customfield_10010`) and written in the shape that API takes: a priority is `{ name: High }`, components are a list of `{ name: ... }`, a select option is `{ value: ... }`, a person is `{ accountId: ... }`. skaldr compares each field in the shape you wrote it, so the extra keys Jira adds when it reads a field back (`self`, `id`, `iconUrl`) never count as an edit. A field Jira does not know, or a value it refuses, stops the run with Jira's own message, naming the field.
+
+**What lands where.** The summary is the item's title. The description is the item's content in the Atlassian Document Format that `--export adf` writes (see Exporting as ADF for Jira). The labels are yours plus `skaldr-<doc_id>`, which skaldr keeps on every issue it publishes and leaves out when it compares labels. Two issue properties, which Jira stores with the issue and does not show, carry the rest: `skaldr.stamp` holds the `doc_id` and the section id, and `skaldr.layout` records which section each part of the description came from, so skaldr can tell later which section an edit touched.
+
+**Updates.** A description is one field in Jira and cannot be changed in part, so when any section of an item changes, skaldr replaces the item's whole description in one request, and leaves it alone when nothing in it changed. The summary and the fields go in one request holding only the ones that changed; a field removed from the YAML is cleared. A rate-limited request is sent again after the wait Jira asks for (up to a minute), and a failed read is tried again after 2, 4 and 8 seconds; a write that fails on Jira's side is never sent twice, since it may have landed.
+
+**Edits made in Jira.** skaldr reads each issue's history after every write and remembers the newest entry. An entry after it that changes the summary, the description, the labels (when the YAML sets `labels`) or a field the YAML sets is an edit made in Jira, and `skaldr diff` shows it under the section, the title or the fields it changed, with who made it and when. Comments, status changes and fields the YAML does not set are not edits. Since skaldr writes as you, an edit you make yourself in Jira counts too.
+
+**The description limit.** Jira takes at most 32,767 characters of description, counted on the compact ADF JSON. An item over that stops the plan before anything is sent, naming the item and its size:
+
+```text
+error: jira project DEMO under no parent issue, document: the item has 40,112 characters of ADF, over the 32,767 a Jira item can take; split the document further with `split`, or shorten it
+```
+
+skaldr never cuts a description short: move sections into their own issues with `split`.
+
+**Archiving.** skaldr never deletes an issue. An item whose section left the YAML or the `split` list is archived: skaldr moves the issue to a status in Jira's done category (by any transition the workflow offers to one), adds a comment saying skaldr archived it, and marks its `skaldr.stamp` as archived, after which skaldr treats the issue as gone. An issue already in a done status gets no transition and no comment. If the workflow offers no transition to a done status from the issue's current status, the run stops naming the issue; close it in Jira and publish again. An issue someone closes by hand is not archived: skaldr keeps publishing to it.
+
+**No writing into an existing issue.** Jira has no counterpart of Notion's `page`: skaldr writes only into issues it created, so a Jira target never adopts an issue and nothing is ever released.
 
 ## The render carries its own source
 

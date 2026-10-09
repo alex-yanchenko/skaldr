@@ -14,12 +14,13 @@ from skaldr.publish.engine import (
     publish_status,
     refusal_message,
 )
+from skaldr.publish.jira import JiraConnector
 from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
 
 
 def installed_connectors() -> ConnectorRegistry:
-    return ConnectorRegistry(())
+    return ConnectorRegistry((JiraConnector(),))
 
 
 def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
