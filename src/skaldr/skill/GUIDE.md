@@ -725,6 +725,12 @@ as a declared name, so a case may bind only some of the variables. Once every ca
 binds it, the variable is no longer listed in the fields at all. `values` works the same for a built
 call (the url, header values and body take the `{{name}}` tokens) and for a case's own `command`.
 
+A key of `values` must also appear as a `{{name}}` in what that case sends: its own `command`, or the
+request's command or url, headers and body as that case sees them. A key the case never uses fails the
+build naming the case and the key. A `secret` variable cannot be bound through `values`, because the
+value would be written into the page and the exports; the reader supplies it. A value is inserted as
+written, so a `{{name}}` inside a value is read as a slot the reader fills.
+
 **`headers` replaces, `headers_add` layers.** Cases that share a credential and differ in one header
 write the shared one once on the request and the difference under `headers_add`, which replaces the
 names it lists and leaves the rest. `headers` stays a replacement, because `headers: {}` is what records
@@ -768,9 +774,9 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
 - **Pick `command` when a copied curl would fail or mislead.** If the reader would run skaldr's curl
   and get a 403 because the credential, proxy or filter is missing, the button is manufacturing
   counter-evidence. Write the command you ran.
-- **A `{{name}}` still works** inside `command`, from `variables`, `case_variable` or a case's `values`, and is written in
-  exactly as the reader types it, with no shell quoting added. You own the quoting, so put the token
-  where the shell will read it the way you mean.
+- **A `{{name}}` still works** inside `command`, from `variables`, `case_variable` or a case's
+  `values`, and is written in exactly as the reader types it, with no shell quoting added. You own the
+  quoting, so put the token where the shell will read it the way you mean.
 - **`command` excludes `method`, `url`, `headers` and `body`**, and a case of a command request cannot
   set `headers` or `headers_add`. Those fields exist to build a curl, and a request with a `command`
   builds none, so they would never reach what the reader runs. A request that sets `command` together

@@ -11,7 +11,15 @@ from skaldr.compute import command_for, reader_variables, request_wire
 from skaldr.errors import ReportError
 from skaldr.models import Request, RequestFlow, parse_report, unresolvable_request_variables
 from skaldr.render import render_html
-from tests.factories import make_command_request, make_flow, make_report, make_request, make_step, markdown_of
+from tests.factories import (
+    make_command_request,
+    make_flow,
+    make_report,
+    make_request,
+    make_step,
+    markdown_of,
+    notion_of,
+)
 
 RECORDS_URL = "https://api.example.test/v1/records"
 SHARED_COMMAND = (
@@ -238,6 +246,29 @@ def test_the_markdown_export_shows_each_cases_command_with_its_own_values() -> N
     )
 
 
+def test_the_notion_export_shows_each_cases_command_with_its_own_values() -> None:
+    second_term = _shared_command_with("A100", "2", "1")
+    control = _shared_command_with("A100", "1", "1")
+
+    assert notion_of([_command_request()]) == (
+        "**Tier mappings on the partner API**\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n'
+        "\t\tSecond term\n"
+        f"\t\t```bash\n\t\t{second_term}\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```plain text\n\t\tsecond\n\t\t```\n"
+        "\t</tab>\n"
+        '\t<tab icon="✅">\n'
+        "\t\tControl\n"
+        f"\t\t```bash\n\t\t{control}\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```plain text\n\t\tfirst\n\t\t```\n"
+        "\t</tab>\n"
+        "</tabs>\n"
+    )
+
+
 def test_the_markdown_export_lists_only_the_values_the_reader_still_supplies() -> None:
     cases = [
         {"label": "One", "values": {"id": "A100", "term": "2"}, "response": {"body": "x"}},
@@ -402,6 +433,95 @@ def test_an_empty_values_map_is_rejected() -> None:
     cases = [{"label": "Second term", "values": {}, "response": OK}]
 
     assert "should have at least 1 item" in _rejected(_command_request(cases=cases))
+
+
+def test_a_secret_variable_cannot_be_bound_through_values() -> None:
+    variables = [{"name": "id", "secret": True}, {"name": "term"}, {"name": "seq"}]
+
+    assert (
+        "case 'Second term' sets `id` under values, but `id` is a secret variable the reader supplies"
+    ) in _rejected(_command_request(variables=variables))
+
+
+def test_a_secret_variable_cannot_be_bound_through_values_in_a_flow_step() -> None:
+    step = make_step(
+        url="https://api.example.test/{{id}}",
+        cases=[{"label": "Control", "values": {"id": "A100"}, "response": OK}],
+    )
+
+    assert (
+        "case 'Control' sets `id` under values, but `id` is a secret variable the reader supplies"
+    ) in _rejected(make_flow(variables=[{"name": "id", "secret": True}], steps=[step, step]))
+
+
+def test_a_values_key_the_cases_own_command_never_uses_is_rejected() -> None:
+    cases = [
+        {
+            "label": "Own",
+            "command": "vault-run -- curl -s https://api.example.test/v1/other/{{id}}",
+            "values": {"id": "B7", "term": "9"},
+            "response": OK,
+        }
+    ]
+
+    assert "case 'Own' sets `term` under values, but nothing it sends uses `{{term}}`" in _rejected(
+        _command_request(cases=cases)
+    )
+
+
+def test_a_values_key_a_cases_replaced_headers_no_longer_carry_is_rejected() -> None:
+    cases = [
+        {"label": "Bare", "headers": {}, "values": {"id": "A100", "term": "2", "seq": "1"}, "response": OK}
+    ]
+
+    assert "case 'Bare' sets `term` under values, but nothing it sends uses `{{term}}`" in _rejected(
+        _built_request(cases=cases)
+    )
+
+
+def test_a_value_carrying_a_token_is_inserted_as_written_and_the_token_stays_a_reader_slot() -> None:
+    block = _command_request(
+        command="fetch {{id}} {{term}}",
+        variables=[{"name": "id"}, {"name": "term"}],
+        cases=[{"label": "Nested", "values": {"id": "{{term}}"}, "response": OK}],
+    )
+    parsed = _parsed_request(block)
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert command_for(parsed, parsed.cases[0]) == "fetch {{term}} {{term}}"
+    assert re.findall(r'data-rq-slot="([^"]+)"', html) == ["term", "term"]
+
+
+def test_a_flow_with_no_reader_fields_and_no_captures_renders_no_fields_block() -> None:
+    step = make_step(
+        url="https://api.example.test/{{id}}",
+        cases=[{"label": "one", "values": {"id": "A100"}, "response": OK}],
+    )
+    html = render_html(
+        parse_report(make_report(blocks=[make_flow(variables=[{"name": "id"}], steps=[step, step])]))
+    )
+
+    assert 'class="rq-vars"' not in html
+    assert "https://api.example.test/A100" in html
+
+
+def test_a_flow_step_case_layers_headers_and_binds_values_together() -> None:
+    step = make_step(
+        url="https://api.example.test/{{id}}",
+        cases=[
+            {
+                "label": "Second term",
+                "headers_add": {"X-Term": "{{term}}"},
+                "values": {"id": "A100", "term": "2"},
+                "response": OK,
+            }
+        ],
+    )
+    flow = _parsed_flow(make_flow(variables=[{"name": "id"}, {"name": "term"}], steps=[step, step]))
+
+    assert command_for(flow.steps[0], flow.steps[0].cases[0]) == (
+        "curl -i -X GET \\\n  -H 'X-Term: 2' \\\n  https://api.example.test/A100"
+    )
 
 
 def test_a_blank_value_is_rejected() -> None:

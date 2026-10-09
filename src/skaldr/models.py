@@ -2210,14 +2210,38 @@ class _RequestCore(FrozenModel):
                 "so there is nothing for it to fill"
             )
 
-    def check_case_values_name_declared_variables(self, declared: Iterable[str], owner: str) -> None:
-        known = set(declared)
+    def referenced_by_case(self, case: RequestCase) -> set[str]:
+        headers = case.headers if case.headers is not None else self.headers
+        scan = " ".join(
+            (
+                self.url or "",
+                case.command or self.command or "",
+                *headers.values(),
+                *(case.headers_add or {}).values(),
+                self.body or "",
+            )
+        )
+        return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
+
+    def check_values_keys(self, variables: Sequence[RequestVariable], owner: str) -> None:
+        known = {variable.name: variable for variable in variables}
         for case in self.cases:
+            used = self.referenced_by_case(case)
             for name in case.values or {}:
                 if name not in known:
                     raise ValueError(
                         f"case '{case.label}' sets `{name}` under values, but the {owner} declares no "
                         f"variable named `{name}`"
+                    )
+                if known[name].secret:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but `{name}` is a secret "
+                        "variable the reader supplies"
+                    )
+                if name not in used:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but nothing it sends uses "
+                        f"`{{{{{name}}}}}`"
                     )
 
     def case_bindings(self, case: RequestCase) -> dict[str, str]:
@@ -2300,7 +2324,7 @@ class Request(_RequestCore, _VariableOwner, _Block):
                 f"`{self.case_variable}` is both the case_variable and a declared variable: each case "
                 "supplies it, so it must not also be a field the reader fills"
             )
-        self.check_case_values_name_declared_variables(declared, "request")
+        self.check_values_keys(self.variables, "request")
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
@@ -2400,7 +2424,7 @@ class RequestFlow(_VariableOwner, _Block):
         if repeated:
             raise ValueError(f"flow declares a variable twice: {', '.join(sorted(repeated))}")
         for step in self.steps:
-            step.check_case_values_name_declared_variables(declared, "flow")
+            step.check_values_keys(self.variables, "flow")
         captured = [capture.name for step in self.steps for capture in step.captures]
         clashing = {name for name in captured if name in declared}
         if clashing:
