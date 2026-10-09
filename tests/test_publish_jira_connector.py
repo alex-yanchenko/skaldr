@@ -149,9 +149,13 @@ def test_publishing_creates_the_document_issue_then_each_split_section_under_it(
         (
             "Garden handbook",
             ["garden", "skaldr-garden-handbook"],
-            {"doc_id": DOC_ID, "section_id": None, "archived": False},
+            {"doc_id": DOC_ID, "section_id": None, "commented": False, "archived": False},
         ),
-        ("Tools", {"key": "DEMO-1"}, {"doc_id": DOC_ID, "section_id": "tools", "archived": False}),
+        (
+            "Tools",
+            {"key": "DEMO-1"},
+            {"doc_id": DOC_ID, "section_id": "tools", "commented": False, "archived": False},
+        ),
     )
 
 

@@ -30,6 +30,7 @@ NOT_FOUND: dict[str, JsonValue] = {
 }
 _API = "/rest/api/3"
 _AS_STORED = frozenset({"description", "status"})
+DISPLAY_NAMES = {"customfield_10010": "Story Points"}
 History = dict[str, JsonValue]
 
 
@@ -98,6 +99,10 @@ class FakeJira:
     edits_during_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
         default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
     )
+    edits_before_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
+        default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
+    )
+    adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     _issues_made: int = 0
     _history_ids: int = 10_000
     _local_ids: int = 0
@@ -130,6 +135,11 @@ class FakeJira:
         self, key: str, author: dict[str, JsonValue] = EDITOR, **fields: JsonValue
     ) -> None:
         self.edits_during_writes.setdefault(key, []).append((author, dict(fields)))
+
+    def edit_right_before_the_next_write(
+        self, key: str, author: dict[str, JsonValue] = EDITOR, **fields: JsonValue
+    ) -> None:
+        self.edits_before_writes.setdefault(key, []).append((author, dict(fields)))
 
     def fail_next(self, method: str, path: str, reply: Reply) -> None:
         self.failing[(method, path)] = reply
@@ -237,6 +247,8 @@ class FakeJira:
         refused = self._refusal(body.fields)
         if refused is not None:
             return refused
+        for author, fields in self.edits_before_writes.pop(key, []):
+            self._change(issue, fields, author)
         changes = dict(body.fields)
         if "description" in changes:
             changes["description"] = self._stored(changes["description"])
@@ -249,8 +261,8 @@ class FakeJira:
     def _change(self, issue: FakeIssue, changes: dict[str, JsonValue], author: dict[str, JsonValue]) -> None:
         items: list[dict[str, JsonValue]] = [
             {
-                "field": name,
-                "fieldtype": "jira",
+                "field": DISPLAY_NAMES.get(name, name),
+                "fieldtype": "custom" if name in DISPLAY_NAMES else "jira",
                 "fieldId": name,
                 "fromString": _shown(issue.fields.get(name)),
                 "toString": _shown(value),
@@ -361,6 +373,8 @@ class FakeJira:
             return
         if not isinstance(node, dict):
             return
+        if node.get("type") == "paragraph" and self.adds_to_paragraphs:
+            node["attrs"] = dict(self.adds_to_paragraphs)
         attrs = node.get("attrs")
         if node.get("type") in ("table", "taskList", "taskItem") and isinstance(attrs, dict):
             self._local_ids += 1

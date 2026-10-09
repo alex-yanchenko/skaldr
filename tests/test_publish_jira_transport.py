@@ -22,7 +22,16 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import JiraTarget
 from tests.factories import make_jira_target
 from tests.factories.auth_factory import summarise
-from tests.factories.jira_factory import DONE, IN_PROGRESS, NOT_FOUND, SITE, WRITER, FakeJira, Reply
+from tests.factories.jira_factory import (
+    DONE,
+    EDITOR,
+    IN_PROGRESS,
+    NOT_FOUND,
+    SITE,
+    WRITER,
+    FakeJira,
+    Reply,
+)
 
 DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
@@ -77,8 +86,13 @@ RAW_AFTER_CREATE = {
 }
 
 
-def _stamp_value(stamp: Stamp, *, archived: bool = False) -> JsonValue:
-    return {"doc_id": stamp.doc_id, "section_id": stamp.section_id, "archived": archived}
+def _stamp_value(stamp: Stamp, *, commented: bool = False, archived: bool = False) -> JsonValue:
+    return {
+        "doc_id": stamp.doc_id,
+        "section_id": stamp.section_id,
+        "commented": commented,
+        "archived": archived,
+    }
 
 
 def _layout_value(sections: dict[str, list[JsonValue]]) -> JsonValue:
@@ -185,23 +199,52 @@ def test_the_marker_after_a_write_is_skaldrs_own_entry_even_when_others_change_f
     )
 
 
-def test_a_read_back_that_differs_from_the_write_without_another_author_is_not_taken_as_published() -> None:
+@pytest.mark.parametrize(
+    ("author", "named"), [(EDITOR, "Robin Editor"), (WRITER, "Example Reader")], ids=["someone-else", "you"]
+)
+def test_an_edit_landing_just_before_skaldrs_write_to_the_same_field_is_named_so_it_can_be_restored(
+    author: dict[str, JsonValue], named: str
+) -> None:
     jira = FakeJira()
     transport, created = _created(jira)
-    jira.edit_right_after_the_next_write(
-        created.item_id, author=WRITER, description=_description(INTRO, _table(), PLANTING)
+    jira.edit_right_before_the_next_write(created.item_id, author=author, summary="Garden notes")
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+
+    assert (str(raised.value), jira.issues["DEMO-1"].fields["summary"]) == (
+        "DEMO-1: skaldr's write replaced an edit made in Jira just before it (summary in changelog 10001 by "
+        f"{named} at 2026-10-01T10:00:00.000+0000); restore it from the issue's history if it should stay",
+        "Garden guide",
     )
 
-    with pytest.raises(
-        ConnectorError,
-        match=_exactly(
-            "DEMO-1 reads back differently from what skaldr wrote to it; the write landed, and the next "
-            "publish shows the difference"
-        ),
-    ):
-        transport.write_content(
-            created.item_id, ContentWrite({"planting": section_text([SOW_IN_MAY])}, created.raw_sections)
-        )
+
+def test_skaldrs_own_change_to_a_custom_field_jira_logs_by_its_display_name_is_its_own() -> None:
+    jira = FakeJira()
+    fields: dict[str, JsonValue] = {**FIELDS_WRITTEN, "customfield_10010": 3}
+    transport, created = _created(jira, CONTENT.model_copy(update={"fields": fields}))
+    write = FieldsWrite(
+        "Garden handbook", {**fields, "customfield_10010": 5}, "Garden handbook", fields, STAMP
+    )
+
+    written = transport.write_fields(created.item_id, write)
+
+    assert (written.marker, written.comparable.fields["customfield_10010"]) == ("10001", 5)
+
+
+def test_a_read_back_jira_saved_in_a_form_skaldr_does_not_expect_is_taken_as_published() -> None:
+    jira = FakeJira(adds_to_paragraphs={"indentation": 0})
+    transport, created = _created(jira)
+    sections = {"planting": section_text([SOW_IN_MAY])}
+
+    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+
+    saved: JsonValue = {
+        "type": "paragraph",
+        "attrs": {"indentation": 0},
+        "content": [{"type": "text", "text": "Sow in May."}],
+    }
+    assert (written.marker, written.comparable.sections) == ("10001", {"planting": section_text([saved])})
 
 
 def test_a_change_made_to_a_new_issue_right_after_its_create_is_left_for_the_next_publish_to_report() -> None:
@@ -211,10 +254,11 @@ def test_a_change_made_to_a_new_issue_right_after_its_create_is_left_for_the_nex
 
     created = transport.create_item(NewItem(TARGET, STAMP, CONTENT))
 
-    assert (created.marker, transport.parts_edited_after(created.item_id, created.marker, CONTENT)) == (
-        None,
-        (FIELDS,),
-    )
+    assert (
+        created.marker,
+        created.comparable,
+        transport.parts_edited_after(created.item_id, created.marker, CONTENT),
+    ) == (None, CONTENT_AS_COMPARED, (FIELDS,))
 
 
 def test_a_fresh_transport_reads_a_newly_owned_field_in_the_shape_the_target_writes_it() -> None:
@@ -658,12 +702,13 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
             ("GET", "/rest/api/3/issue/DEMO-1"),
             ("GET", "/rest/api/3/issue/DEMO-1/transitions"),
             ("POST", "/rest/api/3/issue/DEMO-1/comment"),
+            ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             ("POST", "/rest/api/3/issue/DEMO-1/transitions"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
         ],
         DONE,
         [{"version": 1, "type": "doc", "content": [_words(why)]}],
-        _stamp_value(STAMP, archived=True),
+        _stamp_value(STAMP, commented=True, archived=True),
     )
 
 
@@ -722,25 +767,44 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
 
     transport.archive_item(created.item_id)
 
-    assert summarise(jira.requests[4])["body"] == {"transition": {"id": "31"}}
+    assert summarise(jira.requests[5])["body"] == {"transition": {"id": "31"}}
 
 
-def test_a_transition_that_fails_after_the_comment_keeps_the_comment_and_archiving_again_finishes() -> None:
+@pytest.mark.parametrize(
+    ("refusals", "message"),
+    [
+        pytest.param(
+            [Reply(500, {"errorMessages": ["Boom"]})],
+            "Jira answered HTTP 500 to POST /rest/api/3/issue/DEMO-1/transitions: Boom",
+            id="server-error",
+        ),
+        pytest.param(
+            [Reply(400, {"errorMessages": ["Resolution is required."]})] * 2,
+            "Jira refused POST /rest/api/3/issue/DEMO-1/transitions (HTTP 400): Resolution is required.",
+            id="workflow-validator-twice",
+        ),
+    ],
+)
+def test_a_transition_that_fails_after_the_comment_never_gets_the_comment_posted_twice(
+    refusals: list[Reply], message: str
+) -> None:
     jira = FakeJira()
     transport, created = _created(jira)
-    jira.fail_next("POST", "/rest/api/3/issue/DEMO-1/transitions", Reply(500, {"errorMessages": ["Boom"]}))
+    raised: list[str] = []
 
-    with pytest.raises(ConnectorError) as raised:
-        transport.archive_item(created.item_id)
-    commented = len(jira.issues["DEMO-1"].comments)
+    for refusal in refusals:
+        jira.fail_next("POST", "/rest/api/3/issue/DEMO-1/transitions", refusal)
+        with pytest.raises(ConnectorError) as failed:
+            transport.archive_item(created.item_id)
+        raised.append(str(failed.value))
     transport.archive_item(created.item_id)
 
     issue = jira.issues["DEMO-1"]
-    assert (str(raised.value), commented, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
-        "Jira answered HTTP 500 to POST /rest/api/3/issue/DEMO-1/transitions: Boom",
+    assert (raised, len(issue.comments), issue.fields["status"], issue.properties["skaldr.stamp"]) == (
+        [message] * len(refusals),
         1,
         DONE,
-        _stamp_value(STAMP, archived=True),
+        _stamp_value(STAMP, commented=True, archived=True),
     )
 
 

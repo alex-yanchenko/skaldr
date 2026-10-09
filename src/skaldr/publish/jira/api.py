@@ -39,6 +39,10 @@ class ChangeDetails(JiraModel):
     field_id: str | None = Field(default=None, alias="fieldId")
 
     @property
+    def identity(self) -> str:
+        return self.field_id or self.field
+
+    @property
     def names(self) -> frozenset[str]:
         return frozenset({self.field} if self.field_id is None else {self.field, self.field_id})
 
