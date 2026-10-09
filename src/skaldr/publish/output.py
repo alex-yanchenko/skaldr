@@ -1,13 +1,12 @@
 import difflib
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from pydantic import JsonValue
 
 from skaldr.publish.content import Part
 from skaldr.publish.drafts import item_label, section_label
-from skaldr.publish.engine import ItemStatus, PublishDiff, Refused, RemoteEdit, YamlChange
+from skaldr.publish.engine import ItemStatus, PublishDiff, RemoteEdit, YamlChange
 from skaldr.publish.plan import ItemRef
 
 NO_VISIBLE_CHANGE = "(the service reports an edit here, and its text is unchanged)"
@@ -73,12 +72,20 @@ def diff_lines(diff: PublishDiff) -> list[str]:
         if diff.remote_edits
         else ["Remote edits since the last publish: none"]
     )
+    missing = (
+        [
+            "Missing remotely:",
+            *(f"{missing.item.label} ({missing.item_id})" for missing in diff.missing_remotely),
+        ]
+        if diff.missing_remotely
+        else []
+    )
     yaml = (
         ["What this YAML would change:", *_yaml_change_lines(diff.yaml_changes)]
         if diff.yaml_changes
         else ["What this YAML would change: nothing"]
     )
-    return [*remote, *yaml]
+    return [*remote, *missing, *yaml]
 
 
 def _located(item: ItemRef, part: Part, path: str | None) -> dict[str, JsonValue]:
@@ -111,37 +118,16 @@ def diff_json(diff: PublishDiff) -> str:
             }
             for change in diff.yaml_changes
         ],
+        "missing_remotely": [
+            {
+                "target": missing.item.target,
+                "item": item_label(missing.item.section_id),
+                "item_id": missing.item_id,
+            }
+            for missing in diff.missing_remotely
+        ],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
-
-
-@dataclass(frozen=True)
-class _Count:
-    parts: str
-    were: str
-    edits: str
-    them: str
-
-    @classmethod
-    def of(cls, count: int) -> "_Count":
-        if count == 1:
-            return cls("1 part", "was", "edit", "it")
-        return cls(f"{count} parts", "were", "edits", "them")
-
-
-def refusal_message(refused: Refused) -> str:
-    count = _Count.of(len(refused.edits))
-    if refused.reason == "edited":
-        return (
-            f"{count.parts} {count.were} edited in the service since the last publish, so nothing was "
-            f"written. To keep the {count.edits}, copy {count.them} into the YAML first; to replace "
-            f"{count.them}, publish with --apply --overwrite."
-        )
-    return (
-        f"{count.parts} edited in the service changed after the last diff showed {count.them}, or no diff "
-        f"has shown {count.them} yet, so nothing was written. Read the diff above, then publish with "
-        "--apply --overwrite again."
-    )
 
 
 def status_line(status: ItemStatus) -> str:

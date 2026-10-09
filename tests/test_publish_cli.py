@@ -244,6 +244,7 @@ def test_diff_json_holds_the_same_facts_as_the_text(
                 "next": RAKE_TEXT,
             }
         ],
+        "missing_remotely": [],
     }
 
     exit_code = _run(["diff", str(path), "--json"], transport)

@@ -10,6 +10,7 @@ from skaldr.publish.plan import (
     CreateStep,
     ItemRef,
     PublishPlan,
+    ReleaseStep,
     RemoveSectionStep,
     Step,
     TargetPlan,
@@ -185,7 +186,13 @@ class Applier:
             case WriteContentStep():
                 return self._write_content(target_plan, step)
             case ArchiveStep():
-                self.transports.for_target(target_plan.label).archive_item(step.item_id)
+                if step.item in self.remote:
+                    self.transports.for_target(target_plan.label).archive_item(step.item_id)
+                return with_item(self.state, step.item, target_plan.target, None)
+            case ReleaseStep():
+                if step.item in self.remote:
+                    transport = self.transports.for_target(target_plan.label)
+                    transport.release_item(step.item_id, self._raw_sections(step.item))
                 return with_item(self.state, step.item, target_plan.target, None)
             case _:
                 assert_never(step)
@@ -214,6 +221,7 @@ class Applier:
         self.remote[step.item] = remote
         created = PublishedItem(
             item_id=remote.item_id,
+            origin="created" if step.into_id is None else "adopted",
             rendered=step.draft.content,
             remote=remote.comparable,
             marker=remote.marker,

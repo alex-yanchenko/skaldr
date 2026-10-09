@@ -114,13 +114,17 @@ class FakeTransport:
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
     hand_edits: list[tuple[str, int, Part]] = field(default_factory=list[tuple[str, int, Part]])
     _revision: int = 0
+    _items_made: int = 0
     _writes: int = 0
     _failing_write: int | None = None
     _dropping_after_write: int | None = None
 
-    def seed(self, item_id: str, title: str, doc_id: str | None) -> None:
+    def seed(
+        self, item_id: str, title: str, doc_id: str | None, sections: dict[str, str] | None = None
+    ) -> None:
         stamp = None if doc_id is None else Stamp(doc_id, None)
-        self.items[item_id] = FakeItem(title, {}, {}, stamp, None, self._bump())
+        self._items_made += 1
+        self.items[item_id] = FakeItem(title, dict(sections or {}), {}, stamp, None, self._bump())
 
     def fail_on_write(self, count_from_now: int) -> None:
         self._failing_write = self._writes + count_from_now
@@ -167,7 +171,7 @@ class FakeTransport:
         self._write(("create", item.content.title, item.parent_id or "", item.into_id or ""))
         if item.into_id is not None:
             self._refuse_a_stale_layout(item.into_id, item.into_raw_sections)
-        item_id = item.into_id or f"page-{len(self.items) + 1}"
+        item_id = item.into_id or self._new_item_id()
         content = item.content
         self.items[item_id] = FakeItem(
             content.title,
@@ -239,6 +243,15 @@ class FakeTransport:
         self.items[item_id].archived = True
         self._drop_the_connection_if_asked()
 
+    def release_item(self, item_id: str, raw_sections: RawSections, /) -> None:
+        self._write(("release", item_id))
+        self._refuse_a_stale_layout(item_id, raw_sections)
+        item = self.items[item_id]
+        item.raw_sections = {}
+        item.stamp = None
+        item.revision = self._bump()
+        self._drop_the_connection_if_asked()
+
     def remote_edits_since(self, item_id: str, marker: str | None, /) -> tuple[Part, ...]:
         self.calls.append(("edits_since", item_id))
         since = int(marker or "0")
@@ -267,6 +280,10 @@ class FakeTransport:
     def _bump(self) -> int:
         self._revision += 1
         return self._revision
+
+    def _new_item_id(self) -> str:
+        self._items_made += 1
+        return f"page-{self._items_made}"
 
     def _remote(self, item_id: str) -> RemoteItem:
         item = self.items[item_id]

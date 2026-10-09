@@ -6,11 +6,13 @@ from skaldr.errors import PublishError
 from skaldr.publish.applier import Applied, Applier, StepListener
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, differing_parts, section_part
 from skaldr.publish.drafts import ItemDraft, item_label
-from skaldr.publish.plan import ItemRef, plan_publish, published_item
+from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
 from skaldr.publish.reading import (
+    MissingItem,
     Reading,
     RemoteEdit,
+    missing_message,
     part_text,
     read_items_written_into,
     read_published,
@@ -18,11 +20,14 @@ from skaldr.publish.reading import (
     shown_token,
 )
 from skaldr.publish.state import PendingCreate, PublishState, held_state_lock, save_state
+from skaldr.publish.transport import RemoteItem
 
 __all__ = [
     "Applied",
     "ApplyOutcome",
+    "DryRun",
     "ItemStatus",
+    "MissingItem",
     "Prepared",
     "PublishDiff",
     "Refused",
@@ -30,12 +35,15 @@ __all__ = [
     "YamlChange",
     "apply_publish",
     "diff_publish",
+    "dry_run_publish",
     "prepare_publish",
     "publish_status",
+    "refusal_message",
 ]
 
 RefusalReason = Literal["edited", "changed since the diff"]
 CREATE_INTERRUPTED = "create interrupted"
+MISSING_REMOTELY = "missing remotely"
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,7 @@ ApplyOutcome = Applied | Refused
 class PublishDiff:
     remote_edits: tuple[RemoteEdit, ...]
     yaml_changes: tuple[YamlChange, ...]
+    missing_remotely: tuple[MissingItem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,6 +121,62 @@ def _refuse_an_interrupted_create(prepared: Prepared) -> None:
         raise PublishError(_interrupted_create_message(prepared, prepared.state.pending_creates[0]))
 
 
+@dataclass(frozen=True)
+class _Count:
+    parts: str
+    were: str
+    edits: str
+    them: str
+
+    @classmethod
+    def of(cls, count: int) -> "_Count":
+        if count == 1:
+            return cls("1 part", "was", "edit", "it")
+        return cls(f"{count} parts", "were", "edits", "them")
+
+
+def refusal_message(refused: Refused) -> str:
+    count = _Count.of(len(refused.edits))
+    if refused.reason == "edited":
+        return (
+            f"{count.parts} {count.were} edited in the service since the last publish, so nothing was "
+            f"written. To keep the {count.edits}, copy {count.them} into the YAML first; to replace "
+            f"{count.them}, publish with --apply --overwrite."
+        )
+    return (
+        f"{count.parts} edited in the service changed after the last diff showed {count.them}, or no diff "
+        f"has shown {count.them} yet, so nothing was written. Read the diff above, then publish with "
+        "--apply --overwrite again."
+    )
+
+
+@dataclass(frozen=True)
+class _Preflight:
+    prepared: Prepared
+    readings: list[Reading]
+    missing: list[MissingItem]
+    written_into: dict[ItemRef, RemoteItem]
+
+    @property
+    def edited(self) -> list[Reading]:
+        return [reading for reading in self.readings if reading.edited]
+
+
+def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
+    _refuse_an_interrupted_create(prepared)
+    published = read_published(prepared, transports)
+    settled = prepared.with_state(published.state)
+    written_into = read_items_written_into(settled, settled.plan, transports, {})
+    return _Preflight(settled, published.readings, published.missing, written_into)
+
+
+def _refuse_missing_items(preflight: _Preflight) -> None:
+    if preflight.missing:
+        missing = preflight.missing[0]
+        service = preflight.prepared.target_named(missing.item.target).service()
+        raise PublishError(missing_message(missing, service))
+
+
 def _ignore_step(_target: str, _described: str) -> None:
     return None
 
@@ -120,21 +185,43 @@ def apply_publish(
     prepared: Prepared, *, overwrite: bool = False, on_step: StepListener = _ignore_step
 ) -> ApplyOutcome:
     with held_state_lock(prepared.state_path, prepared.document_path):
-        _refuse_an_interrupted_create(prepared)
         loaded = prepared.state
         transports = Transports(prepared)
-        readings, settled = read_published(prepared, transports)
-        prepared = prepared.with_state(settled)
-        written_into = read_items_written_into(prepared, transports)
-        edited = [reading for reading in readings if reading.edited]
+        preflight = _preflight(prepared, transports)
+        if not overwrite:
+            _refuse_missing_items(preflight)
+        edited = preflight.edited
+        prepared = preflight.prepared
         refused, prepared = _refusal(prepared, edited, overwrite) if edited else (None, prepared)
         _save_if_changed(prepared, loaded)
         if refused is not None:
             return refused
         rewritten = {reading.item: reading.edited for reading in edited}
-        plan = plan_publish(prepared.drafts, prepared.state, prepared.registry, rewritten)
-        remote = {**written_into, **{reading.item: reading.remote for reading in readings}}
+        missing = [missing.item for missing in preflight.missing]
+        plan = plan_publish(prepared.drafts, prepared.state, prepared.registry, rewritten, missing)
+        written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
+        remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
         return Applier(prepared, transports, remote, on_step, prepared.state).run(plan)
+
+
+@dataclass(frozen=True)
+class DryRun:
+    plan: PublishPlan
+    edits: tuple[RemoteEdit, ...]
+    refusal: str | None
+
+
+def dry_run_publish(prepared: Prepared) -> DryRun:
+    try:
+        preflight = _preflight(prepared, Transports(prepared))
+        _refuse_missing_items(preflight)
+    except PublishError as exc:
+        return DryRun(prepared.plan, (), str(exc))
+    if preflight.edited:
+        edits = remote_edits(preflight.prepared, preflight.edited)
+        return DryRun(prepared.plan, edits, refusal_message(Refused(edits, "edited")))
+    settled = preflight.prepared
+    return DryRun(plan_publish(settled.drafts, settled.state, settled.registry), (), None)
 
 
 def _changes_of_item(
@@ -183,12 +270,12 @@ def _yaml_changes(prepared: Prepared) -> tuple[YamlChange, ...]:
 def diff_publish(prepared: Prepared) -> PublishDiff:
     with held_state_lock(prepared.state_path, prepared.document_path):
         loaded = prepared.state
-        readings, settled = read_published(prepared, Transports(prepared))
-        prepared = prepared.with_state(settled)
-        edited = [reading for reading in readings if reading.edited]
+        published = read_published(prepared, Transports(prepared))
+        prepared = prepared.with_state(published.state)
+        edited = [reading for reading in published.readings if reading.edited]
         prepared = prepared.with_state(_with_shown(prepared, edited))
         _save_if_changed(prepared, loaded)
-        return PublishDiff(remote_edits(prepared, edited), _yaml_changes(prepared))
+        return PublishDiff(remote_edits(prepared, edited), _yaml_changes(prepared), tuple(published.missing))
 
 
 def _item_states(reading: Reading, draft: ItemDraft) -> tuple[str, ...]:
@@ -207,17 +294,36 @@ def _unpublished_state(prepared: Prepared, ref: ItemRef) -> str:
     return CREATE_INTERRUPTED if interrupted else "never published"
 
 
+@dataclass(frozen=True)
+class _StatusFacts:
+    readings: dict[ItemRef, Reading]
+    missing: dict[ItemRef, str]
+
+
+def _status_of(ref: ItemRef, draft: ItemDraft | None, prepared: Prepared, facts: _StatusFacts) -> ItemStatus:
+    if ref in facts.missing:
+        return ItemStatus(ref, facts.missing[ref], (MISSING_REMOTELY,))
+    reading = facts.readings.get(ref)
+    if reading is None:
+        return ItemStatus(ref, None, (_unpublished_state(prepared, ref),))
+    states = ("removed",) if draft is None else _item_states(reading, draft)
+    return ItemStatus(ref, reading.published.item_id, states)
+
+
 def publish_status(prepared: Prepared) -> tuple[ItemStatus, ...]:
-    readings, _ = read_published(prepared, Transports(prepared))
-    by_item = {reading.item: reading for reading in readings}
-    statuses: list[ItemStatus] = []
-    for target in prepared.drafts:
-        for draft in target.items:
-            ref = ItemRef(target.label, draft.section_id)
-            reading = by_item.pop(ref, None)
-            if reading is None:
-                statuses.append(ItemStatus(ref, None, (_unpublished_state(prepared, ref),)))
-            else:
-                statuses.append(ItemStatus(ref, reading.published.item_id, _item_states(reading, draft)))
-    statuses += [ItemStatus(ref, reading.published.item_id, ("removed",)) for ref, reading in by_item.items()]
-    return tuple(statuses)
+    published = read_published(prepared, Transports(prepared))
+    facts = _StatusFacts(
+        {reading.item: reading for reading in published.readings},
+        {missing.item: missing.item_id for missing in published.missing},
+    )
+    drafted = [
+        (ItemRef(target.label, draft.section_id), draft)
+        for target in prepared.drafts
+        for draft in target.items
+    ]
+    drafted_refs = {ref for ref, _ in drafted}
+    held = [ref for ref in (*facts.readings, *facts.missing) if ref not in drafted_refs]
+    return (
+        *(_status_of(ref, draft, prepared, facts) for ref, draft in drafted),
+        *(_status_of(ref, None, prepared, facts) for ref in held),
+    )

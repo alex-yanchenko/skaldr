@@ -1,16 +1,16 @@
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from typing_extensions import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError
 from skaldr.publish.content import ItemContent, Part, comparable, differing_parts
-from skaldr.publish.plan import CreateStep, ItemRef
+from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState
-from skaldr.publish.transport import RemoteItem, Transport
+from skaldr.publish.transport import RemoteItem
 from skaldr.services import SERVICE_NAMES, Service
 
 NOT_YET_PUBLISHED = ItemContent(title="")
@@ -58,14 +58,21 @@ def refuse_another_documents_item(ref: ItemRef, remote: RemoteItem, doc_id: str)
         )
 
 
-def _read(transport: Transport, ref: ItemRef, item: PublishedItem, service: Service) -> RemoteItem:
-    try:
-        return transport.read_item(item.item_id, item.remote)
-    except ItemNotFoundError as exc:
-        raise PublishError(
-            f"{ref.label} ({item.item_id}) is no longer in {SERVICE_NAMES[service]}, so skaldr stops here "
-            "and changes nothing: it cannot tell whether the item was deleted on purpose"
-        ) from exc
+@dataclass(frozen=True)
+class MissingItem:
+    item: ItemRef
+    item_id: str
+
+
+def missing_message(missing: MissingItem, service: Service) -> str:
+    return (
+        f"{missing.item.label} ({missing.item_id}) is no longer in {SERVICE_NAMES[service]}; publish with "
+        "--apply --overwrite to create it again, or to forget it if the YAML no longer has it"
+    )
+
+
+def _has_content(remote: RemoteItem) -> bool:
+    return any(text.strip() for text in remote.comparable.sections.values())
 
 
 def _the_interrupted_write_landed(item: PublishedItem, remote: RemoteItem, edited: Sequence[Part]) -> bool:
@@ -98,14 +105,26 @@ def _settled(
     return landed, ()
 
 
-def read_published(prepared: Prepared, transports: Transports) -> tuple[list[Reading], PublishState]:
+@dataclass(frozen=True)
+class PublishedReadings:
+    readings: list[Reading]
+    state: PublishState
+    missing: list[MissingItem]
+
+
+def read_published(prepared: Prepared, transports: Transports) -> PublishedReadings:
     readings: list[Reading] = []
+    missing: list[MissingItem] = []
     state = prepared.state
     for label, published_target in prepared.state.targets.items():
         transport = transports.for_target(label)
         for section_id, item in published_target.held_items():
             ref = ItemRef(label, section_id)
-            remote = _read(transport, ref, item, published_target.service)
+            try:
+                remote = transport.read_item(item.item_id, item.remote)
+            except ItemNotFoundError:
+                missing.append(MissingItem(ref, item.item_id))
+                continue
             refuse_another_documents_item(ref, remote, prepared.doc_id)
             reported = tuple(transport.remote_edits_since(item.item_id, item.marker))
             edited = tuple(dict.fromkeys([*differing_parts(item.remote, remote.comparable), *reported]))
@@ -113,17 +132,38 @@ def read_published(prepared: Prepared, transports: Transports) -> tuple[list[Rea
             if settled != item:
                 state = with_item(state, ref, prepared.target_named(label), settled)
             readings.append(Reading(ref, settled, remote, edited, reported))
-    return readings, state
+    return PublishedReadings(readings, state, missing)
 
 
-def read_items_written_into(prepared: Prepared, transports: Transports) -> dict[ItemRef, RemoteItem]:
-    read: dict[ItemRef, RemoteItem] = {}
-    for target_plan in prepared.plan.targets:
+def _read_written_into(
+    prepared: Prepared, transports: Transports, label: str, step: CreateStep
+) -> RemoteItem:
+    into_id = step.into_id or ""
+    service = prepared.target_named(label).service()
+    try:
+        remote = transports.for_target(label).read_item(into_id, NOT_YET_PUBLISHED)
+    except ItemNotFoundError as exc:
+        raise PublishError(
+            f"{step.item.label}: the page {into_id} the target names is not in {SERVICE_NAMES[service]}; "
+            "name an existing empty page, or publish under one with `parent_page` instead"
+        ) from exc
+    refuse_another_documents_item(step.item, remote, prepared.doc_id)
+    if remote.doc_id is None and _has_content(remote):
+        raise PublishError(
+            f"{step.item.label}: {into_id} already holds content and carries no skaldr stamp, so skaldr will "
+            "not write into it; empty the page, or publish under it with `parent_page` instead"
+        )
+    return remote
+
+
+def read_items_written_into(
+    prepared: Prepared, plan: PublishPlan, transports: Transports, already: Mapping[ItemRef, RemoteItem]
+) -> dict[ItemRef, RemoteItem]:
+    read = dict(already)
+    for target_plan in plan.targets:
         for step in target_plan.steps:
-            if isinstance(step, CreateStep) and step.into_id is not None:
-                remote = transports.for_target(target_plan.label).read_item(step.into_id, NOT_YET_PUBLISHED)
-                refuse_another_documents_item(step.item, remote, prepared.doc_id)
-                read[step.item] = remote
+            if isinstance(step, CreateStep) and step.into_id is not None and step.item not in read:
+                read[step.item] = _read_written_into(prepared, transports, target_plan.label, step)
     return read
 
 

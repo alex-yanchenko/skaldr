@@ -19,6 +19,7 @@ from skaldr.publish.content import (
 from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label, section_label
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
 from skaldr.publish_block import TargetBase
+from skaldr.services import SERVICE_NAMES, SERVICES, Service
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,12 @@ class ArchiveStep:
 
 
 @dataclass(frozen=True)
+class ReleaseStep:
+    item: ItemRef
+    item_id: str
+
+
+@dataclass(frozen=True)
 class RemoveSectionStep:
     item: ItemRef
     key: str
@@ -75,7 +82,15 @@ class WriteContentStep:
     paths: Mapping[Part, str]
 
 
-Step = CreateStep | WriteFieldsStep | WriteSectionStep | RemoveSectionStep | WriteContentStep | ArchiveStep
+Step = (
+    CreateStep
+    | WriteFieldsStep
+    | WriteSectionStep
+    | RemoveSectionStep
+    | WriteContentStep
+    | ArchiveStep
+    | ReleaseStep
+)
 ItemUpdate = WriteFieldsStep | WriteSectionStep | RemoveSectionStep | WriteContentStep
 
 
@@ -138,25 +153,32 @@ def item_steps(
     return (*fields, *_section_updates(item, draft, written, removed))
 
 
+def _retired(ref: ItemRef, item: PublishedItem) -> Step:
+    return ReleaseStep(ref, item.item_id) if item.origin == "adopted" else ArchiveStep(ref, item.item_id)
+
+
+@dataclass(frozen=True)
+class _RemoteFacts:
+    rewritten: Mapping[ItemRef, Collection[Part]]
+    missing: Collection[ItemRef]
+
+
 def _target_plan(
-    draft: TargetDraft,
-    published: PublishedTarget | None,
-    connector: Connector,
-    rewritten: Mapping[ItemRef, Collection[Part]],
+    draft: TargetDraft, published: PublishedTarget | None, connector: Connector, facts: _RemoteFacts
 ) -> TargetPlan:
     creates: list[Step] = []
     updates: list[Step] = []
     for item in draft.items:
         ref = ItemRef(draft.label, item.section_id)
         existing = published_item(published, item.section_id)
-        if existing is None:
+        if existing is None or ref in facts.missing:
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
             creates.append(CreateStep(ref, item, into_id))
             continue
-        updates += item_steps(ref, existing.rendered, item, connector.writes, rewritten.get(ref, ()))
+        updates += item_steps(ref, existing.rendered, item, connector.writes, facts.rewritten.get(ref, ()))
     drafted = {item.section_id for item in draft.sections}
-    archives: list[Step] = [
-        ArchiveStep(ItemRef(draft.label, section_id), item.item_id)
+    archives = [
+        _retired(ItemRef(draft.label, section_id), item)
         for section_id, item in (published.sections.items() if published is not None else ())
         if section_id not in drafted
     ]
@@ -172,13 +194,33 @@ def _removed_target_plan(label: str, published: PublishedTarget, registry: Conne
             "skaldr cannot archive its items; publish with the version of skaldr that wrote it, or put the "
             "target back in the `publish` block"
         ) from exc
-    archives = [
-        ArchiveStep(ItemRef(label, section_id), item.item_id)
-        for section_id, item in published.sections.items()
-    ]
+    retired = [_retired(ItemRef(label, section_id), item) for section_id, item in published.sections.items()]
     if published.document is not None:
-        archives.append(ArchiveStep(ItemRef(label, None), published.document.item_id))
-    return TargetPlan(label, target, tuple(archives))
+        retired.append(_retired(ItemRef(label, None), published.document))
+    return TargetPlan(label, target, tuple(retired))
+
+
+def _moved_message(service: Service, old: str, new: str) -> str:
+    return (
+        f"the {SERVICE_NAMES[service]} target moved from {old} to {new}; skaldr does not move pages or "
+        f"issues, so nothing was archived or created. Archive or move the items under {old} by hand, then "
+        f"delete the target '{old}' from the state file and publish again"
+    )
+
+
+def _refuse_moved_targets(drafts: Sequence[TargetDraft], state: PublishState) -> None:
+    drafted = {draft.label for draft in drafts}
+    for service in SERVICES:
+        new = [
+            draft.label
+            for draft in drafts
+            if draft.target.service() == service and draft.label not in state.targets
+        ]
+        old = [
+            label for label, held in state.targets.items() if held.service == service and label not in drafted
+        ]
+        if new and old:
+            raise PublishError(_moved_message(service, old[0], new[0]))
 
 
 def _refuse_shared_items(state: PublishState) -> None:
@@ -199,15 +241,16 @@ def plan_publish(
     state: PublishState,
     registry: ConnectorRegistry,
     rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
+    missing: Collection[ItemRef] = (),
 ) -> PublishPlan:
     _refuse_shared_items(state)
+    _refuse_moved_targets(drafts, state)
     drafted = {draft.label for draft in drafts}
+    facts = _RemoteFacts(rewritten, missing)
     return PublishPlan(
         (
             *(
-                _target_plan(
-                    draft, state.targets.get(draft.label), registry.for_target(draft.target), rewritten
-                )
+                _target_plan(draft, state.targets.get(draft.label), registry.for_target(draft.target), facts)
                 for draft in drafts
             ),
             *(
@@ -238,6 +281,8 @@ def describe_step(step: Step) -> str:
             return f"update   {item_label(step.item.section_id)}: {', '.join([*written, *removed])}"
         case ArchiveStep():
             return f"archive  {item_label(step.item.section_id)} ({step.item_id})"
+        case ReleaseStep():
+            return f"release  {item_label(step.item.section_id)} ({step.item_id})"
         case _:
             assert_never(step)
 
@@ -245,8 +290,10 @@ def describe_step(step: Step) -> str:
 def _counts(steps: Sequence[Step]) -> str:
     creates = sum(isinstance(step, CreateStep) for step in steps)
     archives = sum(isinstance(step, ArchiveStep) for step in steps)
-    updates = len(steps) - creates - archives
-    return f"{creates} to create, {updates} to update, {archives} to archive"
+    releases = sum(isinstance(step, ReleaseStep) for step in steps)
+    updates = len(steps) - creates - archives - releases
+    counted = f"{creates} to create, {updates} to update, {archives} to archive"
+    return f"{counted}, {releases} to release" if releases else counted
 
 
 def describe_plan(plan: PublishPlan) -> list[str]:

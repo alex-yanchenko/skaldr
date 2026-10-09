@@ -1040,15 +1040,17 @@ A rendered page embeds its source **without** the `publish` block: the block, th
 This version of skaldr has the publish commands but no Notion or Jira connection yet, so each of them stops with `error: no connector publishes to notion` (or `jira`) until a release adds the connections. What follows is how the commands behave.
 
 ```bash
-skaldr publish garden.yaml                      # dry run: prints the plan, sends and writes nothing
+skaldr publish garden.yaml                      # dry run: reads the services, prints the plan, writes nothing
 skaldr publish garden.yaml --apply              # publishes; stops with a diff if an item was edited in the service
 skaldr publish garden.yaml --apply --overwrite  # replaces the remote edits the last diff showed
 skaldr diff garden.yaml                         # remote edits since the last publish, then what the YAML would change
 skaldr diff garden.yaml --json                  # the same facts as JSON
-skaldr status garden.yaml                       # per item: in sync, edited remotely, changed in the YAML, removed, never published
+skaldr status garden.yaml                       # per item: in sync, edited remotely, changed in the YAML, removed, missing remotely, never published
 ```
 
-**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, then each item's updates (its title and fields, each section it writes, and each section it removes from the item), then the items it would archive. A dry run sends nothing to any service and writes no file. `--apply` carries the plan out one step at a time and prints each step as it lands.
+**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, then each item's updates (its title and fields, each section it writes, and each section it removes from the item), then the items it would archive or release. `--apply` carries the plan out one step at a time and prints each step as it lands.
+
+The dry run reads every service the document publishes to, with your stored sign-in, and never writes to a service or to the state file. It reads each item skaldr published and the page a target writes into, so its plan is the one `--apply` would carry out. When `--apply` would not go ahead, the dry run says so and exits with status 1: after remote edits it prints each edit and `error: --apply would stop: ...`, and for any other reason (a stamp from another document, a page that already holds content, an item missing in the service, an interrupted create) it prints `error: --apply would refuse: ...` with the reason.
 
 ```text
 notion page 0123456789abcdef0123456789abcdef: 1 to create, 3 to update, 1 to archive
@@ -1067,9 +1069,15 @@ A Notion page takes one write per changed section. A connector that can only rep
 
 skaldr saves the state after every step and notes each write before sending it, so a run that stops halfway, for example on a network error, carries on from the failed step when you run it again. A write that reached the service before the run stopped is recognised as skaldr's own on the next run, because the service then holds exactly the text skaldr was writing, and is not shown as a remote edit. A create is different: if a run stops while creating a page or issue, skaldr cannot tell whether it was made, so the next `--apply` stops and names the parent and the title to look for, rather than risk creating it twice. Archive the item if it is there, delete its entry from `pending_creates` in the state file, and publish again. Every item skaldr creates is stamped with the `doc_id` and the id of the section it holds, so a later release can find such an item by itself.
 
-Keep the file: without it skaldr no longer knows which items it made. It names pages and issues by id, so in a public repository add `*.skaldr-state.json` and `*.skaldr-state.json.lock` to `.gitignore` and keep a copy of the state file elsewhere. A state file that records another `doc_id` is refused; the usual cause is a changed `doc_id`, so change it back. An item that is no longer in the service, or a target in the state file that this version of skaldr cannot read, stops the run with an error before anything is written.
+Keep the file: without it skaldr no longer knows which items it made. It names pages and issues by id, so in a public repository add `*.skaldr-state.json` and `*.skaldr-state.json.lock` to `.gitignore` and keep a copy of the state file elsewhere. A state file that records another `doc_id` is refused; the usual cause is a changed `doc_id`, so change it back. A target in the state file that this version of skaldr cannot read stops the run with an error before anything is written.
 
 **Only what this document owns.** skaldr writes only to items in the state file and to the page a Notion target names in `page`. Every one of them is read before the first write, and an item stamped with another document's `doc_id` stops the run, naming both documents, before anything is sent.
+
+A page that a target names with `page` was not made by skaldr, so skaldr writes into it only while it is empty: a page that already holds content and carries no skaldr stamp is refused, naming it. The state file records such a page as adopted, and skaldr never archives it. When its target leaves the `publish` block, skaldr releases it instead: it clears what skaldr wrote and removes the stamp, leaving the page itself in place. Every item skaldr created is archived as before.
+
+**Moved targets.** A target is known by its place: the Notion `parent_page` or `page`, or the Jira `project` and `parent`. When a target's place changes, skaldr does not move pages or issues, and it does not archive the old ones and create new ones either: the run stops, naming the old place and the new one. Archive or move the old items by hand, delete the old target from the state file, and publish again. A target removed from the block with no new target for the same service in its place is not a move: its created items are archived and an adopted page is released.
+
+**Items deleted in the service.** An item skaldr published that is no longer in the service shows as missing remotely in `skaldr status`, and under "Missing remotely" in `skaldr diff` (`missing_remotely` in `--json`). `--apply` stops, naming it. `--apply --overwrite` creates it again under its parent and records its new id, or forgets it when the YAML no longer has it.
 
 **Edits made in the service.** Before writing, skaldr reads every item it published and compares the service's copy now with the copy the service returned right after skaldr's last write, so formatting the service adds is never mistaken for an edit; a connector can also report an edit the text does not show. When an item was edited, `--apply` writes nothing, prints each edited part as a unified diff and exits with status 1. Then choose: leave it, copy the edit into the YAML, or replace it with `--apply --overwrite`, which writes the YAML's content over exactly the edits the last diff showed, whether that diff came from `--apply` or from `skaldr diff`. If the item changed again after that diff, or no diff has shown the edit yet, `--overwrite` writes nothing either and prints the new diff, so an edit you have not seen is never overwritten.
 
@@ -1083,7 +1091,7 @@ Keep the file: without it skaldr no longer knows which items it made. It names p
 error: 1 part was edited in the service since the last publish, so nothing was written. To keep the edit, copy it into the YAML first; to replace it, publish with --apply --overwrite.
 ```
 
-**`skaldr diff --json`** prints two lists, `remote_edits` and `yaml_changes`. Each entry names its `target`, `item` (`document` or `section <id>`), `part` (`section`, `title` or `fields`), `section` id, `yaml_path` and the `published` text; a remote edit adds the `current` text and, when the service says, `edited_by` and `edited_at`; a YAML change adds the `next` text. An item never published shows `null` as its published text, and an item the YAML removed shows `null` as its next text.
+**`skaldr diff --json`** prints three lists, `remote_edits`, `yaml_changes` and `missing_remotely` (each missing item's `target`, `item` and `item_id`). Each entry names its `target`, `item` (`document` or `section <id>`), `part` (`section`, `title` or `fields`), `section` id, `yaml_path` and the `published` text; a remote edit adds the `current` text and, when the service says, `edited_by` and `edited_at`; a YAML change adds the `next` text. An item never published shows `null` as its published text, and an item the YAML removed shows `null` as its next text.
 
 **Limits.** A connector can declare a limit on a section or on a whole item, such as a character count. Content over it stops the plan before anything is sent, naming the target, the item, the section and the limit, and suggesting a further `split`.
 

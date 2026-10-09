@@ -9,10 +9,12 @@ from skaldr.publish.engine import (
     Prepared,
     apply_publish,
     diff_publish,
+    dry_run_publish,
     prepare_publish,
     publish_status,
+    refusal_message,
 )
-from skaldr.publish.output import diff_json, diff_lines, refusal_message, remote_edit_lines, status_line
+from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
 
 
@@ -55,11 +57,22 @@ def _print_step(target: str, described: str) -> None:
     print(f"{target}: {described}", flush=True)
 
 
+def _dry_run(prepared: Prepared, document: Path) -> int:
+    dry_run = dry_run_publish(prepared)
+    print("\n".join(describe_plan(dry_run.plan)))
+    if dry_run.edits:
+        print("\n".join(remote_edit_lines(dry_run.edits)))
+    if dry_run.refusal is not None:
+        verb = "stop" if dry_run.edits else "refuse"
+        print(f"error: --apply would {verb}: {dry_run.refusal}", file=sys.stderr)
+        return 1
+    print(f"Dry run: nothing was sent. Publish with `skaldr publish {document} --apply`.")
+    return 0
+
+
 def _publish(prepared: Prepared, document: Path, *, apply: bool, overwrite: bool) -> int:
     if not apply:
-        print("\n".join(describe_plan(prepared.plan)))
-        print(f"Dry run: nothing was sent. Publish with `skaldr publish {document} --apply`.")
-        return 0
+        return _dry_run(prepared, document)
     outcome = apply_publish(prepared, overwrite=overwrite, on_step=_print_step)
     if isinstance(outcome, Applied):
         if not outcome.steps:

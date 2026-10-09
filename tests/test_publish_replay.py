@@ -225,31 +225,16 @@ def test_a_state_target_this_skaldr_cannot_read_is_refused(tmp_path: Path) -> No
     _publish(path, transport)
     state_path = state_path_for(path)
     text = state_path.read_text(encoding="utf-8").replace('"to": "notion"', '"to": "notion", "colour": "red"')
-    state_path.write_text(
-        text.replace(TARGET_LABEL, "notion page 99999999999999999999999999999999"), encoding="utf-8"
-    )
+    state_path.write_text(text, encoding="utf-8")
+    write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": [make_jira_target()]})
     expected = (
-        "the state file records the target 'notion page 99999999999999999999999999999999' in a form this "
-        "version of skaldr cannot read, so skaldr cannot archive its items; publish with the version of "
-        "skaldr that wrote it, or put the target back in the `publish` block"
+        f"the state file records the target '{TARGET_LABEL}' in a form this version of skaldr cannot read, "
+        "so skaldr cannot archive its items; publish with the version of skaldr that wrote it, or put the "
+        "target back in the `publish` block"
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        prepare_publish(path, fake_registry(transport))
-
-
-def test_an_item_deleted_in_the_service_stops_the_run_without_a_traceback(tmp_path: Path) -> None:
-    transport = FakeTransport()
-    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
-    transport.delete_item_by_hand("page-2")
-    expected = (
-        f"{TARGET_LABEL}, section tools (page-2) is no longer in Notion, so skaldr stops here and changes "
-        "nothing: it cannot tell whether the item was deleted on purpose"
-    )
-
-    with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
-    assert transport.writes() == []
+        prepare_publish(path, fake_registry(transport, target_types=(NotionTarget, JiraTarget)))
 
 
 def test_a_publish_is_refused_while_another_holds_the_state_lock(tmp_path: Path) -> None:

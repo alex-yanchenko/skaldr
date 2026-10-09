@@ -32,8 +32,12 @@ class InFlightWrite(FrozenModel):
     rendered: ItemContent
 
 
+ItemOrigin = Literal["created", "adopted"]
+
+
 class PublishedItem(FrozenModel):
     item_id: str
+    origin: ItemOrigin = "created"
     rendered: ItemContent
     remote: ItemContent
     marker: str | None = None
