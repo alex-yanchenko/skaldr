@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields, Location, TargetBase
@@ -8,6 +8,7 @@ from skaldr.services import JiraService
 
 JIRA_PROJECT_KEY_PATTERN = r"[A-Z][A-Z0-9_]+"
 JIRA_ISSUE_KEY_PATTERN = rf"{JIRA_PROJECT_KEY_PATTERN}-[1-9][0-9]*"
+FIELDS_SKALDR_SETS = frozenset({"summary", "description", "project", "issuetype", "parent", "status"})
 
 
 class JiraWhere(FrozenModel):
@@ -31,9 +32,35 @@ class JiraWhere(FrozenModel):
     )
 
 
+def _set_by_skaldr(fields: JsonFields, place: str) -> str | None:
+    taken = [name for name in sorted(fields) if name in FIELDS_SKALDR_SETS]
+    if not taken:
+        return None
+    named = ", ".join(f"`{name}`" for name in taken)
+    return (
+        f"a jira target cannot set {named} in `{place}`; skaldr sets summary, description, project, "
+        "issuetype and parent itself, and Jira changes status only through a transition"
+    )
+
+
 class JiraTarget(TargetBase):
     to: JiraService = Field(description="Publish to Jira: `jira`.")
     where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
+
+    @model_validator(mode="after")
+    def _validate_fields_left_to_skaldr(self) -> "JiraTarget":
+        places = [
+            (self.where.fields, "where.fields"),
+            *(
+                (override.fields, f"overrides.{section_id}.fields")
+                for section_id, override in self.overrides.items()
+            ),
+        ]
+        for fields, place in places:
+            refusal = _set_by_skaldr(fields, place)
+            if refusal is not None:
+                raise ValueError(refusal)
+        return self
 
     def where_fields(self) -> JsonFields:
         return self.where.fields

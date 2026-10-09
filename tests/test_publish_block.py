@@ -47,6 +47,10 @@ blocks:
   - { type: text, body: "Hello." }
 """
 CANNOT_CUT = "the publish block could not be left out of the page"
+SET_BY_SKALDR = (
+    "skaldr sets summary, description, project, issuetype and parent itself, and Jira changes status only "
+    "through a transition"
+)
 
 
 def _parse(publish: dict[str, Any]) -> Publish | None:
@@ -176,6 +180,30 @@ def test_a_notion_target_names_one_page(where: dict[str, Any], message: str) -> 
 )
 def test_a_jira_target_checks_its_keys(where: dict[str, Any], message: str) -> None:
     _rejects({"doc_id": "plan", "targets": [{"to": "jira", "where": where}]}, message)
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        pytest.param(
+            make_jira_target(where={"project": "PLAN", "issue_type": "Task", "fields": {"summary": "x"}}),
+            f"a jira target cannot set `summary` in `where.fields`; {SET_BY_SKALDR}",
+            id="where",
+        ),
+        pytest.param(
+            make_jira_target(
+                split=["st1"],
+                overrides={
+                    "st1": {"fields": {"status": {"name": "Done"}, "description": "x", "labels": ["a"]}}
+                },
+            ),
+            f"a jira target cannot set `description`, `status` in `overrides.st1.fields`; {SET_BY_SKALDR}",
+            id="override",
+        ),
+    ],
+)
+def test_a_jira_target_leaves_the_fields_skaldr_sets_to_skaldr(target: dict[str, Any], message: str) -> None:
+    _rejects({"doc_id": "plan", "targets": [target]}, message)
 
 
 def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
