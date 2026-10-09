@@ -3068,6 +3068,19 @@
           "description": "A Notion page URL or page id the document is written into, replacing its content.",
           "title": "Page"
         },
+        "workspace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The id or name of the signed-in Notion workspace to publish with; needed only when signed in to several. Not part of the target's place.",
+          "title": "Workspace"
+        },
         "fields": {
           "additionalProperties": {
             "$ref": "#/$defs/JsonValue"

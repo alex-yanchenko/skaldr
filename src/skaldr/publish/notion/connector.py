@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import httpx2
 
 from skaldr.auth.notion import NotionSession
-from skaldr.auth.store import require_notion
+from skaldr.auth.store import require_notion_for_a_target
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count, render_notion_regions
 from skaldr.export.tree import LoweredDocument
@@ -21,13 +21,14 @@ NOTION_LIMITS = (
 
 
 class _SignedInOnFirstUse:
-    def __init__(self, http: httpx2.BaseTransport | None) -> None:
+    def __init__(self, http: httpx2.BaseTransport | None, workspace: str | None) -> None:
         self._http = http
+        self._workspace = workspace
         self._session: NotionSession | None = None
 
     def _signed_in(self) -> NotionSession:
         if self._session is None:
-            self._session = NotionSession(require_notion(), transport=self._http)
+            self._session = NotionSession(require_notion_for_a_target(self._workspace), transport=self._http)
         return self._session
 
     @property
@@ -54,6 +55,7 @@ class NotionConnector:
             return notion_page_id(target.where.page)
         return None
 
-    def open_transport(self, _target: TargetBase, /) -> NotionTransport:
-        tokens = _SignedInOnFirstUse(self.http)
+    def open_transport(self, target: TargetBase, /) -> NotionTransport:
+        workspace = target.where.workspace if isinstance(target, NotionTarget) else None
+        tokens = _SignedInOnFirstUse(self.http, workspace)
         return NotionTransport(NotionApi(tokens, transport=self.http, sleep=self.sleep))

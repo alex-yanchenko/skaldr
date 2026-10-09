@@ -81,7 +81,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
         "targets": [
             {
                 "to": "notion",
-                "where": {"parent_page": NOTION_PAGE_URL, "page": None, "fields": {}},
+                "where": {"parent_page": NOTION_PAGE_URL, "page": None, "workspace": None, "fields": {}},
                 "from": None,
                 "split": ["st1"],
                 "overrides": {},
@@ -104,6 +104,21 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
 
 def test_a_report_without_a_publish_block_has_none() -> None:
     assert parse_report(make_report()).publish is None
+
+
+def test_a_notion_target_may_name_a_workspace_that_is_not_part_of_its_place() -> None:
+    in_workspace = make_notion_target(
+        where={"parent_page": NOTION_PAGE_URL, "workspace": "Example Workspace"}
+    )
+    publish = _parse({"doc_id": "plan", "targets": [in_workspace]})
+
+    assert publish is not None
+    target = publish.targets[0]
+    assert (target.model_dump(mode="json")["where"], target.place_key(), target.place_label()) == (
+        {"parent_page": NOTION_PAGE_URL, "page": None, "workspace": "Example Workspace", "fields": {}},
+        ("notion", NOTION_PAGE_ID),
+        f"notion page {NOTION_PAGE_ID}",
+    )
 
 
 @pytest.mark.parametrize(

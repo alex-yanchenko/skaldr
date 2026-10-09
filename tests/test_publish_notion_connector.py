@@ -16,7 +16,13 @@ from skaldr.publish.drafts import authored_from, draft_targets
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_report
-from tests.factories.auth_factory import basic_auth_header, make_notion_credentials, seed_notion
+from tests.factories.auth_factory import (
+    OTHER_WORKSPACE_ID,
+    WORKSPACE_ID,
+    basic_auth_header,
+    make_notion_credentials,
+    seed_notion,
+)
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import (
     TARGET_LABEL,
@@ -164,6 +170,82 @@ def test_a_refused_stored_token_is_renewed_saved_to_the_keychain_and_the_read_se
             "keychain",
         ),
     )
+
+
+def _notion_target_in(workspace: str | None) -> NotionTarget:
+    where: dict[str, Any] = {"parent_page": NOTION_PAGE_ID}
+    if workspace is not None:
+        where["workspace"] = workspace
+    return NotionTarget.model_validate(make_notion_target(where=where))
+
+
+def _read_the_parent_page(workspace: str | None, notion: InMemoryNotion) -> str:
+    transport = _connector(notion).open_transport(_notion_target_in(workspace))
+    return transport.read_item(NOTION_PAGE_ID, ItemContent(title="")).comparable.title
+
+
+def _sign_in_to_two_workspaces() -> None:
+    seed_notion(make_notion_credentials(access_token="lapsed-access"))
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace"))
+
+
+def test_a_target_without_a_workspace_uses_the_only_sign_in() -> None:
+    seed_notion(make_notion_credentials(access_token="access-token"))
+    notion = _notion_with_a_parent_page()
+
+    assert _read_the_parent_page(None, notion) == "Team plans"
+
+
+def test_a_target_without_a_workspace_names_the_key_to_set_when_signed_in_to_several() -> None:
+    _sign_in_to_two_workspaces()
+    notion = _notion_with_a_parent_page()
+
+    with pytest.raises(
+        AuthError,
+        match=re.escape(
+            f"Signed in to several Notion workspaces (Example Workspace ({WORKSPACE_ID}), "
+            f"Other Workspace ({OTHER_WORKSPACE_ID})); name one with `workspace` in the target's `where`"
+        ),
+    ):
+        _read_the_parent_page(None, notion)
+    assert notion.requests == []
+
+
+@pytest.mark.parametrize("workspace", [WORKSPACE_ID, "Example Workspace"])
+def test_a_target_names_its_workspace_by_id_or_by_name_and_the_renewal_is_saved_to_that_entry(
+    workspace: str,
+) -> None:
+    _sign_in_to_two_workspaces()
+    notion = _notion_with_a_parent_page()
+
+    title = _read_the_parent_page(workspace, notion)
+
+    assert (title, load_notion(WORKSPACE_ID), load_notion(OTHER_WORKSPACE_ID)) == (
+        "Team plans",
+        SignIn(
+            make_notion_credentials(access_token="renewed-access", refresh_token="renewed-refresh"),
+            "keychain",
+        ),
+        SignIn(
+            make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace"),
+            "keychain",
+        ),
+    )
+
+
+def test_a_workspace_that_matches_no_sign_in_lists_the_signed_in_workspaces() -> None:
+    _sign_in_to_two_workspaces()
+    notion = _notion_with_a_parent_page()
+
+    with pytest.raises(
+        AuthError,
+        match=re.escape(
+            "No Notion sign-in matches workspace `Missing Workspace`; signed in to Example Workspace "
+            f"({WORKSPACE_ID}), Other Workspace ({OTHER_WORKSPACE_ID})"
+        ),
+    ):
+        _read_the_parent_page("Missing Workspace", notion)
+    assert notion.requests == []
 
 
 def test_a_dry_run_that_renews_the_sign_in_saves_it_so_a_rotated_refresh_token_is_never_lost(

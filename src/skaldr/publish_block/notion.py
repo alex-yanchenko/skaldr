@@ -60,6 +60,11 @@ class NotionWhere(FrozenModel):
         default=None,
         description="A Notion page URL or page id the document is written into, replacing its content.",
     )
+    workspace: str | None = Field(
+        default=None,
+        description="The id or name of the signed-in Notion workspace to publish with; needed only when "
+        "signed in to several. Not part of the target's place.",
+    )
     fields: JsonFields = Field(
         default_factory=JsonFields,
         description="Database property values when the target page is a database row; `overrides` changes "
