@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, ItemNotFoundError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.models import Report, parse_report
@@ -141,6 +141,13 @@ class FakeTransport:
         self.items[item_id].raw_sections[key] = text
         self.report_an_edit_without_changing_content(item_id, section_part(key))
 
+    def delete_section_by_hand(self, item_id: str, key: str) -> None:
+        del self.items[item_id].raw_sections[key]
+        self.report_an_edit_without_changing_content(item_id, section_part(key))
+
+    def delete_item_by_hand(self, item_id: str) -> None:
+        del self.items[item_id]
+
     def edit_fields_by_hand(self, item_id: str, fields: JsonFields) -> None:
         self.items[item_id].fields = fields
         self.report_an_edit_without_changing_content(item_id, FIELDS)
@@ -174,6 +181,8 @@ class FakeTransport:
 
     def read_item(self, item_id: str, _published: ItemContent, /) -> RemoteItem:
         self.calls.append(("read", item_id))
+        if item_id not in self.items:
+            raise ItemNotFoundError(f"{item_id} is not on the service")
         remote = self._remote(item_id)
         if not self.reads_list_fields_reversed:
             return remote

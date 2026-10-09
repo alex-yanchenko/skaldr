@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -292,3 +293,20 @@ def test_skaldr_hands_the_publish_commands_to_the_publish_cli(
     exit_code = skaldr_main([command, str(path)])
 
     assert (exit_code, capsys.readouterr().err) == (1, "error: no connector publishes to notion\n")
+
+
+def test_a_publish_command_without_the_publish_extra_names_the_install_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for module in [name for name in sys.modules if name.startswith("skaldr.publish")]:
+        monkeypatch.delitem(sys.modules, module)
+    monkeypatch.setitem(sys.modules, "filelock", None)
+
+    exit_code = skaldr_main(["diff", str(tmp_path / "doc.yaml")])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: `skaldr diff` needs the publish extra (filelock is not installed). Reinstall with it: "
+        "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
+        "or pip install 'skaldr[publish]'\n",
+    )

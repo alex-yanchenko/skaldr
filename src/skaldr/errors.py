@@ -14,6 +14,10 @@ class PublishError(Exception):
     pass
 
 
+class ItemNotFoundError(ConnectorError):
+    pass
+
+
 class RegionNotFoundError(LookupError):
     pass
 

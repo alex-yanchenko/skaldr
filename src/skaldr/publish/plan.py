@@ -2,6 +2,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 
+from pydantic import ValidationError
 from typing_extensions import assert_never
 
 from skaldr.errors import PublishError
@@ -163,7 +164,14 @@ def _target_plan(
 
 
 def _removed_target_plan(label: str, published: PublishedTarget, registry: ConnectorRegistry) -> TargetPlan:
-    target = registry.for_service(published.service).target_type.model_validate(published.target)
+    try:
+        target = registry.for_service(published.service).target_type.model_validate(published.target)
+    except ValidationError as exc:
+        raise PublishError(
+            f"the state file records the target '{label}' in a form this version of skaldr cannot read, so "
+            "skaldr cannot archive its items; publish with the version of skaldr that wrote it, or put the "
+            "target back in the `publish` block"
+        ) from exc
     archives = [
         ArchiveStep(ItemRef(label, section_id), item.item_id)
         for section_id, item in published.sections.items()

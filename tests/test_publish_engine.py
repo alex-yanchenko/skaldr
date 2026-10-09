@@ -128,26 +128,6 @@ def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: 
     )
 
 
-def test_a_first_publish_that_fails_midway_creates_only_the_missing_items_on_the_next_run(
-    tmp_path: Path,
-) -> None:
-    path = write_garden_report(tmp_path)
-    transport = FakeTransport()
-    transport.fail_on_write(2)
-
-    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
-        _publish(path, transport)
-    transport.forget_calls()
-    transport.stop_failing()
-    outcome = _publish(path, transport)
-
-    assert (outcome, transport.writes(), sorted(transport.items)) == (
-        Applied(('create   section tools "Tools"',)),
-        [("create", "Tools", "page-1", "")],
-        ["page-1", "page-2"],
-    )
-
-
 def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))

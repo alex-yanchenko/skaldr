@@ -1,16 +1,35 @@
+import os
+import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
+from filelock import FileLock, Timeout
 from pydantic import Field, ValidationError
 
 from skaldr.errors import PublishError
 from skaldr.frozen_model import FrozenModel
-from skaldr.publish.content import ItemContent
+from skaldr.publish.content import ItemContent, Part, PartKind
 from skaldr.publish_block.target import JsonFields
-from skaldr.replace_file import replace_file
 from skaldr.services import Service
 
 STATE_FILE_SUFFIX = ".skaldr-state.json"
+LOCK_FILE_SUFFIX = ".lock"
+
+
+class WritingPart(FrozenModel):
+    kind: PartKind
+    key: str = ""
+
+    @property
+    def part(self) -> Part:
+        return Part(self.kind, self.key)
+
+
+class InFlightWrite(FrozenModel):
+    parts: list[WritingPart]
+    rendered: ItemContent
 
 
 class PublishedItem(FrozenModel):
@@ -19,6 +38,7 @@ class PublishedItem(FrozenModel):
     remote: ItemContent
     marker: str | None = None
     shown_remote: str | None = None
+    writing: InFlightWrite | None = None
 
 
 class PublishedTarget(FrozenModel):
@@ -34,10 +54,18 @@ class PublishedTarget(FrozenModel):
         return [*document, *self.sections.items()]
 
 
+class PendingCreate(FrozenModel):
+    target: str
+    section_id: str | None
+    parent_id: str | None
+    title: str
+
+
 class PublishState(FrozenModel):
     version: Literal[1] = 1
     doc_id: str
     targets: dict[str, PublishedTarget] = Field(default_factory=dict[str, PublishedTarget])
+    pending_creates: list[PendingCreate] = Field(default_factory=list[PendingCreate])
 
 
 def state_path_for(document_path: Path) -> Path:
@@ -53,16 +81,54 @@ def load_state(path: Path, doc_id: str) -> PublishState:
         state = PublishState.model_validate_json(text)
     except ValidationError as exc:
         raise PublishError(
-            f"{path} is not a publish state skaldr can read; restore it from version control or a backup, "
-            "since without it skaldr no longer knows which pages and issues it created"
+            f"{path} is not a publish state skaldr can read; put back the copy you keep of it, since without "
+            "it skaldr no longer knows which pages and issues it created"
         ) from exc
     if state.doc_id != doc_id:
         raise PublishError(
-            f"{path} records the publishing of '{state.doc_id}', not '{doc_id}'; each document keeps its own "
-            "state file next to it, so rename one of the two documents' files or restore the right state file"
+            f"{path} records the publishing of '{state.doc_id}', not '{doc_id}'. If you changed the "
+            f"document's `doc_id`, change it back to '{state.doc_id}': skaldr knows its pages and issues by "
+            "it, and a new doc_id would publish the document again as a new set of items"
         )
     return state
 
 
+def refuse_an_unwritable_directory(path: Path) -> None:
+    directory = path.parent
+    if not os.access(directory, os.W_OK | os.X_OK):
+        raise PublishError(
+            f"skaldr keeps the publish state next to the document, and {directory} is not writable; make "
+            "it writable, or move the document somewhere it is"
+        )
+
+
+@contextmanager
+def held_state_lock(path: Path, document: Path) -> Generator[None, None, None]:
+    refuse_an_unwritable_directory(path)
+    lock = FileLock(str(path) + LOCK_FILE_SUFFIX)
+    try:
+        lock.acquire(timeout=0)
+    except Timeout as exc:
+        raise PublishError(
+            f"another skaldr publish of {document} is running and holds {lock.lock_file}; wait for it to "
+            "finish, then run this again"
+        ) from exc
+    try:
+        yield
+    finally:
+        lock.release()
+
+
 def save_state(path: Path, state: PublishState) -> None:
-    replace_file(path, state.model_dump_json(indent=2) + "\n")
+    refuse_an_unwritable_directory(path)
+    encoded = (state.model_dump_json(indent=2) + "\n").encode("utf-8")
+    descriptor, staged = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as staging:
+            staging.write(encoded)
+            staging.flush()
+            os.fsync(staging.fileno())
+        Path(staged).replace(path)
+    except BaseException:
+        Path(staged).unlink(missing_ok=True)
+        raise

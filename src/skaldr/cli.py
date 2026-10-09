@@ -96,21 +96,33 @@ def _writes_an_html_page(args: argparse.Namespace) -> bool:
     return not args.check or args.embed
 
 
+def _missing_extra(command: str, exc: ModuleNotFoundError) -> int:
+    missing = (exc.name or "skaldr").partition(".")[0]
+    if missing == "skaldr":
+        raise exc
+    print(
+        f"error: `skaldr {command}` needs the publish extra ({missing} is not installed). Reinstall with it: "
+        "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
+        "or pip install 'skaldr[publish]'",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _run_auth(argv: list[str]) -> int:
     try:
         from skaldr.auth.cli import main as auth_main
     except ModuleNotFoundError as exc:
-        missing = (exc.name or "skaldr").partition(".")[0]
-        if missing == "skaldr":
-            raise
-        print(
-            f"error: `skaldr auth` needs the publish extra ({missing} is not installed). Reinstall with it: "
-            "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
-            "or pip install 'skaldr[publish]'",
-            file=sys.stderr,
-        )
-        return 1
+        return _missing_extra("auth", exc)
     return auth_main(argv)
+
+
+def _run_publish(argv: list[str]) -> int:
+    try:
+        from skaldr.publish.cli import main as publish_main
+    except ModuleNotFoundError as exc:
+        return _missing_extra(argv[0], exc)
+    return publish_main(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,9 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments[:1] == ["auth"]:
         return _run_auth(arguments[1:])
     if arguments[:1] and arguments[0] in _PUBLISH_COMMANDS:
-        from skaldr.publish.cli import main as publish_main
-
-        return publish_main(arguments)
+        return _run_publish(arguments)
     parser = argparse.ArgumentParser(
         description="Render a skaldr content file to an HTML page.",
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
