@@ -1,12 +1,13 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Final, Literal, Protocol, TypeVar
 
 from markdown_it.token import Token
 from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
-from skaldr.models import ToneLiteral
+from skaldr.models import Person, ToneLiteral
 from skaldr.richtext_syntax import (
     ANCHOR_PREFIX,
     CITATION,
@@ -26,6 +27,16 @@ from skaldr.richtext_syntax import (
     SpanTones,
     inline_tokens,
     nested_too_deep,
+)
+from skaldr.typed_links import (
+    DATE_SCHEME,
+    DOC_SCHEME,
+    JIRA_SCHEME,
+    USER_SCHEME,
+    date_target,
+    document_target,
+    issue_key,
+    person_key,
 )
 
 MarkerStyle = Literal["bold", "italic", "strike"]
@@ -55,6 +66,34 @@ class Link:
 class AnchorLink:
     label: "Rich"
     anchor: str
+
+
+@dataclass(frozen=True)
+class DateMention:
+    label: "Rich"
+    start: date
+    end: date | None
+
+
+@dataclass(frozen=True)
+class PersonMention:
+    label: "Rich"
+    key: str
+    person: Person
+
+
+@dataclass(frozen=True)
+class IssueLink:
+    label: "Rich"
+    key: str
+    url: str | None
+
+
+@dataclass(frozen=True)
+class DocumentLink:
+    label: "Rich"
+    doc_id: str
+    section: str | None
 
 
 @dataclass(frozen=True)
@@ -93,7 +132,22 @@ class InlineMath:
     expression: str
 
 
-Run = Plain | Code | Link | AnchorLink | Citation | Placeholder | Styled | ScriptText | Tinted | InlineMath
+Run = (
+    Plain
+    | Code
+    | Link
+    | AnchorLink
+    | DateMention
+    | PersonMention
+    | IssueLink
+    | DocumentLink
+    | Citation
+    | Placeholder
+    | Styled
+    | ScriptText
+    | Tinted
+    | InlineMath
+)
 Rich = tuple[Run, ...]
 
 _STYLE_OPENERS: Final[Mapping[str, StyleName]] = {
@@ -110,6 +164,8 @@ class RichContext:
     reference_numbers: Mapping[str, int] | None = None
     reference_urls: Mapping[str, str | None] = field(default_factory=dict[str, "str | None"])
     anchor_ids: frozenset[str] | None = None
+    people: Mapping[str, Person] = field(default_factory=dict[str, Person])
+    jira_site: str | None = None
 
 
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
@@ -145,7 +201,28 @@ def _wrapped_runs(opener: Token, inner: Rich, rules: RichContext) -> Rich:
     return (Styled(_STYLE_OPENERS[opener.type], inner),)
 
 
+def _typed_link_run(url: str, label: Rich, rules: RichContext) -> Run | None:
+    if url.startswith(DATE_SCHEME):
+        target = date_target(url)
+        return DateMention(label, target.start, target.end)
+    if url.startswith(USER_SCHEME):
+        key = person_key(url)
+        if key not in rules.people:
+            raise ReportError(f"rich text links to unknown person '{key}': declare it under meta.people")
+        return PersonMention(label, key, rules.people[key])
+    if url.startswith(JIRA_SCHEME):
+        key = issue_key(url)
+        return IssueLink(label, key, f"{rules.jira_site}/browse/{key}" if rules.jira_site else None)
+    if url.startswith(DOC_SCHEME):
+        target = document_target(url)
+        return DocumentLink(label, target.doc_id, target.section)
+    return None
+
+
 def _link_runs(url: str, label: Rich, rules: RichContext) -> Rich:
+    typed = _typed_link_run(url, label, rules)
+    if typed is not None:
+        return (typed,)
     if not url.startswith(ANCHOR_PREFIX):
         return (Link(label, url),)
     if rules.anchor_ids is None:
@@ -194,6 +271,14 @@ class RunWriter(Protocol[Written]):
 
     def anchor_link(self, label: Written, anchor: str, /) -> Written: ...
 
+    def date_mention(self, label: Written, start: date, end: date | None, /) -> Written: ...
+
+    def person_mention(self, label: Written, key: str, person: Person, /) -> Written: ...
+
+    def issue_link(self, label: Written, key: str, url: str | None, /) -> Written: ...
+
+    def document_link(self, label: Written, doc_id: str, section: str | None, /) -> Written: ...
+
     def citation(self, run: Citation, /) -> Written: ...
 
     def placeholder(self, name: str, /) -> Written: ...
@@ -224,6 +309,14 @@ def write_run(run: Run, writer: RunWriter[Written]) -> Written:
             return writer.link(write_runs(run.label, writer), run.url)
         case AnchorLink():
             return writer.anchor_link(write_runs(run.label, writer), run.anchor)
+        case DateMention():
+            return writer.date_mention(write_runs(run.label, writer), run.start, run.end)
+        case PersonMention():
+            return writer.person_mention(write_runs(run.label, writer), run.key, run.person)
+        case IssueLink():
+            return writer.issue_link(write_runs(run.label, writer), run.key, run.url)
+        case DocumentLink():
+            return writer.document_link(write_runs(run.label, writer), run.doc_id, run.section)
         case Citation():
             return writer.citation(run)
         case Placeholder():
@@ -255,6 +348,18 @@ class VisibleText(TextRunWriter):
         return label
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def date_mention(self, label: str, _start: date, _end: date | None, /) -> str:
+        return label
+
+    def person_mention(self, label: str, _key: str, _person: Person, /) -> str:
+        return label
+
+    def issue_link(self, label: str, _key: str, _url: str | None, /) -> str:
+        return label
+
+    def document_link(self, label: str, _doc_id: str, _section: str | None, /) -> str:
         return label
 
     def citation(self, run: Citation, /) -> str:

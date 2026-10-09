@@ -13,6 +13,7 @@ from typing_extensions import override
 from skaldr.errors import ReportError
 from skaldr.mathml import refuse_invalid_math
 from skaldr.models import ALLOWED_URL_SCHEMES, REFERENCE_KEY_PATTERN, BadgeColorLiteral, Tone, ToneLiteral
+from skaldr.typed_links import TYPED_LINK_SCHEMES
 
 ANCHOR_PREFIX: Final = "#"
 MAX_NESTING: Final = 20
@@ -73,7 +74,10 @@ class SpanTones:
 class _RichMarkdown(MarkdownIt):
     @override
     def validateLink(self, url: str) -> bool:
-        return url.startswith((*ALLOWED_URL_SCHEMES, ANCHOR_PREFIX)) and _PLACEHOLDER_OPEN not in url
+        return (
+            url.startswith((*ALLOWED_URL_SCHEMES, *TYPED_LINK_SCHEMES, ANCHOR_PREFIX))
+            and _PLACEHOLDER_OPEN not in url
+        )
 
     @override
     def normalizeLink(self, url: str) -> str:

@@ -288,6 +288,24 @@ class Badge(FrozenModel):
     )
 
 
+PERSON_KEY_PATTERN = REFERENCE_KEY_PATTERN
+NOTION_USER_PATTERN = r"^user://[0-9A-Fa-f-]+$"
+JIRA_SITE_SCHEME = "https://"
+
+
+class Person(FrozenModel):
+    notion: str | None = Field(
+        default=None,
+        pattern=NOTION_USER_PATTERN,
+        description="The person's Notion user id as a `user://` URI. The Notion Markdown export writes a "
+        "`[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+    )
+    jira: str | None = Field(
+        default=None,
+        description="The person's Jira account id, for the Jira writer. Not read when rendering.",
+    )
+
+
 class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
@@ -314,6 +332,29 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
+    people: dict[Annotated[str, StringConstraints(pattern=rf"^{PERSON_KEY_PATTERN}$")], Person] = Field(
+        default_factory=dict[str, Person],
+        description="The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not "
+        "listed here fails the build.",
+    )
+    jira_site: str | None = Field(
+        default=None,
+        description="The https:// address of your Jira site, such as https://example.atlassian.net. A "
+        "`[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key "
+        "is shown as text.",
+    )
+
+    @field_validator("jira_site")
+    @classmethod
+    def _jira_site_is_an_https_address(cls, site: str | None) -> str | None:
+        if site is None:
+            return None
+        if not site.startswith(JIRA_SITE_SCHEME):
+            raise ValueError(f"jira_site must be an {JIRA_SITE_SCHEME} URL")
+        defect = _url_defect(site)
+        if defect is not None:
+            raise ValueError(f"jira_site {site!r} is not a valid URL ({defect})")
+        return site.rstrip("/")
 
 
 class Heading(_Block):

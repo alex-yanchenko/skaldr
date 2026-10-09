@@ -7,7 +7,9 @@ content file can never smuggle in raw HTML.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -23,6 +25,7 @@ from skaldr.frozen_model import FrozenModel
 from skaldr.highlight import highlighted_code, highlighted_diff_lines
 from skaldr.mathml import mathml
 from skaldr.models import (
+    Person,
     Report,
     ToneLiteral,
     iter_requests,
@@ -125,6 +128,23 @@ class _HtmlRuns(TextRunWriter):
     def anchor_link(self, label: str, anchor: str, /) -> str:
         return f'<a href="#{escape(anchor)}">{label}</a>'
 
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
+        if end is None:
+            return f'<time class="date-chip" datetime="{start.isoformat()}">{label}</time>'
+        return f'<span class="date-chip" data-range="{start.isoformat()}/{end.isoformat()}">{label}</span>'
+
+    def person_mention(self, label: str, key: str, _person: Person, /) -> str:
+        return f'<span class="person-chip" data-person="{escape(key)}">{label}</span>'
+
+    def issue_link(self, label: str, _key: str, url: str | None, /) -> str:
+        if url is None:
+            return f'<span class="issue-link">{label}</span>'
+        return f'<a class="issue-link" href="{escape(url)}">{label}</a>'
+
+    def document_link(self, label: str, doc_id: str, section: str | None, /) -> str:
+        fragment = f"#{section}" if section else ""
+        return f'<a class="doc-link" href="{escape(doc_id)}.html{escape(fragment)}">{label}</a>'
+
     def citation(self, run: Citation, /) -> str:
         anchor = "" if run.key in self.cited else f' id="fnref-{run.key}"'
         self.cited.add(run.key)
@@ -162,6 +182,8 @@ def render_richtext(
     cited: set[str] | None = None,
     anchor_ids: frozenset[str] | None = None,
     placeholders: set[str] | None = None,
+    people: Mapping[str, Person] | None = None,
+    jira_site: str | None = None,
 ) -> Markup:
     """Rich text as HTML: `parse_rich` reads the inline subset and every other character is escaped.
     `[^key]` markers resolve to a superscript number only for keys `ref_numbers` declares; an unknown
@@ -169,8 +191,16 @@ def render_richtext(
     targets: a `[…](#id)` link to an id outside it fails the build, and None leaves such links literal.
     `cited` records which reference keys have rendered, so only the first citation of a key carries
     the `fnref-` anchor id and the references list knows which keys are cited; pass one shared set
-    across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name."""
-    runs = parse_rich(str(text), RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids))
+    across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name.
+    `people` and `jira_site` resolve `user:` and `jira:` links, as `meta.people` and `meta.jira_site`
+    do on a page."""
+    context = RichContext(
+        reference_numbers=ref_numbers,
+        anchor_ids=anchor_ids,
+        people=people if people is not None else {},
+        jira_site=jira_site,
+    )
+    runs = parse_rich(str(text), context)
     return Markup(write_runs(runs, _HtmlRuns(cited if cited is not None else set(), placeholders)))
 
 
@@ -246,15 +276,20 @@ def _render(
 
     ref_numbers = compute.reference_numbers(report)
     anchor_ids = frozenset(slugs.values())
+    people = report.meta.people
+    jira_site = report.meta.jira_site
     compute.validate_rich_text_fields(
-        report, RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids)
+        report,
+        RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids, people=people, jira_site=jira_site),
     )
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
     # trailing references list reads it to give a cited key a backlink and skip one never cited.
     cited_references: set[str] = set()
 
     def richtext(text: str) -> Markup:
-        return render_richtext(text, ref_numbers, cited_references, anchor_ids, placeholders)
+        return render_richtext(
+            text, ref_numbers, cited_references, anchor_ids, placeholders, people, jira_site
+        )
 
     filters = cast("dict[str, Any]", env.filters)
     filters["richtext"] = richtext

@@ -90,6 +90,8 @@ def lowering_for(report: Report) -> Lowering:
         reference_numbers=compute.reference_numbers(report),
         reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
         anchor_ids=frozenset(anchors.values()),
+        people=report.meta.people,
+        jira_site=report.meta.jira_site,
     )
     compute.validate_rich_text_fields(report, rich_context)
     return Lowering(

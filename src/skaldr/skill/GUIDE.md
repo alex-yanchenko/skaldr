@@ -60,6 +60,9 @@ meta:
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
+  people:                        # optional; who a [Ada](user:ada) link can name (see Rich text)
+    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g" }
+  jira_site: "https://example.atlassian.net"   # optional; where a [ABC-123](jira:ABC-123) link points
 ```
 
 `source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
@@ -121,7 +124,7 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 `key_value` values, timeline/status text) accept a small markdown subset:
 
 `**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `` $`x_i`$ `` (inline math) · `[label](https://url)`
-(links allow `http`, `https`, `mailto` only).
+(links allow `http`, `https`, `mailto` and the typed links below only).
 
 **CommonMark rules.** Rich text follows CommonMark's inline rules (it is parsed with markdown-it-py) for emphasis, code spans, links and backslash escapes, plus the extensions this section lists: underline, subscript, superscript, coloured spans, inline math, `[^key]` citations and `{{name}}` blanks. So marks nest (`**bold with *italic* inside**`), a link label holds marks (`[**docs** H~2~O](https://url)`), and a link URL may hold balanced parentheses (`https://en.wikipedia.org/wiki/Foo_(bar)`). A link needs both text and a URL and takes no title, so `[x]()`, `[](https://url)` and `[x](https://url "title")` show as typed. A marker opens or closes only where CommonMark's flanking rules allow it: `2 * 3 * 4` and `a ** b ** c` stay prose, and so does ``the **`api`**s``, because a closing `**` between punctuation and a letter closes nothing. `_word_` is italic and `__word__` bold, as on GitHub, while an underscore inside a word (`snake_case`, `a__init__b`) stays text; write an identifier such as `__init__` in a `` `code` `` span. A backslash before any ASCII punctuation shows that character literally and drops the backslash (`\*`, `\~`, `\[`); a backslash before a letter stays. Multi-backtick code spans (``` `` a`b `` ```) work. Raw HTML, autolinks (`<https://url>`), images, entity references (`&amp;`) and hard line breaks are not read: they show as typed. A NUL character becomes U+FFFD, as CommonMark requires. Marks, links and coloured spans nest up to 20 deep; more than that fails the build naming the limit. A rich-text mistake that fails the build names the field it sits in, as in `blocks.1.items.2: unknown tone 'purple' in {tone=purple}: …`.
 
@@ -139,6 +142,8 @@ matching the TOC. A slug that would equal an id the page itself uses (`skaldr-so
 `ref-<key>` and `fnref-<key>` for a reference key) gets the suffix too, and an author `id` equal to
 one fails the build. A `#slug` that names no heading or section **fails the build**, so a dangling
 in-page link never ships.
+
+**Typed links.** Four more link targets name a date, a person, an issue or another document instead of a URL. `[1 Oct](date:2026-10-01)` is a date chip, and a range is `[the week](date:2026-10-05/2026-10-09)`; a date is `YYYY-MM-DD`, a range's end is not before its start, and anything else fails the build naming the value. `[Ada](user:ada)` is a person chip: `ada` must be a key under `meta.people`, a map from a key (letters, digits, `_` and `-`) to `notion` (a `user://` id) and `jira` (an account id), both optional, and a key missing from the map fails the build naming it. An index document uses its own `people`, not its parts'. `[ABC-123](jira:ABC-123)` is an issue link to `<meta.jira_site>/browse/ABC-123`, where `jira_site` is your `https://` Jira address; without `jira_site` the label shows as text, because the key alone names no site. The key is capitals, a hyphen and a number. `[the plan](doc:onboarding-plan#st2)` links to another skaldr document by its `doc_id`, with an optional `#section` id; the HTML page links to `onboarding-plan.html#st2` and the GitHub Markdown to `onboarding-plan.md#st2`, which work when the files sit side by side under those names. Every label is rich text, and a typed link inside a flow label or other plain-text field reads as its label. Exports: see Exporting as Markdown.
 
 **Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL,
 never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a valid anchor and
@@ -1084,6 +1089,10 @@ case, where the page is shared as a URL an agent later has to read back.
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
+| `[1 Oct](date:2026-10-01)` | the label as text | a date mention, `<mention-date start="2026-10-01"/>`, with `end` for a range; the label is dropped, since Notion writes the date itself |
+| `[Ada](user:ada)` | the label as text | a user mention, `<mention-user url="user://…">Ada</mention-user>`, when the person has a `notion` id; otherwise the label as text |
+| `[ABC-123](jira:ABC-123)` | a link to the issue on `meta.jira_site`, or the label as text without one | the same |
+| `[the plan](doc:onboarding-plan#st2)` | a link to `onboarding-plan.md#st2` | the label as text, since a Notion page id exists only once the document is published |
 | `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
