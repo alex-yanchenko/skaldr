@@ -401,8 +401,12 @@ def test_a_refused_read_is_a_connector_error_and_not_a_rejected_write() -> None:
     )
 
 
-@pytest.mark.parametrize("method", ["read", "write"])
-def test_a_rejected_sign_in_says_to_sign_in_again(method: str) -> None:
+@pytest.mark.parametrize(
+    ("method", "raised_type"),
+    [("read", ConnectorError), ("write", WriteRejectedError)],
+    ids=["read", "write-that-never-landed"],
+)
+def test_a_rejected_sign_in_says_to_sign_in_again(method: str, raised_type: type[ConnectorError]) -> None:
     jira = _seeded()
     jira.answer_next(Reply(401, {"errorMessages": ["Unauthorized"]}))
     client = jira.client()
@@ -414,7 +418,7 @@ def test_a_rejected_sign_in_says_to_sign_in_again(method: str) -> None:
             client.edit_issue("DEMO-1", {"summary": "Garden guide"})
 
     assert (type(raised.value), str(raised.value)) == (
-        ConnectorError,
+        raised_type,
         f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
         "so run `skaldr auth jira`",
     )

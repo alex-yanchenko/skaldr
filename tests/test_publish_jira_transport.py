@@ -22,7 +22,7 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import JiraTarget
 from tests.factories import make_jira_target
 from tests.factories.auth_factory import summarise
-from tests.factories.jira_factory import DONE, IN_PROGRESS, SITE, FakeJira
+from tests.factories.jira_factory import DONE, IN_PROGRESS, NOT_FOUND, SITE, FakeJira, Reply
 
 DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
@@ -265,9 +265,31 @@ def test_a_read_names_the_latest_edit_to_what_skaldr_writes_and_marks_the_newest
     )
 
 
-def test_a_missing_issue_reads_as_not_found() -> None:
-    with pytest.raises(ItemNotFoundError):
-        _transport(FakeJira()).read_item("DEMO-9", CONTENT)
+def test_a_missing_issue_reads_as_not_found_once_the_sign_in_is_confirmed() -> None:
+    jira = FakeJira()
+
+    with pytest.raises(
+        ItemNotFoundError,
+        match=_exactly(
+            "Jira has no issue DEMO-9 that this account can see (HTTP 404 to GET /rest/api/3/issue/DEMO-9)"
+        ),
+    ):
+        _transport(jira).read_item("DEMO-9", CONTENT)
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-9"), ("GET", "/rest/api/3/myself")]
+
+
+def test_a_not_found_answered_to_a_sign_in_jira_no_longer_accepts_is_not_a_missing_issue() -> None:
+    jira = FakeJira()
+    jira.answer_next(Reply(404, NOT_FOUND), Reply(401, {"errorMessages": ["Unauthorized"]}))
+
+    with pytest.raises(ConnectorError) as raised:
+        _transport(jira).read_item("DEMO-1", CONTENT)
+
+    assert (type(raised.value), str(raised.value)) == (
+        ConnectorError,
+        f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+        "so run `skaldr auth jira`",
+    )
 
 
 def test_a_description_without_a_layout_reads_as_one_section() -> None:

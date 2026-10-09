@@ -220,7 +220,8 @@ class JiraClient:
         detail = _detail(response)
         explained = f": {detail}" if detail else ""
         if status == HTTPStatus.UNAUTHORIZED:
-            raise ConnectorError(
+            rejected = ConnectorError if method in READ_METHODS else WriteRejectedError
+            raise rejected(
                 f"Jira at {self.site} rejected the sign-in (HTTP 401); the API token may have expired or "
                 "been revoked, so run `skaldr auth jira`"
             )

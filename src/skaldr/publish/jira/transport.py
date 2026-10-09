@@ -258,7 +258,11 @@ class JiraTransport:
     def _read(self, item_id: str) -> _Read:
         shapes = self._field_shapes.get(item_id, {})
         names = list(dict.fromkeys([SUMMARY, DESCRIPTION, *shapes]))
-        issue = self._client.get_issue(item_id, names)
+        try:
+            issue = self._client.get_issue(item_id, names)
+        except ItemNotFoundError:
+            self._client.myself()
+            raise
         stamp = self._stamp(item_id)
         if stamp is not None and stamp.archived:
             raise ItemNotFoundError(f"skaldr archived {item_id}, so it no longer publishes there")
