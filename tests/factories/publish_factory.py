@@ -206,7 +206,7 @@ class FakeTransport:
         item.raw_sections[key] = f'<span discussion-urls="discussion://1">{first}</span>\n{rest}'
 
     def edit_section_by_hand(self, item_id: str, key: str, text: str) -> None:
-        self.items[item_id].raw_sections[key] = text
+        self.items[item_id].raw_sections[key] = self._stored(text)
         self.report_an_edit_without_changing_content(item_id, section_part(key))
 
     def delete_section_by_hand(self, item_id: str, key: str) -> None:

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import ItemContent
+from skaldr.publish.content import FIELDS, TITLE, ItemContent, differing_parts
 from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
 from skaldr.publish.notion.transport import NotionTransport
@@ -442,6 +442,21 @@ def test_notion_reports_no_edit_the_text_comparison_does_not_already_show_and_as
     edited = transport.parts_edited_after(created.item_id, created.marker, created.comparable)
 
     assert (edited, notion.requests) == ((), [])
+
+
+def test_a_title_or_field_a_person_changes_shows_in_the_read_so_the_engine_sees_the_edit() -> None:
+    notion = _notion()
+    transport, created = _created(notion, CONTENT.model_copy(update={"fields": {"Area": "Shed"}}))
+    notion.set_property_by_hand(created.item_id, "Name", "Garden notes")
+    notion.set_property_by_hand(created.item_id, "Area", "Orchard")
+
+    read = transport.read_item(created.item_id, created.comparable)
+
+    assert (
+        differing_parts(created.comparable, read.comparable),
+        read.comparable.title,
+        read.comparable.fields["Area"],
+    ) == ((TITLE, FIELDS), "Garden notes", "Orchard")
 
 
 def _write_into_the_empty_row(notion: InMemoryNotion, fields: dict[str, Any]) -> None:

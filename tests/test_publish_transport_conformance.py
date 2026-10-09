@@ -252,6 +252,16 @@ def test_the_marker_a_write_returns_covers_that_write(under_test: TransportUnder
     assert instance.transport.parts_edited_after(created.item_id, written.marker, CONTENT) == ()
 
 
+def test_a_hand_edit_shows_in_the_comparable_text_a_read_returns(under_test: TransportUnderTest) -> None:
+    instance, created = _created(under_test)
+
+    instance.edit_section_by_hand(created.item_id, "planting", "Sow in June.\n")
+
+    assert _sections(instance.transport.read_item(created.item_id, CONTENT)) == _expected_sections(
+        instance.transport, {"intro": "Welcome.\n", "planting": "Sow in June.\n"}
+    )
+
+
 def test_a_hand_edit_after_a_marker_is_reported(under_test: TransportUnderTest) -> None:
     if not under_test.reports_edits:
         pytest.skip("this transport reports no edits by marker")
