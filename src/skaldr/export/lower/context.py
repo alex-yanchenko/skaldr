@@ -28,6 +28,7 @@ class Lowering:
     anchors: dict[int, str]
     matrix_tallies: Mapping[str, compute.DerivedTally]
     table_tallies: Mapping[str, compute.DerivedTally]
+    section_titles: Mapping[str, str]
 
     def rich(self, text: str) -> Rich:
         return rich_line(text, self.rich_context)
@@ -98,6 +99,7 @@ def lowering_for(report: Report) -> Lowering:
         anchors=anchors,
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),
+        section_titles=compute.section_titles_by_id(report),
     )
 
 

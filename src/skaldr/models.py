@@ -2507,15 +2507,39 @@ def _describe_value_kind(value: Any) -> str:
         return "a boolean"
     if isinstance(value, Mapping):
         return "a mapping"
+    if isinstance(value, list):
+        return "a list"
     return "null" if value is None else type(value).__name__
 
 
-def _refuse_an_unusable_extra_field(value: Any) -> Any:
-    if value is None or isinstance(value, bool | Mapping):
+def _refuse_an_unusable_extra_item(value: Any) -> None:
+    if value is None or isinstance(value, bool | Mapping | list):
         raise ValueError(
             f"an extra field must be a string, a number or a list of them, not {_describe_value_kind(value)}"
         )
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("an extra field must not be blank")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("an extra field must be a finite number")
+
+
+def _refuse_an_unusable_extra_field(value: Any) -> Any:
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("an extra field list must not be empty")
+        items = cast("list[Any]", value)
+        for item in items:
+            _refuse_an_unusable_extra_item(item)
+        return items
+    _refuse_an_unusable_extra_item(value)
     return value
+
+
+def fact_label(name: str) -> str:
+    return name[:1].upper() + name[1:]
+
+
+KNOWN_FIELD_NAMES: Final = ("status", "priority", "assignee", "due", "labels", "estimate")
 
 
 class SectionFields(FrozenModel):
@@ -2527,6 +2551,22 @@ class SectionFields(FrozenModel):
     @property
     def extras(self) -> dict[str, FieldScalar | FieldList]:
         return cast("dict[str, FieldScalar | FieldList]", self.model_extra or {})
+
+    @model_validator(mode="after")
+    def _refuse_two_facts_under_one_label(self) -> "SectionFields":
+        seen: dict[str, str] = {}
+        sources = (
+            *((name, "a known field", fact_label(name)) for name in KNOWN_FIELD_NAMES),
+            *((name, "a link type", fact_label(name)) for name in self.links),
+            *((name, "an extra field", name) for name in self.extras),
+        )
+        for name, kind, label in sources:
+            if label in seen:
+                raise ValueError(
+                    f"'{name}' ({kind}) and {seen[label]} would both show as '{label}'; rename one of them"
+                )
+            seen[label] = f"'{name}' ({kind})"
+        return self
 
     status: NonBlank | None = Field(
         default=None, description="Workflow state, shown as a chip (e.g. `In Progress`)."

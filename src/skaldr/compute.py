@@ -55,6 +55,7 @@ from skaldr.models import (
     Tabs,
     ToneLiteral,
     col_sum,
+    fact_label,
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
@@ -734,8 +735,14 @@ def section_titles_by_id(report: Report) -> dict[str, str]:
     }
 
 
+def plain_number(value: str | int | float) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 def _extra_fact_value(value: str | int | float) -> FactValue:
-    return FactValue("chip", fmt(value), "slate")
+    return FactValue("chip", plain_number(value), "slate")
 
 
 def section_facts(fields: SectionFields, titles: Mapping[str, str]) -> tuple[SectionFact, ...]:
@@ -753,11 +760,11 @@ def section_facts(fields: SectionFields, titles: Mapping[str, str]) -> tuple[Sec
             SectionFact("Labels", tuple(FactValue("chip", label, "slate") for label in fields.labels))
         )
     if fields.estimate is not None:
-        facts.append(SectionFact("Estimate", (FactValue("text", fmt(fields.estimate)),)))
+        facts.append(SectionFact("Estimate", (FactValue("text", plain_number(fields.estimate)),)))
     for link_type, targets in fields.links.items():
         facts.append(
             SectionFact(
-                link_type.capitalize(),
+                fact_label(link_type),
                 tuple(FactValue("link", titles[target], anchor=target) for target in targets),
             )
         )

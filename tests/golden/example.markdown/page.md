@@ -11,6 +11,7 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - [Rollout](#rollout)
 - [Method](#method)
 - [At a glance](#at-a-glance)
+- [Recount Zone C](#recount-zone-c)
 - [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
 - [Counts at a glance](#counts-at-a-glance)
 - [Count methods compared](#count-methods-compared)
@@ -236,6 +237,19 @@ function pickWinner(a, b) {
 
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.
+
+## Recount Zone C
+
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
+- **team**: Floor ops
+
+Zone C holds most of the mislabeled bins, so it is recounted first.
 
 ## Appendix: discrepancy-reason raw counts
 

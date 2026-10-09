@@ -86,7 +86,7 @@ def lower_fact_strip(block: models.FactStrip) -> list[Node]:
 
 
 def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> list[Node]:
-    facts = compute.section_facts(fields, compute.section_titles_by_id(lowering.report))
+    facts = compute.section_facts(fields, lowering.section_titles)
     return (
         [bullets(ListEntry(with_bold_label(fact.label, _fact_values(fact))) for fact in facts)]
         if facts
