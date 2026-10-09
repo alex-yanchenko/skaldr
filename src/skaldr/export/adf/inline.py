@@ -81,9 +81,17 @@ class IssueLinks:
 
     def __post_init__(self) -> None:
         site = urlsplit(self.site_url)
-        if site.scheme != "https" or not site.hostname or "@" in site.netloc:
+        refused = (
+            not self.site_url.startswith("https://")
+            or not site.hostname
+            or "@" in site.netloc
+            or site.query
+            or site.fragment
+        )
+        if refused:
             raise ConnectorError(
-                f"issue links need an https site URL with a host and no user info, got '{self.site_url}'"
+                "issue links need a lowercase https:// site URL with a host and no user info, query or "
+                f"fragment, got '{self.site_url}'"
             )
         for key in sorted(self.project_keys):
             if not PROJECT_KEY.fullmatch(key):

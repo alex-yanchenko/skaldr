@@ -334,13 +334,20 @@ def test_two_adjacent_links_to_different_urls_stay_separate_nodes() -> None:
         "https://",
         "https://user:secret@example.atlassian.net",
         "https://user@example.atlassian.net",
+        "https://a.net/x?q=1#f",
+        "https://a.net?q=1",
+        "https://a.net/#f",
+        "HTTPS://a.net",
         "",
     ],
 )
 def test_issue_links_refuse_a_site_that_is_not_https_with_a_host_and_no_user_info(site: str) -> None:
     with pytest.raises(
         ConnectorError,
-        match=re.escape(f"issue links need an https site URL with a host and no user info, got '{site}'"),
+        match=re.escape(
+            "issue links need a lowercase https:// site URL with a host and no user info, query or "
+            f"fragment, got '{site}'"
+        ),
     ):
         IssueLinks(site, frozenset({"PLAN"}))
 
