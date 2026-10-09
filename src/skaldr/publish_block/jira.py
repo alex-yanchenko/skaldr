@@ -38,8 +38,8 @@ class JiraTarget(TargetBase):
     def where_fields(self) -> JsonFields:
         return self.where.fields
 
-    def location_key(self) -> Location:
+    def place_key(self) -> Location:
         return ("jira", self.where.project, self.where.parent or "")
 
-    def location_label(self) -> str:
+    def place_label(self) -> str:
         return f"jira project {self.where.project} under {self.where.parent or 'no parent issue'}"

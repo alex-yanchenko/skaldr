@@ -57,13 +57,10 @@ class TargetBase(FrozenModel):
         return {**self.where_fields(), **(override.fields if override is not None else {})}
 
     @abstractmethod
-    def location_key(self) -> Location: ...
+    def place_key(self) -> Location: ...
 
     @abstractmethod
-    def location_label(self) -> str: ...
+    def place_label(self) -> str: ...
 
-    def place_key(self) -> Location:
-        return self.location_key()
-
-    def place_label(self) -> str:
-        return self.location_label()
+    def location_label(self) -> str:
+        return self.place_label()

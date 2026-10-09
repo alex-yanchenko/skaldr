@@ -263,17 +263,26 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
     [
         pytest.param(
             [make_notion_target(), make_notion_target(where={"parent_page": OTHER_NOTION_PAGE_ID})],
-            [("notion", "parent_page", NOTION_PAGE_ID), ("notion", "parent_page", OTHER_NOTION_PAGE_ID)],
+            [
+                (("notion", NOTION_PAGE_ID), f"notion page {NOTION_PAGE_ID}"),
+                (("notion", OTHER_NOTION_PAGE_ID), f"notion page {OTHER_NOTION_PAGE_ID}"),
+            ],
             id="two-notion-pages",
         ),
         pytest.param(
             [make_notion_target(), make_notion_target(where={"page": OTHER_NOTION_PAGE_ID})],
-            [("notion", "parent_page", NOTION_PAGE_ID), ("notion", "page", OTHER_NOTION_PAGE_ID)],
+            [
+                (("notion", NOTION_PAGE_ID), f"notion page {NOTION_PAGE_ID}"),
+                (("notion", OTHER_NOTION_PAGE_ID), f"notion page {OTHER_NOTION_PAGE_ID} (written into)"),
+            ],
             id="a-notion-parent-page-and-a-page-written-into",
         ),
         pytest.param(
             [make_jira_target(), make_jira_target(where={"project": "OPS", "issue_type": "Task"})],
-            [("jira", "PLAN", ""), ("jira", "OPS", "")],
+            [
+                (("jira", "PLAN", ""), "jira project PLAN under no parent issue"),
+                (("jira", "OPS", ""), "jira project OPS under no parent issue"),
+            ],
             id="two-jira-projects",
         ),
         pytest.param(
@@ -281,18 +290,22 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
                 make_jira_target(where={"project": "PLAN", "issue_type": "Task", "parent": "PLAN-1"}),
                 make_jira_target(where={"project": "PLAN", "issue_type": "Task", "parent": "PLAN-2"}),
             ],
-            [("jira", "PLAN", "PLAN-1"), ("jira", "PLAN", "PLAN-2")],
+            [
+                (("jira", "PLAN", "PLAN-1"), "jira project PLAN under PLAN-1"),
+                (("jira", "PLAN", "PLAN-2"), "jira project PLAN under PLAN-2"),
+            ],
             id="one-jira-project-under-two-parents",
         ),
     ],
 )
-def test_targets_in_different_places_are_accepted(
-    targets: list[dict[str, Any]], locations: list[tuple[str, ...]]
+def test_targets_in_different_places_are_accepted_and_each_has_its_own_label(
+    targets: list[dict[str, Any]], locations: list[tuple[tuple[str, ...], str]]
 ) -> None:
     publish = _parse({"doc_id": "plan", "targets": targets})
 
     assert publish is not None
-    assert [target.location_key() for target in publish.targets] == locations
+    assert [(target.place_key(), target.location_label()) for target in publish.targets] == locations
+    assert [hasattr(target, "location_key") for target in publish.targets] == [False, False]
 
 
 @pytest.mark.parametrize(
