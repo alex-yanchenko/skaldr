@@ -261,9 +261,11 @@ class InMemoryNotion:
         return None
 
     def _property_name(self, page: StoredPage, name: str) -> str:
+        if name in page.properties:
+            return name
         if name == "title":
             return next(key for key, (kind, _) in page.properties.items() if kind == "title")
-        return name if name in page.properties else ""
+        return ""
 
     def _markdown(self, method: str, page_id: str, body: dict[str, Any]) -> httpx2.Response:
         page = self._found(page_id)

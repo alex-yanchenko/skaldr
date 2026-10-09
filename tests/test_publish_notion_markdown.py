@@ -4,9 +4,11 @@ from skaldr.publish.notion.page_markdown import (
     UNKEYED_SECTION,
     KeyedPage,
     Replacement,
+    carried_into,
     comparable_text,
     joined,
     keyed_page,
+    release_replacement,
     section_replacement,
     stamp_line,
     without_comment_markers,
@@ -206,10 +208,102 @@ def test_the_last_stamp_on_the_page_counts_and_an_earlier_one_is_content() -> No
     assert (keyed.stamp, keyed.raw_sections) == (STAMP, {"intro": INTRO + other})
 
 
-def test_content_written_after_the_stamp_belongs_to_the_last_section() -> None:
-    keyed = keyed_page(_page(INTRO, STAMP_LINE, "Late note.\n"), {"intro": INTRO})
+@pytest.mark.parametrize(
+    "below",
+    [
+        pytest.param([f"{CHILD}\n", "<empty-block/>"], id="child-then-empty-block"),
+        pytest.param(["<empty-block/>\n", CHILD], id="empty-block-then-child"),
+        pytest.param([f"{CHILD}\n", "A person's note.\n", "<empty-block/>"], id="a-persons-text"),
+        pytest.param(["\n", "A person's note."], id="text-after-a-blank-line"),
+    ],
+)
+def test_whatever_follows_the_stamp_belongs_to_no_section(below: list[str]) -> None:
+    keyed = keyed_page(_page(INTRO, STAMP_LINE, *below), {"intro": INTRO})
 
-    assert keyed.sections == {"intro": INTRO + "Late note.\n"}
+    assert (keyed.raw_sections, keyed.sections, keyed.stamp) == ({"intro": INTRO}, {"intro": INTRO}, STAMP)
+
+
+def test_a_child_page_inside_a_section_stays_in_its_raw_text_and_leaves_its_comparable_text() -> None:
+    tools = f"## Tools\n- Spade.\n{CHILD}\n- Rake.\n"
+
+    keyed = keyed_page(_page(INTRO, tools, PLANTING, STAMP_LINE), LAYOUT)
+
+    assert (keyed.raw_sections, keyed.sections, keyed.child_ids) == (
+        {"intro": INTRO, "tools": tools, "planting": PLANTING},
+        LAYOUT,
+        ("0123456789abcdef0123456789abcdef",),
+    )
+
+
+def test_a_child_page_between_two_sections_belongs_to_the_one_before_so_sections_join_into_the_page() -> None:
+    page = _page(INTRO, f"{CHILD}\n", TOOLS, PLANTING, STAMP_LINE)
+
+    keyed = keyed_page(page, LAYOUT)
+
+    assert (
+        keyed.raw_sections["intro"],
+        keyed.sections,
+        joined([*keyed.raw_sections.values(), STAMP_LINE]),
+    ) == (
+        f"{INTRO}{CHILD}\n",
+        LAYOUT,
+        page,
+    )
+
+
+def test_child_pages_are_listed_in_page_order_above_and_below_the_stamp() -> None:
+    other = '<page url="https://www.notion.so/Beds-fedcba9876543210fedcba9876543210">Beds</page>'
+
+    keyed = keyed_page(_page(INTRO, f"{other}\n", STAMP_LINE, CHILD), {"intro": INTRO})
+
+    assert keyed.child_ids == ("fedcba9876543210fedcba9876543210", "0123456789abcdef0123456789abcdef")
+
+
+@pytest.mark.parametrize(
+    ("raw", "text", "carried"),
+    [
+        pytest.param(TOOLS, "## Tools\n- Hoe.\n", "## Tools\n- Hoe.\n", id="no-child-page"),
+        pytest.param(
+            f"## Tools\n- Spade.\n{CHILD}\n- Rake.\n",
+            "## Tools\n- Hoe.\n- Fork.\n- Rake.\n",
+            f"## Tools\n- Hoe.\n{CHILD}\n- Fork.\n- Rake.\n",
+            id="kept-after-as-many-lines",
+        ),
+        pytest.param(
+            f"Intro.\n{CHILD}\n",
+            "<table>\n\t<tr>\n\t\t<td>a</td>\n\t</tr>\n</table>\nAfter.\n",
+            f"<table>\n\t<tr>\n\t\t<td>a</td>\n\t</tr>\n</table>\n{CHILD}\nAfter.\n",
+            id="moved-past-a-table-to-the-next-block",
+        ),
+        pytest.param(
+            f"{CHILD}\n## Tools\n", "## Tools\n- Hoe.\n", f"{CHILD}\n## Tools\n- Hoe.\n", id="first"
+        ),
+        pytest.param(f"## Tools\n{CHILD}\n", "", f"{CHILD}\n", id="section-removed"),
+    ],
+)
+def test_child_pages_in_a_section_are_carried_into_its_new_text_at_a_block_boundary(
+    raw: str, text: str, carried: str
+) -> None:
+    assert carried_into(raw, text) == carried
+
+
+def test_releasing_removes_the_published_lines_and_the_stamp_and_keeps_a_persons_text_and_child_pages() -> (
+    None
+):
+    planting = "## Planting\nSow in June.\n"
+    released = _page(INTRO, "A person's note.\n", TOOLS, f"{CHILD}\n", planting, STAMP_LINE)
+
+    replacement = release_replacement(_page(released, "Below.\n"), LAYOUT)
+
+    assert replacement == Replacement(
+        released, f"A person's note.\n{CHILD}\nSow in June.\n", ("intro", "tools", "planting")
+    )
+
+
+def test_releasing_a_page_skaldr_already_released_changes_nothing() -> None:
+    assert release_replacement("A person's note.\n", {}) == Replacement(
+        "A person's note.\n", "A person's note.\n", (UNKEYED_SECTION,)
+    )
 
 
 def test_a_commented_stamp_is_still_the_stamp() -> None:
@@ -219,6 +313,14 @@ def test_a_commented_stamp_is_still_the_stamp() -> None:
 
 
 CURRENT = [("intro", INTRO), ("tools", TOOLS), ("planting", PLANTING)]
+PAGE = _page(INTRO, TOOLS, PLANTING, STAMP_LINE)
+SEEDS = ("seeds", "Seeds.\n")
+
+
+def _replaced(current: list[tuple[str, str]], after: list[tuple[str, str]]) -> Replacement | None:
+    return section_replacement(
+        current, after, joined([*(text for _, text in current), STAMP_LINE]), STAMP_LINE
+    )
 
 
 @pytest.mark.parametrize(
@@ -226,27 +328,32 @@ CURRENT = [("intro", INTRO), ("tools", TOOLS), ("planting", PLANTING)]
     [
         pytest.param(
             [("intro", INTRO), ("tools", "## Tools\n- Hoe.\n"), ("planting", PLANTING)],
-            Replacement(TOOLS, "## Tools\n- Hoe.\n"),
+            Replacement(TOOLS, "## Tools\n- Hoe.\n", ("tools",)),
             id="replace-one-section",
         ),
         pytest.param(
             [("intro", INTRO), ("planting", PLANTING)],
-            Replacement(TOOLS, ""),
+            Replacement(TOOLS, "", ("tools",)),
             id="remove-one-section",
         ),
         pytest.param(
-            [("intro", INTRO), ("seeds", "Seeds.\n"), ("tools", TOOLS), ("planting", PLANTING)],
-            Replacement(INTRO, INTRO + "Seeds.\n"),
-            id="add-after-a-section-anchors-on-it",
+            [("intro", INTRO), SEEDS, ("tools", TOOLS), ("planting", PLANTING)],
+            Replacement("Welcome to the garden.\n", "Welcome to the garden.\nSeeds.\n", ("intro",)),
+            id="add-after-a-section-anchors-on-its-last-line",
         ),
         pytest.param(
-            [("seeds", "Seeds.\n"), ("intro", INTRO), ("tools", TOOLS), ("planting", PLANTING)],
-            Replacement(INTRO, "Seeds.\n" + INTRO),
-            id="add-first-anchors-on-the-next-section",
+            [SEEDS, *CURRENT],
+            Replacement("## Welcome\n", "Seeds.\n## Welcome\n", ("intro",)),
+            id="add-first-anchors-on-the-next-sections-first-line",
+        ),
+        pytest.param(
+            [*CURRENT, SEEDS],
+            Replacement("Sow in spring.\n", "Sow in spring.\nSeeds.\n", ("planting",)),
+            id="add-last-anchors-on-the-last-line-before-the-stamp",
         ),
         pytest.param(
             [("planting", PLANTING), ("intro", INTRO), ("tools", TOOLS)],
-            Replacement(INTRO + TOOLS + PLANTING, PLANTING + INTRO + TOOLS),
+            Replacement(INTRO + TOOLS + PLANTING, PLANTING + INTRO + TOOLS, ("intro", "tools", "planting")),
             id="move-spans-both-places",
         ),
         pytest.param(CURRENT, Replacement("", ""), id="nothing-changes"),
@@ -255,33 +362,56 @@ CURRENT = [("intro", INTRO), ("tools", TOOLS), ("planting", PLANTING)]
 def test_a_section_change_is_one_replacement_of_the_smallest_span_it_touches(
     after: list[tuple[str, str]], replacement: Replacement | None
 ) -> None:
-    assert section_replacement(CURRENT, after, STAMP_LINE) == replacement
+    assert section_replacement(CURRENT, after, PAGE, STAMP_LINE) == replacement
+
+
+@pytest.mark.parametrize(
+    "last_line",
+    [
+        pytest.param(f"{COMMENTED}\n", id="a-comment-marker"),
+        pytest.param(
+            '<unknown url="https://www.notion.so/x" alt="bookmark"/>\n', id="a-block-markdown-cannot-show"
+        ),
+    ],
+)
+def test_an_added_section_anchors_past_a_neighbour_line_it_must_not_rewrite(last_line: str) -> None:
+    current = [("intro", f"## Welcome\n{last_line}"), ("tools", TOOLS)]
+
+    assert _replaced(current, [current[0], SEEDS, current[1]]) == Replacement(
+        "## Tools\n", "Seeds.\n## Tools\n", ("tools",)
+    )
+
+
+def test_an_added_section_anchors_on_the_shortest_tail_that_appears_once() -> None:
+    current = [("intro", INTRO), ("a", "Note.\nWater.\n"), ("b", "Water.\n")]
+
+    assert _replaced(current, [*current[:2], SEEDS, current[2]]) == Replacement(
+        "Note.\nWater.\n", "Note.\nWater.\nSeeds.\n", ("a",)
+    )
 
 
 def test_a_span_that_appears_twice_widens_until_it_appears_once() -> None:
     current = [("intro", INTRO), ("a", "Water.\n"), ("b", "Water.\n")]
     after = [("intro", INTRO), ("a", "Water.\n"), ("b", "Water daily.\n")]
 
-    assert section_replacement(current, after, STAMP_LINE) == Replacement(
-        "Water.\nWater.\n", "Water.\nWater daily.\n"
-    )
+    assert _replaced(current, after) == Replacement("Water.\nWater.\n", "Water.\nWater daily.\n", ("a", "b"))
 
 
 def test_a_page_with_no_sections_takes_its_first_section_before_the_stamp() -> None:
-    assert section_replacement([], [("intro", INTRO)], STAMP_LINE) == Replacement(
+    assert section_replacement([], [("intro", INTRO)], STAMP_LINE, STAMP_LINE) == Replacement(
         STAMP_LINE, INTRO + STAMP_LINE
     )
 
 
 def test_a_page_with_no_sections_and_no_stamp_has_nothing_to_anchor_on() -> None:
-    assert section_replacement([], [("intro", INTRO)], None) is None
+    assert section_replacement([], [("intro", INTRO)], "", None) is None
 
 
 def test_text_added_after_a_last_line_without_its_newline_starts_on_a_line_of_its_own() -> None:
     current = [("intro", "Welcome.")]
 
-    assert section_replacement(current, [*current, ("tools", TOOLS)], None) == Replacement(
-        "Welcome.", "Welcome.\n" + TOOLS
+    assert section_replacement(current, [*current, ("tools", TOOLS)], "Welcome.", None) == Replacement(
+        "Welcome.", "Welcome.\n" + TOOLS, ("intro",)
     )
 
 

@@ -75,7 +75,7 @@ TRANSPORTS = [
         id="fake",
     ),
     pytest.param(
-        TransportUnderTest(_notion, NOTION_TARGET, writes_into_pages=True, reports_edits=True),
+        TransportUnderTest(_notion, NOTION_TARGET, writes_into_pages=True, reports_edits=False),
         id="notion",
     ),
 ]

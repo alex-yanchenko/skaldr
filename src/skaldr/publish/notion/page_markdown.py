@@ -2,7 +2,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Final
+from typing import Final, Literal
 
 from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer
 from skaldr.patterns import SLUG_PATTERN
@@ -16,11 +16,15 @@ STAMP_PATTERN: Final = re.compile(
     rf"{STAMP_WORDS} ({SLUG_PATTERN})(?:, section ({SLUG_PATTERN}))?(?: {re.escape(STAMP_COLOR)})?"
 )
 CHILD_REFERENCE: Final = re.compile(r'<(page|database)\b[^>]*?\burl="([^"]*)"[^>]*>.*</\1>')
+UNKNOWN_BLOCK: Final = re.compile(r"<unknown\b")
 SPAN_TAG: Final = re.compile(r"<span\b([^>]*)>|</span>")
 DISCUSSION_ATTRIBUTE: Final = re.compile(r'\s*discussion-urls="[^"]*"')
 TABLE_OPENING: Final = re.compile(r"<table[\s>]")
 TABLE_CLOSING: Final = "</table>"
 INDENTATION: Final = (" ", "\t")
+
+LineRole = Literal["published", "added", "child", "blank", "stamp", "below"]
+KEPT_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"added", "child"})
 
 
 def stamp_line(stamp: Stamp) -> str:
@@ -79,6 +83,10 @@ def without_comment_markers(text: str) -> str:
         else:
             edits.opening(match)
     return edits.applied_to(text)
+
+
+def holds_an_unknown_block(text: str) -> bool:
+    return UNKNOWN_BLOCK.search(text) is not None
 
 
 @dataclass
@@ -154,10 +162,6 @@ class _PageLine:
     at_top_level: bool
 
     @property
-    def ignorable_at_the_end(self) -> bool:
-        return self.normalised is None or _is_empty_block(self.normalised) or self.child_url is not None
-
-    @property
     def child_url(self) -> str | None:
         if not self.at_top_level or self.normalised is None:
             return None
@@ -169,6 +173,14 @@ class _PageLine:
         if not self.at_top_level or self.normalised is None:
             return None
         return _parsed_stamp(self.normalised)
+
+    @property
+    def aligns(self) -> bool:
+        return self.normalised is not None and self.child_url is None
+
+    @property
+    def unaligned_role(self) -> LineRole:
+        return "child" if self.child_url is not None else "blank"
 
 
 def _page_lines(markdown: str) -> list[_PageLine]:
@@ -184,17 +196,6 @@ def _page_lines(markdown: str) -> list[_PageLine]:
 
 def _last_stamp_at(lines: Sequence[_PageLine]) -> int | None:
     return next((index for index in reversed(range(len(lines))) if lines[index].stamp is not None), None)
-
-
-def _trailing_after(lines: Sequence[_PageLine], stamp_at: int | None) -> set[int]:
-    if stamp_at is None:
-        return set()
-    trailing: set[int] = set()
-    for index in reversed(range(stamp_at + 1, len(lines))):
-        if not lines[index].ignorable_at_the_end:
-            break
-        trailing.add(index)
-    return trailing
 
 
 @dataclass(frozen=True)
@@ -218,63 +219,107 @@ class _Layout:
             return self.keys[position - 1]
         return self.keys[0] if self.keys else self.fallback
 
-    def keys_of(self, actual: Sequence[str]) -> list[str]:
-        keys = [self.fallback] * len(actual)
+    def placed(self, actual: Sequence[str]) -> list[tuple[str, LineRole]]:
+        placed: list[tuple[str, LineRole]] = [(self.fallback, "added")] * len(actual)
         matcher = SequenceMatcher(None, self.lines, actual, autojunk=False)
         for tag, start, end, actual_start, actual_end in matcher.get_opcodes():
             for offset, index in enumerate(range(actual_start, actual_end)):
                 if tag == "equal":
-                    keys[index] = self.keys[start + offset]
+                    placed[index] = (self.keys[start + offset], "published")
                 elif tag == "replace":
-                    keys[index] = self.keys[start + offset * (end - start) // (actual_end - actual_start)]
+                    position = start + offset * (end - start) // (actual_end - actual_start)
+                    placed[index] = (self.keys[position], "added")
                 else:
-                    keys[index] = self.key_before(start)
-        return keys
+                    placed[index] = (self.key_before(start), "added")
+        return placed
 
 
-def _keys_of_lines(lines: Sequence[_PageLine], content: Sequence[int], layout: _Layout) -> dict[int, str]:
-    aligned = [index for index in content if lines[index].normalised is not None]
-    aligned_keys = layout.keys_of([lines[index].normalised or "" for index in aligned])
-    found: dict[int, str] = dict(zip(aligned, aligned_keys, strict=True))
-    keys: dict[int, str] = {}
-    waiting: list[int] = []
-    current: str | None = None
-    for index in content:
-        if index in found:
-            current = found[index]
-        if current is None:
-            waiting.append(index)
+@dataclass(frozen=True)
+class _Placed:
+    line: _PageLine
+    key: str | None
+    role: LineRole
+
+
+def _placed_lines(markdown: str, layout: Mapping[str, str]) -> list[_Placed]:
+    lines = _page_lines(markdown)
+    stamp_at = _last_stamp_at(lines)
+    content_end = len(lines) if stamp_at is None else stamp_at
+    shape = _Layout.of(layout)
+    aligned = [index for index in range(content_end) if lines[index].aligns]
+    found = dict(
+        zip(aligned, shape.placed([lines[index].normalised or "" for index in aligned]), strict=True)
+    )
+    first_key = found[aligned[0]][0] if aligned else shape.fallback
+    placed: list[_Placed] = []
+    current = first_key
+    for index, line in enumerate(lines):
+        if index >= content_end:
+            placed.append(_Placed(line, None, "stamp" if index == stamp_at else "below"))
             continue
-        keys |= dict.fromkeys([*waiting, index], current)
-        waiting = []
-    return keys | dict.fromkeys(waiting, layout.fallback)
+        key, role = found.get(index, (current, line.unaligned_role))
+        current = key
+        placed.append(_Placed(line, key, role))
+    return placed
 
 
 def keyed_page(markdown: str, layout: Mapping[str, str]) -> KeyedPage:
-    lines = _page_lines(markdown)
-    stamp_at = _last_stamp_at(lines)
-    children = {index for index, line in enumerate(lines) if line.child_url is not None}
-    left_out = {*children, *_trailing_after(lines, stamp_at), *([] if stamp_at is None else [stamp_at])}
-    content = [index for index in range(len(lines)) if index not in left_out]
+    placed = _placed_lines(markdown, layout)
     raw: dict[str, list[str]] = {}
-    for index, key in sorted(_keys_of_lines(lines, content, _Layout.of(layout)).items()):
-        raw.setdefault(key, []).append(lines[index].raw)
-    raw_sections = {key: "".join(section) for key, section in raw.items()}
+    shown: dict[str, list[str]] = {}
+    for line in placed:
+        if line.key is None:
+            continue
+        raw.setdefault(line.key, []).append(line.line.raw)
+        shown.setdefault(line.key, []).extend([] if line.role == "child" else [line.line.raw])
+    stamp = next((line.line for line in placed if line.role == "stamp"), None)
     return KeyedPage(
-        raw_sections=raw_sections,
-        sections={key: comparable_text(without_comment_markers(text)) for key, text in raw_sections.items()},
-        stamp=None if stamp_at is None else lines[stamp_at].stamp,
-        stamp_line=None if stamp_at is None else lines[stamp_at].raw,
+        raw_sections={key: "".join(lines) for key, lines in raw.items()},
+        sections={
+            key: text
+            for key, lines in shown.items()
+            if (text := comparable_text(without_comment_markers("".join(lines))))
+        },
+        stamp=None if stamp is None else stamp.stamp,
+        stamp_line=None if stamp is None else stamp.raw,
         child_ids=tuple(
-            notion_page_id(url) or url for index in sorted(children) if (url := lines[index].child_url)
+            notion_page_id(url) or url for line in placed if (url := line.line.child_url) is not None
         ),
     )
+
+
+def carried_into(raw: str, text: str) -> str:
+    children: list[tuple[int, str]] = []
+    lines_before = 0
+    for line in _page_lines(raw):
+        if line.child_url is not None:
+            children.append((lines_before, line.raw if line.raw.endswith("\n") else f"{line.raw}\n"))
+        elif line.normalised is not None:
+            lines_before += 1
+    if not children:
+        return text
+    new_lines = _raw_lines(text)
+    normaliser = _Normaliser()
+    pieces: list[str] = []
+    for index in range(len(new_lines) + 1):
+        at_a_boundary = index == len(new_lines) or (
+            normaliser.at_block_level and not new_lines[index].startswith(INDENTATION)
+        )
+        if at_a_boundary:
+            due = [child for position, child in children if min(position, len(new_lines)) <= index]
+            pieces += due
+            children = children[len(due) :]
+        if index < len(new_lines):
+            pieces.append(new_lines[index])
+            normaliser.line(new_lines[index].removesuffix("\n"))
+    return joined(pieces)
 
 
 @dataclass(frozen=True)
 class Replacement:
     old_str: str
     new_str: str
+    quoted: tuple[str, ...] = ()
 
     @property
     def changes_nothing(self) -> bool:
@@ -282,6 +327,13 @@ class Replacement:
 
 
 NO_REPLACEMENT: Final = Replacement("", "")
+
+
+def release_replacement(markdown: str, layout: Mapping[str, str]) -> Replacement:
+    placed = [line for line in _placed_lines(markdown, layout) if line.role != "below"]
+    kept = [line.line.raw for line in placed if line.role in KEPT_WHEN_RELEASED]
+    quoted = tuple(dict.fromkeys(line.key for line in placed if line.key is not None))
+    return Replacement("".join(line.line.raw for line in placed), joined(kept), quoted)
 
 
 def _common_prefix(before: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]]) -> int:
@@ -303,26 +355,67 @@ def _texts(pairs: Sequence[tuple[str, str]]) -> list[str]:
     return [text for _, text in pairs]
 
 
+def _keys(pairs: Sequence[tuple[str, str]]) -> tuple[str, ...]:
+    return tuple(key for key, _ in pairs)
+
+
+def _quotable(line: str, with_markers: bool) -> bool:
+    return not holds_an_unknown_block(line) and (with_markers or DISCUSSION_ATTRIBUTE.search(line) is None)
+
+
+def _unique_edge(text: str, page: str, *, from_the_end: bool, with_markers: bool) -> str | None:
+    lines = _raw_lines(text)
+    ordered = list(reversed(lines)) if from_the_end else lines
+    taken: list[str] = []
+    for line in ordered:
+        if not _quotable(line, with_markers):
+            return None
+        taken.append(line)
+        edge = "".join(reversed(taken)) if from_the_end else "".join(taken)
+        if edge.strip() and page.count(edge) == 1:
+            return edge
+    return None
+
+
+def _anchored_insertion(
+    current: Sequence[tuple[str, str]], at: int, inserted: str, page: str, stamp: str | None
+) -> Replacement | None:
+    before = current[at - 1] if at > 0 else None
+    after = current[at] if at < len(current) else None
+    for with_markers in (False, True):
+        if before is not None:
+            tail = _unique_edge(before[1], page, from_the_end=True, with_markers=with_markers)
+            if tail is not None:
+                return Replacement(tail, joined([tail, inserted]), (before[0],))
+        if after is not None:
+            head = _unique_edge(after[1], page, from_the_end=False, with_markers=with_markers)
+            if head is not None:
+                return Replacement(head, joined([inserted, head]), (after[0],))
+        if after is None and stamp is not None:
+            return Replacement(stamp, joined([inserted, stamp]))
+    return None
+
+
 def section_replacement(
-    current: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]], stamp: str | None
+    current: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]], page: str, stamp: str | None
 ) -> Replacement | None:
     start = _common_prefix(current, after)
     suffix = _common_suffix(current, after, start)
     end_before, end_after = len(current) - suffix, len(after) - suffix
     if start == end_before and start == end_after:
         return NO_REPLACEMENT
-    page = joined([*_texts(current), stamp or ""])
+    if start == end_before:
+        anchored = _anchored_insertion(current, start, joined(_texts(after[start:end_after])), page, stamp)
+        if anchored is not None:
+            return anchored
     while True:
         old = joined(_texts(current[start:end_before]))
         if old and page.count(old) == 1:
-            return Replacement(old, joined(_texts(after[start:end_after])))
+            return Replacement(old, joined(_texts(after[start:end_after])), _keys(current[start:end_before]))
         if start > 0:
             start -= 1
         elif end_before < len(current):
             end_before += 1
             end_after += 1
         else:
-            break
-    if stamp is None:
-        return None
-    return Replacement(stamp, joined([*_texts(after), stamp]))
+            return None

@@ -100,8 +100,14 @@ def rich_text_request(text: str) -> list[JsonValue]:
     ]
 
 
-def title_request(title: str) -> JsonFields:
-    return {TITLE_PROPERTY_ID: {"title": rich_text_request(title)}}
+def title_property_name(page: Page) -> str:
+    return next(
+        (name for name, value in page.properties.items() if isinstance(value, TitleValue)), TITLE_PROPERTY_ID
+    )
+
+
+def title_request(title: str, name: str = TITLE_PROPERTY_ID) -> JsonFields:
+    return {name: {"title": rich_text_request(title)}}
 
 
 @dataclass(frozen=True)

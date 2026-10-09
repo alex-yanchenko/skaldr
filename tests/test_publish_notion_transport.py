@@ -5,7 +5,8 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import ItemContent, section_part
+from skaldr.publish.content import ItemContent
+from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
 from skaldr.publish.notion.transport import NotionTransport
 from skaldr.publish.transport import (
     AddSection,
@@ -64,8 +65,8 @@ def _created(
     return transport, created
 
 
-def _title(text: str) -> dict[str, Any]:
-    return {"title": {"title": [{"type": "text", "text": {"content": text}}]}}
+def _title(text: str, name: str = "title") -> dict[str, Any]:
+    return {name: {"title": [{"type": "text", "text": {"content": text}}]}}
 
 
 def _text(text: str) -> dict[str, Any]:
@@ -133,7 +134,7 @@ def test_a_row_of_a_database_is_created_in_its_data_source_with_the_fields_as_pr
             "/v1/pages",
             {
                 "parent": {"data_source_id": f"source-{NOTION_PAGE_ID}"},
-                "properties": {**_title("Garden handbook"), "Area": _text("Shed")},
+                "properties": {**_title("Garden handbook", "Name"), "Area": _text("Shed")},
                 "markdown": f"{WELCOME}{PLANTING}{STAMP_LINE}\n",
                 "allow_async": True,
             },
@@ -270,7 +271,12 @@ def test_an_added_section_is_placed_after_the_section_it_follows() -> None:
         SectionRequest(AddSection("tools", "## Tools\n- Spade.\n", "intro"), created.raw_sections),
     )
 
-    assert (list(written.raw_sections), notion.markdown_of(created.item_id)) == (
+    assert (
+        [body for method, _, body in _sent(notion) if method == "PATCH"],
+        list(written.raw_sections),
+        notion.markdown_of(created.item_id),
+    ) == (
+        [_update("Welcome to the garden.\n", "Welcome to the garden.\n## Tools\n- Spade.\n")],
         ["intro", "tools", "planting"],
         f"{WELCOME}## Tools\n- Spade.\n{PLANTING}{STAMP_LINE}",
     )
@@ -366,7 +372,15 @@ def test_fields_and_title_are_written_in_one_request_and_a_cleared_field_is_empt
     )
 
     assert ([body for method, _, body in _sent(notion) if method == "PATCH"], written.comparable.fields) == (
-        [{"properties": {**_title("Garden guide"), "Area": _text("Orchard"), "Owner": {"rich_text": []}}}],
+        [
+            {
+                "properties": {
+                    **_title("Garden guide", "Name"),
+                    "Area": _text("Orchard"),
+                    "Owner": {"rich_text": []},
+                }
+            }
+        ],
         {"Area": "Orchard", "Owner": "", "Status": None},
     )
 
@@ -384,38 +398,17 @@ def test_fields_are_not_written_to_a_page_stamped_by_another_document() -> None:
     assert notion.writes() == []
 
 
-def test_an_edit_by_skaldrs_own_bot_is_never_reported_and_needs_no_content_read() -> None:
-    notion = _notion()
-    transport, created = _created(notion)
-
-    edited = transport.parts_edited_after(created.item_id, None, created.comparable)
-
-    assert (edited, [path for _, path, _ in _sent(notion)]) == (
-        (),
-        [f"/v1/pages/{created.item_id}", "/v1/users/me"],
-    )
-
-
-def test_an_edit_by_a_person_after_the_marker_reports_the_parts_it_changed() -> None:
+def test_notion_reports_no_edit_the_text_comparison_does_not_already_show_and_asks_nothing() -> None:
     notion = _notion()
     transport, created = _created(notion)
     notion.edit_by_hand(created.item_id, "Sow in spring.", "Sow in June.")
 
-    assert transport.parts_edited_after(created.item_id, created.marker, created.comparable) == (
-        section_part("planting"),
-    )
+    edited = transport.parts_edited_after(created.item_id, created.marker, created.comparable)
+
+    assert (edited, notion.requests) == ((), [])
 
 
-def test_a_person_editing_only_what_skaldr_does_not_own_reports_nothing() -> None:
-    notion = _notion()
-    transport, created = _created(notion)
-    notion.set_property_by_hand(created.item_id, "Owner", "Rowan")
-    published_without_fields = created.comparable.model_copy(update={"fields": {}})
-
-    assert transport.parts_edited_after(created.item_id, created.marker, published_without_fields) == ()
-
-
-def test_creating_into_a_page_replaces_its_content_then_sets_its_title_and_fields() -> None:
+def test_creating_into_a_page_sets_its_title_and_fields_then_replaces_its_content() -> None:
     notion = _notion()
     transport = notion.transport()
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
@@ -428,6 +421,7 @@ def test_creating_into_a_page_replaces_its_content_then_sets_its_title_and_field
 
     assert ([(method, body) for method, _, body in _sent(notion) if method != "GET"], created.item_id) == (
         [
+            ("PATCH", {"properties": {**_title("Garden handbook", "Name"), "Area": _text("Shed")}}),
             (
                 "PATCH",
                 {
@@ -436,9 +430,29 @@ def test_creating_into_a_page_replaces_its_content_then_sets_its_title_and_field
                     "allow_async": True,
                 },
             ),
-            ("PATCH", {"properties": {**_title("Garden handbook"), "Area": _text("Shed")}}),
         ],
         EMPTY_ROW,
+    )
+
+
+def test_creating_into_a_page_whose_property_notion_refuses_writes_nothing() -> None:
+    notion = _notion()
+    transport = notion.transport()
+    raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
+    notion.scripted = [Scripted(400, _refusal("Shed is not a valid option."), method="PATCH")]
+    content = CONTENT.model_copy(update={"fields": {"Area": "Shed"}})
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=f"^Notion refused to change page {EMPTY_ROW}: Shed is not a valid option. "
+        r"\(validation_error\)$",
+    ):
+        transport.create_item(
+            NewItem(DATABASE_TARGET, STAMP, content, into_id=EMPTY_ROW, into_raw_sections=raw)
+        )
+    assert (notion.markdown_of(EMPTY_ROW), notion.pages[EMPTY_ROW].properties["Area"]) == (
+        "",
+        ("rich_text", None),
     )
 
 
@@ -458,12 +472,17 @@ def test_creating_into_a_page_that_changed_since_it_was_read_writes_nothing() ->
 def test_a_page_holding_child_pages_reports_them() -> None:
     notion = _notion()
     child = numbered_id(5).replace("-", "")
-    notion.add_page(EMPTY_ROW, "Plans", f'<page url="https://www.notion.so/Seeds-{child}">Seeds</page>')
+    reference = f'<page url="https://www.notion.so/Seeds-{child}">Seeds</page>'
+    notion.add_page(EMPTY_ROW, "Plans", reference)
     transport = notion.transport()
 
     read = transport.read_item(EMPTY_ROW, ItemContent(title=""))
 
-    assert (read.child_ids, read.raw_sections) == ((child,), {})
+    assert (read.child_ids, read.raw_sections, read.comparable.sections) == (
+        (child,),
+        {UNKEYED_SECTION: reference},
+        {},
+    )
 
 
 def test_the_comparable_form_mirrors_notions_normalisation_and_drops_empty_sections() -> None:
@@ -487,3 +506,170 @@ def test_an_id_that_cannot_be_a_notion_page_is_not_found_without_a_request() -> 
 
 def test_page_ids_in_answers_are_given_back_without_dashes() -> None:
     assert dashed(FIRST_PAGE) == numbered_id(1)
+
+
+def _refusal(message: str) -> dict[str, Any]:
+    return {"object": "error", "status": 400, "code": "validation_error", "message": message}
+
+
+def _patches(notion: InMemoryNotion) -> list[Any]:
+    return [body for method, _, body in _sent(notion) if method == "PATCH"]
+
+
+def test_a_moved_section_is_one_request_over_the_span_between_its_two_places() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+
+    transport.write_section(
+        created.item_id,
+        SectionRequest(ReplaceSection("planting", PLANTING, PLANTING, None), created.raw_sections),
+    )
+
+    assert (_patches(notion), notion.markdown_of(created.item_id)) == (
+        [_update(WELCOME + PLANTING, PLANTING + WELCOME)],
+        f"{PLANTING}{WELCOME}{STAMP_LINE}",
+    )
+
+
+def test_text_a_person_types_below_the_stamp_belongs_to_no_section_and_never_blocks_a_write() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, STAMP_LINE, f"{STAMP_LINE}\nA visitor's note.")
+    read = transport.read_item(created.item_id, created.comparable)
+
+    transport.write_section(
+        created.item_id,
+        SectionRequest(
+            ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
+            read.raw_sections,
+        ),
+    )
+
+    assert (read.comparable.sections, notion.markdown_of(created.item_id)) == (
+        {"intro": WELCOME, "planting": PLANTING},
+        f"{WELCOME}## Planting\nSow in May.\n{STAMP_LINE}\nA visitor's note.",
+    )
+
+
+def test_a_child_page_moved_into_a_section_stays_in_place_when_the_section_is_rewritten() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    child = f'<page url="https://www.notion.so/Seeds-{numbered_id(5).replace("-", "")}">Seeds</page>'
+    notion.edit_by_hand(created.item_id, "Sow in spring.", f"Sow in spring.\n{child}")
+    read = transport.read_item(created.item_id, created.comparable)
+    notion.requests.clear()
+
+    transport.write_section(
+        created.item_id,
+        SectionRequest(
+            ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
+            read.raw_sections,
+        ),
+    )
+
+    assert _patches(notion) == [
+        _update(f"## Planting\nSow in spring.\n{child}\n", f"## Planting\nSow in May.\n{child}\n")
+    ]
+
+
+def test_a_section_holding_a_block_notion_cannot_show_as_markdown_is_not_rewritten() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    unknown = '<unknown url="https://www.notion.so/bookmark" alt="bookmark"/>'
+    notion.edit_by_hand(created.item_id, "Sow in spring.", f"Sow in spring.\n{unknown}")
+    read = transport.read_item(created.item_id, created.comparable)
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=f"^section planting of Notion page {created.item_id} holds a block Notion does not show as "
+        "Markdown, so skaldr will not rewrite it; change or remove that block in Notion first$",
+    ):
+        transport.write_section(
+            created.item_id,
+            SectionRequest(
+                ReplaceSection(
+                    "planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"
+                ),
+                read.raw_sections,
+            ),
+        )
+    assert notion.writes() == []
+
+
+def test_a_move_that_would_not_fit_one_request_is_refused_before_anything_is_sent() -> None:
+    notion = _notion()
+    sections = {key: f"## {key.upper()}\n{'a' * 150_000}\n" for key in ("a", "b")}
+    transport, created = _created(notion, ItemContent(title="Big", sections=sections))
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=f"^the write to Notion page {created.item_id} quotes sections a, b and would send 600,032 "
+        "bytes of JSON in one request, over the 450,000 one request may carry; give one of those sections "
+        "its own page with `split`$",
+    ):
+        transport.write_section(
+            created.item_id,
+            SectionRequest(ReplaceSection("b", sections["b"], sections["b"], None), created.raw_sections),
+        )
+    assert notion.writes() == []
+
+
+def test_a_release_keeps_text_a_person_added_and_text_below_the_stamp() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, "Sow in spring.", "Sow in spring.\nWater weekly.")
+    notion.edit_by_hand(created.item_id, STAMP_LINE, f"{STAMP_LINE}\nA visitor's note.")
+    read = transport.read_item(created.item_id, created.comparable)
+
+    transport.release_item(created.item_id, Release(read.raw_sections, ()))
+
+    assert notion.markdown_of(created.item_id) == "Water weekly.\nA visitor's note."
+
+
+def test_a_fields_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+
+    written = transport.write_fields(
+        created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP)
+    )
+
+    assert (_patches(notion), written.stamp, notion.markdown_of(created.item_id)) == (
+        [
+            _update("Sow in spring.", f"Sow in spring.\n{STAMP_LINE}\n"),
+            {"properties": _title("Garden guide", "Name")},
+        ],
+        STAMP,
+        f"{WELCOME}{PLANTING}{STAMP_LINE}",
+    )
+
+
+def test_a_fields_write_to_a_page_this_transport_never_read_is_refused() -> None:
+    notion = _notion()
+    _, created = _created(notion)
+
+    with pytest.raises(
+        ConnectorError,
+        match=f"^skaldr has not read Notion page {created.item_id} in this run, so it cannot tell its "
+        "sections apart$",
+    ):
+        notion.transport().write_fields(
+            created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP)
+        )
+
+
+def test_a_property_named_title_is_a_field_and_never_replaces_the_title() -> None:
+    notion = InMemoryNotion()
+    notion.add_database(NOTION_PAGE_ID, {"Name": "title", "title": "rich_text"})
+    transport = notion.transport()
+
+    created = transport.create_item(
+        NewItem(DATABASE_TARGET, STAMP, CONTENT.model_copy(update={"fields": {"title": "Lowercase"}}))
+    )
+
+    assert (_sent(notion)[3][2]["properties"], created.comparable.title, created.comparable.fields) == (
+        {**_title("Garden handbook", "Name"), "title": _text("Lowercase")},
+        "Garden handbook",
+        {"title": "Lowercase"},
+    )
