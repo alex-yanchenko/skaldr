@@ -3269,7 +3269,7 @@
           "type": "string"
         },
         "targets": {
-          "description": "One entry per place the document publishes to; each is built from the document on its own.",
+          "description": "One entry per place the document publishes to; each is built from the document on its own. An empty list retires the document: publishing archives every item it created and releases every page it wrote into.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3287,7 +3287,6 @@
               }
             ]
           },
-          "minItems": 1,
           "title": "Targets",
           "type": "array"
         }
