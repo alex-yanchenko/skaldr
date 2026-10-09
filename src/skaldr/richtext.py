@@ -33,6 +33,7 @@ from skaldr.typed_links import (
     DOC_SCHEME,
     JIRA_SCHEME,
     USER_SCHEME,
+    DocumentTarget,
     date_target,
     document_target,
     issue_key,
@@ -166,6 +167,7 @@ class RichContext:
     anchor_ids: frozenset[str] | None = None
     people: Mapping[str, Person] = field(default_factory=dict[str, Person])
     jira_site: str | None = None
+    part_anchors: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 def parse_rich(text: str, context: RichContext | None = None) -> Rich:
@@ -214,9 +216,21 @@ def _typed_link_run(url: str, label: Rich, rules: RichContext) -> Run | None:
         key = issue_key(url)
         return IssueLink(label, key, f"{rules.jira_site}/browse/{key}" if rules.jira_site else None)
     if url.startswith(DOC_SCHEME):
-        target = document_target(url)
-        return DocumentLink(label, target.doc_id, target.section)
+        return _document_run(document_target(url), label, rules)
     return None
+
+
+def _document_run(target: DocumentTarget, label: Rich, rules: RichContext) -> Run:
+    part_anchor = rules.part_anchors.get(target.doc_id)
+    if part_anchor is None:
+        return DocumentLink(label, target.doc_id, target.section)
+    if target.section is None:
+        return AnchorLink(label, part_anchor)
+    if rules.anchor_ids is not None and target.section not in rules.anchor_ids:
+        raise ReportError(
+            f"rich text links to unknown section '{target.section}' of document '{target.doc_id}'"
+        )
+    return AnchorLink(label, target.section)
 
 
 def _link_runs(url: str, label: Rich, rules: RichContext) -> Rich:

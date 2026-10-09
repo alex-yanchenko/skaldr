@@ -184,6 +184,7 @@ def render_richtext(
     placeholders: set[str] | None = None,
     people: Mapping[str, Person] | None = None,
     jira_site: str | None = None,
+    part_anchors: Mapping[str, str] | None = None,
 ) -> Markup:
     """Rich text as HTML: `parse_rich` reads the inline subset and every other character is escaped.
     `[^key]` markers resolve to a superscript number only for keys `ref_numbers` declares; an unknown
@@ -191,14 +192,13 @@ def render_richtext(
     targets: a `[…](#id)` link to an id outside it fails the build, and None leaves such links literal.
     `cited` records which reference keys have rendered, so only the first citation of a key carries
     the `fnref-` anchor id and the references list knows which keys are cited; pass one shared set
-    across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name.
-    `people` and `jira_site` resolve `user:` and `jira:` links, as `meta.people` and `meta.jira_site`
-    do on a page."""
+    across a whole render. `placeholders`, when passed, collects every `{{name}}` blank's name."""
     context = RichContext(
         reference_numbers=ref_numbers,
         anchor_ids=anchor_ids,
         people=people if people is not None else {},
         jira_site=jira_site,
+        part_anchors=part_anchors if part_anchors is not None else {},
     )
     runs = parse_rich(str(text), context)
     return Markup(write_runs(runs, _HtmlRuns(cited if cited is not None else set(), placeholders)))
@@ -278,9 +278,16 @@ def _render(
     anchor_ids = frozenset(slugs.values())
     people = report.meta.people
     jira_site = report.meta.jira_site
+    part_anchors = compute.part_anchors(report, slugs)
     compute.validate_rich_text_fields(
         report,
-        RichContext(reference_numbers=ref_numbers, anchor_ids=anchor_ids, people=people, jira_site=jira_site),
+        RichContext(
+            reference_numbers=ref_numbers,
+            anchor_ids=anchor_ids,
+            people=people,
+            jira_site=jira_site,
+            part_anchors=part_anchors,
+        ),
     )
     # Templates render top-to-bottom, so this set fills with each `[^key]` as prose renders; the
     # trailing references list reads it to give a cited key a backlink and skip one never cited.
@@ -288,7 +295,7 @@ def _render(
 
     def richtext(text: str) -> Markup:
         return render_richtext(
-            text, ref_numbers, cited_references, anchor_ids, placeholders, people, jira_site
+            text, ref_numbers, cited_references, anchor_ids, placeholders, people, jira_site, part_anchors
         )
 
     filters = cast("dict[str, Any]", env.filters)

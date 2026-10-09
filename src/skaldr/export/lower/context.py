@@ -92,6 +92,7 @@ def lowering_for(report: Report) -> Lowering:
         anchor_ids=frozenset(anchors.values()),
         people=report.meta.people,
         jira_site=report.meta.jira_site,
+        part_anchors=compute.part_anchors(report, anchors),
     )
     compute.validate_rich_text_fields(report, rich_context)
     return Lowering(

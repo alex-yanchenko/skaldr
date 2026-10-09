@@ -15,6 +15,7 @@ TYPED_LINK_SCHEMES: Final = (DATE_SCHEME, USER_SCHEME, JIRA_SCHEME, DOC_SCHEME)
 
 _ISO_DATE: Final = re.compile(r"\d{4}-\d{2}-\d{2}")
 _RANGE_SEPARATOR: Final = "/"
+_DAYS_IN_A_RANGE: Final = 2
 _ISSUE_KEY: Final = re.compile(r"[A-Z][A-Z0-9_]*-[0-9]+")
 _PERSON_KEY: Final = re.compile(PERSON_KEY_PATTERN)
 _DOCUMENT_ID: Final = re.compile(SLUG_PATTERN)
@@ -47,11 +48,15 @@ def _day(value: str, target: str) -> date:
 
 
 def date_target(target: str) -> DateTarget:
-    start_text, separator, end_text = target.removeprefix(DATE_SCHEME).partition(_RANGE_SEPARATOR)
-    start = _day(start_text, target)
-    if not separator:
+    days = target.removeprefix(DATE_SCHEME).split(_RANGE_SEPARATOR)
+    if len(days) > _DAYS_IN_A_RANGE:
+        raise ReportError(
+            f"date range {target} holds more than two dates: write a range as date:YYYY-MM-DD/YYYY-MM-DD"
+        )
+    start = _day(days[0], target)
+    if len(days) == 1:
         return DateTarget(start, None)
-    end = _day(end_text, target)
+    end = _day(days[1], target)
     if end < start:
         raise ReportError(f"date range {target} ends before it starts: write the earlier date first")
     return DateTarget(start, end)

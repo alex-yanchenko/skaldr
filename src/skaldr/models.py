@@ -20,6 +20,7 @@ from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TypeGuard, cast, get_args
+from urllib.parse import urlsplit
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -293,6 +294,9 @@ NOTION_USER_PATTERN = r"^user://[0-9A-Fa-f-]+$"
 JIRA_SITE_SCHEME = "https://"
 
 
+PersonKey = Annotated[str, StringConstraints(pattern=rf"^{PERSON_KEY_PATTERN}$")]
+
+
 class Person(FrozenModel):
     notion: str | None = Field(
         default=None,
@@ -332,7 +336,7 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
-    people: dict[Annotated[str, StringConstraints(pattern=rf"^{PERSON_KEY_PATTERN}$")], Person] = Field(
+    people: dict[PersonKey, Person] = Field(
         default_factory=dict[str, Person],
         description="The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not "
         "listed here fails the build.",
@@ -351,6 +355,15 @@ class Meta(FrozenModel):
             return None
         if not site.startswith(JIRA_SITE_SCHEME):
             raise ValueError(f"jira_site must be an {JIRA_SITE_SCHEME} URL")
+        address = urlsplit(site)
+        if not address.hostname:
+            raise ValueError(f"jira_site {site!r} names no host: write it as https://<your-site>")
+        if address.username is not None or address.password is not None:
+            raise ValueError(f"jira_site {site!r} must not hold a username or password")
+        if "?" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a query")
+        if "#" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a fragment")
         defect = _url_defect(site)
         if defect is not None:
             raise ValueError(f"jira_site {site!r} is not a valid URL ({defect})")
@@ -2672,6 +2685,7 @@ def _is_built_by_an_index(info: ValidationInfo) -> bool:
 class Part(FrozenModel):
     type: Literal["part"]
     title: NonBlank
+    doc_id: str | None = None
     collapsed: bool = False
     blocks: list[Block] = Field(min_length=1)
 
@@ -3227,10 +3241,81 @@ def _merged_badges(declared: Sequence[tuple[Path, Mapping[str, Badge]]]) -> dict
     return {key: badge.model_dump(mode="json") for key, badge in merged.items()}
 
 
+_PEOPLE: Final = TypeAdapter(dict[PersonKey, Person])
+
+
+def _own_meta_value(data: Mapping[str, Any], name: str) -> object:
+    meta: object = data.get("meta")
+    return cast("Mapping[str, object]", meta).get(name) if isinstance(meta, Mapping) else None
+
+
+def _parsed_people(data: object) -> dict[str, Person]:
+    try:
+        return _PEOPLE.validate_python({} if data is None else data)
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("meta", "people"))) from err
+
+
+def _merged_people(declared: Sequence[tuple[Path, Mapping[str, Person]]]) -> dict[str, Any]:
+    merged: dict[str, Person] = {}
+    declared_in: dict[str, Path] = {}
+    for path, people in declared:
+        for key, person in people.items():
+            if key in merged and merged[key] != person:
+                raise ReportError(
+                    f"person {key!r} is declared differently in {declared_in[key]} and {path}; "
+                    "an index merges every part's people, so give it one Notion and Jira id or rename one key"
+                )
+            merged.setdefault(key, person)
+            declared_in.setdefault(key, path)
+    return {key: person.model_dump(mode="json") for key, person in merged.items()}
+
+
+def _merged_jira_site(declared: Sequence[tuple[Path, object]]) -> str | None:
+    first: tuple[Path, str] | None = None
+    for path, site in declared:
+        if not isinstance(site, str):
+            continue
+        address = site.rstrip("/")
+        if first is None:
+            first = (path, address)
+        elif first[1] != address:
+            raise ReportError(
+                f"jira_site is declared differently in {first[0]} and {path}; "
+                "an index points every issue link at one site, so give each part the same address"
+            )
+    return first[1] if first else None
+
+
+def _merged_index_meta(path: Path, data: Mapping[str, Any], parts: Sequence[_LoadedPart]) -> object:
+    meta: object = data.get("meta")
+    if not isinstance(meta, Mapping):
+        return meta
+    people = _merged_people(
+        [
+            (path, _parsed_people(_own_meta_value(data, "people"))),
+            *((part.path, part.report.meta.people) for part in parts),
+        ]
+    )
+    site = _merged_jira_site(
+        [
+            (path, _own_meta_value(data, "jira_site")),
+            *((part.path, part.report.meta.jira_site) for part in parts),
+        ]
+    )
+    return {
+        **cast("Mapping[str, Any]", meta),
+        **({"people": people} if people else {}),
+        **({"jira_site": site} if site else {}),
+    }
+
+
 def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
+    publish = part.report.publish
     return {
         "type": "part",
         "title": part.report.meta.title,
+        "doc_id": publish.doc_id if publish else None,
         "collapsed": index.collapsed,
         "blocks": part.data["blocks"],
     }
@@ -3261,7 +3346,12 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
     page = {key: value for key, value in data.items() if key != "index"}
-    combined = {**page, "badges": badges, "blocks": [*intro, *(_part_block(part, index) for part in parts)]}
+    combined = {
+        **page,
+        **({"meta": _merged_index_meta(path, data, parts)} if "meta" in page else {}),
+        "badges": badges,
+        "blocks": [*intro, *(_part_block(part, index) for part in parts)],
+    }
     return _Document(combined, tuple(enumerate((part.path for part in parts), start=len(intro))))
 
 

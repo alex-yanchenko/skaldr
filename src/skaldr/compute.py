@@ -169,6 +169,14 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     return slugs
 
 
+def part_anchors(report: Report, slugs: dict[int, str]) -> dict[str, str]:
+    return {
+        block.doc_id: slugs[id(block)]
+        for block in report.blocks
+        if isinstance(block, Part) and block.doc_id is not None
+    }
+
+
 def toc_entries(report: Report, slugs: dict[int, str]) -> list[tuple[str, str]]:
     """(slug, text) for top-level level-2 headings, sections and parts, in document order: the TOC
     targets. A section or part is a top-level region, so it earns a TOC entry and its own anchor."""

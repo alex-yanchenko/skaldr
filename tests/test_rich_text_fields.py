@@ -75,6 +75,7 @@ PLAIN_TEXT_FIELDS = frozenset(
         "Meta.jira_site",
         "Person.notion",
         "Person.jira",
+        "Part.doc_id",
         "MeterItem.label",
         "Note.title",
         "Note.icon",

@@ -271,7 +271,13 @@ def test_a_full_page_render_resolves_people_from_the_meta_map() -> None:
 def test_github_markdown_keeps_the_label_and_links_issues_and_documents() -> None:
     assert markdown_of(_text_block(TYPED_BODY), meta=PEOPLE_META) == (
         "Due 1 Oct or the week; Ada owns [ABC-123](https://example.atlassian.net/browse/ABC-123); "
-        "see [the plan](onboarding-plan.md#st2).\n"
+        "see [the plan](onboarding-plan.md).\n"
+    )
+
+
+def test_github_markdown_drops_the_section_since_a_github_heading_slug_comes_from_its_title() -> None:
+    assert markdown_of(_text_block("[a](doc:plan#st2) [b](doc:plan)"), meta=PEOPLE_META) == (
+        "[a](plan.md) [b](plan.md)\n"
     )
 
 
@@ -301,3 +307,142 @@ def test_emit_json_carries_people_and_the_jira_site_in_the_meta() -> None:
         "ada": {"notion": "user://11111111-2222-3333-4444-555555555555", "jira": "5b10a2844c20165700ede21g"},
         "bo": {"notion": None, "jira": None},
     }
+
+
+@pytest.mark.parametrize(
+    ("site", "message"),
+    [
+        pytest.param(
+            "https://u:p@evil.example/x",
+            "jira_site 'https://u:p@evil.example/x' must not hold a username or password",
+            id="userinfo",
+        ),
+        pytest.param(
+            "https://u@evil.example",
+            "jira_site 'https://u@evil.example' must not hold a username or password",
+            id="username-only",
+        ),
+        pytest.param(
+            "https://example.atlassian.net?q=1",
+            "jira_site 'https://example.atlassian.net?q=1' must not hold a query",
+            id="query",
+        ),
+        pytest.param(
+            "https://example.atlassian.net#f",
+            "jira_site 'https://example.atlassian.net#f' must not hold a fragment",
+            id="fragment",
+        ),
+        pytest.param(
+            "https:///path",
+            "jira_site 'https:///path' names no host: write it as https://<your-site>",
+            id="no-host",
+        ),
+    ],
+)
+def test_a_jira_site_refuses_what_would_misplace_the_browse_path(site: str, message: str) -> None:
+    with pytest.raises(ReportError) as error:
+        parse_report(make_report(meta={"title": "T", "jira_site": site}))
+
+    assert str(error.value) == f"invalid content data: meta.jira_site: Value error, {message}"
+
+
+def test_a_jira_site_may_carry_a_path_for_a_jira_served_below_one() -> None:
+    meta = {"title": "T", "jira_site": "https://example.org/jira/"}
+    html = render_html(parse_report(make_report(meta=meta, blocks=_text_block("[A-1](jira:A-1)"))))
+
+    assert '<a class="issue-link" href="https://example.org/jira/browse/A-1">A-1</a>' in html
+
+
+def test_a_date_range_of_three_dates_names_the_range_form() -> None:
+    with pytest.raises(ReportError) as error:
+        parse_rich("[x](date:2026-10-01/2026-10-01/2026-10-02)", CONTEXT)
+
+    assert str(error.value) == (
+        "date range date:2026-10-01/2026-10-01/2026-10-02 holds more than two dates: "
+        "write a range as date:YYYY-MM-DD/YYYY-MM-DD"
+    )
+
+
+@pytest.mark.parametrize("text", ["[x](USER:ada)", "[x](Date:2026-10-01)", "`[x](date:2026-10-01)`"])
+def test_a_scheme_in_capitals_or_inside_inline_code_stays_literal(text: str) -> None:
+    runs = parse_rich(text, CONTEXT)
+
+    assert not any(isinstance(run, DateMention | PersonMention) for run in runs)
+
+
+def test_a_typed_link_in_inline_code_is_written_as_code() -> None:
+    assert str(render_richtext("`[x](date:2026-10-01)`")) == "<code>[x](date:2026-10-01)</code>"
+
+
+def test_a_flow_note_reads_typed_links_as_their_labels_and_lists_the_links_a_diagram_loses() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {"label": "Scan", "note": "[Ada](user:ada) by [1 Oct](date:2026-10-01)"},
+            {"label": "Fix", "note": "see [ABC-1](jira:ABC-1) and [plan](doc:plan#st2)"},
+        ],
+    }
+
+    assert markdown_of([flow], meta=PEOPLE_META) == (
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan<br>Ada by 1 Oct"]\n'
+        '    s2["Fix<br>see ABC-1 and plan"]\n'
+        "    s1 --> s2\n"
+        "```\n"
+        "\n"
+        "- **Fix**: see [ABC-1](https://example.atlassian.net/browse/ABC-1) and [plan](plan.md)\n"
+    )
+
+
+def test_notion_writes_typed_links_in_a_table_cell_and_a_heading_caption() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "who", "label": "Who", "kind": "rich"}, {"key": "n", "label": "N"}],
+        "rows": [{"who": "[Ada](user:ada) on [1 Oct](date:2026-10-01)", "n": "x"}],
+    }
+    heading = {"type": "heading", "text": "Plan", "sub": "due [1 Oct](date:2026-10-01)"}
+
+    assert notion_of([heading, table], meta=PEOPLE_META) == (
+        "## Plan\n"
+        '*due <mention-date start="2026-10-01"/>* {color="gray"}\n'
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n"
+        "\t\t<td>**Who**</td>\n"
+        "\t\t<td>**N**</td>\n"
+        "\t</tr>\n"
+        "\t<tr>\n"
+        '\t\t<td><mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> '
+        'on <mention-date start="2026-10-01"/></td>\n'
+        "\t\t<td>x</td>\n"
+        "\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_person_label_is_escaped_inside_a_notion_mention() -> None:
+    assert notion_of(_text_block("[a <b>](user:ada)"), meta=PEOPLE_META) == (
+        '<mention-user url="user://11111111-2222-3333-4444-555555555555">a \\<b\\></mention-user>\n'
+    )
+
+
+def test_a_person_without_a_notion_id_is_a_chip_in_html_and_its_label_in_both_markdown_exports() -> None:
+    body = _text_block("[a <b>](user:bo)")
+
+    html = render_html(parse_report(make_report(meta=PEOPLE_META, blocks=body)))
+
+    assert '<span class="person-chip" data-person="bo">a &lt;b&gt;</span>' in html
+    assert markdown_of(body, meta=PEOPLE_META) == "a \\<b\\>\n"
+    assert notion_of(body, meta=PEOPLE_META) == "a \\<b\\>\n"
+
+
+def test_an_issue_and_a_document_label_are_escaped_in_html() -> None:
+    html = str(
+        render_richtext("[a <b>](jira:ABC-1) [c <i>](doc:plan#st2)", jira_site=SITE),
+    )
+
+    assert html == (
+        '<a class="issue-link" href="https://example.atlassian.net/browse/ABC-1">a &lt;b&gt;</a> '
+        '<a class="doc-link" href="plan.html#st2">c &lt;i&gt;</a>'
+    )
