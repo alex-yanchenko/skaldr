@@ -23,6 +23,7 @@ from skaldr.publish.engine import (
 )
 from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import load_state, state_path_for
+from skaldr.publish.transport import Stamp
 from tests.factories.publish_factory import (
     DOC_ID,
     INTRO_KEY,
@@ -220,7 +221,7 @@ def test_labels_the_service_reads_back_in_another_order_are_not_a_remote_edit(tm
 
 def test_a_page_stamped_by_another_document_is_refused_naming_both_documents(tmp_path: Path) -> None:
     transport = FakeTransport()
-    transport.seed(NOTION_PAGE_ID, ItemContent(title="Kitchen rota"), OTHER_DOC_ID)
+    transport.seed(NOTION_PAGE_ID, "Kitchen rota", OTHER_DOC_ID)
     path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
     expected = (
         f"{TARGET_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
@@ -235,7 +236,7 @@ def test_a_page_stamped_by_another_document_is_refused_naming_both_documents(tmp
 def test_a_published_item_restamped_by_another_document_is_refused(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
-    transport.items["page-2"].doc_id = OTHER_DOC_ID
+    transport.items["page-2"].stamp = Stamp(OTHER_DOC_ID, "tools")
     expected = (
         f"{TARGET_LABEL}, section tools (page-2) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs to "
         f"that document and not to '{DOC_ID}'; skaldr writes only to items of the document it publishes"
@@ -248,19 +249,23 @@ def test_a_published_item_restamped_by_another_document_is_refused(tmp_path: Pat
 
 def test_an_unstamped_page_the_target_names_is_written_into_and_stamped(tmp_path: Path) -> None:
     transport = FakeTransport()
-    transport.seed(NOTION_PAGE_ID, ItemContent(title="Blank page"), None)
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
     path = write_garden_report(
         tmp_path, publish=make_notion_publish(split=["tools"], where={"page": NOTION_PAGE_ID})
     )
 
     outcome = _publish(path, transport)
 
-    assert (outcome, transport.writes(), transport.items[NOTION_PAGE_ID].doc_id) == (
+    assert (
+        outcome,
+        transport.writes(),
+        [transport.items[item_id].stamp for item_id in (NOTION_PAGE_ID, "page-2")],
+    ) == (
         Applied(
             (f'create   document "Garden handbook" into {NOTION_PAGE_ID}', 'create   section tools "Tools"')
         ),
         [("create", "Garden handbook", "", NOTION_PAGE_ID), ("create", "Tools", NOTION_PAGE_ID, "")],
-        DOC_ID,
+        [Stamp(DOC_ID, None), Stamp(DOC_ID, "tools")],
     )
 
 

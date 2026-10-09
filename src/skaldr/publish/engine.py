@@ -30,6 +30,7 @@ from skaldr.publish.plan import (
     RemoveSectionStep,
     Step,
     TargetPlan,
+    WriteContentStep,
     WriteFieldsStep,
     WriteSectionStep,
     describe_step,
@@ -44,7 +45,19 @@ from skaldr.publish.state import (
     save_state,
     state_path_for,
 )
-from skaldr.publish.transport import NewItem, RemoteItem, SectionWrite, Transport
+from skaldr.publish.transport import (
+    NO_SECTIONS,
+    AddSection,
+    FieldsWrite,
+    NewItem,
+    RawSections,
+    RemoteItem,
+    RemoveSection,
+    ReplaceSection,
+    SectionWrite,
+    Stamp,
+    Transport,
+)
 from skaldr.publish_block import TargetBase
 
 RefusalReason = Literal["edited", "changed since the diff"]
@@ -181,17 +194,20 @@ def _read_published(prepared: Prepared, transports: _Transports) -> list[_Readin
             remote = transport.read_item(item.item_id, item.remote)
             _refuse_another_documents_item(ref, remote, prepared.doc_id)
             reported = transport.remote_edits_since(item.item_id, item.marker)
-            edited = tuple(dict.fromkeys([*differing_parts(item.remote, remote.content), *reported]))
+            edited = tuple(dict.fromkeys([*differing_parts(item.remote, remote.comparable), *reported]))
             readings.append(_Reading(ref, item, remote, edited))
     return readings
 
 
-def _refuse_items_written_into_that_belong_elsewhere(prepared: Prepared, transports: _Transports) -> None:
+def _read_items_written_into(prepared: Prepared, transports: _Transports) -> dict[ItemRef, RemoteItem]:
+    read: dict[ItemRef, RemoteItem] = {}
     for target_plan in prepared.plan.targets:
         for step in target_plan.steps:
             if isinstance(step, CreateStep) and step.into_id is not None:
                 remote = transports.for_target(target_plan.label).read_item(step.into_id, NOT_YET_PUBLISHED)
                 _refuse_another_documents_item(step.item, remote, prepared.doc_id)
+                read[step.item] = remote
+    return read
 
 
 def _remote_edits(prepared: Prepared, readings: Sequence[_Reading]) -> tuple[RemoteEdit, ...]:
@@ -201,7 +217,7 @@ def _remote_edits(prepared: Prepared, readings: Sequence[_Reading]) -> tuple[Rem
             part,
             _part_path(prepared, reading.item, part),
             part_text(reading.published.remote, part),
-            part_text(reading.remote.content, part),
+            part_text(reading.remote.comparable, part),
             reading.remote.edited_by,
             reading.remote.edited_at,
         )
@@ -211,7 +227,7 @@ def _remote_edits(prepared: Prepared, readings: Sequence[_Reading]) -> tuple[Rem
 
 
 def _shown_token(remote: RemoteItem) -> str:
-    seen = f"{content_digest(remote.content)}:{remote.marker or ''}"
+    seen = f"{content_digest(remote.comparable)}:{remote.marker or ''}"
     return hashlib.sha256(seen.encode("utf-8")).hexdigest()
 
 
@@ -275,8 +291,9 @@ class _Applier:
             for step in target_plan.steps:
                 self.state = self._applied(target_plan, step)
                 save_state(self.prepared.state_path, self.state)
-                self.done.append(describe_step(step))
-                self.on_step(target_plan.label, describe_step(step))
+                described = describe_step(step)
+                self.done.append(described)
+                self.on_step(target_plan.label, described)
         self._keep_each_target_as_written()
         return Applied(tuple(self.done))
 
@@ -306,12 +323,15 @@ class _Applier:
         written = self._item(ref).model_copy(
             update={
                 "rendered": rendered,
-                "remote": remote.content,
+                "remote": remote.comparable,
                 "marker": remote.marker,
                 "shown_remote": None,
             }
         )
         return _with_item(self.state, ref, step_plan.target, written)
+
+    def _raw_sections(self, ref: ItemRef) -> RawSections:
+        return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
 
     def _write_section(
         self, target_plan: TargetPlan, ref: ItemRef, key: str, text: str | None, follows: str | None
@@ -320,53 +340,88 @@ class _Applier:
         rendered = item.rendered.model_copy(
             update={"sections": placed_section(item.rendered.sections, key, text, follows)}
         )
-        current = self.remote[ref].content.sections.get(key) if ref in self.remote else None
-        if current is None and text is None:
+        raw_sections = self._raw_sections(ref)
+        write = _section_write(key, raw_sections.get(key), text, follows)
+        if write is None:
             return _with_item(
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
-        remote = transport.write_section(item.item_id, SectionWrite(key, current, text, follows))
+        remote = transport.write_section(item.item_id, write, raw_sections)
         return self._after_write(target_plan, ref, rendered, remote)
 
+    def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
+        item = self._item(step.item)
+        transport = self.transports.for_target(step.item.target)
+        remote = transport.write_content(item.item_id, step.content.sections, self._raw_sections(step.item))
+        rendered = item.rendered.model_copy(update={"sections": step.content.sections})
+        return self._after_write(target_plan, step.item, rendered, remote)
+
+    def _write_fields(self, target_plan: TargetPlan, step: WriteFieldsStep) -> PublishState:
+        item = self._item(step.item)
+        now = self.remote[step.item].comparable if step.item in self.remote else item.remote
+        write = FieldsWrite(
+            step.content.title,
+            step.content.fields,
+            now.title,
+            now.fields,
+            Stamp(self.prepared.doc_id, step.item.section_id),
+        )
+        remote = self.transports.for_target(step.item.target).write_fields(item.item_id, write)
+        rendered = item.rendered.model_copy(
+            update={"title": step.content.title, "fields": step.content.fields}
+        )
+        return self._after_write(target_plan, step.item, rendered, remote)
+
     def _applied(self, target_plan: TargetPlan, step: Step) -> PublishState:
-        transport = self.transports.for_target(target_plan.label)
         match step:
             case CreateStep():
-                return self._created(target_plan, step, transport)
+                return self._created(target_plan, step)
             case WriteFieldsStep():
-                item = self._item(step.item)
-                remote = transport.write_fields(item.item_id, step.content.title, step.content.fields)
-                rendered = item.rendered.model_copy(
-                    update={"title": step.content.title, "fields": step.content.fields}
-                )
-                return self._after_write(target_plan, step.item, rendered, remote)
+                return self._write_fields(target_plan, step)
             case WriteSectionStep():
                 return self._write_section(target_plan, step.item, step.key, step.text, step.follows)
             case RemoveSectionStep():
                 return self._write_section(target_plan, step.item, step.key, None, None)
+            case WriteContentStep():
+                return self._write_content(target_plan, step)
             case ArchiveStep():
-                transport.archive_item(step.item_id)
+                self.transports.for_target(target_plan.label).archive_item(step.item_id)
                 return _with_item(self.state, step.item, target_plan.target, None)
             case _:
                 assert_never(step)
 
-    def _created(self, target_plan: TargetPlan, step: CreateStep, transport: Transport) -> PublishState:
+    def _created(self, target_plan: TargetPlan, step: CreateStep) -> PublishState:
         parent = None if step.item.section_id is None else self._item(ItemRef(step.item.target, None))
-        remote = transport.create_item(
+        written_into = self.remote.get(step.item)
+        remote = self.transports.for_target(target_plan.label).create_item(
             NewItem(
                 target_plan.target,
-                self.prepared.doc_id,
+                Stamp(self.prepared.doc_id, step.item.section_id),
                 step.draft.content,
                 parent_id=None if parent is None else parent.item_id,
                 into_id=step.into_id,
+                into_raw_sections=NO_SECTIONS if written_into is None else written_into.raw_sections,
             )
         )
         self.remote[step.item] = remote
         created = PublishedItem(
-            item_id=remote.item_id, rendered=step.draft.content, remote=remote.content, marker=remote.marker
+            item_id=remote.item_id,
+            rendered=step.draft.content,
+            remote=remote.comparable,
+            marker=remote.marker,
         )
         return _with_item(self.state, step.item, target_plan.target, created)
+
+
+def _section_write(
+    key: str, raw_current: str | None, text: str | None, follows: str | None
+) -> SectionWrite | None:
+    if text is None:
+        return None if raw_current is None else RemoveSection(key, raw_current)
+    if raw_current is None:
+        return AddSection(key, text, follows)
+    return ReplaceSection(key, raw_current, text, follows)
 
 
 def _ignore_step(_target: str, _described: str) -> None:
@@ -378,7 +433,7 @@ def apply_publish(
 ) -> ApplyOutcome:
     transports = _Transports(prepared)
     readings = _read_published(prepared, transports)
-    _refuse_items_written_into_that_belong_elsewhere(prepared, transports)
+    written_into = _read_items_written_into(prepared, transports)
     edited = [reading for reading in readings if reading.edited]
     refusal = _refusal(prepared, edited, overwrite) if edited else None
     if refusal is not None:
@@ -389,7 +444,7 @@ def apply_publish(
         prepared.registry,
         {reading.item: reading.edited for reading in edited},
     )
-    remote = {reading.item: reading.remote for reading in readings}
+    remote = {**written_into, **{reading.item: reading.remote for reading in readings}}
     return _Applier(prepared, transports, remote, on_step, prepared.state).run(plan)
 
 

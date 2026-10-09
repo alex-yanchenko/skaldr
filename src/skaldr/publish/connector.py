@@ -11,6 +11,7 @@ from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
 from skaldr.services import Service
 
 LimitScope = Literal["section", "item"]
+WriteGranularity = Literal["section", "content"]
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,9 @@ class Connector(Protocol):
 
     @property
     def limits(self) -> tuple[ContentLimit, ...]: ...
+
+    @property
+    def writes(self) -> WriteGranularity: ...
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
 

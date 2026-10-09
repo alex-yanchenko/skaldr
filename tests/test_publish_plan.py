@@ -13,6 +13,7 @@ from skaldr.publish.plan import (
     PublishPlan,
     RemoveSectionStep,
     TargetPlan,
+    WriteContentStep,
     WriteFieldsStep,
     WriteSectionStep,
     describe_plan,
@@ -149,7 +150,7 @@ def test_a_split_section_removed_from_the_document_archives_its_item() -> None:
     )
 
 
-def test_writes_come_before_archives_and_removed_sections_come_last() -> None:
+def test_each_item_writes_then_removes_its_sections_and_archives_come_last() -> None:
     state = _state_of(_drafts())
     (target,) = _drafts(publish=make_notion_publish(), blocks=make_garden_blocks()[1:])
     sections = target.document.content.sections
@@ -157,8 +158,8 @@ def test_writes_come_before_archives_and_removed_sections_come_last() -> None:
     assert _plan((target,), state).targets[0].steps == (
         WriteSectionStep(DOCUMENT, "page legend", sections["page legend"], "page header", "badges"),
         WriteSectionStep(DOCUMENT, "tools", sections["tools"], "page legend", "blocks[0]"),
-        ArchiveStep(TOOLS, "page-2"),
         RemoveSectionStep(DOCUMENT, INTRO_KEY),
+        ArchiveStep(TOOLS, "page-2"),
     )
 
 
@@ -242,22 +243,46 @@ def test_two_targets_holding_the_same_item_in_the_state_file_are_refused() -> No
         _plan(drafts, state.model_copy(update={"targets": {TARGET_LABEL: shared}}))
 
 
-def test_the_plan_reads_as_creates_updates_archives_and_deletes_with_deletes_last() -> None:
+def test_the_plan_reads_as_creates_then_each_items_updates_and_removals_then_archives() -> None:
     state = _state_of(_drafts())
     (target,) = _drafts(publish=make_notion_publish(), blocks=make_garden_blocks()[1:])
 
     assert describe_plan(_plan((target,), state)) == [
-        f"{TARGET_LABEL}: 0 to create, 2 to update, 1 to archive, 1 to delete",
+        f"{TARGET_LABEL}: 0 to create, 3 to update, 1 to archive",
         "  update   document: page legend (badges)",
         "  update   document: tools (blocks[0])",
+        f"  remove   document: {INTRO_KEY}",
         "  archive  section tools (page-2)",
-        f"  DELETE   document: {INTRO_KEY}, removed from the item",
     ]
+
+
+def test_a_whole_content_connector_plans_one_content_write_per_item() -> None:
+    state = _state_of(_drafts())
+    (target,) = _drafts(publish=make_notion_publish(), blocks=make_garden_blocks()[1:])
+    plan = plan_publish((target,), state, fake_registry(FakeTransport(), writes="content"))
+
+    assert (plan.targets[0].steps, describe_plan(plan)) == (
+        (
+            WriteContentStep(
+                DOCUMENT,
+                ("page legend", "tools"),
+                (INTRO_KEY,),
+                target.document.content,
+                target.document.paths,
+            ),
+            ArchiveStep(TOOLS, "page-2"),
+        ),
+        [
+            f"{TARGET_LABEL}: 0 to create, 1 to update, 1 to archive",
+            f"  update   document: page legend (badges), tools (blocks[0]), remove {INTRO_KEY}",
+            "  archive  section tools (page-2)",
+        ],
+    )
 
 
 def test_a_first_publish_reads_as_creates_naming_each_item() -> None:
     assert describe_plan(_plan(_drafts(), PublishState(doc_id=DOC_ID))) == [
-        f"{TARGET_LABEL}: 2 to create, 0 to update, 0 to archive, 0 to delete",
+        f"{TARGET_LABEL}: 2 to create, 0 to update, 0 to archive",
         '  create   document "Garden handbook"',
         '  create   section tools "Tools"',
     ]

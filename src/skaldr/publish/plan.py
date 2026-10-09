@@ -5,7 +5,7 @@ from types import MappingProxyType
 from typing_extensions import assert_never
 
 from skaldr.errors import PublishError
-from skaldr.publish.connector import Connector, ConnectorRegistry
+from skaldr.publish.connector import Connector, ConnectorRegistry, WriteGranularity
 from skaldr.publish.content import (
     FIELDS,
     TITLE,
@@ -65,8 +65,17 @@ class RemoveSectionStep:
     key: str
 
 
-Step = CreateStep | WriteFieldsStep | WriteSectionStep | ArchiveStep | RemoveSectionStep
-ItemWrite = WriteFieldsStep | WriteSectionStep
+@dataclass(frozen=True)
+class WriteContentStep:
+    item: ItemRef
+    written: tuple[str, ...]
+    removed: tuple[str, ...]
+    content: ItemContent
+    paths: Mapping[Part, str]
+
+
+Step = CreateStep | WriteFieldsStep | WriteSectionStep | RemoveSectionStep | WriteContentStep | ArchiveStep
+ItemUpdate = WriteFieldsStep | WriteSectionStep | RemoveSectionStep | WriteContentStep
 
 
 @dataclass(frozen=True)
@@ -81,12 +90,6 @@ class PublishPlan:
     targets: tuple[TargetPlan, ...]
 
 
-@dataclass(frozen=True)
-class ItemSteps:
-    writes: tuple[ItemWrite, ...]
-    removals: tuple[RemoveSectionStep, ...]
-
-
 def published_item(published: PublishedTarget | None, section_id: str | None) -> PublishedItem | None:
     if published is None:
         return None
@@ -98,26 +101,40 @@ def _field_parts(last: ItemContent, content: ItemContent, rewritten: Collection[
     return tuple(part for part, changed in differs.items() if changed or part in rewritten)
 
 
+def _section_updates(
+    item: ItemRef, draft: ItemDraft, written: Collection[str], removed: Sequence[str]
+) -> list[ItemUpdate]:
+    updates: list[ItemUpdate] = []
+    previous: str | None = None
+    for key, text in draft.content.sections.items():
+        if key in written:
+            updates.append(WriteSectionStep(item, key, text, previous, draft.paths[section_part(key)]))
+        previous = key
+    return [*updates, *(RemoveSectionStep(item, key) for key in removed)]
+
+
 def item_steps(
-    item: ItemRef, last: ItemContent, draft: ItemDraft, rewritten: Collection[Part] = ()
-) -> ItemSteps:
+    item: ItemRef,
+    last: ItemContent,
+    draft: ItemDraft,
+    writes: WriteGranularity,
+    rewritten: Collection[Part] = (),
+) -> tuple[ItemUpdate, ...]:
     content = draft.content
     changes = section_changes(last.sections, content.sections)
     rewritten_keys = [part.key for part in rewritten if part.kind == "section"]
     written = {*changes.written, *(key for key in rewritten_keys if key in content.sections)}
-    removed = dict.fromkeys(
-        [*changes.removed, *(key for key in rewritten_keys if key not in content.sections)]
+    removed = list(
+        dict.fromkeys([*changes.removed, *(key for key in rewritten_keys if key not in content.sections)])
     )
-    writes: list[ItemWrite] = []
     field_parts = _field_parts(last, content, rewritten)
-    if field_parts:
-        writes.append(WriteFieldsStep(item, field_parts, content))
-    previous: str | None = None
-    for key, text in content.sections.items():
-        if key in written:
-            writes.append(WriteSectionStep(item, key, text, previous, draft.paths[section_part(key)]))
-        previous = key
-    return ItemSteps(tuple(writes), tuple(RemoveSectionStep(item, key) for key in removed))
+    fields: list[ItemUpdate] = [WriteFieldsStep(item, field_parts, content)] if field_parts else []
+    if not written and not removed:
+        return tuple(fields)
+    if writes == "content":
+        ordered = tuple(key for key in content.sections if key in written)
+        return (*fields, WriteContentStep(item, ordered, tuple(removed), content, draft.paths))
+    return (*fields, *_section_updates(item, draft, written, removed))
 
 
 def _target_plan(
@@ -127,8 +144,7 @@ def _target_plan(
     rewritten: Mapping[ItemRef, Collection[Part]],
 ) -> TargetPlan:
     creates: list[Step] = []
-    writes: list[Step] = []
-    removals: list[Step] = []
+    updates: list[Step] = []
     for item in draft.items:
         ref = ItemRef(draft.label, item.section_id)
         existing = published_item(published, item.section_id)
@@ -136,16 +152,14 @@ def _target_plan(
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
             creates.append(CreateStep(ref, item, into_id))
             continue
-        steps = item_steps(ref, existing.rendered, item, rewritten.get(ref, ()))
-        writes += steps.writes
-        removals += steps.removals
+        updates += item_steps(ref, existing.rendered, item, connector.writes, rewritten.get(ref, ()))
     drafted = {item.section_id for item in draft.sections}
     archives: list[Step] = [
         ArchiveStep(ItemRef(draft.label, section_id), item.item_id)
         for section_id, item in (published.sections.items() if published is not None else ())
         if section_id not in drafted
     ]
-    return TargetPlan(draft.label, draft.target, (*creates, *writes, *archives, *removals))
+    return TargetPlan(draft.label, draft.target, (*creates, *updates, *archives))
 
 
 def _removed_target_plan(label: str, published: PublishedTarget, registry: ConnectorRegistry) -> TargetPlan:
@@ -208,20 +222,23 @@ def describe_step(step: Step) -> str:
             )
         case WriteSectionStep():
             return f"update   {item_label(step.item.section_id)}: {section_label(step.key, step.path)}"
+        case RemoveSectionStep():
+            return f"remove   {item_label(step.item.section_id)}: {step.key}"
+        case WriteContentStep():
+            written = [section_label(key, step.paths.get(section_part(key))) for key in step.written]
+            removed = [f"remove {key}" for key in step.removed]
+            return f"update   {item_label(step.item.section_id)}: {', '.join([*written, *removed])}"
         case ArchiveStep():
             return f"archive  {item_label(step.item.section_id)} ({step.item_id})"
-        case RemoveSectionStep():
-            return f"DELETE   {item_label(step.item.section_id)}: {step.key}, removed from the item"
         case _:
             assert_never(step)
 
 
 def _counts(steps: Sequence[Step]) -> str:
     creates = sum(isinstance(step, CreateStep) for step in steps)
-    updates = sum(isinstance(step, WriteFieldsStep | WriteSectionStep) for step in steps)
     archives = sum(isinstance(step, ArchiveStep) for step in steps)
-    deletes = sum(isinstance(step, RemoveSectionStep) for step in steps)
-    return f"{creates} to create, {updates} to update, {archives} to archive, {deletes} to delete"
+    updates = len(steps) - creates - archives
+    return f"{creates} to create, {updates} to update, {archives} to archive"
 
 
 def describe_plan(plan: PublishPlan) -> list[str]:

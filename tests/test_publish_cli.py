@@ -44,7 +44,7 @@ def test_a_dry_run_prints_the_plan_and_sends_and_writes_nothing(
 
     assert (exit_code, capsys.readouterr().out, transport.calls, state_path_for(path).exists()) == (
         0,
-        f"{TARGET_LABEL}: 2 to create, 0 to update, 0 to archive, 0 to delete\n"
+        f"{TARGET_LABEL}: 2 to create, 0 to update, 0 to archive\n"
         '  create   document "Garden handbook"\n'
         '  create   section tools "Tools"\n'
         f"Dry run: nothing was sent. Publish with `skaldr publish {path} --apply`.\n",

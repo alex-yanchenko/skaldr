@@ -1048,15 +1048,18 @@ skaldr diff garden.yaml --json                  # the same facts as JSON
 skaldr status garden.yaml                       # per item: in sync, edited remotely, changed in the YAML, removed, never published
 ```
 
-**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, the parts it would update, the items it would archive and, last and in capitals, the sections it would delete from an item that stays. A dry run sends nothing to any service and writes no file. `--apply` carries the plan out one step at a time and prints each step as it lands.
+**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, then each item's updates (its title and fields, each section it writes, and each section it removes from the item), then the items it would archive. A dry run sends nothing to any service and writes no file. `--apply` carries the plan out one step at a time and prints each step as it lands.
 
 ```text
-notion page 0123456789abcdef0123456789abcdef: 1 to create, 1 to update, 1 to archive, 1 to delete
+notion page 0123456789abcdef0123456789abcdef: 1 to create, 3 to update, 1 to archive
   create   section planting "Planting"
-  update   document: blocks[0]
+  update   document: fields
+  update   document: watering (blocks[1])
+  remove   document: page legend
   archive  section tools (page-2)
-  DELETE   document: page legend, removed from the item
 ```
+
+A Notion page takes one write per changed section. A connector that can only replace an item's whole content, such as a Jira description, takes one write per changed item instead, and the plan lists every section that write changes on one line.
 
 **What goes where.** The document's own page or issue holds the subtitle, the table of contents, every top-level block that `from` keeps and `split` does not take, and the footer. A split section's page or issue holds that section alone, titled by it. Only the document's item has a table of contents. Each item has its own badge legend, listing only the badges that item uses, placed before its first top-level table as on the HTML page. Within an item, each top-level block is a section of its own for updates: a `section` by its `id`, a heading by its anchor, any other block by its content (a short hash, with a `#2` suffix for a second identical block), plus the `page header`, `page legend` and `page footer`. So adding or deleting a block writes only that block, and changing the text of a block that has no id or heading writes it as one block added and one removed. Publishing again writes only the sections whose text changed and leaves the rest of the item as it is. A section that moved is written again at its new place, and a section that left the item is removed from it. An item whose section left the YAML or the `split` list is archived, and so is every item of a target removed from the `publish` block. Lists of plain values (labels, components, numbers) and the keys of field values compare as sorted sets, so `[seeds, soil]` and `[soil, seeds]` are the same value and reordering them publishes nothing; a list of objects or of lists keeps its order. `fields` from `where` apply to every item. A split section's `overrides` replace them key by key: a key the override names takes the override's value whole (a `labels` list in an override replaces the `labels` of `where`, it does not add to it), and every other key keeps the value from `where`. skaldr's own stamp of the `doc_id` is not a field, so no override can remove it.
 
