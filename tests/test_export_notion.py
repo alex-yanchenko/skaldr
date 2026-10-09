@@ -9,7 +9,7 @@ import pytest
 from skaldr.errors import ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.apportion import apportioned
-from skaldr.export.budget import Budget, Limit, RenderedBlock, character_budget, characters
+from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
@@ -20,7 +20,6 @@ from skaldr.export.notion import (
 )
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
 from skaldr.export.tree import (
-    BlockRegion,
     Callout,
     Columns,
     Diagram,
@@ -72,7 +71,6 @@ from tests.factories import (
     folder_texts,
     heading_sections,
     lowered,
-    lowered_regions,
     make_command_request,
     make_label_table,
     make_report,
@@ -80,7 +78,7 @@ from tests.factories import (
     make_table,
     make_toggle,
     notion_of,
-    one_region,
+    rendered_block_count,
 )
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
@@ -105,7 +103,7 @@ def _section_text(title: str, body: str, rows: int) -> str:
 
 
 def _chunked(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "normal") -> NotionChunks:
-    return chunk_notion(one_region(nodes), character_budget(limit), page_width)
+    return chunk_notion(nodes, character_budget(limit), page_width)
 
 
 @pytest.mark.parametrize(
@@ -1228,14 +1226,14 @@ def test_two_sections_that_exactly_fill_the_limit_share_one_chunk() -> None:
     assert _chunked(nodes, len("## A\n## B\n")) == NotionChunks(("## A\n## B\n",), ())
 
 
-def _rendered_blocks(block: RenderedBlock) -> int:
-    return 1 if block.lines else 0
+def _characters_and_blocks(most_blocks: int) -> Budget:
+    return Budget(
+        (Limit(characters, CHUNK_THAT_HOLDS_THE_WHOLE_PAGE), Limit(rendered_block_count, most_blocks))
+    )
 
 
 def test_a_block_limit_groups_sections_where_a_character_limit_would_not() -> None:
-    budget = Budget((Limit(characters, CHUNK_THAT_HOLDS_THE_WHOLE_PAGE), Limit(_rendered_blocks, 4)))
-
-    assert chunk_notion(lowered_regions(heading_sections(4, "x = 1\n")), budget) == NotionChunks(
+    assert chunk_notion(lowered(heading_sections(4, "x = 1\n")), _characters_and_blocks(4)) == NotionChunks(
         (
             _section_text("Part 0", "x = 1", 1) + _section_text("Part 1", "x = 1", 1),
             _section_text("Part 2", "x = 1", 1) + _section_text("Part 3", "x = 1", 1),
@@ -1244,20 +1242,10 @@ def test_a_block_limit_groups_sections_where_a_character_limit_would_not() -> No
     )
 
 
-def test_a_region_holding_several_sections_splits_at_each_of_their_headings() -> None:
-    part = BlockRegion(
-        0,
-        (
-            Heading(1, (Plain("P"),)),
-            Heading(2, (Plain("A"),)),
-            Paragraph((Plain("x"),)),
-            Heading(2, (Plain("B"),)),
-            Paragraph((Plain("x"),)),
-        ),
-    )
-
-    assert chunk_notion((part,), character_budget(len("# P\n## A\nx\n"))) == NotionChunks(
-        ("# P\n## A\nx\n", "## B\nx\n"), ()
+def test_a_section_over_the_block_limit_alone_is_reported_though_its_characters_fit() -> None:
+    assert chunk_notion(lowered(heading_sections(2, "x = 1\n")), _characters_and_blocks(1)) == NotionChunks(
+        (_section_text("Part 0", "x = 1", 1), _section_text("Part 1", "x = 1", 1)),
+        ("## Part 0", "## Part 1"),
     )
 
 
@@ -1372,23 +1360,6 @@ SECTIONS_WITH_LISTS = (
 )
 def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: int) -> None:
     assert "".join(_chunked(nodes, limit).chunks) == render_notion(nodes)
-
-
-@pytest.mark.parametrize(
-    "nodes",
-    [
-        pytest.param(OPENING_THAT_RENDERS_NOTHING, id="opening-renders-nothing"),
-        pytest.param(SECTIONS_WITH_LISTS, id="sections-with-lists"),
-        pytest.param(lowered(heading_sections(4, "x = 1\n" * 20)), id="code-sections"),
-    ],
-)
-@pytest.mark.parametrize(
-    "limit", [pytest.param(limit, id=f"limit-{limit}") for limit in (1, 20, 400, 100000)]
-)
-def test_where_regions_begin_never_moves_a_chunk_boundary(nodes: tuple[Node, ...], limit: int) -> None:
-    one_region_per_node = tuple(BlockRegion(index, (node,)) for index, node in enumerate(nodes))
-
-    assert chunk_notion(one_region_per_node, character_budget(limit)) == _chunked(nodes, limit)
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:

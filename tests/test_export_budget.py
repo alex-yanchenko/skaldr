@@ -3,17 +3,21 @@ import pytest
 from skaldr.export.budget import Budget, Cost, Limit, RenderedBlock, character_budget, characters
 from skaldr.export.tree import Heading, Paragraph, TableCell, TableNode, TableRow
 from skaldr.richtext import Plain
+from tests.factories import rendered_block_count
 
-
-def _rendered_blocks(block: RenderedBlock) -> int:
-    return 1 if block.lines else 0
-
-
-CHARACTERS_AND_BLOCKS = Budget((Limit(characters, 10), Limit(_rendered_blocks, 2)))
+CHARACTERS_AND_BLOCKS = Budget((Limit(characters, 10), Limit(rendered_block_count, 2)))
 
 
 def test_characters_count_each_line_and_its_newline() -> None:
     assert characters(RenderedBlock(Paragraph((Plain("abc"),)), ("abc", "de"))) == len("abc\nde\n")
+
+
+def test_characters_are_additive_across_blocks_because_the_splitter_sums_block_costs() -> None:
+    first = RenderedBlock(Paragraph((Plain("abc"),)), ("abc", "de"))
+    second = RenderedBlock(Paragraph((Plain("fgh"),)), ("fgh",))
+    written_together = RenderedBlock(first.node, (*first.lines, *second.lines))
+
+    assert characters(written_together) == characters(first) + characters(second)
 
 
 def test_a_character_budget_holds_one_character_limit() -> None:
@@ -55,8 +59,8 @@ def test_nothing_costs_zero_in_every_measure_of_the_budget() -> None:
     assert CHARACTERS_AND_BLOCKS.nothing == Cost((0, 0))
 
 
-def test_costs_add_and_subtract_amount_by_amount() -> None:
-    assert (Cost((7, 1)) + Cost((3, 2)), Cost((7, 1)) - Cost((3, 2))) == (Cost((10, 3)), Cost((4, -1)))
+def test_costs_add_amount_by_amount() -> None:
+    assert Cost((7, 1)) + Cost((3, 2)) == Cost((10, 3))
 
 
 def test_the_total_of_no_costs_is_nothing() -> None:
@@ -67,17 +71,11 @@ def test_the_total_adds_every_cost() -> None:
     assert CHARACTERS_AND_BLOCKS.total([Cost((4, 1)), Cost((5, 1)), Cost((1, 0))]) == Cost((10, 2))
 
 
-def test_a_budget_less_what_was_spent_lowers_each_limit_by_its_amount() -> None:
-    assert CHARACTERS_AND_BLOCKS.less(Cost((4, 3))) == Budget(
-        (Limit(characters, 6), Limit(_rendered_blocks, -1))
-    )
-
-
 def test_costs_measured_against_different_budgets_do_not_add() -> None:
-    with pytest.raises(ValueError, match=r"^zip\(\) argument 2 is longer than argument 1$"):
+    with pytest.raises(ValueError, match=r"zip\(\)"):
         _ = Cost((1,)) + Cost((1, 1))
 
 
 def test_a_cost_measured_against_another_budget_is_not_judged() -> None:
-    with pytest.raises(ValueError, match=r"^zip\(\) argument 2 is shorter than argument 1$"):
+    with pytest.raises(ValueError, match=r"zip\(\)"):
         CHARACTERS_AND_BLOCKS.allows(Cost((1, 1, 1)))

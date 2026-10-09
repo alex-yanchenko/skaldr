@@ -1,13 +1,13 @@
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeVar, get_args
 
 import yaml
 
+from skaldr.export.budget import RenderedBlock
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
-from skaldr.export.tree import BlockRegion, Node, Region
+from skaldr.export.tree import Node
 from skaldr.models import AnyBlock, AuthoredBlock, parse_report
 from tests.factories.report_factory import make_index_report, make_report
 
@@ -79,12 +79,8 @@ def lowered(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Node, ...]:
     return lower_report(parse_report(make_report(blocks=blocks, **overrides))).body
 
 
-def lowered_regions(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Region, ...]:
-    return lower_report(parse_report(make_report(blocks=blocks, **overrides))).regions
-
-
-def one_region(nodes: Sequence[Node]) -> tuple[BlockRegion]:
-    return (BlockRegion(0, tuple(nodes)),)
+def rendered_block_count(block: RenderedBlock) -> int:
+    return 1 if block.lines else 0
 
 
 def notion_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:

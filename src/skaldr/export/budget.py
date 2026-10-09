@@ -25,12 +25,6 @@ class Cost:
             amounts=tuple(mine + theirs for mine, theirs in zip(self.amounts, other.amounts, strict=True)),
         )
 
-    def __sub__(self, other: Self) -> Self:
-        return replace(
-            self,
-            amounts=tuple(mine - theirs for mine, theirs in zip(self.amounts, other.amounts, strict=True)),
-        )
-
 
 @dataclass(frozen=True)
 class Limit:
@@ -54,15 +48,6 @@ class Budget:
 
     def allows(self, cost: Cost) -> bool:
         return all(amount <= limit.most for amount, limit in zip(cost.amounts, self.limits, strict=True))
-
-    def less(self, spent: Cost) -> Self:
-        return replace(
-            self,
-            limits=tuple(
-                replace(limit, most=limit.most - amount)
-                for limit, amount in zip(self.limits, spent.amounts, strict=True)
-            ),
-        )
 
 
 def characters(block: RenderedBlock) -> int:

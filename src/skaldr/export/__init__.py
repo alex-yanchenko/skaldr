@@ -125,7 +125,7 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
     page_width = report.meta.notion_width
     if chunk is None:
         return _export_pages(out_dir, document.title, {"page.md": render_notion(document.body, page_width)})
-    split = chunk_notion(document.regions, character_budget(chunk), page_width)
+    split = chunk_notion(document.body, character_budget(chunk), page_width)
     return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
 
 

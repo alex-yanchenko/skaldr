@@ -36,7 +36,6 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    Region,
     TableCell,
     TableNode,
     TableOfContents,
@@ -452,26 +451,29 @@ class _Piece:
     cost: Cost
 
 
-def _sections(regions: Sequence[Region]) -> list[list[Node]]:
+@dataclass(frozen=True)
+class _CostedBlock:
+    block: RenderedBlock
+    cost: Cost
+
+
+def _sections(nodes: Sequence[Node]) -> list[list[Node]]:
     sections: list[list[Node]] = [[]]
-    for region in regions:
-        for node in region.nodes:
-            if _chunk_heading(node) is not None and sections[-1]:
-                sections.append([])
-            sections[-1].append(node)
+    for node in nodes:
+        if _chunk_heading(node) is not None and sections[-1]:
+            sections.append([])
+        sections[-1].append(node)
     return sections
 
 
-def chunk_notion(
-    regions: Sequence[Region], budget: Budget, page_width: NotionWidth = "normal"
-) -> NotionChunks:
+def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth = "normal") -> NotionChunks:
     room = TableRoom.on_page(page_width)
-    sections = _sections(regions)
     chunks: list[str] = []
     oversized: list[str] = []
     current_chunk = _Piece("", budget.nothing)
-    for section in sections:
-        pieces = _section_pieces(_rendered_blocks(section, room), budget)
+    for section in _sections(nodes):
+        costed = [_CostedBlock(block, budget.cost(block)) for block in _rendered_blocks(section, room)]
+        pieces = _section_pieces(costed, budget)
         if any(not budget.allows(piece.cost) for piece in pieces):
             oversized.append(_section_label(section))
         for piece in pieces:
@@ -481,8 +483,7 @@ def chunk_notion(
             current_chunk = _Piece(current_chunk.text + piece.text, current_chunk.cost + piece.cost)
     if current_chunk.text:
         chunks.append(current_chunk.text)
-    whole_page = render_notion([node for section in sections for node in section], page_width)
-    return NotionChunks(tuple(chunks) or (whole_page,), tuple(oversized))
+    return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))
 
 
 def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlock]:
@@ -499,37 +500,33 @@ def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlo
     return blocks
 
 
-def _text_of(blocks: Sequence[RenderedBlock]) -> str:
-    return _page([line for block in blocks for line in block.lines]) if blocks else ""
+def _piece_of(costed: Sequence[_CostedBlock], budget: Budget) -> _Piece:
+    text = _page([line for member in costed for line in member.block.lines]) if costed else ""
+    return _Piece(text, budget.total(member.cost for member in costed))
 
 
-def _piece_of(blocks: Sequence[RenderedBlock], budget: Budget) -> _Piece:
-    return _Piece(_text_of(blocks), budget.total(budget.cost(block) for block in blocks))
-
-
-def _trailing_headings(blocks: Sequence[RenderedBlock]) -> list[RenderedBlock]:
+def _trailing_headings(costed: Sequence[_CostedBlock]) -> list[_CostedBlock]:
     count = 0
-    while count < len(blocks) and isinstance(blocks[len(blocks) - 1 - count].node, Heading):
+    while count < len(costed) and isinstance(costed[len(costed) - 1 - count].block.node, Heading):
         count += 1
-    return list(blocks[len(blocks) - count :])
+    return list(costed[len(costed) - count :])
 
 
-def _section_pieces(blocks: Sequence[RenderedBlock], budget: Budget) -> list[_Piece]:
-    whole = _piece_of(blocks, budget)
+def _section_pieces(costed: Sequence[_CostedBlock], budget: Budget) -> list[_Piece]:
+    whole = _piece_of(costed, budget)
     if budget.allows(whole.cost):
-        return [whole] if blocks else []
-    groups: list[list[RenderedBlock]] = [[]]
+        return [whole] if costed else []
+    groups: list[list[_CostedBlock]] = [[]]
     spent = budget.nothing
-    for block in blocks:
+    for member in costed:
         group = groups[-1]
-        cost = budget.cost(block)
-        if group and not budget.allows(spent + cost):
+        if group and not budget.allows(spent + member.cost):
             carried = _trailing_headings(group)
             kept = group[: len(group) - len(carried)]
             if kept:
                 groups[-1] = kept
                 groups.append(carried)
-                spent = budget.total(budget.cost(member) for member in carried)
-        groups[-1].append(block)
-        spent += cost
+                spent = budget.total(carried_member.cost for carried_member in carried)
+        groups[-1].append(member)
+        spent += member.cost
     return [_piece_of(group, budget) for group in groups if group]
