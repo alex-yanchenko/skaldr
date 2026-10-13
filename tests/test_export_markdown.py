@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,10 @@ from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
     folder_texts,
+    in_a_grid_cell,
+    in_an_open_section,
     make_command_request,
+    make_query_request,
     make_report,
     make_tab,
     make_tabs,
@@ -94,6 +98,30 @@ def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> No
         "**Tier mappings on the partner API**\n\n"
         "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n"
         "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n"
+    )
+
+
+def test_a_query_request_exports_a_fenced_block_in_its_language_labelled_with_the_runner() -> None:
+    request = make_query_request()
+
+    assert markdown_of([request]) == (
+        "**Open orders in the shop database**\n\n"
+        "*open orders*\n\n"
+        "**Query**: mongosh, orders database\n\n"
+        '```json\n[{"$match": {"status": "open"}}, {"$count": "n"}]\n```\n\n'
+        '**Recorded output**\n\n```json\n[\n  {\n    "n": 12\n  }\n]\n```\n'
+    )
+
+
+def test_a_query_holding_backticks_gets_a_longer_fence() -> None:
+    query = {"runner": "psql", "lang": "sql", "content": "SELECT '```' AS fence"}
+
+    assert markdown_of([make_query_request(query=query)]) == (
+        "**Open orders in the shop database**\n\n"
+        "*open orders*\n\n"
+        "**Query**: psql\n\n"
+        "````sql\nSELECT '```' AS fence\n````\n\n"
+        '**Recorded output**\n\n```json\n[\n  {\n    "n": 12\n  }\n]\n```\n'
     )
 
 
@@ -1142,6 +1170,65 @@ def test_a_divider_in_a_walkthrough_step_stands_apart_inside_the_list_entry() ->
     }
 
     assert markdown_of([walkthrough]) == "1. **Go**\n\n   a\n\n   ---\n"
+
+
+def test_a_web_image_is_a_markdown_image_with_its_caption_in_italics_below() -> None:
+    block = {
+        "type": "image",
+        "src": "https://example.com/aisle.png",
+        "alt": "Aisle 12",
+        "caption": "Overflow bins",
+    }
+
+    assert markdown_of([block]) == "![Aisle 12](https://example.com/aisle.png)\n\n*Overflow bins*\n"
+
+
+def test_a_web_image_without_a_caption_is_only_the_markdown_image() -> None:
+    block = {"type": "image", "src": "https://example.com/a(1).png", "alt": "Aisle [12]"}
+
+    assert markdown_of([block]) == "![Aisle \\[12\\]](https://example.com/a%281%29.png)\n"
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"), [("video", "Video"), ("audio", "Audio"), ("file", "File"), ("pdf", "PDF")]
+)
+def test_a_media_block_is_a_labelled_link_to_its_url(kind: str, label: str) -> None:
+    block = {"type": "media", "kind": kind, "src": "https://example.com/walk", "caption": "Dock walk"}
+
+    assert markdown_of([block]) == f"{label}: [Dock walk](https://example.com/walk)\n"
+
+
+def test_a_media_block_without_a_caption_links_its_own_url() -> None:
+    block = {"type": "media", "kind": "pdf", "src": "https://example.com/sheet.pdf"}
+
+    assert markdown_of([block]) == "PDF: [https://example.com/sheet.pdf](https://example.com/sheet.pdf)\n"
+
+
+def test_a_media_url_is_percent_encoded_in_the_markdown_link() -> None:
+    src = "https://example.com/a(1)?x=\"1\"&y=<2>&z='3'"
+    block = {"type": "media", "kind": "file", "src": src, "caption": "Sheet"}
+
+    assert markdown_of([block]) == "File: [Sheet](https://example.com/a%281%29?x=%221%22&y=%3C2%3E&z='3')\n"
+
+
+@pytest.mark.parametrize(
+    ("container", "heading"),
+    [
+        pytest.param(in_an_open_section, "## part\n\n", id="section"),
+        pytest.param(in_a_grid_cell, "", id="grid"),
+    ],
+)
+def test_a_web_image_and_a_media_block_nest_in_a_section_or_a_grid_cell(
+    container: Callable[[list[dict[str, Any]]], dict[str, Any]], heading: str
+) -> None:
+    blocks = [
+        {"type": "image", "src": "https://example.com/a.png", "alt": "A", "caption": "Cap"},
+        {"type": "media", "kind": "pdf", "src": "https://example.com/s.pdf", "caption": "Sheet"},
+    ]
+
+    assert markdown_of([container(blocks)]) == (
+        f"{heading}![A](https://example.com/a.png)\n\n*Cap*\n\nPDF: [Sheet](https://example.com/s.pdf)\n"
+    )
 
 
 def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:

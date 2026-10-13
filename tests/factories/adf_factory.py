@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import date
 
 from skaldr.export.inline import plain
 from skaldr.export.runs import Break, CheckMark, Chip, StatusMark, SwimlaneMark
@@ -16,6 +17,7 @@ from skaldr.export.tree import (
     Heading,
     ListEntry,
     ListNode,
+    Media,
     Node,
     Paragraph,
     PieChart,
@@ -32,7 +34,20 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.richtext import Citation, Code, Link, Plain, ScriptText, Styled, Tinted
+from skaldr.models import Person
+from skaldr.richtext import (
+    Citation,
+    Code,
+    DateMention,
+    DocumentLink,
+    IssueLink,
+    Link,
+    PersonMention,
+    Plain,
+    ScriptText,
+    Styled,
+    Tinted,
+)
 
 
 def text_entry(text: str, *children: Node) -> ListEntry:
@@ -66,6 +81,7 @@ def minimal_nodes() -> Mapping[type, Node]:
         Callout: Callout("info", (para("c"),)),
         Quote: Quote((plain("q"),)),
         Divider: Divider(),
+        Media: Media("video", "https://example.com/v.mp4", caption=plain("m")),
         Toggle: Toggle(plain("t"), None, (para("c"),)),
         Columns: Columns((GridColumn(100, (para("c"),)),)),
         Tabs: Tabs((Tab(plain("t"), (para("c"),)),)),
@@ -92,6 +108,13 @@ def showcase_nodes() -> tuple[Node, ...]:
                 ScriptText("subscript", "2"),
                 ScriptText("superscript", "n"),
                 Citation("k", 1, "https://example.com/k"),
+                DateMention((Plain("1 Oct"),), date(2026, 10, 1), None),
+                DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9)),
+                PersonMention((Plain("Ada"),), "ada", Person(jira="acct-1")),
+                PersonMention((Plain("Bo"),), "bo", Person()),
+                IssueLink((Plain("PLAN-1"),), "PLAN-1", "https://example.atlassian.net/browse/PLAN-1"),
+                IssueLink((Plain("PLAN-2"),), "PLAN-2", None),
+                DocumentLink((Plain("the plan"),), "plan", "st2"),
                 Break(),
                 Chip("API", "violet"),
                 StatusMark("blocked"),
@@ -113,6 +136,8 @@ def showcase_nodes() -> tuple[Node, ...]:
         ListNode("check", (ListEntry(plain("done"), checked=True), ListEntry(plain("open")))),
         Quote((plain("a quote"), plain("second line")), cite=plain("Someone")),
         Divider(),
+        Media("image", "https://example.com/a.png", plain("Aisle"), plain("Fig 1")),
+        Media("pdf", "https://example.com/a.pdf"),
         DisplayMath(r"\frac{a}{b}"),
         TableNode(
             (cell("Name"), cell("State", "info"), cell("Note")),

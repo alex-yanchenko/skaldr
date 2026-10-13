@@ -15,8 +15,6 @@
 	var button = controls.querySelector(".sc-btn");
 	var menu = controls.querySelector(".sc-menu");
 	if (!button || !menu) return;
-	/* Width is not authorable and a reader override is never persisted, so the control always starts
-	   from the default cap. */
 	var defaultWidth = "default";
 
 	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
@@ -50,8 +48,8 @@
 				if (item.dataset.val === "auto") { root.removeAttribute("data-theme"); drop("skaldr-theme"); }
 				else { root.setAttribute("data-theme", item.dataset.val); save("skaldr-theme", item.dataset.val); }
 			} else {
-				/* Width is a transient per-view override — not persisted, so a reload resets to the default cap. */
-				root.setAttribute("data-width", item.dataset.val);
+				if (item.dataset.val === defaultWidth) { root.removeAttribute("data-width"); drop("skaldr-width"); }
+				else { root.setAttribute("data-width", item.dataset.val); save("skaldr-width", item.dataset.val); }
 			}
 			reflect();
 		});

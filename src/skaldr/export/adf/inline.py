@@ -1,6 +1,7 @@
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from typing import Final
 from urllib.parse import quote, urlsplit
 
@@ -10,6 +11,8 @@ from skaldr.errors import ConnectorError
 from skaldr.export.adf.colors import BADGE_LOZENGE, TEXT_COLOR
 from skaldr.export.adf.nodes import (
     AdfCode,
+    AdfDate,
+    AdfDateAttrs,
     AdfEm,
     AdfHardBreak,
     AdfInline,
@@ -18,6 +21,8 @@ from skaldr.export.adf.nodes import (
     AdfLink,
     AdfLinkAttrs,
     AdfMark,
+    AdfMention,
+    AdfMentionAttrs,
     AdfStatus,
     AdfStatusAttrs,
     AdfStrike,
@@ -42,7 +47,7 @@ from skaldr.export.runs import (
     write_export_runs,
 )
 from skaldr.export.tree import ToneName
-from skaldr.models import ALLOWED_URL_SCHEMES, StatusState, SwimlaneStepState, ToneLiteral
+from skaldr.models import ALLOWED_URL_SCHEMES, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, ScriptPosition, StyleName
 
 AdfInlines = tuple[AdfInline, ...]
@@ -176,6 +181,15 @@ def _as_text_in_a_link(node: AdfInline) -> AdfInline:
     return _plain_text(node["attrs"]["url"].rsplit("/", 1)[-1])
 
 
+def _date_node(day: date) -> AdfDate:
+    midnight_utc = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    return AdfDate(type="date", attrs=AdfDateAttrs(timestamp=str(int(midnight_utc.timestamp()) * 1000)))
+
+
+def _text_of(nodes: AdfInlines) -> str:
+    return "".join(node["text"] for node in nodes if node["type"] == "text")
+
+
 def _status(text: str, color: LozengeColor) -> AdfInlines:
     if not text:
         return ()
@@ -232,6 +246,25 @@ class AdfRuns:
         return with_mark(tuple(map(_as_text_in_a_link, label)), mark)
 
     def anchor_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
+        return label
+
+    def date_mention(self, _label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
+        if end is None:
+            return (_date_node(start),)
+        return (_date_node(start), _plain_text(" to "), _date_node(end))
+
+    def person_mention(self, label: AdfInlines, _key: str, person: Person, /) -> AdfInlines:
+        if person.jira is None:
+            return label
+        attrs = AdfMentionAttrs(id=person.jira, text="@" + _text_of(label))
+        return (AdfMention(type="mention", attrs=attrs),)
+
+    def issue_link(self, label: AdfInlines, _key: str, url: str | None, /) -> AdfInlines:
+        if url is None:
+            return label
+        return (AdfInlineCard(type="inlineCard", attrs=AdfInlineCardAttrs(url=url)),)
+
+    def document_link(self, label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
         return label
 
     def citation(self, run: Citation, /) -> AdfInlines:

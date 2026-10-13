@@ -1,6 +1,7 @@
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from typing import Final
 
 from typing_extensions import assert_never
@@ -14,6 +15,7 @@ from skaldr.export.markup import (
     bang_cannot_open_an_image,
     body_cell_texts,
     code_block_lines,
+    encode_url,
     escape_block_start,
     indent_lines,
     is_emphasised_body_cell,
@@ -34,6 +36,7 @@ from skaldr.export.tree import (
     ListKind,
     ListNode,
     LoweredDocument,
+    Media,
     Node,
     Paragraph,
     Quote,
@@ -46,7 +49,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, ToneLiteral
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, Person, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
@@ -138,6 +141,15 @@ class _NotionRuns(MarkupRuns):
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
+
+    def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
+        finish = f' end="{end.isoformat()}"' if end else ""
+        return f'<mention-date start="{start.isoformat()}"{finish}/>'
+
+    def person_mention(self, label: str, _key: str, person: Person, /) -> str:
+        if person.notion is None:
+            return label
+        return f'<mention-user url="{person.notion}">{label}</mention-user>'
 
     def placeholder(self, name: str, /) -> str:
         return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
@@ -339,6 +351,12 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
     return lines
 
 
+def _media_line(node: Media) -> str:
+    if node.kind == "image":
+        return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
+    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+
+
 def _quote_line(node: Quote) -> str:
     body = "<br>".join(_block_text(line) for line in node.lines)
     if node.cite:
@@ -392,6 +410,8 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return code_block_lines(replace(node, language=node.language or NOTION_PLAIN_TEXT_LANGUAGE))
         case DisplayMath():
             return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
+        case Media():
+            return [_media_line(node)]
         case Callout():
             icon = node.icon or CALLOUT_ICON[node.tone]
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'

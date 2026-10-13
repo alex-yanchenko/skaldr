@@ -1,9 +1,10 @@
 {% import "macros.html.j2" as m %}<div class="wrap">
 {% if meta.hero %}
-<header class="hero"><h1>{{ meta.title }}</h1>{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}</header>
+<header class="hero">{{ m.page_title(meta) }}{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}{{ m.cover_link(meta) }}</header>
 {% else %}
-<h1>{{ meta.title }}</h1>
+{{ m.page_title(meta) }}
 {% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}
+{{ m.cover_link(meta) }}
 {% endif %}
 {% if toc %}<nav class="toc">{% for slug, text in toc %}<a href="#{{ slug }}">{{ text }}</a>{% endfor %}</nav>{% endif %}
 {% if used_badges and first_table_index is none %}{{ m.legend(used_badges) }}{% endif %}

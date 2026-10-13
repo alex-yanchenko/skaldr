@@ -17,13 +17,16 @@ from skaldr.export.lower.prose import (
     lower_fact_strip,
     lower_image,
     lower_key_value,
+    lower_link,
     lower_list,
     lower_math,
+    lower_media,
     lower_meter,
     lower_note,
     lower_quote,
     lower_range,
     lower_references,
+    lower_section_fields,
     lower_status_list,
     lower_timeline,
 )
@@ -96,7 +99,7 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
     legend = PagePart("legend", tuple(_legend(lowering, compute.used_badges(report))))
     closing = PagePart("footer", _footer(report, lowering))
     page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
-    return _without_empty_parts(report.meta.title, page)
+    return _without_empty_parts(report.meta.title, page, icon=report.meta.icon, cover=report.meta.cover)
 
 
 def assemble_item_page(
@@ -118,12 +121,22 @@ def assemble_item_page(
     )
     legend = PagePart("legend", tuple(_legend(lowering, used)))
     closing = PagePart("footer", _footer(report, lowering) if opens_the_document else ())
-    return _without_empty_parts(title, [header, *_with_the_legend(regions, legend, first_table), closing])
+    return _without_empty_parts(
+        title,
+        [header, *_with_the_legend(regions, legend, first_table), closing],
+        icon=report.meta.icon,
+        cover=report.meta.cover if opens_the_document else None,
+    )
 
 
-def _without_empty_parts(title: str, page: Sequence[Region]) -> LoweredDocument:
+def _without_empty_parts(
+    title: str, page: Sequence[Region], *, icon: str | None, cover: str | None
+) -> LoweredDocument:
     return LoweredDocument(
-        title, tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes)
+        title,
+        tuple(region for region in page if isinstance(region, BlockRegion) or region.nodes),
+        icon=icon,
+        cover=cover,
     )
 
 
@@ -198,6 +211,10 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
             return [Divider()]
         case models.Image():
             return lower_image(block)
+        case models.Media():
+            return lower_media(block)
+        case models.Link():
+            return lower_link(block)
         case models.Timeline():
             return lower_timeline(block, lowering)
         case models.Flow():
@@ -264,7 +281,8 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     updated: list[Node] = (
         [Paragraph(italic(plain(f"updated {block.updated}")), "muted")] if block.updated else []
     )
-    children = [*updated, *_lower_blocks(block.blocks, lowering, depth + 1)]
+    facts = lower_section_fields(block.fields, lowering) if block.fields else []
+    children = [*updated, *facts, *_lower_blocks(block.blocks, lowering, depth + 1)]
     anchor = lowering.anchor_of(block)
     if block.collapsed:
         return [Toggle(plain(block.title), level, tuple(children), anchor)]

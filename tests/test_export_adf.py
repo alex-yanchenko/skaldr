@@ -38,6 +38,8 @@ from skaldr.export.tree import (
     ListKind,
     ListNode,
     LoweredDocument,
+    Media,
+    MediaNodeKind,
     Node,
     Paragraph,
     PieChart,
@@ -545,6 +547,60 @@ def test_a_divider_is_a_rule() -> None:
     assert _rendered(Divider()) == _doc({"type": "rule"})
 
 
+def _link_mark(href: str) -> Json:
+    return {"type": "link", "attrs": {"href": href}}
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"),
+    [("image", "Image"), ("video", "Video"), ("audio", "Audio"), ("file", "File"), ("pdf", "PDF")],
+)
+def test_a_media_node_is_a_paragraph_of_its_kind_and_a_link_named_by_the_caption(
+    kind: MediaNodeKind, label: str
+) -> None:
+    node = Media(kind, "https://example.com/a.bin", plain("alt"), plain("Dock walkthrough"))
+
+    assert _rendered(node) == _doc(
+        _paragraph(_text(f"{label}: "), _text("Dock walkthrough", _link_mark("https://example.com/a.bin")))
+    )
+
+
+def test_a_media_node_without_a_caption_names_its_link_by_the_description() -> None:
+    node = Media("image", "https://example.com/a.png", plain("Aisle 12"))
+
+    assert _rendered(node) == _doc(
+        _paragraph(_text("Image: "), _text("Aisle 12", _link_mark("https://example.com/a.png")))
+    )
+
+
+def test_a_media_node_without_a_caption_or_description_names_its_link_by_the_url() -> None:
+    node = Media("pdf", "https://example.com/a.pdf")
+
+    assert _rendered(node) == _doc(
+        _paragraph(
+            _text("PDF: "), _text("https://example.com/a.pdf", _link_mark("https://example.com/a.pdf"))
+        )
+    )
+
+
+def test_a_media_node_with_a_scheme_adf_does_not_link_is_the_label_and_the_name_alone() -> None:
+    node = Media("file", "ftp://example.com/a.zip", caption=plain("Archive"))
+
+    assert _rendered(node) == _doc(_paragraph(_text("File: Archive")))
+
+
+def test_a_media_node_inside_a_callout_stays_a_paragraph() -> None:
+    node = Callout("info", (Media("video", "https://example.com/v.mp4", caption=plain("Clip")),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [_paragraph(_text("Video: "), _text("Clip", _link_mark("https://example.com/v.mp4")))],
+        }
+    )
+
+
 def _table_cell(kind: str, text: str, background: str | None = None) -> Json:
     cell: dict[str, object] = {"type": kind}
     if background:
@@ -850,6 +906,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Callout: "panel",
     Quote: "blockquote",
     Divider: "rule",
+    Media: "paragraph",
     Toggle: "expand",
     Columns: "paragraph",
     Tabs: "expand",

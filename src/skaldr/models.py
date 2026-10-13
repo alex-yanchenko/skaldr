@@ -16,10 +16,12 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from datetime import date
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TypeGuard, cast, get_args
+from urllib.parse import urlsplit
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -33,6 +35,7 @@ from pydantic import (
     AfterValidator,
     AnyUrl,
     BeforeValidator,
+    ConfigDict,
     Discriminator,
     Field,
     StrictBool,
@@ -50,6 +53,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.lexers import find_lexer
 from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish_block import Publish, section_choice_errors
@@ -70,19 +74,31 @@ def _url_defect(url: str) -> str | None:
         return err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
     if parsed.scheme == "mailto" and not parsed.path:
         return "it names no address"
+    if "@" in urlsplit(url).netloc:
+        return "it holds a username or password"
     return None
 
 
-def _require_url_scheme(url: str | None, subject: str) -> None:
-    """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
-    field so the gate (and message) can't drift; `subject` names the field in the error."""
-    if url is None:
-        return
-    if not url.startswith(ALLOWED_URL_SCHEMES):
-        raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
+LINK_URL_WORDING = "an http://, https://, or mailto: link"
+WEB_URL_SCHEMES = ("http://", "https://")
+WEB_URL_WORDING = "an http:// or https:// link"
+
+
+def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, ...], wording: str) -> None:
+    if not url.startswith(schemes):
+        raise ValueError(f"{subject} must be {wording}")
     defect = _url_defect(url)
     if defect is not None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
+def _require_web_url(url: str, subject: str) -> None:
+    _require_scheme_and_well_formed(url, subject, WEB_URL_SCHEMES, WEB_URL_WORDING)
+
+
+def _require_url_scheme(url: str | None, subject: str) -> None:
+    if url is not None:
+        _require_scheme_and_well_formed(url, subject, ALLOWED_URL_SCHEMES, LINK_URL_WORDING)
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
@@ -288,6 +304,27 @@ class Badge(FrozenModel):
     )
 
 
+PERSON_KEY_PATTERN = REFERENCE_KEY_PATTERN
+NOTION_USER_PATTERN = r"^user://[0-9A-Fa-f-]+$"
+JIRA_SITE_SCHEME = "https://"
+
+
+PersonKey = Annotated[str, StringConstraints(pattern=rf"^{PERSON_KEY_PATTERN}$")]
+
+
+class Person(FrozenModel):
+    notion: str | None = Field(
+        default=None,
+        pattern=NOTION_USER_PATTERN,
+        description="The person's Notion user id as a `user://` URI. The Notion Markdown export writes a "
+        "`[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+    )
+    jira: str | None = Field(
+        default=None,
+        description="The person's Jira account id, for the Jira writer. Not read when rendering.",
+    )
+
+
 class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
@@ -314,6 +351,54 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
+    people: dict[PersonKey, Person] = Field(
+        default_factory=dict[str, Person],
+        description="The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not "
+        "listed here fails the build.",
+    )
+    jira_site: str | None = Field(
+        default=None,
+        description="The https:// address of your Jira site, such as https://example.atlassian.net. A "
+        "`[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key "
+        "is shown as text.",
+    )
+
+    @field_validator("jira_site")
+    @classmethod
+    def _jira_site_is_an_https_address(cls, site: str | None) -> str | None:
+        if site is None:
+            return None
+        if not site.startswith(JIRA_SITE_SCHEME):
+            raise ValueError(f"jira_site must be an {JIRA_SITE_SCHEME} URL")
+        address = urlsplit(site)
+        if not address.hostname:
+            raise ValueError(f"jira_site {site!r} names no host: write it as https://<your-site>")
+        if address.username is not None or address.password is not None:
+            raise ValueError(f"jira_site {site!r} must not hold a username or password")
+        if "?" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a query")
+        if "#" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a fragment")
+        defect = _url_defect(site)
+        if defect is not None:
+            raise ValueError(f"jira_site {site!r} is not a valid URL ({defect})")
+        return site.rstrip("/")
+
+    icon: Icon | None = Field(
+        default=None,
+        description="One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
+    )
+    cover: str | None = Field(
+        default=None,
+        description="An http:// or https:// image address for the page cover. The HTML page allows no remote "
+        "images, so it shows a 'Cover image' link under the title instead; the Notion page cover.",
+    )
+
+    @model_validator(mode="after")
+    def _cover_is_a_web_url(self) -> "Meta":
+        if self.cover is not None:
+            _require_web_url(self.cover, "'cover'")
+        return self
 
 
 class Heading(_Block):
@@ -776,17 +861,85 @@ class Divider(_Block):
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
-        description="A data: URI (self-contained, no external fetches). Base64-encode the payload "
-        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render."
+        description="A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link "
+        "card on the page, as an image in a Markdown export). Base64-encode a data: payload "
+        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. "
+        "A URL may not carry a username or password."
     )
-    alt: str = Field(description="Alt text for the image.")
+    alt: str = Field(description="Alt text for the image. Required, and it must hold visible text.")
     caption: str | None = Field(default=None, description="Optional caption shown below the image.")
     max_width: Count | None = Field(default=None, description="Optional max width in pixels.")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _alt_must_hold_visible_text(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        alt = fields.get("alt", "")
+        if isinstance(alt, str) and not alt.strip():
+            raise ValueError("'alt' must hold visible text")
+        return fields
+
     @model_validator(mode="after")
-    def _data_uri_only(self) -> "Image":
-        if not self.src.startswith("data:"):
-            raise ValueError("'src' must be a data: URI")
+    def _data_uri_or_web_url(self) -> "Image":
+        if self.src.startswith("data:"):
+            return self
+        if not self.src.startswith(WEB_URL_SCHEMES):
+            raise ValueError("'src' must be a data: URI or an http:// or https:// URL")
+        _require_web_url(self.src, "'src'")
+        return self
+
+
+MediaKind = Literal["video", "audio", "file", "pdf"]
+MEDIA_KIND_LABELS: Final[Mapping[MediaKind, str]] = {
+    "video": "Video",
+    "audio": "Audio",
+    "file": "File",
+    "pdf": "PDF",
+}
+
+
+class Media(_Block):
+    type: Literal["media"]
+    kind: MediaKind = Field(description="What the URL points at: video, audio, file or pdf.")
+    src: str = Field(
+        description="An http(s) URL, shown as a link card on the page and as a link in a Markdown "
+        "export. It may not carry a username or password."
+    )
+    caption: str | None = Field(default=None, description="Optional caption naming the media.")
+
+    @model_validator(mode="after")
+    def _web_url_only(self) -> "Media":
+        _require_web_url(self.src, "'src'")
+        return self
+
+
+LinkDisplay = Literal["inline", "card", "embed"]
+
+
+class Link(_Block):
+    type: Literal["link"]
+    url: str = Field(description="An http:// or https:// address.")
+    display: LinkDisplay = Field(
+        default="card",
+        description="`inline` is a plain link in a line of text; `card` is a bordered card with the title, "
+        "the domain and the caption; `embed` asks for the page to be shown in place. The HTML page loads "
+        "nothing from outside, so an embed renders as the card with a note, and both Markdown exports "
+        "write an embed as the card.",
+    )
+    title: NonBlank | None = Field(
+        default=None, description="Link text or card title; the URL without its scheme when omitted."
+    )
+    caption: NonBlank | None = Field(
+        default=None, description="A line under a card or embed; not allowed on an inline link."
+    )
+
+    @model_validator(mode="after")
+    def _web_url_and_no_inline_caption(self) -> "Link":
+        _require_web_url(self.url, "'url'")
+        if self.display == "inline" and self.caption is not None:
+            raise ValueError("a link shown inline takes no caption; use display: card or display: embed")
         return self
 
 
@@ -1940,6 +2093,34 @@ def _command_without_block_scalar_trailing_newline(text: str) -> str:
 CommandText = Annotated[str, AfterValidator(_command_without_block_scalar_trailing_newline)]
 
 
+def _non_blank_query_without_block_scalar_trailing_newline(text: str) -> str:
+    trimmed = text.rstrip("\n")
+    if not trimmed.strip():
+        raise ValueError("query must not be blank (omit it instead)")
+    return trimmed
+
+
+def _pygments_lexer_name(language: str) -> str:
+    if find_lexer(language) is None:
+        raise ValueError(f"`{language}` is not a Pygments lexer name")
+    return language
+
+
+class RequestQuery(FrozenModel):
+    runner: NonBlank = Field(
+        description="Free-text label for the tool the query runs in, shown with it, such as "
+        "`mongosh, orders database` or `psql, reporting replica`."
+    )
+    lang: Annotated[str, AfterValidator(_pygments_lexer_name)] = Field(
+        description="The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It "
+        "highlights the query on the page and labels the fence in the Markdown exports."
+    )
+    content: Annotated[str, AfterValidator(_non_blank_query_without_block_scalar_trailing_newline)] = Field(
+        description="The query text the reader copies and runs in the named tool. May carry "
+        "`{{variable}}` tokens, written in as the reader types them."
+    )
+
+
 class ComposedCall(NamedTuple):
     method: HttpMethod
     url: str
@@ -2099,13 +2280,14 @@ class _RequestCore(FrozenModel):
 
     label: NonBlank = Field(description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
-        default=None, description="The HTTP method. Required unless the call runs a `command`."
+        default=None,
+        description="The HTTP method. Required unless the call runs a `command` or records a `query`.",
     )
     url: str | None = Field(
         default=None,
         min_length=1,
         description="The full URL. May carry `{{variable}}` tokens. Required unless the call runs a "
-        "`command`.",
+        "`command` or records a `query`.",
     )
     command: CommandText | None = Field(
         default=None,
@@ -2119,6 +2301,13 @@ class _RequestCore(FrozenModel):
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
+    )
+    query: RequestQuery | None = Field(
+        default=None,
+        description="Evidence that is not a shell command: a database aggregation, a SQL query or an MCP "
+        "call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and "
+        "the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` "
+        "or `command`.",
     )
     headers: dict[str, str] = Field(
         default_factory=dict,
@@ -2159,6 +2348,7 @@ class _RequestCore(FrozenModel):
             (
                 self.url or "",
                 self.command or "",
+                self.query.content if self.query else "",
                 *self.headers.values(),
                 self.body or "",
                 *case_headers,
@@ -2187,11 +2377,43 @@ class _RequestCore(FrozenModel):
         for case in self.cases:
             self._check_how_the_case_fills_its_values(case)
         check_header_map(self.headers, "request header")
-        if self.command is None:
+        if self.query is not None:
+            self._check_query_call()
+        elif self.command is None:
             self._check_composed_call()
         else:
             self._check_command_call()
         return self
+
+    def _check_query_call(self) -> None:
+        composed_fields = {
+            "method": self.method,
+            "url": self.url,
+            "headers": self.headers or None,
+            "body": self.body,
+            "command": self.command,
+        }
+        for name, value in composed_fields.items():
+            if value is not None:
+                raise ValueError(
+                    f"request '{self.label}' sets `query` and `{name}`: a query is recorded as written, "
+                    f"so skaldr builds no curl and `{name}` would never reach it"
+                )
+        if self.command_note is not None:
+            raise ValueError(
+                f"request '{self.label}' sets a command_note on a query: put the note in a verdict"
+            )
+        for case in self.cases:
+            for name, value in (
+                ("command", case.command),
+                ("headers", case.headers),
+                ("headers_add", case.headers_add),
+            ):
+                if value is not None:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` on a request that records a query, which has "
+                        "no command or headers of its own: write the change into the query"
+                    )
 
     def _check_how_the_case_fills_its_values(self, case: RequestCase) -> None:
         if case.value is not None and case.values is not None:
@@ -2216,6 +2438,7 @@ class _RequestCore(FrozenModel):
             (
                 self.url or "",
                 case.command or self.command or "",
+                self.query.content if self.query is not None else "",
                 *headers.values(),
                 *(case.headers_add or {}).values(),
                 self.body or "",
@@ -2253,7 +2476,7 @@ class _RequestCore(FrozenModel):
         if self.method is None or self.url is None:
             raise ValueError(
                 f"request '{self.label}' needs `method` and `url` to build a curl, or a `command` to run "
-                "as written"
+                "as written, or a `query` to record as written"
             )
         for case in self.cases:
             if case.command is not None:
@@ -2383,6 +2606,11 @@ class RequestStep(_RequestCore):
             raise ValueError(
                 f"step '{self.label}' captures a value and records {len(self.cases)} cases; a capture "
                 "reads one definite response, so a step that produces a value keeps a single case"
+            )
+        if self.captures and self.query is not None:
+            raise ValueError(
+                f"step '{self.label}' captures a value but records a query: a capture reads a response "
+                "the reader pastes, and a query has nowhere to paste one"
             )
         return self
 
@@ -2528,6 +2756,8 @@ _Simple = (
     | Note
     | Divider
     | Image
+    | Media
+    | Link
     | Timeline
     | Flow
     | Fan
@@ -2545,6 +2775,108 @@ FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Fiel
 RequestLike = Request | RequestStep
 
 
+def _iso_date_from_text(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"due must be an ISO date such as 2026-10-15, not {value!r}") from error
+
+
+IsoDate = Annotated[date, BeforeValidator(_iso_date_from_text)]
+FieldScalar = NonBlank | Number
+FieldList = Annotated[list[FieldScalar], Field(min_length=1)]
+SectionLinks = dict[
+    NonBlank, Annotated[list[Annotated[str, Field(pattern=rf"^{ANCHOR_ID_PATTERN}$")]], Field(min_length=1)]
+]
+
+
+def _describe_value_kind(value: Any) -> str:
+    if isinstance(value, bool):
+        return "a boolean"
+    if isinstance(value, Mapping):
+        return "a mapping"
+    if isinstance(value, list):
+        return "a list"
+    return "null" if value is None else type(value).__name__
+
+
+def _refuse_an_unusable_extra_item(value: Any) -> None:
+    if value is None or isinstance(value, bool | Mapping | list):
+        raise ValueError(
+            f"an extra field must be a string, a number or a list of them, not {_describe_value_kind(value)}"
+        )
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("an extra field must not be blank")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("an extra field must be a finite number")
+
+
+def _refuse_an_unusable_extra_field(value: Any) -> Any:
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("an extra field list must not be empty")
+        items = cast("list[Any]", value)
+        for item in items:
+            _refuse_an_unusable_extra_item(item)
+        return items
+    _refuse_an_unusable_extra_item(value)
+    return value
+
+
+def fact_label(name: str) -> str:
+    return name[:1].upper() + name[1:]
+
+
+KNOWN_FIELD_NAMES: Final = ("status", "priority", "assignee", "due", "labels", "estimate")
+
+
+class SectionFields(FrozenModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[  # pyright: ignore[reportIncompatibleVariableOverride]
+        str, Annotated[FieldScalar | FieldList, BeforeValidator(_refuse_an_unusable_extra_field)]
+    ] = Field(init=False)
+
+    @property
+    def extras(self) -> dict[str, FieldScalar | FieldList]:
+        return cast("dict[str, FieldScalar | FieldList]", self.model_extra or {})
+
+    @model_validator(mode="after")
+    def _refuse_two_facts_under_one_label(self) -> "SectionFields":
+        seen: dict[str, str] = {}
+        sources = (
+            *((name, "a known field", fact_label(name)) for name in KNOWN_FIELD_NAMES),
+            *((name, "a link type", fact_label(name)) for name in self.links),
+            *((name, "an extra field", name) for name in self.extras),
+        )
+        for name, kind, label in sources:
+            if label in seen:
+                raise ValueError(
+                    f"'{name}' ({kind}) and {seen[label]} would both show as '{label}'; rename one of them"
+                )
+            seen[label] = f"'{name}' ({kind})"
+        return self
+
+    status: NonBlank | None = Field(
+        default=None, description="Workflow state, shown as a chip (e.g. `In Progress`)."
+    )
+    priority: NonBlank | None = Field(default=None, description="Priority, shown as a chip (e.g. `High`).")
+    assignee: NonBlank | None = Field(
+        default=None, description="A person's key, shown as a person chip carrying the key."
+    )
+    due: IsoDate | None = Field(default=None, description="Due date, ISO `YYYY-MM-DD`.")
+    labels: Annotated[list[NonBlank], Field(min_length=1)] | None = Field(
+        default=None, description="Labels, each shown as a chip."
+    )
+    estimate: Number | None = Field(default=None, description="Effort estimate as a number.")
+    links: SectionLinks = Field(
+        default_factory=SectionLinks,
+        description="Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of "
+        "the sections it points at. Every id must be the `id` of a section in this document.",
+    )
+
+
 class Section(_Block):
     type: Literal["section"]
     title: NonBlank = Field(description="Summary label shown on the collapsible.")
@@ -2553,6 +2885,12 @@ class Section(_Block):
         pattern=rf"^{ANCHOR_ID_PATTERN}$",
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived "
         "slug so `[…](#id)` links survive a title rename. Must be unique across the page.",
+    )
+    fields: SectionFields | None = Field(
+        default=None,
+        description="Issue fields and page properties shown as a fact strip under the title: status, "
+        "priority, assignee, due, labels, estimate, `links` to other sections by id, and any extra key "
+        "holding a string, a number or a list of them.",
     )
     collapsed: bool = Field(
         default=True,
@@ -2693,6 +3031,7 @@ def _is_built_by_an_index(info: ValidationInfo) -> bool:
 class Part(FrozenModel):
     type: Literal["part"]
     title: NonBlank
+    doc_id: str | None = Field(default=None, exclude=True)
     collapsed: bool = False
     blocks: list[Block] = Field(min_length=1)
 
@@ -2754,6 +3093,8 @@ def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
             | Note()
             | Divider()
             | Image()
+            | Media()
+            | Link()
             | Timeline()
             | Flow()
             | Fan()
@@ -3074,6 +3415,23 @@ class Report(FrozenModel):
         return self
 
     @model_validator(mode="after")
+    def _validate_section_links_name_sections(self) -> "Report":
+        section_ids = {
+            block.id for _, block in self.located_blocks if isinstance(block, Section) and block.id
+        }
+        for path, block in self.located_blocks:
+            if not isinstance(block, Section) or block.fields is None:
+                continue
+            for link_type, targets in block.fields.links.items():
+                for index, target in enumerate(targets):
+                    if target not in section_ids:
+                        raise ValueError(
+                            f"section link '{link_type}' names '{target}', which is not the id of any "
+                            f"section, at {path}.fields.links.{link_type}.{index}"
+                        )
+        return self
+
+    @model_validator(mode="after")
     def _validate_anchor_ids_unique(self) -> "Report":
         _refuse_repeats(
             [
@@ -3248,10 +3606,95 @@ def _merged_badges(declared: Sequence[tuple[Path, Mapping[str, Badge]]]) -> dict
     return {key: badge.model_dump(mode="json") for key, badge in merged.items()}
 
 
+_PEOPLE: Final = TypeAdapter(dict[PersonKey, Person])
+
+
+def _own_meta_value(data: Mapping[str, Any], name: str) -> object:
+    meta: object = data.get("meta")
+    return cast("Mapping[str, object]", meta).get(name) if isinstance(meta, Mapping) else None
+
+
+def _parsed_people(data: object) -> dict[str, Person]:
+    try:
+        return _PEOPLE.validate_python({} if data is None else data)
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("meta", "people"))) from err
+
+
+def _merged_people(declared: Sequence[tuple[Path, Mapping[str, Person]]]) -> dict[str, Any]:
+    merged: dict[str, Person] = {}
+    declared_in: dict[str, Path] = {}
+    for path, people in declared:
+        for key, person in people.items():
+            if key in merged and merged[key] != person:
+                raise ReportError(
+                    f"person {key!r} is declared differently in {declared_in[key]} and {path}; "
+                    "an index merges every part's people, so give it one Notion and Jira id or rename one key"
+                )
+            merged.setdefault(key, person)
+            declared_in.setdefault(key, path)
+    return {key: person.model_dump(mode="json") for key, person in merged.items()}
+
+
+def _merged_jira_site(declared: Sequence[tuple[Path, object]]) -> str | None:
+    first: tuple[Path, str] | None = None
+    for path, site in declared:
+        if not isinstance(site, str):
+            continue
+        address = site.rstrip("/")
+        if first is None:
+            first = (path, address)
+        elif first[1] != address:
+            raise ReportError(
+                f"jira_site is declared differently in {first[0]} and {path}; "
+                "an index points every issue link at one site, so give each part the same address"
+            )
+    return first[1] if first else None
+
+
+def _merged_index_meta(path: Path, data: Mapping[str, Any], parts: Sequence[_LoadedPart]) -> object:
+    meta: object = data.get("meta")
+    if not isinstance(meta, Mapping):
+        return meta
+    people = _merged_people(
+        [
+            (path, _parsed_people(_own_meta_value(data, "people"))),
+            *((part.path, part.report.meta.people) for part in parts),
+        ]
+    )
+    site = _merged_jira_site(
+        [
+            (path, _own_meta_value(data, "jira_site")),
+            *((part.path, part.report.meta.jira_site) for part in parts),
+        ]
+    )
+    return {
+        **cast("Mapping[str, Any]", meta),
+        **({"people": people} if people else {}),
+        **({"jira_site": site} if site else {}),
+    }
+
+
+def _refuse_a_doc_id_published_twice(parts: Sequence[_LoadedPart]) -> None:
+    first_part_with: dict[str, Path] = {}
+    for part in parts:
+        if part.report.publish is None:
+            continue
+        doc_id = part.report.publish.doc_id
+        if doc_id in first_part_with:
+            raise ReportError(
+                f"doc_id {doc_id!r} is published by both {first_part_with[doc_id]} and {part.path}; "
+                "an index needs each part's publish.doc_id to be different"
+            )
+        first_part_with[doc_id] = part.path
+
+
 def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
+    publish = part.report.publish
     return {
         "type": "part",
         "title": part.report.meta.title,
+        "doc_id": publish.doc_id if publish else None,
         "collapsed": index.collapsed,
         "blocks": part.data["blocks"],
     }
@@ -3279,10 +3722,16 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
     parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
     page = {key: value for key, value in data.items() if key != "index"}
-    combined = {**page, "badges": badges, "blocks": [*intro, *(_part_block(part, index) for part in parts)]}
+    combined = {
+        **page,
+        **({"meta": _merged_index_meta(path, data, parts)} if "meta" in page else {}),
+        "badges": badges,
+        "blocks": [*intro, *(_part_block(part, index) for part in parts)],
+    }
     return _Document(combined, tuple(enumerate((part.path for part in parts), start=len(intro))))
 
 
