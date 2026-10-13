@@ -142,10 +142,29 @@ def test_a_paragraph_is_its_inline_text_and_drops_its_tone() -> None:
             ListNode("check", (_entry("a"), _entry("b", checked=True))), "* [ ] a\n* [x] b\n", id="check"
         ),
         pytest.param(_bullets(ListEntry(())), "*\n", id="bare-marker"),
+        pytest.param(
+            ListNode("number", (_entry("a", _bullets(_entry("b"))), _entry("c")), 999_999_999),
+            "999999999. a\n           * b\n999999999. c\n",
+            id="number-clamped-at-the-largest-commonmark-marker",
+        ),
     ],
 )
 def test_a_list_writes_the_markers_slack_stores(node: ListNode, text: str) -> None:
     assert render_slack([node]) == text
+
+
+@pytest.mark.parametrize(
+    ("nodes", "text"),
+    [
+        pytest.param([Paragraph(()), _para("a")], "a\n", id="empty-paragraph"),
+        pytest.param([_bullets(_entry("a", Paragraph(())))], "* a\n", id="empty-paragraph-in-a-list-item"),
+        pytest.param(
+            [_bullets(ListEntry((), children=(Paragraph(()),)))], "*\n", id="empty-paragraph-in-an-empty-item"
+        ),
+    ],
+)
+def test_an_empty_paragraph_writes_nothing(nodes: list[Node], text: str) -> None:
+    assert render_slack(nodes) == text
 
 
 @pytest.mark.parametrize(
@@ -169,7 +188,7 @@ def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
     deepest = ListNode("number", (_entry("c"),))
     middle = ListNode("number", (_entry("b", deepest),))
 
-    assert render_slack([ListNode("number", (_entry("a", middle),), 9)]) == ("9. a\n   1. b\n      1. c\n")
+    assert render_slack([ListNode("number", (_entry("a", middle),), 9)]) == "9. a\n   1. b\n      1. c\n"
 
 
 @pytest.mark.parametrize(
@@ -392,6 +411,16 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
             Callout("success", (_bullets(_entry("a", CodeBlock("x"))),)),
             "::: {.callout}\n✅\n\n* a\n\n```\nx\n```\n:::\n",
             id="list-moves-its-code-within-the-callout",
+        ),
+        pytest.param(
+            Callout("info", (Toggle(_text("T"), None, (_para("x"),)),)),
+            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
+            id="led-by-a-toggle-title",
+        ),
+        pytest.param(
+            Callout("info", (Tabs((Tab(_text("T"), (_para("x"),)),)),)),
+            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
+            id="led-by-a-tab-title",
         ),
     ],
 )
