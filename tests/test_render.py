@@ -3209,15 +3209,28 @@ def test_display_controls_render_with_all_theme_and_width_options() -> None:
         )
 
 
-def test_only_theme_is_restored_before_paint_in_the_head() -> None:
+def test_theme_and_width_are_restored_before_paint_in_the_head() -> None:
     html = render_html(parse_report(make_report()))
     head = html.split("</head>", 1)[0]
 
-    assert "localStorage" in head
+    assert 'localStorage.getItem("skaldr-theme")' in head
     assert 'setAttribute("data-theme"' in head
-    # Width is transient per-view: never persisted, so a reader override resets to the default cap on
-    # reload. (An absent "skaldr-width" key proves it's neither stored on click nor restored in the head.)
-    assert "skaldr-width" not in html
+    assert 'localStorage.getItem("skaldr-width")' in head
+    restore_width = (
+        'if (width === "wide" || width === "full") '
+        'document.documentElement.setAttribute("data-width", width);'
+    )
+    assert restore_width in head
+
+
+def test_the_width_control_remembers_wide_and_full_and_forgets_default() -> None:
+    html = render_html(parse_report(make_report()))
+    body = html.split("</head>", 1)[1]
+
+    assert (
+        'root.setAttribute("data-width", item.dataset.val); save("skaldr-width", item.dataset.val);' in body
+    )
+    assert 'root.removeAttribute("data-width"); drop("skaldr-width");' in body
 
 
 def test_width_switch_overrides_are_defined_in_the_stylesheet() -> None:
