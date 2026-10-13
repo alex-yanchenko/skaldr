@@ -3,6 +3,8 @@ from typing import Any
 import pytest
 
 from skaldr.export.adf import AdfUnsupportedError, render_adf
+from skaldr.export.inline import plain
+from skaldr.export.tree import Callout, Node, Paragraph
 from tests.factories import (
     lowered,
     make_cell,
@@ -85,7 +87,7 @@ def _in_a_panel(block: dict[str, Any]) -> list[dict[str, Any]]:
     ],
 )
 def test_a_panel_refusing_a_block_names_the_block_the_author_wrote(block: dict[str, Any], named: str) -> None:
-    assert _refusal(_in_a_panel(block)) == f"ADF cannot place {named} inside a callout"
+    assert _refusal(_in_a_panel(block)) == f"ADF cannot place {named} inside a panel"
 
 
 def test_a_request_flow_step_with_two_cases_is_named_a_request_step() -> None:
@@ -97,14 +99,34 @@ def test_a_request_flow_step_with_two_cases_is_named_a_request_step() -> None:
     }
     flow = {"type": "request_flow", "label": "Walk", "steps": [step, step]}
 
-    assert _refusal(_in_a_panel(flow)) == "ADF cannot place a request step inside a callout"
+    assert _refusal(_in_a_panel(flow)) == "ADF cannot place a request step inside a panel"
 
 
-def test_a_toned_grid_cell_holding_another_toned_cell_names_the_inner_cell_a_grid_cell() -> None:
+def test_a_toned_grid_cell_holding_another_toned_cell_names_both_a_grid_cell() -> None:
     inner = make_grid([make_cell(6, [{"type": "text", "body": "x"}]) | {"tone": "info"}])
     outer = make_grid([make_cell(6, [inner]) | {"tone": "warning"}])
 
-    assert _refusal([outer]) == "ADF cannot place a grid cell inside a callout"
+    assert _refusal([outer]) == "ADF cannot place a grid cell inside a grid cell"
+
+
+def test_a_container_with_no_authored_name_is_a_callout() -> None:
+    nodes: tuple[Node, ...] = (Callout("info", (Callout("info", (Paragraph(plain("x")),)),)),)
+
+    with pytest.raises(AdfUnsupportedError) as refused:
+        render_adf(nodes)
+
+    assert str(refused.value) == "ADF cannot place a callout inside a callout"
+
+
+def test_a_container_authored_as_a_note_is_named_a_note() -> None:
+    nodes: tuple[Node, ...] = (
+        Callout("neutral", (Callout("info", (Paragraph(plain("x")),)),), authored_as="note"),
+    )
+
+    with pytest.raises(AdfUnsupportedError) as refused:
+        render_adf(nodes)
+
+    assert str(refused.value) == "ADF cannot place a callout inside a note"
 
 
 def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
@@ -127,4 +149,4 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
 def test_a_block_named_in_the_error_keeps_the_heading_above_it() -> None:
     blocks = [{"type": "heading", "text": "Plan"}, *_in_a_panel(COMPARISON)]
 
-    assert _refusal(blocks) == "ADF cannot place a comparison inside a callout, under the heading 'Plan'"
+    assert _refusal(blocks) == "ADF cannot place a comparison inside a panel, under the heading 'Plan'"

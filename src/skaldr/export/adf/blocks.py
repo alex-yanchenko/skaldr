@@ -87,7 +87,6 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
 _CONTAINER_TERM: Final[Mapping[Container, str]] = {
     "doc": "the document",
-    "panel": "a callout",
     "expand": "a toggle",
     "nested_expand": "a toggle that is itself inside a toggle",
 }
@@ -152,6 +151,7 @@ class _AdfBlocks:
         self.runs = AdfRuns(issue_links)
         self.local_ids = count(1)
         self.heading = ""
+        self.panel_name = _NODE_TERM[Callout]
 
     def local_id(self, kind: str) -> str:
         return f"skaldr-{kind}-{next(self.local_ids)}"
@@ -163,10 +163,13 @@ class _AdfBlocks:
         content = self.inline(runs)
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()
 
+    def container_term(self, container: Container) -> str:
+        return f"a {self.panel_name}" if container == "panel" else _CONTAINER_TERM[container]
+
     def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
         for block in produced:
             if block["type"] not in _ALLOWED_BLOCKS[container]:
-                message = f"ADF cannot place a {_authored_term(node)} inside {_CONTAINER_TERM[container]}"
+                message = f"ADF cannot place a {_authored_term(node)} inside {self.container_term(container)}"
                 if self.heading:
                     message += f", under the heading '{self.heading}'"
                 raise AdfUnsupportedError(message)
@@ -197,7 +200,10 @@ class _AdfBlocks:
             case DisplayMath():
                 return [self.code_block(node.expression, LATEX_LANGUAGE)]
             case Callout():
+                enclosing_name = self.panel_name
+                self.panel_name = node.authored_as or _NODE_TERM[Callout]
                 content = self.blocks(node.children, "panel") or [_empty_paragraph()]
+                self.panel_name = enclosing_name
                 panel = AdfPanelAttrs(panelType=PANEL_TYPE[node.tone])
                 return [AdfPanel(type="panel", attrs=panel, content=content)]
             case Quote():

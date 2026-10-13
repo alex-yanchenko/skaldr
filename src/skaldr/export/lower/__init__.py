@@ -255,7 +255,9 @@ def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.Panel():
             return [
                 Callout(
-                    "neutral", (Paragraph(bold(block.title)), *_lower_blocks(block.blocks, lowering, depth))
+                    "neutral",
+                    (Paragraph(bold(block.title)), *_lower_blocks(block.blocks, lowering, depth)),
+                    authored_as="panel",
                 )
             ]
         case models.Grid() | models.InnerGrid():
