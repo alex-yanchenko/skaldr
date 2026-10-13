@@ -5,6 +5,7 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportRejectedError
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -51,6 +52,7 @@ from skaldr.export.tree import (
 from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
+SLACK_TARGET: Final = "slack"
 SLACK_CANVAS_LIMIT: Final = 1_048_576
 SLACK_TABLE_CELL_LIMIT: Final = 300
 DEEPEST_CANVAS_HEADING: Final = 3
@@ -253,17 +255,28 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
             assert_never(kind)
 
 
-@dataclass(frozen=True)
-class SlackCanvas:
-    text: str
-    oversized_tables: tuple[str, ...] = ()
+def _table_over_the_cell_limit(cells: int, nearest_heading: str) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        f"a table has {cells:,} cells, over the {SLACK_TABLE_CELL_LIMIT} a Slack canvas table can hold",
+        "split it into two tables or export it elsewhere",
+        f"under the heading '{nearest_heading}'" if nearest_heading else None,
+    )
+
+
+def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        f"the canvas Markdown is {size:,} characters, "
+        f"over the {SLACK_CANVAS_LIMIT:,} a Slack canvas can hold",
+        "split the document into several canvases or export it elsewhere",
+    )
 
 
 class _CanvasWriter:
     def __init__(self) -> None:
         self.runs = _SlackRuns()
-        self.heading = ""
-        self.oversized_tables: list[str] = []
+        self.nearest_heading = ""
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
@@ -284,14 +297,8 @@ class _CanvasWriter:
     def table_lines(self, table: TableNode) -> list[str]:
         cells = table_width(table) * (1 + len(table.rows))
         if cells > SLACK_TABLE_CELL_LIMIT:
-            self.oversized_tables.append(self.table_limit_message(cells))
+            raise _table_over_the_cell_limit(cells, self.nearest_heading)
         return pipe_table_lines(table, self.inline)
-
-    def table_limit_message(self, cells: int) -> str:
-        message = (
-            f"a table has {cells:,} cells, over Slack's limit of {SLACK_TABLE_CELL_LIMIT} per canvas table"
-        )
-        return f"{message}, under the heading '{self.heading}'" if self.heading else message
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
@@ -330,7 +337,7 @@ class _CanvasWriter:
     def lines(self, block: _CanvasBlock) -> list[str]:
         match block:
             case Heading():
-                self.heading = export_visible_text(block.text).strip() or self.heading
+                self.nearest_heading = export_visible_text(block.text).strip() or self.nearest_heading
                 return [heading_line(min(block.level, DEEPEST_CANVAS_HEADING), self.inline(block.text))]
             case Paragraph():
                 text = self.block_text(block.text)
@@ -368,7 +375,8 @@ class _CanvasWriter:
         return joined([lines for _, lines in self.rendered(blocks)])
 
 
-def render_slack(nodes: Sequence[Node]) -> SlackCanvas:
-    writer = _CanvasWriter()
-    lines = writer.blocks(_canvas_blocks(nodes, "top"))
-    return SlackCanvas("\n".join(lines) + "\n", tuple(writer.oversized_tables))
+def render_slack(nodes: Sequence[Node]) -> str:
+    text = "\n".join(_CanvasWriter().blocks(_canvas_blocks(nodes, "top"))) + "\n"
+    if len(text) > SLACK_CANVAS_LIMIT:
+        raise _canvas_over_the_size_limit(len(text))
+    return text

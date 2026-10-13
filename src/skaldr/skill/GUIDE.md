@@ -1462,7 +1462,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `[Ada](user:ada)` | the label as text |
 | a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
 
-A canvas table holds at most 300 cells, the header row included. A longer table is still written whole, never split, and the export prints a warning with its cell count and the heading above it. A canvas holds at most 1,048,576 characters of Markdown, so the export prints a warning with the size when the page is over that.
+A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, so a document whose canvas Markdown is longer fails the same way, naming its size.
 
 ## What you never write
 

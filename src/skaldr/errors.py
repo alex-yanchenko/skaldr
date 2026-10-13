@@ -6,6 +6,16 @@ class AdfUnsupportedError(ReportError):
     pass
 
 
+class ExportRejectedError(ReportError):
+    def __init__(self, target: str, why: str, instead: str, where: str | None = None) -> None:
+        self.target = target
+        self.why = why
+        self.instead = instead
+        self.where = where
+        located = f"{why}, {where}" if where else why
+        super().__init__(f"{located}; {instead}")
+
+
 class AuthError(Exception):
     pass
 

@@ -93,7 +93,7 @@ def markdown_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
 
 
 def slack_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
-    return render_slack(lowered(blocks, **overrides)).text
+    return render_slack(lowered(blocks, **overrides))
 
 
 def heading_sections(count: int, body: str) -> list[dict[str, Any]]:

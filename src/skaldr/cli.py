@@ -676,7 +676,7 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             file=sys.stderr,
         )
     for oversized in result.oversized_sections:
-        if target in ("adf", "slack"):
+        if target == "adf":
             print(f"warning: {oversized}", file=sys.stderr)
             continue
         print(
