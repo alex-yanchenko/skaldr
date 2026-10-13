@@ -14,6 +14,18 @@ class ConnectorError(Exception):
     pass
 
 
+class PublishError(Exception):
+    pass
+
+
+class ItemNotFoundError(ConnectorError):
+    pass
+
+
+class WriteRejectedError(ConnectorError):
+    pass
+
+
 class RegionNotFoundError(LookupError):
     pass
 

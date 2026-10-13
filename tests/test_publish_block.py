@@ -263,12 +263,26 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
     [
         pytest.param(
             [make_notion_target(), make_notion_target(where={"parent_page": OTHER_NOTION_PAGE_ID})],
-            [("notion", NOTION_PAGE_ID), ("notion", OTHER_NOTION_PAGE_ID)],
+            [
+                (("notion", NOTION_PAGE_ID), f"notion page {NOTION_PAGE_ID}"),
+                (("notion", OTHER_NOTION_PAGE_ID), f"notion page {OTHER_NOTION_PAGE_ID}"),
+            ],
             id="two-notion-pages",
         ),
         pytest.param(
+            [make_notion_target(), make_notion_target(where={"page": OTHER_NOTION_PAGE_ID})],
+            [
+                (("notion", NOTION_PAGE_ID), f"notion page {NOTION_PAGE_ID}"),
+                (("notion", OTHER_NOTION_PAGE_ID), f"notion page {OTHER_NOTION_PAGE_ID} (written into)"),
+            ],
+            id="a-notion-parent-page-and-a-page-written-into",
+        ),
+        pytest.param(
             [make_jira_target(), make_jira_target(where={"project": "OPS", "issue_type": "Task"})],
-            [("jira", "PLAN", ""), ("jira", "OPS", "")],
+            [
+                (("jira", "PLAN", ""), "jira project PLAN under no parent issue"),
+                (("jira", "OPS", ""), "jira project OPS under no parent issue"),
+            ],
             id="two-jira-projects",
         ),
         pytest.param(
@@ -276,18 +290,22 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
                 make_jira_target(where={"project": "PLAN", "issue_type": "Task", "parent": "PLAN-1"}),
                 make_jira_target(where={"project": "PLAN", "issue_type": "Task", "parent": "PLAN-2"}),
             ],
-            [("jira", "PLAN", "PLAN-1"), ("jira", "PLAN", "PLAN-2")],
+            [
+                (("jira", "PLAN", "PLAN-1"), "jira project PLAN under PLAN-1"),
+                (("jira", "PLAN", "PLAN-2"), "jira project PLAN under PLAN-2"),
+            ],
             id="one-jira-project-under-two-parents",
         ),
     ],
 )
-def test_targets_in_different_places_are_accepted(
-    targets: list[dict[str, Any]], locations: list[tuple[str, ...]]
+def test_targets_in_different_places_are_accepted_and_each_has_its_own_label(
+    targets: list[dict[str, Any]], locations: list[tuple[tuple[str, ...], str]]
 ) -> None:
     publish = _parse({"doc_id": "plan", "targets": targets})
 
     assert publish is not None
-    assert [target.location_key() for target in publish.targets] == locations
+    assert [(target.place_key(), target.location_label()) for target in publish.targets] == locations
+    assert [hasattr(target, "location_key") for target in publish.targets] == [False, False]
 
 
 @pytest.mark.parametrize(
@@ -387,8 +405,15 @@ def test_a_doc_id_is_a_slug_of_at_least_two_characters(doc_id: str, message: str
     _rejects({"doc_id": doc_id, "targets": [make_notion_target()]}, message)
 
 
-def test_a_publish_block_needs_a_target() -> None:
-    _rejects({"doc_id": "plan", "targets": []}, "publish.targets: List should have at least 1 item")
+def test_a_publish_block_with_no_targets_retires_the_document() -> None:
+    publish = _parse({"doc_id": "plan", "targets": []})
+
+    assert publish is not None
+    assert publish.model_dump(mode="json") == {"doc_id": "plan", "targets": []}
+
+
+def test_a_publish_block_still_needs_its_targets_key() -> None:
+    _rejects({"doc_id": "plan"}, "publish.targets: Field required")
 
 
 def test_the_publish_block_its_leading_comments_and_every_line_up_to_the_next_key_are_left_out() -> None:
