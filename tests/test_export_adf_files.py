@@ -40,6 +40,25 @@ def test_an_adf_export_writes_the_body_as_page_adf_json_without_the_title(tmp_pa
     assert json.loads((out_dir / "page.adf.json").read_text(encoding="utf-8")) == HI_DOCUMENT
 
 
+def _exported_page(tmp_path: Path, name: str, *, toc: bool) -> str:
+    blocks = [
+        {"type": "section", "id": "first", "title": "First", "blocks": [{"type": "text", "body": "One."}]},
+        {"type": "section", "id": "second", "title": "Second", "blocks": [{"type": "text", "body": "Two."}]},
+    ]
+    meta = {"title": "Test Report", "toc": toc}
+    report = load_report(write_report(tmp_path, make_report(meta=meta, blocks=blocks)))
+    out_dir = tmp_path / name
+    export_adf(report, out_dir)
+    return (out_dir / "page.adf.json").read_text(encoding="utf-8")
+
+
+def test_a_table_of_contents_writes_nothing_because_jira_headings_have_no_anchors(tmp_path: Path) -> None:
+    with_toc = _exported_page(tmp_path, "with", toc=True)
+    without_toc = _exported_page(tmp_path, "without", toc=False)
+
+    assert with_toc == without_toc
+
+
 def test_the_cli_exports_adf_and_prints_the_path(
     tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

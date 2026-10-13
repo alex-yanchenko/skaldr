@@ -106,7 +106,6 @@ _NODE_TERM: Final[Mapping[type, str]] = {
     Columns: "grid",
     Tabs: "set of tabs",
     Diagram: "diagram",
-    TableOfContents: "table of contents",
 }
 MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
@@ -216,8 +215,7 @@ class _AdfBlocks:
             case Diagram():
                 return self.diagram_blocks(node, container)
             case TableOfContents():
-                entries = tuple(ListEntry(entry.title) for entry in node.entries if entry.title)
-                return self.list_blocks(ListNode("bullet", entries), container)
+                return []
             case _:
                 exhausted: Never = node
                 raise AdfUnsupportedError(f"ADF has no form for the lowered node {type(exhausted).__name__}")

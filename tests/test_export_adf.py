@@ -853,12 +853,16 @@ def test_a_chart_is_its_data_table_alone() -> None:
     assert _rendered(bars) == expected
 
 
-def test_a_table_of_contents_is_a_bullet_list_of_its_titles() -> None:
+def test_a_table_of_contents_writes_nothing() -> None:
     node = TableOfContents((TocEntry("a", plain("First")), TocEntry("b", plain("Second"))))
 
-    assert _rendered(node) == _doc(
-        {"type": "bulletList", "content": [_item(_words("First")), _item(_words("Second"))]}
-    )
+    assert _rendered(_para("before"), node, _para("after")) == _doc(_words("before"), _words("after"))
+
+
+def test_a_table_of_contents_alone_leaves_the_empty_paragraph_every_document_has() -> None:
+    node = TableOfContents((TocEntry("a", plain("First")),))
+
+    assert _rendered(node) == _doc(_paragraph())
 
 
 def test_an_issue_key_in_a_paragraph_becomes_a_card_when_links_are_given() -> None:
@@ -910,7 +914,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "bulletList",
-    TableOfContents: "bulletList",
+    TableOfContents: "paragraph",
 }
 
 

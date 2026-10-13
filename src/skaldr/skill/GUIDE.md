@@ -1422,7 +1422,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `chart` | its data table |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
-| a table of contents | a bulleted list of the titles, without links |
+| a table of contents | nothing, because a Jira heading has no anchor for an entry to link to |
 | `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
 | an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
 | `[text](date:…)` | a date node at UTC midnight of the start date; a range is the start date, the text " to " and the end date |
