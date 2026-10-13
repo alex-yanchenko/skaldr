@@ -14,6 +14,7 @@ from skaldr.publish.content import (
     placed_section,
     same_fields,
     section_part,
+    set_fields,
     with_fields_named,
 )
 from skaldr.publish.drafts import SPLIT_ADVICE
@@ -106,6 +107,13 @@ def _archive_comment(stamp: StampValue | None) -> JsonValue:
     return description_doc([{"type": "paragraph", "content": [{"type": "text", "text": text}]}])
 
 
+def _sendable_blocks(sections: Mapping[str, str]) -> dict[str, Blocks]:
+    try:
+        return {key: section_blocks(text) for key, text in sections.items()}
+    except ConnectorError as exc:
+        raise WriteRejectedError(str(exc)) from exc
+
+
 def _property(name: str, value: BaseModel) -> EntityProperty:
     return EntityProperty(key=name, value=value.model_dump(mode="json"))
 
@@ -168,18 +176,18 @@ class JiraTransport:
 
     def create_item(self, request: NewItem, /) -> RemoteItem:
         if request.into_id is not None:
-            raise ConnectorError(
+            raise WriteRejectedError(
                 "Jira publishes only into issues skaldr creates, so it cannot write into "
                 f"{request.into_id}; publish under it with `parent` instead"
             )
         target = request.target
         if not isinstance(target, JiraTarget):
-            raise ConnectorError(f"the Jira connector cannot publish to a {target.service()} target")
+            raise WriteRejectedError(f"the Jira connector cannot publish to a {target.service()} target")
         content = request.content
-        sections = {key: section_blocks(text) for key, text in content.sections.items()}
+        sections = _sendable_blocks(content.sections)
         description = self._description(sections, f'the new issue "{content.title}"')
         fields: dict[str, JsonValue] = {
-            **content.fields,
+            **set_fields(content.fields),
             LABELS: _with_doc_label(content.fields.get(LABELS), request.stamp.doc_id),
             "project": {"key": target.where.project},
             "issuetype": {"name": target.where.issue_type},
@@ -194,12 +202,20 @@ class JiraTransport:
         created = self._client.create_issue(
             fields, [_property(STAMP_PROPERTY, stamp), _property(LAYOUT_PROPERTY, layout)]
         )
-        self._remember_shapes(created.key, content.fields)
-        read = self._read_after_write(created.key, layout, stamp)
-        if not self._owned_entries(created.key, read.history):
-            return self._handed_over(created.key, read.remote, _newest(read.history))
+        try:
+            return self._read_back_created(created.key, content, layout, stamp)
+        except ConnectorError as exc:
+            raise ConnectorError(f"created {created.key} but could not read it back: {exc}") from exc
+
+    def _read_back_created(
+        self, item_id: str, content: ItemContent, layout: Layout, stamp: StampValue
+    ) -> RemoteItem:
+        self._remember_shapes(item_id, content.fields)
+        read = self._read_after_write(item_id, layout, stamp)
+        if not self._owned_entries(item_id, read.history):
+            return self._handed_over(item_id, read.remote, _newest(read.history))
         published = replace(read.remote, comparable=self.comparable_form(content))
-        return self._handed_over(created.key, published, NO_MARKER)
+        return self._handed_over(item_id, published, NO_MARKER)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         current = self._read_unchanged(item_id, request.raw_sections)
@@ -337,7 +353,7 @@ class JiraTransport:
         return current
 
     def _write_description(self, item_id: str, sections: Mapping[str, str]) -> RemoteItem:
-        blocks = {key: section_blocks(text) for key, text in sections.items()}
+        blocks = _sendable_blocks(sections)
         description = self._description(blocks, item_id)
         layout = layout_of(blocks)
         self._client.edit_issue(item_id, {DESCRIPTION: description}, [_property(LAYOUT_PROPERTY, layout)])

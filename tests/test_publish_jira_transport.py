@@ -19,8 +19,8 @@ from skaldr.publish.transport import (
     SectionRequest,
     Stamp,
 )
-from skaldr.publish_block import JiraTarget
-from tests.factories import make_jira_target
+from skaldr.publish_block import JiraTarget, NotionTarget
+from tests.factories import make_jira_target, make_notion_target
 from tests.factories.auth_factory import summarise
 from tests.factories.jira_factory import (
     DONE,
@@ -501,11 +501,11 @@ def test_a_description_over_jiras_limit_is_refused_before_anything_is_sent() -> 
     assert jira.requests == []
 
 
-def test_creating_into_an_existing_issue_is_refused() -> None:
+def test_creating_into_an_existing_issue_is_a_rejected_write_and_sends_nothing() -> None:
     jira = FakeJira()
 
     with pytest.raises(
-        ConnectorError,
+        WriteRejectedError,
         match=_exactly(
             "Jira publishes only into issues skaldr creates, so it cannot write into DEMO-5; publish under "
             "it with `parent` instead"
@@ -513,6 +513,115 @@ def test_creating_into_an_existing_issue_is_refused() -> None:
     ):
         _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT, into_id="DEMO-5"))
     assert jira.requests == []
+
+
+def test_creating_for_a_notion_target_is_a_rejected_write_and_sends_nothing() -> None:
+    jira = FakeJira()
+    target = NotionTarget.model_validate(make_notion_target())
+
+    with pytest.raises(
+        WriteRejectedError, match=_exactly("the Jira connector cannot publish to a notion target")
+    ):
+        _transport(jira).create_item(NewItem(target, STAMP, CONTENT))
+    assert jira.requests == []
+
+
+def test_a_section_that_is_not_a_list_of_adf_blocks_is_a_rejected_write_and_sends_nothing() -> None:
+    jira = FakeJira()
+    content = CONTENT.model_copy(update={"sections": {"intro": '{"type": "paragraph"}'}})
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=_exactly(
+            'a Jira section holds a JSON list of ADF blocks, and this one does not: \'{"type": "paragraph"}\''
+        ),
+    ):
+        _transport(jira).create_item(NewItem(TARGET, STAMP, content))
+    assert jira.requests == []
+
+
+def test_a_content_write_of_a_section_that_is_not_adf_blocks_is_a_rejected_write_and_writes_nothing() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=_exactly(
+            "a Jira section holds a JSON list of ADF blocks, and this one does not: 'Sow in May.'"
+        ),
+    ):
+        transport.write_content(
+            created.item_id, ContentWrite({"planting": "Sow in May."}, created.raw_sections)
+        )
+    assert jira.calls() == _read_calls("DEMO-1")
+
+
+def test_fields_with_no_value_are_left_out_of_a_create() -> None:
+    jira = FakeJira()
+    fields: dict[str, JsonValue] = {
+        "priority": {"name": "High"},
+        "duedate": None,
+        "components": [],
+        "customfield_10020": "",
+        "customfield_10030": {},
+    }
+
+    _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT.model_copy(update={"fields": fields})))
+
+    assert summarise(jira.requests[0])["body"] == {
+        "fields": {
+            "priority": {"name": "High"},
+            "labels": [DOC_LABEL],
+            "project": {"key": "DEMO"},
+            "issuetype": {"name": "Task"},
+            "summary": "Garden handbook",
+            "description": {"version": 1, "type": "doc", "content": [INTRO, _table(), PLANTING]},
+        },
+        "properties": [
+            {"key": "skaldr.stamp", "value": _stamp_value(STAMP)},
+            {
+                "key": "skaldr.layout",
+                "value": _layout_value({"intro": [INTRO, _table()], "planting": [PLANTING]}),
+            },
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("honours_properties", "method", "path", "refusal", "cause"),
+    [
+        pytest.param(
+            True,
+            "GET",
+            "/rest/api/3/issue/DEMO-1/changelog",
+            Reply(403, {"errorMessages": ["Forbidden"]}),
+            "Jira refused GET /rest/api/3/issue/DEMO-1/changelog (HTTP 403): Forbidden",
+            id="read-refused",
+        ),
+        pytest.param(
+            False,
+            "PUT",
+            "/rest/api/3/issue/DEMO-1/properties/skaldr.layout",
+            Reply(400, {"errorMessages": ["Bad property"]}),
+            "Jira refused PUT /rest/api/3/issue/DEMO-1/properties/skaldr.layout (HTTP 400): Bad property",
+            id="property-refused",
+        ),
+    ],
+)
+def test_a_failure_after_the_issue_is_created_names_the_created_issue(
+    honours_properties: bool, method: str, path: str, refusal: Reply, cause: str
+) -> None:
+    jira = FakeJira(honours_properties_on_create=honours_properties)
+    jira.fail_next(method, path, refusal)
+
+    with pytest.raises(ConnectorError) as raised:
+        _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT))
+
+    assert (type(raised.value), str(raised.value), list(jira.issues)) == (
+        ConnectorError,
+        f"created DEMO-1 but could not read it back: {cause}",
+        ["DEMO-1"],
+    )
 
 
 def test_a_rejected_issue_type_is_a_rejected_write() -> None:
