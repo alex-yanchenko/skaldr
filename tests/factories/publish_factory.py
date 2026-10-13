@@ -37,6 +37,7 @@ REFUSED_WRITE = "the service refused the write"
 DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
 LOST_WRITE = "the connection dropped before the service saw the write"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
+SPAN_COLOR = re.compile(r'(<span[^>]*?) color="[^"]*"')
 INTRO_KEY = "block 2c7116fc"
 NEW_INTRO_KEY = "block e976d1ce"
 
@@ -135,6 +136,7 @@ class FakeTransport:
     strips_trailing_whitespace: bool = False
     reads_cleared_fields_as_null: bool = False
     drops_unset_fields: bool = False
+    ignores_span_colors: bool = False
     service_fields: JsonFields = field(default_factory=JsonFields)
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
@@ -237,7 +239,7 @@ class FakeTransport:
         self.calls.clear()
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
-        sections = {key: self._stored(text) for key, text in content.sections.items()}
+        sections = {key: self._in_read_form(self._stored(text)) for key, text in content.sections.items()}
         return content.model_copy(update={"sections": sections})
 
     def read_item(self, item_id: str, _keyed_like: ItemContent, /) -> RemoteItem:
@@ -362,6 +364,9 @@ class FakeTransport:
     def _stored(self, text: str) -> str:
         return text.rstrip() if self.strips_trailing_whitespace else text
 
+    def _in_read_form(self, text: str) -> str:
+        return SPAN_COLOR.sub(r"\1", text) if self.ignores_span_colors else text
+
     def _kept_fields(self, fields: JsonFields) -> JsonFields:
         if not self.drops_unset_fields:
             return fields
@@ -405,9 +410,11 @@ class FakeTransport:
 
     def _remote(self, item_id: str) -> RemoteItem:
         item = self.items[item_id]
+        content = item.content
+        sections = {key: self._in_read_form(text) for key, text in content.sections.items()}
         return RemoteItem(
             item_id,
-            item.content,
+            content.model_copy(update={"sections": sections}),
             dict(item.raw_sections),
             item.stamp,
             str(item.revision),

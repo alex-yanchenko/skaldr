@@ -30,6 +30,14 @@ CONTENT = ItemContent(
     sections={"intro": "Welcome.\n", "planting": "Sow in spring.\n"},
     fields={"Area": "Shed", "Owner": "Rowan"},
 )
+FORMATTED_CONTENT = ItemContent(
+    title="Garden handbook",
+    sections={
+        "intro": '<span color="green">**Welcome.**</span>  \n\n',
+        "planting": "- Sow in spring.\n\t- Water daily.\n",
+    },
+    fields={"Area": "Shed", "Labels": ["soil", "seeds"]},
+)
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
 
 
@@ -54,7 +62,7 @@ def _fake_instance(transport: FakeTransport) -> Instance:
 
 
 def _fake() -> Instance:
-    return _fake_instance(FakeTransport(strips_trailing_whitespace=True))
+    return _fake_instance(FakeTransport(strips_trailing_whitespace=True, ignores_span_colors=True))
 
 
 TRANSPORTS = [
@@ -272,6 +280,13 @@ def test_creating_into_an_empty_page_sets_its_title_and_the_requested_fields_and
     )
 
 
+def test_the_comparable_form_of_a_comparable_form_is_itself(under_test: TransportUnderTest) -> None:
+    transport = under_test.make().transport
+    once = transport.comparable_form(FORMATTED_CONTENT)
+
+    assert transport.comparable_form(once) == once
+
+
 class ReordersSections(FakeTransport):
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         read = super().read_item(item_id, keyed_like)
@@ -303,6 +318,13 @@ class KeepsClearedFields(FakeTransport):
         return super().write_fields(item_id, replace(request, previous_fields=dict(request.fields)))
 
 
+class ClosesEverySectionAgain(FakeTransport):
+    def comparable_form(self, content: ItemContent, /) -> ItemContent:
+        formed = super().comparable_form(content)
+        closed = {key: text + "\n" for key, text in formed.sections.items()}
+        return formed.model_copy(update={"sections": closed})
+
+
 def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
     return TransportUnderTest(
         lambda: _fake_instance(transport_type()), NOTION_TARGET, writes_into_pages=True, reports_edits=True
@@ -332,6 +354,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             KeepsClearedFields,
             test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_absent,
             id="keeps-cleared-fields",
+        ),
+        pytest.param(
+            ClosesEverySectionAgain,
+            test_the_comparable_form_of_a_comparable_form_is_itself,
+            id="comparable-form-not-idempotent",
         ),
     ],
 )

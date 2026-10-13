@@ -34,6 +34,7 @@ class Reading:
     remote: RemoteItem
     edited: tuple[Part, ...]
     reported: tuple[Part, ...]
+    saved_copy: ItemContent
 
 
 @dataclass(frozen=True)
@@ -140,16 +141,18 @@ def _retired_already(item: PublishedItem, remote: RemoteItem | None) -> bool:
     return item.retiring == "release" and _released(remote, item)
 
 
-def _keyed_view(item: PublishedItem, names: Sequence[str]) -> ItemContent:
-    return item.remote.model_copy(update={"fields": {name: item.remote.fields.get(name) for name in names}})
+def _keyed_view(content: ItemContent, names: Sequence[str]) -> ItemContent:
+    return content.model_copy(update={"fields": {name: content.fields.get(name) for name in names}})
 
 
-def _published_view(item: PublishedItem) -> ItemContent:
-    return _keyed_view(item, list(item.rendered.fields))
+def _published_view(saved_copy: ItemContent, item: PublishedItem) -> ItemContent:
+    return _keyed_view(saved_copy, list(item.rendered.fields))
 
 
 def _readable_view(item: PublishedItem, draft: ItemDraft | None) -> ItemContent:
-    return _keyed_view(item, [*item.rendered.fields, *(draft.content.fields if draft is not None else ())])
+    return _keyed_view(
+        item.remote, [*item.rendered.fields, *(draft.content.fields if draft is not None else ())]
+    )
 
 
 def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -> RemoteItem | None:
@@ -238,9 +241,9 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             refuse_another_documents_item(ref, read, prepared.doc_id)
             remote = replace(read, comparable=with_fields_named(read.comparable, owned.fields))
             if item.retiring is not None:
-                readings.append(Reading(ref, item, remote, (), ()))
+                readings.append(Reading(ref, item, remote, (), (), transport.comparable_form(item.remote)))
                 continue
-            published = _published_view(item)
+            published = _published_view(transport.comparable_form(item.remote), item)
             reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
             compared = with_fields_named(read.comparable, published.fields)
             unsettled = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
@@ -249,7 +252,8 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 state = with_item(state, ref, prepared.target_named(label), settled)
             landed = set(unsettled) - set(edited)
             still_reported = tuple(part for part in reported if part not in landed)
-            readings.append(Reading(ref, settled, remote, edited, still_reported))
+            saved_copy = transport.comparable_form(settled.remote)
+            readings.append(Reading(ref, settled, remote, edited, still_reported, saved_copy))
     return PublishedReadings(readings, state, missing)
 
 
@@ -301,7 +305,7 @@ def remote_edits(prepared: Prepared, readings: Sequence[Reading]) -> tuple[Remot
             reading.item,
             part,
             _part_path(prepared, reading.item, part),
-            part_text(reading.published.remote, part),
+            part_text(reading.saved_copy, part),
             part_text(reading.remote.comparable, part),
             reading.remote.edited_by,
             reading.remote.edited_at,

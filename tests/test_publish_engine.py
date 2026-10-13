@@ -45,6 +45,8 @@ SPRING = "## Planting\nSow in spring.\n"
 LATE_SPRING = "## Planting\nSow in late spring.\n"
 TOOLS_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
 RAKE_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Rake.\n'
+UNCOLORED_TOOLS_TEXT = "## Tools\n<span>**api**</span>\n- Spade.\n"
+UNCOLORED_RAKE_TEXT = "## Tools\n<span>**api**</span>\n- Rake.\n"
 LEGEND_TEXT = (
     "<details>\n"
     "<summary>Legend: badges used on this page</summary>\n"
@@ -419,4 +421,41 @@ def test_an_unchanged_published_document_is_in_sync(tmp_path: Path) -> None:
     assert publish_status(prepare_publish(path, fake_registry(transport))) == (
         ItemStatus(DOCUMENT, "page-1", ("in sync",)),
         ItemStatus(TOOLS, "page-2", ("in sync",)),
+    )
+
+
+def test_a_saved_copy_from_before_the_transport_changed_its_form_is_still_in_sync(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.ignores_span_colors = True
+
+    statuses = publish_status(prepare_publish(path, fake_registry(transport)))
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+    outcome = _publish(path, transport)
+
+    assert (statuses, diff, outcome, transport.writes()) == (
+        (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("in sync",))),
+        PublishDiff((), ()),
+        Applied(()),
+        [],
+    )
+
+
+def test_a_remote_edit_after_the_transport_changed_its_form_is_shown_in_its_current_form(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.ignores_span_colors = True
+    transport.items["page-2"].raw_sections["tools"] = RAKE_TEXT
+
+    statuses = publish_status(prepare_publish(path, fake_registry(transport)))
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+
+    tools_edit = RemoteEdit(
+        TOOLS, section_part("tools"), "blocks[1]", UNCOLORED_TOOLS_TEXT, UNCOLORED_RAKE_TEXT, None, None
+    )
+    assert (statuses, diff) == (
+        (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("edited remotely",))),
+        PublishDiff((tools_edit,), ()),
     )
