@@ -14,6 +14,7 @@ from skaldr.publish.content import (
     same_fields,
     set_fields,
     with_fields_named,
+    with_look_owned_by,
     with_parts,
 )
 from skaldr.publish.drafts import ItemDraft
@@ -55,6 +56,10 @@ def part_text(content: ItemContent | None, part: Part) -> str | None:
             return content.title + "\n"
         case "fields":
             return json.dumps(comparable(set_fields(content.fields)), indent=2, ensure_ascii=False) + "\n"
+        case "icon":
+            return None if content.icon is None else content.icon + "\n"
+        case "cover":
+            return None if content.cover is None else content.cover + "\n"
         case "section":
             return content.sections.get(part.key)
         case _:
@@ -140,16 +145,28 @@ def _retired_already(item: PublishedItem, remote: RemoteItem | None) -> bool:
     return item.retiring == "release" and _released(remote, item)
 
 
-def _keyed_view(item: PublishedItem, names: Sequence[str]) -> ItemContent:
-    return item.remote.model_copy(update={"fields": {name: item.remote.fields.get(name) for name in names}})
+def _owners(item: PublishedItem, draft: ItemDraft | None) -> list[ItemContent]:
+    return [item.rendered] if draft is None else [item.rendered, draft.content]
+
+
+def _owned_field_names(owners: Sequence[ItemContent]) -> list[str]:
+    return [name for owner in owners for name in owner.fields]
+
+
+def _owned_part_of(read: ItemContent, owners: Sequence[ItemContent]) -> ItemContent:
+    return with_look_owned_by(with_fields_named(read, _owned_field_names(owners)), *owners)
+
+
+def _keyed_view(item: PublishedItem, owners: Sequence[ItemContent]) -> ItemContent:
+    remote = item.remote
+    keyed = remote.model_copy(
+        update={"fields": {name: remote.fields.get(name) for name in _owned_field_names(owners)}}
+    )
+    return with_look_owned_by(keyed, *owners)
 
 
 def _published_view(item: PublishedItem) -> ItemContent:
-    return _keyed_view(item, list(item.rendered.fields))
-
-
-def _readable_view(item: PublishedItem, draft: ItemDraft | None) -> ItemContent:
-    return _keyed_view(item, [*item.rendered.fields, *(draft.content.fields if draft is not None else ())])
+    return _keyed_view(item, [item.rendered])
 
 
 def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -> RemoteItem | None:
@@ -167,7 +184,9 @@ def _rendered_where_it_matches(remote: ItemContent, draft: ItemContent, transpor
         key: draft.sections[key] if expected.sections.get(key) == text else text
         for key, text in remote.sections.items()
     }
-    return ItemContent(title=title, sections=sections, fields=fields)
+    icon = remote.icon if draft.icon is not None and expected.icon != remote.icon else draft.icon
+    cover = remote.cover if draft.cover is not None and expected.cover != remote.cover else draft.cover
+    return ItemContent(title=title, sections=sections, fields=fields, icon=icon, cover=cover)
 
 
 def _adopted(remote: RemoteItem, draft: ItemDraft | None, transport: Transport) -> PublishedItem:
@@ -227,8 +246,8 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             item = held.model_copy(update={"retiring": None}) if draft is not None else held
             if item != held:
                 state = with_item(state, ref, prepared.target_named(label), item)
-            owned = _readable_view(item, draft)
-            read = _read_or_none(transport, item.item_id, owned)
+            owners = _owners(item, draft)
+            read = _read_or_none(transport, item.item_id, _keyed_view(item, owners))
             if _retired_already(item, read):
                 state = with_item(state, ref, prepared.target_named(label), None)
                 continue
@@ -236,13 +255,13 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 missing.append(MissingItem(ref, item.item_id))
                 continue
             refuse_another_documents_item(ref, read, prepared.doc_id)
-            remote = replace(read, comparable=with_fields_named(read.comparable, owned.fields))
+            remote = replace(read, comparable=_owned_part_of(read.comparable, owners))
             if item.retiring is not None:
                 readings.append(Reading(ref, item, remote, (), ()))
                 continue
             published = _published_view(item)
             reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
-            compared = with_fields_named(read.comparable, published.fields)
+            compared = _owned_part_of(read.comparable, [item.rendered])
             unsettled = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
             settled, edited = _settled(item, remote, unsettled, transport)
             if settled != item:
@@ -268,8 +287,7 @@ def _read_written_into(
         ) from exc
     refuse_another_documents_item(step.item, remote, prepared.doc_id)
     holds_this_draft = not differing_parts(
-        transport.comparable_form(step.draft.content),
-        with_fields_named(remote.comparable, step.draft.content.fields),
+        transport.comparable_form(step.draft.content), _owned_part_of(remote.comparable, [step.draft.content])
     )
     if remote.doc_id is None and _has_content(remote) and not holds_this_draft:
         raise PublishError(

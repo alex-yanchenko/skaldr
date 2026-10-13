@@ -223,9 +223,18 @@ class Applier:
             now.title,
             with_fields_named(now, [*item.rendered.fields, *step.content.fields]).fields,
             Stamp(self.prepared.doc_id, step.item.section_id),
+            icon=step.content.icon,
+            cover=step.content.cover,
+            previous_icon=now.icon,
+            previous_cover=now.cover,
         )
         rendered = item.rendered.model_copy(
-            update={"title": step.content.title, "fields": step.content.fields}
+            update={
+                "title": step.content.title,
+                "fields": step.content.fields,
+                "icon": step.content.icon,
+                "cover": step.content.cover,
+            }
         )
         transport = self.transports.for_target(step.item.target)
         return self._written(

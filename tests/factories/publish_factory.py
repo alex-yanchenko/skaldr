@@ -9,7 +9,7 @@ from skaldr.export.tree import LoweredDocument
 from skaldr.models import Report
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import WriteGranularity
-from skaldr.publish.content import FIELDS, ItemContent, Part, section_part
+from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.transport import (
     AddSection,
@@ -71,12 +71,16 @@ def make_notion_publish(**target: Any) -> dict[str, Any]:
     }
 
 
+def make_garden_meta(**changes: Any) -> dict[str, Any]:
+    return {"title": "Garden handbook", "subtitle": ["For new members"], "toc": True, **changes}
+
+
 def make_garden_report(
     publish: dict[str, Any] | None = None, blocks: list[dict[str, Any]] | None = None, **overrides: Any
 ) -> dict[str, Any]:
     return make_report(
         **{
-            "meta": {"title": "Garden handbook", "subtitle": ["For new members"], "toc": True},
+            "meta": make_garden_meta(),
             "badges": API_BADGES,
             "publish": publish if publish is not None else make_notion_publish(split=["tools"]),
             "blocks": blocks if blocks is not None else make_garden_blocks(),
@@ -108,6 +112,8 @@ class FakeItem:
     archived: bool = False
     children: tuple[str, ...] = ()
     reported_set_properties: tuple[str, ...] | None = None
+    icon: str | None = None
+    cover: str | None = None
 
     @property
     def set_properties(self) -> tuple[str, ...]:
@@ -118,7 +124,9 @@ class FakeItem:
     @property
     def content(self) -> ItemContent:
         sections = {key: _without_comment_markers(text) for key, text in self.raw_sections.items()}
-        return ItemContent(title=self.title, sections=sections, fields=self.fields)
+        return ItemContent(
+            title=self.title, sections=sections, fields=self.fields, icon=self.icon, cover=self.cover
+        )
 
 
 @dataclass(frozen=True)
@@ -216,6 +224,14 @@ class FakeTransport:
     def delete_item_by_hand(self, item_id: str) -> None:
         del self.items[item_id]
 
+    def set_icon_by_hand(self, item_id: str, icon: str | None) -> None:
+        self.items[item_id].icon = icon
+        self.report_an_edit_without_changing_content(item_id, ICON)
+
+    def set_cover_by_hand(self, item_id: str, cover: str | None) -> None:
+        self.items[item_id].cover = cover
+        self.report_an_edit_without_changing_content(item_id, COVER)
+
     def edit_fields_by_hand(self, item_id: str, fields: JsonFields) -> None:
         item = self.items[item_id]
         names = {*item.fields, *fields}
@@ -263,6 +279,8 @@ class FakeTransport:
             existing.title = content.title
             existing.raw_sections = dict(content.sections)
             existing.fields = self._kept_fields({**existing.fields, **content.fields})
+            existing.icon = content.icon or existing.icon
+            existing.cover = content.cover or existing.cover
             existing.revision = self._bump()
             if self._creating_into_without_a_stamp:
                 raise ConnectorError(DROPPED_AFTER_WRITE)
@@ -276,6 +294,8 @@ class FakeTransport:
             request.stamp,
             request.parent_id,
             self._bump(),
+            icon=content.icon,
+            cover=content.cover,
         )
         return self._after_write(item_id)
 
@@ -315,7 +335,9 @@ class FakeTransport:
         title = ("title",) if request.changes_the_title else ()
         changed = tuple(f"set {name}" for name in sorted(request.changed_fields))
         cleared = tuple(f"clear {name}" for name in sorted(request.cleared_fields))
-        self._write(("write_fields", item_id, *title, *changed, *cleared))
+        icon = (f"icon {request.icon}",) if request.changes_the_icon else ()
+        cover = (f"cover {request.cover}",) if request.changes_the_cover else ()
+        self._write(("write_fields", item_id, *title, *changed, *cleared, *icon, *cover))
         item = self.items[item_id]
         if item.stamp is None or item.stamp.doc_id != request.stamp.doc_id:
             raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
@@ -325,6 +347,8 @@ class FakeTransport:
         kept = {name: value for name, value in item.fields.items() if name not in request.cleared_fields}
         item.fields = self._kept_fields({**kept, **nulled, **request.changed_fields})
         item.title = request.title
+        item.icon = request.icon if request.changes_the_icon else item.icon
+        item.cover = request.cover if request.changes_the_cover else item.cover
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -357,6 +381,8 @@ class FakeTransport:
             if edit.item_id == item_id
             and edit.revision > since
             and (edit.part != FIELDS or any(name in keyed_like.fields for name in edit.field_names))
+            and (edit.part != ICON or keyed_like.icon is not None)
+            and (edit.part != COVER or keyed_like.cover is not None)
         )
 
     def _stored(self, text: str) -> str:

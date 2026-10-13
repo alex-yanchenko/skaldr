@@ -77,6 +77,8 @@ class StoredPage:
     last_edited_time: datetime
     last_edited_by: str
     in_trash: bool = False
+    icon: dict[str, Any] | None = None
+    cover: dict[str, Any] | None = None
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -85,6 +87,8 @@ class StoredPage:
             "last_edited_time": self.last_edited_time.isoformat().replace("+00:00", ".000Z"),
             "last_edited_by": {"object": "user", "id": self.last_edited_by},
             "in_trash": self.in_trash,
+            "icon": self.icon,
+            "cover": self.cover,
             "properties": {
                 name: _property_json(kind, value) for name, (kind, value) in self.properties.items()
             },
@@ -196,6 +200,14 @@ class InMemoryNotion:
         page.properties[name] = (kind, value)
         self._touch(page, PERSON_ID)
 
+    def set_look_by_hand(
+        self, page_id: str, *, icon: dict[str, Any] | None, cover: dict[str, Any] | None
+    ) -> None:
+        page = self.pages[notion_page_id(page_id) or page_id]
+        page.icon = icon
+        page.cover = cover
+        self._touch(page, PERSON_ID)
+
     def markdown_of(self, page_id: str) -> str:
         return self.pages[notion_page_id(page_id) or page_id].markdown
 
@@ -248,6 +260,8 @@ class InMemoryNotion:
             return httpx2.Response(200, json=page.as_json())
         if "in_trash" in body:
             page.in_trash = bool(body["in_trash"])
+        page.icon = body.get("icon", page.icon)
+        page.cover = body.get("cover", page.cover)
         refusal = self._set_properties(page, body.get("properties", {}))
         if refusal is not None:
             return refusal
@@ -312,6 +326,8 @@ class InMemoryNotion:
             as_notion_stores(body.get("markdown", "")),
             self._edit_time(),
             BOT_ID,
+            icon=body.get("icon"),
+            cover=body.get("cover"),
         )
         refusal = self._set_properties(page, body.get("properties", {}))
         if refusal is not None:

@@ -32,6 +32,10 @@ CONTENT = ItemContent(
     fields={"Area": "Shed", "Owner": "Rowan"},
 )
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
+SEEDLING = "🌱"
+SUNFLOWER = "🌻"
+COVER_URL = "https://example.com/garden.png"
+LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
 
 
 @dataclass(frozen=True)
@@ -241,6 +245,38 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
     assert is_unset(read.comparable.fields.get("Owner"))
 
 
+def test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them(
+    under_test: TransportUnderTest,
+) -> None:
+    instance = under_test.make()
+    transport = instance.transport
+    created = transport.create_item(NewItem(under_test.target, STAMP, LOOKING))
+
+    transport.write_fields(
+        created.item_id,
+        FieldsWrite(
+            LOOKING.title,
+            LOOKING.fields,
+            LOOKING.title,
+            LOOKING.fields,
+            STAMP,
+            icon=SUNFLOWER,
+            cover=None,
+            previous_icon=SEEDLING,
+            previous_cover=COVER_URL,
+        ),
+    )
+    read = transport.read_item(created.item_id, LOOKING)
+
+    assert (
+        (created.comparable.icon, created.comparable.cover),
+        (read.comparable.icon, read.comparable.cover),
+    ) == (
+        (SEEDLING, COVER_URL),
+        (SUNFLOWER, None),
+    )
+
+
 def test_the_marker_a_write_returns_covers_that_write(under_test: TransportUnderTest) -> None:
     instance, created = _created(under_test)
     raw = dict(created.raw_sections)
@@ -329,6 +365,11 @@ class KeepsClearedFields(FakeTransport):
         return super().write_fields(item_id, replace(request, previous_fields=dict(request.fields)))
 
 
+class KeepsTheCover(FakeTransport):
+    def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
+        return super().write_fields(item_id, replace(request, cover=request.previous_cover))
+
+
 def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
     return TransportUnderTest(
         lambda: _fake_instance(transport_type()), NOTION_TARGET, writes_into_pages=True, reports_edits=True
@@ -358,6 +399,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             KeepsClearedFields,
             test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_absent,
             id="keeps-cleared-fields",
+        ),
+        pytest.param(
+            KeepsTheCover,
+            test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them,
+            id="keeps-the-cover",
         ),
     ],
 )

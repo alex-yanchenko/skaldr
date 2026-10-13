@@ -27,12 +27,19 @@ from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import (
     TARGET_LABEL,
     make_garden_blocks,
+    make_garden_meta,
     make_notion_publish,
     write_garden_report,
 )
 
 DOCUMENT_PAGE = numbered_id(1).replace("-", "")
 TOOLS_PAGE = numbered_id(2).replace("-", "")
+SEEDLING = "🌱"
+SUNFLOWER = "🌻"
+COVER_URL = "https://example.com/garden.png"
+SEEDLING_ICON = {"type": "emoji", "emoji": SEEDLING}
+SUNFLOWER_ICON = {"type": "emoji", "emoji": SUNFLOWER}
+GARDEN_COVER = {"type": "external", "external": {"url": COVER_URL}}
 
 
 def _connector(notion: InMemoryNotion) -> NotionConnector:
@@ -349,3 +356,80 @@ def test_an_edit_made_in_notion_stops_the_publish_until_it_is_overwritten(
         True,
     )
     assert "-Sow in spring.\n+Sow in June." in refusal.out
+
+
+def _page_writes(notion: InMemoryNotion) -> list[tuple[str, Any]]:
+    return [
+        (request.url.path, json.loads(request.content))
+        for request in notion.requests
+        if request.method == "PATCH" and not request.url.path.endswith("/markdown")
+    ]
+
+
+def test_publishing_sets_the_icon_and_cover_then_changes_and_clears_them_as_the_yaml_does(
+    tmp_path: Path,
+) -> None:
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
+    path = write_garden_report(tmp_path, meta=make_garden_meta(icon=SEEDLING, cover=COVER_URL))
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    published = [(notion.pages[page].icon, notion.pages[page].cover) for page in (DOCUMENT_PAGE, TOOLS_PAGE)]
+    write_garden_report(tmp_path, meta=make_garden_meta(icon=SUNFLOWER))
+    notion.requests.clear()
+
+    changed = main(["publish", str(path), "--apply"], registry=_registry(notion))
+    changes = _page_writes(notion)
+    notion.requests.clear()
+    again = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (published, changed, changes, again, notion.writes()) == (
+        [(SEEDLING_ICON, GARDEN_COVER), (SEEDLING_ICON, None)],
+        0,
+        [
+            (f"/v1/pages/{DOCUMENT_PAGE}", {"icon": SUNFLOWER_ICON, "cover": None}),
+            (f"/v1/pages/{TOOLS_PAGE}", {"icon": SUNFLOWER_ICON}),
+        ],
+        0,
+        [],
+    )
+
+
+def test_an_icon_changed_in_notion_stops_the_publish_until_it_is_overwritten(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
+    path = write_garden_report(tmp_path, meta=make_garden_meta(icon=SEEDLING))
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.set_look_by_hand(DOCUMENT_PAGE, icon={"type": "emoji", "emoji": "🔥"}, cover=None)
+    capsys.readouterr()
+
+    refused = main(["publish", str(path), "--apply"], registry=_registry(notion))
+    refusal = capsys.readouterr()
+    overwritten = main(["publish", str(path), "--apply", "--overwrite"], registry=_registry(notion))
+
+    assert (refused, overwritten, notion.pages[DOCUMENT_PAGE].icon) == (1, 0, SEEDLING_ICON)
+    assert f"-{SEEDLING}\n+🔥" in refusal.out
+
+
+def test_an_icon_and_cover_a_person_adds_in_notion_to_a_page_without_them_are_kept(tmp_path: Path) -> None:
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.set_look_by_hand(DOCUMENT_PAGE, icon={"type": "emoji", "emoji": "🔥"}, cover=GARDEN_COVER)
+    notion.requests.clear()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (
+        exit_code,
+        notion.writes(),
+        notion.pages[DOCUMENT_PAGE].icon,
+        notion.pages[DOCUMENT_PAGE].cover,
+    ) == (
+        0,
+        [],
+        {"type": "emoji", "emoji": "🔥"},
+        GARDEN_COVER,
+    )

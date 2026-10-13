@@ -13,7 +13,7 @@ from skaldr.errors import PublishError
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
 from skaldr.publish.connector import Connector, ConnectorRegistry, ContentLimit
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, section_part
+from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
 from skaldr.services import SERVICE_NAMES
 
@@ -150,10 +150,14 @@ def _item_draft(
             title=page.title,
             sections=dict(zip(keys, texts, strict=True)),
             fields=context.target.fields_for(section_id),
+            icon=page.icon,
+            cover=page.cover,
         ),
         {
             TITLE: title_path,
             FIELDS: context.fields_path(section_id),
+            ICON: "meta.icon",
+            **({COVER: "meta.cover"} if section_id is None else {}),
             **{
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
             },

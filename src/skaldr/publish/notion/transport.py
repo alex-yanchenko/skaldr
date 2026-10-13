@@ -9,6 +9,12 @@ from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
 from skaldr.publish.content import ItemContent, Part, is_unset, placed_section
 from skaldr.publish.notion.api import NotionApi
+from skaldr.publish.notion.icon_and_cover import (
+    cover_text,
+    icon_and_cover_to_change,
+    icon_and_cover_to_set,
+    icon_text,
+)
 from skaldr.publish.notion.page_markdown import (
     KeyedPage,
     Replacement,
@@ -264,10 +270,14 @@ class NotionTransport:
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
         properties = {**title, **self._property_requests(page, values)}
+        body: JsonFields = {
+            **({"properties": properties} if properties else {}),
+            **icon_and_cover_to_change(request),
+        }
         if stamp is None:
             markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp)
-        if properties:
-            page = self._api.update_page(item_id, {"properties": properties})
+        if body:
+            page = self._api.update_page(item_id, body)
         return self._remote(item_id, page, markdown, layout)
 
     def archive_item(self, item_id: str, /) -> None:
@@ -317,7 +327,13 @@ class NotionTransport:
         edited_at = page.last_edited_time.isoformat()
         return RemoteItem(
             item_id,
-            ItemContent(title=title_text(page), sections=keyed.sections, fields=property_fields(page)),
+            ItemContent(
+                title=title_text(page),
+                sections=keyed.sections,
+                fields=property_fields(page),
+                icon=icon_text(page),
+                cover=cover_text(page),
+            ),
             keyed.raw_sections,
             keyed.stamp,
             marker=edited_at,
@@ -413,7 +429,12 @@ class NotionTransport:
             **title_request(request.content.title, parent.title_name),
             **_property_requests(parent.property_kinds, values, f"Notion database {parent.page_id}"),
         }
-        return {"parent": parent.request, "properties": properties, "markdown": joined([*first_batch, stamp])}
+        return {
+            "parent": parent.request,
+            "properties": properties,
+            **icon_and_cover_to_set(request.content),
+            "markdown": joined([*first_batch, stamp]),
+        }
 
     def _finish_create(
         self, item_id: str, content: ItemContent, later_batches: Sequence[Sequence[str]]
@@ -430,26 +451,27 @@ class NotionTransport:
         self._published[key] = layout
         return self._remote(item_id, self._live_page(item_id), markdown, layout)
 
-    def _into_properties(self, item_id: str, request: NewItem) -> JsonFields:
+    def _into_page_request(self, item_id: str, request: NewItem) -> JsonFields:
         self._unchanged_since_read(item_id, request.into_raw_sections)
         page = self._live_page(item_id)
         values = {name: value for name, value in request.content.fields.items() if not is_unset(value)}
-        return {
+        properties = {
             **title_request(request.content.title, title_property_name(page)),
             **self._property_requests(page, values),
         }
+        return {"properties": properties, **icon_and_cover_to_set(request.content)}
 
     def _create_into(self, item_id: str, request: NewItem) -> RemoteItem:
         content = request.content
         stamp = stamp_line(request.stamp)
         batches = _create_batches(list(content.sections.values()), stamp)
-        properties = _with_nothing_sent(lambda: self._into_properties(item_id, request))
+        page_request = _with_nothing_sent(lambda: self._into_page_request(item_id, request))
         _refused_or_unknown(
             lambda: self._api.update_markdown(item_id, _replace_content(joined([*batches[0], stamp])))
         )
 
         def finish() -> RemoteItem:
-            self._api.update_page(item_id, {"properties": properties})
+            self._api.update_page(item_id, page_request)
             return self._finish_create(item_id, content, batches[1:])
 
         return _finished_after_a_change(item_id, content.title, finish)

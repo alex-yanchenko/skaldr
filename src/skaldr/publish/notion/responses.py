@@ -19,6 +19,8 @@ READ_PROPERTY_TYPES = (
     "files",
 )
 OTHER_PROPERTY = "other"
+READ_IMAGE_TYPES = ("emoji", "external", "file", "custom_emoji", "icon")
+OTHER_IMAGE = "other"
 
 
 class NotionResponse(BaseModel):
@@ -131,13 +133,17 @@ class OtherValue(NotionResponse):
     type: str
 
 
-def _property_kind(value: object) -> str:
+def _kind_among(value: object, kinds: tuple[str, ...], other: str) -> str:
     kind: object = (
         cast("dict[str, object]", value).get("type")
         if isinstance(value, dict)
         else getattr(value, "type", None)
     )
-    return kind if isinstance(kind, str) and kind in READ_PROPERTY_TYPES else OTHER_PROPERTY
+    return kind if isinstance(kind, str) and kind in kinds else other
+
+
+def _property_kind(value: object) -> str:
+    return _kind_among(value, READ_PROPERTY_TYPES, OTHER_PROPERTY)
 
 
 PropertyValue = Annotated[
@@ -160,6 +166,62 @@ PropertyValue = Annotated[
 ]
 
 
+class LinkedFile(NotionResponse):
+    url: str
+
+
+class CustomEmoji(NotionResponse):
+    id: str
+
+
+class NativeIcon(NotionResponse):
+    name: str
+    color: str | None = None
+
+
+class EmojiImage(NotionResponse):
+    type: Literal["emoji"]
+    emoji: str
+
+
+class ExternalImage(NotionResponse):
+    type: Literal["external"]
+    external: LinkedFile
+
+
+class UploadedImage(NotionResponse):
+    type: Literal["file"]
+
+
+class CustomEmojiImage(NotionResponse):
+    type: Literal["custom_emoji"]
+    custom_emoji: CustomEmoji
+
+
+class NativeIconImage(NotionResponse):
+    type: Literal["icon"]
+    icon: NativeIcon
+
+
+class OtherImage(NotionResponse):
+    type: str
+
+
+def _image_kind(value: object) -> str:
+    return _kind_among(value, READ_IMAGE_TYPES, OTHER_IMAGE)
+
+
+PageImage = Annotated[
+    Annotated[EmojiImage, Tag("emoji")]
+    | Annotated[ExternalImage, Tag("external")]
+    | Annotated[UploadedImage, Tag("file")]
+    | Annotated[CustomEmojiImage, Tag("custom_emoji")]
+    | Annotated[NativeIconImage, Tag("icon")]
+    | Annotated[OtherImage, Tag(OTHER_IMAGE)],
+    Discriminator(_image_kind),
+]
+
+
 class Page(NotionResponse):
     object: Literal["page"]
     id: str
@@ -167,6 +229,8 @@ class Page(NotionResponse):
     last_edited_by: PartialUser
     in_trash: bool
     properties: dict[str, PropertyValue]
+    icon: PageImage | None = None
+    cover: PageImage | None = None
 
 
 class PageMarkdown(NotionResponse):

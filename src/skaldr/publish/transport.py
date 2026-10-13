@@ -116,6 +116,18 @@ class FieldsWrite:
     previous_title: str
     previous_fields: JsonFields
     stamp: Stamp
+    icon: str | None = None
+    cover: str | None = None
+    previous_icon: str | None = None
+    previous_cover: str | None = None
+
+    @property
+    def changes_the_icon(self) -> bool:
+        return self.icon != self.previous_icon
+
+    @property
+    def changes_the_cover(self) -> bool:
+        return self.cover != self.previous_cover
 
     @property
     def changed_fields(self) -> JsonFields:

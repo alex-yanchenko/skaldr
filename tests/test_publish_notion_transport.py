@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, differing_parts
+from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, differing_parts
 from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
 from skaldr.publish.notion.transport import NotionTransport
@@ -42,6 +42,14 @@ DATABASE_TARGET = NotionTarget.model_validate(make_notion_target())
 PAGE_TARGET = NotionTarget.model_validate(make_notion_target(where={"parent_page": PARENT_PAGE_ID}))
 FIRST_PAGE = numbered_id(1).replace("-", "")
 EMPTY_ROW = numbered_id(900).replace("-", "")
+SEEDLING = "🌱"
+SUNFLOWER = "🌻"
+COVER_URL = "https://example.com/garden.png"
+UPLOADED = "a file uploaded to Notion"
+CUSTOM_EMOJI_ID = "c0ffee00-0000-4000-8000-0000000000e1"
+SEEDLING_ICON = {"type": "emoji", "emoji": SEEDLING}
+GARDEN_COVER = {"type": "external", "external": {"url": COVER_URL}}
+LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
 
 
 def _notion() -> InMemoryNotion:
@@ -801,6 +809,191 @@ def test_a_section_write_to_a_page_edited_since_it_was_read_writes_nothing() -> 
             created.item_id, SectionRequest(AddSection("care", "## Care\n", "tools"), created.raw_sections)
         )
     assert notion.writes() == []
+
+
+def test_a_page_is_created_with_the_icon_as_an_emoji_and_the_cover_as_an_external_image() -> None:
+    notion = _notion()
+    transport = notion.transport()
+
+    created = transport.create_item(NewItem(PAGE_TARGET, STAMP, LOOKING))
+
+    assert ([body for method, _, body in _sent(notion) if method == "POST"], created.comparable) == (
+        [
+            {
+                "parent": {"page_id": PARENT_PAGE_ID},
+                "properties": _title("Garden handbook"),
+                "icon": SEEDLING_ICON,
+                "cover": GARDEN_COVER,
+                "markdown": f"{WELCOME}{PLANTING}{STAMP_LINE}\n",
+                "allow_async": True,
+            }
+        ],
+        LOOKING,
+    )
+
+
+def test_an_icon_and_cover_that_changed_are_set_and_cleared_without_the_properties() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+
+    written = transport.write_fields(
+        created.item_id,
+        FieldsWrite(
+            CONTENT.title,
+            {},
+            CONTENT.title,
+            {},
+            STAMP,
+            icon=SUNFLOWER,
+            cover=None,
+            previous_icon=SEEDLING,
+            previous_cover=COVER_URL,
+        ),
+    )
+
+    assert (_patches(notion), written.comparable) == (
+        [{"icon": {"type": "emoji", "emoji": SUNFLOWER}, "cover": None}],
+        CONTENT.model_copy(update={"icon": SUNFLOWER}),
+    )
+
+
+def test_an_icon_and_cover_that_did_not_change_are_not_sent() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+
+    transport.write_fields(
+        created.item_id,
+        FieldsWrite(
+            "Garden guide",
+            {},
+            CONTENT.title,
+            {},
+            STAMP,
+            icon=SEEDLING,
+            cover=COVER_URL,
+            previous_icon=SEEDLING,
+            previous_cover=COVER_URL,
+        ),
+    )
+
+    assert _patches(notion) == [{"properties": _title("Garden guide")}]
+
+
+def _uploaded(signature: str) -> dict[str, Any]:
+    url = f"https://files.example.com/space/trowel.png?signature={signature}"
+    return {"type": "file", "file": {"url": url, "expiry_time": "2026-10-09T13:00:00.000Z"}}
+
+
+@pytest.mark.parametrize(
+    ("icon", "cover", "expected", "edited"),
+    [
+        pytest.param(
+            {"type": "emoji", "emoji": "🔥"},
+            GARDEN_COVER,
+            ("🔥", COVER_URL),
+            (ICON,),
+            id="emoji-and-external",
+        ),
+        pytest.param(
+            {"type": "external", "external": {"url": "https://example.com/leaf.png"}},
+            None,
+            ("https://example.com/leaf.png", None),
+            (ICON, COVER),
+            id="external-icon",
+        ),
+        pytest.param(
+            {"type": "custom_emoji", "custom_emoji": {"id": CUSTOM_EMOJI_ID, "name": "trowel"}},
+            _uploaded("first"),
+            (f"Notion custom emoji {CUSTOM_EMOJI_ID}", UPLOADED),
+            (ICON, COVER),
+            id="custom-emoji-and-uploaded-cover",
+        ),
+        pytest.param(
+            {"type": "icon", "icon": {"name": "pizza", "color": "blue"}},
+            {"type": "gallery"},
+            ("Notion icon pizza (blue)", "a Notion gallery cover"),
+            (ICON, COVER),
+            id="native-icon-and-an-unknown-cover",
+        ),
+        pytest.param(_uploaded("first"), GARDEN_COVER, (UPLOADED, COVER_URL), (ICON,), id="uploaded-icon"),
+        pytest.param(
+            {"type": "sticker"},
+            GARDEN_COVER,
+            ("a Notion sticker icon", COVER_URL),
+            (ICON,),
+            id="unknown-icon",
+        ),
+    ],
+)
+def test_each_kind_of_icon_and_cover_a_person_sets_reads_as_a_remote_edit(
+    icon: dict[str, Any],
+    cover: dict[str, Any] | None,
+    expected: tuple[str | None, str | None],
+    edited: tuple[Part, ...],
+) -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+    notion.set_look_by_hand(created.item_id, icon=icon, cover=cover)
+
+    read = transport.read_item(created.item_id, created.comparable)
+
+    assert (
+        (read.comparable.icon, read.comparable.cover),
+        differing_parts(created.comparable, read.comparable),
+    ) == (
+        expected,
+        edited,
+    )
+
+
+def test_an_uploaded_icon_and_cover_read_the_same_after_notion_signs_their_addresses_again() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+    notion.set_look_by_hand(created.item_id, icon=_uploaded("first"), cover=_uploaded("first"))
+    first = transport.read_item(created.item_id, created.comparable)
+    notion.set_look_by_hand(created.item_id, icon=_uploaded("second"), cover=_uploaded("second"))
+
+    second = transport.read_item(created.item_id, created.comparable)
+
+    assert (differing_parts(first.comparable, second.comparable), second.comparable.icon) == ((), UPLOADED)
+
+
+def test_writing_into_a_page_sets_the_icon_and_cover_with_its_title_and_fields() -> None:
+    notion = _notion()
+    transport = notion.transport()
+    raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
+    notion.requests.clear()
+
+    transport.create_item(
+        NewItem(
+            DATABASE_TARGET,
+            STAMP,
+            LOOKING.model_copy(update={"fields": {"Area": "Shed"}}),
+            into_id=EMPTY_ROW,
+            into_raw_sections=raw,
+        )
+    )
+
+    assert _patches(notion)[1:] == [
+        {
+            "properties": {**_title("Garden handbook", "Name"), "Area": _text("Shed")},
+            "icon": SEEDLING_ICON,
+            "cover": GARDEN_COVER,
+        }
+    ]
+
+
+def test_writing_into_a_page_without_an_icon_or_cover_keeps_the_ones_it_has() -> None:
+    notion = _notion()
+    notion.set_look_by_hand(EMPTY_ROW, icon={"type": "emoji", "emoji": "🔥"}, cover=GARDEN_COVER)
+
+    _write_into_the_empty_row(notion, {})
+
+    assert (_patches(notion)[1:], notion.pages[EMPTY_ROW].icon, notion.pages[EMPTY_ROW].cover) == (
+        [{"properties": _title("Garden handbook", "Name")}],
+        {"type": "emoji", "emoji": "🔥"},
+        GARDEN_COVER,
+    )
 
 
 def test_a_content_write_keeps_the_child_pages_of_a_section_it_removes() -> None:
