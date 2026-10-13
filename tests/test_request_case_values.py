@@ -7,13 +7,14 @@ import pytest
 import yaml
 
 from skaldr.cli import main
-from skaldr.compute import command_for, reader_variables, request_wire
+from skaldr.compute import command_for, query_text_for, reader_variables, request_wire
 from skaldr.errors import ReportError
 from skaldr.models import Request, RequestFlow, parse_report, unresolvable_request_variables
 from skaldr.render import render_html
 from tests.factories import (
     make_command_request,
     make_flow,
+    make_query_request,
     make_report,
     make_request,
     make_step,
@@ -183,6 +184,37 @@ def test_a_variable_only_some_cases_bind_stays_a_field_for_the_cases_that_leave_
     block = _parsed_request(_command_request(cases=cases))
 
     assert [variable.name for variable in reader_variables(block)] == ["seq"]
+
+
+def _query_request_with_values() -> Request:
+    return _parsed_request(
+        make_query_request(
+            query={
+                "runner": "mongosh, orders database",
+                "lang": "json",
+                "content": '[{"$match": {"status": "{{status}}", "region": "{{region}}"}}]',
+            },
+            variables=[{"name": "status"}, {"name": "region"}],
+            cases=[
+                {"label": "Open", "values": {"status": "open"}, "response": OK},
+                {"label": "Closed", "values": {"status": "closed"}, "response": OK},
+            ],
+        )
+    )
+
+
+def test_a_query_case_fills_the_query_text_from_its_values() -> None:
+    block = _query_request_with_values()
+
+    assert block.query is not None
+    assert [query_text_for(block.query, block, case) for case in block.cases] == [
+        '[{"$match": {"status": "open", "region": "{{region}}"}}]',
+        '[{"$match": {"status": "closed", "region": "{{region}}"}}]',
+    ]
+
+
+def test_a_query_request_leaves_a_field_only_for_what_its_cases_do_not_bind() -> None:
+    assert [variable.name for variable in reader_variables(_query_request_with_values())] == ["region"]
 
 
 def test_a_block_with_no_values_keeps_every_declared_variable_as_a_field() -> None:

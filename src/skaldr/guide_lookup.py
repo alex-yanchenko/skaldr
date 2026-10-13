@@ -154,7 +154,14 @@ class _Guide:
         prefixed = [
             section for section in self.sections if _plain(section.title).casefold().startswith(wanted)
         ]
-        return prefixed[0] if len(prefixed) == 1 and wanted else None
+        if prefixed:
+            return prefixed[0] if len(prefixed) == 1 and wanted else None
+        word_prefixed = [
+            section
+            for section in self.sections
+            if any(word.startswith(wanted) for word in _plain(section.title).casefold().split())
+        ]
+        return word_prefixed[0] if len(word_prefixed) == 1 and wanted else None
 
     def blocks_table_rows(self, name: str) -> str | None:
         blocks = self.section_named(_BLOCKS_SECTION)

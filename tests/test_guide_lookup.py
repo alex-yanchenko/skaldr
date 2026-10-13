@@ -153,6 +153,21 @@ def test_an_ambiguous_title_prefix_is_unknown() -> None:
         lookup("o", SMALL_GUIDE.replace("## Other", "## Other\n\n## Over"))
 
 
+def test_a_unique_word_prefix_finds_the_section_when_no_title_starts_with_it() -> None:
+    assert lookup("tex", SMALL_GUIDE) == "## Rich text\n\nRich prose."
+
+
+def test_an_ambiguous_word_prefix_is_unknown() -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("tex", SMALL_GUIDE.replace("## Other", "## Another text"))
+
+
+def test_a_title_prefix_wins_over_a_word_prefix_in_another_title() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Tex starts here")
+
+    assert lookup("tex", guide) == "## Tex starts here"
+
+
 def test_a_block_name_wins_over_a_section_with_the_same_title() -> None:
     guide = SMALL_GUIDE.replace("## Other", "## Divider\n\nSection prose.")
 
@@ -192,7 +207,7 @@ def test_string_and_integer_literals_print_with_their_repr(capsys: pytest.Captur
 
     assert (
         "  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | null, default null. "
-        "The HTTP method. Required unless the call runs a `command`."
+        "The HTTP method. Required unless the call runs a `command` or records a `query`."
     ) in request_lines
     assert next(line for line in heading_lines if line.startswith("  level:")).startswith(
         "  level: 2 | 3 | 4, default 2."

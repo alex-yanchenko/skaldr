@@ -23,7 +23,7 @@ uv run skaldr ...           # uv uses the system Python ≥ 3.10
 2. **Write the YAML from real evidence.** Never invent numbers to fill the template.
 3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion,
    `skaldr report.yaml --export markdown` or `--export notion` writes the same document as
-   Markdown instead.
+   Markdown instead, and `--export adf` as the JSON a Jira issue description takes.
 4. **Done = skaldr prints `OK` and the output file exists.** A structural mistake fails the build
    with a precise path (`blocks.3.items.2.value: ...`); read it, fix, re-run.
 

@@ -7,6 +7,7 @@ from typing import Annotated, Final, Literal, get_args
 from pydantic import StringConstraints, ValidationError
 
 from skaldr.errors import ReportError
+from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
 from skaldr.export.budget import character_budget
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
@@ -21,14 +22,18 @@ __all__ = [
     "EXPORT_TARGETS",
     "ExportResult",
     "ExportTarget",
+    "export_adf",
     "export_markdown",
     "export_notion",
 ]
 
-ExportTarget = Literal[NotionService, "markdown"]
+ExportTarget = Literal[NotionService, "markdown", "adf"]
 EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
-ExportedPageName = Annotated[str, StringConstraints(pattern=r"^page(?:\.[0-9]{2,})?\.md$")]
+ADF_PAGE_NAME: Final = "page.adf.json"
+ExportedPageName = Annotated[
+    str, StringConstraints(pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|page\.adf\.json)$")
+]
 
 
 class ExportManifest(FrozenModel):
@@ -132,3 +137,15 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:
     document = lower_report(report)
     return _export_pages(out_dir, document.title, {"page.md": render_markdown_document(document)})
+
+
+def export_adf(report: Report, out_dir: Path) -> ExportResult:
+    document = lower_report(report)
+    adf = render_adf_document(document)
+    size = compact_adf_length(adf)
+    over_the_limit = (
+        (f"the ADF description is {size:,} characters, over Jira's limit of {JIRA_DESCRIPTION_LIMIT:,}",)
+        if size > JIRA_DESCRIPTION_LIMIT
+        else ()
+    )
+    return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)

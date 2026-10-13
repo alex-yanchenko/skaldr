@@ -4,8 +4,12 @@ from dataclasses import replace
 from skaldr.richtext import (
     AnchorLink,
     Code,
+    DateMention,
+    DocumentLink,
     InlineMath,
+    IssueLink,
     Link,
+    PersonMention,
     Plain,
     Rich,
     RichContext,
@@ -45,7 +49,7 @@ def _on_one_line(run: Run) -> Run:
             return Code(LINE_ENDING.sub(" ", run.text))
         case InlineMath():
             return InlineMath(LINE_ENDING.sub(" ", run.expression))
-        case Link() | AnchorLink():
+        case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
             return replace(run, label=tuple(map(_on_one_line, run.label)))
         case Styled() | Tinted():
             return replace(run, runs=tuple(map(_on_one_line, run.runs)))

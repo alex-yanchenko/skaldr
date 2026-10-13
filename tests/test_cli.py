@@ -17,7 +17,7 @@ from skaldr.models import Report, load_report, parse_report
 from skaldr.render import render_embed, render_html
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
-from tests.factories import make_reconciled_table, make_report
+from tests.factories import make_query_request, make_reconciled_table, make_report
 
 _UNKNOWN_TONE_TEXT = "x [a]{tone=x}"
 _UNKNOWN_TONE_MESSAGE = (
@@ -1070,6 +1070,75 @@ def test_check_validates_through_an_include(tmp_path: Path, capsys: pytest.Captu
     assert "oops" in captured.err  # the fragment's bad field, not a generic splice failure
 
 
+def test_emit_json_carries_a_web_image_and_a_media_block(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [
+        {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", "caption": "Bins"},
+        {"type": "media", "kind": "video", "src": "https://example.com/walk.mp4", "caption": "Dock walk"},
+    ]
+    data_path = _write(tmp_path, make_report(blocks=blocks))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["blocks"] == [
+        {
+            "type": "image",
+            "src": "https://example.com/aisle.png",
+            "alt": "Aisle 12",
+            "caption": "Bins",
+            "max_width": None,
+            "span": None,
+        },
+        {
+            "type": "media",
+            "kind": "video",
+            "src": "https://example.com/walk.mp4",
+            "caption": "Dock walk",
+            "span": None,
+        },
+    ]
+
+
+def test_emit_json_dumps_the_people_and_the_jira_site(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    meta = {
+        "title": "T",
+        "jira_site": "https://example.atlassian.net",
+        "people": {"ada": {"jira": "5b10a2844c20165700ede21g"}},
+    }
+    data_path = _write(tmp_path, make_report(meta=meta))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    captured = capsys.readouterr()
+    emitted = json.loads(captured.out)["meta"]
+    assert (exit_code, emitted["jira_site"], emitted["people"]) == (
+        0,
+        "https://example.atlassian.net",
+        {"ada": {"notion": None, "jira": "5b10a2844c20165700ede21g"}},
+    )
+
+
+def test_check_fails_a_person_link_missing_from_the_people_map(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "[Ada](user:ada)"}]))
+
+    exit_code = main(["--check", str(data_path)])
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        (
+            "",
+            f"FAIL  {data_path}: blocks.0.body: rich text links to unknown person 'ada': "
+            "declare it under meta.people\n\n1 file failed\n",
+        ),
+    )
+
+
 def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "blocks.yaml").write_text("- type: text\n  body: from fragment\n", encoding="utf-8")
     main_path = tmp_path / "main.yaml"
@@ -1082,6 +1151,21 @@ def test_emit_json_flattens_an_include(tmp_path: Path, capsys: pytest.CaptureFix
     assert json.loads(captured.out)["blocks"] == [
         {"type": "text", "body": "from fragment", "muted": False, "span": None}
     ]
+
+
+def test_emit_json_carries_a_requests_query_with_its_runner_language_and_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[make_query_request()]))
+
+    exit_code = main(["--emit-json", str(data_path)])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["blocks"][0]["query"] == {
+        "runner": "mongosh, orders database",
+        "lang": "json",
+        "content": '[{"$match": {"status": "open"}}, {"$count": "n"}]',
+    }
 
 
 def test_render_rejects_multiple_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
