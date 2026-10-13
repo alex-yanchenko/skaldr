@@ -1,6 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Final
 from urllib.parse import quote
 
@@ -9,7 +10,7 @@ from typing_extensions import assert_never
 from skaldr.export.glyphs import gauge_bar, mark_glyph
 from skaldr.export.runs import Chip, Gauge, Mark
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
-from skaldr.models import ToneLiteral
+from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName, TextRunWriter
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -123,6 +124,18 @@ class MarkupRuns(TextRunWriter, ABC):
 
     def link(self, label: str, url: str, /) -> str:
         return f"[{label}]({encode_url(url)})"
+
+    def date_mention(self, label: str, _start: date, _end: date | None, /) -> str:
+        return label
+
+    def person_mention(self, label: str, _key: str, _person: Person, /) -> str:
+        return label
+
+    def issue_link(self, label: str, _key: str, url: str | None, /) -> str:
+        return self.link(label, url) if url else label
+
+    def document_link(self, label: str, _doc_id: str, _section: str | None, /) -> str:
+        return label
 
     def citation(self, run: Citation, /) -> str:
         label = self.escape(f"[{run.number}]")

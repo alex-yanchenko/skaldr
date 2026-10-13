@@ -1,6 +1,7 @@
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from typing import Final
 
 from typing_extensions import assert_never
@@ -45,7 +46,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
-from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, ToneLiteral
+from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, Person, ToneLiteral
 from skaldr.richtext import ScriptPosition
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
@@ -137,6 +138,15 @@ class _NotionRuns(MarkupRuns):
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
+
+    def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
+        finish = f' end="{end.isoformat()}"' if end else ""
+        return f'<mention-date start="{start.isoformat()}"{finish}/>'
+
+    def person_mention(self, label: str, _key: str, person: Person, /) -> str:
+        if person.notion is None:
+            return label
+        return f'<mention-user url="{person.notion}">{label}</mention-user>'
 
     def placeholder(self, name: str, /) -> str:
         return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'

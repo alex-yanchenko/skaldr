@@ -189,6 +189,9 @@ class _MarkdownRuns(MarkupRuns):
         slug = self.heading_slugs.get(anchor)
         return f"[{label}](#{slug})" if slug else label
 
+    def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
+        return self.link(label, f"{doc_id}.md")
+
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
 
