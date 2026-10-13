@@ -186,6 +186,8 @@ To show a literal `{{`, put it in a `` `code` `` span. A blank inside a link lab
 bracket text around the blank's chip, so `[the PR](https://host/pull/{{pr}})` is counted like any
 other blank until you fill in the URL.
 
+A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts too, even though those fields are plain text and show the `{{name}}` as written.
+
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
   you run before "final".
@@ -207,12 +209,6 @@ meta:
   updated: "{{date}}"
   toc: true
 
-badges:
-  DONE: { label: "Done", tone: green, legend: "Finished and checked." }
-  CURRENT: { label: "Current", tone: blue, legend: "Being worked on now." }
-  PENDING: { label: "Pending", tone: slate, legend: "Not started." }
-  BLOCKED: { label: "Blocked", tone: red, legend: "Waiting on something named in the step." }
-
 blocks:
   - { type: heading, text: "Intent" }
   - type: callout
@@ -233,15 +229,6 @@ blocks:
       - { state: current, text: "{{step-in-progress}}" }
       - { state: pending, text: "{{step-not-started}}" }
       - { state: blocked, text: "{{step-waiting-on-something}}" }
-  - type: table
-    columns:
-      - { key: step, label: "Step", kind: text }
-      - { key: state, label: "State", kind: badge }
-    rollup: { by: state, label: "Done of total" }
-    rows:
-      - { step: "{{finished-step}}", state: DONE }
-      - { step: "{{step-in-progress}}", state: CURRENT }
-      - { step: "{{step-not-started}}", state: PENDING }
 
   - { type: heading, text: "Next" }
   - type: list

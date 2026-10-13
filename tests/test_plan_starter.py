@@ -5,14 +5,16 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.guide_lookup import lookup
-from skaldr.models import package_text
+from skaldr.models import package_text, parse_report
+from skaldr.render import find_placeholders
+from tests.factories import make_report
 
 GUIDE = package_text("skill/GUIDE.md")
 STARTER = package_text("skill/plan-starter.yaml")
 STARTER_PLACEHOLDERS = (
-    "decision-one, decision-two, finished-step, first-action, mistake-to-avoid, reason-one, reason-two, "
-    "second-action, step-in-progress, step-not-started, step-waiting-on-something, "
-    "what-done-looks-like-and-why-it-matters"
+    "date, decision-one, decision-two, finished-step, first-action, mistake-to-avoid, one-line-summary, "
+    "plan-title, reason-one, reason-two, second-action, step-in-progress, step-not-started, "
+    "step-waiting-on-something, what-done-looks-like-and-why-it-matters"
 )
 GUIDE_STARTER_SECTION = re.compile(r"^## Working plan starter\n(.*?)(?=^## |\Z)", re.DOTALL | re.MULTILINE)
 FENCED_YAML = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
@@ -31,7 +33,7 @@ def test_the_starter_builds_as_it_is(tmp_path: Path, capsys: pytest.CaptureFixtu
 
     assert (exit_code, capsys.readouterr().out) == (
         0,
-        f"OK    {path}  (12 unfilled placeholders: {STARTER_PLACEHOLDERS})\n",
+        f"OK    {path}  (15 unfilled placeholders: {STARTER_PLACEHOLDERS})\n",
     )
 
 
@@ -46,7 +48,7 @@ def test_the_starter_fails_the_strict_check_naming_every_placeholder(
     assert (exit_code, captured.out, captured.err) == (
         1,
         "",
-        f"FAIL  {path}: 12 unfilled placeholders: {STARTER_PLACEHOLDERS}\n\n1 file failed\n",
+        f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n\n1 file failed\n",
     )
 
 
@@ -125,3 +127,26 @@ def test_new_without_exactly_a_kind_and_a_file_prints_its_usage(
         "",
         "error: usage: skaldr new <kind> <file>; the kinds are plan\n",
     )
+
+
+def test_placeholders_in_the_title_subtitle_date_and_updated_are_unfilled_blanks() -> None:
+    report = parse_report(
+        make_report(
+            meta={
+                "title": "{{plan-title}}",
+                "subtitle": ["{{first-line}}", "kept as written", "{{second-line}}"],
+                "date": "{{when}}",
+                "updated": "{{refreshed}}",
+            }
+        )
+    )
+
+    assert find_placeholders(report) == ["first-line", "plan-title", "refreshed", "second-line", "when"]
+
+
+def test_a_document_with_no_placeholders_has_no_unfilled_blanks() -> None:
+    report = parse_report(
+        make_report(meta={"title": "Plain", "subtitle": ["a line"], "date": "Q3", "updated": "today"})
+    )
+
+    assert find_placeholders(report) == []

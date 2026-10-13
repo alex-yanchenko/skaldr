@@ -5,12 +5,6 @@ meta:
   updated: "{{date}}"
   toc: true
 
-badges:
-  DONE: { label: "Done", tone: green, legend: "Finished and checked." }
-  CURRENT: { label: "Current", tone: blue, legend: "Being worked on now." }
-  PENDING: { label: "Pending", tone: slate, legend: "Not started." }
-  BLOCKED: { label: "Blocked", tone: red, legend: "Waiting on something named in the step." }
-
 blocks:
   - { type: heading, text: "Intent" }
   - type: callout
@@ -31,15 +25,6 @@ blocks:
       - { state: current, text: "{{step-in-progress}}" }
       - { state: pending, text: "{{step-not-started}}" }
       - { state: blocked, text: "{{step-waiting-on-something}}" }
-  - type: table
-    columns:
-      - { key: step, label: "Step", kind: text }
-      - { key: state, label: "State", kind: badge }
-    rollup: { by: state, label: "Done of total" }
-    rows:
-      - { step: "{{finished-step}}", state: DONE }
-      - { step: "{{step-in-progress}}", state: CURRENT }
-      - { step: "{{step-not-started}}", state: PENDING }
 
   - { type: heading, text: "Next" }
   - type: list
