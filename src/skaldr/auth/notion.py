@@ -348,7 +348,7 @@ class NotionSession:
     ) -> None:
         self._sign_in = sign_in
         self._transport = transport
-        self._took_the_stored_token = False
+        self._may_take_the_stored_token = True
         self._renewed_with_notion = False
 
     @property
@@ -364,11 +364,11 @@ class NotionSession:
         credentials = self._sign_in.credentials
         stored = _stored_for_the_same_workspace(credentials)
         if (
-            not self._took_the_stored_token
+            self._may_take_the_stored_token
             and stored is not None
             and stored.access_token != self.access_token
         ):
-            self._took_the_stored_token = True
+            self._may_take_the_stored_token = False
             self._sign_in = SignIn(stored, self._sign_in.source)
             return
         if self._renewed_with_notion:
@@ -381,7 +381,14 @@ class NotionSession:
         renewed = self._renewed(credentials)
         self._renewed_with_notion = True
         self._sign_in = SignIn(renewed, self._sign_in.source)
-        save_notion_returning_the_replaced(renewed)
+        try:
+            save_notion_returning_the_replaced(renewed)
+        except AuthError as unsaved:
+            self._may_take_the_stored_token = False
+            raise AuthError(
+                f"Notion renewed the sign-in but skaldr could not save the renewed sign-in ({unsaved}), so "
+                f"the stored sign-in may no longer work{SIGN_IN_AGAIN_SUFFIX}"
+            ) from None
 
     def _renewed(self, credentials: NotionCredentials) -> NotionCredentials:
         try:

@@ -6,12 +6,14 @@ import keyring
 import pytest
 from keyring.errors import KeyringError
 
+from skaldr.auth import store
 from skaldr.auth.notion import NotionSession, renewed_notion_credentials
 from skaldr.auth.store import NotionCredentials, SignIn, load_notion
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
     TOKEN_RESPONSE,
     InMemoryKeyring,
+    SlowSaveKeyring,
     WriteFailingKeyring,
     basic_auth_header,
     fake_api,
@@ -172,16 +174,54 @@ def test_a_refused_renewal_with_no_other_stored_refresh_token_says_to_sign_in_ag
     assert sent == ["refresh-token"]
 
 
-def test_a_renewed_token_is_used_even_when_the_keychain_refuses_to_save_it(keychain: InMemoryKeyring) -> None:
+def test_a_renewal_the_keychain_refuses_to_save_says_to_sign_in_again_and_keeps_the_renewed_token(
+    keychain: InMemoryKeyring,
+) -> None:
     seed_notion(make_notion_credentials())
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), []))
+    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen := []))
     failing = WriteFailingKeyring(KeyringError("locked"))
     failing.entries = dict(keychain.entries)
     keyring.set_keyring(failing)
 
-    with pytest.raises(AuthError, match=r"^The system keychain is unavailable: locked$"):
+    with pytest.raises(AuthError) as caught:
         session.renew()
-    assert session.access_token == "renewed-access"
+    with pytest.raises(AuthError) as renewed_again:
+        session.renew()
+
+    assert (str(caught.value), session.access_token, str(renewed_again.value), len(seen)) == (
+        "Notion renewed the sign-in but skaldr could not save the renewed sign-in (The system keychain is "
+        f"unavailable: locked), so the stored sign-in may no longer work{RUN_AUTH_AGAIN}",
+        "renewed-access",
+        f"Notion refused the renewed sign-in{RUN_AUTH_AGAIN}",
+        1,
+    )
+
+
+def test_a_renewal_whose_keychain_save_times_out_says_to_sign_in_again(
+    keychain: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_notion(make_notion_credentials())
+    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), []))
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
+    slow = SlowSaveKeyring()
+    slow.entries = dict(keychain.entries)
+    keyring.set_keyring(slow)
+
+    try:
+        with pytest.raises(AuthError) as caught:
+            session.renew()
+    finally:
+        slow.released.set()
+
+    assert (type(caught.value), str(caught.value), session.access_token) == (
+        AuthError,
+        "Notion renewed the sign-in but skaldr could not save the renewed sign-in (The system keychain did "
+        "not answer within 0.2 seconds; unlock it or answer its prompt, then run the command again. A change "
+        "skaldr asked for may still be applied if the keychain answers later), so the stored sign-in may no "
+        f"longer work{RUN_AUTH_AGAIN}",
+        "renewed-access",
+    )
 
 
 def test_a_sign_in_that_could_not_be_saved_after_renewal_is_not_renewed() -> None:
