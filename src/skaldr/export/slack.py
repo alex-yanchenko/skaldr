@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal
@@ -49,7 +49,7 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
-from skaldr.models import MEDIA_KIND_LABELS
+from skaldr.models import MEDIA_KIND_LABELS, InnerGrid, Report, Walkthrough
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
 SLACK_TARGET: Final = "slack"
@@ -262,6 +262,32 @@ def _table_over_the_cell_limit(cells: int, nearest_heading: str) -> ExportReject
         "split it into two tables or export it elsewhere",
         f"under the heading '{nearest_heading}'" if nearest_heading else None,
     )
+
+
+def _grid_in_a_walkthrough_step(path: str) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        "a Slack canvas cannot show a grid inside a walkthrough step, "
+        "since a canvas list item holds only text",
+        "move the grid out of the step, after the walkthrough",
+        f"at {path}",
+    )
+
+
+def _grids_in_walkthrough_steps(report: Report) -> Iterator[str]:
+    for path, block in report.located_blocks:
+        if not isinstance(block, Walkthrough):
+            continue
+        for step_index, step in enumerate(block.steps):
+            for index, detail in enumerate(step.detail):
+                if isinstance(detail, InnerGrid):
+                    yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
+
+
+def reject_what_a_canvas_cannot_show(report: Report) -> None:
+    first_grid = next(_grids_in_walkthrough_steps(report), None)
+    if first_grid is not None:
+        raise _grid_in_a_walkthrough_step(first_grid)
 
 
 def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:

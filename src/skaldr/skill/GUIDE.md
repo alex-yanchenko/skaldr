@@ -1462,7 +1462,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `[Ada](user:ada)` | the label as text |
 | a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
 
-A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, so a document whose canvas Markdown is longer fails the same way, naming its size.
+A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, so a document whose canvas Markdown is longer fails the same way, naming its size. A walkthrough step is a canvas list item, which holds only text, so a `grid` in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough.
 
 ## What you never write
 

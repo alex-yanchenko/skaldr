@@ -2,6 +2,7 @@ import json
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -676,6 +677,83 @@ def test_the_cli_writes_a_slack_export_under_out_named_for_the_file(
     assert main([str(data_path), "--export", "slack"]) == 0
 
     assert (tmp_path / "out" / "doc.slack" / "page.md").read_text(encoding="utf-8") == "Hello.\n"
+
+
+def _walkthrough_grid_message(walkthrough_index: int) -> str:
+    return (
+        "a Slack canvas cannot show a grid inside a walkthrough step, since a canvas list item holds only "
+        f"text, at blocks.{walkthrough_index}.walkthrough.steps.1.detail.1.grid; move the grid out of the "
+        "step, after the walkthrough"
+    )
+
+
+def _walkthrough_with_a_grid_in_its_second_step() -> dict[str, Any]:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "text", "body": "Action"}]},
+            {"span": 3, "blocks": [{"type": "code", "content": "recount --aisle 4"}]},
+        ],
+    }
+    return {
+        "type": "walkthrough",
+        "steps": [
+            {"label": "Freeze", "detail": [{"type": "text", "body": "Lock the aisle."}]},
+            {"label": "Scan", "detail": [{"type": "text", "body": "Twice."}, grid]},
+        ],
+    }
+
+
+def test_a_grid_inside_a_walkthrough_step_is_rejected_before_anything_is_written(tmp_path: Path) -> None:
+    blocks = [{"type": "heading", "text": "Recount"}, _walkthrough_with_a_grid_in_its_second_step()]
+    report = load_report(write_report(tmp_path, make_report(blocks=blocks)))
+    out_dir = tmp_path / "out"
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(report, out_dir)
+
+    assert (raised.value.target, str(raised.value), out_dir.exists()) == (
+        "slack",
+        _walkthrough_grid_message(1),
+        False,
+    )
+
+
+def test_a_walkthrough_whose_steps_hold_no_grid_exports() -> None:
+    walkthrough = {
+        "type": "walkthrough",
+        "steps": [{"label": "Freeze", "detail": [{"type": "text", "body": "Lock the aisle."}]}],
+    }
+
+    assert slack_of([walkthrough]) == "1. **Freeze** Lock the aisle.\n"
+
+
+def test_a_grid_outside_a_walkthrough_step_exports_as_a_layout() -> None:
+    grid = {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "text", "body": "left"}]},
+            {"span": 3, "blocks": [{"type": "text", "body": "right"}]},
+        ],
+    }
+
+    assert slack_of([grid]) == "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nright\n:::\n:::\n"
+
+
+def test_the_cli_refuses_a_grid_inside_a_walkthrough_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, make_report(blocks=[_walkthrough_with_a_grid_in_its_second_step()]))
+    export_dir = tmp_path / "exported"
+
+    assert main([str(data_path), "--export", "slack", "--export-dir", str(export_dir)]) == 1
+
+    captured = capsys.readouterr()
+    assert (captured.err, captured.out, export_dir.exists()) == (
+        f"error: {_walkthrough_grid_message(0)}\n",
+        "",
+        False,
+    )
 
 
 def test_the_cli_refuses_a_table_over_the_canvas_limit_and_writes_nothing(
