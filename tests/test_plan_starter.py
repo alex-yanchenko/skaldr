@@ -1,7 +1,9 @@
+import os
 import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from skaldr.cli import main
 from skaldr.guide_lookup import lookup
@@ -50,6 +52,43 @@ def test_the_starter_fails_the_strict_check_naming_every_placeholder(
         "",
         f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n\n1 file failed\n",
     )
+
+
+def test_the_literal_placeholder_list_is_the_starters_own_blanks_in_sorted_order() -> None:
+    blanks = sorted(set(re.findall(r"\{\{([A-Za-z0-9_-]+)\}\}", STARTER)))
+
+    assert ", ".join(blanks) == STARTER_PLACEHOLDERS
+
+
+def test_a_hand_filled_starter_passes_the_strict_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "filled.yaml"
+    path.write_text(re.sub(r"\{\{[A-Za-z0-9_-]+\}\}", "invented text", STARTER), encoding="utf-8")
+
+    exit_code = main(["--check", "--strict", str(path)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"OK    {path}\n")
+
+
+def test_the_starter_has_no_toc_and_a_neutral_open_questions_callout() -> None:
+    report = parse_report(yaml.safe_load(STARTER))
+
+    assert (report.meta.toc, report.blocks[-1].model_dump(include={"type", "tone", "title", "body"})) == (
+        False,
+        {
+            "type": "callout",
+            "tone": "info",
+            "title": "Open questions and blockers",
+            "body": 'List each open question and blocker here, or write "none".',
+        },
+    )
+
+
+def test_a_placeholder_in_the_meta_source_is_an_unfilled_blank() -> None:
+    report = parse_report(make_report(meta={"title": "Plain", "source": "from {{origin}}"}))
+
+    assert find_placeholders(report) == ["origin"]
 
 
 def test_the_guide_section_holds_the_starter_byte_for_byte() -> None:
@@ -115,7 +154,38 @@ def test_new_with_an_unknown_kind_lists_the_valid_kinds(
     )
 
 
-@pytest.mark.parametrize("arguments", [["new"], ["new", "plan"], ["new", "plan", "a.yaml", "b.yaml"]])
+def test_new_reports_a_write_that_fails_in_the_usual_error_form(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file, not a folder", encoding="utf-8")
+    target = blocker / "plan.yaml"
+
+    exit_code = main(["new", "plan", str(target)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err) == (
+        1,
+        "",
+        f"error: could not write {target}: [Errno 17] File exists: '{os.path.realpath(blocker)}'\n",
+    )
+
+
+def test_a_content_file_named_new_still_renders_when_given_as_a_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "new").write_text(yaml.safe_dump(make_report()), encoding="utf-8")
+
+    exit_code = main(["--check", "./new"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, "OK    new\n")
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["new"], ["new", "plan"], ["new", "plan", "a.yaml", "b.yaml"], ["new", "plan", "p.yaml", "--live"]],
+)
 def test_new_without_exactly_a_kind_and_a_file_prints_its_usage(
     arguments: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:

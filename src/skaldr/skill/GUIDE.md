@@ -201,13 +201,14 @@ A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts t
 
 `skaldr new plan plan.yaml` writes this file for you: copy it, replace each `{{placeholder}}` with real content, delete what the plan does not need, and run `skaldr --check --strict plan.yaml` until nothing is unfilled.
 
+Keep the plan file next to the work it tracks; in a public repository keep it out of git or in a private folder. After each edit run `skaldr plan.yaml -o plan.html --if-stale`, keep the Working state section current, and re-read the file after a context reset.
+
 ```yaml
 version: 1
 meta:
   title: "{{plan-title}}"
   subtitle: ["{{one-line-summary}}"]
   updated: "{{date}}"
-  toc: true
 
 blocks:
   - { type: heading, text: "Intent" }
@@ -244,9 +245,9 @@ blocks:
 
   - { type: heading, text: "Open questions" }
   - type: callout
-    tone: warning
-    title: "Blockers"
-    body: "none"
+    tone: info
+    title: "Open questions and blockers"
+    body: 'List each open question and blocker here, or write "none".'
 ```
 
 ## Numbers are formatted for you

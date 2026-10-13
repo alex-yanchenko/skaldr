@@ -143,7 +143,10 @@ def _run_new(arguments: list[str]) -> int:
     target = Path(file_name)
     if target.exists():
         return _fail(f"{target} already exists; pick another file name or delete it first")
-    replace_file(target, package_text(_NEW_KINDS[kind]))
+    try:
+        replace_file(target, package_text(_NEW_KINDS[kind]))
+    except OSError as err:
+        return _fail(f"could not write {target}: {err}")
     print(f"OK  wrote the {kind} starter to {target}")
     print(
         f"    fill in every {{{{placeholder}}}}, then render it: "

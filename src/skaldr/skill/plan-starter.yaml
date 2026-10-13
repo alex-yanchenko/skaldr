@@ -3,7 +3,6 @@ meta:
   title: "{{plan-title}}"
   subtitle: ["{{one-line-summary}}"]
   updated: "{{date}}"
-  toc: true
 
 blocks:
   - { type: heading, text: "Intent" }
@@ -40,6 +39,6 @@ blocks:
 
   - { type: heading, text: "Open questions" }
   - type: callout
-    tone: warning
-    title: "Blockers"
-    body: "none"
+    tone: info
+    title: "Open questions and blockers"
+    body: 'List each open question and blocker here, or write "none".'
