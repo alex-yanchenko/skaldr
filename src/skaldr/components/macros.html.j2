@@ -20,6 +20,10 @@
    <span> wrapper (not <div>) so it's valid inside the inline flow-node txt column too. #}
 {% macro chip_keys(keys) %}<span class="chips">{% for key in keys %}<span class="chip {{ badges[key].tone }}">{{ badges[key].label }}</span>{% endfor %}</span>{% endmacro %}
 
+{% macro section_fact_value(value) %}{% if value.kind == "chip" %}<span class="chip {{ value.tone }}">{{ value.text }}</span>{% elif value.kind == "person" %}<span class="person">{{ value.text }}</span>{% elif value.kind == "date" %}<time datetime="{{ value.text }}">{{ value.text }}</time>{% elif value.kind == "link" %}<a href="#{{ value.anchor }}">{{ value.text }}</a>{% else %}<span>{{ value.text }}</span>{% endif %}{% endmacro %}
+
+{% macro section_fact_strip(facts) %}{% if facts %}<div class="sfields">{% for fact in facts %}<span class="sf"><span class="k">{{ fact.label }}</span>{% for value in fact.values %}{{ section_fact_value(value) }}{% endfor %}</span>{% endfor %}</div>{% endif %}{% endmacro %}
+
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
 <summary>Legend: {{ badge_legend_subject }}</summary>
@@ -366,7 +370,7 @@
 {% elif block.type == "request_flow" %}
 {{ request_flow(block) }}
 {% elif block.type == "section" %}
-<details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+<details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% if block.fields %}{{ section_fact_strip(section_facts(block.fields)) }}{% endif %}{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "toggle" %}
 <details class="toggle"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "tabs" %}

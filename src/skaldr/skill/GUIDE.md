@@ -242,7 +242,7 @@ or to keep a small block from stretching across the whole page.
 | `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below), which runs any shell line, including a secret-manager wrapper such as `doppler run`, `op run` or `vault-run`, so the credential never enters the page, or a `query` for a database, SQL or MCP call | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`, **or** `query: {runner, lang, content}`; `variables?`, `case_variable?`, `cases: [{label, value? or values?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
 | `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command or query, case_variable?, cases (each with value? or values?, as in a request), captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
-| `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
+| `section` | Collapsible container | `title`, `id?` (stable anchor), `fields?` (status, priority, assignee, due, labels, estimate, links; see below), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card, one per "slide" in a deck-style doc | `title`, `blocks[]` |
 | `toggle` | Collapsible group for anywhere a block can go, with no TOC entry or anchor | `title`, `collapsed?` (default true), `blocks[]` |
 | `tabs` | Several panes shown one at a time, chosen from the label strip a multi-case `request` uses | `tabs: [{label, tone?, blocks[]}]` (2 to 24 tabs, distinct labels) |
@@ -300,6 +300,29 @@ Its optional `updated` shows a muted "updated <value>" stamp in the section head
 label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor, so a living-doc region can be both navigable and freshness-stamped.
+
+**Section `fields`.** A section may carry issue fields or page properties, shown as a fact strip at the top of its body (the HTML) or as a bulleted list under its heading (the GitHub and Notion Markdown). Every key is optional: `status`, `priority` (strings, shown as chips), `assignee` (a person key, shown as a person chip carrying the key), `due` (an ISO date such as `2026-10-15`; YAML reads it unquoted), `labels` (a list of strings, one chip each), `estimate` (a number) and `links`. `links` maps a link type to the ids of the sections it points at, such as `blocks: [st3]`; each id must be the `id` of a section in the document, or the build fails naming the missing id, and the HTML shows each as a link to that section. A link stays within one file: a section in an index's part can link to another section of the same part file, never to a section in a different part, because each part is checked on its own and the build fails naming the id. A key skaldr does not know is kept and shown as a generic chip, so a Jira custom field fits: its value is a string, a number or a list of strings and numbers, and a boolean, a mapping, null, a blank string, an empty list or a number that is not finite fails the build. Numbers show as written, without thousands separators, so `year: 2026` stays `2026`. A link type shows with its first letter upper-cased (`QA review` stays `QA review`), an extra key shows exactly as written, and two facts that would show under the same label, such as an extra key `Status` beside the `status` field, fail the build.
+
+```yaml
+- type: section
+  id: st2
+  title: "Widen the bin code"
+  collapsed: false
+  fields:
+    status: "In Progress"
+    priority: High
+    assignee: ada
+    due: 2026-10-15
+    labels: [onboarding]
+    estimate: 3
+    links: { blocks: [st3] }
+    team: "Floor ops"
+  blocks: [{ type: text, body: "Bin codes grow from four to six characters." }]
+- type: section
+  id: st3
+  title: "Relabel the aisles"
+  blocks: [{ type: text, body: "Print and hang the new aisle labels." }]
+```
 
 A `toggle` is the collapsible for everywhere a `section` cannot go: inside a section, a panel, a grid cell or a walkthrough step's detail, as well as at the top level. It looks like a section's collapse but gets no TOC entry and no anchor, so use it to tuck away detail rather than to mark a region. It starts collapsed like a section (`collapsed: false` opens it). What it holds depends on where it sits. At the top level, in a section, in a panel or in another such toggle it holds whatever a section holds, including a `request` or `request_flow`. In a grid cell, a walkthrough step's detail or a tab it holds any block except a section, panel, grid, walkthrough, request or request_flow. A toggle may hold another toggle, and a heading inside one still gets its anchor.
 

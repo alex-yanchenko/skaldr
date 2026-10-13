@@ -10,7 +10,15 @@ from pydantic import JsonValue
 from skaldr.errors import ReportError
 from skaldr.models import Report, load_report, package_path, parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import make_cell, make_grid, make_report, make_request, make_swimlane, make_table
+from tests.factories import (
+    make_cell,
+    make_grid,
+    make_report,
+    make_request,
+    make_section,
+    make_swimlane,
+    make_table,
+)
 
 
 class DocumentValidator(Protocol):
@@ -104,6 +112,49 @@ def test_an_example_document_passes_the_generated_schema(path: Path) -> None:
 
     load_report(path)
     assert schema_errors(document) == []
+
+
+SECTION_FIELDS = {
+    "status": "In Progress",
+    "due": "2026-10-15",
+    "labels": ["bins"],
+    "estimate": 2.5,
+    "team": "Floor ops",
+    "components": ["a", 4],
+    "links": {"blocks": ["st3"]},
+}
+
+
+def sections_with_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    return make_report(
+        blocks=[
+            make_section("st2", fields=fields),
+            make_section("st3"),
+        ]
+    )
+
+
+def test_section_fields_pass_both_the_build_and_the_schema() -> None:
+    document = sections_with_fields(SECTION_FIELDS)
+
+    parse_report(document)
+    assert schema_errors(document) == []
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({"team": {"name": "ops"}}, id="extra-mapping"),
+        pytest.param({"labels": []}, id="empty-labels"),
+        pytest.param({"links": {"blocks": []}}, id="empty-link-list"),
+    ],
+)
+def test_a_bad_section_field_is_refused_by_both_the_build_and_the_schema(fields: dict[str, Any]) -> None:
+    document = sections_with_fields(fields)
+
+    with pytest.raises(ReportError):
+        parse_report(document)
+    assert not SCHEMA_VALIDATOR.is_valid(document)
 
 
 SWIMLANE_STEP = {"lane": "Product", "col": "Sprint 1", "n": "1", "label": "Spec"}

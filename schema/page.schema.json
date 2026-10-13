@@ -4537,6 +4537,18 @@
           "description": "Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived slug so `[\u2026](#id)` links survive a title rename. Must be unique across the page.",
           "title": "Id"
         },
+        "fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SectionFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Issue fields and page properties shown as a fact strip under the title: status, priority, assignee, due, labels, estimate, `links` to other sections by id, and any extra key holding a string, a number or a list of them."
+        },
         "collapsed": {
           "default": true,
           "description": "Whether the section starts collapsed. Default true suits an appendix / detail; set false for a read-through living doc so the section opens expanded.",
@@ -4710,6 +4722,176 @@
         "blocks"
       ],
       "title": "Section",
+      "type": "object"
+    },
+    "SectionFields": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "maximum": 1e+300,
+            "minimum": -1e+300
+          },
+          {
+            "items": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maximum": 1e+300,
+                  "minimum": -1e+300
+                }
+              ]
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        ]
+      },
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workflow state, shown as a chip (e.g. `In Progress`).",
+          "title": "Status"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Priority, shown as a chip (e.g. `High`).",
+          "title": "Priority"
+        },
+        "assignee": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A person's key, shown as a person chip carrying the key.",
+          "title": "Assignee"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Due date, ISO `YYYY-MM-DD`.",
+          "title": "Due"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Labels, each shown as a chip.",
+          "title": "Labels"
+        },
+        "estimate": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Effort estimate as a number.",
+          "title": "Estimate"
+        },
+        "links": {
+          "description": "Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of the sections it points at. Every id must be the `id` of a section in this document.",
+          "patternProperties": {
+            "\\S": {
+              "items": {
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Links",
+          "type": "object"
+        }
+      },
+      "title": "SectionFields",
       "type": "object"
     },
     "StatusItem": {

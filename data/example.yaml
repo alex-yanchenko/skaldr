@@ -307,6 +307,24 @@ blocks:
                       - { state: blocked, text: "Awaiting `OPS-1234`." }
 
   - type: section
+    id: recount-followup
+    title: "Recount Zone C"
+    collapsed: false
+    fields:
+      status: "In Progress"
+      priority: High
+      assignee: ada
+      due: "2026-10-15"
+      labels: [recount, bins]
+      estimate: 3
+      links: { relates: [appendix-raw-counts] }
+      team: "Floor ops"
+    blocks:
+      - type: text
+        body: "Zone C holds most of the mislabeled bins, so it is recounted first."
+
+  - type: section
+    id: appendix-raw-counts
     title: "Appendix: discrepancy-reason raw counts"
     updated: "18 Jul 2026"
     blocks:

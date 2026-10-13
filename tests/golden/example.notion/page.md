@@ -279,6 +279,16 @@ function pickWinner(a, b) {
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
 </columns>
+## Recount Zone C
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: Appendix: discrepancy-reason raw counts
+- **team**: Floor ops
+Zone C holds most of the mislabeled bins, so it is recounted first.
 ## Appendix: discrepancy-reason raw counts {toggle="true"}
 	*updated 18 Jul 2026* {color="gray"}
 	- Double-count (same-window re-scan): 340
