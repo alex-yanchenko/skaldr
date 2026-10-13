@@ -524,6 +524,31 @@ def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> 
     assert render_slack([Paragraph((run,))]) == _canvas(f"{written}\n")
 
 
+@pytest.mark.parametrize(
+    ("runs", "written"),
+    [
+        pytest.param(
+            (Styled("bold", _text("(x)")), Plain("y")), "(x)y", id="bold-followed-by-a-word-character"
+        ),
+        pytest.param(
+            (Plain("a"), Styled("italic", _text("(b)")), Plain(".")),
+            "a(b).",
+            id="italic-between-a-letter-and-punctuation",
+        ),
+        pytest.param(
+            (Styled("bold", _text("a")), Styled("italic", _text("b"))),
+            "**a**b",
+            id="italic-running-into-a-bold-closer",
+        ),
+        pytest.param((Styled("strike", _text("(s)")), Plain("t")), "(s)t", id="strike-followed-by-a-letter"),
+    ],
+)
+def test_emphasis_whose_markers_a_canvas_cannot_read_drops_its_style_and_never_becomes_a_tag(
+    runs: tuple[ExportRun, ...], written: str
+) -> None:
+    assert render_slack([Paragraph(runs)]) == _canvas(f"{written}\n")
+
+
 def test_canvas_special_characters_are_escaped_in_text_but_not_dollars() -> None:
     nodes = [Paragraph(_text("a*b_c~d`e|f [x] <@U0EXAMPLE1> $5 &amp; done!"))]
 

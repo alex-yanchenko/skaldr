@@ -1455,6 +1455,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it |
 | `media` | a link named by the caption, or by the kind (Video, Audio, File or PDF) when there is none |
 | badges | bold labels |
+| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter; there the text is written without the mark |
 | `++underline++`, `H~2~O`, `10^3^`, `[text]{tone=…}` | the text alone |
 | `` $`x_i`$ `` inline math | inline code |
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |

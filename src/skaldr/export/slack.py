@@ -23,7 +23,6 @@ from skaldr.export.markup import (
     quoted,
     spaced,
     styled,
-    styled_in_tags,
     table_width,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
@@ -83,8 +82,8 @@ def _slack_date(day: date) -> str:
 
 
 class _SlackRuns(CommonMarkRuns):
-    def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
-        return styled_in_tags(style, inner)
+    def unflanked_emphasis(self, _style: MarkerStyle, inner: str, /) -> str:
+        return inner
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
