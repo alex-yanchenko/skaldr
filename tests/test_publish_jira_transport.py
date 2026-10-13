@@ -247,6 +247,110 @@ def test_a_read_back_jira_saved_in_a_form_skaldr_does_not_expect_is_taken_as_pub
     assert (written.marker, written.comparable.sections) == ("10001", {"planting": section_text([saved])})
 
 
+def _saved_words(text: str) -> JsonValue:
+    return {"type": "paragraph", "attrs": {"indentation": 0}, "content": [{"type": "text", "text": text}]}
+
+
+def test_a_new_issue_jira_saved_in_a_form_skaldr_does_not_expect_is_taken_as_published() -> None:
+    jira = FakeJira(adds_to_paragraphs={"indentation": 0})
+    transport = _transport(jira)
+
+    created = transport.create_item(NewItem(TARGET, STAMP, CONTENT))
+
+    saved_table: JsonValue = {
+        "type": "table",
+        "content": [
+            {"type": "tableRow", "content": [{"type": "tableHeader", "content": [_saved_words("Tool")]}]}
+        ],
+    }
+    saved = CONTENT.model_copy(
+        update={
+            "sections": {
+                "intro": section_text([_saved_words("Welcome."), saved_table]),
+                "planting": section_text([_saved_words("Sow in spring.")]),
+            }
+        }
+    )
+    assert (
+        created.marker,
+        created.comparable,
+        transport.read_item(created.item_id, CONTENT).comparable,
+        transport.parts_edited_after(created.item_id, created.marker, CONTENT),
+    ) == (None, saved, saved, ())
+
+
+GARDENER = "account-gardener"
+WEEDER = "account-weeder"
+
+
+def _asking(account_id: str) -> JsonValue:
+    mention: JsonValue = {"type": "mention", "attrs": {"id": account_id, "text": "@Robin"}}
+    return {"type": "paragraph", "content": [{"type": "text", "text": "Ask "}, mention]}
+
+
+def _with_planting(*blocks: JsonValue) -> ItemContent:
+    return CONTENT.model_copy(
+        update={"sections": {"intro": CONTENT.sections["intro"], "planting": section_text(list(blocks))}}
+    )
+
+
+def test_a_mention_jira_saves_under_the_persons_display_name_stays_in_sync_after_a_create_and_an_update() -> (
+    None
+):
+    jira = FakeJira(names_in_mentions={GARDENER: "Robin Gardener (Robin)"})
+    content = _with_planting(_asking(GARDENER))
+    transport, created = _created(jira, content)
+    after_create = transport.read_item(created.item_id, content)
+    edited_after_create = transport.parts_edited_after(created.item_id, created.marker, content)
+    updated = _with_planting(_asking(GARDENER), SOW_IN_MAY)
+
+    written = transport.write_content(
+        created.item_id, ContentWrite(dict(updated.sections), after_create.raw_sections)
+    )
+    after_update = transport.read_item(created.item_id, updated)
+
+    assert (
+        created.comparable,
+        after_create.comparable,
+        edited_after_create,
+        written.comparable,
+        after_update.comparable,
+        transport.parts_edited_after(created.item_id, written.marker, updated),
+    ) == (
+        transport.comparable_form(content),
+        transport.comparable_form(content),
+        (),
+        transport.comparable_form(updated),
+        transport.comparable_form(updated),
+        (),
+    )
+
+
+def test_a_mention_pointed_at_another_person_in_jira_is_an_edit() -> None:
+    jira = FakeJira(names_in_mentions={GARDENER: "Robin Gardener (Robin)", WEEDER: "Robin Weeder"})
+    content = _with_planting(_asking(GARDENER))
+    transport, created = _created(jira, content)
+    jira.edit_by_hand(created.item_id, description=_description(INTRO, _table(), _asking(WEEDER)))
+
+    assert (
+        transport.parts_edited_after(created.item_id, created.marker, content),
+        transport.read_item(created.item_id, content).comparable.sections["planting"],
+    ) == (
+        (section_part("planting"),),
+        section_text(
+            [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": "Ask "},
+                        {"type": "mention", "attrs": {"id": WEEDER}},
+                    ],
+                }
+            ]
+        ),
+    )
+
+
 def test_a_change_made_to_a_new_issue_right_after_its_create_is_left_for_the_next_publish_to_report() -> None:
     jira = FakeJira()
     jira.edit_right_after_the_next_write("DEMO-1", labels=["garden", "triaged", DOC_LABEL])

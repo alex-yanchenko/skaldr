@@ -103,6 +103,7 @@ class FakeJira:
         default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
     )
     adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    names_in_mentions: dict[str, str] = field(default_factory=dict[str, str])
     _issues_made: int = 0
     _history_ids: int = 10_000
     _local_ids: int = 0
@@ -376,6 +377,10 @@ class FakeJira:
         if node.get("type") == "paragraph" and self.adds_to_paragraphs:
             node["attrs"] = dict(self.adds_to_paragraphs)
         attrs = node.get("attrs")
+        mentioned = attrs.get("id") if node.get("type") == "mention" and isinstance(attrs, dict) else None
+        if isinstance(attrs, dict) and isinstance(mentioned, str) and mentioned in self.names_in_mentions:
+            attrs["accessLevel"] = ""
+            attrs["text"] = f"@{self.names_in_mentions[mentioned]}"
         if node.get("type") in ("table", "taskList", "taskItem") and isinstance(attrs, dict):
             self._local_ids += 1
             attrs["localId"] = f"jira-{self._local_ids:04d}"

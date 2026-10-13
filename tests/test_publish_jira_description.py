@@ -153,6 +153,26 @@ def test_the_comparable_form_drops_default_attributes_and_keeps_widths_skaldr_ne
     ]
 
 
+def test_a_mention_compares_by_its_account_id_alone_whatever_name_and_access_jira_saves_with_it() -> None:
+    sent: JsonValue = {"type": "mention", "attrs": {"id": "account-gardener", "text": "@Robin"}}
+    saved: JsonValue = {
+        "type": "mention",
+        "attrs": {
+            "accessLevel": "",
+            "id": "account-gardener",
+            "text": "@Robin Gardener (Robin)",
+            "userType": "DEFAULT",
+        },
+    }
+    someone_else: JsonValue = {"type": "mention", "attrs": {"id": "account-weeder", "text": "@Robin"}}
+
+    assert [comparable_node(node) for node in (sent, saved, someone_else)] == [
+        {"type": "mention", "attrs": {"id": "account-gardener"}},
+        {"type": "mention", "attrs": {"id": "account-gardener"}},
+        {"type": "mention", "attrs": {"id": "account-weeder"}},
+    ]
+
+
 def test_a_comparable_section_is_the_section_text_of_its_comparable_blocks() -> None:
     task: JsonValue = {"type": "taskList", "attrs": {"localId": "skaldr-task-list-1"}, "content": []}
 

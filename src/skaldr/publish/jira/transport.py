@@ -12,7 +12,6 @@ from skaldr.publish.content import (
     Part,
     is_unset,
     placed_section,
-    same_value,
     section_part,
 )
 from skaldr.publish.drafts import SPLIT_ADVICE
@@ -144,14 +143,6 @@ def _described(entry: Changelog, written: frozenset[str]) -> str:
     return f"{fields} in changelog {entry.id} by {author} at {when}"
 
 
-def _reads_as(remote: ItemContent, expected: ItemContent) -> bool:
-    return (
-        remote.title == expected.title
-        and list(remote.sections.items()) == list(expected.sections.items())
-        and all(same_value(value, remote.fields.get(name)) for name, value in expected.fields.items())
-    )
-
-
 class JiraTransport:
     def __init__(self, client: JiraClient, field_shapes: Mapping[str, JsonValue] | None = None) -> None:
         self._client = client
@@ -200,10 +191,9 @@ class JiraTransport:
         )
         self._remember_shapes(created.key, content.fields)
         read = self._read_after_write(created.key, layout, stamp)
-        expected = self.comparable_form(content)
-        if not self._owned_entries(created.key, read.history) and _reads_as(read.remote.comparable, expected):
+        if not self._owned_entries(created.key, read.history):
             return self._handed_over(created.key, read.remote, _newest(read.history))
-        published = replace(read.remote, comparable=expected)
+        published = replace(read.remote, comparable=self.comparable_form(content))
         return self._handed_over(created.key, published, NO_MARKER)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:

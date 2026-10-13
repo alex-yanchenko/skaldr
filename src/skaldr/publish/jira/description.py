@@ -24,6 +24,9 @@ SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
     ("tableHeader", "colspan"): (1,),
     ("tableHeader", "rowspan"): (1,),
     ("orderedList", "order"): (1,),
+    ("mention", "text"): None,
+    ("mention", "accessLevel"): None,
+    ("mention", "userType"): None,
 }
 
 Blocks = list[JsonValue]
