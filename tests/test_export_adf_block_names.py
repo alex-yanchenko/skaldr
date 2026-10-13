@@ -4,12 +4,13 @@ import pytest
 
 from skaldr.export.adf import AdfUnsupportedError, render_adf
 from skaldr.export.inline import plain
-from skaldr.export.tree import Callout, Node, Paragraph
+from skaldr.export.tree import Callout, Node, Paragraph, Tab, TableCell, TableNode, Tabs, Toggle
 from tests.factories import (
     lowered,
     make_cell,
     make_grid,
     make_request,
+    make_tab,
     make_tabs,
     make_toggle,
 )
@@ -144,6 +145,32 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
     blocks = [make_toggle(make_toggle(make_toggle(request)))]
 
     assert _refusal(blocks) == "ADF cannot place a request inside a toggle that is itself inside a toggle"
+
+
+def test_a_tab_inside_a_toggle_names_the_set_of_tabs_as_the_container() -> None:
+    blocks = [make_toggle(make_tabs(make_tab("a", COMPARISON), make_tab("b")))]
+
+    assert _refusal(blocks) == (
+        "ADF cannot place a comparison inside a set of tabs that is itself inside a toggle"
+    )
+
+
+def test_a_toggle_inside_tabs_names_the_toggle_as_the_container_and_the_tabs_as_its_parent() -> None:
+    blocks = [make_tabs(make_tab("a", make_toggle(COMPARISON)), make_tab("b"))]
+
+    assert _refusal(blocks) == (
+        "ADF cannot place a comparison inside a toggle that is itself inside a set of tabs"
+    )
+
+
+def test_a_tab_group_authored_as_a_request_names_the_request_as_the_container() -> None:
+    cases = Tabs((Tab(plain("a"), (TableNode((TableCell(plain("h")),), ()),)),), authored_as="request")
+    nodes: tuple[Node, ...] = (Toggle(plain("t"), None, (cases,)),)
+
+    with pytest.raises(AdfUnsupportedError) as refused:
+        render_adf(nodes)
+
+    assert str(refused.value) == "ADF cannot place a table inside a request that is itself inside a toggle"
 
 
 def test_a_block_named_in_the_error_keeps_the_heading_above_it() -> None:

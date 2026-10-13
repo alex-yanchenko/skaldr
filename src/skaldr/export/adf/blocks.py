@@ -87,9 +87,8 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
 _CONTAINER_TERM: Final[Mapping[Container, str]] = {
     "doc": "the document",
-    "expand": "a toggle",
-    "nested_expand": "a toggle that is itself inside a toggle",
 }
+TOGGLE_NAME: Final = "toggle"
 _NODE_TERM: Final[Mapping[type, str]] = {
     Heading: "heading",
     Paragraph: "text",
@@ -152,6 +151,7 @@ class _AdfBlocks:
         self.local_ids = count(1)
         self.heading = ""
         self.panel_name = _NODE_TERM[Callout]
+        self.expand_names: list[str] = []
 
     def local_id(self, kind: str) -> str:
         return f"skaldr-{kind}-{next(self.local_ids)}"
@@ -164,7 +164,15 @@ class _AdfBlocks:
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()
 
     def container_term(self, container: Container) -> str:
-        return f"a {self.panel_name}" if container == "panel" else _CONTAINER_TERM[container]
+        match container:
+            case "panel":
+                return f"a {self.panel_name}"
+            case "expand":
+                return f"a {self.expand_names[-1]}"
+            case "nested_expand":
+                return f"a {self.expand_names[-1]} that is itself inside a {self.expand_names[-2]}"
+            case "doc":
+                return _CONTAINER_TERM[container]
 
     def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
         for block in produced:
@@ -216,12 +224,14 @@ class _AdfBlocks:
                 title = export_visible_text(node.title)
                 if node.heading_level is not None:
                     self.heading = title.strip() or self.heading
-                return [self.expand(container, title, node.children)]
+                return [self.expand(container, TOGGLE_NAME, title, node.children)]
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
+                name = node.authored_as or _NODE_TERM[Tabs]
                 return [
-                    self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs
+                    self.expand(container, name, export_visible_text(tab.title), tab.children)
+                    for tab in node.tabs
                 ]
             case Diagram():
                 return self.diagram_blocks(node, container)
@@ -261,13 +271,17 @@ class _AdfBlocks:
             paragraphs.append(AdfParagraph(type="paragraph", content=list(cite)))
         return [AdfBlockquote(type="blockquote", content=paragraphs)] if paragraphs else []
 
-    def expand(self, container: Container, title: str, children: Sequence[Node]) -> AdfBlock:
+    def expand(self, container: Container, name: str, title: str, children: Sequence[Node]) -> AdfBlock:
         attrs = AdfExpandAttrs(title=title)
-        if container in ("expand", "nested_expand"):
-            nested = self.blocks(children, "nested_expand") or [_empty_paragraph()]
-            return AdfNestedExpand(type="nestedExpand", attrs=attrs, content=nested)
-        content = self.blocks(children, "expand") or [_empty_paragraph()]
-        return AdfExpand(type="expand", attrs=attrs, content=content)
+        self.expand_names.append(name)
+        try:
+            if container in ("expand", "nested_expand"):
+                nested = self.blocks(children, "nested_expand") or [_empty_paragraph()]
+                return AdfNestedExpand(type="nestedExpand", attrs=attrs, content=nested)
+            content = self.blocks(children, "expand") or [_empty_paragraph()]
+            return AdfExpand(type="expand", attrs=attrs, content=content)
+        finally:
+            self.expand_names.pop()
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
         supplement = self.blocks(node.supplement, container)
