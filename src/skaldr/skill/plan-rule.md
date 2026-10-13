@@ -1,8 +1,9 @@
 # Working plans as live skaldr docs
 
 When you write an implementation or working plan of any substance, a multi-step feature, refactor,
-migration, or an investigation you'll act on, author it as a **skaldr YAML doc** (`skaldr --guide`
-for the block palette), not a chat dump or a throwaway `.md`, and render it live for the user.
+migration, or an investigation you'll act on, author it as a **skaldr YAML doc**, not a chat dump or
+a throwaway `.md`, and render it live for the user. Start from `skaldr new plan plan.yaml` (or
+`skaldr --guide plan`), fill in its placeholders, and use `skaldr --guide` only for blocks it lacks.
 
 - **It's for _your_ working state, not just shareable output.** The `plan.yaml` on disk is your
   durable, compaction-proof record of the plan: after a context compaction, re-read the file to

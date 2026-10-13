@@ -125,10 +125,39 @@ def _run_auth(argv: list[str]) -> int:
     return auth_main(argv)
 
 
+_NEW_KINDS = {"plan": "skill/plan-starter.yaml"}
+
+
+def _fail(message: str) -> int:
+    print(f"error: {message}", file=sys.stderr)
+    return 1
+
+
+def _run_new(arguments: list[str]) -> int:
+    kinds = ", ".join(_NEW_KINDS)
+    if len(arguments) != 2:
+        return _fail(f"usage: skaldr new <kind> <file>; the kinds are {kinds}")
+    kind, file_name = arguments
+    if kind not in _NEW_KINDS:
+        return _fail(f"unknown kind '{kind}' for `skaldr new`; the kinds are {kinds}")
+    target = Path(file_name)
+    if target.exists():
+        return _fail(f"{target} already exists; pick another file name or delete it first")
+    replace_file(target, package_text(_NEW_KINDS[kind]))
+    print(f"OK  wrote the {kind} starter to {target}")
+    print(
+        f"    fill in every {{{{placeholder}}}}, then render it: "
+        f"skaldr {target} -o {target.with_suffix('.html')} --live"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     if arguments[:1] == ["auth"]:
         return _run_auth(arguments[1:])
+    if arguments[:1] == ["new"]:
+        return _run_new(arguments[1:])
     parser = argparse.ArgumentParser(
         description="Render a skaldr content file to an HTML page.",
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`.",

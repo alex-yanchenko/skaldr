@@ -16,8 +16,7 @@ description: >-
 # Authoring a skaldr report
 
 skaldr is a **CLI already on your PATH**. Do not look for a source repo, a `uv run`, or a
-`python -m`; just run `skaldr`. You write one YAML content file; skaldr renders one self-contained
-HTML page and owns all the design.
+`python -m`; just run `skaldr`. You write one YAML file; skaldr renders one HTML page and owns the design.
 
 It covers visual structure (flows, tables, cards, charts, timelines) plus living-doc support
 (freshness stamps, `!include`, rollups, `--live`). Run `skaldr --guide` for the full block palette.
@@ -35,13 +34,13 @@ fabrication, so honesty is on you.
 
 1. **Load the current contract from the tool itself** (it matches the installed version; trust it
    over memory):
-   - `skaldr --guide` for the authoring guide: every block, the rules, the `table`, and a complete
-     example.
+   - For a working plan, run `skaldr new plan plan.yaml` or `skaldr --guide plan` and fill in the
+     starter; no need to read the whole guide.
+   - `skaldr --guide` for every block, the rules, the `table`, and a complete example.
    - `skaldr --write-schema /tmp/skaldr.schema.json` for the exact fields and types.
 2. **Write the YAML** from real evidence, following the guide.
-3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion,
-   `skaldr report.yaml --export markdown` or `--export notion` writes the same document to
-   `out/<name>.<target>/page.md` instead.
+3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion, add `--export markdown`
+   or `--export notion` instead; it writes `out/<name>.<target>/page.md`.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = skaldr prints `OK` and the output
    file exists. To validate without writing anything (e.g. over a glob), use
@@ -59,5 +58,4 @@ fabrication, so honesty is on you.
 **Given a skaldr render (`.html` or artifact URL)?** Recover its YAML with
 `skaldr --extract-source <file|url>`; don't parse the HTML, since every render embeds its source.
 
-This file stays thin: version-specific detail lives in `skaldr --guide` and `skaldr --write-schema`,
-so the guidance stays correct across upgrades without reinstalling the skill.
+This file stays thin: version-specific detail lives in `skaldr --guide` and `skaldr --write-schema`.
