@@ -7,9 +7,11 @@ from urllib.parse import urlsplit
 from typing_extensions import assert_never
 
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
-from skaldr.export.markdown import ENTITY_LOOKALIKE, LARGEST_ORDERED_MARKER_NUMBER, MarkdownRuns
 from skaldr.export.markup import (
     DIVIDER_LINE,
+    ENTITY_LOOKALIKE,
+    LARGEST_ORDERED_MARKER_NUMBER,
+    CommonMarkRuns,
     code_block_lines,
     code_span,
     encode_url,
@@ -21,6 +23,7 @@ from skaldr.export.markup import (
     quoted,
     spaced,
     styled,
+    styled_in_tags,
     table_width,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
@@ -48,7 +51,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Citation, Plain, ScriptPosition
+from skaldr.richtext import Citation, MarkerStyle, Plain, ScriptPosition
 
 SLACK_CANVAS_LIMIT: Final = 1_048_576
 SLACK_TABLE_CELL_LIMIT: Final = 300
@@ -79,9 +82,9 @@ def _slack_date(day: date) -> str:
     return f"![](slack_date:{day.isoformat()})"
 
 
-class _SlackRuns(MarkdownRuns):
-    def __init__(self) -> None:
-        super().__init__({})
+class _SlackRuns(CommonMarkRuns):
+    def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
+        return styled_in_tags(style, inner)
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
@@ -92,9 +95,6 @@ class _SlackRuns(MarkdownRuns):
     def citation(self, run: Citation, /) -> str:
         label = self.escape(f"[{run.number}]")
         return self.link(label, run.url) if run.url else label
-
-    def document_link(self, label: str, _doc_id: str, _section: str | None, /) -> str:
-        return label
 
     def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
         return f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)

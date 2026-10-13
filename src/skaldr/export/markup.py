@@ -1,20 +1,34 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from typing import Final
 from urllib.parse import quote
 
 from typing_extensions import assert_never
 
+from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
 from skaldr.export.glyphs import gauge_bar, mark_glyph
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, write_export_run
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
 from skaldr.models import Person, ToneLiteral
-from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName, TextRunWriter
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Link,
+    MarkerStyle,
+    ScriptPosition,
+    Styled,
+    StyleName,
+    TextRunWriter,
+    Tinted,
+)
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
+ENTITY_LOOKALIKE: Final = re.compile(r"&(?=#?\w+;)")
+LARGEST_ORDERED_MARKER_NUMBER: Final = 999_999_999
 DIVIDER_LINE: Final = "---"
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
@@ -207,3 +221,101 @@ class MarkupRuns(TextRunWriter, ABC):
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)
+
+
+@dataclass(frozen=True)
+class _Emphasis:
+    style: MarkerStyle
+    inner: str
+
+
+_Piece = str | _Emphasis
+
+
+def _marker_style(style: StyleName) -> MarkerStyle | None:
+    match style:
+        case "bold" | "italic" | "strike":
+            return style
+        case "underline":
+            return None
+        case _:
+            assert_never(style)
+
+
+def _first_character(pieces: Sequence[_Piece]) -> str:
+    for piece in pieces:
+        if isinstance(piece, str):
+            written = piece
+        else:
+            written = piece.inner if not piece.inner.strip() else EMPHASIS_OPENER_STAND_IN
+        if written:
+            return written[0]
+    return NO_CHARACTER
+
+
+class CommonMarkRuns(MarkupRuns, ABC):
+    @abstractmethod
+    def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str: ...
+
+    def links_to(self, _anchor: str, /) -> bool:
+        return False
+
+    def write(self, runs: ExportRich) -> str:
+        pieces = self._pieces(runs)
+        written = ""
+        open_marker_character = NO_CHARACTER
+        for index, piece in enumerate(pieces):
+            if isinstance(piece, str):
+                written += piece
+                open_marker_character = NO_CHARACTER
+                continue
+            marker = STYLE_MARKER[piece.style]
+            runs_into_the_previous_marker = (
+                marker[0] == open_marker_character and piece.inner == piece.inner.lstrip()
+            )
+            following = _first_character(pieces[index + 1 :]) or LINE_EDGE
+            if runs_into_the_previous_marker or not markers_flank(
+                piece.inner, written[-1:] or LINE_EDGE, following
+            ):
+                emphasis = self.unflanked_emphasis(piece.style, piece.inner)
+            else:
+                emphasis = styled(piece.style, piece.inner)
+            written += emphasis
+            open_marker_character = marker[0] if emphasis.endswith(marker) else NO_CHARACTER
+        return written
+
+    def _pieces(self, runs: ExportRich) -> list[_Piece]:
+        pieces: list[_Piece] = []
+        for run in runs:
+            match run:
+                case Styled():
+                    inner = self.write(run.runs)
+                    marker_style = _marker_style(run.style)
+                    pieces.append(
+                        self.underline(inner) if marker_style is None else _Emphasis(marker_style, inner)
+                    )
+                case Tinted():
+                    pieces += self._pieces(run.runs)
+                case Link():
+                    pieces.append(self.link(self.write(run.label), run.url))
+                case AnchorLink() if not self.links_to(run.anchor):
+                    pieces += self._pieces(run.label)
+                case AnchorLink():
+                    pieces.append(self.anchor_link(self.write(run.label), run.anchor))
+                case Chip():
+                    pieces.append(_Emphasis("bold", self.escape(run.label)))
+                case _:
+                    pieces.append(write_export_run(run, self))
+        return pieces
+
+    def code(self, text: str, /) -> str:
+        return code_span(text)
+
+    def anchor_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def placeholder(self, name: str, /) -> str:
+        return code_span("{{" + name + "}}")
+
+    def chip(self, run: Chip, /) -> str:
+        return self.write((run,))

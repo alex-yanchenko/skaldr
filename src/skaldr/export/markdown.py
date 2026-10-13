@@ -1,4 +1,3 @@
-import re
 import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
@@ -7,15 +6,14 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, written_emphasis
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
-    STYLE_MARKER,
-    MarkupRuns,
+    ENTITY_LOOKALIKE,
+    LARGEST_ORDERED_MARKER_NUMBER,
+    CommonMarkRuns,
     code_block_lines,
-    code_span,
     encode_url,
     escape_block_start,
     heading_line,
@@ -28,7 +26,7 @@ from skaldr.export.markup import (
     styled_in_tags,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import Chip, ExportRich, export_visible_text, write_export_run
+from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -54,16 +52,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import (
-    SCRIPT_HTML_TAG,
-    AnchorLink,
-    Link,
-    MarkerStyle,
-    ScriptPosition,
-    Styled,
-    StyleName,
-    Tinted,
-)
+from skaldr.richtext import SCRIPT_HTML_TAG, Link, MarkerStyle, ScriptPosition
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -72,8 +61,6 @@ OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x1F170, 0x1F18A),
 )
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
-ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
-LARGEST_ORDERED_MARKER_NUMBER: Final = 999_999_999
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -104,91 +91,18 @@ def github_slug(text: str) -> str:
     return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
 
 
-@dataclass(frozen=True)
-class _Emphasis:
-    style: MarkerStyle
-    inner: str
-
-
-_Piece = str | _Emphasis
-
-
-def _marker_style(style: StyleName) -> MarkerStyle | None:
-    match style:
-        case "bold" | "italic" | "strike":
-            return style
-        case "underline":
-            return None
-        case _:
-            assert_never(style)
-
-
-def _first_character(pieces: Sequence[_Piece]) -> str:
-    for piece in pieces:
-        if isinstance(piece, str):
-            written = piece
-        else:
-            written = piece.inner if not piece.inner.strip() else EMPHASIS_OPENER_STAND_IN
-        if written:
-            return written[0]
-    return NO_CHARACTER
-
-
-class MarkdownRuns(MarkupRuns):
+class MarkdownRuns(CommonMarkRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.heading_slugs = heading_slugs
 
-    def write(self, runs: ExportRich) -> str:
-        pieces = self._pieces(runs)
-        written = ""
-        open_marker_character = NO_CHARACTER
-        for index, piece in enumerate(pieces):
-            if isinstance(piece, str):
-                written += piece
-                open_marker_character = NO_CHARACTER
-                continue
-            marker = STYLE_MARKER[piece.style]
-            runs_into_the_previous_marker = (
-                marker[0] == open_marker_character and piece.inner == piece.inner.lstrip()
-            )
-            if runs_into_the_previous_marker:
-                emphasis = styled_in_tags(piece.style, piece.inner)
-            else:
-                following = _first_character(pieces[index + 1 :]) or LINE_EDGE
-                emphasis = written_emphasis(piece.style, piece.inner, written[-1:] or LINE_EDGE, following)
-            written += emphasis
-            open_marker_character = marker[0] if emphasis.endswith(marker) else NO_CHARACTER
-        return written
+    def links_to(self, anchor: str, /) -> bool:
+        return anchor in self.heading_slugs
 
-    def _pieces(self, runs: ExportRich) -> list[_Piece]:
-        pieces: list[_Piece] = []
-        for run in runs:
-            match run:
-                case Styled():
-                    inner = self.write(run.runs)
-                    marker_style = _marker_style(run.style)
-                    pieces.append(
-                        self.underline(inner) if marker_style is None else _Emphasis(marker_style, inner)
-                    )
-                case Tinted():
-                    pieces += self._pieces(run.runs)
-                case Link():
-                    pieces.append(self.link(self.write(run.label), run.url))
-                case AnchorLink() if run.anchor not in self.heading_slugs:
-                    pieces += self._pieces(run.label)
-                case AnchorLink():
-                    pieces.append(self.anchor_link(self.write(run.label), run.anchor))
-                case Chip():
-                    pieces.append(_Emphasis("bold", self.escape(run.label)))
-                case _:
-                    pieces.append(write_export_run(run, self))
-        return pieces
+    def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
+        return styled_in_tags(style, inner)
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
-
-    def code(self, text: str, /) -> str:
-        return code_span(text)
 
     def anchor_link(self, label: str, anchor: str, /) -> str:
         slug = self.heading_slugs.get(anchor)
@@ -196,12 +110,6 @@ class MarkdownRuns(MarkupRuns):
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")
-
-    def placeholder(self, name: str, /) -> str:
-        return code_span("{{" + name + "}}")
-
-    def chip(self, run: Chip, /) -> str:
-        return self.write((run,))
 
     def underline(self, inner: str, /) -> str:
         return f"<ins>{inner}</ins>"

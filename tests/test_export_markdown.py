@@ -8,7 +8,7 @@ from markdown_it import MarkdownIt
 from skaldr.errors import ReportError
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export import markdown as markdown_module
-from skaldr.export.flanking import written_emphasis
+from skaldr.export.flanking import markers_flank
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
 from skaldr.export.markup import code_block_lines, code_span, styled
 from skaldr.export.runs import (
@@ -973,44 +973,28 @@ def test_emphasis_beside_non_ascii_punctuation_keeps_its_markers(body: str, mark
 
 
 @pytest.mark.parametrize(
-    ("inner", "before", "after", "written"),
+    ("inner", "before", "after", "flanks"),
     [
-        pytest.param(
-            "(a)", "€", "\n", "<strong>(a)</strong>", id="a-currency-symbol-before-is-not-certain-punctuation"
-        ),
-        pytest.param(
-            "(a)", "\n", "€", "<strong>(a)</strong>", id="a-currency-symbol-after-is-not-certain-punctuation"
-        ),
-        pytest.param(
-            "€a",
-            "x",
-            "\n",
-            "<strong>€a</strong>",
-            id="a-symbol-opening-the-text-needs-a-punctuation-neighbour",
-        ),
-        pytest.param("€a", " ", "\n", "**€a**", id="a-symbol-opening-the-text-after-a-space"),
-        pytest.param(
-            "a€", "\n", "x", "<strong>a€</strong>", id="a-symbol-closing-the-text-needs-a-neighbour"
-        ),
-        pytest.param(" (a) ", "x", "y", " **(a)** ", id="spaces-inside-the-emphasis-count-as-its-neighbours"),
-        pytest.param("(a)", "x", "y", "<strong>(a)</strong>", id="no-spaces-inside-and-letters-around"),
-        pytest.param("a", "x", "y", "**a**", id="letters-inside-need-no-neighbour"),
-        pytest.param("  ", "x", "y", "  ", id="only-spaces-is-no-emphasis"),
-        pytest.param("(a)", "", "", "<strong>(a)</strong>", id="an-empty-neighbour-is-not-punctuation"),
-        pytest.param(
-            "(a)", "", " ", "<strong>(a)</strong>", id="an-empty-neighbour-before-is-not-punctuation"
-        ),
-        pytest.param(
-            "(a)", " ", "", "<strong>(a)</strong>", id="an-empty-neighbour-after-is-not-punctuation"
-        ),
-        pytest.param("a", "", "", "**a**", id="letters-inside-need-no-neighbour-at-all"),
-        pytest.param("(a)", "$", "!", "**(a)**", id="ascii-punctuation-neighbours"),
+        pytest.param("(a)", "€", "\n", False, id="a-currency-symbol-before-is-not-certain-punctuation"),
+        pytest.param("(a)", "\n", "€", False, id="a-currency-symbol-after-is-not-certain-punctuation"),
+        pytest.param("€a", "x", "\n", False, id="a-symbol-opening-the-text-needs-a-punctuation-neighbour"),
+        pytest.param("€a", " ", "\n", True, id="a-symbol-opening-the-text-after-a-space"),
+        pytest.param("a€", "\n", "x", False, id="a-symbol-closing-the-text-needs-a-neighbour"),
+        pytest.param(" (a) ", "x", "y", True, id="spaces-inside-the-emphasis-count-as-its-neighbours"),
+        pytest.param("(a)", "x", "y", False, id="no-spaces-inside-and-letters-around"),
+        pytest.param("a", "x", "y", True, id="letters-inside-need-no-neighbour"),
+        pytest.param("  ", "x", "y", True, id="only-spaces-has-no-marker-to-break"),
+        pytest.param("(a)", "", "", False, id="an-empty-neighbour-is-not-punctuation"),
+        pytest.param("(a)", "", " ", False, id="an-empty-neighbour-before-is-not-punctuation"),
+        pytest.param("(a)", " ", "", False, id="an-empty-neighbour-after-is-not-punctuation"),
+        pytest.param("a", "", "", True, id="letters-inside-need-no-neighbour-at-all"),
+        pytest.param("(a)", "$", "!", True, id="ascii-punctuation-neighbours"),
     ],
 )
-def test_bold_is_written_with_markers_only_when_the_neighbours_let_github_close_it(
-    inner: str, before: str, after: str, written: str
+def test_markers_flank_only_when_the_neighbours_let_github_open_and_close_them(
+    inner: str, before: str, after: str, flanks: bool
 ) -> None:
-    assert written_emphasis("bold", inner, before, after) == written
+    assert markers_flank(inner, before, after) is flanks
 
 
 @pytest.mark.parametrize(
