@@ -73,6 +73,7 @@ from tests.factories import (
     make_cell,
     make_command_request,
     make_grid,
+    make_query_request,
     make_report,
     make_request,
     make_tab,
@@ -444,6 +445,24 @@ def test_a_request_with_one_case_shows_its_label_note_status_and_verdict() -> No
         Paragraph((*bold("Recorded output"), Plain(": "), Plain("200 OK"))),
         CodeBlock("ok", ""),
         Callout("success", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
+    )
+
+
+def test_a_query_request_shows_its_runner_and_the_query_in_its_own_language() -> None:
+    request = make_query_request(
+        query={"runner": "psql, reporting replica", "lang": "sql", "content": "SELECT 1 WHERE s = '{{s}}'"},
+        case_variable="s",
+        cases=[{"label": "open", "verdict": "fine", "response": {"body": "1"}}],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Open orders in the shop database")),
+        Paragraph(italic(plain("open"))),
+        Paragraph((*bold("Query"), Plain(": "), Plain("psql, reporting replica"))),
+        CodeBlock("SELECT 1 WHERE s = 'open'", "sql"),
+        Paragraph(bold("Recorded output")),
+        CodeBlock("1", "json"),
+        Callout("neutral", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
     )
 
 

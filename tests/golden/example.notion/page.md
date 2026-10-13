@@ -259,6 +259,7 @@ function pickWinner(a, b) {
 }
 ```
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
+> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**<br>*example.com · Revision 7*
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.<br>*Floor lead, ticket OPS-1234*
 ## At a glance
 <columns>
@@ -279,6 +280,16 @@ function pickWinner(a, b) {
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
 </columns>
+## Recount Zone C
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: Appendix: discrepancy-reason raw counts
+- **team**: Floor ops
+Zone C holds most of the mislabeled bins, so it is recounted first.
 ## Appendix: discrepancy-reason raw counts {toggle="true"}
 	*updated 18 Jul 2026* {color="gray"}
 	- Double-count (same-window re-scan): 340

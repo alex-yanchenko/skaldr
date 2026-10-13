@@ -16,6 +16,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from datetime import date
 from functools import cached_property
 from importlib import resources
 from pathlib import Path
@@ -34,6 +35,7 @@ from pydantic import (
     AfterValidator,
     AnyUrl,
     BeforeValidator,
+    ConfigDict,
     Discriminator,
     Field,
     StrictBool,
@@ -51,6 +53,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
+from skaldr.lexers import find_lexer
 from skaldr.mathml import refuse_invalid_math
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish_block import Publish, section_choice_errors
@@ -84,6 +87,22 @@ def _require_url_scheme(url: str | None, subject: str) -> None:
     defect = _url_defect(url)
     if defect is not None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
+WEB_URL_SCHEMES = ("http://", "https://")
+
+
+def _require_web_url(url: str, subject: str) -> None:
+    if not url.startswith(WEB_URL_SCHEMES):
+        raise ValueError(f"{subject} must be an http:// or https:// link")
+    defect = _url_defect(url) or _userinfo_defect(url)
+    if defect is not None:
+        raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+
+
+def _userinfo_defect(url: str) -> str | None:
+    parsed = _LINK_URL.validate_python(url)
+    return "it holds a username or password" if parsed.username or parsed.password else None
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
@@ -368,6 +387,22 @@ class Meta(FrozenModel):
         if defect is not None:
             raise ValueError(f"jira_site {site!r} is not a valid URL ({defect})")
         return site.rstrip("/")
+
+    icon: Icon | None = Field(
+        default=None,
+        description="One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
+    )
+    cover: str | None = Field(
+        default=None,
+        description="An http:// or https:// image address for the page cover. The HTML page allows no remote "
+        "images, so it shows a 'Cover image' link under the title instead; the Notion page cover.",
+    )
+
+    @model_validator(mode="after")
+    def _cover_is_a_web_url(self) -> "Meta":
+        if self.cover is not None:
+            _require_web_url(self.cover, "'cover'")
+        return self
 
 
 class Heading(_Block):
@@ -841,6 +876,34 @@ class Image(_Block):
     def _data_uri_only(self) -> "Image":
         if not self.src.startswith("data:"):
             raise ValueError("'src' must be a data: URI")
+        return self
+
+
+LinkDisplay = Literal["inline", "card", "embed"]
+
+
+class Link(_Block):
+    type: Literal["link"]
+    url: str = Field(description="An http:// or https:// address.")
+    display: LinkDisplay = Field(
+        default="card",
+        description="`inline` is a plain link in a line of text; `card` is a bordered card with the title, "
+        "the domain and the caption; `embed` asks for the page to be shown in place. The HTML page loads "
+        "nothing from outside, so an embed renders as the card with a note, and both Markdown exports "
+        "write an embed as the card.",
+    )
+    title: NonBlank | None = Field(
+        default=None, description="Link text or card title; the URL without its scheme when omitted."
+    )
+    caption: NonBlank | None = Field(
+        default=None, description="A line under a card or embed; not allowed on an inline link."
+    )
+
+    @model_validator(mode="after")
+    def _web_url_and_no_inline_caption(self) -> "Link":
+        _require_web_url(self.url, "'url'")
+        if self.display == "inline" and self.caption is not None:
+            raise ValueError("a link shown inline takes no caption; use display: card or display: embed")
         return self
 
 
@@ -1994,6 +2057,34 @@ def _command_without_block_scalar_trailing_newline(text: str) -> str:
 CommandText = Annotated[str, AfterValidator(_command_without_block_scalar_trailing_newline)]
 
 
+def _non_blank_query_without_block_scalar_trailing_newline(text: str) -> str:
+    trimmed = text.rstrip("\n")
+    if not trimmed.strip():
+        raise ValueError("query must not be blank (omit it instead)")
+    return trimmed
+
+
+def _pygments_lexer_name(language: str) -> str:
+    if find_lexer(language) is None:
+        raise ValueError(f"`{language}` is not a Pygments lexer name")
+    return language
+
+
+class RequestQuery(FrozenModel):
+    runner: NonBlank = Field(
+        description="Free-text label for the tool the query runs in, shown with it, such as "
+        "`mongosh, orders database` or `psql, reporting replica`."
+    )
+    lang: Annotated[str, AfterValidator(_pygments_lexer_name)] = Field(
+        description="The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It "
+        "highlights the query on the page and labels the fence in the Markdown exports."
+    )
+    content: Annotated[str, AfterValidator(_non_blank_query_without_block_scalar_trailing_newline)] = Field(
+        description="The query text the reader copies and runs in the named tool. May carry "
+        "`{{variable}}` tokens, written in as the reader types them."
+    )
+
+
 class ComposedCall(NamedTuple):
     method: HttpMethod
     url: str
@@ -2080,6 +2171,14 @@ class RequestCase(FrozenModel):
         description="What this case supplies for the block's `case_variable`. Defaults to `label`, "
         "which is what you want when the cases are resource names.",
     )
+    values: Annotated[dict[str, NonBlank], Field(min_length=1)] | None = Field(
+        default=None,
+        description="What this case supplies for several of the block's declared `variables` at once, "
+        "as a map of variable name to value. Each name must be a declared variable. Use it when cases "
+        "differ by more than one value, so a shared `command` or built call is written once. A declared "
+        "variable the case leaves out stays a field the reader fills on this case's tab. Cannot be "
+        "combined with `value`, or on a request that declares a `case_variable`.",
+    )
     headers: dict[str, str] | None = Field(
         default=None,
         description="Replace the request's headers for this case alone. Omit to inherit them; give an "
@@ -2145,13 +2244,14 @@ class _RequestCore(FrozenModel):
 
     label: NonBlank = Field(description="What the call is for, shown in the header.")
     method: HttpMethod | None = Field(
-        default=None, description="The HTTP method. Required unless the call runs a `command`."
+        default=None,
+        description="The HTTP method. Required unless the call runs a `command` or records a `query`.",
     )
     url: str | None = Field(
         default=None,
         min_length=1,
         description="The full URL. May carry `{{variable}}` tokens. Required unless the call runs a "
-        "`command`.",
+        "`command` or records a `query`.",
     )
     command: CommandText | None = Field(
         default=None,
@@ -2165,6 +2265,13 @@ class _RequestCore(FrozenModel):
         default=None,
         description="Rich-text line under the command explaining why it is shaped the way it is, such "
         "as what a `jq` filter makes visible. The verdict stays about what came back.",
+    )
+    query: RequestQuery | None = Field(
+        default=None,
+        description="Evidence that is not a shell command: a database aggregation, a SQL query or an MCP "
+        "call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and "
+        "the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` "
+        "or `command`.",
     )
     headers: dict[str, str] = Field(
         default_factory=dict,
@@ -2205,6 +2312,7 @@ class _RequestCore(FrozenModel):
             (
                 self.url or "",
                 self.command or "",
+                self.query.content if self.query else "",
                 *self.headers.values(),
                 self.body or "",
                 *case_headers,
@@ -2230,25 +2338,109 @@ class _RequestCore(FrozenModel):
                 f"a request records at most {MAX_STRIP_LABELS} cases, and this one has "
                 f"{len(self.cases)}; split it into blocks a reader can take in"
             )
-        if self.case_variable is None:
-            for case in self.cases:
-                if case.value is not None:
-                    raise ValueError(
-                        f"case '{case.label}' sets a value but the request declares no case_variable, "
-                        "so there is nothing for it to fill"
-                    )
+        for case in self.cases:
+            self._check_how_the_case_fills_its_values(case)
         check_header_map(self.headers, "request header")
-        if self.command is None:
+        if self.query is not None:
+            self._check_query_call()
+        elif self.command is None:
             self._check_composed_call()
         else:
             self._check_command_call()
         return self
 
+    def _check_query_call(self) -> None:
+        composed_fields = {
+            "method": self.method,
+            "url": self.url,
+            "headers": self.headers or None,
+            "body": self.body,
+            "command": self.command,
+        }
+        for name, value in composed_fields.items():
+            if value is not None:
+                raise ValueError(
+                    f"request '{self.label}' sets `query` and `{name}`: a query is recorded as written, "
+                    f"so skaldr builds no curl and `{name}` would never reach it"
+                )
+        if self.command_note is not None:
+            raise ValueError(
+                f"request '{self.label}' sets a command_note on a query: put the note in a verdict"
+            )
+        for case in self.cases:
+            for name, value in (
+                ("command", case.command),
+                ("headers", case.headers),
+                ("headers_add", case.headers_add),
+            ):
+                if value is not None:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` on a request that records a query, which has "
+                        "no command or headers of its own: write the change into the query"
+                    )
+
+    def _check_how_the_case_fills_its_values(self, case: RequestCase) -> None:
+        if case.value is not None and case.values is not None:
+            raise ValueError(
+                f"case '{case.label}' sets value and values together: value fills the case_variable and "
+                "values fills declared variables, so give the case one of them"
+            )
+        if case.values is not None and self.case_variable is not None:
+            raise ValueError(
+                f"case '{case.label}' sets values on a request that declares case_variable "
+                f"`{self.case_variable}`: values and case_variable are two ways to fill a case, so use one"
+            )
+        if case.value is not None and self.case_variable is None:
+            raise ValueError(
+                f"case '{case.label}' sets a value but the request declares no case_variable, "
+                "so there is nothing for it to fill"
+            )
+
+    def referenced_by_case(self, case: RequestCase) -> set[str]:
+        headers = case.headers if case.headers is not None else self.headers
+        scan = " ".join(
+            (
+                self.url or "",
+                case.command or self.command or "",
+                self.query.content if self.query is not None else "",
+                *headers.values(),
+                *(case.headers_add or {}).values(),
+                self.body or "",
+            )
+        )
+        return {match.group(1) for match in VARIABLE_TOKEN.finditer(scan)}
+
+    def check_values_keys(self, variables: Sequence[RequestVariable], owner: str) -> None:
+        known = {variable.name: variable for variable in variables}
+        for case in self.cases:
+            used = self.referenced_by_case(case)
+            for name in case.values or {}:
+                if name not in known:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but the {owner} declares no "
+                        f"variable named `{name}`"
+                    )
+                if known[name].secret:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but `{name}` is a secret "
+                        "variable the reader supplies"
+                    )
+                if name not in used:
+                    raise ValueError(
+                        f"case '{case.label}' sets `{name}` under values, but nothing it sends uses "
+                        f"`{{{{{name}}}}}`"
+                    )
+
+    def case_bindings(self, case: RequestCase) -> dict[str, str]:
+        if self.case_variable is not None:
+            return {self.case_variable: case.value or case.label}
+        return dict(case.values or {})
+
     def _check_composed_call(self) -> None:
         if self.method is None or self.url is None:
             raise ValueError(
                 f"request '{self.label}' needs `method` and `url` to build a curl, or a `command` to run "
-                "as written"
+                "as written, or a `query` to record as written"
             )
         for case in self.cases:
             if case.command is not None:
@@ -2319,6 +2511,7 @@ class Request(_RequestCore, _VariableOwner, _Block):
                 f"`{self.case_variable}` is both the case_variable and a declared variable: each case "
                 "supplies it, so it must not also be a field the reader fills"
             )
+        self.check_values_keys(self.variables, "request")
         unused = self.resolvable_variables() - self.referenced_variables()
         if unused:
             raise ValueError(
@@ -2378,6 +2571,11 @@ class RequestStep(_RequestCore):
                 f"step '{self.label}' captures a value and records {len(self.cases)} cases; a capture "
                 "reads one definite response, so a step that produces a value keeps a single case"
             )
+        if self.captures and self.query is not None:
+            raise ValueError(
+                f"step '{self.label}' captures a value but records a query: a capture reads a response "
+                "the reader pastes, and a query has nowhere to paste one"
+            )
         return self
 
 
@@ -2417,6 +2615,8 @@ class RequestFlow(_VariableOwner, _Block):
         repeated = {name for name in declared if declared.count(name) > 1}
         if repeated:
             raise ValueError(f"flow declares a variable twice: {', '.join(sorted(repeated))}")
+        for step in self.steps:
+            step.check_values_keys(self.variables, "flow")
         captured = [capture.name for step in self.steps for capture in step.captures]
         clashing = {name for name in captured if name in declared}
         if clashing:
@@ -2520,6 +2720,7 @@ _Simple = (
     | Note
     | Divider
     | Image
+    | Link
     | Timeline
     | Flow
     | Fan
@@ -2537,6 +2738,108 @@ FullWidthBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow, Fiel
 RequestLike = Request | RequestStep
 
 
+def _iso_date_from_text(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"due must be an ISO date such as 2026-10-15, not {value!r}") from error
+
+
+IsoDate = Annotated[date, BeforeValidator(_iso_date_from_text)]
+FieldScalar = NonBlank | Number
+FieldList = Annotated[list[FieldScalar], Field(min_length=1)]
+SectionLinks = dict[
+    NonBlank, Annotated[list[Annotated[str, Field(pattern=rf"^{ANCHOR_ID_PATTERN}$")]], Field(min_length=1)]
+]
+
+
+def _describe_value_kind(value: Any) -> str:
+    if isinstance(value, bool):
+        return "a boolean"
+    if isinstance(value, Mapping):
+        return "a mapping"
+    if isinstance(value, list):
+        return "a list"
+    return "null" if value is None else type(value).__name__
+
+
+def _refuse_an_unusable_extra_item(value: Any) -> None:
+    if value is None or isinstance(value, bool | Mapping | list):
+        raise ValueError(
+            f"an extra field must be a string, a number or a list of them, not {_describe_value_kind(value)}"
+        )
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("an extra field must not be blank")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("an extra field must be a finite number")
+
+
+def _refuse_an_unusable_extra_field(value: Any) -> Any:
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("an extra field list must not be empty")
+        items = cast("list[Any]", value)
+        for item in items:
+            _refuse_an_unusable_extra_item(item)
+        return items
+    _refuse_an_unusable_extra_item(value)
+    return value
+
+
+def fact_label(name: str) -> str:
+    return name[:1].upper() + name[1:]
+
+
+KNOWN_FIELD_NAMES: Final = ("status", "priority", "assignee", "due", "labels", "estimate")
+
+
+class SectionFields(FrozenModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[  # pyright: ignore[reportIncompatibleVariableOverride]
+        str, Annotated[FieldScalar | FieldList, BeforeValidator(_refuse_an_unusable_extra_field)]
+    ] = Field(init=False)
+
+    @property
+    def extras(self) -> dict[str, FieldScalar | FieldList]:
+        return cast("dict[str, FieldScalar | FieldList]", self.model_extra or {})
+
+    @model_validator(mode="after")
+    def _refuse_two_facts_under_one_label(self) -> "SectionFields":
+        seen: dict[str, str] = {}
+        sources = (
+            *((name, "a known field", fact_label(name)) for name in KNOWN_FIELD_NAMES),
+            *((name, "a link type", fact_label(name)) for name in self.links),
+            *((name, "an extra field", name) for name in self.extras),
+        )
+        for name, kind, label in sources:
+            if label in seen:
+                raise ValueError(
+                    f"'{name}' ({kind}) and {seen[label]} would both show as '{label}'; rename one of them"
+                )
+            seen[label] = f"'{name}' ({kind})"
+        return self
+
+    status: NonBlank | None = Field(
+        default=None, description="Workflow state, shown as a chip (e.g. `In Progress`)."
+    )
+    priority: NonBlank | None = Field(default=None, description="Priority, shown as a chip (e.g. `High`).")
+    assignee: NonBlank | None = Field(
+        default=None, description="A person's key, shown as a person chip carrying the key."
+    )
+    due: IsoDate | None = Field(default=None, description="Due date, ISO `YYYY-MM-DD`.")
+    labels: Annotated[list[NonBlank], Field(min_length=1)] | None = Field(
+        default=None, description="Labels, each shown as a chip."
+    )
+    estimate: Number | None = Field(default=None, description="Effort estimate as a number.")
+    links: SectionLinks = Field(
+        default_factory=SectionLinks,
+        description="Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of "
+        "the sections it points at. Every id must be the `id` of a section in this document.",
+    )
+
+
 class Section(_Block):
     type: Literal["section"]
     title: NonBlank = Field(description="Summary label shown on the collapsible.")
@@ -2545,6 +2848,12 @@ class Section(_Block):
         pattern=rf"^{ANCHOR_ID_PATTERN}$",
         description="Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived "
         "slug so `[…](#id)` links survive a title rename. Must be unique across the page.",
+    )
+    fields: SectionFields | None = Field(
+        default=None,
+        description="Issue fields and page properties shown as a fact strip under the title: status, "
+        "priority, assignee, due, labels, estimate, `links` to other sections by id, and any extra key "
+        "holding a string, a number or a list of them.",
     )
     collapsed: bool = Field(
         default=True,
@@ -2747,6 +3056,7 @@ def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
             | Note()
             | Divider()
             | Image()
+            | Link()
             | Timeline()
             | Flow()
             | Fan()
@@ -3064,6 +3374,23 @@ class Report(FrozenModel):
             "reference key(s)",
             "reference keys must be unique",
         )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_section_links_name_sections(self) -> "Report":
+        section_ids = {
+            block.id for _, block in self.located_blocks if isinstance(block, Section) and block.id
+        }
+        for path, block in self.located_blocks:
+            if not isinstance(block, Section) or block.fields is None:
+                continue
+            for link_type, targets in block.fields.links.items():
+                for index, target in enumerate(targets):
+                    if target not in section_ids:
+                        raise ValueError(
+                            f"section link '{link_type}' names '{target}', which is not the id of any "
+                            f"section, at {path}.fields.links.{link_type}.{index}"
+                        )
         return self
 
     @model_validator(mode="after")

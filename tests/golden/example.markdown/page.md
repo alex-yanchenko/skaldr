@@ -1,4 +1,6 @@
-# Q3 Warehouse Inventory Count: Discrepancies & Fixes
+# 📦 Q3 Warehouse Inventory Count: Discrepancies & Fixes
+
+[Cover image](https://example.com/covers/warehouse.png)
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 
@@ -11,6 +13,7 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - [Rollout](#rollout)
 - [Method](#method)
 - [At a glance](#at-a-glance)
+- [Recount Zone C](#recount-zone-c)
 - [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
 - [Counts at a glance](#counts-at-a-glance)
 - [Count methods compared](#count-methods-compared)
@@ -219,6 +222,10 @@ function pickWinner(a, b) {
 
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
 
+> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**
+>
+> *example.com · Revision 7*
+
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.
 >
 > *Floor lead, ticket OPS-1234*
@@ -238,6 +245,19 @@ function pickWinner(a, b) {
 
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.
+
+## Recount Zone C
+
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
+- **team**: Floor ops
+
+Zone C holds most of the mislabeled bins, so it is recounted first.
 
 ## Appendix: discrepancy-reason raw counts
 

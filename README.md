@@ -55,6 +55,7 @@ the result:
 
 ```bash
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
+skaldr --guide request             # one block: its table row, its guide section and its fields (--guide --list names them all)
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)
@@ -140,7 +141,7 @@ an unknown type, a field from the wrong block, or an unknown key each fails with
 **Blocks:** `skaldr --guide` describes each one.
 
 - Prose and metadata: `heading` · `text` · `list` · `fact_strip` · `key_value` · `def_list` ·
-  `quote` · `note` · `callout` · `code` · `math` · `image` · `divider` · `references`
+  `quote` · `note` · `callout` · `code` · `math` · `image` · `link` · `divider` · `references`
 - Numbers and state: `cards` · `badge_row` · `status_list` · `meter` · `range` · `table` ·
   `chart` · `comparison` · `matrix` · `timeline`
 - Processes: `flow` (a directional pipeline in arrow or step style, with an optional loop) ·

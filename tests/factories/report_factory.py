@@ -126,6 +126,21 @@ def make_command_request(**overrides: Any) -> dict[str, Any]:
     return block
 
 
+def make_query_request(**overrides: Any) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": "request",
+        "label": "Open orders in the shop database",
+        "query": {
+            "runner": "mongosh, orders database",
+            "lang": "json",
+            "content": '[{"$match": {"status": "open"}}, {"$count": "n"}]',
+        },
+        "cases": [{"label": "open orders", "response": {"body": '[{"n": 12}]'}}],
+    }
+    block.update(overrides)
+    return block
+
+
 def make_step(**overrides: Any) -> dict[str, Any]:
     """A minimal valid `request_flow` step. Captures nothing unless a caller asks for it."""
     step: dict[str, Any] = {
