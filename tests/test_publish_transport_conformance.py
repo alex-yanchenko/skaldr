@@ -73,9 +73,10 @@ def _as_adf(text: str) -> str:
 def _jira() -> Instance:
     jira = FakeJira()
     transport = JiraTransport(jira.client())
+    outside_reader = JiraTransport(jira.client())
 
     def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
-        sections = {**transport.read_item(item_id, ItemContent(title="")).raw_sections, key: text}
+        sections = {**outside_reader.read_item(item_id, ItemContent(title="")).raw_sections, key: text}
         blocks = [block for section in sections.values() for block in section_blocks(section)]
         jira.edit_by_hand(item_id, description=description_doc(blocks))
 

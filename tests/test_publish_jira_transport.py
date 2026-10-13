@@ -112,15 +112,6 @@ def _created(jira: FakeJira, content: ItemContent = CONTENT) -> tuple[JiraTransp
 
 def _read_calls(key: str) -> list[tuple[str, str]]:
     return [
-        ("GET", f"/rest/api/3/issue/{key}"),
-        ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.stamp"),
-        ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.layout"),
-        ("GET", f"/rest/api/3/issue/{key}/changelog"),
-    ]
-
-
-def _checked_calls(key: str) -> list[tuple[str, str]]:
-    return [
         ("GET", f"/rest/api/3/issue/{key}/changelog"),
         ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.stamp"),
         ("GET", f"/rest/api/3/issue/{key}/properties/skaldr.layout"),
@@ -399,7 +390,7 @@ def test_creating_an_issue_sends_the_description_fields_label_stamp_and_layout_i
 
     created = _transport(jira).create_item(NewItem(UNDER_A_PARENT, STAMP, CONTENT))
 
-    assert (jira.calls(), summarise(jira.requests[0])["body"], str(jira.requests[1].url)) == (
+    assert (jira.calls(), summarise(jira.requests[0])["body"], str(jira.requests[4].url)) == (
         [("POST", "/rest/api/3/issue"), *_read_calls("DEMO-1")],
         {
             "fields": {
@@ -451,7 +442,7 @@ def test_a_label_the_author_already_wrote_is_not_sent_twice() -> None:
     assert jira.issues["DEMO-1"].fields["labels"] == [DOC_LABEL, "garden"]
 
 
-def test_when_jira_drops_the_properties_of_a_create_skaldr_puts_them_and_reads_again() -> None:
+def test_when_jira_drops_the_properties_of_a_create_skaldr_puts_them_without_reading_again() -> None:
     jira = FakeJira(honours_properties_on_create=False)
 
     created = _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT))
@@ -464,9 +455,33 @@ def test_when_jira_drops_the_properties_of_a_create_skaldr_puts_them_and_reads_a
             *_read_calls("DEMO-1"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.layout"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
-            *_read_calls("DEMO-1"),
         ],
     )
+
+
+def test_the_edit_check_after_a_read_reuses_that_read_and_sends_nothing_more() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_by_hand(created.item_id, summary="Garden guide", description=_description(INTRO, _table()))
+    jira.forget_requests()
+
+    transport.read_item(created.item_id, CONTENT)
+    edited = transport.parts_edited_after(created.item_id, created.marker, CONTENT)
+
+    assert (edited, jira.calls()) == ((TITLE, section_part("planting")), _read_calls("DEMO-1"))
+
+
+def test_a_write_between_a_read_and_the_edit_check_makes_the_check_read_again() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.read_item(created.item_id, CONTENT)
+    written = transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+    jira.edit_by_hand(created.item_id, summary="Garden notes")
+    jira.forget_requests()
+
+    edited = transport.parts_edited_after(created.item_id, written.marker, CONTENT)
+
+    assert (edited, jira.calls()) == ((TITLE,), _read_calls("DEMO-1"))
 
 
 def test_a_description_over_jiras_limit_is_refused_before_anything_is_sent() -> None:
@@ -568,11 +583,12 @@ def test_a_missing_issue_reads_as_not_found_once_the_sign_in_is_confirmed() -> N
     with pytest.raises(
         ItemNotFoundError,
         match=_exactly(
-            "Jira has no issue DEMO-9 that this account can see (HTTP 404 to GET /rest/api/3/issue/DEMO-9)"
+            "Jira has no issue DEMO-9 that this account can see (HTTP 404 to GET "
+            "/rest/api/3/issue/DEMO-9/changelog)"
         ),
     ):
         _transport(jira).read_item("DEMO-9", CONTENT)
-    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-9"), ("GET", "/rest/api/3/myself")]
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-9/changelog"), ("GET", "/rest/api/3/myself")]
 
 
 def test_a_not_found_answered_to_a_sign_in_jira_no_longer_accepts_is_not_a_missing_issue() -> None:
@@ -610,7 +626,7 @@ def test_a_content_write_replaces_the_description_and_layout_in_one_request() ->
 
     assert (jira.calls(), summarise(jira.requests[4])["body"], written.comparable.sections) == (
         [
-            *_checked_calls("DEMO-1"),
+            *_read_calls("DEMO-1"),
             ("PUT", "/rest/api/3/issue/DEMO-1"),
             *_read_calls("DEMO-1"),
             ("GET", "/rest/api/3/myself"),
@@ -631,7 +647,7 @@ def test_a_content_write_replaces_the_description_and_layout_in_one_request() ->
     assert written.comparable.fields == FIELDS_WRITTEN
 
 
-def test_when_jira_drops_the_properties_of_an_edit_skaldr_puts_the_layout_and_reads_again() -> None:
+def test_when_jira_drops_the_properties_of_an_edit_skaldr_puts_the_layout_without_reading_again() -> None:
     jira = FakeJira(honours_properties_on_edit=False)
     transport, created = _created(jira)
     sections = {"planting": section_text([SOW_IN_MAY])}
@@ -643,7 +659,6 @@ def test_when_jira_drops_the_properties_of_an_edit_skaldr_puts_the_layout_and_re
         [
             *_read_calls("DEMO-1"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.layout"),
-            *_read_calls("DEMO-1"),
             ("GET", "/rest/api/3/myself"),
         ],
     )
@@ -683,7 +698,7 @@ def test_a_write_quoting_section_text_jira_does_not_hold_under_the_same_keys_is_
 
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
         transport.write_content(created.item_id, ContentWrite(dict(created.raw_sections), stale))
-    assert jira.calls() == _checked_calls("DEMO-1")
+    assert jira.calls() == _read_calls("DEMO-1")
 
 
 def test_an_empty_content_write_clears_the_description() -> None:
@@ -727,7 +742,7 @@ def test_a_section_write_quoting_text_jira_no_longer_holds_is_refused_unsent() -
         transport.write_section(
             created.item_id, SectionRequest(RemoveSection("planting", "[]"), created.raw_sections)
         )
-    assert jira.calls() == _checked_calls("DEMO-1")
+    assert jira.calls() == _read_calls("DEMO-1")
 
 
 def _fields_write(fields: dict[str, JsonValue], title: str = "Garden handbook") -> FieldsWrite:
