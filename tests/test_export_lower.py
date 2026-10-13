@@ -34,6 +34,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListNode,
     LoweredDocument,
+    Media,
     Node,
     PagePart,
     Paragraph,
@@ -73,6 +74,7 @@ from tests.factories import (
     make_cell,
     make_command_request,
     make_grid,
+    make_query_request,
     make_report,
     make_request,
     make_tab,
@@ -444,6 +446,24 @@ def test_a_request_with_one_case_shows_its_label_note_status_and_verdict() -> No
         Paragraph((*bold("Recorded output"), Plain(": "), Plain("200 OK"))),
         CodeBlock("ok", ""),
         Callout("success", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
+    )
+
+
+def test_a_query_request_shows_its_runner_and_the_query_in_its_own_language() -> None:
+    request = make_query_request(
+        query={"runner": "psql, reporting replica", "lang": "sql", "content": "SELECT 1 WHERE s = '{{s}}'"},
+        case_variable="s",
+        cases=[{"label": "open", "verdict": "fine", "response": {"body": "1"}}],
+    )
+
+    assert lowered([request]) == (
+        Paragraph(bold("Open orders in the shop database")),
+        Paragraph(italic(plain("open"))),
+        Paragraph((*bold("Query"), Plain(": "), Plain("psql, reporting replica"))),
+        CodeBlock("SELECT 1 WHERE s = 'open'", "sql"),
+        Paragraph(bold("Recorded output")),
+        CodeBlock("1", "json"),
+        Callout("neutral", (Paragraph((*bold("Verdict"), Plain(": "), Plain("fine"))),)),
     )
 
 
@@ -1273,6 +1293,42 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
     block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
 
     assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
+
+
+@pytest.mark.parametrize(
+    ("image", "node"),
+    [
+        pytest.param(
+            {"caption": "Overflow bins"},
+            Media("image", "https://example.com/aisle.png", plain("Aisle 12"), plain("Overflow bins")),
+            id="with-a-caption",
+        ),
+        pytest.param({}, Media("image", "https://example.com/aisle.png", plain("Aisle 12")), id="alt-only"),
+    ],
+)
+def test_a_web_image_keeps_its_url_alt_and_caption(image: dict[str, Any], node: Media) -> None:
+    block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
+
+    assert lowered([block]) == (node,)
+
+
+@pytest.mark.parametrize(
+    ("block", "node"),
+    [
+        pytest.param(
+            {"kind": "video", "src": "https://example.com/walk.mp4", "caption": "Dock walk"},
+            Media("video", "https://example.com/walk.mp4", (), plain("Dock walk")),
+            id="video-with-a-caption",
+        ),
+        pytest.param(
+            {"kind": "pdf", "src": "https://example.com/sheet.pdf"},
+            Media("pdf", "https://example.com/sheet.pdf"),
+            id="pdf-without-a-caption",
+        ),
+    ],
+)
+def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], node: Media) -> None:
+    assert lowered([{"type": "media", **block}]) == (node,)
 
 
 @pytest.mark.parametrize(

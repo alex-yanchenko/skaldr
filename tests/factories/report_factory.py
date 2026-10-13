@@ -61,6 +61,14 @@ def make_cell(span: Any, blocks: list[dict[str, Any]] | None = None) -> dict[str
     return {"span": span, "blocks": blocks if blocks is not None else [{"type": "text", "body": "x"}]}
 
 
+def in_an_open_section(blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    return make_section("part", blocks=blocks, collapsed=False)
+
+
+def in_a_grid_cell(blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    return make_grid([make_cell(6, blocks)])
+
+
 def make_toggle(*blocks: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     return {
         "type": "toggle",
@@ -121,6 +129,21 @@ def make_command_request(**overrides: Any) -> dict[str, Any]:
         "label": "Tier mappings on the partner API",
         "command": "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
         "cases": [{"label": "all tiers", "response": {"body": '[{"code": "STANDARD", "mapped": null}]'}}],
+    }
+    block.update(overrides)
+    return block
+
+
+def make_query_request(**overrides: Any) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": "request",
+        "label": "Open orders in the shop database",
+        "query": {
+            "runner": "mongosh, orders database",
+            "lang": "json",
+            "content": '[{"$match": {"status": "open"}}, {"$count": "n"}]',
+        },
+        "cases": [{"label": "open orders", "response": {"body": '[{"n": 12}]'}}],
     }
     block.update(overrides)
     return block
