@@ -1,6 +1,6 @@
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from typing import Final
 from urllib.parse import quote
@@ -8,7 +8,7 @@ from urllib.parse import quote
 from typing_extensions import assert_never
 
 from skaldr.export.glyphs import gauge_bar, mark_glyph
-from skaldr.export.runs import Chip, Gauge, Mark
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
 from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import Citation, MarkerStyle, ScriptPosition, StyleName, TextRunWriter
@@ -19,6 +19,7 @@ DIVIDER_LINE: Final = "---"
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
+HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 URL_SAFE_CHARACTERS: Final = "/:?#[]@!$&'*+,;=%~"
 
 
@@ -89,6 +90,50 @@ def encode_url(url: str) -> str:
 
 def indent_lines(lines: Sequence[str], prefix: str) -> list[str]:
     return [prefix + line if line else line for line in lines]
+
+
+def heading_line(level: int, text: str) -> str:
+    kept_hashes = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), text)
+    return f"{'#' * level} {kept_hashes}"
+
+
+def spaced(lines: Sequence[str]) -> list[str]:
+    return ["", *lines] if lines else []
+
+
+def quoted(lines: Sequence[str]) -> list[str]:
+    return [f"> {line}" if line else ">" for line in lines]
+
+
+def joined(sections: Sequence[Sequence[str]]) -> list[str]:
+    out: list[str] = []
+    for lines in sections:
+        if lines:
+            out += ["", *lines] if out else lines
+    return out
+
+
+def _padded(cells: Sequence[str], width: int) -> list[str]:
+    return [*cells, *[""] * (width - len(cells))]
+
+
+def _pipe_table_row(cells: Sequence[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def pipe_table_lines(table: TableNode, inline: Callable[[ExportRich], str]) -> list[str]:
+    def cell_text(runs: ExportRich) -> str:
+        return inline(runs).replace("|", "\\|")
+
+    width = max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
+    lines = [
+        _pipe_table_row(_padded([cell_text(cell.text) for cell in table.header], width)),
+        _pipe_table_row(["---"] * width),
+    ]
+    for row in table.rows:
+        texts = body_cell_texts(table, row, [cell_text(cell.text) for cell in row.cells])
+        lines.append(_pipe_table_row(_padded(texts, width)))
+    return lines
 
 
 class MarkupRuns(TextRunWriter, ABC):

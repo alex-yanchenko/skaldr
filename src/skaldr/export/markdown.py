@@ -14,12 +14,16 @@ from skaldr.export.markup import (
     DIVIDER_LINE,
     STYLE_MARKER,
     MarkupRuns,
-    body_cell_texts,
     code_block_lines,
     code_span,
     encode_url,
     escape_block_start,
+    heading_line,
     indent_lines,
+    joined,
+    pipe_table_lines,
+    quoted,
+    spaced,
     styled,
     styled_in_tags,
 )
@@ -42,7 +46,6 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    TableCell,
     TableNode,
     TableOfContents,
     Tabs,
@@ -70,7 +73,6 @@ OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
 )
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
 ENTITY_LOOKALIKE = re.compile(r"&(?=#?\w+;)")
-HEADING_CLOSING_RUN = re.compile(r"(?:(?<=\s)|^)(#+\s*)$")
 LARGEST_ORDERED_MARKER_NUMBER: Final = 999_999_999
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
@@ -132,7 +134,7 @@ def _first_character(pieces: Sequence[_Piece]) -> str:
     return NO_CHARACTER
 
 
-class _MarkdownRuns(MarkupRuns):
+class MarkdownRuns(MarkupRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.heading_slugs = heading_slugs
 
@@ -259,33 +261,9 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
     return family is not None and after is not None and after.family == family and not after.alternated
 
 
-def _spaced(lines: Sequence[str]) -> list[str]:
-    return ["", *lines] if lines else []
-
-
-def _quoted(lines: Sequence[str]) -> list[str]:
-    return [f"> {line}" if line else ">" for line in lines]
-
-
-def _pad(cells: Sequence[str], width: int) -> list[str]:
-    return [*cells, *[""] * (width - len(cells))]
-
-
-def _table_row(cells: Sequence[str]) -> str:
-    return "| " + " | ".join(cells) + " |"
-
-
-def _joined(sections: Sequence[Sequence[str]]) -> list[str]:
-    out: list[str] = []
-    for lines in sections:
-        if lines:
-            out += ["", *lines] if out else lines
-    return out
-
-
 class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
-        self.runs = _MarkdownRuns(heading_slugs)
+        self.runs = MarkdownRuns(heading_slugs)
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
@@ -294,22 +272,10 @@ class _MarkdownWriter:
         return escape_block_start(self.inline(runs))
 
     def heading_line(self, level: HeadingLevel, runs: ExportRich) -> str:
-        text = HEADING_CLOSING_RUN.sub(lambda match: "\\" + match.group(1), self.inline(runs))
-        return f"{'#' * level} {text}"
-
-    def cell_text(self, cell: TableCell) -> str:
-        return self.inline(cell.text).replace("|", "\\|")
+        return heading_line(level, self.inline(runs))
 
     def table_lines(self, table: TableNode) -> list[str]:
-        width = max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
-        lines = [
-            _table_row(_pad([self.cell_text(cell) for cell in table.header], width)),
-            _table_row(["---"] * width),
-        ]
-        for row in table.rows:
-            texts = body_cell_texts(table, row, [self.cell_text(cell) for cell in row.cells])
-            lines.append(_table_row(_pad(texts, width)))
-        return lines
+        return pipe_table_lines(table, self.inline)
 
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)
@@ -342,7 +308,7 @@ class _MarkdownWriter:
         if not title:
             return self.blocks_after(children, after)
         body = self.blocks_after(children, None)
-        return _Written.of([title, *_spaced(body.lines)], body.tail)
+        return _Written.of([title, *spaced(body.lines)], body.tail)
 
     def callout_lines(self, node: Callout) -> list[str]:
         icon = node.icon or CALLOUT_ICON[node.tone]
@@ -351,14 +317,14 @@ class _MarkdownWriter:
         if lines and body.opens_with_a_paragraph:
             lines[0] = f"{icon} {lines[0]}"
         else:
-            lines = [icon, *_spaced(lines)]
-        return _quoted(lines)
+            lines = [icon, *spaced(lines)]
+        return quoted(lines)
 
     def media_lines(self, node: Media) -> list[str]:
         if node.kind == "image":
             image = f"![{self.inline(node.description)}]({encode_url(node.url)})"
             caption = [styled("italic", self.inline(node.caption))] if node.caption else []
-            return _joined([[image], caption])
+            return joined([[image], caption])
         label = self.inline(node.caption or plain(node.url))
         return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, node.url)}"]
 
@@ -366,7 +332,7 @@ class _MarkdownWriter:
         parts = [self.block_text(line) for line in node.lines]
         if node.cite:
             parts.append(styled("italic", self.inline(node.cite)))
-        return _quoted(_joined([[part] for part in parts]))
+        return quoted(joined([[part] for part in parts]))
 
     def tabs_written(self, node: Tabs, after: _ListTail | None) -> _Written:
         sections: list[Sequence[str]] = []
@@ -378,7 +344,7 @@ class _MarkdownWriter:
             if section.lines:
                 sections.append(section.lines)
                 tail = section.tail
-        return _Written.of(_joined(sections), tail)
+        return _Written.of(joined(sections), tail)
 
     def toc_lines(self, node: TableOfContents, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)
@@ -426,7 +392,7 @@ class _MarkdownWriter:
             case Diagram():
                 supplement = self.blocks_after(node.supplement, None)
                 return _Written.of(
-                    [*mermaid_fence_lines(node.figure), *_spaced(supplement.lines)], supplement.tail
+                    [*mermaid_fence_lines(node.figure), *spaced(supplement.lines)], supplement.tail
                 )
             case TableOfContents():
                 return _Written.of(self.toc_lines(node, alternate), _ListTail("dash", alternate))
@@ -443,7 +409,7 @@ class _MarkdownWriter:
                 opens_with_a_paragraph = opens_with_a_paragraph if rendered else isinstance(node, Paragraph)
                 rendered.append(written.lines)
                 tail = written.tail
-        return _Written(tuple(_joined(rendered)), tail, opens_with_a_paragraph)
+        return _Written(tuple(joined(rendered)), tail, opens_with_a_paragraph)
 
     def blocks(self, nodes: Sequence[Node]) -> list[str]:
         return list(self.blocks_after(nodes, None).lines)
