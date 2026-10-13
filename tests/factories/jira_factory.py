@@ -87,7 +87,7 @@ def _decorated(value: JsonValue) -> JsonValue:
 class FakeJira:
     issue_types: tuple[str, ...] = ("Task", "Story")
     unknown_fields: frozenset[str] = frozenset({"story_points"})
-    changelog_page_size: int = 2
+    page_size: int = 2
     honours_properties_on_create: bool = True
     honours_properties_on_edit: bool = True
     issues: dict[str, FakeIssue] = field(default_factory=dict[str, FakeIssue])
@@ -187,6 +187,7 @@ class FakeJira:
             (rf"{issue}/transitions", "GET", self._transitions),
             (rf"{issue}/transitions", "POST", self._transition),
             (rf"{issue}/comment", "POST", self._comment),
+            (rf"{issue}/comment", "GET", self._comments),
         ]
 
     def _myself(self, _request: httpx2.Request) -> httpx2.Response:
@@ -292,7 +293,7 @@ class FakeJira:
             return issue
         start = int(request.url.params.get("startAt", "0"))
         asked = int(request.url.params.get("maxResults", "50"))
-        size = min(asked, self.changelog_page_size)
+        size = min(asked, self.page_size)
         histories: list[JsonValue] = list(self.histories[key])
         page = histories[start : start + size]
         return httpx2.Response(
@@ -361,6 +362,25 @@ class FakeJira:
             return issue
         issue.comments.append(_CommentBody.model_validate_json(request.content).body)
         return httpx2.Response(201, json={"id": str(len(issue.comments))})
+
+    def _comments(self, request: httpx2.Request, key: str) -> httpx2.Response:
+        issue = self._issue(key)
+        if isinstance(issue, httpx2.Response):
+            return issue
+        start = int(request.url.params.get("startAt", "0"))
+        size = min(int(request.url.params.get("maxResults", "50")), self.page_size)
+        comments: list[JsonValue] = [
+            {"id": str(number), "body": body} for number, body in enumerate(issue.comments, start=1)
+        ]
+        return httpx2.Response(
+            200,
+            json={
+                "startAt": start,
+                "maxResults": size,
+                "total": len(comments),
+                "comments": comments[start : start + size],
+            },
+        )
 
     def _stored(self, description: JsonValue) -> JsonValue:
         stored = copy.deepcopy(description)

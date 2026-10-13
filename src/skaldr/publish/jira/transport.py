@@ -1,5 +1,6 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
@@ -24,6 +25,7 @@ from skaldr.publish.jira.description import (
     Blocks,
     Layout,
     blocks_of,
+    comparable_node,
     comparable_section,
     description_doc,
     layout_of,
@@ -53,6 +55,7 @@ SUMMARY = "summary"
 DESCRIPTION = "description"
 LABELS = "labels"
 NO_MARKER = -1
+Stored = TypeVar("Stored", bound=BaseModel)
 NOTHING_TO_RELEASE = (
     "Jira has nothing to release: skaldr writes only into issues it created, and archives those"
 )
@@ -256,12 +259,17 @@ class JiraTransport:
         if not status.is_done:
             done = self._done_transition(item_id, status)
             if not current.commented:
-                self._client.add_comment(item_id, _archive_comment(stamp))
+                self._comment_once(item_id, _archive_comment(stamp))
                 current = current.model_copy(update={"commented": True})
                 self._client.put_property(item_id, STAMP_PROPERTY, current.model_dump(mode="json"))
             self._client.transition(item_id, done.id)
         archived = current.model_copy(update={"archived": True})
         self._client.put_property(item_id, STAMP_PROPERTY, archived.model_dump(mode="json"))
+
+    def _comment_once(self, item_id: str, body: JsonValue) -> None:
+        wanted = comparable_node(body)
+        if not any(comparable_node(comment.body) == wanted for comment in self._client.comments(item_id)):
+            self._client.add_comment(item_id, body)
 
     def release_item(self, _item_id: str, _request: Release, /) -> None:
         raise ConnectorError(NOTHING_TO_RELEASE)
@@ -471,21 +479,22 @@ class JiraTransport:
         own = None if stamp is None or stamp.doc_id is None else doc_label(stamp.doc_id)
         return [label for label in _labels(value) if label != own]
 
+    def _property_value(self, item_id: str, name: str, model: type[Stored]) -> Stored | None:
+        found = self._client.get_property(item_id, name)
+        return None if found is None else model.model_validate(found.value)
+
     def _stamp(self, item_id: str) -> StampValue | None:
-        found = self._client.get_property(item_id, STAMP_PROPERTY)
-        if found is None:
-            return None
         try:
-            return StampValue.model_validate(found.value)
-        except ValidationError:
-            return None
+            return self._property_value(item_id, STAMP_PROPERTY, StampValue)
+        except ValidationError as exc:
+            raise ConnectorError(
+                f"the {STAMP_PROPERTY} property of {item_id} is not one skaldr can read, so skaldr cannot "
+                "tell which document the issue belongs to or whether it archived the issue"
+            ) from exc
 
     def _layout(self, item_id: str) -> Layout | None:
-        found = self._client.get_property(item_id, LAYOUT_PROPERTY)
-        if found is None:
-            return None
         try:
-            return Layout.model_validate(found.value)
+            return self._property_value(item_id, LAYOUT_PROPERTY, Layout)
         except ValidationError:
             return None
 

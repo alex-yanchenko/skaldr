@@ -8,6 +8,7 @@ from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.jira.api import (
     ChangeDetails,
     Changelog,
+    Comment,
     CreatedIssue,
     EntityProperty,
     Issue,
@@ -227,6 +228,44 @@ def test_a_comment_is_posted_as_adf() -> None:
         [PARAGRAPH],
         _request("POST", "/rest/api/3/issue/DEMO-1/comment", {"body": PARAGRAPH}),
     )
+
+
+def _rules(count: int) -> JsonValue:
+    rules: list[JsonValue] = [{"type": "rule"}] * count
+    return {"version": 1, "type": "doc", "content": rules}
+
+
+def test_the_comments_are_read_page_by_page_to_the_end() -> None:
+    jira = _seeded()
+    client = jira.client()
+    for count in range(3):
+        client.add_comment("DEMO-1", _rules(count))
+    jira.forget_requests()
+
+    comments = client.comments("DEMO-1")
+
+    assert (comments, [summarise(request)["url"] for request in jira.requests]) == (
+        [Comment(id="1", body=_rules(0)), Comment(id="2", body=_rules(1)), Comment(id="3", body=_rules(2))],
+        [
+            f"{SITE}/rest/api/3/issue/DEMO-1/comment?startAt=0&maxResults=100",
+            f"{SITE}/rest/api/3/issue/DEMO-1/comment?startAt=2&maxResults=100",
+        ],
+    )
+
+
+def test_a_comments_page_that_does_not_start_where_it_was_asked_to_is_an_error() -> None:
+    jira = _seeded()
+    stuck: JsonValue = {"startAt": 0, "total": 9, "comments": [{"id": "1", "body": PARAGRAPH}]}
+    jira.answer_next(Reply(200, stuck), Reply(200, stuck))
+
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly(
+            "Jira answered GET /rest/api/3/issue/DEMO-1/comment with a page starting at entry 0 when skaldr "
+            "asked for entry 1, so skaldr cannot read the issue's whole list of comments"
+        ),
+    ):
+        jira.client().comments("DEMO-1")
 
 
 def test_myself_names_the_signed_in_account() -> None:

@@ -20,11 +20,13 @@ from skaldr.auth.store import JiraCredentials
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.jira.api import (
     Changelog,
-    ChangelogPage,
+    Comment,
     CreatedIssue,
     EntityProperty,
+    Entry,
     Issue,
     JiraUser,
+    Page,
     Transition,
     Transitions,
 )
@@ -33,7 +35,7 @@ API = "/rest/api/3"
 ATTEMPTS = 4
 FIRST_BACKOFF_SECONDS = 2
 LONGEST_RETRY_AFTER_SECONDS = 60
-CHANGELOG_PAGE_SIZE = 100
+PAGE_SIZE = 100
 READ_METHODS = frozenset({"GET"})
 
 Answer = TypeVar("Answer", bound=BaseModel)
@@ -151,21 +153,27 @@ class JiraClient:
         self._send("PUT", issue_path(key), key=key, body=body)
 
     def changelog(self, key: str) -> list[Changelog]:
-        path = issue_path(key, "changelog")
-        entries: list[Changelog] = []
+        return self._every_entry(key, "changelog", Page[Changelog], "history")
+
+    def comments(self, key: str) -> list[Comment]:
+        return self._every_entry(key, "comment", Page[Comment], "list of comments")
+
+    def _every_entry(self, key: str, listing: str, page_type: type[Page[Entry]], whole: str) -> list[Entry]:
+        path = issue_path(key, listing)
+        entries: list[Entry] = []
         while True:
             start = len(entries)
-            params = {"startAt": start, "maxResults": CHANGELOG_PAGE_SIZE}
+            params = {"startAt": start, "maxResults": PAGE_SIZE}
             response = self._send("GET", path, key=key, params=params)
-            page = self._parsed(ChangelogPage, response, path, "a page of the issue's changelog")
+            page = self._parsed(page_type, response, path, f"a page of the issue's {whole}")
             if page.start_at != start:
                 raise ConnectorError(
                     f"Jira answered GET {path} with a page starting at entry {page.start_at} when skaldr "
-                    f"asked for entry {start}, so skaldr cannot read the issue's whole history"
+                    f"asked for entry {start}, so skaldr cannot read the issue's whole {whole}"
                 )
-            entries += page.values
+            entries += page.entries
             ended = page.is_last or (page.total is not None and len(entries) >= page.total)
-            if ended or not page.values:
+            if ended or not page.entries:
                 return entries
 
     def get_property(self, key: str, name: str) -> EntityProperty | None:

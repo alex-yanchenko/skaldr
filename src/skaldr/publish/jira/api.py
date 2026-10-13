@@ -1,6 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from typing import Generic, TypeVar
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue
 
 DONE_CATEGORY = "done"
+Entry = TypeVar("Entry")
 
 
 class JiraModel(BaseModel):
@@ -58,11 +61,16 @@ class Changelog(JiraModel):
         return int(self.id)
 
 
-class ChangelogPage(JiraModel):
+class Comment(JiraModel):
+    id: str
+    body: JsonValue = None
+
+
+class Page(JiraModel, Generic[Entry]):
     start_at: int = Field(alias="startAt")
     total: int | None = None
     is_last: bool | None = Field(default=None, alias="isLast")
-    values: list[Changelog] = Field(default_factory=list[Changelog])
+    entries: tuple[Entry, ...] = Field(default=(), validation_alias=AliasChoices("values", "comments"))
 
 
 class Transition(JiraModel):

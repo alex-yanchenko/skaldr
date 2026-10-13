@@ -929,6 +929,7 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
             ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             ("GET", "/rest/api/3/issue/DEMO-1"),
             ("GET", "/rest/api/3/issue/DEMO-1/transitions"),
+            ("GET", "/rest/api/3/issue/DEMO-1/comment"),
             ("POST", "/rest/api/3/issue/DEMO-1/comment"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             ("POST", "/rest/api/3/issue/DEMO-1/transitions"),
@@ -937,6 +938,122 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
         DONE,
         [{"version": 1, "type": "doc", "content": [_words(why)]}],
         _stamp_value(STAMP, commented=True, archived=True),
+    )
+
+
+def _archive_comment_body(document: str) -> JsonValue:
+    why = f"skaldr archived this issue: {document} no longer has the content it held."
+    return {"version": 1, "type": "doc", "content": [_words(why)]}
+
+
+def test_an_archive_retried_after_its_stamp_was_not_saved_finds_its_comment_and_does_not_post_another() -> (
+    None
+):
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.fail_next(
+        "PUT",
+        "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp",
+        Reply(400, {"errorMessages": ["Bad value"]}),
+    )
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=_exactly(
+            "Jira refused PUT /rest/api/3/issue/DEMO-1/properties/skaldr.stamp (HTTP 400): Bad value"
+        ),
+    ):
+        transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (issue.comments, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
+        [_archive_comment_body("the document garden-handbook")],
+        DONE,
+        _stamp_value(STAMP, commented=True, archived=True),
+    )
+
+
+def test_an_archive_comment_jira_saved_with_attributes_of_its_own_still_counts_as_skaldrs() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    saved: JsonValue = {
+        "version": 1,
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "attrs": {"localId": "jira-0042"},
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "skaldr archived this issue: the document garden-handbook no longer has the "
+                        "content it held.",
+                    }
+                ],
+            }
+        ],
+    }
+    jira.issues["DEMO-1"].comments.append(saved)
+
+    transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (issue.comments, issue.fields["status"]) == ([saved], DONE)
+
+
+def test_archiving_an_issue_without_a_stamp_comments_without_a_doc_id_and_stamps_it_archived() -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-3", summary="Notes")
+
+    _transport(jira).archive_item("DEMO-3")
+
+    issue = jira.issues["DEMO-3"]
+    assert (issue.comments, issue.fields["status"], issue.properties) == (
+        [_archive_comment_body("the document")],
+        DONE,
+        {
+            "skaldr.stamp": {
+                "doc_id": None,
+                "section_id": None,
+                "commented": True,
+                "archived": True,
+            }
+        },
+    )
+
+
+UNREADABLE_STAMP = (
+    "the skaldr.stamp property of DEMO-3 is not one skaldr can read, so skaldr cannot tell which document "
+    "the issue belongs to or whether it archived the issue"
+)
+
+
+@pytest.mark.parametrize(
+    "stamp", [pytest.param("junk", id="not-an-object"), pytest.param({"doc_id": ["x"]}, id="foreign-shape")]
+)
+def test_an_unreadable_stamp_stops_a_read_and_an_archive(stamp: JsonValue) -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-3", summary="Notes").properties["skaldr.stamp"] = stamp
+    transport = _transport(jira)
+
+    with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
+        transport.read_item("DEMO-3", ItemContent(title=""))
+    with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
+        transport.archive_item("DEMO-3")
+    assert jira.issues["DEMO-3"].comments == []
+
+
+def test_an_unreadable_layout_reads_the_description_as_one_section() -> None:
+    jira = FakeJira()
+    issue = jira.seed("DEMO-3", summary="Notes", description=_description(INTRO, PLANTING))
+    issue.properties["skaldr.layout"] = "junk"
+
+    read = _transport(jira).read_item("DEMO-3", ItemContent(title=""))
+
+    assert (read.comparable, read.raw_sections) == (
+        ItemContent(title="Notes", sections={"(description)": section_text([INTRO, PLANTING])}),
+        {"(description)": section_text([INTRO, PLANTING])},
     )
 
 
@@ -995,7 +1112,7 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
 
     transport.archive_item(created.item_id)
 
-    assert summarise(jira.requests[5])["body"] == {"transition": {"id": "31"}}
+    assert summarise(jira.requests[6])["body"] == {"transition": {"id": "31"}}
 
 
 @pytest.mark.parametrize(
