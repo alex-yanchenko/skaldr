@@ -171,6 +171,18 @@ def test_a_field_value_is_sent_in_the_shape_its_property_kind_takes(
             id="boolean-for-a-number",
         ),
         pytest.param(
+            "number",
+            float("nan"),
+            "the Notion property 'Area' is a number property, so skaldr sends it a number, not NaN",
+            id="not-a-number",
+        ),
+        pytest.param(
+            "number",
+            float("-inf"),
+            "the Notion property 'Area' is a number property, so skaldr sends it a number, not -Infinity",
+            id="infinite-number",
+        ),
+        pytest.param(
             "multi_select",
             "soil",
             "the Notion property 'Area' is a multi_select property, so skaldr sends it a list of texts, "
@@ -183,6 +195,20 @@ def test_a_field_value_is_sent_in_the_shape_its_property_kind_takes(
             "the Notion property 'Area' is a date property, so skaldr sends it a date text or a start and "
             'end, not {"end": "2026-05-31"}',
             id="date-without-start",
+        ),
+        pytest.param(
+            "date",
+            {"start": "2026-03-01", "end": 31},
+            "the Notion property 'Area' is a date property, so skaldr sends it a date text or a start and "
+            'end, not {"start": "2026-03-01", "end": 31}',
+            id="date-with-an-end-that-is-not-text",
+        ),
+        pytest.param(
+            "date",
+            {"start": "2026-03-01", "end": None},
+            "the Notion property 'Area' is a date property, so skaldr sends it a date text or a start and "
+            'end, not {"start": "2026-03-01", "end": null}',
+            id="date-with-a-null-end",
         ),
         pytest.param(
             "checkbox",

@@ -1,7 +1,8 @@
 import json
-from collections.abc import Callable, Mapping
+import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Literal, NamedTuple, TypeGuard
 
 from pydantic import JsonValue
 from typing_extensions import assert_never
@@ -33,8 +34,28 @@ from skaldr.publish_block.target import JsonFields
 TITLE_PROPERTY_ID: Final = "title"
 RICH_TEXT_PIECE_CHARACTERS: Final = 2000
 
+SettableKind = Literal[
+    "rich_text",
+    "number",
+    "select",
+    "status",
+    "multi_select",
+    "date",
+    "checkbox",
+    "url",
+    "email",
+    "phone_number",
+    "people",
+    "relation",
+]
 
-def _plain(items: list[RichTextItem]) -> str:
+
+@dataclass(frozen=True)
+class _Sent:
+    value: JsonValue
+
+
+def _plain(items: Sequence[RichTextItem]) -> str:
     return "".join(item.plain_text for item in items)
 
 
@@ -44,47 +65,46 @@ def title_text(page: Page) -> str:
     )
 
 
-def _read_value(value: PropertyValue) -> tuple[bool, JsonValue]:
+def _read_value(value: PropertyValue) -> _Sent | None:
     match value:
         case TitleValue() | OtherValue():
-            return False, None
+            return None
         case RichTextValue():
-            return True, _plain(value.rich_text)
+            return _Sent(_plain(value.rich_text))
         case NumberValue():
-            return True, value.number
+            return _Sent(value.number)
         case SelectValue() | StatusValue():
             option = value.select if isinstance(value, SelectValue) else value.status
-            return True, None if option is None else option.name
+            return _Sent(None if option is None else option.name)
         case MultiSelectValue():
-            return True, [option.name for option in value.multi_select]
+            return _Sent([option.name for option in value.multi_select])
         case DateValue():
             if value.date is None or value.date.end is None:
-                return True, None if value.date is None else value.date.start
-            return True, {"start": value.date.start, "end": value.date.end}
+                return _Sent(None if value.date is None else value.date.start)
+            return _Sent({"start": value.date.start, "end": value.date.end})
         case CheckboxValue():
-            return True, value.checkbox
+            return _Sent(value.checkbox)
         case UrlValue():
-            return True, value.url
+            return _Sent(value.url)
         case EmailValue():
-            return True, value.email
+            return _Sent(value.email)
         case PhoneNumberValue():
-            return True, value.phone_number
+            return _Sent(value.phone_number)
         case PeopleValue() | RelationValue():
             references = value.people if isinstance(value, PeopleValue) else value.relation
-            return True, [reference.id for reference in references]
+            return _Sent([reference.id for reference in references])
         case FilesValue():
-            return True, [file.name for file in value.files]
+            return _Sent([file.name for file in value.files])
         case _:
             assert_never(value)
 
 
 def property_fields(page: Page) -> JsonFields:
-    fields: JsonFields = {}
-    for name, value in page.properties.items():
-        readable, read = _read_value(value)
-        if readable:
-            fields[name] = read
-    return fields
+    return {
+        name: read.value
+        for name, value in page.properties.items()
+        if (read := _read_value(value)) is not None
+    }
 
 
 def set_property_names(page: Page) -> tuple[str, ...]:
@@ -110,11 +130,6 @@ def title_request(title: str, name: str = TITLE_PROPERTY_ID) -> JsonFields:
     return {name: {"title": rich_text_request(title)}}
 
 
-@dataclass(frozen=True)
-class _Sent:
-    value: JsonValue
-
-
 def _text_list(value: JsonValue) -> list[str] | None:
     if not isinstance(value, list) or not all(isinstance(member, str) for member in value):
         return None
@@ -124,9 +139,11 @@ def _text_list(value: JsonValue) -> list[str] | None:
 def _date(value: JsonValue) -> _Sent | None:
     if isinstance(value, str):
         return _Sent({"start": value})
-    if isinstance(value, dict) and isinstance(value.get("start"), str):
-        return _Sent({key: member for key, member in value.items() if key in ("start", "end")})
-    return None
+    if not isinstance(value, dict) or not isinstance(value.get("start"), str):
+        return None
+    if "end" in value and not isinstance(value["end"], str):
+        return None
+    return _Sent({key: member for key, member in value.items() if key in ("start", "end")})
 
 
 def _text_value(value: JsonValue) -> _Sent | None:
@@ -134,7 +151,9 @@ def _text_value(value: JsonValue) -> _Sent | None:
 
 
 def _number(value: JsonValue) -> _Sent | None:
-    return _Sent(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return _Sent(value) if math.isfinite(value) else None
 
 
 def _named(value: JsonValue) -> _Sent | None:
@@ -159,38 +178,45 @@ def _rich_text(value: JsonValue) -> _Sent | None:
     return _Sent(rich_text_request(value)) if isinstance(value, str) else None
 
 
-_Encoding = tuple[Callable[[JsonValue], _Sent | None], JsonValue, str]
+class _Encoding(NamedTuple):
+    encode: Callable[[JsonValue], _Sent | None]
+    cleared: JsonValue
+    expectation: str
 
-_ENCODINGS: Final[Mapping[str, _Encoding]] = {
-    "rich_text": (_rich_text, [], "a text"),
-    "number": (_number, None, "a number"),
-    "select": (_named, None, "a text"),
-    "status": (_named, None, "a text"),
-    "multi_select": (_names, [], "a list of texts"),
-    "date": (_date, None, "a date text or a start and end"),
-    "checkbox": (_checkbox, False, "true or false"),
-    "url": (_text_value, None, "a text"),
-    "email": (_text_value, None, "a text"),
-    "phone_number": (_text_value, None, "a text"),
-    "people": (_ids, [], "a list of user ids"),
-    "relation": (_ids, [], "a list of page ids"),
+
+_ENCODINGS: Final[Mapping[SettableKind, _Encoding]] = {
+    "rich_text": _Encoding(_rich_text, [], "a text"),
+    "number": _Encoding(_number, None, "a number"),
+    "select": _Encoding(_named, None, "a text"),
+    "status": _Encoding(_named, None, "a text"),
+    "multi_select": _Encoding(_names, [], "a list of texts"),
+    "date": _Encoding(_date, None, "a date text or a start and end"),
+    "checkbox": _Encoding(_checkbox, False, "true or false"),
+    "url": _Encoding(_text_value, None, "a text"),
+    "email": _Encoding(_text_value, None, "a text"),
+    "phone_number": _Encoding(_text_value, None, "a text"),
+    "people": _Encoding(_ids, [], "a list of user ids"),
+    "relation": _Encoding(_ids, [], "a list of page ids"),
 }
 
 
+def _is_settable(kind: str) -> TypeGuard[SettableKind]:
+    return kind in _ENCODINGS
+
+
 def property_request(name: str, kind: str, value: JsonValue) -> JsonFields:
-    encoding = _ENCODINGS.get(kind)
-    if encoding is None:
+    if not _is_settable(kind):
         raise WriteRejectedError(
             f"the Notion property '{name}' is a {kind} property, which skaldr cannot set"
         )
-    encode, cleared, expectation = encoding
+    encoding = _ENCODINGS[kind]
     if is_unset(value):
-        return {kind: cleared}
-    sent = encode(value)
+        return {kind: encoding.cleared}
+    sent = encoding.encode(value)
     if sent is None:
         shown = json.dumps(value, ensure_ascii=False)
         raise WriteRejectedError(
-            f"the Notion property '{name}' is a {kind} property, so skaldr sends it {expectation}, "
+            f"the Notion property '{name}' is a {kind} property, so skaldr sends it {encoding.expectation}, "
             f"not {shown}"
         )
     return {kind: sent.value}
