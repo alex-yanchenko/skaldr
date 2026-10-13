@@ -228,10 +228,6 @@ class InMemoryNotion:
         return self._route(request.method, request.url.path, body)
 
     def _route(self, method: str, path: str, body: dict[str, Any]) -> httpx2.Response:
-        if (method, path) == ("GET", "/v1/users/me"):
-            return httpx2.Response(
-                200, json={"object": "user", "id": BOT_ID, "type": "bot", "name": "skaldr"}
-            )
         if (method, path) == ("POST", "/v1/pages"):
             return self._create(body)
         for pattern, handler in (

@@ -9,7 +9,7 @@ import pytest
 
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.notion.api import NOTION_VERSION, NotionApi
-from skaldr.publish.notion.responses import PageMarkdown, User
+from skaldr.publish.notion.responses import Page, PageMarkdown
 from skaldr.publish_block.target import JsonFields
 from tests.factories.auth_factory import rendered_traceback
 
@@ -29,7 +29,7 @@ MARKDOWN: dict[str, Any] = {
     "truncated": False,
     "unknown_block_ids": [],
 }
-BOT: dict[str, Any] = {"object": "user", "id": "bot-1", "type": "bot", "name": "skaldr", "avatar_url": None}
+PAGE_URL = f"https://api.notion.com/v1/pages/{PAGE_ID}"
 
 
 def _task(status: str, **extra: Any) -> dict[str, Any]:
@@ -54,6 +54,7 @@ class Answer:
     body: Any
     headers: dict[str, str] = field(default_factory=dict[str, str])
     failure: type[httpx2.TransportError] | None = None
+    raw: bytes | None = None
 
 
 def _failing(failure: type[httpx2.TransportError]) -> Answer:
@@ -89,6 +90,8 @@ class ScriptedNotion:
             raise answer.failure(
                 "timed out" if "Timeout" in answer.failure.__name__ else "reset", request=request
             )
+        if answer.raw is not None:
+            return httpx2.Response(answer.status, content=answer.raw, headers=answer.headers)
         return httpx2.Response(answer.status, json=answer.body, headers=answer.headers)
 
 
@@ -128,10 +131,10 @@ def _get(url: str, token: str = "Bearer first-token") -> Sent:
 
 
 def test_a_read_sends_the_bearer_token_and_the_notion_version_and_parses_the_answer() -> None:
-    harness = _harness(Answer(200, BOT))
+    harness = _harness(Answer(200, PAGE))
 
-    assert harness.api.me() == User.model_validate(BOT)
-    assert harness.notion.sent == [_get("https://api.notion.com/v1/users/me")]
+    assert harness.api.page(PAGE_ID) == Page.model_validate(PAGE)
+    assert harness.notion.sent == [_get(PAGE_URL)]
 
 
 def test_the_api_version_is_the_one_the_markdown_endpoints_need() -> None:
@@ -228,11 +231,38 @@ def test_a_task_still_running_after_ten_minutes_is_reported_as_unfinished() -> N
 
 def test_a_rate_limited_request_waits_as_long_as_retry_after_says_and_tries_again() -> None:
     limited = Answer(429, _error(429, "rate_limited", "slow down"), {"Retry-After": "2"})
-    harness = _harness(limited, limited, Answer(200, BOT))
+    harness = _harness(limited, limited, Answer(200, PAGE))
 
-    harness.api.me()
+    harness.api.page(PAGE_ID)
 
     assert (harness.sleeps, len(harness.notion.sent)) == ([2.0, 2.0], 3)
+
+
+@pytest.mark.parametrize(
+    "retry_after",
+    [
+        pytest.param("soon", id="not-a-number"),
+        pytest.param("-5", id="negative"),
+        pytest.param("inf", id="infinite"),
+        pytest.param("nan", id="not-a-number-float"),
+    ],
+)
+def test_a_retry_after_that_is_not_a_finite_wait_falls_back_to_the_backoff(retry_after: str) -> None:
+    limited = Answer(429, _error(429, "rate_limited", "slow down"), {"Retry-After": retry_after})
+    harness = _harness(limited, Answer(200, PAGE))
+
+    harness.api.page(PAGE_ID)
+
+    assert (harness.sleeps, len(harness.notion.sent)) == ([1.0], 2)
+
+
+def test_a_server_error_on_a_read_waits_as_long_as_retry_after_says() -> None:
+    busy = Answer(503, _error(503, "service_unavailable", "busy"), {"Retry-After": "7"})
+    harness = _harness(busy, Answer(200, PAGE))
+
+    harness.api.page(PAGE_ID)
+
+    assert (harness.sleeps, len(harness.notion.sent)) == ([7.0], 2)
 
 
 def test_a_retry_without_retry_after_backs_off_exponentially() -> None:
@@ -280,9 +310,9 @@ def test_a_request_still_rate_limited_after_six_attempts_is_refused() -> None:
 
 
 def test_a_refused_token_is_renewed_once_and_the_request_sent_again_with_the_new_one() -> None:
-    harness = _harness(Answer(401, _error(401, "unauthorized", "expired")), Answer(200, BOT))
+    harness = _harness(Answer(401, _error(401, "unauthorized", "expired")), Answer(200, PAGE))
 
-    harness.api.me()
+    harness.api.page(PAGE_ID)
 
     assert (harness.tokens.renewals, [sent.authorization for sent in harness.notion.sent]) == (
         1,
@@ -295,7 +325,7 @@ def test_a_token_refused_after_a_second_renewal_stops_with_advice_to_sign_in_aga
     harness = _harness(refused, refused, refused)
 
     with pytest.raises(AuthError) as caught:
-        harness.api.me()
+        harness.api.page(PAGE_ID)
 
     assert (str(caught.value), harness.tokens.renewals) == (
         "Notion refused the renewed sign-in; run `skaldr auth notion` again",
@@ -306,9 +336,9 @@ def test_a_token_refused_after_a_second_renewal_stops_with_advice_to_sign_in_aga
 
 def test_a_request_refused_once_after_renewal_is_sent_again_after_a_second() -> None:
     refused = Answer(401, _error(401, "unauthorized", "expired"))
-    harness = _harness(refused, refused, Answer(200, BOT))
+    harness = _harness(refused, refused, Answer(200, PAGE))
 
-    harness.api.me()
+    harness.api.page(PAGE_ID)
 
     assert [sent.authorization for sent in harness.notion.sent] == [
         "Bearer first-token",
@@ -369,10 +399,10 @@ def test_an_unreachable_notion_is_a_connector_error_that_names_no_token() -> Non
     api = NotionApi(CountingTokens(iter([])), transport=httpx2.MockTransport(refuse), sleep=lambda _: None)
 
     with pytest.raises(ConnectorError) as caught:
-        api.me()
+        api.page(PAGE_ID)
 
     assert (str(caught.value), "first-token" in rendered_traceback(caught.value)) == (
-        "Notion could not read the signed-in bot: could not reach Notion (connection refused)",
+        f"Notion could not read page {PAGE_ID}: could not reach Notion (connection refused)",
         False,
     )
 
@@ -440,9 +470,9 @@ def test_a_failure_while_following_an_accepted_task_says_the_change_may_still_la
 
 
 def test_a_read_that_cannot_reach_notion_is_tried_again() -> None:
-    harness = _harness(_failing(httpx2.ConnectError), _failing(httpx2.ReadTimeout), Answer(200, BOT))
+    harness = _harness(_failing(httpx2.ConnectError), _failing(httpx2.ReadTimeout), Answer(200, PAGE))
 
-    harness.api.me()
+    harness.api.page(PAGE_ID)
 
     assert (len(harness.notion.sent), harness.sleeps) == (3, [1.0, 2.0])
 
@@ -472,33 +502,116 @@ def test_a_write_that_never_reached_notion_says_so() -> None:
 
 
 @pytest.mark.parametrize(
-    ("call", "refusal"),
+    ("call", "status", "retry_after", "refusal"),
     [
         pytest.param(
             "write",
+            429,
+            "120",
             WriteRejectedError(
                 f"Notion asked skaldr to wait 120 seconds before it may change page {PAGE_ID}, longer than "
                 "the 60 seconds skaldr waits; publish again later"
             ),
-            id="write",
+            id="rate-limited-write",
         ),
         pytest.param(
             "read",
+            429,
+            "120",
             ConnectorError(
-                "Notion asked skaldr to wait 120 seconds before it may read the signed-in bot, longer than "
+                f"Notion asked skaldr to wait 120 seconds before it may read page {PAGE_ID}, longer than "
                 "the 60 seconds skaldr waits; publish again later"
             ),
-            id="read",
+            id="rate-limited-read",
+        ),
+        pytest.param(
+            "read",
+            503,
+            "7200",
+            ConnectorError(
+                f"Notion asked skaldr to wait 7200 seconds before it may read page {PAGE_ID}, longer than "
+                "the 60 seconds skaldr waits; publish again later"
+            ),
+            id="server-error-on-a-read",
+        ),
+        pytest.param(
+            "read",
+            429,
+            "1e308",
+            ConnectorError(
+                f"Notion asked skaldr to wait 1e+308 seconds before it may read page {PAGE_ID}, longer than "
+                "the 60 seconds skaldr waits; publish again later"
+            ),
+            id="huge",
         ),
     ],
 )
-def test_a_retry_after_longer_than_a_minute_is_not_waited_for(call: str, refusal: ConnectorError) -> None:
-    harness = _harness(Answer(429, _error(429, "rate_limited", "slow down"), {"Retry-After": "120"}))
+def test_a_retry_after_longer_than_a_minute_is_not_waited_for(
+    call: str, status: int, retry_after: str, refusal: ConnectorError
+) -> None:
+    told_to_wait = {"Retry-After": retry_after}
+    harness = _harness(Answer(status, _error(status, "rate_limited", "slow down"), told_to_wait))
 
     with pytest.raises(ConnectorError) as caught:
         if call == "write":
             harness.api.update_page(PAGE_ID, {"in_trash": True})
         else:
-            harness.api.me()
+            harness.api.page(PAGE_ID)
 
-    assert (type(caught.value), str(caught.value), harness.sleeps) == (type(refusal), str(refusal), [])
+    assert (type(caught.value), str(caught.value), harness.sleeps, len(harness.notion.sent)) == (
+        type(refusal),
+        str(refusal),
+        [],
+        1,
+    )
+
+
+def test_a_server_error_on_a_write_names_the_error_even_when_it_asks_for_a_long_wait() -> None:
+    harness = _harness(Answer(503, _error(503, "service_unavailable", "busy"), {"Retry-After": "7200"}))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.update_page(PAGE_ID, {"in_trash": True})
+
+    assert (type(caught.value), str(caught.value), harness.sleeps) == (
+        ConnectorError,
+        f"Notion could not change page {PAGE_ID}: HTTP 503 service_unavailable: busy",
+        [],
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param(b"<html>Welcome</html>", id="not-json"),
+        pytest.param(b"\x80\x81 not text", id="not-utf-8"),
+    ],
+)
+def test_an_answer_that_is_not_json_is_a_connector_error(raw: bytes) -> None:
+    harness = _harness(Answer(200, None, raw=raw))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.page(PAGE_ID)
+
+    assert (type(caught.value), str(caught.value)) == (
+        ConnectorError,
+        f"Notion answered read page {PAGE_ID} with something that is not JSON",
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param(b"<html>Bad gateway</html>", id="not-json"),
+        pytest.param(b"\x80\x81 not text", id="not-utf-8"),
+    ],
+)
+def test_an_error_answer_that_is_not_json_is_reported_by_its_status(raw: bytes) -> None:
+    harness = _harness(Answer(400, None, raw=raw))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.page(PAGE_ID)
+
+    assert (type(caught.value), str(caught.value)) == (
+        ConnectorError,
+        f"Notion could not read page {PAGE_ID}: HTTP 400 unknown: ",
+    )

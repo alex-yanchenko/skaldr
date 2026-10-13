@@ -42,7 +42,8 @@ SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
 _TOKEN_ENDPOINT = f"{_NOTION_API}/v1/oauth/token"
-_SIGN_IN_AGAIN = "; run `skaldr auth notion` again"
+SIGN_IN_AGAIN_SUFFIX = "; run `skaldr auth notion` again"
+RENEWED_SIGN_IN_REFUSED = f"Notion refused the renewed sign-in{SIGN_IN_AGAIN_SUFFIX}"
 CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
 
 _REDIRECT_HOST = "localhost"
@@ -107,7 +108,8 @@ def sign_in_to_notion(
                     _TOKEN_ENDPOINT,
                     authorization_response=f"{redirect_uri}?{query}",
                     state=state,
-                )
+                ),
+                _refused_sign_in,
             )
     credentials = NotionCredentials(
         client_id=client_id,
@@ -280,8 +282,7 @@ def _basic_auth_with_json_body(
 
 
 def _parse_token(
-    request: Callable[[], Mapping[str, object]],
-    refused: Callable[[AuthlibBaseError], AuthError] = lambda exc: _refused_sign_in(exc),
+    request: Callable[[], Mapping[str, object]], refused: Callable[[AuthlibBaseError], AuthError]
 ) -> _NotionToken:
     with CaughtWithoutChaining(ValidationError) as invalid:
         try:
@@ -316,7 +317,7 @@ def _refused_sign_in(exc: AuthlibBaseError) -> AuthError:
 
 
 def _refused_renewal(exc: AuthlibBaseError) -> AuthError:
-    return AuthError(f"Notion refused to renew the sign-in: {_oauth_error_named(exc)}{_SIGN_IN_AGAIN}")
+    return AuthError(f"Notion refused to renew the sign-in: {_oauth_error_named(exc)}{SIGN_IN_AGAIN_SUFFIX}")
 
 
 def renewed_notion_credentials(
@@ -324,11 +325,13 @@ def renewed_notion_credentials(
 ) -> NotionCredentials:
     refresh_token = credentials.refresh_token
     if refresh_token is None:
-        raise AuthError(f"Notion refused the stored sign-in and it holds no refresh token{_SIGN_IN_AGAIN}")
+        raise AuthError(
+            f"Notion refused the stored sign-in and it holds no refresh token{SIGN_IN_AGAIN_SUFFIX}"
+        )
     if not (credentials.client_id and credentials.client_secret):
         raise AuthError(
             "Notion refused the stored sign-in and it cannot be renewed without the client ID and secret"
-            f"{_SIGN_IN_AGAIN}"
+            f"{SIGN_IN_AGAIN_SUFFIX}"
         )
     with _oauth_client(credentials.client_id, credentials.client_secret, transport) as client:
         token = _parse_token(
@@ -369,11 +372,11 @@ class NotionSession:
             self._sign_in = SignIn(stored, self._sign_in.source)
             return
         if self._renewed_with_notion:
-            raise AuthError(f"Notion refused the renewed sign-in{_SIGN_IN_AGAIN}")
+            raise AuthError(RENEWED_SIGN_IN_REFUSED)
         if credentials.workspace_id is None:
             raise AuthError(
                 "Notion refused the stored sign-in, which has no workspace id, so a renewed token could not "
-                f"be saved{_SIGN_IN_AGAIN}"
+                f"be saved{SIGN_IN_AGAIN_SUFFIX}"
             )
         renewed = self._renewed(credentials)
         self._renewed_with_notion = True

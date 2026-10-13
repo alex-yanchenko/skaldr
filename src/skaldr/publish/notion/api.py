@@ -1,4 +1,4 @@
-import json
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +17,7 @@ from tenacity import (
 )
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable_only
+from skaldr.auth.notion import RENEWED_SIGN_IN_REFUSED
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.notion.responses import (
     AsyncTask,
@@ -29,9 +30,11 @@ from skaldr.publish.notion.responses import (
     PageMarkdown,
     PendingTask,
     SucceededTask,
-    User,
 )
 from skaldr.publish_block.target import JsonFields
+
+Answer = TypeVar("Answer")
+Sleep = Callable[[float], None]
 
 NOTION_API: Final = "https://api.notion.com"
 NOTION_VERSION: Final = "2026-03-11"
@@ -46,10 +49,12 @@ ALWAYS_RETRIED: Final = frozenset({HTTPStatus.TOO_MANY_REQUESTS, 529})
 REFUSED_WRITE_STATUSES: Final = frozenset(
     {HTTPStatus.BAD_REQUEST, HTTPStatus.FORBIDDEN, HTTPStatus.CONFLICT, HTTPStatus.TOO_MANY_REQUESTS}
 )
-SIGN_IN_AGAIN: Final = "; run `skaldr auth notion` again"
+_BACKOFF: Final = wait_exponential(multiplier=1, max=LONGEST_BACKOFF_SECONDS)
+_ASYNC_TASK: Final = TypeAdapter[PendingTask | SucceededTask | FailedTask](AsyncTask)
 
-Answer = TypeVar("Answer")
-Sleep = Callable[[float], None]
+
+class _UnreachableError(ConnectorError):
+    pass
 
 
 class TokenSource(Protocol):
@@ -71,14 +76,7 @@ def _retry_after_seconds(response: httpx2.Response) -> float | None:
         seconds = float(response.headers.get("retry-after", ""))
     except ValueError:
         return None
-    return seconds if seconds >= 0 else None
-
-
-_BACKOFF = wait_exponential(multiplier=1, max=LONGEST_BACKOFF_SECONDS)
-
-
-class _UnreachableError(ConnectorError):
-    pass
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
 def _wait_before_retrying(state: RetryCallState) -> float:
@@ -95,23 +93,19 @@ def _last_answer(state: RetryCallState) -> httpx2.Response:
     return answer
 
 
+def _is_retried(response: httpx2.Response) -> bool:
+    on_a_read = response.request.method == "GET"
+    return response.status_code in ALWAYS_RETRIED or (response.is_server_error and on_a_read)
+
+
 def _asks_for_too_long_a_wait(response: httpx2.Response) -> float | None:
     told = _retry_after_seconds(response)
-    too_long = (
-        response.status_code in ALWAYS_RETRIED and told is not None and told > LONGEST_RETRY_AFTER_SECONDS
-    )
+    too_long = _is_retried(response) and told is not None and told > LONGEST_RETRY_AFTER_SECONDS
     return told if too_long else None
 
 
-def _deserves_a_retry(method: str) -> Callable[[httpx2.Response], bool]:
-    def deserves(response: httpx2.Response) -> bool:
-        status = response.status_code
-        server_error = HTTPStatus.INTERNAL_SERVER_ERROR <= status < 600
-        if _asks_for_too_long_a_wait(response) is not None:
-            return False
-        return status in ALWAYS_RETRIED or (server_error and method == "GET")
-
-    return deserves
+def _deserves_a_retry(response: httpx2.Response) -> bool:
+    return _is_retried(response) and _asks_for_too_long_a_wait(response) is None
 
 
 def _unreachable_on_a_read(method: str) -> Callable[[BaseException], bool]:
@@ -124,7 +118,7 @@ def _unreachable_on_a_read(method: str) -> Callable[[BaseException], bool]:
 def _error_body(response: httpx2.Response) -> ErrorBody:
     try:
         return ErrorBody.model_validate(response.json())
-    except (json.JSONDecodeError, ValidationError):
+    except (ValueError, ValidationError):
         return ErrorBody()
 
 
@@ -149,9 +143,6 @@ def _validated(shape: type[Answer] | TypeAdapter[Answer], data: object, action: 
         raise ConnectorError(f"Notion answered an unexpected shape to {action.to_do}: {fields}") from None
 
 
-_ASYNC_TASK: Final = TypeAdapter[PendingTask | SucceededTask | FailedTask](AsyncTask)
-
-
 class NotionApi:
     def __init__(
         self,
@@ -166,9 +157,6 @@ class NotionApi:
 
     def close(self) -> None:
         self._client.close()
-
-    def me(self) -> User:
-        return self._get(User, "/v1/users/me", _Action("read the signed-in bot", "reading", writes=False))
 
     def page(self, page_id: str) -> Page:
         return self._get(
@@ -186,7 +174,8 @@ class NotionApi:
         return markdown
 
     def block(self, block_id: str) -> Block:
-        return self._get(Block, f"/v1/blocks/{block_id}", _Action(f"read block {block_id}", "reading", False))
+        action = _Action(f"read block {block_id}", "reading", writes=False)
+        return self._get(Block, f"/v1/blocks/{block_id}", action)
 
     def database(self, database_id: str) -> Database:
         action = _Action(f"read database {database_id}", "reading", writes=False)
@@ -230,7 +219,7 @@ class NotionApi:
             raise notion_failure(answer.status_code, _error_body(answer), action)
         try:
             return answer.json()
-        except json.JSONDecodeError:
+        except ValueError:
             raise ConnectorError(f"Notion answered {action.to_do} with something that is not JSON") from None
 
     def _finished(self, answer: httpx2.Response, action: _Action) -> dict[str, JsonValue]:
@@ -274,7 +263,7 @@ class NotionApi:
             self._tokens.renew()
             answer = self._with_retries(method, path, body, action)
         if answer.status_code == HTTPStatus.UNAUTHORIZED:
-            raise AuthError(f"Notion refused the renewed sign-in{SIGN_IN_AGAIN}")
+            raise AuthError(RENEWED_SIGN_IN_REFUSED)
         return answer
 
     def _with_retries(
@@ -283,8 +272,7 @@ class NotionApi:
         retrying = Retrying(
             stop=stop_after_attempt(RETRY_ATTEMPTS),
             wait=_wait_before_retrying,
-            retry=retry_if_result(_deserves_a_retry(method))
-            | retry_if_exception(_unreachable_on_a_read(method)),
+            retry=retry_if_result(_deserves_a_retry) | retry_if_exception(_unreachable_on_a_read(method)),
             sleep=self._sleep,
             retry_error_callback=_last_answer,
         )
