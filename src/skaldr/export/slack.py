@@ -63,7 +63,8 @@ CALLOUT_OPEN: Final = "::: {.callout}"
 LAYOUT_OPEN: Final = "::: {.layout}"
 COLUMN_OPEN: Final = "::: {.column}"
 MATH_LANGUAGE: Final = "latex"
-CHECK_MARKER_INDENT: Final = 2
+BULLET_MARKER: Final = "*"
+BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "\N{NO-BREAK SPACE}"
 Place = Literal["top", "callout", "column"]
 
@@ -249,12 +250,12 @@ def _canvas_blocks(nodes: Sequence[Node], place: Place) -> list[_CanvasBlock]:
 def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
     match kind:
         case "bullet":
-            return "*", len("*") + 1
+            return BULLET_MARKER, BULLET_INDENT
         case "number":
             marker = f"{min(number, LARGEST_ORDERED_MARKER_NUMBER)}."
             return marker, len(marker) + 1
         case "check":
-            return f"* [{'x' if checked else ' '}]", CHECK_MARKER_INDENT
+            return f"{BULLET_MARKER} [{'x' if checked else ' '}]", BULLET_INDENT
         case _:
             assert_never(kind)
 

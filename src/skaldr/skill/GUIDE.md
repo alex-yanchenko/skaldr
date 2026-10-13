@@ -1360,7 +1360,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section, and `--export slack` the Markdown for a Slack canvas, described after it. Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1443,7 +1443,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and nested lists; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text. A code block, table, quote, callout, image, media, diagram, math block, heading or second nested list in a list item moves to just after the whole list, together with everything after it in that item, in order; a divider in a list item is dropped. A canvas joins two lists in a row into one, so a paragraph holding a single no-break space keeps them apart, such as a `fact_strip` right before a `cards` block |
 | `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
 | `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
-| `flow`, `fan`, `chart` | the same Mermaid diagram as the GitHub-flavored export, with the list of steps or the data table under it |
+| `flow`, `fan`, `chart` | the same Mermaid block as the GitHub-flavored export, which a canvas shows as a code block of the diagram's source, with the list of steps or the data table under it |
 | `quote` | quoted lines, with the citation on its own line in italics |
 | `divider` | `---` at the top level; dropped inside a list item or a grid column |
 | a collapsed `section` | a heading at its level, then its content |

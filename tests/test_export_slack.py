@@ -75,32 +75,32 @@ CANVAS_LIMIT_MESSAGE = (
 )
 
 
-def _text(text: str) -> Rich:
+def _rich_text(text: str) -> Rich:
     return (Plain(text),)
 
 
-def _para(text: str) -> Paragraph:
-    return Paragraph(_text(text))
+def _paragraph(text: str) -> Paragraph:
+    return Paragraph(_rich_text(text))
 
 
-def _entry(text: str, *children: Node, checked: bool = False) -> ListEntry:
-    return ListEntry(_text(text), checked, children)
+def _list_entry(text: str, *children: Node, checked: bool = False) -> ListEntry:
+    return ListEntry(_rich_text(text), checked, children)
 
 
 def _bullets(*entries: ListEntry) -> ListNode:
     return ListNode("bullet", entries)
 
 
-def _cell(text: str) -> TableCell:
-    return TableCell(_text(text))
+def _table_cell(text: str) -> TableCell:
+    return TableCell(_rich_text(text))
 
 
 def _key_value_table() -> TableNode:
-    return TableNode((_cell("k"),), (TableRow((_cell("v"),)),))
+    return TableNode((_table_cell("k"),), (TableRow((_table_cell("v"),)),))
 
 
 def _one_column_table(cells: int) -> TableNode:
-    return TableNode((_cell("h"),), tuple(TableRow((_cell("v"),)) for _ in range(cells - 1)))
+    return TableNode((_table_cell("h"),), tuple(TableRow((_table_cell("v"),)) for _ in range(cells - 1)))
 
 
 def _one_column_table_text(cells: int) -> str:
@@ -126,24 +126,28 @@ def test_the_example_exports_to_the_slack_golden_regenerated_by_the_export_comma
 def test_a_heading_keeps_its_level_up_to_three_and_deeper_ones_fold_to_three(
     level: HeadingLevel, line: str
 ) -> None:
-    assert render_slack([Heading(level, _text("Counts"), "counts")]) == f"{line}\n"
+    assert render_slack([Heading(level, _rich_text("Counts"), "counts")]) == f"{line}\n"
 
 
 def test_a_paragraph_is_its_inline_text_and_drops_its_tone() -> None:
-    assert render_slack([Paragraph(_text("Counted twice."), "warning")]) == "Counted twice.\n"
+    assert render_slack([Paragraph(_rich_text("Counted twice."), "warning")]) == "Counted twice.\n"
 
 
 @pytest.mark.parametrize(
     ("node", "text"),
     [
-        pytest.param(_bullets(_entry("a"), _entry("b")), "* a\n* b\n", id="bullet"),
-        pytest.param(ListNode("number", (_entry("a"), _entry("b")), 3), "3. a\n4. b\n", id="number-start"),
+        pytest.param(_bullets(_list_entry("a"), _list_entry("b")), "* a\n* b\n", id="bullet"),
         pytest.param(
-            ListNode("check", (_entry("a"), _entry("b", checked=True))), "* [ ] a\n* [x] b\n", id="check"
+            ListNode("number", (_list_entry("a"), _list_entry("b")), 3), "3. a\n4. b\n", id="number-start"
+        ),
+        pytest.param(
+            ListNode("check", (_list_entry("a"), _list_entry("b", checked=True))),
+            "* [ ] a\n* [x] b\n",
+            id="check",
         ),
         pytest.param(_bullets(ListEntry(())), "*\n", id="bare-marker"),
         pytest.param(
-            ListNode("number", (_entry("a", _bullets(_entry("b"))), _entry("c")), 999_999_999),
+            ListNode("number", (_list_entry("a", _bullets(_list_entry("b"))), _list_entry("c")), 999_999_999),
             "999999999. a\n           * b\n999999999. c\n",
             id="number-clamped-at-the-largest-commonmark-marker",
         ),
@@ -156,8 +160,10 @@ def test_a_list_writes_the_markers_slack_stores(node: ListNode, text: str) -> No
 @pytest.mark.parametrize(
     ("nodes", "text"),
     [
-        pytest.param([Paragraph(()), _para("a")], "a\n", id="empty-paragraph"),
-        pytest.param([_bullets(_entry("a", Paragraph(())))], "* a\n", id="empty-paragraph-in-a-list-item"),
+        pytest.param([Paragraph(()), _paragraph("a")], "a\n", id="empty-paragraph"),
+        pytest.param(
+            [_bullets(_list_entry("a", Paragraph(())))], "* a\n", id="empty-paragraph-in-a-list-item"
+        ),
         pytest.param(
             [_bullets(ListEntry((), children=(Paragraph(()),)))], "*\n", id="empty-paragraph-in-an-empty-item"
         ),
@@ -179,41 +185,41 @@ def test_an_empty_paragraph_writes_nothing(nodes: list[Node], text: str) -> None
     ],
 )
 def test_a_nested_list_keeps_its_own_kind(kind: ListKind, nested_kind: ListKind, text: str) -> None:
-    nested = ListNode(nested_kind, (_entry("b"),))
+    nested = ListNode(nested_kind, (_list_entry("b"),))
 
-    assert render_slack([ListNode(kind, (_entry("a", nested),))]) == text
+    assert render_slack([ListNode(kind, (_list_entry("a", nested),))]) == text
 
 
 def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
-    deepest = ListNode("number", (_entry("c"),))
-    middle = ListNode("number", (_entry("b", deepest),))
+    deepest = ListNode("number", (_list_entry("c"),))
+    middle = ListNode("number", (_list_entry("b", deepest),))
 
-    assert render_slack([ListNode("number", (_entry("a", middle),), 9)]) == "9. a\n   1. b\n      1. c\n"
+    assert render_slack([ListNode("number", (_list_entry("a", middle),), 9)]) == "9. a\n   1. b\n      1. c\n"
 
 
 @pytest.mark.parametrize(
     ("second", "second_text"),
     [
-        pytest.param(_bullets(_entry("b")), "* b", id="same-kind"),
-        pytest.param(ListNode("number", (_entry("b"),)), "1. b", id="bullet-then-number"),
-        pytest.param(ListNode("check", (_entry("b"),)), "* [ ] b", id="bullet-then-check"),
+        pytest.param(_bullets(_list_entry("b")), "* b", id="same-kind"),
+        pytest.param(ListNode("number", (_list_entry("b"),)), "1. b", id="bullet-then-number"),
+        pytest.param(ListNode("check", (_list_entry("b"),)), "* [ ] b", id="bullet-then-check"),
     ],
 )
 def test_two_lists_in_a_row_are_kept_apart_by_a_no_break_space_paragraph(
     second: ListNode, second_text: str
 ) -> None:
-    assert render_slack([_bullets(_entry("a")), second]) == f"* a\n\n{LIST_SEPARATOR}\n\n{second_text}\n"
+    assert render_slack([_bullets(_list_entry("a")), second]) == f"* a\n\n{LIST_SEPARATOR}\n\n{second_text}\n"
 
 
 def test_lists_brought_together_by_a_container_with_no_title_are_kept_apart() -> None:
-    untitled = Toggle((), None, (_bullets(_entry("b")),))
+    untitled = Toggle((), None, (_bullets(_list_entry("b")),))
 
-    assert render_slack([_bullets(_entry("a")), untitled]) == f"* a\n\n{LIST_SEPARATOR}\n\n* b\n"
+    assert render_slack([_bullets(_list_entry("a")), untitled]) == f"* a\n\n{LIST_SEPARATOR}\n\n* b\n"
 
 
 def test_lists_in_a_row_inside_a_callout_or_a_column_are_kept_apart() -> None:
-    lists = (_bullets(_entry("a")), _bullets(_entry("b")))
-    columns = Columns((GridColumn(50, lists), GridColumn(50, (_para("c"),))))
+    lists = (_bullets(_list_entry("a")), _bullets(_list_entry("b")))
+    columns = Columns((GridColumn(50, lists), GridColumn(50, (_paragraph("c"),))))
 
     assert render_slack([Callout("info", lists), columns]) == (
         f"::: {{.callout}}\n💡\n\n* a\n\n{LIST_SEPARATOR}\n\n* b\n:::\n\n"
@@ -223,18 +229,24 @@ def test_lists_in_a_row_inside_a_callout_or_a_column_are_kept_apart() -> None:
 
 
 def test_lists_with_a_paragraph_between_them_need_no_separator() -> None:
-    assert render_slack([_bullets(_entry("a")), _para("b"), _bullets(_entry("c"))]) == "* a\n\nb\n\n* c\n"
+    assert (
+        render_slack([_bullets(_list_entry("a")), _paragraph("b"), _bullets(_list_entry("c"))])
+        == "* a\n\nb\n\n* c\n"
+    )
 
 
 def test_a_second_list_in_one_list_item_moves_after_the_whole_list_kept_apart_from_it() -> None:
-    entry = _entry("a", _bullets(_entry("b")), ListNode("number", (_entry("c"),)))
+    entry = _list_entry("a", _bullets(_list_entry("b")), ListNode("number", (_list_entry("c"),)))
 
-    assert render_slack([_bullets(entry, _entry("d"))]) == f"* a\n  * b\n* d\n\n{LIST_SEPARATOR}\n\n1. c\n"
+    assert (
+        render_slack([_bullets(entry, _list_entry("d"))]) == f"* a\n  * b\n* d\n\n{LIST_SEPARATOR}\n\n1. c\n"
+    )
 
 
 def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:
     node = _bullets(
-        _entry("Drift", _para("first"), _para("second")), ListEntry((), children=(_para("alone"),))
+        _list_entry("Drift", _paragraph("first"), _paragraph("second")),
+        ListEntry((), children=(_paragraph("alone"),)),
     )
 
     assert render_slack([node]) == "* Drift first second\n* alone\n"
@@ -245,53 +257,57 @@ def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:
     [
         pytest.param(CodeBlock("x", "bash"), "```bash\nx\n```", id="code"),
         pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
-        pytest.param(Quote((_text("said"),)), "> said", id="quote"),
-        pytest.param(Callout("info", (_para("careful"),)), "::: {.callout}\n💡 careful\n:::", id="callout"),
+        pytest.param(Quote((_rich_text("said"),)), "> said", id="quote"),
         pytest.param(
-            Media("image", "https://example.com/a.png", _text("a chart")),
+            Callout("info", (_paragraph("careful"),)), "::: {.callout}\n💡 careful\n:::", id="callout"
+        ),
+        pytest.param(
+            Media("image", "https://example.com/a.png", _rich_text("a chart")),
             "![a chart](https://example.com/a.png)",
             id="media",
         ),
         pytest.param(Diagram(ONE_NODE_GRAPH), MERMAID_ONE_NODE, id="diagram"),
         pytest.param(DisplayMath("x^2"), "```latex\nx^2\n```", id="math"),
-        pytest.param(Heading(2, _text("Inner")), "## Inner", id="heading"),
+        pytest.param(Heading(2, _rich_text("Inner")), "## Inner", id="heading"),
     ],
 )
 def test_a_block_a_list_item_cannot_hold_moves_after_the_whole_top_level_list(moved: Node, text: str) -> None:
-    nested = _bullets(_entry("c", moved))
-    nodes = [_bullets(_entry("a"), _entry("b", nested)), _para("after")]
+    nested = _bullets(_list_entry("c", moved))
+    nodes = [_bullets(_list_entry("a"), _list_entry("b", nested)), _paragraph("after")]
 
     assert render_slack(nodes) == f"* a\n* b\n  * c\n\n{text}\n\nafter\n"
 
 
 def test_the_rest_of_a_list_item_moves_with_its_first_block_so_the_order_holds() -> None:
-    entry = _entry("a", _para("lead"), CodeBlock("x"), _para("tail"), _bullets(_entry("n")))
-    nodes = [ListNode("number", (entry, _entry("b"))), _para("after")]
+    entry = _list_entry(
+        "a", _paragraph("lead"), CodeBlock("x"), _paragraph("tail"), _bullets(_list_entry("n"))
+    )
+    nodes = [ListNode("number", (entry, _list_entry("b"))), _paragraph("after")]
 
     assert render_slack(nodes) == "1. a lead\n2. b\n\n```\nx\n```\n\ntail\n\n* n\n\nafter\n"
 
 
 def test_blocks_moved_from_several_list_items_keep_their_order() -> None:
-    nodes = [_bullets(_entry("a", CodeBlock("one")), _entry("b", CodeBlock("two")))]
+    nodes = [_bullets(_list_entry("a", CodeBlock("one")), _list_entry("b", CodeBlock("two")))]
 
     assert render_slack(nodes) == "* a\n* b\n\n```\none\n```\n\n```\ntwo\n```\n"
 
 
 def test_a_divider_and_a_table_of_contents_inside_a_list_item_are_dropped() -> None:
-    contents = TableOfContents((TocEntry("x", _text("X")),))
+    contents = TableOfContents((TocEntry("x", _rich_text("X")),))
 
-    assert render_slack([_bullets(_entry("a", Divider(), contents))]) == "* a\n"
+    assert render_slack([_bullets(_list_entry("a", Divider(), contents))]) == "* a\n"
 
 
 def test_a_table_is_a_pipe_table_without_tones_or_widths_and_with_pipes_escaped_and_lines_joined() -> None:
     table = TableNode(
-        (_cell("Item"), _cell("Note")),
+        (_table_cell("Item"), _table_cell("Note")),
         (
             TableRow(
-                (TableCell(_text("a|b"), "danger"), TableCell((Plain("one"), Break(), Plain("two")))),
+                (TableCell(_rich_text("a|b"), "danger"), TableCell((Plain("one"), Break(), Plain("two")))),
                 "warning",
             ),
-            TableRow((_cell("Total"), _cell("2")), emphasis="total"),
+            TableRow((_table_cell("Total"), _table_cell("2")), emphasis="total"),
         ),
         columns=(TableColumn("info", 0.3), TableColumn()),
     )
@@ -317,7 +333,7 @@ def test_a_table_over_300_cells_is_rejected() -> None:
 
 
 def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> None:
-    nodes = [Heading(2, _text("Counts")), Callout("info", (_one_column_table(301),))]
+    nodes = [Heading(2, _rich_text("Counts")), Callout("info", (_one_column_table(301),))]
 
     assert _rejection(nodes) == (
         "slack",
@@ -326,7 +342,7 @@ def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> Non
 
 
 def test_a_heading_without_text_leaves_the_heading_above_it_named_in_a_table_rejection() -> None:
-    nodes = [Heading(2, _text("Counts")), Heading(3, ()), _one_column_table(301)]
+    nodes = [Heading(2, _rich_text("Counts")), Heading(3, ()), _one_column_table(301)]
 
     assert _rejection(nodes) == (
         "slack",
@@ -335,7 +351,9 @@ def test_a_heading_without_text_leaves_the_heading_above_it_named_in_a_table_rej
 
 
 def test_padding_counts_toward_the_cells_of_a_table() -> None:
-    table = TableNode((_cell("a"), _cell("b")), tuple(TableRow((_cell("v"),)) for _ in range(150)))
+    table = TableNode(
+        (_table_cell("a"), _table_cell("b")), tuple(TableRow((_table_cell("v"),)) for _ in range(150))
+    )
 
     assert _rejection([table]) == (
         "slack",
@@ -352,7 +370,7 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
         pytest.param(DisplayMath("e = mc^2"), "```latex\ne = mc^2\n```\n", id="math"),
         pytest.param(Diagram(ONE_NODE_GRAPH), f"{MERMAID_ONE_NODE}\n", id="diagram"),
         pytest.param(
-            Diagram(ONE_NODE_GRAPH, (_bullets(_entry("A", _bullets(_entry("by aisle")))),)),
+            Diagram(ONE_NODE_GRAPH, (_bullets(_list_entry("A", _bullets(_list_entry("by aisle")))),)),
             f"{MERMAID_ONE_NODE}\n\n* A\n  * by aisle\n",
             id="diagram-with-its-supplement",
         ),
@@ -366,17 +384,17 @@ def test_a_fenced_block_carries_its_language(node: Node, text: str) -> None:
     ("node", "text"),
     [
         pytest.param(
-            Media("image", "https://example.com/a.png", _text("a chart"), _text("Q3 counts")),
+            Media("image", "https://example.com/a.png", _rich_text("a chart"), _rich_text("Q3 counts")),
             "![a chart](https://example.com/a.png)\n\n*Q3 counts*\n",
             id="image-with-caption",
         ),
         pytest.param(
-            Media("image", "https://example.com/a b.png", _text("a chart")),
+            Media("image", "https://example.com/a b.png", _rich_text("a chart")),
             "![a chart](https://example.com/a%20b.png)\n",
             id="image",
         ),
         pytest.param(
-            Media("video", "https://example.com/v.mp4", caption=_text("Walkthrough")),
+            Media("video", "https://example.com/v.mp4", caption=_rich_text("Walkthrough")),
             "[Walkthrough](https://example.com/v.mp4)\n",
             id="video-with-caption",
         ),
@@ -396,29 +414,29 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
     ("node", "text"),
     [
         pytest.param(
-            Callout("warning", (_para("careful"),)), "::: {.callout}\n⚠️ careful\n:::\n", id="tone-icon"
+            Callout("warning", (_paragraph("careful"),)), "::: {.callout}\n⚠️ careful\n:::\n", id="tone-icon"
         ),
         pytest.param(
-            Callout("info", (_para("north"),), "🧭"), "::: {.callout}\n🧭 north\n:::\n", id="own-icon"
+            Callout("info", (_paragraph("north"),), "🧭"), "::: {.callout}\n🧭 north\n:::\n", id="own-icon"
         ),
         pytest.param(
-            Callout("info", (_bullets(_entry("a")), _para("b"))),
+            Callout("info", (_bullets(_list_entry("a")), _paragraph("b"))),
             "::: {.callout}\n💡\n\n* a\n\nb\n:::\n",
             id="led-by-a-list",
         ),
         pytest.param(Callout("info", ()), "::: {.callout}\n💡\n:::\n", id="empty"),
         pytest.param(
-            Callout("success", (_bullets(_entry("a", CodeBlock("x"))),)),
+            Callout("success", (_bullets(_list_entry("a", CodeBlock("x"))),)),
             "::: {.callout}\n✅\n\n* a\n\n```\nx\n```\n:::\n",
             id="list-moves-its-code-within-the-callout",
         ),
         pytest.param(
-            Callout("info", (Toggle(_text("T"), None, (_para("x"),)),)),
+            Callout("info", (Toggle(_rich_text("T"), None, (_paragraph("x"),)),)),
             "::: {.callout}\n💡 **T**\n\nx\n:::\n",
             id="led-by-a-toggle-title",
         ),
         pytest.param(
-            Callout("info", (Tabs((Tab(_text("T"), (_para("x"),)),)),)),
+            Callout("info", (Tabs((Tab(_rich_text("T"), (_paragraph("x"),)),)),)),
             "::: {.callout}\n💡 **T**\n\nx\n:::\n",
             id="led-by-a-tab-title",
         ),
@@ -431,9 +449,11 @@ def test_a_callout_is_a_fenced_callout_whose_unindented_body_starts_with_its_ico
 
 
 def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_it() -> None:
-    columns = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (_para("right"),))))
-    inner = Callout("danger", (_para("inner"),))
-    node = Callout("info", (_para("lead"), _key_value_table(), inner, Divider(), columns, _para("tail")))
+    columns = Columns((GridColumn(50, (_paragraph("left"),)), GridColumn(50, (_paragraph("right"),))))
+    inner = Callout("danger", (_paragraph("inner"),))
+    node = Callout(
+        "info", (_paragraph("lead"), _key_value_table(), inner, Divider(), columns, _paragraph("tail"))
+    )
 
     assert render_slack([node]) == (
         "::: {.callout}\n💡 lead\n\ntail\n:::\n\n"
@@ -445,39 +465,43 @@ def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_i
 
 
 def test_a_table_moved_out_of_a_list_in_a_callout_moves_on_after_the_callout() -> None:
-    node = Callout("info", (_bullets(_entry("a", _key_value_table())),))
+    node = Callout("info", (_bullets(_list_entry("a", _key_value_table())),))
 
     assert render_slack([node]) == "::: {.callout}\n💡\n\n* a\n:::\n\n| k |\n| --- |\n| v |\n"
 
 
 def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
-    innermost = Callout("danger", (_para("c"),))
-    middle = Callout("warning", (_para("b"), innermost))
+    innermost = Callout("danger", (_paragraph("c"),))
+    middle = Callout("warning", (_paragraph("b"), innermost))
 
-    assert render_slack([Callout("info", (_para("a"), middle))]) == (
+    assert render_slack([Callout("info", (_paragraph("a"), middle))]) == (
         "::: {.callout}\n💡 a\n:::\n\n::: {.callout}\n⚠️ b\n:::\n\n::: {.callout}\n🛑 c\n:::\n"
     )
 
 
 def test_a_quote_is_quoted_lines_with_the_cite_on_its_own_italic_line() -> None:
-    node = Quote((_text("said"), _text("# again")), _text("Ana"))
+    node = Quote((_rich_text("said"), _rich_text("# again")), _rich_text("Ana"))
 
     assert render_slack([node]) == "> said\n>\n> \\# again\n>\n> *Ana*\n"
 
 
 def test_a_divider_stays_at_the_top_level() -> None:
-    toggle = Toggle(_text("More"), None, (Divider(),))
+    toggle = Toggle(_rich_text("More"), None, (Divider(),))
 
-    assert render_slack([_para("a"), Divider(), _para("b"), toggle]) == ("a\n\n---\n\nb\n\n**More**\n\n---\n")
+    assert render_slack([_paragraph("a"), Divider(), _paragraph("b"), toggle]) == (
+        "a\n\n---\n\nb\n\n**More**\n\n---\n"
+    )
 
 
 @pytest.mark.parametrize(
     ("node", "text"),
     [
-        pytest.param(Toggle(_text("Raw"), 2, (_para("x"),)), "## Raw\n\nx\n", id="heading-level-2"),
-        pytest.param(Toggle(_text("Raw"), 5, (_para("x"),)), "### Raw\n\nx\n", id="heading-level-5-folds"),
-        pytest.param(Toggle(_text("Raw"), None, (_para("x"),)), "**Raw**\n\nx\n", id="no-heading"),
-        pytest.param(Toggle((), None, (_para("x"),)), "x\n", id="no-title"),
+        pytest.param(Toggle(_rich_text("Raw"), 2, (_paragraph("x"),)), "## Raw\n\nx\n", id="heading-level-2"),
+        pytest.param(
+            Toggle(_rich_text("Raw"), 5, (_paragraph("x"),)), "### Raw\n\nx\n", id="heading-level-5-folds"
+        ),
+        pytest.param(Toggle(_rich_text("Raw"), None, (_paragraph("x"),)), "**Raw**\n\nx\n", id="no-heading"),
+        pytest.param(Toggle((), None, (_paragraph("x"),)), "x\n", id="no-title"),
     ],
 )
 def test_a_toggle_is_its_heading_or_bold_title_then_its_children(node: Toggle, text: str) -> None:
@@ -487,9 +511,9 @@ def test_a_toggle_is_its_heading_or_bold_title_then_its_children(node: Toggle, t
 def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
     node = Columns(
         (
-            GridColumn(40, (_para("left"), Divider())),
-            GridColumn(30, (_bullets(_entry("a")),)),
-            GridColumn(30, (Toggle(_text("T"), None, (_para("x"),)),)),
+            GridColumn(40, (_paragraph("left"), Divider())),
+            GridColumn(30, (_bullets(_list_entry("a")),)),
+            GridColumn(30, (Toggle(_rich_text("T"), None, (_paragraph("x"),)),)),
         )
     )
 
@@ -503,7 +527,7 @@ def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
 
 
 def test_more_than_three_columns_are_their_children_one_after_another() -> None:
-    node = Columns(tuple(GridColumn(25, (_para(name), Divider())) for name in "abcd"))
+    node = Columns(tuple(GridColumn(25, (_paragraph(name), Divider())) for name in "abcd"))
 
     assert render_slack([node]) == "a\n\n---\n\nb\n\n---\n\nc\n\n---\n\nd\n\n---\n"
 
@@ -512,23 +536,25 @@ def test_more_than_three_columns_are_their_children_one_after_another() -> None:
     ("held", "text"),
     [
         pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
-        pytest.param(Callout("info", (_para("c"),)), "::: {.callout}\n💡 c\n:::", id="callout"),
+        pytest.param(Callout("info", (_paragraph("c"),)), "::: {.callout}\n💡 c\n:::", id="callout"),
         pytest.param(
-            _bullets(_entry("a", _key_value_table())), "* a\n\n| k |\n| --- |\n| v |", id="table-from-a-list"
+            _bullets(_list_entry("a", _key_value_table())),
+            "* a\n\n| k |\n| --- |\n| v |",
+            id="table-from-a-list",
         ),
     ],
 )
 def test_columns_holding_a_table_or_callout_are_their_children_one_after_another(
     held: Node, text: str
 ) -> None:
-    node = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (held, Divider()))))
+    node = Columns((GridColumn(50, (_paragraph("left"),)), GridColumn(50, (held, Divider()))))
 
     assert render_slack([node]) == f"left\n\n{text}\n\n---\n"
 
 
 def test_columns_inside_a_column_are_their_children_one_after_another_inside_the_layout() -> None:
-    inner = Columns((GridColumn(50, (_para("x"),)), GridColumn(50, (_para("y"),))))
-    node = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (inner,))))
+    inner = Columns((GridColumn(50, (_paragraph("x"),)), GridColumn(50, (_paragraph("y"),))))
+    node = Columns((GridColumn(50, (_paragraph("left"),)), GridColumn(50, (inner,))))
 
     assert render_slack([node]) == (
         "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nx\n\ny\n:::\n:::\n"
@@ -538,8 +564,8 @@ def test_columns_inside_a_column_are_their_children_one_after_another_inside_the
 def test_tabs_are_bold_titles_led_by_the_tone_icon_then_their_children() -> None:
     node = Tabs(
         (
-            Tab(_text("Floor"), (_para("a"),), "warning"),
-            Tab(_text("System"), (_para("b"),), "accent"),
+            Tab(_rich_text("Floor"), (_paragraph("a"),), "warning"),
+            Tab(_rich_text("System"), (_paragraph("b"),), "accent"),
         )
     )
 
@@ -549,8 +575,8 @@ def test_tabs_are_bold_titles_led_by_the_tone_icon_then_their_children() -> None
 @pytest.mark.parametrize(
     ("tab", "text"),
     [
-        pytest.param(Tab((), (_para("a"),), "warning"), "⚠️\n\na\n", id="icon-without-a-title"),
-        pytest.param(Tab((), (_para("a"),)), "a\n", id="neither-icon-nor-title"),
+        pytest.param(Tab((), (_paragraph("a"),), "warning"), "⚠️\n\na\n", id="icon-without-a-title"),
+        pytest.param(Tab((), (_paragraph("a"),)), "a\n", id="neither-icon-nor-title"),
     ],
 )
 def test_a_tab_without_a_title_writes_its_icon_alone_or_nothing_before_its_children(
@@ -560,45 +586,49 @@ def test_a_tab_without_a_title_writes_its_icon_alone_or_nothing_before_its_child
 
 
 def test_a_table_of_contents_writes_nothing() -> None:
-    contents = TableOfContents((TocEntry("x", _text("X")),))
+    contents = TableOfContents((TocEntry("x", _rich_text("X")),))
 
-    assert render_slack([_para("a"), contents, _para("b")]) == "a\n\nb\n"
+    assert render_slack([_paragraph("a"), contents, _paragraph("b")]) == "a\n\nb\n"
 
 
 @pytest.mark.parametrize(
     ("run", "written"),
     [
-        pytest.param(Styled("bold", _text("b")), "**b**", id="bold"),
-        pytest.param(Styled("italic", _text("i")), "*i*", id="italic"),
-        pytest.param(Styled("strike", _text("s")), "~~s~~", id="strike"),
-        pytest.param(Styled("underline", _text("u")), "u", id="underline-is-plain"),
-        pytest.param(Tinted("danger", "warning", _text("t")), "t", id="tint-is-plain"),
+        pytest.param(Styled("bold", _rich_text("b")), "**b**", id="bold"),
+        pytest.param(Styled("italic", _rich_text("i")), "*i*", id="italic"),
+        pytest.param(Styled("strike", _rich_text("s")), "~~s~~", id="strike"),
+        pytest.param(Styled("underline", _rich_text("u")), "u", id="underline-is-plain"),
+        pytest.param(Tinted("danger", "warning", _rich_text("t")), "t", id="tint-is-plain"),
         pytest.param(ScriptText("subscript", "2"), "2", id="subscript-is-plain"),
         pytest.param(ScriptText("superscript", "*3"), "\\*3", id="superscript-is-plain-and-escaped"),
         pytest.param(Code("a`b"), "``a`b``", id="code-outgrows-its-backticks"),
         pytest.param(Chip("a*b", "blue"), "**a\\*b**", id="chip-is-bold"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
-        pytest.param(AnchorLink(_text("method"), "method"), "method", id="anchor-link-is-its-label"),
+        pytest.param(AnchorLink(_rich_text("method"), "method"), "method", id="anchor-link-is-its-label"),
         pytest.param(
-            DateMention(_text("1 Oct"), date(2026, 10, 1), None), "![](slack_date:2026-10-01)", id="date"
+            DateMention(_rich_text("1 Oct"), date(2026, 10, 1), None), "![](slack_date:2026-10-01)", id="date"
         ),
         pytest.param(
-            DateMention(_text("1 to 3 Oct"), date(2026, 10, 1), date(2026, 10, 3)),
+            DateMention(_rich_text("1 to 3 Oct"), date(2026, 10, 1), date(2026, 10, 3)),
             "![](slack_date:2026-10-01) to ![](slack_date:2026-10-03)",
             id="date-range",
         ),
-        pytest.param(PersonMention(_text("Ada"), "ada", Person()), "Ada", id="person-without-a-slack-id"),
         pytest.param(
-            Link(_text("x"), "https://example.com/a b"), "[x](https://example.com/a%20b)", id="https"
+            PersonMention(_rich_text("Ada"), "ada", Person()), "Ada", id="person-without-a-slack-id"
         ),
-        pytest.param(Link(_text("x"), "http://example.com"), "[x](http://example.com)", id="http"),
-        pytest.param(Link(_text("x"), "mailto:ops@example.com"), "[x](mailto:ops@example.com)", id="mailto"),
+        pytest.param(
+            Link(_rich_text("x"), "https://example.com/a b"), "[x](https://example.com/a%20b)", id="https"
+        ),
+        pytest.param(Link(_rich_text("x"), "http://example.com"), "[x](http://example.com)", id="http"),
+        pytest.param(
+            Link(_rich_text("x"), "mailto:ops@example.com"), "[x](mailto:ops@example.com)", id="mailto"
+        ),
         pytest.param(InlineMath("x_i"), "`x_i`", id="inline-math-is-code"),
         pytest.param(
-            DocumentLink(_text("the plan"), "plan", None), "the plan", id="document-link-is-its-label"
+            DocumentLink(_rich_text("the plan"), "plan", None), "the plan", id="document-link-is-its-label"
         ),
         pytest.param(
-            IssueLink(_text("ABC-1"), "ABC-1", "https://example.atlassian.net/browse/ABC-1"),
+            IssueLink(_rich_text("ABC-1"), "ABC-1", "https://example.atlassian.net/browse/ABC-1"),
             "[ABC-1](https://example.atlassian.net/browse/ABC-1)",
             id="issue-link",
         ),
@@ -617,19 +647,21 @@ def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> 
     ("runs", "written"),
     [
         pytest.param(
-            (Styled("bold", _text("(x)")), Plain("y")), "(x)y", id="bold-followed-by-a-word-character"
+            (Styled("bold", _rich_text("(x)")), Plain("y")), "(x)y", id="bold-followed-by-a-word-character"
         ),
         pytest.param(
-            (Plain("a"), Styled("italic", _text("(b)")), Plain(".")),
+            (Plain("a"), Styled("italic", _rich_text("(b)")), Plain(".")),
             "a(b).",
             id="italic-between-a-letter-and-punctuation",
         ),
         pytest.param(
-            (Styled("bold", _text("a")), Styled("italic", _text("b"))),
+            (Styled("bold", _rich_text("a")), Styled("italic", _rich_text("b"))),
             "**a**b",
             id="italic-running-into-a-bold-closer",
         ),
-        pytest.param((Styled("strike", _text("(s)")), Plain("t")), "(s)t", id="strike-followed-by-a-letter"),
+        pytest.param(
+            (Styled("strike", _rich_text("(s)")), Plain("t")), "(s)t", id="strike-followed-by-a-letter"
+        ),
     ],
 )
 def test_emphasis_whose_markers_a_canvas_cannot_read_drops_its_style_and_never_becomes_a_tag(
@@ -639,13 +671,13 @@ def test_emphasis_whose_markers_a_canvas_cannot_read_drops_its_style_and_never_b
 
 
 def test_canvas_special_characters_are_escaped_in_text_but_not_dollars() -> None:
-    nodes = [Paragraph(_text("a*b_c~d`e|f [x] <@U0EXAMPLE1> $5 &amp; done!"))]
+    nodes = [Paragraph(_rich_text("a*b_c~d`e|f [x] <@U0EXAMPLE1> $5 &amp; done!"))]
 
     assert render_slack(nodes) == ("a\\*b\\_c\\~d\\`e|f \\[x\\] \\<@U0EXAMPLE1\\> $5 \\&amp; done\\!\n")
 
 
 def test_canvas_special_characters_and_pipes_are_escaped_in_a_table_cell() -> None:
-    table = TableNode((_cell("a*b_c~d`e|f"),), (TableRow((TableCell((Code("x|y"),)),)),))
+    table = TableNode((_table_cell("a*b_c~d`e|f"),), (TableRow((TableCell((Code("x|y"),)),)),))
 
     assert render_slack([table]) == "| a\\*b\\_c\\~d\\`e\\|f |\n| --- |\n| `x\\|y` |\n"
 
@@ -662,11 +694,11 @@ def test_canvas_special_characters_and_pipes_are_escaped_in_a_table_cell() -> No
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(text: str, line: str) -> None:
-    assert render_slack([_para(text)]) == f"{line}\n"
+    assert render_slack([_paragraph(text)]) == f"{line}\n"
 
 
 def test_a_list_item_that_starts_like_a_callout_fence_stays_text() -> None:
-    assert render_slack([_bullets(_entry(":::"))]) == "* \\:::\n"
+    assert render_slack([_bullets(_list_entry(":::"))]) == "* \\:::\n"
 
 
 def test_a_document_exports_its_body_without_the_title_since_the_canvas_takes_the_title(
