@@ -12,7 +12,9 @@ from skaldr.publish.content import (
     Part,
     is_unset,
     placed_section,
+    same_fields,
     section_part,
+    with_fields_named,
 )
 from skaldr.publish.drafts import SPLIT_ADVICE
 from skaldr.publish.jira.api import Changelog, EntityProperty, Issue, Status, Transition
@@ -255,15 +257,18 @@ class JiraTransport:
         read = self._last_read_holding(item_id, keyed_like)
         since = _number(marker)
         touched = {name for entry in read.history if entry.number > since for name in _names(entry)}
-        parts = [
-            *((TITLE,) if SUMMARY in touched else ()),
-            *((FIELDS,) if touched & set(keyed_like.fields) else ()),
-        ]
+        published = self.comparable_form(keyed_like)
+        current = with_fields_named(read.remote.comparable, published.fields)
+        retitled = SUMMARY in touched and current.title != published.title
+        refielded = bool(touched & set(published.fields)) and not same_fields(
+            published.fields, current.fields
+        )
+        parts = [*((TITLE,) if retitled else ()), *((FIELDS,) if refielded else ())]
         if DESCRIPTION in touched:
-            published = self.comparable_form(keyed_like).sections
-            current = read.remote.comparable.sections
-            keys = dict.fromkeys([*published, *current])
-            parts += [section_part(key) for key in keys if published.get(key) != current.get(key)]
+            keys = dict.fromkeys([*published.sections, *current.sections])
+            parts += [
+                section_part(key) for key in keys if published.sections.get(key) != current.sections.get(key)
+            ]
         return tuple(parts)
 
     def _last_read_holding(self, item_id: str, keyed_like: ItemContent) -> _Read:

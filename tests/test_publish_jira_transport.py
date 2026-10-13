@@ -954,30 +954,60 @@ def test_the_marker_after_a_write_covers_skaldrs_own_changes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("field_ids", "parts"),
+    ("edits", "parts"),
     [
-        pytest.param(("summary",), (TITLE,), id="summary"),
-        pytest.param(("priority",), (FIELDS,), id="owned-field"),
-        pytest.param(("labels",), (FIELDS,), id="owned-labels"),
-        pytest.param(("status", "Sprint", "resolution"), (), id="fields-skaldr-never-set"),
-        pytest.param(("summary", "priority"), (TITLE, FIELDS), id="both"),
+        pytest.param({"summary": "Garden guide"}, (TITLE,), id="summary"),
+        pytest.param({"priority": {"name": "Low"}}, (FIELDS,), id="owned-field"),
+        pytest.param({"labels": ["shed", DOC_LABEL]}, (FIELDS,), id="owned-labels"),
+        pytest.param(
+            {"status": IN_PROGRESS, "resolution": {"name": "Done"}}, (), id="fields-skaldr-never-set"
+        ),
+        pytest.param({"summary": "Garden guide", "priority": {"name": "Low"}}, (TITLE, FIELDS), id="both"),
     ],
 )
-def test_a_changelog_entry_after_the_marker_reports_the_part_it_touched(
-    field_ids: tuple[str, ...], parts: tuple[object, ...]
+def test_a_changelog_entry_after_the_marker_reports_the_part_it_changed(
+    edits: dict[str, JsonValue], parts: tuple[object, ...]
 ) -> None:
     jira = FakeJira()
     transport, created = _created(jira)
-    jira.log_by_hand(created.item_id, *field_ids)
+    jira.edit_by_hand(created.item_id, **edits)
 
     assert transport.parts_edited_after(created.item_id, created.marker, CONTENT) == parts
+
+
+def test_a_title_and_field_edit_made_in_jira_and_then_reverted_is_not_an_edit() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_by_hand(created.item_id, summary="Garden guide", priority={"name": "Low"})
+    jira.edit_by_hand(created.item_id, summary="Garden handbook", priority={"name": "High"})
+
+    assert transport.parts_edited_after(created.item_id, created.marker, CONTENT) == ()
+
+
+def test_an_entry_naming_the_summary_and_a_field_without_changing_them_is_not_an_edit() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.log_by_hand(created.item_id, "summary", "priority", "labels")
+
+    assert transport.parts_edited_after(created.item_id, created.marker, CONTENT) == ()
+
+
+def test_skaldrs_own_write_after_the_marker_is_not_an_edit_once_the_issue_holds_what_it_wrote() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    retitled = CONTENT.model_copy(update={"title": "Garden guide", "fields": {"priority": {"name": "Low"}}})
+    transport.write_fields(
+        created.item_id, FieldsWrite("Garden guide", retitled.fields, CONTENT.title, FIELDS_WRITTEN, STAMP)
+    )
+
+    assert transport.parts_edited_after(created.item_id, created.marker, retitled) == ()
 
 
 def test_labels_skaldr_does_not_own_are_not_an_edit() -> None:
     jira = FakeJira()
     content = CONTENT.model_copy(update={"fields": {"priority": {"name": "High"}}})
     transport, created = _created(jira, content)
-    jira.log_by_hand(created.item_id, "labels")
+    jira.edit_by_hand(created.item_id, labels=["triaged", DOC_LABEL])
 
     assert transport.parts_edited_after(created.item_id, created.marker, content) == ()
 
@@ -998,7 +1028,7 @@ def test_a_description_edit_reports_only_the_sections_whose_text_changed() -> No
 def test_without_a_marker_every_entry_counts() -> None:
     jira = FakeJira()
     transport, created = _created(jira)
-    jira.log_by_hand(created.item_id, "summary")
+    jira.edit_by_hand(created.item_id, summary="Garden guide")
 
     assert transport.parts_edited_after(created.item_id, None, CONTENT) == (TITLE,)
 
