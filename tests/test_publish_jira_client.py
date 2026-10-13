@@ -416,6 +416,43 @@ def test_a_dropped_connection_on_a_read_is_retried_and_on_a_write_is_not() -> No
     )
 
 
+def test_an_answer_httpx_cannot_decode_is_a_connector_error_and_is_not_retried() -> None:
+    jira = _seeded()
+    jira.answer_next(httpx2.DecodingError("bad gzip stream"))
+
+    with pytest.raises(ConnectorError) as raised:
+        jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (type(raised.value), str(raised.value), jira.sleeps, len(jira.requests)) == (
+        ConnectorError,
+        f"the request GET /rest/api/3/issue/DEMO-1 to Jira at {SITE} failed: bad gzip stream",
+        [],
+        1,
+    )
+
+
+def test_a_retry_after_in_digits_that_are_not_ascii_falls_back_to_the_doubling_wait() -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(429, {}, {"Retry-After": "²".encode()}))
+
+    issue = jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (issue.fields, jira.sleeps, len(jira.requests)) == ({"summary": "Garden handbook"}, [2.0], 2)
+
+
+def test_a_property_can_be_set_to_json_null() -> None:
+    jira = _seeded()
+
+    jira.client().put_property("DEMO-1", "skaldr.note", None)
+
+    request = jira.requests[0]
+    assert (request.content, request.headers["content-type"], jira.issues["DEMO-1"].properties) == (
+        b"null",
+        "application/json",
+        {"skaldr.note": None},
+    )
+
+
 def test_a_read_that_never_connects_fails_after_four_attempts() -> None:
     jira = _seeded()
     jira.answer_next(*[httpx2.ConnectError("connection refused")] * 4)

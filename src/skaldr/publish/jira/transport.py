@@ -122,7 +122,7 @@ def _property(name: str, value: BaseModel) -> EntityProperty:
 
 
 def _number(marker: str | None) -> int:
-    return int(marker) if marker is not None and marker.isdigit() else NO_MARKER
+    return int(marker) if marker is not None and marker.isascii() and marker.isdecimal() else NO_MARKER
 
 
 def _marker(number: int) -> str | None:

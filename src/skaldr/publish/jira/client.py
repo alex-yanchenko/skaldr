@@ -1,7 +1,9 @@
+import json
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from enum import Enum
 from http import HTTPStatus
-from typing import TypeVar
+from typing import Final, TypeVar
 from urllib.parse import quote
 
 import httpx2
@@ -38,8 +40,21 @@ LONGEST_RETRY_AFTER_SECONDS = 60
 PAGE_SIZE = 100
 READ_METHODS = frozenset({"GET"})
 
+JSON = {"Content-Type": "application/json"}
+
 Answer = TypeVar("Answer", bound=BaseModel)
 _BACKOFF = wait_exponential(multiplier=FIRST_BACKOFF_SECONDS)
+
+
+class _NoBody(Enum):
+    NO_BODY = "no body"
+
+
+NO_BODY: Final = _NoBody.NO_BODY
+
+
+def _json_bytes(body: JsonValue) -> bytes:
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 class _ErrorBody(BaseModel):
@@ -51,9 +66,9 @@ def issue_path(key: str, *rest: str) -> str:
     return "/".join([f"{API}/issue/{quote(key, safe='')}", *(quote(part, safe="") for part in rest)])
 
 
-def _retry_after(response: httpx2.Response) -> float | None:
+def _retry_after(response: httpx2.Response) -> int | None:
     text = response.headers.get("Retry-After", "").strip()
-    return float(text) if text.isdigit() else None
+    return int(text) if text.isascii() and text.isdecimal() else None
 
 
 def _wait(state: RetryCallState) -> float:
@@ -99,10 +114,9 @@ def _attempts(count: int) -> str:
 
 
 def _when_to_try_again(response: httpx2.Response) -> str:
-    retry_after = _retry_after(response)
-    if retry_after is None:
+    seconds = _retry_after(response)
+    if seconds is None:
         return "wait a minute and publish again"
-    seconds = int(retry_after)
     unit = "second" if seconds == 1 else "seconds"
     return f"Jira asked to wait {seconds} {unit}, so publish again after that"
 
@@ -205,7 +219,7 @@ class JiraClient:
         *,
         key: str | None = None,
         params: Mapping[str, str | int] | None = None,
-        body: JsonValue = None,
+        body: JsonValue | _NoBody = NO_BODY,
         missing_is_an_answer: bool = False,
     ) -> httpx2.Response:
         attempts = 0
@@ -213,9 +227,9 @@ class JiraClient:
         def attempt() -> httpx2.Response:
             nonlocal attempts
             attempts += 1
-            if body is None:
+            if isinstance(body, _NoBody):
                 return self._http.request(method, path, params=params)
-            return self._http.request(method, path, params=params, json=body)
+            return self._http.request(method, path, params=params, content=_json_bytes(body), headers=JSON)
 
         retrying = Retrying(
             stop=stop_after_attempt(ATTEMPTS),
@@ -228,6 +242,8 @@ class JiraClient:
             response: httpx2.Response = retrying(attempt)
         except httpx2.TransportError as exc:
             raise ConnectorError(f"could not reach Jira at {self.site} for {method} {path}: {exc}") from exc
+        except httpx2.RequestError as exc:
+            raise ConnectorError(f"the request {method} {path} to Jira at {self.site} failed: {exc}") from exc
         if missing_is_an_answer and response.status_code == HTTPStatus.NOT_FOUND:
             return response
         self._refuse_a_failure(method, path, key, response, attempts)

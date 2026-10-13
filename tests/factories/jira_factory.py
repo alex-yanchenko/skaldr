@@ -60,7 +60,14 @@ class _CommentBody(BaseModel):
 class Reply:
     status: int
     body: JsonValue = None
-    headers: Mapping[str, str] = field(default_factory=dict[str, str])
+    headers: Mapping[str, str | bytes] = field(default_factory=dict[str, str | bytes])
+
+    def response(self) -> httpx2.Response:
+        raw = [
+            (name.encode(), value if isinstance(value, bytes) else value.encode())
+            for name, value in self.headers.items()
+        ]
+        return httpx2.Response(self.status, json=self.body, headers=raw)
 
 
 @dataclass
@@ -93,7 +100,7 @@ class FakeJira:
     issues: dict[str, FakeIssue] = field(default_factory=dict[str, FakeIssue])
     histories: dict[str, list[History]] = field(default_factory=dict[str, list[History]])
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
-    queued: list[Reply | httpx2.TransportError] = field(default_factory=list[Reply | httpx2.TransportError])
+    queued: list[Reply | httpx2.RequestError] = field(default_factory=list[Reply | httpx2.RequestError])
     sleeps: list[float] = field(default_factory=list[float])
     failing: dict[tuple[str, str], Reply] = field(default_factory=dict[tuple[str, str], Reply])
     edits_during_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
@@ -114,7 +121,7 @@ class FakeJira:
     def client(self) -> JiraClient:
         return JiraClient(make_jira_credentials(), transport=self.transport(), sleep=self.sleeps.append)
 
-    def answer_next(self, *replies: Reply | httpx2.TransportError) -> None:
+    def answer_next(self, *replies: Reply | httpx2.RequestError) -> None:
         self.queued.extend(replies)
 
     def calls(self) -> list[tuple[str, str]]:
@@ -159,12 +166,12 @@ class FakeJira:
         self.requests.append(request)
         if self.queued:
             queued = self.queued.pop(0)
-            if isinstance(queued, httpx2.TransportError):
+            if isinstance(queued, httpx2.RequestError):
                 raise queued
-            return httpx2.Response(queued.status, json=queued.body, headers=dict(queued.headers))
+            return queued.response()
         failure = self.failing.pop((request.method, unquote(request.url.path)), None)
         if failure is not None:
-            return httpx2.Response(failure.status, json=failure.body, headers=dict(failure.headers))
+            return failure.response()
         path = request.url.raw_path.decode().partition("?")[0]
         for pattern, method, answer in self._routes():
             matched = re.fullmatch(pattern, path)

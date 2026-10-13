@@ -1259,6 +1259,17 @@ def test_without_a_marker_every_entry_counts() -> None:
     assert transport.parts_edited_after(created.item_id, None, CONTENT) == (TITLE,)
 
 
+@pytest.mark.parametrize(
+    "marker", ["²", "next", "-3", ""], ids=["superscript-digit", "word", "signed", "empty"]
+)
+def test_a_marker_that_is_not_ascii_digits_reads_as_no_marker(marker: str) -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_by_hand(created.item_id, summary="Garden guide")
+
+    assert transport.parts_edited_after(created.item_id, marker, CONTENT) == (TITLE,)
+
+
 def test_the_comparable_form_normalises_each_section_and_drops_empty_ones() -> None:
     content = ItemContent(
         title="Garden handbook",
