@@ -6,6 +6,7 @@ import pytest
 from skaldr.errors import RegionNotFoundError
 from skaldr.export.inline import plain
 from skaldr.export.lower import (
+    assemble_item_page,
     assemble_page,
     lower_region,
     lower_regions,
@@ -267,6 +268,24 @@ def test_a_list_after_a_list_in_the_previous_region_keeps_the_notion_separator_i
     )
 
     assert render_notion_regions(lower_report(report)) == ("- One.\n", "<empty-block/>\n- Two.\n")
+
+
+@pytest.mark.parametrize(
+    ("opens_the_document", "cover"),
+    [(True, "https://example.com/cover.png"), (False, None)],
+    ids=["document item", "split child item"],
+)
+def test_every_item_page_carries_the_icon_and_only_the_document_item_the_cover(
+    opens_the_document: bool, cover: str | None
+) -> None:
+    meta = {"title": "T", "icon": "\U0001f9ea", "cover": "https://example.com/cover.png"}
+    lowering = lowering_for(parse_report(make_report(meta=meta)))
+
+    page = assemble_item_page(
+        "Item", [lower_region(lowering, 0)], lowering, opens_the_document=opens_the_document
+    )
+
+    assert (page.title, page.icon, page.cover) == ("Item", "\U0001f9ea", cover)
 
 
 def test_a_region_that_writes_nothing_slices_to_an_empty_text() -> None:

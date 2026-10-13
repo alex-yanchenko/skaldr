@@ -1,4 +1,6 @@
-# Q3 Warehouse Inventory Count: Discrepancies & Fixes
+# 📦 Q3 Warehouse Inventory Count: Discrepancies & Fixes
+
+[Cover image](https://example.com/covers/warehouse.png)
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 
@@ -11,6 +13,7 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - [Rollout](#rollout)
 - [Method](#method)
 - [At a glance](#at-a-glance)
+- [Recount Zone C](#recount-zone-c)
 - [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
 - [Counts at a glance](#counts-at-a-glance)
 - [Count methods compared](#count-methods-compared)
@@ -54,6 +57,8 @@ Percentages are of the 10,000-unit total. Counts were verified against the shelf
 Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 
 Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
+
+The recount runs 10 to 14 Jul, is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows [the cold room plan](cold-room-plan.md).
 
 ### Count pipeline
 
@@ -217,6 +222,16 @@ function pickWinner(a, b) {
 
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
 
+![Aisle 12 with overflow bins](https://example.com/photos/aisle-12.png)
+
+*Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).*
+
+Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough.mp4)
+
+> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**
+>
+> *example.com · Revision 7*
+
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.
 >
 > *Floor lead, ticket OPS-1234*
@@ -236,6 +251,19 @@ function pickWinner(a, b) {
 
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.
+
+## Recount Zone C
+
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
+- **team**: Floor ops
+
+Zone C holds most of the mislabeled bins, so it is recounted first.
 
 ## Appendix: discrepancy-reason raw counts
 

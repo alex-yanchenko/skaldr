@@ -1462,9 +1462,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1537,6 +1539,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -1765,12 +1773,12 @@
           "type": "string"
         },
         "src": {
-          "description": "A data: URI (self-contained, no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
+          "description": "A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link card on the page, as an image in a Markdown export). Base64-encode a data: payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. A URL may not carry a username or password.",
           "title": "Src",
           "type": "string"
         },
         "alt": {
-          "description": "Alt text for the image.",
+          "description": "Alt text for the image. Required, and it must hold visible text.",
           "title": "Alt",
           "type": "string"
         },
@@ -1914,9 +1922,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1989,6 +1999,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -2112,9 +2128,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -2187,6 +2205,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -2392,6 +2416,83 @@
         "pairs"
       ],
       "title": "KeyValue",
+      "type": "object"
+    },
+    "Link": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "link",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "An http:// or https:// address.",
+          "title": "Url",
+          "type": "string"
+        },
+        "display": {
+          "default": "card",
+          "description": "`inline` is a plain link in a line of text; `card` is a bordered card with the title, the domain and the caption; `embed` asks for the page to be shown in place. The HTML page loads nothing from outside, so an embed renders as the card with a note, and both Markdown exports write an embed as the card.",
+          "enum": [
+            "inline",
+            "card",
+            "embed"
+          ],
+          "title": "Display",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Link text or card title; the URL without its scheme when omitted.",
+          "title": "Title"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A line under a card or embed; not allowed on an inline link.",
+          "title": "Caption"
+        }
+      },
+      "required": [
+        "type",
+        "url"
+      ],
+      "title": "Link",
       "type": "object"
     },
     "ListBlock": {
@@ -2729,6 +2830,67 @@
       "title": "MatrixCell",
       "type": "object"
     },
+    "Media": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "media",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the URL points at: video, audio, file or pdf.",
+          "enum": [
+            "video",
+            "audio",
+            "file",
+            "pdf"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "src": {
+          "description": "An http(s) URL, shown as a link card on the page and as a link in a Markdown export. It may not carry a username or password.",
+          "title": "Src",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption naming the media.",
+          "title": "Caption"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "src"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
     "Meta": {
       "additionalProperties": false,
       "properties": {
@@ -2805,6 +2967,55 @@
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
           "title": "Hero",
           "type": "boolean"
+        },
+        "people": {
+          "description": "The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not listed here fails the build.",
+          "patternProperties": {
+            "^[A-Za-z0-9_-]+$": {
+              "$ref": "#/$defs/Person"
+            }
+          },
+          "title": "People",
+          "type": "object"
+        },
+        "jira_site": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The https:// address of your Jira site, such as https://example.atlassian.net. A `[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key is shown as text.",
+          "title": "Jira Site"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
+          "title": "Icon"
+        },
+        "cover": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An http:// or https:// image address for the page cover. The HTML page allows no remote images, so it shows a 'Cover image' link under the title instead; the Notion page cover.",
+          "title": "Cover"
         }
       },
       "required": [
@@ -3129,9 +3340,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -3208,6 +3421,12 @@
                 "$ref": "#/$defs/Image"
               },
               {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
+              },
+              {
                 "$ref": "#/$defs/Timeline"
               },
               {
@@ -3256,6 +3475,40 @@
         "blocks"
       ],
       "title": "Panel",
+      "type": "object"
+    },
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "notion": {
+          "anyOf": [
+            {
+              "pattern": "^user://[0-9A-Fa-f-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Notion user id as a `user://` URI. The Notion Markdown export writes a `[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+          "title": "Notion"
+        },
+        "jira": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Jira account id, for the Jira writer. Not read when rendering.",
+          "title": "Jira"
+        }
+      },
+      "title": "Person",
       "type": "object"
     },
     "Publish": {
@@ -3682,7 +3935,7 @@
             }
           ],
           "default": null,
-          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "description": "The HTTP method. Required unless the call runs a `command` or records a `query`.",
           "title": "Method"
         },
         "url": {
@@ -3696,7 +3949,7 @@
             }
           ],
           "default": null,
-          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command` or records a `query`.",
           "title": "Url"
         },
         "command": {
@@ -3726,6 +3979,18 @@
           "default": null,
           "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
           "title": "Command Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evidence that is not a shell command: a database aggregation, a SQL query or an MCP call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` or `command`."
         },
         "headers": {
           "additionalProperties": {
@@ -4043,6 +4308,35 @@
       "title": "RequestFlow",
       "type": "object"
     },
+    "RequestQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "runner": {
+          "description": "Free-text label for the tool the query runs in, shown with it, such as `mongosh, orders database` or `psql, reporting replica`.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Runner",
+          "type": "string"
+        },
+        "lang": {
+          "description": "The query's language as a Pygments lexer name, such as `json`, `sql` or `js`. It highlights the query on the page and labels the fence in the Markdown exports.",
+          "title": "Lang",
+          "type": "string"
+        },
+        "content": {
+          "description": "The query text the reader copies and runs in the named tool. May carry `{{variable}}` tokens, written in as the reader types them.",
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runner",
+        "lang",
+        "content"
+      ],
+      "title": "RequestQuery",
+      "type": "object"
+    },
     "RequestResponse": {
       "additionalProperties": false,
       "properties": {
@@ -4133,7 +4427,7 @@
             }
           ],
           "default": null,
-          "description": "The HTTP method. Required unless the call runs a `command`.",
+          "description": "The HTTP method. Required unless the call runs a `command` or records a `query`.",
           "title": "Method"
         },
         "url": {
@@ -4147,7 +4441,7 @@
             }
           ],
           "default": null,
-          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command`.",
+          "description": "The full URL. May carry `{{variable}}` tokens. Required unless the call runs a `command` or records a `query`.",
           "title": "Url"
         },
         "command": {
@@ -4177,6 +4471,18 @@
           "default": null,
           "description": "Rich-text line under the command explaining why it is shaped the way it is, such as what a `jq` filter makes visible. The verdict stays about what came back.",
           "title": "Command Note"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evidence that is not a shell command: a database aggregation, a SQL query or an MCP call, run in the tool named by its `runner`. It is shown highlighted with a Copy button, and the cases record what came back. Cannot be combined with `method`, `url`, `headers`, `body` or `command`."
         },
         "headers": {
           "additionalProperties": {
@@ -4364,6 +4670,18 @@
           "description": "Optional stable anchor id (lowercase, hyphen-separated). Overrides the title-derived slug so `[\u2026](#id)` links survive a title rename. Must be unique across the page.",
           "title": "Id"
         },
+        "fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SectionFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Issue fields and page properties shown as a fact strip under the title: status, priority, assignee, due, labels, estimate, `links` to other sections by id, and any extra key holding a string, a number or a list of them."
+        },
         "collapsed": {
           "default": true,
           "description": "Whether the section starts collapsed. Default true suits an appendix / detail; set false for a read-through living doc so the section opens expanded.",
@@ -4402,9 +4720,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -4482,6 +4802,12 @@
                 "$ref": "#/$defs/Image"
               },
               {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
+              },
+              {
                 "$ref": "#/$defs/Timeline"
               },
               {
@@ -4533,6 +4859,176 @@
         "blocks"
       ],
       "title": "Section",
+      "type": "object"
+    },
+    "SectionFields": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "maximum": 1e+300,
+            "minimum": -1e+300
+          },
+          {
+            "items": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "maximum": 1e+300,
+                  "minimum": -1e+300
+                }
+              ]
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        ]
+      },
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workflow state, shown as a chip (e.g. `In Progress`).",
+          "title": "Status"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Priority, shown as a chip (e.g. `High`).",
+          "title": "Priority"
+        },
+        "assignee": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A person's key, shown as a person chip carrying the key.",
+          "title": "Assignee"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Due date, ISO `YYYY-MM-DD`.",
+          "title": "Due"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Labels, each shown as a chip.",
+          "title": "Labels"
+        },
+        "estimate": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "maximum": 1e+300,
+              "minimum": -1e+300
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Effort estimate as a number.",
+          "title": "Estimate"
+        },
+        "links": {
+          "description": "Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of the sections it points at. Every id must be the `id` of a section in this document.",
+          "patternProperties": {
+            "\\S": {
+              "items": {
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Links",
+          "type": "object"
+        }
+      },
+      "title": "SectionFields",
       "type": "object"
     },
     "StatusItem": {
@@ -4996,9 +5492,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -5071,6 +5569,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5521,9 +6025,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -5599,6 +6105,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5785,9 +6297,11 @@
                 "heading": "#/$defs/Heading",
                 "image": "#/$defs/Image",
                 "key_value": "#/$defs/KeyValue",
+                "link": "#/$defs/Link",
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -5860,6 +6374,12 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
+              },
+              {
+                "$ref": "#/$defs/Link"
               },
               {
                 "$ref": "#/$defs/Timeline"
@@ -5959,9 +6479,11 @@
             "heading": "#/$defs/Heading",
             "image": "#/$defs/Image",
             "key_value": "#/$defs/KeyValue",
+            "link": "#/$defs/Link",
             "list": "#/$defs/ListBlock",
             "math": "#/$defs/Math",
             "matrix": "#/$defs/Matrix",
+            "media": "#/$defs/Media",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
             "panel": "#/$defs/Panel",
@@ -6039,6 +6561,12 @@
           },
           {
             "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Media"
+          },
+          {
+            "$ref": "#/$defs/Link"
           },
           {
             "$ref": "#/$defs/Timeline"

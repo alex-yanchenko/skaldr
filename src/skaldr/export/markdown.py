@@ -17,6 +17,7 @@ from skaldr.export.markup import (
     body_cell_texts,
     code_block_lines,
     code_span,
+    encode_url,
     escape_block_start,
     indent_lines,
     styled,
@@ -37,6 +38,7 @@ from skaldr.export.tree import (
     ListKind,
     ListNode,
     LoweredDocument,
+    Media,
     Node,
     Paragraph,
     Quote,
@@ -48,6 +50,7 @@ from skaldr.export.tree import (
     heading_of,
     nested_nodes,
 )
+from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import (
     SCRIPT_HTML_TAG,
     AnchorLink,
@@ -188,6 +191,9 @@ class _MarkdownRuns(MarkupRuns):
     def anchor_link(self, label: str, anchor: str, /) -> str:
         slug = self.heading_slugs.get(anchor)
         return f"[{label}](#{slug})" if slug else label
+
+    def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
+        return self.link(label, f"{doc_id}.md")
 
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
@@ -348,6 +354,14 @@ class _MarkdownWriter:
             lines = [icon, *_spaced(lines)]
         return _quoted(lines)
 
+    def media_lines(self, node: Media) -> list[str]:
+        if node.kind == "image":
+            image = f"![{self.inline(node.description)}]({encode_url(node.url)})"
+            caption = [styled("italic", self.inline(node.caption))] if node.caption else []
+            return _joined([[image], caption])
+        label = self.inline(node.caption or plain(node.url))
+        return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, node.url)}"]
+
     def quote_lines(self, node: Quote) -> list[str]:
         parts = [self.block_text(line) for line in node.lines]
         if node.cite:
@@ -390,6 +404,8 @@ class _MarkdownWriter:
                 return _Written.of(code_block_lines(node))
             case DisplayMath():
                 return _Written.of(code_block_lines(CodeBlock(node.expression, "math")))
+            case Media():
+                return _Written.of(self.media_lines(node))
             case Callout():
                 return _Written.of(self.callout_lines(node))
             case Quote():
@@ -437,5 +453,10 @@ def render_markdown(nodes: Sequence[Node]) -> str:
     return "\n".join(_MarkdownWriter(github_heading_slugs(nodes)).blocks(nodes)) + "\n"
 
 
+def _cover_link(cover: str | None) -> tuple[Paragraph, ...]:
+    return (Paragraph((Link(plain("Cover image"), cover),)),) if cover else ()
+
+
 def render_markdown_document(document: LoweredDocument) -> str:
-    return render_markdown((Heading(1, plain(document.title)), *document.body))
+    title = plain(f"{document.icon} {document.title}" if document.icon else document.title)
+    return render_markdown((Heading(1, title), *_cover_link(document.cover), *document.body))
