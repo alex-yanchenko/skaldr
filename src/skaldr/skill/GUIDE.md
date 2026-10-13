@@ -1360,7 +1360,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section. Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section, and `--export slack` the Markdown for a Slack canvas, described after it. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1431,6 +1431,38 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `[text](doc:id)` | the text alone, because a page id exists only once the document is published |
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, and the nearest heading above it, for example `ADF cannot place a table inside a callout, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle`. Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
+
+## Exporting for a Slack canvas
+
+`skaldr report.yaml --export slack` writes the document as the Markdown a Slack canvas takes, to `out/<name>.slack/page.md` (or the folder `--export-dir` names). Nothing is sent anywhere: whatever creates the canvas (Slack's `canvases.create`, or an agent's Slack connector) uses the `title` in the folder's `.skaldr-export.json` as the canvas title and `page.md` as its body. Like the Notion export, the file holds the body only, since a canvas shows its title above the body. The folder keeps its `.skaldr-export.json` list, with the same overwrite rules as the Markdown exports. `--chunk` does not apply.
+
+| Block | Canvas Markdown |
+| --- | --- |
+| `heading` | `#`, `##` or `###`; a canvas has no deeper heading, so a heading that would be deeper, such as a level 4 heading or a level 3 heading inside a section, is `###` |
+| `text`, and prose in other blocks | a paragraph; tones are dropped |
+| a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and nested lists, and a nested list takes the kind of the list it sits in, so a numbered list inside a bulleted one is bulleted. A paragraph in a list item joins the item's text. A code block, table, quote, callout, image, media, diagram, math block or heading in a list item moves to just after the whole list, together with everything after it in that item, in order; a divider in a list item is dropped |
+| `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
+| `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
+| `flow`, `fan`, `chart` | the same Mermaid diagram as the GitHub-flavored export, with the list of steps or the data table under it |
+| `quote` | quoted lines, with the citation on its own line in italics |
+| `divider` | `---` at the top level; dropped inside a list item or a grid column |
+| a collapsed `section` | a heading at its level, then its content |
+| `toggle` | its bold title, then its content |
+| `tabs`, a multi-case `request` | each tab as a bold title, led by an icon when its tone is info, success, warning or danger, then its content |
+| `grid` | a `::: {.layout}` of `::: {.column}` blocks when it has at most three cells and none of them holds a table or a callout (a toned cell is a callout); otherwise its cells one after another |
+| `table`, `comparison`, `matrix`, `swimlane` | a pipe table under its header row; tones and widths are dropped, a `\|` in a cell is escaped, and the lines of a cell are joined with `<br>` |
+| a table of contents | nothing, since a canvas has no links to its own headings |
+| `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it |
+| `media` | a link named by the caption, or by the kind (Video, Audio, File or PDF) when there is none |
+| badges | bold labels |
+| `++underline++`, `H~2~O`, `10^3^`, `[text]{tone=…}` | the text alone |
+| `` $`x_i`$ `` inline math | inline code |
+| `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
+| `[Ada](user:ada)` | the label as text |
+| a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
+| a link to anything but an `http`, `https`, `mailto`, `tel`, `ftp` or `slack` address or a relative path | the label as text, since a canvas drops other links |
+
+A canvas table holds at most 300 cells, the header row included. A longer table is still written whole, never split, and the export prints a warning with its cell count and the heading above it. A canvas holds at most 1,048,576 characters of Markdown, so the export prints a warning with the size when the page is over that.
 
 ## What you never write
 

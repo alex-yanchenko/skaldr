@@ -7,6 +7,7 @@ from skaldr.export.budget import RenderedBlock
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
+from skaldr.export.slack import render_slack
 from skaldr.export.tree import Node
 from skaldr.models import AnyBlock, AuthoredBlock, parse_report
 from tests.factories.report_factory import make_index_report, make_report
@@ -89,6 +90,10 @@ def notion_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
 
 def markdown_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
     return render_markdown(lowered(blocks, **overrides))
+
+
+def slack_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
+    return render_slack(lowered(blocks, **overrides)).text
 
 
 def heading_sections(count: int, body: str) -> list[dict[str, Any]]:

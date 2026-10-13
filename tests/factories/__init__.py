@@ -9,6 +9,7 @@ from tests.factories.export_factory import (
     notion_of,
     parsed_block,
     rendered_block_count,
+    slack_of,
     write_index_document,
     write_report,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "notion_of",
     "parsed_block",
     "rendered_block_count",
+    "slack_of",
     "write_index_document",
     "write_report",
 ]

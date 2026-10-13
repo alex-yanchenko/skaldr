@@ -121,11 +121,15 @@ def _pipe_table_row(cells: Sequence[str]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+def table_width(table: TableNode) -> int:
+    return max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
+
+
 def pipe_table_lines(table: TableNode, inline: Callable[[ExportRich], str]) -> list[str]:
     def cell_text(runs: ExportRich) -> str:
         return inline(runs).replace("|", "\\|")
 
-    width = max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
+    width = table_width(table)
     lines = [
         _pipe_table_row(_padded([cell_text(cell.text) for cell in table.header], width)),
         _pipe_table_row(["---"] * width),

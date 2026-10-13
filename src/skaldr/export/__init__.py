@@ -12,6 +12,7 @@ from skaldr.export.budget import character_budget
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
+from skaldr.export.slack import SLACK_CANVAS_LIMIT, render_slack
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
 from skaldr.replace_file import replace_file
@@ -25,9 +26,10 @@ __all__ = [
     "export_adf",
     "export_markdown",
     "export_notion",
+    "export_slack",
 ]
 
-ExportTarget = Literal[NotionService, "markdown", "adf"]
+ExportTarget = Literal[NotionService, "markdown", "adf", "slack"]
 EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 ADF_PAGE_NAME: Final = "page.adf.json"
@@ -149,3 +151,17 @@ def export_adf(report: Report, out_dir: Path) -> ExportResult:
         else ()
     )
     return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+
+
+def export_slack(report: Report, out_dir: Path) -> ExportResult:
+    document = lower_report(report)
+    canvas = render_slack(document.body)
+    size = len(canvas.text)
+    over_the_limit = (
+        (f"the canvas Markdown is {size:,} characters, over Slack's limit of {SLACK_CANVAS_LIMIT:,}",)
+        if size > SLACK_CANVAS_LIMIT
+        else ()
+    )
+    return _export_pages(
+        out_dir, document.title, {"page.md": canvas.text}, (*canvas.oversized_tables, *over_the_limit)
+    )
