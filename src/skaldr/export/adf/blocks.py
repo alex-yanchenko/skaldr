@@ -42,6 +42,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
+from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.tree import (
     Callout,
@@ -55,6 +56,8 @@ from skaldr.export.tree import (
     ListEntry,
     ListNode,
     LoweredDocument,
+    Media,
+    MediaNodeKind,
     Node,
     Paragraph,
     Quote,
@@ -67,6 +70,7 @@ from skaldr.export.tree import (
     ToneName,
     nested_nodes,
 )
+from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import Plain
 
 Container = Literal["doc", "panel", "expand", "nested_expand"]
@@ -97,12 +101,14 @@ _NODE_TERM: Final[Mapping[type, str]] = {
     Callout: "callout",
     Quote: "quote",
     Divider: "divider",
+    Media: "media block",
     Toggle: "toggle",
     Columns: "grid",
     Tabs: "set of tabs",
     Diagram: "diagram",
     TableOfContents: "table of contents",
 }
+MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
 LOOP_BACK_NOTE: Final = " (loop back)"
 LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
@@ -194,6 +200,8 @@ class _AdfBlocks:
                 return self.quote_blocks(node)
             case Divider():
                 return [AdfRule(type="rule")]
+            case Media():
+                return [self.media_paragraph(node)]
             case Toggle():
                 title = export_visible_text(node.title)
                 if node.heading_level is not None:
@@ -221,6 +229,13 @@ class _AdfBlocks:
         if node.tone is not None:
             content = list(with_mark(tuple(content), text_color_mark(node.tone)))
         return [AdfParagraph(type="paragraph", content=content)]
+
+    def media_paragraph(self, node: Media) -> AdfParagraph:
+        name = self.runs.write(node.caption or node.description or plain(node.url))
+        label = (AdfText(type="text", text=f"{MEDIA_NODE_LABELS[node.kind]}: "),)
+        return AdfParagraph(
+            type="paragraph", content=list(self.runs.concat([label, self.runs.link(name, node.url)]))
+        )
 
     def code_block(self, content: str, language: str) -> AdfCodeBlock:
         block = AdfCodeBlock(type="codeBlock")

@@ -1302,9 +1302,14 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
 | `chart` | its data table |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
+| `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
 | a table of contents | a bulleted list of the titles, without links |
 | `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
 | an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
+| `[text](date:…)` | a date node at UTC midnight of the start date; a range is the start date, the text " to " and the end date |
+| `[text](user:key)` | a mention of the person's `jira` account id, shown as "@" and the text; a person with no `jira` id is the text alone |
+| `[text](jira:KEY)` | a live issue card when a Jira site is known (`jira_site`); otherwise the text alone |
+| `[text](doc:id)` | the text alone, because a page id exists only once the document is published |
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, and the nearest heading above it, for example `ADF cannot place a table inside a callout, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle`. Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 

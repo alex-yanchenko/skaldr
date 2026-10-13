@@ -89,7 +89,26 @@ class AdfHardBreak(TypedDict):
     type: Literal["hardBreak"]
 
 
-AdfInline = AdfText | AdfStatus | AdfInlineCard | AdfHardBreak
+class AdfDateAttrs(TypedDict):
+    timestamp: str
+
+
+class AdfDate(TypedDict):
+    type: Literal["date"]
+    attrs: AdfDateAttrs
+
+
+class AdfMentionAttrs(TypedDict):
+    id: str
+    text: str
+
+
+class AdfMention(TypedDict):
+    type: Literal["mention"]
+    attrs: AdfMentionAttrs
+
+
+AdfInline = AdfText | AdfStatus | AdfInlineCard | AdfHardBreak | AdfDate | AdfMention
 
 
 class AdfParagraph(TypedDict):

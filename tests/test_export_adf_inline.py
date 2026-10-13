@@ -1,6 +1,7 @@
 import json
 import re
 from collections.abc import Mapping
+from datetime import date
 from typing import get_args
 
 import pytest
@@ -19,13 +20,17 @@ from skaldr.export.runs import (
     StatusMark,
     SwimlaneMark,
 )
-from skaldr.models import BadgeColorLiteral, StatusState, SwimlaneStepState, ToneLiteral
+from skaldr.models import BadgeColorLiteral, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    DateMention,
+    DocumentLink,
     InlineMath,
+    IssueLink,
     Link,
+    PersonMention,
     Placeholder,
     Plain,
     ScriptPosition,
@@ -370,3 +375,56 @@ def test_issue_links_accept_keys_with_digits_and_underscores() -> None:
     assert _written((Plain("AB_2-7"),), links) == [
         {"type": "inlineCard", "attrs": {"url": f"{SITE}/browse/AB_2-7"}}
     ]
+
+
+def _date_node(timestamp: str) -> dict[str, object]:
+    return {"type": "date", "attrs": {"timestamp": timestamp}}
+
+
+def test_a_date_mention_is_a_date_node_at_utc_midnight_in_epoch_milliseconds() -> None:
+    assert _written((DateMention((Plain("1 Oct"),), date(2026, 10, 1), None),)) == [
+        _date_node("1790812800000")
+    ]
+
+
+def test_a_date_range_is_the_start_date_to_the_end_date() -> None:
+    assert _written((DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9)),)) == [
+        _date_node("1791158400000"),
+        _text(" to "),
+        _date_node("1791504000000"),
+    ]
+
+
+def test_a_person_with_a_jira_account_is_a_mention_of_that_account() -> None:
+    person = Person(jira="5b10a2844c20165700ede21g")
+
+    assert _written((PersonMention((Plain("Ada Park"),), "ada", person),)) == [
+        {"type": "mention", "attrs": {"id": "5b10a2844c20165700ede21g", "text": "@Ada Park"}}
+    ]
+
+
+def test_a_person_mention_takes_the_text_of_a_styled_label() -> None:
+    person = Person(jira="acct-1")
+    label = (Styled("bold", (Plain("Ada"),)), Plain(" Park"))
+
+    assert _written((PersonMention(label, "ada", person),)) == [
+        {"type": "mention", "attrs": {"id": "acct-1", "text": "@Ada Park"}}
+    ]
+
+
+def test_a_person_without_a_jira_account_is_the_label_as_plain_text() -> None:
+    assert _written((PersonMention((Plain("Bo"),), "bo", Person()),)) == [_text("Bo")]
+
+
+def test_an_issue_link_with_a_url_is_an_inline_card() -> None:
+    assert _written((IssueLink((Plain("ABC-123"),), "ABC-123", f"{SITE}/browse/ABC-123"),)) == [
+        {"type": "inlineCard", "attrs": {"url": f"{SITE}/browse/ABC-123"}}
+    ]
+
+
+def test_an_issue_link_without_a_url_is_the_label_as_plain_text() -> None:
+    assert _written((IssueLink((Plain("ABC-123"),), "ABC-123", None),)) == [_text("ABC-123")]
+
+
+def test_a_document_link_is_the_label_as_plain_text() -> None:
+    assert _written((DocumentLink((Plain("the plan"),), "onboarding-plan", "st2"),)) == [_text("the plan")]
