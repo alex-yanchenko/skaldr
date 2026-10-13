@@ -344,7 +344,7 @@ class _CanvasWriter:
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
         if not text:
-            return []
+            return [title.icon] if title.icon else []
         return [styled("bold", f"{title.icon} {text}" if title.icon else text)]
 
     def media_lines(self, media: Media) -> list[str]:

@@ -517,6 +517,19 @@ def test_tabs_are_bold_titles_led_by_the_tone_icon_then_their_children() -> None
     assert render_slack([node]) == "**⚠️ Floor**\n\na\n\n**System**\n\nb\n"
 
 
+@pytest.mark.parametrize(
+    ("tab", "text"),
+    [
+        pytest.param(Tab((), (_para("a"),), "warning"), "⚠️\n\na\n", id="icon-without-a-title"),
+        pytest.param(Tab((), (_para("a"),)), "a\n", id="neither-icon-nor-title"),
+    ],
+)
+def test_a_tab_without_a_title_writes_its_icon_alone_or_nothing_before_its_children(
+    tab: Tab, text: str
+) -> None:
+    assert render_slack([Tabs((tab,))]) == text
+
+
 def test_a_table_of_contents_writes_nothing() -> None:
     contents = TableOfContents((TocEntry("x", _text("X")),))
 
