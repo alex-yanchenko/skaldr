@@ -496,13 +496,6 @@ def test_a_table_of_contents_writes_nothing() -> None:
         ),
         pytest.param(Link(_text("x"), "http://example.com"), "[x](http://example.com)", id="http"),
         pytest.param(Link(_text("x"), "mailto:ops@example.com"), "[x](mailto:ops@example.com)", id="mailto"),
-        pytest.param(Link(_text("x"), "tel:+15550100"), "[x](tel:+15550100)", id="tel"),
-        pytest.param(Link(_text("x"), "ftp://example.com/f"), "[x](ftp://example.com/f)", id="ftp"),
-        pytest.param(Link(_text("x"), "slack://open"), "[x](slack://open)", id="slack"),
-        pytest.param(Link(_text("x"), "docs/plan.md"), "[x](docs/plan.md)", id="relative-path"),
-        pytest.param(Link(_text("x"), "#top"), "x", id="fragment-only-is-its-label"),
-        pytest.param(Link(_text("x"), "javascript:void(0)"), "x", id="other-scheme-is-its-label"),
-        pytest.param(Link(_text("x"), "FILE:///tmp/a"), "x", id="scheme-case-ignored"),
         pytest.param(InlineMath("x_i"), "`x_i`", id="inline-math-is-code"),
         pytest.param(
             DocumentLink(_text("the plan"), "plan", None), "the plan", id="document-link-is-its-label"
@@ -515,7 +508,7 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(
             Citation("a", 1, "https://example.com"), "[\\[1\\]](https://example.com)", id="citation"
         ),
-        pytest.param(Citation("a", 1, "javascript:void(0)"), "\\[1\\]", id="citation-to-another-scheme"),
+        pytest.param(Citation("a", 1, None), "\\[1\\]", id="citation-without-a-url"),
         pytest.param(Placeholder("owner"), "`{{owner}}`", id="placeholder"),
     ],
 )

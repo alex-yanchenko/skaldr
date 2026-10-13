@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal
-from urllib.parse import urlsplit
 
 from typing_extensions import assert_never
 
@@ -50,13 +49,12 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Citation, MarkerStyle, Plain, ScriptPosition
+from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
 SLACK_CANVAS_LIMIT: Final = 1_048_576
 SLACK_TABLE_CELL_LIMIT: Final = 300
 DEEPEST_CANVAS_HEADING: Final = 3
 MOST_LAYOUT_COLUMNS: Final = 3
-CANVAS_LINK_SCHEMES: Final = frozenset({"http", "https", "mailto", "tel", "ftp", "slack"})
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
 CANVAS_FENCE: Final = ":::"
 CALLOUT_OPEN: Final = "::: {.callout}"
@@ -65,16 +63,6 @@ COLUMN_OPEN: Final = "::: {.column}"
 MATH_LANGUAGE: Final = "latex"
 CHECK_MARKER_INDENT: Final = 2
 Place = Literal["top", "callout", "column"]
-
-
-def _canvas_keeps_link(url: str) -> bool:
-    if url.startswith("#"):
-        return False
-    try:
-        scheme = urlsplit(url).scheme
-    except ValueError:
-        return False
-    return not scheme or scheme.lower() in CANVAS_LINK_SCHEMES
 
 
 def _slack_date(day: date) -> str:
@@ -87,13 +75,6 @@ class _SlackRuns(CommonMarkRuns):
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
-
-    def link(self, label: str, url: str, /) -> str:
-        return super().link(label, url) if _canvas_keeps_link(url) else label
-
-    def citation(self, run: Citation, /) -> str:
-        label = self.escape(f"[{run.number}]")
-        return self.link(label, run.url) if run.url else label
 
     def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
         return f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)

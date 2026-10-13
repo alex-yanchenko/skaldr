@@ -1461,7 +1461,6 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
 | `[Ada](user:ada)` | the label as text |
 | a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
-| a link to anything but an `http`, `https`, `mailto`, `tel`, `ftp` or `slack` address or a relative path | the label as text, since a canvas drops other links |
 
 A canvas table holds at most 300 cells, the header row included. A longer table is still written whole, never split, and the export prints a warning with its cell count and the heading above it. A canvas holds at most 1,048,576 characters of Markdown, so the export prints a warning with the size when the page is over that.
 
