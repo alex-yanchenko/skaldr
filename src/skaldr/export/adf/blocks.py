@@ -114,6 +114,11 @@ LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
+def _authored_term(node: Node) -> str:
+    named = node.authored_as if isinstance(node, (Callout, Quote, TableNode, Tabs)) else None
+    return named or _NODE_TERM[type(node)]
+
+
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
     return block["type"] in _LIST_ITEM_BLOCKS
 
@@ -161,7 +166,7 @@ class _AdfBlocks:
     def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
         for block in produced:
             if block["type"] not in _ALLOWED_BLOCKS[container]:
-                message = f"ADF cannot place a {_NODE_TERM[type(node)]} inside {_CONTAINER_TERM[container]}"
+                message = f"ADF cannot place a {_authored_term(node)} inside {_CONTAINER_TERM[container]}"
                 if self.heading:
                     message += f", under the heading '{self.heading}'"
                 raise AdfUnsupportedError(message)

@@ -300,7 +300,7 @@ def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int)
     cell_nodes: list[tuple[Node, ...]] = []
     for cell in block.cells:
         children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
-        cell_nodes.append((Callout(cell.tone, children),) if cell.tone else children)
+        cell_nodes.append((Callout(cell.tone, children, authored_as="grid cell"),) if cell.tone else children)
     if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
         return [node for children in cell_nodes for node in children]
     ratios = apportioned([cell.span for cell in block.cells], COLUMN_RATIO_TOTAL)

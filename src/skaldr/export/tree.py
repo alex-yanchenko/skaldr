@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
@@ -65,6 +65,7 @@ class TableNode:
     rows: tuple[TableRow, ...]
     header_column: bool = False
     columns: tuple[TableColumn, ...] = ()
+    authored_as: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -91,12 +92,14 @@ class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
     icon: str | None = None
+    authored_as: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
 class Quote:
     lines: tuple[ExportRich, ...]
     cite: ExportRich = ()
+    authored_as: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,7 @@ class Tab:
 @dataclass(frozen=True)
 class Tabs:
     tabs: tuple[Tab, ...]
+    authored_as: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)

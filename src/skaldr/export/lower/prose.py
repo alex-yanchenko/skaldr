@@ -168,17 +168,19 @@ def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
     return [Paragraph(with_bold_label(block.label, lowering.badge_items(block.items)))]
 
 
-def _titled_callout(tone: ToneName, block: models.Callout | models.Note, lowering: Lowering) -> list[Node]:
+def _titled_callout(
+    tone: ToneName, block: models.Callout | models.Note, lowering: Lowering, authored_as: str
+) -> list[Node]:
     heading: tuple[Node, ...] = (Paragraph(bold(block.title)),) if block.title else ()
-    return [Callout(tone, heading + lowering.prose(block.body), block.icon)]
+    return [Callout(tone, heading + lowering.prose(block.body), block.icon, authored_as)]
 
 
 def lower_callout(block: models.Callout, lowering: Lowering) -> list[Node]:
-    return _titled_callout(block.tone, block, lowering)
+    return _titled_callout(block.tone, block, lowering, "callout")
 
 
 def lower_note(block: models.Note, lowering: Lowering) -> list[Node]:
-    return _titled_callout("neutral", block, lowering)
+    return _titled_callout("neutral", block, lowering, "note")
 
 
 def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node]:
@@ -254,7 +256,7 @@ def lower_link(block: models.Link) -> list[Node]:
     if block.display == "inline":
         return [Paragraph((link,))]
     detail = " · ".join(part for part in (card.domain, card.caption) if part)
-    return [Quote(((Styled("bold", (link,)),),), plain(detail))]
+    return [Quote(((Styled("bold", (link,)),),), plain(detail), authored_as=f"link {block.display}")]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:
