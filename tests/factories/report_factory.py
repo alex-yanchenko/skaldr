@@ -61,6 +61,14 @@ def make_cell(span: Any, blocks: list[dict[str, Any]] | None = None) -> dict[str
     return {"span": span, "blocks": blocks if blocks is not None else [{"type": "text", "body": "x"}]}
 
 
+def in_an_open_section(blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    return make_section("part", blocks=blocks, collapsed=False)
+
+
+def in_a_grid_cell(blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    return make_grid([make_cell(6, blocks)])
+
+
 def make_toggle(*blocks: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     return {
         "type": "toggle",

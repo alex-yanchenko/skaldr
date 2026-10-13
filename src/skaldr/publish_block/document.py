@@ -25,20 +25,20 @@ class Publish(FrozenModel):
         "at least two characters, lowercase letters and digits joined by single hyphens.",
     )
     targets: list[PublishTarget] = Field(
-        min_length=1,
         description="One entry per place the document publishes to; each is built from the document on "
-        "its own.",
+        "its own. An empty list retires the document: publishing archives every item it created and "
+        "releases every page it wrote into.",
     )
 
     @model_validator(mode="after")
     def _validate_distinct_locations(self) -> "Publish":
         first_target_at: dict[Location, int] = {}
         for position, target in enumerate(self.targets, start=1):
-            location = target.location_key()
+            location = target.place_key()
             if location in first_target_at:
                 raise ValueError(
                     f"publish targets {first_target_at[location]} and {position} both write to "
-                    f"{target.location_label()}"
+                    f"{target.place_label()}"
                 )
             first_target_at[location] = position
         return self

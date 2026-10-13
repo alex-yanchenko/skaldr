@@ -62,6 +62,9 @@ meta:
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
+  people:                        # optional; who a [Ada](user:ada) link can name (see Rich text)
+    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g" }
+  jira_site: "https://example.atlassian.net"   # optional; where a [ABC-123](jira:ABC-123) link points
   icon: "🧪"                     # optional; one emoji beside the title and as the favicon
   cover: "https://example.com/cover.png"   # optional; an http or https image address
 ```
@@ -127,7 +130,7 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 `key_value` values, timeline/status text) accept a small markdown subset:
 
 `**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `` $`x_i`$ `` (inline math) · `[label](https://url)`
-(links allow `http`, `https`, `mailto` only).
+(links allow `http`, `https`, `mailto` and the typed links below only).
 
 **CommonMark rules.** Rich text follows CommonMark's inline rules (it is parsed with markdown-it-py) for emphasis, code spans, links and backslash escapes, plus the extensions this section lists: underline, subscript, superscript, coloured spans, inline math, `[^key]` citations and `{{name}}` blanks. So marks nest (`**bold with *italic* inside**`), a link label holds marks (`[**docs** H~2~O](https://url)`), and a link URL may hold balanced parentheses (`https://en.wikipedia.org/wiki/Foo_(bar)`). A link needs both text and a URL and takes no title, so `[x]()`, `[](https://url)` and `[x](https://url "title")` show as typed. A marker opens or closes only where CommonMark's flanking rules allow it: `2 * 3 * 4` and `a ** b ** c` stay prose, and so does ``the **`api`**s``, because a closing `**` between punctuation and a letter closes nothing. `_word_` is italic and `__word__` bold, as on GitHub, while an underscore inside a word (`snake_case`, `a__init__b`) stays text; write an identifier such as `__init__` in a `` `code` `` span. A backslash before any ASCII punctuation shows that character literally and drops the backslash (`\*`, `\~`, `\[`); a backslash before a letter stays. Multi-backtick code spans (``` `` a`b `` ```) work. Raw HTML, autolinks (`<https://url>`), images, entity references (`&amp;`) and hard line breaks are not read: they show as typed. A NUL character becomes U+FFFD, as CommonMark requires. Marks, links and coloured spans nest up to 20 deep; more than that fails the build naming the limit. A rich-text mistake that fails the build names the field it sits in, as in `blocks.1.items.2: unknown tone 'purple' in {tone=purple}: …`.
 
@@ -145,6 +148,8 @@ matching the TOC. A slug that would equal an id the page itself uses (`skaldr-so
 `ref-<key>` and `fnref-<key>` for a reference key) gets the suffix too, and an author `id` equal to
 one fails the build. A `#slug` that names no heading or section **fails the build**, so a dangling
 in-page link never ships.
+
+**Typed links.** Four more link targets name a date, a person, an issue or another document instead of a URL. `[1 Oct](date:2026-10-01)` is a date chip, and a range is `[the week](date:2026-10-05/2026-10-09)`; a date is `YYYY-MM-DD`, a range holds two dates and its end is not before its start, and anything else fails the build naming the value. `[Ada](user:ada)` is a person chip: `ada` must be a key under `meta.people`, a map from a key (letters, digits, `_` and `-`) to `notion` (a `user://` id) and `jira` (an account id), both optional, and a key missing from the map fails the build naming it. `[ABC-123](jira:ABC-123)` is an issue link to `<meta.jira_site>/browse/ABC-123`, where `jira_site` is your `https://` Jira address with no username, password, query or fragment (a path is allowed, and a trailing slash is dropped); without `jira_site` the label shows as text, because the key alone names no site. The key is capitals, a hyphen and a number. `[the plan](doc:onboarding-plan#st2)` links to another skaldr document by its `doc_id`, with an optional `#section` id; the HTML page links to `onboarding-plan.html#st2` and the GitHub Markdown to `onboarding-plan.md`, which work when the files sit side by side under those names. The GitHub link drops the section, because GitHub makes a heading's anchor from its title and never from a section `id`. When an index document includes the part whose `publish.doc_id` is that document, the link is an in-page link to the section, or to the part's title when there is no `#section`, in every output. Only that part's own sections (blocks with a `section` `id`) can be named: a heading, or a section of another part, fails the build, since the link would break once the parts publish separately. Two parts with the same `publish.doc_id` fail the build naming both files. Every label is rich text, and a typed link inside a flow label or other plain-text field reads as its label. Exports: see Exporting as Markdown.
 
 **Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL,
 never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a valid anchor and
@@ -285,7 +290,8 @@ or to keep a small block from stretching across the whole page.
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
-| `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
+| `image` | An image: embedded, or named by URL (see below) | `src` (a `data:` URI or an http(s) URL), `alt` (required), `caption?`, `max_width?` |
+| `media` | A video, audio, file or PDF named by URL (see below) | `kind: video\|audio\|file\|pdf`, `src` (an http(s) URL), `caption?` |
 | `link` | A link to another page, as a plain link, a card or an embed (see below) | `url` (http or https), `display?: inline\|card\|embed` (default `card`), `title?`, `caption?` (not on `inline`) |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -331,6 +337,26 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
   # rows / columns / cells …
 ```
 
+An `image` `src` is either a self-contained `data:` URI or an http(s) URL. skaldr never fetches or
+generates images. **Base64-encode a `data:` payload** (a raw, unencoded SVG isn't a valid URI and
+won't render). The page's content security policy lets it load `data:` images only, so a URL cannot
+show as a picture there: an `image` or `media` block with a URL shows as a card with its kind
+(`Image`, `Video`, `Audio`, `File` or `PDF`), its alt text or caption, and the URL's host, and the
+card links to the URL. An `image` needs `alt`, and a blank `alt` fails the build. A URL must start
+with `http://` or `https://` and may not hold a username or password. A `media` block takes http(s)
+URLs only.
+
+```yaml
+- type: image
+  src: "https://example.com/aisle-12.png"
+  alt: "Aisle 12 with overflow bins"
+  caption: "Overflow bins before the count"
+- type: media
+  kind: video
+  src: "https://example.com/dock-walkthrough.mp4"
+  caption: "Dock walkthrough"
+```
+
 A `link` block points at a page the reader can open. `display: inline` writes a plain link in a line of text, `card` (the default) a bordered card with the title, the domain and an optional caption, and `embed` asks for the page to be shown in place. The page skaldr writes loads nothing from outside, so it cannot show an embedded page: an `embed` renders as the same card with a note that the page cannot load embedded content, and the card opens the link. Without a `title` the link text is the URL without its scheme, and a card shows no domain line. The `url` must be an `http://` or `https://` address. An `inline` link takes no `caption`.
 
 ```yaml
@@ -344,9 +370,7 @@ A `link` block points at a page the reader can open. `display: inline` writes a 
   title: "the live board"
 ```
 
-Images must be self-contained `data:` URIs. skaldr
-embeds images; it does not fetch or generate them. **Base64-encode the payload** (a raw,
-unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
+A `section` holds any block except another
 `section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one. A `panel` holds any block
 except a `section`, a `grid`, a `walkthrough` or another `panel` directly inside it. A section
 **starts collapsed** (`collapsed: true` default), right for an appendix or detail-on-demand; for a
@@ -1208,6 +1232,7 @@ blocks:                       # optional: an intro shown before the first part
 - **Each part becomes a part of the page**: its `meta.title` is the part's title, a level 1 heading in the exports and a title band in the HTML, and its blocks follow unchanged. The table of contents lists the index's own headings and sections, then one entry per part. The rest of a part's `meta` (subtitle, source, date, updated, toc and the other options) applies only when the part builds alone; the page takes its header, footer and options from the index's `meta`.
 - **`collapsed: true`** under `index` starts every part collapsed: a collapsible in the HTML, a toggle heading in the Notion export. Parts are open by default.
 - **Badges merge.** The index's `badges` and every part's `badges` combine into one vocabulary and one legend, shown at the top of the page unless the index's own blocks hold a table. A key declared with a different label, tone or legend in two files fails the build naming both files; rename one key or make them agree.
+- **People and the Jira site merge.** The index's `meta.people` and every part's combine, so a part's `[Ada](user:ada)` resolves on the combined page. A key declared with different ids in two files fails the build naming both, and so do two different `meta.jira_site` addresses.
 - **Ids are page-wide.** A heading, section, table or matrix id, a reference key or a request label repeated across two parts fails like a repeat inside one file, and the error names the file behind each part it points at. A file listed twice is refused.
 - The rendered page is the combined page, and `--export notion` writes one `page.md` for it. `--if-stale` and `--watch` follow every part file and every file a part includes, so an edit to a part rebuilds the index. While a part cannot be read, `--watch` keeps following the files it last found.
 - `--emit-json` prints the combined page, with every part already in place and no `index` key. It is a view of the page, not a source file: building it again is refused, because its `part` blocks were not built by an index. The source embedded in the rendered page is the index file alone, as with `!include`; keep the part files beside it.
@@ -1216,7 +1241,7 @@ blocks:                       # optional: an intro shown before the first part
 
 ## Where it publishes: `publish`
 
-An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. Publishing itself is not available yet: no skaldr command sends a document to Notion or Jira, so writing the block and signing in with `skaldr auth` changes nothing about what a render or an export does. `skaldr auth` keeps one sign-in per Jira site and per Notion workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>` and `skaldr auth logout notion <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
+An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages and Jira issues. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. The block changes nothing about what a render or an export does; the `skaldr publish`, `skaldr diff` and `skaldr status` commands read it (see Publishing below). `skaldr auth` keeps one sign-in per Jira site and per Notion workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>` and `skaldr auth logout notion <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
 
 ```yaml
 publish:
@@ -1240,7 +1265,7 @@ publish:
 | `where` (Jira) | A `project` key, an `issue_type`, an optional `parent` issue key, and `fields` for labels, priority, components and custom fields. |
 | `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
 | `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
-| `overrides` | Per-item `fields`, keyed by a split section id. |
+| `overrides` | Per-item `fields`, keyed by a split section id; each key it names replaces that key of `where.fields` whole. |
 
 `skaldr --check` holds the block to these rules and names the target in every message:
 
@@ -1250,6 +1275,70 @@ publish:
 - no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
 
 A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
+
+## Publishing
+
+This version of skaldr has the publish commands but no Notion or Jira connection yet, so each of them stops with `error: no connector publishes to notion` (or `jira`) until a release adds the connections. What follows is how the commands behave.
+
+```bash
+skaldr publish garden.yaml                      # dry run: reads the services, prints the plan, writes nothing
+skaldr publish garden.yaml --apply              # publishes; stops with a diff if an item was edited in the service
+skaldr publish garden.yaml --apply --overwrite  # replaces the remote edits the last diff showed
+skaldr diff garden.yaml                         # remote edits since the last publish, then what the YAML would change
+skaldr diff garden.yaml --json                  # the same facts as JSON
+skaldr status garden.yaml                       # per item: in sync, edited remotely, changed in the YAML, removed, missing remotely, never published
+```
+
+**The plan.** `skaldr publish garden.yaml` prints, for each target, the items it would create, then each item's updates (its title and fields, each section it writes, and each section it removes from the item), then the items it would archive or release. `--apply` carries the plan out one step at a time and prints each step as it lands.
+
+The dry run reads every service the document publishes to, with your stored sign-in, and never writes to a service or to the state file. It reads each item skaldr published and the page a target writes into, so its plan is the one `--apply` would carry out. When `--apply` would not go ahead, the dry run says so and exits with status 1: after remote edits it prints each edit and `error: --apply would stop: ...`, and for any other reason (a stamp from another document, a page that already holds content, an item missing in the service, an interrupted create) it prints `error: --apply would refuse: ...` with the reason.
+
+```text
+notion page 0123456789abcdef0123456789abcdef: 1 to create, 3 to update, 1 to archive
+  create   section planting "Planting"
+  update   document: fields
+  update   document: watering (blocks[1])
+  remove   document: page legend
+  archive  section tools (page-2)
+```
+
+A Notion page takes one write per changed section. A connector that can only replace an item's whole content, such as a Jira description, takes one write per changed item instead, and the plan lists every section that write changes on one line.
+
+**What goes where.** The document's own page or issue holds the subtitle, the table of contents, every top-level block that `from` keeps and `split` does not take, and the footer. A split section's page or issue holds that section alone, titled by it. Only the document's item has a table of contents. Each item has its own badge legend, listing only the badges that item uses, placed before its first top-level table as on the HTML page. Within an item, each top-level block is a section of its own for updates: a `section` by its `id`, a heading by its anchor, any other block by its content (a short hash of the block as the YAML parser reads it, so anchors, merge keys, quoting and key order do not change it, with a `#2` suffix for a second identical block), plus the `page header`, `page legend` and `page footer`. So adding or deleting a block writes only that block, and changing the text of a block that has no id, or of a heading (whose anchor follows its text), writes it as one block added and one removed. A newer skaldr keys the same YAML the same way. Publishing again writes only the sections whose text changed and leaves the rest of the item as it is. A section that moved is written again at its new place, and a section that left the item is removed from it. An item whose section left the YAML or the `split` list is archived, and so is every item of a target removed from the `publish` block. Lists of plain values (labels, components, numbers) and the keys of field values compare as sorted sets, so `[seeds, soil]` and `[soil, seeds]` are the same value and reordering them publishes nothing; a list of objects or of lists keeps its order. skaldr owns only the fields it has published: only those are compared for remote edits, so a field the service or a person sets that skaldr never published (a Jira board or sprint, say) never counts as a remote edit and is never cleared, even by `--overwrite`. A field newly added to the YAML is written over whatever the service holds, without counting that value as an edit. Removing a field from the YAML clears it in the service. An empty value (null, an empty string, list or object) is the same as no value, so a service that reads a cleared field back as null, or drops an empty one, causes no change. `fields` from `where` apply to every item. A split section's `overrides` replace them key by key: a key the override names takes the override's value whole (a `labels` list in an override replaces the `labels` of `where`, it does not add to it), and every other key keeps the value from `where`. skaldr's own stamp of the `doc_id` is not a field, so no override can remove it.
+
+**The state file.** `--apply` keeps a state file next to the YAML: `garden.skaldr-state.json` for `garden.yaml`. It records each page and issue skaldr made, with its id, the text skaldr last rendered for each section, the copy the service returned right after skaldr's write, and a marker the connector uses to spot later edits. `skaldr diff` updates it too, to remember which remote edits it showed you. skaldr writes it whole to a new file beside it, flushes that to disk and only then puts it in place, so a crash never leaves half a file; a folder skaldr cannot write to stops the run before anything is sent. While `--apply` or `skaldr diff` runs, it holds `garden.skaldr-state.json.lock`, and it reads the state file and the YAML only once it holds the lock, so it always plans from what the previous run left. A second run on the same document stops at once, naming the command it blocked, instead of racing the first.
+
+skaldr saves the state after every step and notes each write, archive and release before sending it, so a run that stops halfway, for example on a network error, carries on from the failed step when you run it again. On the next run, each part of an interrupted write that the service now holds exactly as skaldr was writing it (compared in the service's own formatting) is recorded as published, even when someone also edited another part of the item; the parts that did not land are written again, and only the other changes count as remote edits. An interrupted archive or release whose item is already archived, gone, or released (unstamped, with no content and none of the fields skaldr set) is simply forgotten; otherwise it is sent again, without checking the item for edits, since the document no longer holds it. If the section comes back into the YAML before that, skaldr tracks the item again as usual. A write the service rejected outright leaves no trace and is tried again on the next run. `--apply` plans again once it holds the lock and stops if the YAML changed after the plan was made.
+
+A create is different: if a run stops while creating a page or issue and the service's answer never arrived, skaldr cannot tell whether it was made, so the next `--apply` stops and names the parent and the title to look for, rather than risk creating it twice. Archive the item if it is there, delete its entry from `pending_creates` in the state file, and publish again. Writing into a page that a target names with `page` resolves itself, even if the target has since left the `publish` block: if the page carries this document's stamp, skaldr records it as adopted, and if it is unstamped but empty, or holds exactly what skaldr was writing, skaldr writes into it again. Every item skaldr creates is stamped with the `doc_id` and the id of the section it holds, so a later version of skaldr can find such an item by itself.
+
+Keep the file: without it skaldr no longer knows which items it made. It names pages and issues by id, so in a public repository add `*.skaldr-state.json` and `*.skaldr-state.json.lock` to `.gitignore` and keep a copy of the state file elsewhere. A state file that records another `doc_id` is refused; the usual cause is a changed `doc_id`, so change it back. A target in the state file that this version of skaldr cannot read stops the run with an error before anything is written.
+
+**Only what this document owns.** skaldr writes only to items in the state file and to the page a Notion target names in `page`. Every one of them is read before the first write, and an item stamped with another document's `doc_id` stops the run, naming both documents, before anything is sent.
+
+A page that a target names with `page` was not made by skaldr, so skaldr writes into it only while it is empty: a page that already holds content, child pages or properties the service reports as set, and carries no skaldr stamp, is refused, naming it. In the state file and in every message, such a target reads as `notion page <id> (written into)`. The state file records such a page as adopted, and skaldr never archives it. When its target leaves the `publish` block, skaldr releases it instead: it clears what skaldr wrote and removes the stamp, leaving the page itself in place. Every item skaldr created is archived as before.
+
+**Moved targets.** A target is known by its place: the Notion `parent_page`, or the Notion `page` it writes into (so switching one page between `parent_page` and `page` is a move too), or the Jira `project` and `parent`. When a target's place changes, skaldr does not move pages or issues: `--apply` stops before writing anything, naming the old place and the new one, and the dry run says it would. `skaldr diff` and `skaldr status` still run, showing the old target's items as removed and the new target's as never published. To move, publish once with the old target removed from the `publish` block, which archives the items skaldr created there and releases any page it wrote into, then add the new target and publish again. A target removed from the block with no new target for the same service in its place is not a move: its created items are archived and an adopted page is released.
+
+**Retiring a document.** To stop publishing a document, keep its `doc_id` and set `targets: []`. The plan, `--apply`, `skaldr diff` and `skaldr status` then treat every target as removed: the dry run lists an archive for each item skaldr created and a release for each page it wrote into, `--apply` carries them out, `diff` and `status` show every item as removed, and afterwards the state file holds no targets. Publishing again then prints `Nothing to publish`. A document with `targets: []` and no state file has nothing published, so the dry run and `--apply` say so and send nothing. An empty list is not a move.
+
+**Items deleted in the service.** An item skaldr published that is no longer in the service shows as missing remotely in `skaldr status`, and under "Missing remotely" in `skaldr diff` (`missing_remotely` in `--json`). `--apply` stops, naming it. `--apply --overwrite` creates it again under its parent and records its new id, or forgets it when the YAML no longer has it. A page a target wrote into cannot be created again: `--apply --overwrite` stops, naming the page, so name an existing empty page or publish under one with `parent_page`.
+
+**Edits made in the service.** Before writing, skaldr reads every item it published and compares the service's copy now with the copy the service returned right after skaldr's last write, so formatting the service adds is never mistaken for an edit; a connector can also report an edit the text does not show. When an item was edited, `--apply` writes nothing, prints each edited part as a unified diff and exits with status 1. Then choose: leave it, copy the edit into the YAML, or replace it with `--apply --overwrite`, which writes the YAML's content over exactly the edits the last diff showed, whether that diff came from `--apply` or from `skaldr diff`. If the item changed again after that diff, or no diff has shown the edit yet, `--overwrite` writes nothing either and prints the new diff, so an edit you have not seen is never overwritten.
+
+```text
+--- notion page 0123456789abcdef0123456789abcdef, document: planting (blocks[2]), as published
++++ notion page 0123456789abcdef0123456789abcdef, document: planting (blocks[2]), now
+@@ -1,2 +1,2 @@
+ ## Planting
+-Sow in spring.
++Sow in late spring.
+error: 1 part was edited in the service since the last publish, so nothing was written. To keep the edit, copy it into the YAML first; to replace it, publish with --apply --overwrite.
+```
+
+**`skaldr diff --json`** prints three lists, `remote_edits`, `yaml_changes` and `missing_remotely` (each missing item's `target`, `item` and `item_id`). Each entry names its `target`, `item` (`document` or `section <id>`), `part` (`section`, `title` or `fields`), `section` id, `yaml_path` and the `published` text; a remote edit adds the `current` text and, when the service says, `edited_by` and `edited_at`; a YAML change adds the `next` text. An item never published shows `null` as its published text, and an item the YAML removed shows `null` as its next text.
+
+**Limits.** A connector can declare a limit on a section or on a whole item, such as a character count. Content over it stops the plan before anything is sent, naming the target, the item, the section and the limit, and suggesting a further `split`.
 
 ## The render carries its own source
 
@@ -1271,7 +1360,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names). Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1296,16 +1385,52 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
-| `image` | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
+| `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
+| `[1 Oct](date:2026-10-01)` | the label as text | a date mention, `<mention-date start="2026-10-01"/>`, with `end` for a range; the label is dropped, since Notion writes the date itself |
+| `[Ada](user:ada)` | the label as text | a user mention, `<mention-user url="user://…">Ada</mention-user>`, when the person has a `notion` id; otherwise the label as text |
+| `[ABC-123](jira:ABC-123)` | a link to the issue on `meta.jira_site`, or the label as text without one | the same |
+| `[the plan](doc:onboarding-plan#st2)` | a link to `onboarding-plan.md` | the label as text, since a Notion page id exists only once the document is published |
 | `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then a `Cover image` link when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+
+## Exporting as ADF for Jira
+
+`skaldr report.yaml --export adf` writes the document as Atlassian Document Format, the JSON a Jira issue description takes, to `out/<name>.adf/page.adf.json` (or the folder `--export-dir` names). It lets you inspect what a Jira publish would send, and nothing is sent anywhere. Jira renders ADF panels, expands, task lists and status lozenges, which Markdown cannot carry, so Jira gets ADF built by skaldr rather than Markdown. Like the Notion export, the file holds the body only: the title is the issue's summary. The folder keeps its `.skaldr-export.json` list, with the same overwrite rules as the Markdown exports. `--chunk` does not apply.
+
+| Block | ADF |
+| --- | --- |
+| `heading` | a heading of the same level |
+| `text`, and prose in other blocks | a paragraph; a toned paragraph gets the tone's text colour |
+| a list | a bullet, ordered (with its start number) or task list, nested as written |
+| `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
+| `code` | a code block with its language; a `math` block is a code block in `latex` |
+| `quote` | a block quote, the citation in italics |
+| `divider` | a rule |
+| `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
+| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
+| `grid` | its cells one after another |
+| `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
+| `chart` | its data table |
+| badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
+| `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
+| a table of contents | a bulleted list of the titles, without links |
+| `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
+| an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
+| `[text](date:…)` | a date node at UTC midnight of the start date; a range is the start date, the text " to " and the end date |
+| `[text](user:key)` | a mention of the person's `jira` account id, shown as "@" and the text; a person with no `jira` id is the text alone |
+| `[text](jira:KEY)` | a live issue card when a Jira site is known (`jira_site`); otherwise the text alone |
+| `[text](doc:id)` | the text alone, because a page id exists only once the document is published |
+
+ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, and the nearest heading above it, for example `ADF cannot place a table inside a callout, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle`. Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
 ## What you never write
 

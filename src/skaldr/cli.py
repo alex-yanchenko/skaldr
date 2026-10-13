@@ -16,7 +16,14 @@ from typing import Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import PageFetchError, ReportError, UnknownGuideTopicError
-from skaldr.export import EXPORT_MANIFEST, EXPORT_TARGETS, ExportTarget, export_markdown, export_notion
+from skaldr.export import (
+    EXPORT_MANIFEST,
+    EXPORT_TARGETS,
+    ExportTarget,
+    export_adf,
+    export_markdown,
+    export_notion,
+)
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
@@ -66,6 +73,7 @@ def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
 
 
+_PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
 _STANDALONE_MODES = frozenset(
     {"write_schema", "guide", "install_skill", "install_plan_rule", "extract_source"}
 )
@@ -108,20 +116,24 @@ def _writes_an_html_page(args: argparse.Namespace) -> bool:
     return not args.check or args.embed
 
 
+def _missing_extra(command: str, exc: ModuleNotFoundError) -> int:
+    missing = (exc.name or "skaldr").partition(".")[0]
+    if missing == "skaldr":
+        raise exc
+    print(
+        f"error: `skaldr {command}` needs the publish extra ({missing} is not installed). Reinstall with it: "
+        "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
+        "or pip install 'skaldr[publish]'",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _run_auth(argv: list[str]) -> int:
     try:
         from skaldr.auth.cli import main as auth_main
     except ModuleNotFoundError as exc:
-        missing = (exc.name or "skaldr").partition(".")[0]
-        if missing == "skaldr":
-            raise
-        print(
-            f"error: `skaldr auth` needs the publish extra ({missing} is not installed). Reinstall with it: "
-            "uv tool install --force 'skaldr[publish]', pipx install --force 'skaldr[publish]', "
-            "or pip install 'skaldr[publish]'",
-            file=sys.stderr,
-        )
-        return 1
+        return _missing_extra("auth", exc)
     return auth_main(argv)
 
 
@@ -155,15 +167,26 @@ def _run_new(arguments: list[str]) -> int:
     return 0
 
 
+def _run_publish(argv: list[str]) -> int:
+    try:
+        from skaldr.publish.cli import main as publish_main
+    except ModuleNotFoundError as exc:
+        return _missing_extra(argv[0], exc)
+    return publish_main(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     if arguments[:1] == ["auth"]:
         return _run_auth(arguments[1:])
     if arguments[:1] == ["new"]:
         return _run_new(arguments[1:])
+    if arguments[:1] and arguments[0] in _PUBLISH_COMMANDS:
+        return _run_publish(arguments)
     parser = argparse.ArgumentParser(
         description="Render a skaldr content file to an HTML page.",
-        epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`.",
+        epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
+        "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`.",
     )
     parser.add_argument(
         "--version",
@@ -255,8 +278,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--export",
         choices=EXPORT_TARGETS,
-        help="write the document as Markdown instead of HTML: `notion` writes Notion-flavored Markdown "
-        "for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or a wiki.",
+        help="write the document as Markdown or ADF instead of HTML: `notion` writes Notion-flavored "
+        "Markdown for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or "
+        "a wiki; `adf` writes the Atlassian Document Format JSON a Jira issue description takes.",
     )
     parser.add_argument(
         "--export-dir",
@@ -634,6 +658,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
                 result = export_notion(report, out_dir, chunk=chunk)
             case "markdown":
                 result = export_markdown(report, out_dir)
+            case "adf":
+                result = export_adf(report, out_dir)
             case _:
                 assert_never(target)
     except (ReportError, OSError) as exc:
@@ -645,9 +671,12 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
             file=sys.stderr,
         )
-    for heading in result.oversized_sections:
+    for oversized in result.oversized_sections:
+        if target == "adf":
+            print(f"warning: {oversized}", file=sys.stderr)
+            continue
         print(
-            f"warning: section '{heading}' holds a part that cannot be split to fit --chunk {chunk} "
+            f"warning: section '{oversized}' holds a part that cannot be split to fit --chunk {chunk} "
             "(one block, or a heading with the block after it); that part stays whole",
             file=sys.stderr,
         )

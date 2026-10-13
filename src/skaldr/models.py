@@ -21,6 +21,7 @@ from functools import cached_property
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TypeGuard, cast, get_args
+from urllib.parse import urlsplit
 
 # Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
 if sys.version_info >= (3, 11):
@@ -73,35 +74,31 @@ def _url_defect(url: str) -> str | None:
         return err.errors()[0]["msg"].removeprefix("Input should be a valid URL, ")
     if parsed.scheme == "mailto" and not parsed.path:
         return "it names no address"
+    if "@" in urlsplit(url).netloc:
+        return "it holds a username or password"
     return None
 
 
-def _require_url_scheme(url: str | None, subject: str) -> None:
-    """Raise if an author-supplied `url` isn't an allowed scheme. Shared by every model with a link
-    field so the gate (and message) can't drift; `subject` names the field in the error."""
-    if url is None:
-        return
-    if not url.startswith(ALLOWED_URL_SCHEMES):
-        raise ValueError(f"{subject} must be an http://, https://, or mailto: link")
+LINK_URL_WORDING = "an http://, https://, or mailto: link"
+WEB_URL_SCHEMES = ("http://", "https://")
+WEB_URL_WORDING = "an http:// or https:// link"
+
+
+def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, ...], wording: str) -> None:
+    if not url.startswith(schemes):
+        raise ValueError(f"{subject} must be {wording}")
     defect = _url_defect(url)
     if defect is not None:
         raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
 
 
-WEB_URL_SCHEMES = ("http://", "https://")
-
-
 def _require_web_url(url: str, subject: str) -> None:
-    if not url.startswith(WEB_URL_SCHEMES):
-        raise ValueError(f"{subject} must be an http:// or https:// link")
-    defect = _url_defect(url) or _userinfo_defect(url)
-    if defect is not None:
-        raise ValueError(f"{subject} {url!r} is not a valid URL ({defect})")
+    _require_scheme_and_well_formed(url, subject, WEB_URL_SCHEMES, WEB_URL_WORDING)
 
 
-def _userinfo_defect(url: str) -> str | None:
-    parsed = _LINK_URL.validate_python(url)
-    return "it holds a username or password" if parsed.username or parsed.password else None
+def _require_url_scheme(url: str | None, subject: str) -> None:
+    if url is not None:
+        _require_scheme_and_well_formed(url, subject, ALLOWED_URL_SCHEMES, LINK_URL_WORDING)
 
 
 # A reference key must be a safe HTML id/fragment and match the inline `[^key]` marker regex in
@@ -307,6 +304,27 @@ class Badge(FrozenModel):
     )
 
 
+PERSON_KEY_PATTERN = REFERENCE_KEY_PATTERN
+NOTION_USER_PATTERN = r"^user://[0-9A-Fa-f-]+$"
+JIRA_SITE_SCHEME = "https://"
+
+
+PersonKey = Annotated[str, StringConstraints(pattern=rf"^{PERSON_KEY_PATTERN}$")]
+
+
+class Person(FrozenModel):
+    notion: str | None = Field(
+        default=None,
+        pattern=NOTION_USER_PATTERN,
+        description="The person's Notion user id as a `user://` URI. The Notion Markdown export writes a "
+        "`[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+    )
+    jira: str | None = Field(
+        default=None,
+        description="The person's Jira account id, for the Jira writer. Not read when rendering.",
+    )
+
+
 class Meta(FrozenModel):
     title: str = Field(description="Page title (h1).")
     subtitle: list[str] = Field(default_factory=list, description="Subtitle lines under the title.")
@@ -333,6 +351,39 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
+    people: dict[PersonKey, Person] = Field(
+        default_factory=dict[str, Person],
+        description="The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not "
+        "listed here fails the build.",
+    )
+    jira_site: str | None = Field(
+        default=None,
+        description="The https:// address of your Jira site, such as https://example.atlassian.net. A "
+        "`[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key "
+        "is shown as text.",
+    )
+
+    @field_validator("jira_site")
+    @classmethod
+    def _jira_site_is_an_https_address(cls, site: str | None) -> str | None:
+        if site is None:
+            return None
+        if not site.startswith(JIRA_SITE_SCHEME):
+            raise ValueError(f"jira_site must be an {JIRA_SITE_SCHEME} URL")
+        address = urlsplit(site)
+        if not address.hostname:
+            raise ValueError(f"jira_site {site!r} names no host: write it as https://<your-site>")
+        if address.username is not None or address.password is not None:
+            raise ValueError(f"jira_site {site!r} must not hold a username or password")
+        if "?" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a query")
+        if "#" in site:
+            raise ValueError(f"jira_site {site!r} must not hold a fragment")
+        defect = _url_defect(site)
+        if defect is not None:
+            raise ValueError(f"jira_site {site!r} is not a valid URL ({defect})")
+        return site.rstrip("/")
+
     icon: Icon | None = Field(
         default=None,
         description="One emoji shown beside the title and used as the page's favicon; the Notion page icon.",
@@ -810,17 +861,57 @@ class Divider(_Block):
 class Image(_Block):
     type: Literal["image"]
     src: str = Field(
-        description="A data: URI (self-contained, no external fetches). Base64-encode the payload "
-        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render."
+        description="A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link "
+        "card on the page, as an image in a Markdown export). Base64-encode a data: payload "
+        "(e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. "
+        "A URL may not carry a username or password."
     )
-    alt: str = Field(description="Alt text for the image.")
+    alt: str = Field(description="Alt text for the image. Required, and it must hold visible text.")
     caption: str | None = Field(default=None, description="Optional caption shown below the image.")
     max_width: Count | None = Field(default=None, description="Optional max width in pixels.")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _alt_must_hold_visible_text(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        fields = cast("dict[str, Any]", data)
+        alt = fields.get("alt", "")
+        if isinstance(alt, str) and not alt.strip():
+            raise ValueError("'alt' must hold visible text")
+        return fields
+
     @model_validator(mode="after")
-    def _data_uri_only(self) -> "Image":
-        if not self.src.startswith("data:"):
-            raise ValueError("'src' must be a data: URI")
+    def _data_uri_or_web_url(self) -> "Image":
+        if self.src.startswith("data:"):
+            return self
+        if not self.src.startswith(WEB_URL_SCHEMES):
+            raise ValueError("'src' must be a data: URI or an http:// or https:// URL")
+        _require_web_url(self.src, "'src'")
+        return self
+
+
+MediaKind = Literal["video", "audio", "file", "pdf"]
+MEDIA_KIND_LABELS: Final[Mapping[MediaKind, str]] = {
+    "video": "Video",
+    "audio": "Audio",
+    "file": "File",
+    "pdf": "PDF",
+}
+
+
+class Media(_Block):
+    type: Literal["media"]
+    kind: MediaKind = Field(description="What the URL points at: video, audio, file or pdf.")
+    src: str = Field(
+        description="An http(s) URL, shown as a link card on the page and as a link in a Markdown "
+        "export. It may not carry a username or password."
+    )
+    caption: str | None = Field(default=None, description="Optional caption naming the media.")
+
+    @model_validator(mode="after")
+    def _web_url_only(self) -> "Media":
+        _require_web_url(self.src, "'src'")
         return self
 
 
@@ -2665,6 +2756,7 @@ _Simple = (
     | Note
     | Divider
     | Image
+    | Media
     | Link
     | Timeline
     | Flow
@@ -2939,6 +3031,7 @@ def _is_built_by_an_index(info: ValidationInfo) -> bool:
 class Part(FrozenModel):
     type: Literal["part"]
     title: NonBlank
+    doc_id: str | None = Field(default=None, exclude=True)
     collapsed: bool = False
     blocks: list[Block] = Field(min_length=1)
 
@@ -3000,6 +3093,7 @@ def located_child_blocks(block: AnyBlock) -> Sequence[tuple[str, AnyBlock]]:
             | Note()
             | Divider()
             | Image()
+            | Media()
             | Link()
             | Timeline()
             | Flow()
@@ -3512,10 +3606,95 @@ def _merged_badges(declared: Sequence[tuple[Path, Mapping[str, Badge]]]) -> dict
     return {key: badge.model_dump(mode="json") for key, badge in merged.items()}
 
 
+_PEOPLE: Final = TypeAdapter(dict[PersonKey, Person])
+
+
+def _own_meta_value(data: Mapping[str, Any], name: str) -> object:
+    meta: object = data.get("meta")
+    return cast("Mapping[str, object]", meta).get(name) if isinstance(meta, Mapping) else None
+
+
+def _parsed_people(data: object) -> dict[str, Person]:
+    try:
+        return _PEOPLE.validate_python({} if data is None else data)
+    except ValidationError as err:
+        raise ReportError(_format_validation_error(err, ("meta", "people"))) from err
+
+
+def _merged_people(declared: Sequence[tuple[Path, Mapping[str, Person]]]) -> dict[str, Any]:
+    merged: dict[str, Person] = {}
+    declared_in: dict[str, Path] = {}
+    for path, people in declared:
+        for key, person in people.items():
+            if key in merged and merged[key] != person:
+                raise ReportError(
+                    f"person {key!r} is declared differently in {declared_in[key]} and {path}; "
+                    "an index merges every part's people, so give it one Notion and Jira id or rename one key"
+                )
+            merged.setdefault(key, person)
+            declared_in.setdefault(key, path)
+    return {key: person.model_dump(mode="json") for key, person in merged.items()}
+
+
+def _merged_jira_site(declared: Sequence[tuple[Path, object]]) -> str | None:
+    first: tuple[Path, str] | None = None
+    for path, site in declared:
+        if not isinstance(site, str):
+            continue
+        address = site.rstrip("/")
+        if first is None:
+            first = (path, address)
+        elif first[1] != address:
+            raise ReportError(
+                f"jira_site is declared differently in {first[0]} and {path}; "
+                "an index points every issue link at one site, so give each part the same address"
+            )
+    return first[1] if first else None
+
+
+def _merged_index_meta(path: Path, data: Mapping[str, Any], parts: Sequence[_LoadedPart]) -> object:
+    meta: object = data.get("meta")
+    if not isinstance(meta, Mapping):
+        return meta
+    people = _merged_people(
+        [
+            (path, _parsed_people(_own_meta_value(data, "people"))),
+            *((part.path, part.report.meta.people) for part in parts),
+        ]
+    )
+    site = _merged_jira_site(
+        [
+            (path, _own_meta_value(data, "jira_site")),
+            *((part.path, part.report.meta.jira_site) for part in parts),
+        ]
+    )
+    return {
+        **cast("Mapping[str, Any]", meta),
+        **({"people": people} if people else {}),
+        **({"jira_site": site} if site else {}),
+    }
+
+
+def _refuse_a_doc_id_published_twice(parts: Sequence[_LoadedPart]) -> None:
+    first_part_with: dict[str, Path] = {}
+    for part in parts:
+        if part.report.publish is None:
+            continue
+        doc_id = part.report.publish.doc_id
+        if doc_id in first_part_with:
+            raise ReportError(
+                f"doc_id {doc_id!r} is published by both {first_part_with[doc_id]} and {part.path}; "
+                "an index needs each part's publish.doc_id to be different"
+            )
+        first_part_with[doc_id] = part.path
+
+
 def _part_block(part: _LoadedPart, index: Index) -> dict[str, Any]:
+    publish = part.report.publish
     return {
         "type": "part",
         "title": part.report.meta.title,
+        "doc_id": publish.doc_id if publish else None,
         "collapsed": index.collapsed,
         "blocks": part.data["blocks"],
     }
@@ -3543,10 +3722,16 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
     parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
     page = {key: value for key, value in data.items() if key != "index"}
-    combined = {**page, "badges": badges, "blocks": [*intro, *(_part_block(part, index) for part in parts)]}
+    combined = {
+        **page,
+        **({"meta": _merged_index_meta(path, data, parts)} if "meta" in page else {}),
+        "badges": badges,
+        "blocks": [*intro, *(_part_block(part, index) for part in parts)],
+    }
     return _Document(combined, tuple(enumerate((part.path for part in parts), start=len(intro))))
 
 
@@ -3571,9 +3756,14 @@ def _parts_named_in(message: str, parts: Sequence[tuple[int, Path]]) -> str | No
 
 
 def load_report(path: Path) -> Report:
+    report, _ = load_report_and_source(path)
+    return report
+
+
+def load_report_and_source(path: Path) -> tuple[Report, Any]:
     document = _load_document(path)
     try:
-        return parse_report(document.data, built_by_an_index=bool(document.parts))
+        return parse_report(document.data, built_by_an_index=bool(document.parts)), document.data
     except ReportError as err:
         where = _parts_named_in(str(err), document.parts)
         if where is None:

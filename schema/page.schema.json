@@ -1466,6 +1466,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1538,6 +1539,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -1769,12 +1773,12 @@
           "type": "string"
         },
         "src": {
-          "description": "A data: URI (self-contained, no external fetches). Base64-encode the payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render.",
+          "description": "A data: URI (self-contained, shown in the page) or an http(s) URL (shown as a link card on the page, as an image in a Markdown export). Base64-encode a data: payload (e.g. data:image/svg+xml;base64,...); a raw, unencoded SVG isn't a valid URI and won't render. A URL may not carry a username or password.",
           "title": "Src",
           "type": "string"
         },
         "alt": {
-          "description": "Alt text for the image.",
+          "description": "Alt text for the image. Required, and it must hold visible text.",
           "title": "Alt",
           "type": "string"
         },
@@ -1922,6 +1926,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -1994,6 +1999,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -2124,6 +2132,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -2196,6 +2205,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -2818,6 +2830,67 @@
       "title": "MatrixCell",
       "type": "object"
     },
+    "Media": {
+      "additionalProperties": false,
+      "properties": {
+        "span": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Block width in content columns (1 to 6); omit for full width. Same column-count vocabulary as a grid cell's span, relative to the block's container (the page, or the enclosing grid cell when nested). Width only: blocks still stack vertically; use a `grid` to put several in one row.",
+          "title": "Span"
+        },
+        "type": {
+          "const": "media",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the URL points at: video, audio, file or pdf.",
+          "enum": [
+            "video",
+            "audio",
+            "file",
+            "pdf"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "src": {
+          "description": "An http(s) URL, shown as a link card on the page and as a link in a Markdown export. It may not carry a username or password.",
+          "title": "Src",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional caption naming the media.",
+          "title": "Caption"
+        }
+      },
+      "required": [
+        "type",
+        "kind",
+        "src"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
     "Meta": {
       "additionalProperties": false,
       "properties": {
@@ -2894,6 +2967,29 @@
           "description": "Opt-in hero header: a larger display title + subtitle in a tinted band, for a page that opens by selling an idea rather than a plain report header.",
           "title": "Hero",
           "type": "boolean"
+        },
+        "people": {
+          "description": "The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not listed here fails the build.",
+          "patternProperties": {
+            "^[A-Za-z0-9_-]+$": {
+              "$ref": "#/$defs/Person"
+            }
+          },
+          "title": "People",
+          "type": "object"
+        },
+        "jira_site": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The https:// address of your Jira site, such as https://example.atlassian.net. A `[ABC-123](jira:ABC-123)` link points at `<jira_site>/browse/ABC-123`; without it the issue key is shown as text.",
+          "title": "Jira Site"
         },
         "icon": {
           "anyOf": [
@@ -3248,6 +3344,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -3324,6 +3421,9 @@
                 "$ref": "#/$defs/Image"
               },
               {
+                "$ref": "#/$defs/Media"
+              },
+              {
                 "$ref": "#/$defs/Link"
               },
               {
@@ -3377,6 +3477,40 @@
       "title": "Panel",
       "type": "object"
     },
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "notion": {
+          "anyOf": [
+            {
+              "pattern": "^user://[0-9A-Fa-f-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Notion user id as a `user://` URI. The Notion Markdown export writes a `[Ada](user:ada)` link as a mention of this user; without it the link is its label.",
+          "title": "Notion"
+        },
+        "jira": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Jira account id, for the Jira writer. Not read when rendering.",
+          "title": "Jira"
+        }
+      },
+      "title": "Person",
+      "type": "object"
+    },
     "Publish": {
       "additionalProperties": false,
       "properties": {
@@ -3388,7 +3522,7 @@
           "type": "string"
         },
         "targets": {
-          "description": "One entry per place the document publishes to; each is built from the document on its own.",
+          "description": "One entry per place the document publishes to; each is built from the document on its own. An empty list retires the document: publishing archives every item it created and releases every page it wrote into.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3406,7 +3540,6 @@
               }
             ]
           },
-          "minItems": 1,
           "title": "Targets",
           "type": "array"
         }
@@ -4591,6 +4724,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -4666,6 +4800,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -5359,6 +5496,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -5431,6 +5569,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -5888,6 +6029,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "panel": "#/$defs/Panel",
@@ -5963,6 +6105,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -6156,6 +6301,7 @@
                 "list": "#/$defs/ListBlock",
                 "math": "#/$defs/Math",
                 "matrix": "#/$defs/Matrix",
+                "media": "#/$defs/Media",
                 "meter": "#/$defs/Meter",
                 "note": "#/$defs/Note",
                 "quote": "#/$defs/Quote",
@@ -6228,6 +6374,9 @@
               },
               {
                 "$ref": "#/$defs/Image"
+              },
+              {
+                "$ref": "#/$defs/Media"
               },
               {
                 "$ref": "#/$defs/Link"
@@ -6334,6 +6483,7 @@
             "list": "#/$defs/ListBlock",
             "math": "#/$defs/Math",
             "matrix": "#/$defs/Matrix",
+            "media": "#/$defs/Media",
             "meter": "#/$defs/Meter",
             "note": "#/$defs/Note",
             "panel": "#/$defs/Panel",
@@ -6411,6 +6561,9 @@
           },
           {
             "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Media"
           },
           {
             "$ref": "#/$defs/Link"

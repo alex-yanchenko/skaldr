@@ -1,3 +1,3 @@
-from skaldr.publish.connector import Connector, ConnectorRegistry
+from skaldr.publish.connector import Connector, ConnectorRegistry, ContentLimit
 
-__all__ = ["Connector", "ConnectorRegistry"]
+__all__ = ["Connector", "ConnectorRegistry", "ContentLimit"]

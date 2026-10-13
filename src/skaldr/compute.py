@@ -67,7 +67,7 @@ from skaldr.models import (
     walk_blocks,
 )
 from skaldr.prose_blocks import rendered_strings
-from skaldr.richtext import RichContext, parse_rich
+from skaldr.richtext import PartAnchor, RichContext, parse_rich
 
 __all__ = [
     "LinkCard",
@@ -178,6 +178,21 @@ def anchor_slugs(report: Report) -> dict[int, str]:
         taken.add(slug)
         slugs[id(block)] = slug
     return slugs
+
+
+def part_anchors(report: Report, slugs: dict[int, str]) -> dict[str, PartAnchor]:
+    return {
+        block.doc_id: PartAnchor(
+            slugs[id(block)],
+            frozenset(
+                inner.id
+                for inner in walk_blocks(block.blocks)
+                if isinstance(inner, Section) and inner.id is not None
+            ),
+        )
+        for block in report.blocks
+        if isinstance(block, Part) and block.doc_id is not None
+    }
 
 
 def toc_entries(report: Report, slugs: dict[int, str]) -> list[tuple[str, str]]:
@@ -738,6 +753,10 @@ def validate_rich_text_fields(report: Report, context: RichContext) -> None:
             parse_rich(text, context)
         except ReportError as error:
             raise ReportError(f"{'.'.join(path)}: {error}") from error
+
+
+def url_host(url: str) -> str:
+    return urlsplit(url).netloc
 
 
 FactValueKind = Literal["chip", "person", "date", "text", "link"]

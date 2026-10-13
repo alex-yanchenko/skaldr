@@ -6,6 +6,7 @@ import pytest
 from skaldr.errors import RegionNotFoundError
 from skaldr.export.inline import plain
 from skaldr.export.lower import (
+    assemble_item_page,
     assemble_page,
     lower_region,
     lower_regions,
@@ -14,7 +15,7 @@ from skaldr.export.lower import (
     region_for_section,
 )
 from skaldr.export.markdown import render_markdown_document
-from skaldr.export.notion import render_notion
+from skaldr.export.notion import render_notion, render_notion_regions
 from skaldr.export.runs import Chip
 from skaldr.export.tree import (
     BlockRegion,
@@ -240,3 +241,55 @@ def test_the_badge_legend_leads_a_page_with_no_top_level_table() -> None:
         "Test Report",
         (LEGEND, replace(PLAIN_SECTION, source_index=0), replace(BADGE_ROW, source_index=1)),
     )
+
+
+def test_the_notion_page_slices_into_one_text_per_region_that_join_to_the_whole_page() -> None:
+    document = lower_report(_field_guide())
+
+    regions = render_notion_regions(document)
+
+    assert (regions, "".join(regions)) == (
+        (
+            'Spring edition {color="gray"}\n<table_of_contents/>\n',
+            "Intro.\n",
+            "## Set up\n- Inside one.\n",
+            '## First week {toggle="true"}\n\tInside two.\n',
+            "## Wrap up\n",
+            "- Closing.\n",
+            '2026-03-01 {color="gray"}\n',
+        ),
+        render_notion(document.body),
+    )
+
+
+def test_a_list_after_a_list_in_the_previous_region_keeps_the_notion_separator_in_its_own_region() -> None:
+    report = parse_report(
+        make_report(blocks=[{"type": "list", "items": ["One."]}, {"type": "list", "items": ["Two."]}])
+    )
+
+    assert render_notion_regions(lower_report(report)) == ("- One.\n", "<empty-block/>\n- Two.\n")
+
+
+@pytest.mark.parametrize(
+    ("opens_the_document", "cover"),
+    [(True, "https://example.com/cover.png"), (False, None)],
+    ids=["document item", "split child item"],
+)
+def test_every_item_page_carries_the_icon_and_only_the_document_item_the_cover(
+    opens_the_document: bool, cover: str | None
+) -> None:
+    meta = {"title": "T", "icon": "\U0001f9ea", "cover": "https://example.com/cover.png"}
+    lowering = lowering_for(parse_report(make_report(meta=meta)))
+
+    page = assemble_item_page(
+        "Item", [lower_region(lowering, 0)], lowering, opens_the_document=opens_the_document
+    )
+
+    assert (page.title, page.icon, page.cover) == ("Item", "\U0001f9ea", cover)
+
+
+def test_a_region_that_writes_nothing_slices_to_an_empty_text() -> None:
+    lowering = lowering_for(parse_report(make_report()))
+    page = assemble_page([BlockRegion(0, ()), lower_region(lowering, 0)], lowering)
+
+    assert render_notion_regions(page) == ("", "Hello.\n")

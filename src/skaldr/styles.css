@@ -196,6 +196,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.placeholder{padding:0 5px; border-radius:var(--r-sm); border:1px dashed var(--warning-fg);
 		background:var(--warning-bg); color:var(--warning-fg); font-weight:600; font-size:0.92em}
 	.placeholder::before{content:"‹"} .placeholder::after{content:"›"}
+	.date-chip,.person-chip,.issue-link,.doc-link{padding:0 6px; border-radius:var(--r-sm); font-size:0.94em;
+		white-space:nowrap; text-decoration:none}
+	.date-chip{background:var(--neutral-bg); color:var(--neutral-fg)}
+	.person-chip{background:var(--accent-bg); color:var(--accent-fg)}
+	.issue-link{background:var(--info-bg); color:var(--info-fg); font-weight:600}
+	.doc-link{background:var(--teal-bg); color:var(--teal-fg)}
 	.badge-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-block:var(--s3)}
 	.badge-row .label{font-size:12.5px; color:var(--muted); margin-inline-end:var(--s1)}
 	/* Grouped chips — a <dl> laid out like .kv: a 2-column grid (label gutter | chips) where the dt/dd of
@@ -439,7 +445,12 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	figure.fig{margin-block:var(--s4); max-width:680px;
 		& .frame{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
 		& img,& svg{display:block; width:100%; height:auto}
-		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}}
+		& figcaption{font-size:12px; color:var(--muted); margin-top:var(--s2); text-align:center}
+		& .media-card{display:grid; gap:var(--s1); padding:var(--s4); color:var(--ink); text-decoration:none; overflow-wrap:anywhere;
+			&:hover .media-title{text-decoration:underline}}
+		& .media-kind{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+		& .media-title{font-weight:600}
+		& .media-host{font-size:12px; color:var(--muted)}}
 
 	a.link-card{display:flex; flex-direction:column; gap:2px; margin-block:var(--s4); max-width:680px; padding:14px 18px;
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
