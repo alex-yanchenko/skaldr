@@ -39,9 +39,8 @@ fabrication, so honesty is on you.
      example.
    - `skaldr --write-schema /tmp/skaldr.schema.json` for the exact fields and types.
 2. **Write the YAML** from real evidence, following the guide.
-3. **Render:** `skaldr report.yaml -o report.html`. For GitHub or Notion,
-   `skaldr report.yaml --export markdown` or `--export notion` writes the same document to
-   `out/<name>.<target>/page.md` instead.
+3. **Render:** `skaldr report.yaml -o report.html`. For GitHub, Notion or Jira, use `--export markdown`,
+   `--export notion` or `--export adf` in place of `-o`; it writes `out/<name>.<target>/`.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = skaldr prints `OK` and the output
    file exists. To validate without writing anything (e.g. over a glob), use
