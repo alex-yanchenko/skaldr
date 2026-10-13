@@ -169,7 +169,7 @@ def _with_paragraph(text: ExportRich, paragraph: ExportRich) -> ExportRich:
     return (*text, Plain(" "), *paragraph)
 
 
-def _canvas_item(entry: ListEntry, kind: ListKind) -> tuple[_Item, list[Node]]:
+def _canvas_item(entry: ListEntry) -> tuple[_Item, list[Node]]:
     text = entry.text
     nested: list[_List] = []
     moved: list[Node] = []
@@ -182,7 +182,7 @@ def _canvas_item(entry: ListEntry, kind: ListKind) -> tuple[_Item, list[Node]]:
             case Paragraph():
                 text = _with_paragraph(text, child.text)
             case ListNode():
-                nested_list, moved_from_nested = _canvas_list(child, kind)
+                nested_list, moved_from_nested = _canvas_list(child)
                 nested.append(nested_list)
                 moved += moved_from_nested
             case _:
@@ -190,14 +190,14 @@ def _canvas_item(entry: ListEntry, kind: ListKind) -> tuple[_Item, list[Node]]:
     return _Item(text, entry.checked, tuple(nested)), moved
 
 
-def _canvas_list(node: ListNode, kind: ListKind) -> tuple[_List, list[Node]]:
+def _canvas_list(node: ListNode) -> tuple[_List, list[Node]]:
     items: list[_Item] = []
     moved: list[Node] = []
     for entry in node.entries:
-        item, item_moved = _canvas_item(entry, kind)
+        item, moved_from_item = _canvas_item(entry)
         items.append(item)
-        moved += item_moved
-    return _List(kind, tuple(items), node.start), moved
+        moved += moved_from_item
+    return _List(node.kind, tuple(items), node.start), moved
 
 
 def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
@@ -235,7 +235,7 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
             return [node]
         case ListNode():
-            canvas_list, moved = _canvas_list(node, node.kind)
+            canvas_list, moved = _canvas_list(node)
             return [canvas_list, *_canvas_blocks(moved, place)]
         case Callout():
             return _canvas_callout(node)

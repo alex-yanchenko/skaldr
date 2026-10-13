@@ -146,16 +146,15 @@ def test_a_list_writes_the_markers_slack_stores(node: ListNode, text: str) -> No
 @pytest.mark.parametrize(
     ("kind", "nested_kind", "text"),
     [
-        pytest.param("bullet", "number", "* a\n  * b\n", id="number-under-bullet"),
-        pytest.param("number", "bullet", "1. a\n   1. b\n", id="bullet-under-number"),
-        pytest.param("check", "bullet", "* [ ] a\n  * [ ] b\n", id="bullet-under-check"),
-        pytest.param("bullet", "check", "* a\n  * b\n", id="check-under-bullet"),
+        pytest.param("bullet", "number", "* a\n  1. b\n", id="number-under-bullet"),
+        pytest.param("number", "bullet", "1. a\n   * b\n", id="bullet-under-number"),
+        pytest.param("check", "bullet", "* [ ] a\n  * b\n", id="bullet-under-check"),
+        pytest.param("bullet", "check", "* a\n  * [ ] b\n", id="check-under-bullet"),
+        pytest.param("number", "check", "1. a\n   * [ ] b\n", id="check-under-number"),
         pytest.param("number", "number", "1. a\n   1. b\n", id="same-kind"),
     ],
 )
-def test_a_nested_list_is_written_in_its_parents_kind(
-    kind: ListKind, nested_kind: ListKind, text: str
-) -> None:
+def test_a_nested_list_keeps_its_own_kind(kind: ListKind, nested_kind: ListKind, text: str) -> None:
     nested = ListNode(nested_kind, (_entry("b"),))
 
     assert render_slack([ListNode(kind, (_entry("a", nested),))]) == _canvas(text)
