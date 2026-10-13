@@ -15,6 +15,8 @@ from tests.factories.export_factory import (
 from tests.factories.report_factory import (
     NOTION_PAGE_ID,
     NOTION_PAGE_URL,
+    in_a_grid_cell,
+    in_an_open_section,
     make_cell,
     make_command_request,
     make_flow,
@@ -45,6 +47,8 @@ __all__ = [
     "authored_block_types",
     "folder_texts",
     "heading_sections",
+    "in_a_grid_cell",
+    "in_an_open_section",
     "lowered",
     "make_cell",
     "make_command_request",

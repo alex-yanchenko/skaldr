@@ -63,6 +63,8 @@ PLAIN_TEXT_FIELDS = frozenset(
         "Link.title",
         "Link.caption",
         "Math.expression",
+        "Media.src",
+        "Media.caption",
         "Matrix.rows",
         "Matrix.columns",
         "Matrix.id",

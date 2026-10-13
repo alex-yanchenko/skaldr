@@ -235,7 +235,8 @@ or to keep a small block from stretching across the whole page.
 | `quote` | A verbatim quotation | `body`, `cite?` |
 | `note` | A quiet set-apart aside (speaker notes, narration), softer than a `callout` | `body`, `title?`, `icon?` (one emoji) |
 | `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
-| `image` | An embedded image | `src` (a `data:` URI), `alt`, `caption?`, `max_width?` |
+| `image` | An image: embedded, or named by URL (see below) | `src` (a `data:` URI or an http(s) URL), `alt` (required), `caption?`, `max_width?` |
+| `media` | A video, audio, file or PDF named by URL (see below) | `kind: video\|audio\|file\|pdf`, `src` (an http(s) URL), `caption?` |
 | `link` | A link to another page, as a plain link, a card or an embed (see below) | `url` (http or https), `display?: inline\|card\|embed` (default `card`), `title?`, `caption?` (not on `inline`) |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
@@ -281,6 +282,26 @@ drift. Two sources, each keyed by a `badge` (which also supplies the card's chip
   # rows / columns / cells …
 ```
 
+An `image` `src` is either a self-contained `data:` URI or an http(s) URL. skaldr never fetches or
+generates images. **Base64-encode a `data:` payload** (a raw, unencoded SVG isn't a valid URI and
+won't render). The page's content security policy lets it load `data:` images only, so a URL cannot
+show as a picture there: an `image` or `media` block with a URL shows as a card with its kind
+(`Image`, `Video`, `Audio`, `File` or `PDF`), its alt text or caption, and the URL's host, and the
+card links to the URL. An `image` needs `alt`, and a blank `alt` fails the build. A URL must start
+with `http://` or `https://` and may not hold a username or password. A `media` block takes http(s)
+URLs only.
+
+```yaml
+- type: image
+  src: "https://example.com/aisle-12.png"
+  alt: "Aisle 12 with overflow bins"
+  caption: "Overflow bins before the count"
+- type: media
+  kind: video
+  src: "https://example.com/dock-walkthrough.mp4"
+  caption: "Dock walkthrough"
+```
+
 A `link` block points at a page the reader can open. `display: inline` writes a plain link in a line of text, `card` (the default) a bordered card with the title, the domain and an optional caption, and `embed` asks for the page to be shown in place. The page skaldr writes loads nothing from outside, so it cannot show an embedded page: an `embed` renders as the same card with a note that the page cannot load embedded content, and the card opens the link. Without a `title` the link text is the URL without its scheme, and a card shows no domain line. The `url` must be an `http://` or `https://` address. An `inline` link takes no `caption`.
 
 ```yaml
@@ -294,9 +315,7 @@ A `link` block points at a page the reader can open. `display: inline` writes a 
   title: "the live board"
 ```
 
-Images must be self-contained `data:` URIs. skaldr
-embeds images; it does not fetch or generate them. **Base64-encode the payload** (a raw,
-unencoded SVG isn't a valid URI and won't render). A `section` holds any block except another
+A `section` holds any block except another
 `section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one. A `panel` holds any block
 except a `section`, a `grid`, a `walkthrough` or another `panel` directly inside it. A section
 **starts collapsed** (`collapsed: true` default), right for an appendix or detail-on-demand; for a
@@ -1247,7 +1266,9 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
-| `image` | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
+| `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |

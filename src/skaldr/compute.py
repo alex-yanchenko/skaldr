@@ -755,6 +755,10 @@ def validate_rich_text_fields(report: Report, context: RichContext) -> None:
             raise ReportError(f"{'.'.join(path)}: {error}") from error
 
 
+def url_host(url: str) -> str:
+    return urlsplit(url).netloc
+
+
 FactValueKind = Literal["chip", "person", "date", "text", "link"]
 
 

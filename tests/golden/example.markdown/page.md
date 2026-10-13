@@ -222,6 +222,12 @@ function pickWinner(a, b) {
 
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
 
+![Aisle 12 with overflow bins](https://example.com/photos/aisle-12.png)
+
+*Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).*
+
+Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough.mp4)
+
 > **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**
 >
 > *example.com · Revision 7*
