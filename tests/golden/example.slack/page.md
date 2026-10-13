@@ -16,11 +16,15 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 * **Method**: `full cycle count`
 * **Mode**: strict
 
+ 
+
 * **Matched cleanly**: 8,500 (85.0%) **▲ +3%**
 * **Floor: fixable**: 1,100 (11.0%) **Floor** Miscounts + mislabeled bins we can correct.
 * **Vendor: escalate**: 400 (4.0%) **▼ −90** **Vendor**
 * **Count status**: HEALTHY
 * **Total units**: 10,000
+
+ 
 
 * **Matched cleanly**: 85.0%, 8,500 units
 * **Floor-fixable**: 11.0%, 1,100
@@ -228,6 +232,8 @@ The cards on the left summarise; the panels below break down count progress and 
 :::
 
 * **Zone C**: █████████░ 88.0%
+
+ 
 
 * ✅ Reconciliation gate passes.
 * ⛔ Awaiting `OPS-1234`.

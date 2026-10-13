@@ -68,6 +68,7 @@ MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
 TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
 TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
+LIST_SEPARATOR = "\N{NO-BREAK SPACE}"
 CANVAS_LIMIT_MESSAGE = (
     "the canvas Markdown is 1,048,577 characters, over the 1,048,576 a Slack canvas can hold; "
     "split the document into several canvases or export it elsewhere"
@@ -169,6 +170,47 @@ def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
     middle = ListNode("number", (_entry("b", deepest),))
 
     assert render_slack([ListNode("number", (_entry("a", middle),), 9)]) == ("9. a\n   1. b\n      1. c\n")
+
+
+@pytest.mark.parametrize(
+    ("second", "second_text"),
+    [
+        pytest.param(_bullets(_entry("b")), "* b", id="same-kind"),
+        pytest.param(ListNode("number", (_entry("b"),)), "1. b", id="bullet-then-number"),
+        pytest.param(ListNode("check", (_entry("b"),)), "* [ ] b", id="bullet-then-check"),
+    ],
+)
+def test_two_lists_in_a_row_are_kept_apart_by_a_no_break_space_paragraph(
+    second: ListNode, second_text: str
+) -> None:
+    assert render_slack([_bullets(_entry("a")), second]) == f"* a\n\n{LIST_SEPARATOR}\n\n{second_text}\n"
+
+
+def test_lists_brought_together_by_a_container_with_no_title_are_kept_apart() -> None:
+    untitled = Toggle((), None, (_bullets(_entry("b")),))
+
+    assert render_slack([_bullets(_entry("a")), untitled]) == f"* a\n\n{LIST_SEPARATOR}\n\n* b\n"
+
+
+def test_lists_in_a_row_inside_a_callout_or_a_column_are_kept_apart() -> None:
+    lists = (_bullets(_entry("a")), _bullets(_entry("b")))
+    columns = Columns((GridColumn(50, lists), GridColumn(50, (_para("c"),))))
+
+    assert render_slack([Callout("info", lists), columns]) == (
+        f"::: {{.callout}}\n💡\n\n* a\n\n{LIST_SEPARATOR}\n\n* b\n:::\n\n"
+        f"::: {{.layout}}\n::: {{.column}}\n* a\n\n{LIST_SEPARATOR}\n\n* b\n:::\n"
+        "::: {.column}\nc\n:::\n:::\n"
+    )
+
+
+def test_lists_with_a_paragraph_between_them_need_no_separator() -> None:
+    assert render_slack([_bullets(_entry("a")), _para("b"), _bullets(_entry("c"))]) == "* a\n\nb\n\n* c\n"
+
+
+def test_a_second_list_in_one_list_item_moves_after_the_whole_list_kept_apart_from_it() -> None:
+    entry = _entry("a", _bullets(_entry("b")), ListNode("number", (_entry("c"),)))
+
+    assert render_slack([_bullets(entry, _entry("d"))]) == f"* a\n  * b\n* d\n\n{LIST_SEPARATOR}\n\n1. c\n"
 
 
 def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:

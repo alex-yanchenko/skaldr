@@ -64,6 +64,7 @@ LAYOUT_OPEN: Final = "::: {.layout}"
 COLUMN_OPEN: Final = "::: {.column}"
 MATH_LANGUAGE: Final = "latex"
 CHECK_MARKER_INDENT: Final = 2
+LIST_SEPARATOR: Final = "\N{NO-BREAK SPACE}"
 Place = Literal["top", "callout", "column"]
 
 
@@ -142,6 +143,7 @@ _CanvasBlock = (
     | _CanvasCallout
     | _Layout
 )
+_LIST_SEPARATOR_PARAGRAPH: Final = Paragraph((Plain(LIST_SEPARATOR),))
 _MOVED_OUT_OF_A_CALLOUT: Final = (TableNode, _CanvasCallout, Divider, _Layout)
 _KEPT_OUT_OF_A_LAYOUT: Final = (TableNode, _CanvasCallout)
 
@@ -164,6 +166,8 @@ def _canvas_item(entry: ListEntry) -> tuple[_Item, list[Node]]:
                 moved.append(child)
             case Paragraph():
                 text = _with_paragraph(text, child.text)
+            case ListNode() if nested:
+                moved.append(child)
             case ListNode():
                 nested_list, moved_from_nested = _canvas_list(child)
                 nested.append(nested_list)
@@ -299,6 +303,17 @@ def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
     )
 
 
+def _with_lists_kept_apart(
+    rendered: Sequence[tuple[_CanvasBlock, list[str]]],
+) -> list[tuple[_CanvasBlock, list[str]]]:
+    kept_apart: list[tuple[_CanvasBlock, list[str]]] = []
+    for block, lines in rendered:
+        if kept_apart and isinstance(block, _List) and isinstance(kept_apart[-1][0], _List):
+            kept_apart.append((_LIST_SEPARATOR_PARAGRAPH, [LIST_SEPARATOR]))
+        kept_apart.append((block, lines))
+    return kept_apart
+
+
 class _CanvasWriter:
     def __init__(self) -> None:
         self.runs = _SlackRuns()
@@ -395,7 +410,7 @@ class _CanvasWriter:
 
     def rendered(self, blocks: Sequence[_CanvasBlock]) -> list[tuple[_CanvasBlock, list[str]]]:
         written = [(block, self.lines(block)) for block in blocks]
-        return [(block, lines) for block, lines in written if lines]
+        return _with_lists_kept_apart([(block, lines) for block, lines in written if lines])
 
     def blocks(self, blocks: Sequence[_CanvasBlock]) -> list[str]:
         return joined([lines for _, lines in self.rendered(blocks)])
