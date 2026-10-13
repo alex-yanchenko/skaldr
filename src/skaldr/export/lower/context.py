@@ -28,6 +28,7 @@ class Lowering:
     anchors: dict[int, str]
     matrix_tallies: Mapping[str, compute.DerivedTally]
     table_tallies: Mapping[str, compute.DerivedTally]
+    section_titles: Mapping[str, str]
 
     def rich(self, text: str) -> Rich:
         return rich_line(text, self.rich_context)
@@ -90,6 +91,9 @@ def lowering_for(report: Report) -> Lowering:
         reference_numbers=compute.reference_numbers(report),
         reference_urls={item.key: item.url for item in iter_reference_items(report.blocks)},
         anchor_ids=frozenset(anchors.values()),
+        people=report.meta.people,
+        jira_site=report.meta.jira_site,
+        part_anchors=compute.part_anchors(report, anchors),
     )
     compute.validate_rich_text_fields(report, rich_context)
     return Lowering(
@@ -98,6 +102,7 @@ def lowering_for(report: Report) -> Lowering:
         anchors=anchors,
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),
+        section_titles=compute.section_titles_by_id(report),
     )
 
 

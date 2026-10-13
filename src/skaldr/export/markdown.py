@@ -192,6 +192,9 @@ class _MarkdownRuns(MarkupRuns):
         slug = self.heading_slugs.get(anchor)
         return f"[{label}](#{slug})" if slug else label
 
+    def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
+        return self.link(label, f"{doc_id}.md")
+
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
 
@@ -450,5 +453,10 @@ def render_markdown(nodes: Sequence[Node]) -> str:
     return "\n".join(_MarkdownWriter(github_heading_slugs(nodes)).blocks(nodes)) + "\n"
 
 
+def _cover_link(cover: str | None) -> tuple[Paragraph, ...]:
+    return (Paragraph((Link(plain("Cover image"), cover),)),) if cover else ()
+
+
 def render_markdown_document(document: LoweredDocument) -> str:
-    return render_markdown((Heading(1, plain(document.title)), *document.body))
+    title = plain(f"{document.icon} {document.title}" if document.icon else document.title)
+    return render_markdown((Heading(1, title), *_cover_link(document.cover), *document.body))

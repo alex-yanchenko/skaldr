@@ -5,6 +5,8 @@ The current, version-matched authoring contract, printed by `skaldr --guide`. A 
 types, and constraints, also run `skaldr --write-schema <path>` (the machine-readable JSON Schema,
 generated from the same models).
 
+`skaldr --guide` prints this whole guide. `skaldr --guide <name>` prints one part of it. A block name (for example `skaldr --guide request`) prints that block's row from the `## Blocks` table, its `## The <block>` section when the guide has one, and its fields from the model with their types, whether each is required or its default, and its description; a field that holds a nested model also lists that model's fields, one level deep, indented. A section title (for example `skaldr --guide "rich text"`) prints that whole section; the match ignores case and backticks, so `meta` finds `` `meta` ``, and a unique start of a title is enough. A block name wins when a section has the same title. `skaldr --guide --list` prints the guide's section names and the block names, one per line, so you can see what to ask for. A name that is neither fails with an error that lists the block names and the section titles. A name that is both a block or section and a file in the current directory is looked up as the block or section.
+
 ## Shape
 
 ```yaml
@@ -44,7 +46,7 @@ should match pattern '\S'`. To leave an optional one empty, leave the field out.
 
 `--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options or by another version of skaldr. A page it cannot read its options from, and content it cannot load, count as stale too, so the render runs and reports the problem. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
 
-A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own.
+A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own. The one flag `--guide` accepts is `--list`, which only works with a bare `--guide`.
 
 The files skaldr writes itself (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) are written to a temporary file next to the file and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, a missing folder on the way to that target is created, and an existing file keeps its permissions. A read-only file is refused with an error naming it and left as it is. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text. The `--pdf` file is the exception: the headless browser writes it directly, so none of this applies to it.
 
@@ -60,12 +62,19 @@ meta:
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
+  people:                        # optional; who a [Ada](user:ada) link can name (see Rich text)
+    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g" }
+  jira_site: "https://example.atlassian.net"   # optional; where a [ABC-123](jira:ABC-123) link points
+  icon: "🧪"                     # optional; one emoji beside the title and as the favicon
+  cover: "https://example.com/cover.png"   # optional; an http or https image address
 ```
 
 `source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
 
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
+
+`icon` is one emoji. The page shows it beside the title and uses it as the favicon, and the GitHub-flavored export leads the title with it. `cover` is an `http://` or `https://` address. The page allows no remote images, so it shows a "Cover image" link under the title instead of the image, and the GitHub-flavored export writes the same link under the title. Neither reaches the Notion export's Markdown, which holds only the body: they are page properties, which a Notion publish sets on the page itself.
 
 Page **width is not an authoring choice**: every page renders at the default cap, and the reader
 alone widens it (default / wide / full) from the corner menu on the rendered page. There is no
@@ -121,7 +130,7 @@ Prose fields (`text.body`, table `rich`/`text` cells, `callout.body`, list items
 `key_value` values, timeline/status text) accept a small markdown subset:
 
 `**bold**` · `*italic*` · `++underline++` · `` `code` `` · `~~strike~~` · `H~2~O` (subscript) · `10^3^` (superscript) · `` $`x_i`$ `` (inline math) · `[label](https://url)`
-(links allow `http`, `https`, `mailto` only).
+(links allow `http`, `https`, `mailto` and the typed links below only).
 
 **CommonMark rules.** Rich text follows CommonMark's inline rules (it is parsed with markdown-it-py) for emphasis, code spans, links and backslash escapes, plus the extensions this section lists: underline, subscript, superscript, coloured spans, inline math, `[^key]` citations and `{{name}}` blanks. So marks nest (`**bold with *italic* inside**`), a link label holds marks (`[**docs** H~2~O](https://url)`), and a link URL may hold balanced parentheses (`https://en.wikipedia.org/wiki/Foo_(bar)`). A link needs both text and a URL and takes no title, so `[x]()`, `[](https://url)` and `[x](https://url "title")` show as typed. A marker opens or closes only where CommonMark's flanking rules allow it: `2 * 3 * 4` and `a ** b ** c` stay prose, and so does ``the **`api`**s``, because a closing `**` between punctuation and a letter closes nothing. `_word_` is italic and `__word__` bold, as on GitHub, while an underscore inside a word (`snake_case`, `a__init__b`) stays text; write an identifier such as `__init__` in a `` `code` `` span. A backslash before any ASCII punctuation shows that character literally and drops the backslash (`\*`, `\~`, `\[`); a backslash before a letter stays. Multi-backtick code spans (``` `` a`b `` ```) work. Raw HTML, autolinks (`<https://url>`), images, entity references (`&amp;`) and hard line breaks are not read: they show as typed. A NUL character becomes U+FFFD, as CommonMark requires. Marks, links and coloured spans nest up to 20 deep; more than that fails the build naming the limit. A rich-text mistake that fails the build names the field it sits in, as in `blocks.1.items.2: unknown tone 'purple' in {tone=purple}: …`.
 
@@ -139,6 +148,8 @@ matching the TOC. A slug that would equal an id the page itself uses (`skaldr-so
 `ref-<key>` and `fnref-<key>` for a reference key) gets the suffix too, and an author `id` equal to
 one fails the build. A `#slug` that names no heading or section **fails the build**, so a dangling
 in-page link never ships.
+
+**Typed links.** Four more link targets name a date, a person, an issue or another document instead of a URL. `[1 Oct](date:2026-10-01)` is a date chip, and a range is `[the week](date:2026-10-05/2026-10-09)`; a date is `YYYY-MM-DD`, a range holds two dates and its end is not before its start, and anything else fails the build naming the value. `[Ada](user:ada)` is a person chip: `ada` must be a key under `meta.people`, a map from a key (letters, digits, `_` and `-`) to `notion` (a `user://` id) and `jira` (an account id), both optional, and a key missing from the map fails the build naming it. `[ABC-123](jira:ABC-123)` is an issue link to `<meta.jira_site>/browse/ABC-123`, where `jira_site` is your `https://` Jira address with no username, password, query or fragment (a path is allowed, and a trailing slash is dropped); without `jira_site` the label shows as text, because the key alone names no site. The key is capitals, a hyphen and a number. `[the plan](doc:onboarding-plan#st2)` links to another skaldr document by its `doc_id`, with an optional `#section` id; the HTML page links to `onboarding-plan.html#st2` and the GitHub Markdown to `onboarding-plan.md`, which work when the files sit side by side under those names. The GitHub link drops the section, because GitHub makes a heading's anchor from its title and never from a section `id`. When an index document includes the part whose `publish.doc_id` is that document, the link is an in-page link to the section, or to the part's title when there is no `#section`, in every output. Only that part's own sections (blocks with a `section` `id`) can be named: a heading, or a section of another part, fails the build, since the link would break once the parts publish separately. Two parts with the same `publish.doc_id` fail the build naming both files. Every label is rich text, and a typed link inside a flow label or other plain-text field reads as its label. Exports: see Exporting as Markdown.
 
 **Link to the real thing.** When you cite a ticket, PR, doc, dashboard, or page, use its actual URL,
 never a bare `#` or `https://example.com` placeholder (a `#`-only href is not a valid anchor and
@@ -226,6 +237,7 @@ or to keep a small block from stretching across the whole page.
 | `divider` | A horizontal rule that separates the blocks before it from the blocks after it | none: write `- type: divider` |
 | `image` | An image: embedded, or named by URL (see below) | `src` (a `data:` URI or an http(s) URL), `alt` (required), `caption?`, `max_width?` |
 | `media` | A video, audio, file or PDF named by URL (see below) | `kind: video\|audio\|file\|pdf`, `src` (an http(s) URL), `caption?` |
+| `link` | A link to another page, as a plain link, a card or an embed (see below) | `url` (http or https), `display?: inline\|card\|embed` (default `card`), `title?`, `caption?` (not on `inline`) |
 | `timeline` | Ordered events | `items: [{title, time?, body?, state?: done\|current\|pending, badges?}]` |
 | `flow` | A directional pipeline / process (see below) | `steps: [{label, tone?, note?, points?, badges?}]`, `style: arrow\|steps`, `loop?`, `numbered?` |
 | `fan` | One-to-many convergence / divergence (see below) | `hub: {label, tone?, note?, badges?}`, `spokes: [{label, tone?, note?, badges?}]`, `direction: in\|out` |
@@ -233,10 +245,10 @@ or to keep a small block from stretching across the whole page.
 | `comparison` | Option-vs-option feature matrix (see below) | `options[]`, `rows: [{feature, values[]}]`, `highlight?`, `polarity?` |
 | `matrix` | Rows × columns with one state per cell: a coverage / RACI / capability grid (see below) | `rows[]`, `columns[]`, `cells: [{row, col, badge? \| tone?, label?}]`, `id?` (for `of_matrix`) |
 | `swimlane` | Multi-track process on a lane × column grid, optional milestone groups + value rollups (see below) | `lanes[]`, `columns[]`, `steps: [{lane, col, n, label, group?, value?, url?, state?: done\|current\|todo\|blocked\|deferred, id?, depends_on?}]`, `groups?` |
-| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below) | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`; `variables?`, `case_variable?`, `cases: [{label, value?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
-| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command, case_variable?, cases, captures?}]` |
+| `request` | A recorded call the reader can re-run: skaldr builds the curl, or you give the exact `command` (see below), which runs any shell line, including a secret-manager wrapper such as `doppler run`, `op run` or `vault-run`, so the credential never enters the page, or a `query` for a database, SQL or MCP call | `method` + `url` + `headers?` + `body?`, **or** `command` + `command_note?`, **or** `query: {runner, lang, content}`; `variables?`, `case_variable?`, `cases: [{label, value? or values?, command?, headers?, headers_add?, tone?, response, verdict?}]` |
+| `request_flow` | Calls that depend on each other, passing a captured value along (see below) | `variables?`, `steps: [{label, method + url + headers? + body? or command or query, case_variable?, cases (each with value? or values?, as in a request), captures?}]` |
 | `references` | Numbered sources; cite inline with `[^key]` (see below) | `items: [{key, text, url?}]` |
-| `section` | Collapsible container | `title`, `id?` (stable anchor), `collapsed?` (default true), `updated?`, `blocks[]` |
+| `section` | Collapsible container | `title`, `id?` (stable anchor), `fields?` (status, priority, assignee, due, labels, estimate, links; see below), `collapsed?` (default true), `updated?`, `blocks[]` |
 | `panel` | Always-open titled card, one per "slide" in a deck-style doc | `title`, `blocks[]` |
 | `toggle` | Collapsible group for anywhere a block can go, with no TOC entry or anchor | `title`, `collapsed?` (default true), `blocks[]` |
 | `tabs` | Several panes shown one at a time, chosen from the label strip a multi-case `request` uses | `tabs: [{label, tone?, blocks[]}]` (2 to 24 tabs, distinct labels) |
@@ -290,6 +302,19 @@ URLs only.
   caption: "Dock walkthrough"
 ```
 
+A `link` block points at a page the reader can open. `display: inline` writes a plain link in a line of text, `card` (the default) a bordered card with the title, the domain and an optional caption, and `embed` asks for the page to be shown in place. The page skaldr writes loads nothing from outside, so it cannot show an embedded page: an `embed` renders as the same card with a note that the page cannot load embedded content, and the card opens the link. Without a `title` the link text is the URL without its scheme, and a card shows no domain line. The `url` must be an `http://` or `https://` address. An `inline` link takes no `caption`.
+
+```yaml
+- type: link
+  url: "https://example.com/runbook"
+  title: "Counting runbook"
+  caption: "rev. 7"
+- type: link
+  url: "https://example.com/board"
+  display: inline
+  title: "the live board"
+```
+
 A `section` holds any block except another
 `section`, a `grid`, or a `walkthrough`, so a `panel` may sit inside one. A `panel` holds any block
 except a `section`, a `grid`, a `walkthrough` or another `panel` directly inside it. A section
@@ -299,6 +324,29 @@ Its optional `updated` shows a muted "updated <value>" stamp in the section head
 label like `meta.date`, for keeping a living doc's regions honest.
 A top-level `section` is a document region on a par with an `h2`, so it gets its own TOC entry (with
 `meta.toc`) and anchor, so a living-doc region can be both navigable and freshness-stamped.
+
+**Section `fields`.** A section may carry issue fields or page properties, shown as a fact strip at the top of its body (the HTML) or as a bulleted list under its heading (the GitHub and Notion Markdown). Every key is optional: `status`, `priority` (strings, shown as chips), `assignee` (a person key, shown as a person chip carrying the key), `due` (an ISO date such as `2026-10-15`; YAML reads it unquoted), `labels` (a list of strings, one chip each), `estimate` (a number) and `links`. `links` maps a link type to the ids of the sections it points at, such as `blocks: [st3]`; each id must be the `id` of a section in the document, or the build fails naming the missing id, and the HTML shows each as a link to that section. A link stays within one file: a section in an index's part can link to another section of the same part file, never to a section in a different part, because each part is checked on its own and the build fails naming the id. A key skaldr does not know is kept and shown as a generic chip, so a Jira custom field fits: its value is a string, a number or a list of strings and numbers, and a boolean, a mapping, null, a blank string, an empty list or a number that is not finite fails the build. Numbers show as written, without thousands separators, so `year: 2026` stays `2026`. A link type shows with its first letter upper-cased (`QA review` stays `QA review`), an extra key shows exactly as written, and two facts that would show under the same label, such as an extra key `Status` beside the `status` field, fail the build.
+
+```yaml
+- type: section
+  id: st2
+  title: "Widen the bin code"
+  collapsed: false
+  fields:
+    status: "In Progress"
+    priority: High
+    assignee: ada
+    due: 2026-10-15
+    labels: [onboarding]
+    estimate: 3
+    links: { blocks: [st3] }
+    team: "Floor ops"
+  blocks: [{ type: text, body: "Bin codes grow from four to six characters." }]
+- type: section
+  id: st3
+  title: "Relabel the aisles"
+  blocks: [{ type: text, body: "Print and hang the new aisle labels." }]
+```
 
 A `toggle` is the collapsible for everywhere a `section` cannot go: inside a section, a panel, a grid cell or a walkthrough step's detail, as well as at the top level. It looks like a section's collapse but gets no TOC entry and no anchor, so use it to tuck away detail rather than to mark a region. It starts collapsed like a section (`collapsed: false` opens it). What it holds depends on where it sits. At the top level, in a section, in a panel or in another such toggle it holds whatever a section holds, including a `request` or `request_flow`. In a grid cell, a walkthrough step's detail or a tab it holds any block except a section, panel, grid, walkthrough, request or request_flow. A toggle may hold another toggle, and a heading inside one still gets its anchor.
 
@@ -712,6 +760,44 @@ what you got, what it means. That is the one part a reader cannot work out for t
 usually varies one value through `case_variable`; set `headers` on it to replace the request's headers
 instead, which is how you record what happens with the auth header removed.
 
+**Cases that differ by several values use `values`.** `case_variable` fills one name per case. When a
+case changes more than one thing, declare each in `variables` and give every case a `values` map from
+variable name to value. The `command` (or the built call) is written once, and each case's tab shows it
+with that case's values written in, so it runs as copied:
+
+```yaml
+- type: request
+  label: "One record, two terms"
+  command: |
+    vault-run -- curl -s "https://api.example.test/v1/records?id={{id}}&term={{term}}&seq={{seq}}" | jq '.'
+  variables: [{ name: id }, { name: term }, { name: seq }]
+  cases:
+    - label: "Second term"
+      values: { id: A100, term: "2", seq: "1" }
+      tone: warning
+      response: { body: '{ "records": [] }' }
+      verdict: "The record exists in term 1 and is missing from term 2."
+    - label: "Control"
+      values: { id: A100, term: "1", seq: "1" }
+      tone: success
+      response: { body: '{ "records": [{ "id": "A100" }] }' }
+```
+
+A case sets `values` or `value`, never both, and `values` requires the request to declare no
+`case_variable`. Every key of `values` must be a name declared in `variables`; a case that sets a key
+that is not declared fails the build naming the case and the key. A variable a case binds is written
+into that case's command and is not a field on that tab. A variable no case binds, or that a case
+leaves out, is still a field the reader fills on that tab, and `--check --strict` still leaves it alone
+as a declared name, so a case may bind only some of the variables. Once every case that uses a variable
+binds it, the variable is no longer listed in the fields at all. `values` works the same for a built
+call (the url, header values and body take the `{{name}}` tokens) and for a case's own `command`.
+
+A key of `values` must also appear as a `{{name}}` in what that case sends: its own `command`, or the
+request's command or url, headers and body as that case sees them. A key the case never uses fails the
+build naming the case and the key. A `secret` variable cannot be bound through `values`, because the
+value would be written into the page and the exports; the reader supplies it. A value is inserted as
+written, so a `{{name}}` inside a value is read as a slot the reader fills.
+
 **`headers` replaces, `headers_add` layers.** Cases that share a credential and differ in one header
 write the shared one once on the request and the difference under `headers_add`, which replaces the
 names it lists and leaves the rest. `headers` stays a replacement, because `headers: {}` is what records
@@ -727,9 +813,10 @@ pretty-printed on the page; a body you laid out across lines keeps your layout.
 ### Running an exact command: `command`
 
 Give `command` instead of `method`/`url`/`headers`/`body` when the call needs something those fields
-cannot say: a secret manager that supplies the credential so the reader never handles one, a proxy, a
-`| jq` that makes the evidence visible. The Copy button hands over the command exactly as you wrote it,
-every line and every quote, so one copy, one paste, one run reproduces what you saw.
+cannot say: a secret manager (`doppler run`, `op run`, `vault-run`) that supplies the credential so
+the reader never handles one, a proxy, a `| jq` that makes the evidence visible. The Copy button hands
+over the command exactly as you wrote it, every line and every quote, so one copy, one paste, one run
+reproduces what you saw.
 
 ```yaml
 - type: request
@@ -750,14 +837,21 @@ every line and every quote, so one copy, one paste, one run reproduces what you 
       response:
         body: '[{"code":"EU","mappedValue":"eu-west-1"}]'
       verdict: "Same endpoint, same credentials, and the value comes back. Access is not the explanation."
+    - label: "REGION through Doppler"
+      command: |
+        doppler run -p example-service -c prd -- sh -c 'curl -s -u "$PARTNER_USER:$PARTNER_PASS" "https://api.partner.example/v1/mappings?label=REGION"' | jq 'map({code, mappedValue})'
+      tone: success
+      response:
+        body: '[{"code":"EU","mappedValue":"eu-west-1"}]'
+      verdict: "Doppler injects the credentials for the one command, so none of them appears on the page."
 ```
 
 - **Pick `command` when a copied curl would fail or mislead.** If the reader would run skaldr's curl
   and get a 403 because the credential, proxy or filter is missing, the button is manufacturing
   counter-evidence. Write the command you ran.
-- **A `{{name}}` still works** inside `command`, from `variables` or `case_variable`, and is written in
-  exactly as the reader types it, with no shell quoting added. You own the quoting, so put the token
-  where the shell will read it the way you mean.
+- **A `{{name}}` still works** inside `command`, from `variables`, `case_variable` or a case's
+  `values`, and is written in exactly as the reader types it, with no shell quoting added. You own the
+  quoting, so put the token where the shell will read it the way you mean.
 - **`command` excludes `method`, `url`, `headers` and `body`**, and a case of a command request cannot
   set `headers` or `headers_add`. Those fields exist to build a curl, and a request with a `command`
   builds none, so they would never reach what the reader runs. A request that sets `command` together
@@ -798,6 +892,43 @@ That store is keyed by the block's `id`, or by its `label` when it sets none, wh
 request blocks on a page may share one: they would share the reader's values. Give one an `id` when
 two blocks legitimately carry the same label, and keep that `id` fixed if you want the values to
 survive a rename.
+
+### Evidence that is not a shell command: `query`
+
+Give `query` when the evidence is a database aggregation, a SQL statement or an MCP tool call, run in
+some named tool rather than a shell. The page shows the query highlighted, labelled with the tool it
+runs in, and the cases record its real output the way they do for any other request.
+
+```yaml
+- type: request
+  label: "Orders by status in the shop database"
+  query:
+    runner: "mongosh, orders database"    # free text, shown with the query
+    lang: json                             # a Pygments lexer name: json, sql, js, ...
+    content: '[{"$match": {"status": "{{status}}"}}, {"$count": "n"}]'
+  variables: [{ name: status, example: "open" }]
+  cases:
+    - label: "Open orders"
+      tone: warning
+      response: { body: '[{"n": 12}]' }
+      verdict: "Twelve orders are still open, so the nightly close has not run for them."
+```
+
+- **Copy hands over the query text**, with `{{name}}` filled in exactly as the reader typed it, so
+  pasting it into the tool re-runs what you ran. A `{{name}}` works from `variables` and
+  `case_variable` the same way it does in a `command`.
+- **There is nothing to run or capture on the page.** A query shows no "Run this" shell line, no
+  "Copy + capture" and no field to paste output into, because the page cannot run a query. Record the
+  output you got as the case's `response`.
+- **`lang` is checked when the file is read.** A name Pygments has no lexer for fails the build naming
+  it. The same name highlights the query on the page and labels its fence in the Markdown exports,
+  where the query is a fenced block under the runner's name.
+- **`query` excludes `method`, `url`, `headers`, `body` and `command`**, and a case of a query request
+  cannot set `command`, `headers` or `headers_add`; nor can it replace the query. A request that sets
+  `query` together with any of them fails the build with a message naming that field. `command_note`
+  is refused too: say it in a `verdict`. A `request_flow` step may record a `query` but cannot capture
+  from one.
+- Cases, responses, `tone` and `verdict` work exactly as they do for a `command` request.
 
 ## The `request_flow`
 
@@ -858,6 +989,38 @@ steps read. A step that captures nothing may record as many as it likes, and tak
 a `request` does: one step authenticates, the next tabs through every resource that token reaches, and
 the reader supplies the credential once rather than to two separate blocks.
 
+**A step's cases take `values` as a `request`'s do.** A step that tabs through several outcomes by more
+than one value gives each case a `values` map over the flow's `variables`, under the same rules: `value`
+and `values` are never both, `values` requires the step to have no `case_variable`, and a key must be a
+declared variable. A name a step captures is not declared, so a case cannot bind it. Captures still read
+from the response pasted into the step, and a variable every case of every step binds is no longer
+listed in the flow's fields.
+
+```yaml
+- type: request_flow
+  label: "Sign in, then read a record"
+  variables: [{ name: id }, { name: term }]
+  steps:
+    - label: "Sign in"
+      command: "vault-run -- curl -s https://api.example.test/v1/session"
+      captures: [{ name: session, source: body, secret: true }]
+      cases:
+        - label: "200"
+          tone: success
+          response: { body: "abc123" }
+    - label: "Read the record"
+      command: "vault-run -- curl -s -H 'X-Session: {{session}}' https://api.example.test/v1/records/{{id}}/{{term}}"
+      cases:
+        - label: "Second term"
+          values: { id: A100, term: "2" }
+          tone: warning
+          response: { body: "{}" }
+        - label: "Control"
+          values: { id: A100, term: "1" }
+          tone: success
+          response: { body: '{ "id": "A100" }' }
+```
+
 **Each step's Copy gives that one call**, with every value written out (the reader's fields and any
 value an earlier step captured alike), so it runs exactly as it is pasted. The reader works down the
 steps in order, pasting each response back to fill the next.
@@ -866,6 +1029,9 @@ A flow needs at least two steps. One step is a `request`.
 
 A step may run an exact `command` on the same terms as a `request`, and its captures read from the
 output the reader pastes back, so `vault-run -- mint-token` can hand its token to the next step.
+
+A step may instead record a `query` (see the `request` section), shown with its runner and a Copy
+button. A query has nowhere to paste output, so a step that records one cannot capture from it.
 
 ## The `references`
 
@@ -1011,6 +1177,7 @@ blocks:                       # optional: an intro shown before the first part
 - **Each part becomes a part of the page**: its `meta.title` is the part's title, a level 1 heading in the exports and a title band in the HTML, and its blocks follow unchanged. The table of contents lists the index's own headings and sections, then one entry per part. The rest of a part's `meta` (subtitle, source, date, updated, toc and the other options) applies only when the part builds alone; the page takes its header, footer and options from the index's `meta`.
 - **`collapsed: true`** under `index` starts every part collapsed: a collapsible in the HTML, a toggle heading in the Notion export. Parts are open by default.
 - **Badges merge.** The index's `badges` and every part's `badges` combine into one vocabulary and one legend, shown at the top of the page unless the index's own blocks hold a table. A key declared with a different label, tone or legend in two files fails the build naming both files; rename one key or make them agree.
+- **People and the Jira site merge.** The index's `meta.people` and every part's combine, so a part's `[Ada](user:ada)` resolves on the combined page. A key declared with different ids in two files fails the build naming both, and so do two different `meta.jira_site` addresses.
 - **Ids are page-wide.** A heading, section, table or matrix id, a reference key or a request label repeated across two parts fails like a repeat inside one file, and the error names the file behind each part it points at. A file listed twice is refused.
 - The rendered page is the combined page, and `--export notion` writes one `page.md` for it. `--if-stale` and `--watch` follow every part file and every file a part includes, so an edit to a part rebuilds the index. While a part cannot be read, `--watch` keeps following the files it last found.
 - `--emit-json` prints the combined page, with every part already in place and no `index` key. It is a view of the page, not a source file: building it again is refused, because its `part` blocks were not built by an index. The source embedded in the rendered page is the index file alone, as with `!include`; keep the part files beside it.
@@ -1102,14 +1269,19 @@ case, where the page is shared as a URL an agent later has to read back.
 | `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
 | `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
+| `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
+| `[1 Oct](date:2026-10-01)` | the label as text | a date mention, `<mention-date start="2026-10-01"/>`, with `end` for a range; the label is dropped, since Notion writes the date itself |
+| `[Ada](user:ada)` | the label as text | a user mention, `<mention-user url="user://…">Ada</mention-user>`, when the person has a `notion` id; otherwise the label as text |
+| `[ABC-123](jira:ABC-123)` | a link to the issue on `meta.jira_site`, or the label as text without one | the same |
+| `[the plan](doc:onboarding-plan#st2)` | a link to `onboarding-plan.md` | the label as text, since a Notion page id exists only once the document is published |
 | `` $`x_i`$ `` inline math | GitHub's `` $`x_i`$ `` math | Notion inline math, the same form |
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
-Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows its command and recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it, and a table longer than N splits into consecutive tables that each repeat the header row (at `notion_width: full` every part keeps the whole table's column widths). A table part never ends on a `group` row, and a `total` row keeps the row before it. A part that still cannot fit in N, such as a long code block, one long table row, or a heading together with the block after it, stays whole, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
+Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then a `Cover image` link when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
 ## What you never write
 

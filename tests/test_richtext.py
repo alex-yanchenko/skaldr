@@ -1,12 +1,13 @@
 import re
 import timeit
+from datetime import date
 from functools import partial
 
 import pytest
 from pydantic import ValidationError
 
 from skaldr.errors import ReportError
-from skaldr.models import ToneLiteral
+from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -33,6 +34,7 @@ FULL_CONTEXT = RichContext(
     reference_numbers={"sop": 1},
     reference_urls={"sop": "https://example.com/sop"},
     anchor_ids=frozenset({"method"}),
+    people={"ada": Person()},
 )
 
 
@@ -973,6 +975,18 @@ class _TaggedRuns(TextRunWriter):
     def anchor_link(self, label: str, anchor: str, /) -> str:
         return f"<anchor:{label}|{anchor}>"
 
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
+        return f"<date:{label}|{start}|{end}>"
+
+    def person_mention(self, label: str, key: str, person: Person, /) -> str:
+        return f"<person:{label}|{key}|{person.jira}>"
+
+    def issue_link(self, label: str, key: str, url: str | None, /) -> str:
+        return f"<issue:{label}|{key}|{url}>"
+
+    def document_link(self, label: str, doc_id: str, section: str | None, /) -> str:
+        return f"<document:{label}|{doc_id}|{section}>"
+
     def citation(self, run: Citation, /) -> str:
         return f"<cite:{run.key}={run.number}>"
 
@@ -995,12 +1009,14 @@ class _TaggedRuns(TextRunWriter):
 def test_write_runs_hands_every_run_to_its_writer_method_in_order() -> None:
     runs = parse_rich(
         "a `c` [see `x` [^sop]](https://e.com) [m](#method) {{who}} ~~*x*~~ ++u++ H~2~O 10^3^ "
-        "[*hot*]{bg=danger} $`x_i`$",
+        "[*hot*]{bg=danger} $`x_i`$ [d](date:2026-10-01/2026-10-02) [p](user:ada) [i](jira:ABC-1) "
+        "[o](doc:plan#st2)",
         FULL_CONTEXT,
     )
 
     assert write_runs(runs, _TaggedRuns()) == (
         "a <code:c> <link:see <code:x> <cite:sop=1>|https://e.com> <anchor:m|method> <blank:who> "
         "<strike:<italic:x>> <underline:u> H<subscript:2>O 10<superscript:3> <tint:None/danger:<italic:hot>> "
-        "<math:x_i>"
+        "<math:x_i> <date:d|2026-10-01|2026-10-02> <person:p|ada|None> <issue:i|ABC-1|None> "
+        "<document:o|plan|st2>"
     )

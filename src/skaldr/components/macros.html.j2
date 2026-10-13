@@ -3,6 +3,14 @@
 {% set STATUS_GLYPHS = {"done": "✓", "current": "◐", "pending": "○", "failed": "✗", "blocked": "⏸"} %}
 {% set LIST_NUMBERING_TYPES = {"letters": "a", "roman": "i"} %}
 
+{% macro page_title(meta) -%}
+<h1>{% if meta.icon %}<span class="title-icon" aria-hidden="true">{{ meta.icon }}</span>{% endif %}{{ meta.title }}</h1>
+{%- endmacro %}
+
+{% macro cover_link(meta) -%}
+{% if meta.cover %}<p class="cover"><a href="{{ meta.cover }}">Cover image</a></p>{% endif %}
+{%- endmacro %}
+
 {% macro chip_item(item) %}
 {% if item.key is defined %}{% set b = badges[item.key] %}<span class="chip {{ b.tone }}">{{ b.label }}</span>
 {% else %}<span class="chip {{ item.tone }}">{{ item.label }}</span>{% endif %}
@@ -11,6 +19,10 @@
 {# Chips from declared badge keys, attached to a container (card / timeline item / flow node). A
    <span> wrapper (not <div>) so it's valid inside the inline flow-node txt column too. #}
 {% macro chip_keys(keys) %}<span class="chips">{% for key in keys %}<span class="chip {{ badges[key].tone }}">{{ badges[key].label }}</span>{% endfor %}</span>{% endmacro %}
+
+{% macro section_fact_value(value) %}{% if value.kind == "chip" %}<span class="chip {{ value.tone }}">{{ value.text }}</span>{% elif value.kind == "person" %}<span class="person">{{ value.text }}</span>{% elif value.kind == "date" %}<time datetime="{{ value.text }}">{{ value.text }}</time>{% elif value.kind == "link" %}<a href="#{{ value.anchor }}">{{ value.text }}</a>{% else %}<span>{{ value.text }}</span>{% endif %}{% endmacro %}
+
+{% macro section_fact_strip(facts) %}{% if facts %}<div class="sfields">{% for fact in facts %}<span class="sf"><span class="k">{{ fact.label }}</span>{% for value in fact.values %}{{ section_fact_value(value) }}{% endfor %}</span>{% endfor %}</div>{% endif %}{% endmacro %}
 
 {% macro legend(used_badges) %}
 <details class="section"{% if expand_details %} open{% endif %}>
@@ -237,11 +249,18 @@
 </div>
 {% endmacro %}
 
+{% macro query_pane(core, case) %}
+{% set text = query_text_for(core.query, core, case) %}
+{% set marked = highlighted_query(text, core.query.lang) %}
+<div class="rq-pane"><div class="rq-pane-hd"><span>Query</span><span class="rq-runner">{{ core.query.runner }}</span><span class="rq-btns"><button type="button" class="rq-copy">Copy</button></span></div><pre class="rq-cmd rq-query">{% if marked is none %}{{ variable_slots(text) }}{% else %}{{ marked }}{% endif %}</pre></div>
+{% endmacro %}
+
 {% macro request_cases(core) %}
 {% call(index) tab_strip(strip_of(core), "Recorded cases") %}
 {% set case = core.cases[index] %}
 <section class="rq-case" data-rq-case="{{ index }}"{% if core.command is not none %} data-rq-command{% endif %}>
 <h4 class="rq-case-hd">{{ case.label }}</h4>
+{% if core.query is not none %}{{ query_pane(core, case) }}{% else %}
 {% set runs_command = core.command is not none %}
 {% set command = command_for(core, case) %}
 {% if not runs_command %}<div class="rq-pane"><div class="rq-pane-hd"><span>Request</span></div><pre class="rq-wire">{{ variable_slots(request_wire(core, case)) }}</pre></div>{% endif %}
@@ -249,6 +268,7 @@
   | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endif %}{% if core.command_note %}<p class="rq-cnote">{{ core.command_note | richtext }}</p>{% endif %}</div>
 <div class="rq-paste"><div class="rq-pane"><div class="rq-pane-hd"><span>Paste what came back</span><button type="button" class="rq-clear" hidden>Clear</button></div><textarea class="rq-in" rows="2" spellcheck="false" placeholder="{% if runs_command %}Run the command, then paste its output here.{% else %}Run the command, then paste its whole output here. Include the headers if you kept -i.{% endif %}"></textarea></div></div>
 <div class="rq-live" hidden></div>
+{% endif %}
 {% set caption = response_caption(core, case.response) %}<div class="rq-pane"><div class="rq-pane-hd"><span>{{ caption.label }}</span>{% if caption.shows_status %}<span class="rq-status {{ case_tone(case) }}">{{ status_line(case.response) }}</span>{% endif %}</div>
 {% if case.response.headers %}<dl class="rq-hdrs">{% for name, value in case.response.headers.items() %}<dt>{{ name }}</dt><dd>{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</dd>{% endfor %}</dl>{% endif %}
 <pre class="rq-resp">{{ recorded_body(case.response.body) }}</pre></div>
@@ -261,7 +281,7 @@
 {% macro request(block) %}
 <section class="rq">
 <div class="rq-hd"><span class="rq-kind">request</span><span class="rq-title">{{ block.label }}</span></div>
-{% if block.variables %}{{ variables_form(block.id or block.label, block.variables, []) }}{% endif %}
+{% set fields = reader_variables(block) %}{% if fields %}{{ variables_form(block.id or block.label, fields, []) }}{% endif %}
 {{ request_cases(block) }}
 </section>
 {% endmacro %}
@@ -269,7 +289,9 @@
 {% macro request_flow(block) %}
 <section class="rq rq-flow">
 <div class="rq-hd"><span class="rq-kind">request_flow</span><span class="rq-title">{{ block.label }}</span></div>
-{{ variables_form(block.id or block.label, block.variables, produced_names(block)) }}
+{% set fields = reader_variables(block) %}
+{% set produced = produced_names(block) %}
+{{ variables_form(block.id or block.label, fields, produced) if fields or produced }}
 {% for step in block.steps %}
 {% if not loop.first %}<div class="rq-handoff"><span class="rq-bar"></span>{% for capture in block.steps[loop.index0 - 1].captures %}{{ capture.name }}{% if not loop.last %}, {% endif %}{% else %}next{% endfor %}<span class="rq-bar"></span></div>{% endif %}
 <section class="rq-step">
@@ -322,6 +344,13 @@
 <figure class="fig"{% if block.max_width %} style="max-width:{{ block.max_width }}px"{% endif %}><div class="frame"><a class="media-card" href="{{ block.src }}" rel="noopener noreferrer"><span class="media-kind">Image</span><span class="media-title">{{ block.alt }}</span><span class="media-host">{{ url_host(block.src) }}</span></a></div>{% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}</figure>
 {% elif block.type == "media" %}
 <figure class="fig"><div class="frame"><a class="media-card" href="{{ block.src }}" rel="noopener noreferrer"><span class="media-kind">{{ media_kind_labels[block.kind] }}</span><span class="media-title">{{ block.caption or block.src }}</span><span class="media-host">{{ url_host(block.src) }}</span></a></div></figure>
+{% elif block.type == "link" %}
+{% set card = link_card(block) %}
+{% if block.display == "inline" %}
+<p class="text"><a href="{{ card.url }}">{{ card.title }}</a></p>
+{% else %}
+<a class="link-card{% if block.display == "embed" %} embed{% endif %}" href="{{ card.url }}"><span class="lc-title">{{ card.title }}</span>{% if card.domain %}<span class="lc-domain">{{ card.domain }}</span>{% endif %}{% if card.caption %}<span class="lc-caption">{{ card.caption }}</span>{% endif %}{% if block.display == "embed" %}<span class="lc-note">This page cannot load embedded content; the card opens the link.</span>{% endif %}</a>
+{% endif %}
 {% elif block.type == "timeline" %}
 <ul class="tl">{% for it in block.items %}<li{% if it.state %} class="{{ it.state }}"{% endif %}>{% if it.time %}<div class="time">{{ it.time }}</div>{% endif %}<div class="ti">{{ it.title }}</div>{% if it.body %}<div class="tb">{{ it.body | richtext }}</div>{% endif %}{% if it.badges %}{{ chip_keys(it.badges) }}{% endif %}</li>{% endfor %}</ul>
 {% elif block.type == "flow" %}
@@ -345,7 +374,7 @@
 {% elif block.type == "request_flow" %}
 {{ request_flow(block) }}
 {% elif block.type == "section" %}
-<details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
+<details class="section" id="{{ anchor_id(block) }}"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}{% if block.updated %}<span class="upd">updated {{ block.updated }}</span>{% endif %}</summary><div class="section-body">{% if block.fields %}{{ section_fact_strip(section_facts(block.fields)) }}{% endif %}{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "toggle" %}
 <details class="toggle"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "tabs" %}

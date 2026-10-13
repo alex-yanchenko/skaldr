@@ -26,6 +26,7 @@ The count reconciles exactly: every unit lands in one bucket and the counts sum 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 Zone C is <span color="red">behind schedule</span>, its recount is <span color="yellow_bg">due Friday</span>, and the <span color="purple"><span color="pink_bg">vendor lots</span></span> stay open until the supplier replies.
+The recount runs <mention-date start="2026-07-10" end="2026-07-14"/>, is led by <mention-user url="user://11111111-2222-3333-4444-555555555555">Ada Park</mention-user>, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows the cold room plan.
 ### Count pipeline
 ```mermaid
 flowchart LR
@@ -260,6 +261,7 @@ function pickWinner(a, b) {
 *Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
 ![Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).](https://example.com/photos/aisle-12.png)
 <video src="https://example.com/videos/dock-walkthrough.mp4">Dock walkthrough, 4 minutes</video>
+> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**<br>*example.com · Revision 7*
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.<br>*Floor lead, ticket OPS-1234*
 ## At a glance
 <columns>
@@ -280,6 +282,16 @@ function pickWinner(a, b) {
 		- ⛔ Awaiting `OPS-1234`.
 	</column>
 </columns>
+## Recount Zone C
+- **Status**: In Progress
+- **Priority**: High
+- **Assignee**: ada
+- **Due**: 2026-10-15
+- **Labels**: recount, bins
+- **Estimate**: 3
+- **Relates**: Appendix: discrepancy-reason raw counts
+- **team**: Floor ops
+Zone C holds most of the mislabeled bins, so it is recounted first.
 ## Appendix: discrepancy-reason raw counts {toggle="true"}
 	*updated 18 Jul 2026* {color="gray"}
 	- Double-count (same-window re-scan): 340

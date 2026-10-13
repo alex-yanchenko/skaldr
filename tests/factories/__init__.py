@@ -8,6 +8,7 @@ from tests.factories.export_factory import (
     markdown_of,
     notion_of,
     parsed_block,
+    rendered_block_count,
     write_index_document,
     write_report,
 )
@@ -25,6 +26,7 @@ from tests.factories.report_factory import (
     make_label_table,
     make_notion_target,
     make_publish_report,
+    make_query_request,
     make_reconciled_table,
     make_report,
     make_request,
@@ -57,6 +59,7 @@ __all__ = [
     "make_label_table",
     "make_notion_target",
     "make_publish_report",
+    "make_query_request",
     "make_reconciled_table",
     "make_report",
     "make_request",
@@ -70,6 +73,7 @@ __all__ = [
     "markdown_of",
     "notion_of",
     "parsed_block",
+    "rendered_block_count",
     "write_index_document",
     "write_report",
 ]

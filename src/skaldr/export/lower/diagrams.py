@@ -28,8 +28,12 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    DateMention,
+    DocumentLink,
     InlineMath,
+    IssueLink,
     Link,
+    PersonMention,
     Placeholder,
     Plain,
     Run,
@@ -61,8 +65,10 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
 
 def _loses_meaning_in_a_plain_label(run: Run) -> bool:
     match run:
-        case Link() | AnchorLink() | Citation() | InlineMath() | ScriptText():
+        case Link() | AnchorLink() | IssueLink() | DocumentLink() | Citation() | InlineMath() | ScriptText():
             return True
+        case DateMention() | PersonMention():
+            return any(map(_loses_meaning_in_a_plain_label, run.label))
         case Styled() | Tinted():
             return any(map(_loses_meaning_in_a_plain_label, run.runs))
         case Plain() | Code() | Placeholder():

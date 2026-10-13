@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import date
 
 from skaldr.export.runs import (
     Break,
@@ -11,7 +12,7 @@ from skaldr.export.runs import (
     mark_name,
     write_export_runs,
 )
-from skaldr.models import ToneLiteral
+from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -55,6 +56,18 @@ class _MarkedNodeRuns:
 
     def anchor_link(self, label: MarkedNodes, anchor: str, /) -> MarkedNodes:
         return _with_mark(f"anchor={anchor}", label)
+
+    def date_mention(self, label: MarkedNodes, start: date, end: date | None, /) -> MarkedNodes:
+        return _with_mark(f"date={start}/{end}", label)
+
+    def person_mention(self, label: MarkedNodes, key: str, _person: Person, /) -> MarkedNodes:
+        return _with_mark(f"person={key}", label)
+
+    def issue_link(self, label: MarkedNodes, key: str, _url: str | None, /) -> MarkedNodes:
+        return _with_mark(f"issue={key}", label)
+
+    def document_link(self, label: MarkedNodes, doc_id: str, _section: str | None, /) -> MarkedNodes:
+        return _with_mark(f"document={doc_id}", label)
 
     def citation(self, run: Citation, /) -> MarkedNodes:
         return _with_mark(f"citation={run.key}", _leaf("text", f"[{run.number}]"))

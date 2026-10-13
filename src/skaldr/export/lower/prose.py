@@ -22,7 +22,7 @@ from skaldr.export.tree import (
     Quote,
     ToneName,
 )
-from skaldr.richtext import Code, Link, Plain
+from skaldr.richtext import AnchorLink, Code, Link, Plain, Styled
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -84,6 +84,21 @@ def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Loweri
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:
     return [bullets(ListEntry(with_bold_label(fact.label, plain(fact.value))) for fact in block.facts)]
+
+
+def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> list[Node]:
+    facts = compute.section_facts(fields, lowering.section_titles)
+    return (
+        [bullets(ListEntry(with_bold_label(fact.label, _fact_values(fact))) for fact in facts)]
+        if facts
+        else []
+    )
+
+
+def _fact_values(fact: compute.SectionFact) -> ExportRich:
+    if all(value.kind != "link" for value in fact.values):
+        return plain(", ".join(value.text for value in fact.values))
+    return spaced(tuple((AnchorLink(plain(value.text), value.anchor or ""),) for value in fact.values), ", ")
 
 
 def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:
@@ -231,6 +246,15 @@ def lower_image(block: models.Image) -> list[Node]:
 
 def lower_media(block: models.Media) -> list[Node]:
     return [Media(block.kind, block.src, caption=plain(block.caption or ""))]
+
+
+def lower_link(block: models.Link) -> list[Node]:
+    card = compute.link_card(block)
+    link = Link(plain(card.title), card.url)
+    if block.display == "inline":
+        return [Paragraph((link,))]
+    detail = " · ".join(part for part in (card.domain, card.caption) if part)
+    return [Quote(((Styled("bold", (link,)),),), plain(detail))]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:

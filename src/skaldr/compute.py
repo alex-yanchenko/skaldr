@@ -17,8 +17,8 @@ from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import cache
 from http import HTTPStatus
-from typing import Any, Final, NamedTuple, TypedDict, cast, get_args, get_type_hints
-from urllib.parse import urlsplit
+from typing import Any, Final, Literal, NamedTuple, TypedDict, cast, get_args, get_type_hints
+from urllib.parse import quote, urlsplit
 
 import roman
 from pydantic import BaseModel
@@ -35,6 +35,7 @@ from skaldr.models import (
     DeltaDirection,
     FieldPath,
     Heading,
+    Link,
     ListNumbering,
     Matrix,
     MatrixCell,
@@ -45,16 +46,20 @@ from skaldr.models import (
     RequestCase,
     RequestFlow,
     RequestLike,
+    RequestQuery,
     RequestResponse,
+    RequestVariable,
     RichTextMarker,
     Row,
     Section,
+    SectionFields,
     Swimlane,
     SwimlaneStepState,
     Table,
     Tabs,
     ToneLiteral,
     col_sum,
+    fact_label,
     iter_matrices,
     iter_reference_items,
     iter_referenced_badge_keys,
@@ -62,14 +67,17 @@ from skaldr.models import (
     walk_blocks,
 )
 from skaldr.prose_blocks import rendered_strings
-from skaldr.richtext import RichContext, parse_rich
+from skaldr.richtext import PartAnchor, RichContext, parse_rich
 
 __all__ = [
+    "LinkCard",
     "Provenance",
     "anchor_slugs",
     "col_sum",
+    "favicon_href",
     "first_table_index",
     "fmt",
+    "link_card",
     "list_label",
     "matrix_grid",
     "matrix_tallies",
@@ -79,6 +87,8 @@ __all__ = [
     "reconcile_line",
     "reference_numbers",
     "rich_text_strings",
+    "section_facts",
+    "section_titles_by_id",
     "swimlane_layout",
     "table_rollup",
     "table_tallies",
@@ -168,6 +178,21 @@ def anchor_slugs(report: Report) -> dict[int, str]:
         taken.add(slug)
         slugs[id(block)] = slug
     return slugs
+
+
+def part_anchors(report: Report, slugs: dict[int, str]) -> dict[str, PartAnchor]:
+    return {
+        block.doc_id: PartAnchor(
+            slugs[id(block)],
+            frozenset(
+                inner.id
+                for inner in walk_blocks(block.blocks)
+                if isinstance(inner, Section) and inner.id is not None
+            ),
+        )
+        for block in report.blocks
+        if isinstance(block, Part) and block.doc_id is not None
+    }
 
 
 def toc_entries(report: Report, slugs: dict[int, str]) -> list[tuple[str, str]]:
@@ -636,6 +661,27 @@ def _swim_row_template(has_groups: bool, nlanes: int, has_totals: bool) -> str:
     return body
 
 
+def favicon_href(icon: str) -> str:
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+        f'<text y=".9em" font-size="90">{icon}</text></svg>'
+    )
+    return "data:image/svg+xml," + quote(svg)
+
+
+class LinkCard(NamedTuple):
+    url: str
+    title: str
+    domain: str | None
+    caption: str | None
+
+
+def link_card(block: Link) -> LinkCard:
+    if block.title is not None:
+        return LinkCard(block.url, block.title, urlsplit(block.url).hostname, block.caption)
+    return LinkCard(block.url, block.url.split("://", 1)[1], None, block.caption)
+
+
 class Provenance(NamedTuple):
     source: str | None
     facts: tuple[str, ...]
@@ -711,6 +757,68 @@ def validate_rich_text_fields(report: Report, context: RichContext) -> None:
 
 def url_host(url: str) -> str:
     return urlsplit(url).netloc
+
+
+FactValueKind = Literal["chip", "person", "date", "text", "link"]
+
+
+class FactValue(NamedTuple):
+    kind: FactValueKind
+    text: str
+    tone: BadgeColorLiteral | None = None
+    anchor: str | None = None
+
+
+class SectionFact(NamedTuple):
+    label: str
+    values: tuple[FactValue, ...]
+
+
+def section_titles_by_id(report: Report) -> dict[str, str]:
+    return {
+        block.id: block.title
+        for _, block in report.located_blocks
+        if isinstance(block, Section) and block.id is not None
+    }
+
+
+def plain_number(value: str | int | float) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _extra_fact_value(value: str | int | float) -> FactValue:
+    return FactValue("chip", plain_number(value), "slate")
+
+
+def section_facts(fields: SectionFields, titles: Mapping[str, str]) -> tuple[SectionFact, ...]:
+    facts: list[SectionFact] = []
+    if fields.status is not None:
+        facts.append(SectionFact("Status", (FactValue("chip", fields.status, "blue"),)))
+    if fields.priority is not None:
+        facts.append(SectionFact("Priority", (FactValue("chip", fields.priority, "amber"),)))
+    if fields.assignee is not None:
+        facts.append(SectionFact("Assignee", (FactValue("person", fields.assignee),)))
+    if fields.due is not None:
+        facts.append(SectionFact("Due", (FactValue("date", fields.due.isoformat()),)))
+    if fields.labels is not None:
+        facts.append(
+            SectionFact("Labels", tuple(FactValue("chip", label, "slate") for label in fields.labels))
+        )
+    if fields.estimate is not None:
+        facts.append(SectionFact("Estimate", (FactValue("text", plain_number(fields.estimate)),)))
+    for link_type, targets in fields.links.items():
+        facts.append(
+            SectionFact(
+                fact_label(link_type),
+                tuple(FactValue("link", titles[target], anchor=target) for target in targets),
+            )
+        )
+    for name, value in fields.extras.items():
+        values = value if isinstance(value, list) else [value]
+        facts.append(SectionFact(name, tuple(_extra_fact_value(item) for item in values)))
+    return tuple(facts)
 
 
 def fmt(value: Any) -> str:
@@ -891,10 +999,10 @@ class ResponseCaption(NamedTuple):
 
 
 def response_caption(core: RequestLike, response: RequestResponse) -> ResponseCaption:
-    runs_command = core.command is not None
+    records_output = core.command is not None or core.query is not None
     return ResponseCaption(
-        "Recorded output" if runs_command else "Recorded response",
-        shows_status=not runs_command or response.status is not None,
+        "Recorded output" if records_output else "Recorded response",
+        shows_status=not records_output or response.status is not None,
     )
 
 
@@ -917,20 +1025,27 @@ def recorded_body(body: str) -> str:
     return read_recorded_body(body).text
 
 
-def case_value(block: RequestLike, case: RequestCase) -> str | None:
-    """What this case supplies for the block's case axis, defaulting to its label."""
-    return None if block.case_variable is None else (case.value or case.label)
-
-
 def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
     """`text` with the case axis filled in. The case variable is known when the page is built, so it
     is substituted here; every other `{{name}}` stays for the reader to supply at read time."""
-    value = case_value(block, case)
-    if value is None:
+    bindings = block.case_bindings(case)
+    if not bindings:
         return text
-    return VARIABLE_TOKEN.sub(
-        lambda match: value if match.group(1) == block.case_variable else match.group(0), text
-    )
+    return VARIABLE_TOKEN.sub(lambda match: bindings.get(match.group(1), match.group(0)), text)
+
+
+def reader_variables(owner: Request | RequestFlow) -> list[RequestVariable]:
+    cores = [owner] if isinstance(owner, Request) else owner.steps
+    bound = {name for core in cores for case in core.cases for name in (case.values or {})}
+    open_names = {
+        match.group(1)
+        for core in cores
+        for case in core.cases
+        for match in VARIABLE_TOKEN.finditer(sent_text_for(core, case))
+    }
+    return [
+        variable for variable in owner.variables if variable.name not in bound or variable.name in open_names
+    ]
 
 
 def variable_parts(text: str) -> list[tuple[str, str]]:
@@ -989,6 +1104,16 @@ def command_for(core: RequestLike, case: RequestCase) -> str:
         parts.append(f"  --data {shlex.quote(resolve_case(core.body, core, case))}")
     parts.append(f"  {shlex.quote(resolve_case(call.url, core, case))}")
     return " \\\n".join(parts)
+
+
+def query_text_for(query: RequestQuery, core: RequestLike, case: RequestCase) -> str:
+    return resolve_case(query.content, core, case)
+
+
+def sent_text_for(core: RequestLike, case: RequestCase) -> str:
+    if core.query is not None:
+        return query_text_for(core.query, core, case)
+    return command_for(core, case)
 
 
 CASE_LABEL_CHAR = 7.3
