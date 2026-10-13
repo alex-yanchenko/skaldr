@@ -304,6 +304,7 @@ _SHIPPED_PROSE = (
     "src/skaldr/skill/GUIDE.md",
     "src/skaldr/skill/SKILL.md",
     "src/skaldr/skill/example.yaml",
+    "src/skaldr/skill/plan-starter.yaml",
 )
 
 

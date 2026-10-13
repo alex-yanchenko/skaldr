@@ -439,7 +439,16 @@ def find_placeholders(report: Report) -> list[str]:
     --check --strict gate uses this to refuse a doc that still has blanks."""
     seen: set[str] = set()
     _render(report, "page.html.j2", placeholders=seen)
-    return sorted(seen | unresolvable_request_variables(report.blocks))
+    return sorted(seen | _meta_placeholders(report) | unresolvable_request_variables(report.blocks))
+
+
+_META_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_-]+)\}\}")
+
+
+def _meta_placeholders(report: Report) -> set[str]:
+    meta = report.meta
+    plain_texts = [meta.title, *meta.subtitle, meta.date or "", meta.updated or ""]
+    return {name for text in plain_texts for name in _META_PLACEHOLDER.findall(text)}
 
 
 def render_embed(report: Report, *, source: str | None = None) -> str:

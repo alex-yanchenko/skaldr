@@ -1,0 +1,44 @@
+version: 1
+meta:
+  title: "{{plan-title}}"
+  subtitle: ["{{one-line-summary}}"]
+  updated: "{{date}}"
+
+blocks:
+  - { type: heading, text: "Intent" }
+  - type: callout
+    tone: info
+    title: "Done looks like"
+    body: "{{what-done-looks-like-and-why-it-matters}}"
+
+  - { type: heading, text: "Constraints and decisions" }
+  - type: list
+    items:
+      - "{{decision-one}}, because {{reason-one}}"
+      - "{{decision-two}}, because {{reason-two}}"
+
+  - { type: heading, text: "Working state" }
+  - type: status_list
+    items:
+      - { state: done, text: "{{finished-step}}" }
+      - { state: current, text: "{{step-in-progress}}" }
+      - { state: pending, text: "{{step-not-started}}" }
+      - { state: blocked, text: "{{step-waiting-on-something}}" }
+
+  - { type: heading, text: "Next" }
+  - type: list
+    style: number
+    items:
+      - "{{first-action}}"
+      - "{{second-action}}"
+
+  - { type: heading, text: "Pitfalls" }
+  - type: list
+    items:
+      - "{{mistake-to-avoid}}"
+
+  - { type: heading, text: "Open questions" }
+  - type: callout
+    tone: info
+    title: "Open questions and blockers"
+    body: 'List each open question and blocker here, or write "none".'

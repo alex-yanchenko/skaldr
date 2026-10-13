@@ -5,7 +5,7 @@ The current, version-matched authoring contract, printed by `skaldr --guide`. A 
 types, and constraints, also run `skaldr --write-schema <path>` (the machine-readable JSON Schema,
 generated from the same models).
 
-`skaldr --guide` prints this whole guide. `skaldr --guide <name>` prints one part of it. A block name (for example `skaldr --guide request`) prints that block's row from the `## Blocks` table, its `## The <block>` section when the guide has one, and its fields from the model with their types, whether each is required or its default, and its description; a field that holds a nested model also lists that model's fields, one level deep, indented. A section title (for example `skaldr --guide "rich text"`) prints that whole section; the match ignores case and backticks, so `meta` finds `` `meta` ``, and a unique start of a title is enough. A block name wins when a section has the same title. `skaldr --guide --list` prints the guide's section names and the block names, one per line, so you can see what to ask for. A name that is neither fails with an error that lists the block names and the section titles. A name that is both a block or section and a file in the current directory is looked up as the block or section.
+`skaldr --guide` prints this whole guide. `skaldr --guide <name>` prints one part of it. A block name (for example `skaldr --guide request`) prints that block's row from the `## Blocks` table, its `## The <block>` section when the guide has one, and its fields from the model with their types, whether each is required or its default, and its description; a field that holds a nested model also lists that model's fields, one level deep, indented. A section title (for example `skaldr --guide "rich text"`) prints that whole section; the match ignores case and backticks, so `meta` finds `` `meta` ``, and a unique start of a title is enough. When no title starts with the name, a unique start of one word in a title is enough, so `skaldr --guide plan` prints the working plan starter. A block name wins when a section has the same title. `skaldr --guide --list` prints the guide's section names and the block names, one per line, so you can see what to ask for. A name that is neither fails with an error that lists the block names and the section titles. A name that is both a block or section and a file in the current directory is looked up as the block or section.
 
 ## Shape
 
@@ -191,6 +191,8 @@ To show a literal `{{`, put it in a `` `code` `` span. A blank inside a link lab
 bracket text around the blank's chip, so `[the PR](https://host/pull/{{pr}})` is counted like any
 other blank until you fill in the URL.
 
+A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts too, even though those fields are plain text and show the `{{name}}` as written.
+
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
   you run before "final".
@@ -199,6 +201,59 @@ other blank until you fill in the URL.
 > own YAML source** (so `--extract-source` can recover it), which means any `{{…}}` or `[^ref]` in the
 > source also appears in the output. Grepping the HTML for unfilled markers therefore needs
 > `skaldr … --no-source`; better yet, run `skaldr --check --strict` and let skaldr do it.
+
+## Working plan starter
+
+`skaldr new plan plan.yaml` writes this file for you: copy it, replace each `{{placeholder}}` with real content, delete what the plan does not need, and run `skaldr --check --strict plan.yaml` until nothing is unfilled.
+
+Keep the plan file next to the work it tracks; in a public repository keep it out of git or in a private folder. After each edit run `skaldr plan.yaml -o plan.html --if-stale`, keep the Working state section current, and re-read the file after a context reset.
+
+```yaml
+version: 1
+meta:
+  title: "{{plan-title}}"
+  subtitle: ["{{one-line-summary}}"]
+  updated: "{{date}}"
+
+blocks:
+  - { type: heading, text: "Intent" }
+  - type: callout
+    tone: info
+    title: "Done looks like"
+    body: "{{what-done-looks-like-and-why-it-matters}}"
+
+  - { type: heading, text: "Constraints and decisions" }
+  - type: list
+    items:
+      - "{{decision-one}}, because {{reason-one}}"
+      - "{{decision-two}}, because {{reason-two}}"
+
+  - { type: heading, text: "Working state" }
+  - type: status_list
+    items:
+      - { state: done, text: "{{finished-step}}" }
+      - { state: current, text: "{{step-in-progress}}" }
+      - { state: pending, text: "{{step-not-started}}" }
+      - { state: blocked, text: "{{step-waiting-on-something}}" }
+
+  - { type: heading, text: "Next" }
+  - type: list
+    style: number
+    items:
+      - "{{first-action}}"
+      - "{{second-action}}"
+
+  - { type: heading, text: "Pitfalls" }
+  - type: list
+    items:
+      - "{{mistake-to-avoid}}"
+
+  - { type: heading, text: "Open questions" }
+  - type: callout
+    tone: info
+    title: "Open questions and blockers"
+    body: 'List each open question and blocker here, or write "none".'
+```
 
 ## Numbers are formatted for you
 
