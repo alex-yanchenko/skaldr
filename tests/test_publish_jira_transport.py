@@ -25,6 +25,7 @@ from tests.factories import make_jira_target, make_notion_target
 from tests.factories.auth_factory import summarise
 from tests.factories.jira_factory import (
     DONE,
+    DONE_RESOLUTION,
     EDITOR,
     IN_PROGRESS,
     NOT_FOUND,
@@ -1415,6 +1416,112 @@ def test_a_doc_id_that_starts_with_skaldr_still_gets_the_prefix_so_no_two_docume
     assert (jira.issues["DEMO-1"].fields["labels"], created.comparable.fields) == (
         ["skaldr-plan", "skaldr-skaldr-plan"],
         {"labels": ["skaldr-plan"]},
+    )
+
+
+def test_archiving_through_a_close_that_sets_a_resolution_leaves_the_resolution_jira_chose() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (issue.fields["status"], issue.fields["resolution"], summarise(jira.requests[6])["body"]) == (
+        DONE,
+        DONE_RESOLUTION,
+        {"transition": {"id": "31"}},
+    )
+
+
+def test_a_close_whose_screen_requires_a_resolution_stops_the_archive_and_never_comments_twice() -> None:
+    jira = FakeJira(close_screen_requires_resolution=True)
+    transport, created = _created(jira)
+    refusal = (
+        "Jira refused POST /rest/api/3/issue/DEMO-1/transitions (HTTP 400): resolution: Resolution is "
+        "required."
+    )
+
+    for _ in range(2):
+        with pytest.raises(WriteRejectedError, match=_exactly(refusal)):
+            transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (issue.comments, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
+        [_archive_comment_body("the document garden-handbook")],
+        {"name": "To Do", "statusCategory": {"key": "new"}},
+        _stamp_value(STAMP, commented=True),
+    )
+
+
+SPADE_ROW: JsonValue = {
+    "type": "tableRow",
+    "content": [
+        {"type": "tableHeader", "content": [_words("Tool")]},
+        {"type": "tableCell", "content": [_words("Spade.")]},
+    ],
+}
+SAVED_SPADE_ROW: JsonValue = {
+    "type": "tableRow",
+    "content": [
+        {"type": "tableHeader", "attrs": {"colspan": 1, "rowspan": 1}, "content": [_words("Tool")]},
+        {"type": "tableCell", "attrs": {"colspan": 1, "rowspan": 1}, "content": [_words("Spade.")]},
+    ],
+}
+DIG: JsonValue = {"type": "listItem", "content": [_words("Dig.")]}
+
+
+@pytest.mark.parametrize(
+    ("sent", "saved"),
+    [
+        pytest.param(
+            {"type": "table", "attrs": {}, "content": [SPADE_ROW]},
+            {
+                "type": "table",
+                "attrs": {
+                    "isNumberColumnEnabled": False,
+                    "layout": "center",
+                    "displayMode": "default",
+                    "localId": "jira-0001",
+                },
+                "content": [SAVED_SPADE_ROW],
+            },
+            id="table-and-cells",
+        ),
+        pytest.param(
+            {"type": "orderedList", "content": [DIG]},
+            {"type": "orderedList", "attrs": {"order": 1}, "content": [DIG]},
+            id="ordered-list",
+        ),
+        pytest.param(
+            {
+                "type": "paragraph",
+                "content": [{"type": "mention", "attrs": {"id": GARDENER, "text": "@Robin"}}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "mention",
+                        "attrs": {"accessLevel": "", "userType": "DEFAULT", "id": GARDENER, "text": "@Robin"},
+                    }
+                ],
+            },
+            id="mention",
+        ),
+    ],
+)
+def test_the_attributes_jira_fills_in_when_it_saves_a_block_are_not_an_edit(
+    sent: JsonValue, saved: JsonValue
+) -> None:
+    jira = FakeJira(fills_in_saved_defaults=True)
+    content = CONTENT.model_copy(update={"sections": {"planting": section_text([sent])}})
+    transport, created = _created(jira, content)
+
+    read = transport.read_item(created.item_id, content)
+
+    assert (jira.issues["DEMO-1"].fields["description"], read.comparable) == (
+        _description(saved),
+        transport.comparable_form(content),
     )
 
 

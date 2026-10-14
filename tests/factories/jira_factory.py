@@ -19,6 +19,15 @@ TO_DO: dict[str, JsonValue] = {"name": "To Do", "statusCategory": {"key": "new"}
 IN_PROGRESS: dict[str, JsonValue] = {"name": "In Progress", "statusCategory": {"key": "indeterminate"}}
 DONE: dict[str, JsonValue] = {"name": "Done", "statusCategory": {"key": "done"}}
 CLOSE = "31"
+DONE_RESOLUTION: dict[str, JsonValue] = {"name": "Done"}
+RESOLUTION_REQUIRED = "Resolution is required."
+SAVED_DEFAULTS: dict[str, dict[str, JsonValue]] = {
+    "table": {"isNumberColumnEnabled": False, "layout": "center", "displayMode": "default"},
+    "tableHeader": {"colspan": 1, "rowspan": 1},
+    "tableCell": {"colspan": 1, "rowspan": 1},
+    "orderedList": {"order": 1},
+    "mention": {"accessLevel": "", "userType": "DEFAULT"},
+}
 WORKFLOW: dict[str, list[tuple[str, str, dict[str, JsonValue]]]] = {
     "To Do": [("11", "Start", IN_PROGRESS), (CLOSE, "Close", DONE)],
     "In Progress": [("21", "Stop", TO_DO), (CLOSE, "Close", DONE)],
@@ -58,6 +67,7 @@ class _TransitionId(BaseModel):
 
 class _TransitionBody(BaseModel):
     transition: _TransitionId
+    fields: dict[str, JsonValue] = {}
 
 
 class _CommentBody(BaseModel):
@@ -119,6 +129,8 @@ class FakeJira:
     page_size: int = 2
     honours_properties_on_create: bool = True
     honours_properties_on_edit: bool = True
+    close_screen_requires_resolution: bool = False
+    fills_in_saved_defaults: bool = False
     issues: dict[str, FakeIssue] = field(default_factory=dict[str, FakeIssue])
     histories: dict[str, list[History]] = field(default_factory=dict[str, list[History]])
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
@@ -372,7 +384,8 @@ class FakeJira:
         issue = self._issue(key)
         if isinstance(issue, httpx2.Response):
             return issue
-        wanted = _TransitionBody.model_validate_json(request.content).transition.id
+        body = _TransitionBody.model_validate_json(request.content)
+        wanted = body.transition.id
         offered = {
             transition_id: to for transition_id, _, to in WORKFLOW.get(self._current_status(issue), [])
         }
@@ -380,7 +393,13 @@ class FakeJira:
             return httpx2.Response(
                 400, json={"errorMessages": [f"Transition id '{wanted}' is not valid for this issue."]}
             )
-        self._change(issue, {"status": offered[wanted]}, WRITER)
+        closing = wanted == CLOSE
+        if closing and self.close_screen_requires_resolution and "resolution" not in body.fields:
+            return httpx2.Response(
+                400, json={"errorMessages": [], "errors": {"resolution": RESOLUTION_REQUIRED}}
+            )
+        resolution = body.fields.get("resolution", DONE_RESOLUTION) if closing else None
+        self._change(issue, {"status": offered[wanted], "resolution": resolution}, WRITER)
         return httpx2.Response(204)
 
     def _comment(self, request: httpx2.Request, key: str) -> httpx2.Response:
@@ -423,6 +442,10 @@ class FakeJira:
             return
         if node.get("type") == "paragraph" and self.adds_to_paragraphs:
             node["attrs"] = dict(self.adds_to_paragraphs)
+        node_type = node.get("type")
+        if self.fills_in_saved_defaults and isinstance(node_type, str) and node_type in SAVED_DEFAULTS:
+            filled = node.get("attrs")
+            node["attrs"] = {**SAVED_DEFAULTS[node_type], **(filled if isinstance(filled, dict) else {})}
         attrs = node.get("attrs")
         mentioned = attrs.get("id") if node.get("type") == "mention" and isinstance(attrs, dict) else None
         if isinstance(attrs, dict) and isinstance(mentioned, str) and mentioned in self.names_in_mentions:
