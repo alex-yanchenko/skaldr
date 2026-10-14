@@ -1,3 +1,6 @@
+from skaldr.export_targets import ExportTarget
+
+
 class ReportError(Exception):
     """A report failed validation or reconciliation — surfaced to the operator, not swallowed."""
 
@@ -7,7 +10,7 @@ class AdfUnsupportedError(ReportError):
 
 
 class ExportRejectedError(ReportError):
-    def __init__(self, target: str, why: str, instead: str, where: str | None = None) -> None:
+    def __init__(self, target: ExportTarget, why: str, instead: str, where: str | None = None) -> None:
         self.target = target
         self.why = why
         self.instead = instead

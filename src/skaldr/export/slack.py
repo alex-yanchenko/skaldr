@@ -50,6 +50,7 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
+from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import (
     MEDIA_KIND_LABELS,
     AnyBlock,
@@ -60,7 +61,6 @@ from skaldr.models import (
 )
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
-SLACK_TARGET: Final = "slack"
 SLACK_CANVAS_LIMIT: Final = 1_048_576
 SLACK_TABLE_CELL_LIMIT: Final = 300
 DEEPEST_CANVAS_HEADING: Final = 3

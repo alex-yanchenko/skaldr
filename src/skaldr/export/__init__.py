@@ -2,7 +2,7 @@ import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final, Literal, get_args
+from typing import Annotated, Final
 
 from pydantic import StringConstraints, ValidationError
 
@@ -13,10 +13,10 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
 from skaldr.export.slack import reject_what_a_canvas_cannot_show, render_slack
+from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
 from skaldr.replace_file import replace_file
-from skaldr.services import NotionService
 
 __all__ = [
     "EXPORT_MANIFEST",
@@ -29,8 +29,6 @@ __all__ = [
     "export_slack",
 ]
 
-ExportTarget = Literal[NotionService, "markdown", "adf", "slack"]
-EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 MARKDOWN_PAGE_NAME: Final = "page.md"
 ADF_PAGE_NAME: Final = "page.adf.json"
