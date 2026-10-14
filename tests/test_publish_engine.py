@@ -27,8 +27,10 @@ from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish.transport import Stamp
 from tests.factories.publish_factory import (
     DOC_ID,
+    DROPPED_AFTER_WRITE,
     INTO_LABEL,
     INTRO_KEY,
+    LOST_WRITE,
     OTHER_DOC_ID,
     REFUSED_WRITE,
     TARGET_LABEL,
@@ -47,6 +49,8 @@ SPRING = "## Planting\nSow in spring.\n"
 LATE_SPRING = "## Planting\nSow in late spring.\n"
 TOOLS_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Spade.\n'
 RAKE_TEXT = '## Tools\n<span color="blue">**api**</span>\n- Rake.\n'
+UNCOLORED_TOOLS_TEXT = "## Tools\n<span>**api**</span>\n- Spade.\n"
+UNCOLORED_RAKE_TEXT = "## Tools\n<span>**api**</span>\n- Rake.\n"
 LEGEND_TEXT = (
     "<details>\n"
     "<summary>Legend: badges used on this page</summary>\n"
@@ -470,4 +474,90 @@ def test_an_unchanged_published_document_is_in_sync(tmp_path: Path) -> None:
     assert publish_status(prepare_publish(path, fake_registry(transport))) == (
         ItemStatus(DOCUMENT, "page-1", ("in sync",)),
         ItemStatus(TOOLS, "page-2", ("in sync",)),
+    )
+
+
+def test_a_saved_copy_from_before_the_transport_changed_its_form_is_still_in_sync(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.ignores_span_colors = True
+
+    statuses = publish_status(prepare_publish(path, fake_registry(transport)))
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+    outcome = _publish(path, transport)
+
+    assert (statuses, diff, outcome, transport.writes()) == (
+        (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("in sync",))),
+        PublishDiff((), ()),
+        Applied(()),
+        [],
+    )
+
+
+def test_a_remote_edit_after_the_transport_changed_its_form_is_shown_in_its_current_form(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport)
+    transport.ignores_span_colors = True
+    transport.items["page-2"].raw_sections["tools"] = RAKE_TEXT
+
+    statuses = publish_status(prepare_publish(path, fake_registry(transport)))
+    diff = diff_publish(prepare_publish(path, fake_registry(transport)))
+
+    tools_edit = RemoteEdit(
+        TOOLS, section_part("tools"), "blocks[1]", UNCOLORED_TOOLS_TEXT, UNCOLORED_RAKE_TEXT, None, None
+    )
+    assert (statuses, diff) == (
+        (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("edited remotely",))),
+        PublishDiff((tools_edit,), ()),
+    )
+
+
+def test_an_archive_that_never_landed_is_sent_again_after_the_transport_changed_its_form(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
+    path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
+    transport.lose_the_next_write()
+    with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.ignores_span_colors = True
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes(), transport.items["page-2"].archived) == (
+        Applied(("archive  section tools (page-2)",)),
+        [("archive", "page-2")],
+        True,
+    )
+
+
+def test_a_partly_landed_write_after_the_transport_changed_its_form_writes_only_the_rest(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+    write_garden_report(
+        tmp_path,
+        publish=make_notion_publish(),
+        blocks=make_garden_blocks(tools="Rake.", planting="Sow in May."),
+    )
+    transport.land_only_the_first_section_of_the_next_content_write()
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+    transport.stop_failing()
+    transport.ignores_span_colors = True
+    transport.forget_calls()
+
+    outcome = apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+
+    assert (outcome, transport.writes(), transport.items["page-1"].content) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        [("write_content", "page-1")],
+        _drafted(path),
     )

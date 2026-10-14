@@ -1,7 +1,7 @@
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from typing_extensions import assert_never
 
@@ -35,6 +35,7 @@ class Reading:
     remote: RemoteItem
     edited: tuple[Part, ...]
     reported: tuple[Part, ...]
+    saved_copy: ItemContent = field(default_factory=lambda: NOT_YET_PUBLISHED)
 
 
 @dataclass(frozen=True)
@@ -159,16 +160,11 @@ def _owned_part_of(read: ItemContent, owners: Sequence[ItemContent]) -> ItemCont
     return with_look_owned_by(with_fields_named(read, _owned_field_names(owners)), *owners)
 
 
-def _keyed_view(item: PublishedItem, owners: Sequence[ItemContent]) -> ItemContent:
-    remote = item.remote
-    keyed = remote.model_copy(
-        update={"fields": {name: remote.fields.get(name) for name in _owned_field_names(owners)}}
+def _keyed_view(content: ItemContent, owners: Sequence[ItemContent]) -> ItemContent:
+    keyed = content.model_copy(
+        update={"fields": {name: content.fields.get(name) for name in _owned_field_names(owners)}}
     )
     return with_look_owned_by(keyed, *owners)
-
-
-def _published_view(item: PublishedItem) -> ItemContent:
-    return _keyed_view(item, [item.rendered])
 
 
 def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -> RemoteItem | None:
@@ -249,7 +245,7 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             if item != held:
                 state = with_item(state, ref, prepared.target_named(label), item)
             owners = _owners(item, draft)
-            read = _read_or_none(transport, item.item_id, _keyed_view(item, owners))
+            read = _read_or_none(transport, item.item_id, _keyed_view(item.remote, owners))
             if _retired_already(item, read):
                 state = with_item(state, ref, prepared.target_named(label), None)
                 continue
@@ -261,7 +257,8 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             if item.retiring is not None:
                 readings.append(Reading(ref, item, remote, (), ()))
                 continue
-            published = _published_view(item)
+            saved_copy = transport.comparable_form(item.remote)
+            published = _keyed_view(saved_copy, [item.rendered])
             reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
             compared = _owned_part_of(read.comparable, [item.rendered])
             unsettled = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
@@ -270,9 +267,11 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 state = with_item(state, ref, prepared.target_named(label), settled)
             landed = set(unsettled) - set(edited)
             still_reported = tuple(part for part in reported if part not in landed)
+            if settled.remote != item.remote:
+                saved_copy = transport.comparable_form(settled.remote)
             if (edited or still_reported) and remote.edited_by is not None:
                 remote = replace(remote, edited_by=transport.editor_name(remote.edited_by))
-            readings.append(Reading(ref, settled, remote, edited, still_reported))
+            readings.append(Reading(ref, settled, remote, edited, still_reported, saved_copy))
     return PublishedReadings(readings, state, missing)
 
 
@@ -323,7 +322,7 @@ def remote_edits(prepared: Prepared, readings: Sequence[Reading]) -> tuple[Remot
             reading.item,
             part,
             _part_path(prepared, reading.item, part),
-            part_text(reading.published.remote, part),
+            part_text(reading.saved_copy, part),
             part_text(reading.remote.comparable, part),
             reading.remote.edited_by,
             reading.remote.edited_at,

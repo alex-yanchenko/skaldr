@@ -158,7 +158,9 @@ class Applier:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
 
     def _comparable(self, ref: ItemRef, item: PublishedItem) -> ItemContent:
-        return self.remote[ref].comparable if ref in self.remote else item.remote
+        if ref in self.remote:
+            return self.remote[ref].comparable
+        return self.transports.for_target(ref.target).comparable_form(item.remote)
 
     def _written(
         self,
@@ -218,7 +220,7 @@ class Applier:
 
     def _write_fields(self, target_plan: TargetPlan, step: WriteFieldsStep) -> PublishState:
         item = self._item(step.item)
-        now = self.remote[step.item].comparable if step.item in self.remote else item.remote
+        now = self._comparable(step.item, item)
         write = FieldsWrite(
             step.content.title,
             step.content.fields,

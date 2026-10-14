@@ -34,6 +34,43 @@ CONTENT = ItemContent(
     sections={"intro": "Welcome.\n", "planting": "Sow in spring.\n"},
     fields={"Area": "Shed", "Owner": "Rowan"},
 )
+COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
+    title="Garden handbook",
+    sections={
+        "intro": '<span color="green">**Welcome.**</span>  \n\n',
+        "planting": "- Sow in spring.\n\t- Water daily.\n",
+    },
+    fields={"Area": "Shed", "Labels": ["soil", "seeds"]},
+)
+JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
+    title="Garden handbook",
+    sections={
+        "intro": section_text(
+            [
+                {
+                    "type": "paragraph",
+                    "attrs": {"localId": "a1"},
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Welcome.",
+                            "marks": [{"type": "strong"}, {"type": "em"}],
+                        },
+                        {
+                            "type": "mention",
+                            "attrs": {"id": "5b10a2844c20165700ede21g", "text": "@Rowan", "accessLevel": ""},
+                        },
+                    ],
+                }
+            ]
+        ),
+        "tools": "[]\n",
+        "planting": section_text(
+            [{"type": "orderedList", "attrs": {"order": 1}, "content": []}, {"type": "rule"}]
+        ),
+    },
+    fields={"Area": "Shed", "labels": ["soil", "seeds"]},
+)
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
 JIRA_TARGET = JiraTarget.model_validate(make_jira_target())
 SEEDLING = "🌱"
@@ -61,6 +98,7 @@ class TransportUnderTest:
     reports_edits: bool
     carries_look: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
+    form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
@@ -69,7 +107,7 @@ def _fake_instance(transport: FakeTransport) -> Instance:
 
 
 def _fake() -> Instance:
-    return _fake_instance(FakeTransport(strips_trailing_whitespace=True))
+    return _fake_instance(FakeTransport(strips_trailing_whitespace=True, ignores_span_colors=True))
 
 
 def _notion() -> Instance:
@@ -111,7 +149,13 @@ TRANSPORTS = [
     ),
     pytest.param(
         TransportUnderTest(
-            _jira, JIRA_TARGET, writes_into_pages=False, reports_edits=True, carries_look=False, spell=_as_adf
+            _jira,
+            JIRA_TARGET,
+            writes_into_pages=False,
+            reports_edits=True,
+            carries_look=False,
+            spell=_as_adf,
+            form_fixture=JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
         ),
         id="jira",
     ),
@@ -424,6 +468,13 @@ def test_creating_into_an_empty_page_sets_its_title_and_the_requested_fields_and
     )
 
 
+def test_the_comparable_form_of_a_comparable_form_is_itself(under_test: TransportUnderTest) -> None:
+    transport = under_test.make().transport
+    once = transport.comparable_form(under_test.form_fixture)
+
+    assert transport.comparable_form(once) == once
+
+
 class ReordersSections(FakeTransport):
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         read = super().read_item(item_id, keyed_like)
@@ -463,6 +514,13 @@ class KeepsClearedFields(FakeTransport):
 class KeepsTheCover(FakeTransport):
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         return super().write_fields(item_id, replace(request, cover=request.previous_cover))
+
+
+class ClosesEverySectionAgain(FakeTransport):
+    def comparable_form(self, content: ItemContent, /) -> ItemContent:
+        formed = super().comparable_form(content)
+        closed = {key: text + "\n" for key, text in formed.sections.items()}
+        return formed.model_copy(update={"sections": closed})
 
 
 def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
@@ -508,6 +566,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             KeepsTheCover,
             test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them,
             id="keeps-the-cover",
+        ),
+        pytest.param(
+            ClosesEverySectionAgain,
+            test_the_comparable_form_of_a_comparable_form_is_itself,
+            id="comparable-form-not-idempotent",
         ),
     ],
 )
