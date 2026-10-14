@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +12,14 @@ from skaldr.publish.engine import (
     Applied,
     ApplyOutcome,
     ItemStatus,
+    Prepared,
     PublishDiff,
     Refused,
     RemoteEdit,
     YamlChange,
     apply_publish,
     diff_publish,
+    dry_run_publish,
     prepare_publish,
     publish_status,
 )
@@ -420,3 +423,40 @@ def test_an_unchanged_published_document_is_in_sync(tmp_path: Path) -> None:
         ItemStatus(DOCUMENT, "page-1", ("in sync",)),
         ItemStatus(TOOLS, "page-2", ("in sync",)),
     )
+
+
+def _apply(prepared: Prepared) -> object:
+    return apply_publish(prepared)
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        pytest.param(_apply, id="apply"),
+        pytest.param(dry_run_publish, id="dry-run"),
+        pytest.param(diff_publish, id="diff"),
+        pytest.param(publish_status, id="status"),
+    ],
+)
+def test_every_command_closes_the_transport_it_opened(
+    tmp_path: Path, run: Callable[[Prepared], object]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
+    closed_before = transport.closes
+
+    run(prepare_publish(path, fake_registry(transport)))
+
+    assert transport.closes - closed_before == 1
+
+
+def test_an_apply_that_fails_still_closes_the_transport_it_opened(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
+    closed_before = transport.closes
+    transport.fail_on_write(1)
+
+    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
+        _publish(path, transport)
+
+    assert transport.closes - closed_before == 1

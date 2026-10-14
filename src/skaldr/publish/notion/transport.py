@@ -307,6 +307,9 @@ class NotionTransport:
     ) -> tuple[Part, ...]:
         return ()
 
+    def close(self) -> None:
+        self._api.close()
+
     def _live_page(self, item_id: str) -> Page:
         if notion_page_id(item_id) is None:
             raise ItemNotFoundError(f"'{item_id}' is not a Notion page id")

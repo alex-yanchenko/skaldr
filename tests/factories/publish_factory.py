@@ -147,6 +147,7 @@ class FakeTransport:
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
     hand_edits: list[HandEdit] = field(default_factory=list[HandEdit])
+    closes: int = 0
     _revision: int = 0
     _items_made: int = 0
     _writes: int = 0
@@ -384,6 +385,9 @@ class FakeTransport:
             and (edit.part != ICON or keyed_like.icon is not None)
             and (edit.part != COVER or keyed_like.cover is not None)
         )
+
+    def close(self) -> None:
+        self.closes += 1
 
     def _stored(self, text: str) -> str:
         return text.rstrip() if self.strips_trailing_whitespace else text

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx2
+from typing_extensions import override
 
 from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.transport import NotionTransport
@@ -140,6 +141,7 @@ class InMemoryNotion:
     scripted: list[Scripted] = field(default_factory=list[Scripted])
     answers_writes_later: bool = True
     accepted_token: str = "access-token"
+    closes: int = 0
     _edits: int = 0
     _made: int = 0
 
@@ -150,7 +152,7 @@ class InMemoryNotion:
         return NotionTransport(self.api())
 
     def mock(self) -> httpx2.MockTransport:
-        return httpx2.MockTransport(self.handle)
+        return _CountingCloses(self)
 
     def add_database(self, database_id: str, schema: dict[str, str] | None = None) -> None:
         self.databases[notion_page_id(database_id) or database_id] = dict(schema or DATABASE_SCHEMA)
@@ -381,6 +383,16 @@ class InMemoryNotion:
     def _touch(self, page: StoredPage, editor: str) -> None:
         page.last_edited_time = self._edit_time()
         page.last_edited_by = editor
+
+
+class _CountingCloses(httpx2.MockTransport):
+    def __init__(self, notion: InMemoryNotion) -> None:
+        super().__init__(notion.handle)
+        self._notion = notion
+
+    @override
+    def close(self) -> None:
+        self._notion.closes += 1
 
 
 @dataclass

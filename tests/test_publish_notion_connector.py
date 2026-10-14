@@ -255,6 +255,27 @@ def test_a_workspace_that_matches_no_sign_in_lists_the_signed_in_workspaces() ->
     assert notion.requests == []
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(["publish", "--apply"], id="apply"),
+        pytest.param(["publish"], id="dry-run"),
+        pytest.param(["diff"], id="diff"),
+        pytest.param(["status"], id="status"),
+    ],
+)
+def test_every_command_closes_the_notion_client_it_opened(tmp_path: Path, command: list[str]) -> None:
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    closed_before = notion.closes
+
+    exit_code = main([command[0], str(path), *command[1:]], registry=_registry(notion))
+
+    assert (exit_code, notion.closes - closed_before) == (0, 1)
+
+
 def test_a_dry_run_that_renews_the_sign_in_saves_it_so_a_rotated_refresh_token_is_never_lost(
     tmp_path: Path,
 ) -> None:
