@@ -244,6 +244,13 @@ def test_a_list_writes_the_markers_slack_stores(node: ListNode, text: str) -> No
         pytest.param(
             [{"type": "text", "body": "- a\n- b\n\n  2. c"}], 2, "at blocks.0.text", id="nested-in-text"
         ),
+        pytest.param([{"type": "text", "body": "0. a\n1. b"}], 0, "at blocks.0.text", id="start-zero"),
+        pytest.param(
+            [{"type": "callout", "tone": "info", "body": "Steps:\n\n3. a\n4. b"}],
+            3,
+            "at blocks.0.callout",
+            id="in-a-callout",
+        ),
     ],
 )
 def test_a_numbered_list_that_does_not_start_at_1_is_rejected_naming_its_path(
@@ -257,6 +264,27 @@ def test_a_numbered_list_that_does_not_start_at_1_is_rejected_naming_its_path(
         "number the list from 1, or export it elsewhere",
         where,
     )
+
+
+@pytest.mark.parametrize(
+    ("block", "text"),
+    [
+        pytest.param({"type": "quote", "body": "3. a\n4. b"}, "> 3\\. a\n>\n> 4\\. b\n", id="quote"),
+        pytest.param(
+            {
+                "type": "table",
+                "columns": [{"key": "n", "label": "N", "kind": "text"}],
+                "rows": [{"n": "3. a\n4. b"}],
+            },
+            "| N |\n| --- |\n| 3. a<br>4. b |\n",
+            id="table-cell",
+        ),
+    ],
+)
+def test_a_numbered_list_in_a_quote_or_a_table_cell_keeps_its_numbers_as_text(
+    block: dict[str, Any], text: str
+) -> None:
+    assert slack_of([block]) == text
 
 
 @pytest.mark.parametrize(
