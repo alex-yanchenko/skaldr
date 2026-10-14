@@ -5,11 +5,11 @@ from skaldr.auth.jira import verify_jira_token
 from skaldr.auth.store import JiraCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
-    MYSELF,
     SITE_REFUSALS,
     assert_secret_not_in_error_chain,
     basic_auth_header,
     fake_api,
+    jira_myself_answer,
     make_jira_credentials,
     refusing_connections,
     summarise,
@@ -25,7 +25,7 @@ def verify(transport: httpx2.BaseTransport) -> JiraCredentials:
 def test_a_valid_token_is_checked_against_myself_and_named() -> None:
     seen: list[httpx2.Request] = []
 
-    credentials = verify(fake_api({"/rest/api/3/myself": (200, MYSELF)}, seen))
+    credentials = verify(fake_api({"/rest/api/3/myself": (200, jira_myself_answer())}, seen))
 
     assert credentials == make_jira_credentials()
     assert [summarise(request) for request in seen] == [
@@ -47,7 +47,7 @@ def test_a_typed_site_is_checked_at_its_origin() -> None:
         "Example.atlassian.net/jira/your-work",
         "reader@example.com",
         "api-token",
-        transport=fake_api({"/rest/api/3/myself": (200, MYSELF)}, seen),
+        transport=fake_api({"/rest/api/3/myself": (200, jira_myself_answer())}, seen),
     )
 
     assert credentials == make_jira_credentials()

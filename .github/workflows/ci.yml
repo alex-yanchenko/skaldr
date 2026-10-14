@@ -60,8 +60,8 @@ jobs:
       # The skill + guide ship as package data too — exercise both from the installed wheel so a
       # build exclude that drops src/skaldr/skill fails CI here, not at a user's first run.
       - run: |
-          set -o pipefail
-          uvx --from dist/*.whl skaldr --guide | grep -q "## Blocks"
+          uvx --from dist/*.whl skaldr --guide > smoke/guide.md
+          grep -q "## Blocks" smoke/guide.md
       - run: |
           tmp_home="$(mktemp -d)"
           mkdir -p "$tmp_home/.claude"

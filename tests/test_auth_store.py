@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -20,8 +22,10 @@ from typing_extensions import override
 from skaldr.auth import store
 from skaldr.auth.store import (
     JiraCredentials,
+    JiraLookup,
     NotionCredentials,
     SignIn,
+    UnreadableEntryError,
     entry_for_workspace,
     find_jira,
     find_notion,
@@ -38,9 +42,12 @@ from skaldr.auth.store import (
     stored_notion_sign_ins,
 )
 from skaldr.errors import AuthError
+from skaldr.services import Service
+from tests.conftest import REPO_ROOT
 from tests.factories.auth_factory import (
     HEX_WORKSPACE_ID,
     OTHER_WORKSPACE_ID,
+    SITE_ON_ANOTHER_PORT,
     SITE_REFUSALS,
     SITE_WITH_A_PASSWORD,
     SITES_OFF_JIRA_CLOUD,
@@ -48,6 +55,7 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     NullKeyringSubclass,
+    OneEntryRefusingKeyring,
     PlaintextKeyring,
     PlaintextKeyringSubclass,
     ReadRecordingKeyring,
@@ -59,6 +67,7 @@ from tests.factories.auth_factory import (
     make_jira_credentials,
     make_notion_credentials,
     seed_notion,
+    store_jira_entry_an_earlier_skaldr_wrote,
     stored_entry,
 )
 
@@ -67,12 +76,17 @@ LEGACY_JIRA_UNREADABLE = (
     "then run `skaldr auth jira` again"
 )
 REAL_LOCK_FILE = store.lock_file
-WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain.\n"
+WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain."
 AN_ENTRY = stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())
 WAITING_FOR_THE_KEYCHAIN = (
     "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
-    "unlock it or answer there.\n"
+    "unlock it or answer there."
 )
+LOGGED_BY_THE_STORE = "skaldr.auth.store"
+
+
+def notice_logged(notice: str) -> list[tuple[str, int, str]]:
+    return [(LOGGED_BY_THE_STORE, logging.WARNING, notice)]
 
 
 def index_of(*, jira: list[str] | None = None, notion: list[str] | None = None) -> str:
@@ -237,6 +251,20 @@ def test_the_jira_environment_answers_for_its_own_site_and_the_keychain_for_the_
     )
 
 
+def test_the_legacy_jira_entry_is_found_by_its_selector_while_the_environment_holds_a_site(
+    keychain: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keychain.entries[("skaldr", "jira")] = "not json"
+    monkeypatch.setenv("JIRA_SITE", "https://example.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+    monkeypatch.setenv("JIRA_API_TOKEN", "env-token")
+
+    with pytest.raises(UnreadableEntryError) as raised:
+        load_jira("legacy")
+
+    assert str(raised.value) == LEGACY_JIRA_UNREADABLE
+
+
 def test_the_only_stored_notion_sign_in_is_found_without_naming_a_workspace() -> None:
     seed_notion(make_notion_credentials())
 
@@ -259,6 +287,25 @@ def test_a_notion_workspace_is_found_by_its_id_or_its_name() -> None:
         SignIn(other, "keychain"),
         SignIn(make_notion_credentials(), "keychain"),
     )
+
+
+def test_a_notion_workspace_is_found_by_its_name_as_status_shows_it_or_as_notion_sent_it() -> None:
+    spaced = make_notion_credentials(workspace_name="Acme  Corp\t\n")
+    seed_notion(spaced)
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace"))
+
+    assert (load_notion("Acme Corp"), load_notion("Acme  Corp\t\n"), load_notion(" Acme\tCorp ")) == (
+        SignIn(spaced, "keychain"),
+        SignIn(spaced, "keychain"),
+        SignIn(spaced, "keychain"),
+    )
+
+
+def test_an_empty_workspace_name_does_not_select_a_workspace_without_a_name() -> None:
+    seed_notion(make_notion_credentials(workspace_name=None))
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="\t"))
+
+    assert (load_notion(""), load_notion(" ")) == (None, None)
 
 
 def test_a_notion_workspace_nobody_signed_in_to_finds_nothing() -> None:
@@ -290,8 +337,9 @@ def test_two_workspaces_with_one_name_are_refused_when_the_name_is_the_selector(
         load_notion("Example Workspace")
 
     assert str(raised.value) == (
-        "Signed in to several Notion workspaces (Example Workspace (11111111-1111-4111-8111-111111111111), "
-        "Example Workspace (22222222-2222-4222-8222-222222222222)); name one"
+        "Signed in to several Notion workspaces named `Example Workspace` (Example Workspace "
+        "(11111111-1111-4111-8111-111111111111), Example Workspace (22222222-2222-4222-8222-222222222222)); "
+        "name one by its id"
     )
 
 
@@ -314,13 +362,14 @@ def test_a_notion_access_token_in_the_environment_is_skipped_when_a_workspace_is
             lambda: require_jira("example.atlassian.net"),
             "Not signed in to Jira at https://example.atlassian.net; run `skaldr auth jira`",
         ),
+        (lambda: require_jira("legacy"), "Not signed in to Jira at legacy; run `skaldr auth jira`"),
         (lambda: require_notion(), "Not signed in to Notion; run `skaldr auth notion`"),
         (
             lambda: require_notion(WORKSPACE_ID),
             f"Not signed in to Notion workspace {WORKSPACE_ID}; run `skaldr auth notion`",
         ),
     ],
-    ids=["jira", "a jira site", "notion", "a notion workspace"],
+    ids=["jira", "a jira site", "the legacy jira entry", "notion", "a notion workspace"],
 )
 def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
     find: Callable[[], object], refusal: str
@@ -437,7 +486,50 @@ def test_a_legacy_entry_survives_a_migration_whose_write_fails() -> None:
     with pytest.raises(AuthError, match=r"^The system keychain is unavailable: denied$"):
         stored_jira_sign_ins()
 
-    assert failing.entries == {("skaldr", "jira"): legacy}
+    assert failing.entries == {
+        ("skaldr", "jira"): legacy,
+        ("skaldr", "index"): index_of(jira=["jira:https://example.atlassian.net"]),
+    }
+
+
+def test_a_save_whose_index_write_fails_stores_no_unlisted_secret() -> None:
+    refusing = OneEntryRefusingKeyring("index")
+    keyring.set_keyring(refusing)
+
+    with pytest.raises(AuthError, match=r"^The system keychain is unavailable: index refused$"):
+        save_jira(make_jira_credentials())
+
+    assert refusing.entries == {}
+
+
+def test_a_save_whose_entry_write_fails_leaves_only_an_index_row_that_reads_skip() -> None:
+    refusing = OneEntryRefusingKeyring("jira:https://example.atlassian.net")
+    keyring.set_keyring(refusing)
+
+    with pytest.raises(
+        AuthError, match=r"^The system keychain is unavailable: jira:https://example\.atlassian\.net refused$"
+    ):
+        save_jira(make_jira_credentials())
+
+    assert (refusing.entries, stored_jira_sign_ins()) == (
+        {("skaldr", "index"): index_of(jira=["jira:https://example.atlassian.net"])},
+        [],
+    )
+
+
+def test_saving_a_notion_sign_in_reads_the_legacy_entry_only_while_looking_up_the_stored_ones() -> None:
+    recording = ReadRecordingKeyring()
+    keyring.set_keyring(recording)
+
+    seed_notion(make_notion_credentials())
+
+    assert recording.reads == [
+        ("skaldr", "notion"),
+        ("skaldr", "index"),
+        ("skaldr", "notion"),
+        ("skaldr", f"notion:{WORKSPACE_ID}"),
+        ("skaldr", "index"),
+    ]
 
 
 def test_a_migration_never_writes_to_an_insecure_backend(plaintext_keyring: PlaintextKeyring) -> None:
@@ -535,8 +627,21 @@ def test_an_unreadable_legacy_entry_is_found_with_the_selector_legacy(keychain: 
     save_jira(make_jira_credentials())
 
     assert (find_jira("legacy"), find_notion("legacy")) == (
-        stored_entry("jira", "jira", None),
+        JiraLookup("legacy", stored_entry("jira", "jira", None)),
         stored_entry("notion", "notion", None),
+    )
+
+
+def test_a_jira_lookup_returns_the_site_it_normalised_the_selector_to() -> None:
+    save_jira(make_jira_credentials())
+
+    assert (find_jira("Example.atlassian.net/"), find_jira("other.atlassian.net"), find_jira()) == (
+        JiraLookup(
+            "https://example.atlassian.net",
+            stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials()),
+        ),
+        JiraLookup("https://other.atlassian.net", None),
+        JiraLookup(None, stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())),
     )
 
 
@@ -550,6 +655,56 @@ def test_a_keyed_entry_that_cannot_be_read_names_its_site(keychain: InMemoryKeyr
     assert str(raised.value) == (
         "The keychain entry for jira https://example.atlassian.net is unreadable; "
         "run `skaldr auth jira` again"
+    )
+
+
+def test_a_jira_entry_for_a_site_skaldr_now_refuses_is_found_by_the_name_it_was_stored_under(
+    keychain: InMemoryKeyring,
+) -> None:
+    store_jira_entry_an_earlier_skaldr_wrote(keychain, SITE_ON_ANOTHER_PORT)
+    save_jira(make_jira_credentials())
+
+    assert find_jira(SITE_ON_ANOTHER_PORT) == JiraLookup(
+        SITE_ON_ANOTHER_PORT, stored_entry("jira", f"jira:{SITE_ON_ANOTHER_PORT}", None)
+    )
+
+
+def test_a_site_skaldr_refuses_and_nobody_stored_is_still_refused_as_a_selector(
+    keychain: InMemoryKeyring,
+) -> None:
+    store_jira_entry_an_earlier_skaldr_wrote(keychain, SITE_ON_ANOTHER_PORT)
+
+    with pytest.raises(AuthError) as raised:
+        find_jira("https://example.atlassian.net:9443")
+
+    assert str(raised.value) == (
+        "The Jira site must be an https URL like https://<site>.atlassian.net, "
+        "not 'https://example.atlassian.net:9443'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("service", "identifier", "load"),
+    [
+        ("jira", SITE_ON_ANOTHER_PORT, load_jira),
+        ("notion", "unidentified-2", load_notion),
+    ],
+    ids=["a jira site skaldr now refuses", "a moved notion entry"],
+)
+def test_an_unreadable_entry_no_sign_in_would_replace_names_the_logout_that_removes_it(
+    keychain: InMemoryKeyring, service: Service, identifier: str, load: Callable[[], object]
+) -> None:
+    keychain.entries[("skaldr", f"{service}:{identifier}")] = "not json"
+    keychain.entries[("skaldr", "index")] = json.dumps(
+        {"jira": [], "notion": [], service: [f"{service}:{identifier}"]}
+    )
+
+    with pytest.raises(AuthError) as raised:
+        load()
+
+    assert str(raised.value) == (
+        f"The keychain entry for {service} {identifier} is unreadable; "
+        f"run `skaldr auth logout {service} {identifier}` to remove it"
     )
 
 
@@ -766,7 +921,7 @@ def test_a_read_only_state_directory_is_named_in_the_error(
 
 
 def test_waiting_for_another_command_says_so_and_not_that_the_keychain_is_slow(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     other_command = FileLock(store.lock_file(), thread_local=False)
@@ -775,7 +930,40 @@ def test_waiting_for_another_command_says_so_and_not_that_the_keychain_is_slow(
 
     stored_jira_sign_ins()
 
-    assert capsys.readouterr().err == WAITING_FOR_THE_LOCK
+    assert (caplog.record_tuples, capsys.readouterr().err) == (notice_logged(WAITING_FOR_THE_LOCK), "")
+
+
+def test_a_program_that_sets_up_no_logging_shows_the_keychain_notice_on_stderr(tmp_path: Path) -> None:
+    script = "\n".join(
+        [
+            "import keyring",
+            "from skaldr.auth import store",
+            "from tests.factories.auth_factory import SlowKeyring",
+            "store.KEYCHAIN_NOTICE_SECONDS = 0.05",
+            "keyring.set_keyring(SlowKeyring(answers_after=0.3))",
+            "print(store.stored_jira_sign_ins())",
+        ]
+    )
+    environment = {
+        **os.environ,
+        "PYTHON_KEYRING_BACKEND": "keyring.backends.null.Keyring",
+        "XDG_STATE_HOME": str(tmp_path),
+    }
+
+    finished = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+        env=environment,
+    )
+
+    assert (finished.returncode, finished.stdout, finished.stderr) == (
+        0,
+        "[]\n",
+        f"{WAITING_FOR_THE_KEYCHAIN}\n",
+    )
 
 
 def test_nothing_saved_loads_as_signed_out() -> None:
@@ -975,7 +1163,7 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 
 
 def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     slow = SlowKeyring(answers_after=0.5)
@@ -984,8 +1172,11 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
 
     loaded = load_jira()
 
-    assert loaded == SignIn(make_jira_credentials(), "keychain")
-    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+    assert (loaded, caplog.record_tuples, capsys.readouterr().err) == (
+        SignIn(make_jira_credentials(), "keychain"),
+        notice_logged(WAITING_FOR_THE_KEYCHAIN),
+        "",
+    )
 
 
 @pytest.mark.parametrize(
@@ -998,7 +1189,10 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     ],
 )
 def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], operation: Callable[[], object]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+    operation: Callable[[], object],
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
@@ -1013,15 +1207,38 @@ def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
         slow.released.set()
 
     assert time.monotonic() - started < 2
-    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+    assert (caplog.record_tuples, capsys.readouterr().err) == (notice_logged(WAITING_FOR_THE_KEYCHAIN), "")
+
+
+def test_a_keychain_timeout_shorter_than_the_notice_delay_stops_with_the_timeout_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.1)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.05)
+    slow = SlowKeyring(answers_after=30)
+    keyring.set_keyring(slow)
+
+    try:
+        with pytest.raises(AuthError) as raised:
+            load_jira()
+    finally:
+        slow.released.set()
+
+    assert (str(raised.value), caplog.record_tuples) == (
+        "The system keychain did not answer within 0.05 seconds; unlock it or answer its prompt, then run "
+        "the command again. A change skaldr asked for may still be applied if the keychain answers later",
+        notice_logged(WAITING_FOR_THE_KEYCHAIN),
+    )
 
 
 @pytest.mark.usefixtures("keychain")
-def test_a_prompt_keychain_prints_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_prompt_keychain_prints_nothing(
+    capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
     seed_notion(make_notion_credentials())
     load_notion()
 
-    assert capsys.readouterr().err == ""
+    assert (caplog.record_tuples, capsys.readouterr().err) == ([], "")
 
 
 INSECURE_BACKENDS = [
@@ -1134,9 +1351,8 @@ def test_a_chained_keyring_of_secure_backends_is_saved_to(monkeypatch: pytest.Mo
         ("https://Example.atlassian.net/", "https://example.atlassian.net"),
         ("  https://example.atlassian.net/jira/your-work  ", "https://example.atlassian.net"),
         ("https://example.atlassian.net:443", "https://example.atlassian.net"),
-        ("https://example.atlassian.net:8443", "https://example.atlassian.net:8443"),
     ],
-    ids=["bare host", "trailing slash", "a page url", "the default port", "another port"],
+    ids=["bare host", "trailing slash", "a page url", "the default port"],
 )
 def test_a_typed_site_becomes_its_https_origin(typed: str, site: str) -> None:
     assert normalise_site(typed) == site

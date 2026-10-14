@@ -23,6 +23,10 @@ class AuthError(Exception):
     pass
 
 
+class SeveralSignInsError(AuthError):
+    pass
+
+
 class ConnectorError(Exception):
     pass
 

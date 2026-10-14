@@ -2,7 +2,6 @@ import _thread
 import errno
 import json
 import os
-import re
 import socket
 import threading
 import time
@@ -26,7 +25,6 @@ from skaldr.auth.notion import (
 from skaldr.auth.store import NotionCredentials
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
-    TOKEN_RESPONSE,
     WORKSPACE_ID,
     FakeBrowser,
     InMemoryKeyring,
@@ -45,6 +43,7 @@ from tests.factories.auth_factory import (
     free_port,
     make_notion_credentials,
     needs_ipv6_loopback,
+    notion_token_answer,
     refusing,
     refusing_connections,
     refusing_with_an_escape_sequence,
@@ -59,26 +58,34 @@ def sign_in(
     browser: FakeBrowser,
     seen: list[httpx2.Request] | None = None,
     *,
-    token: tuple[int, object] = (200, TOKEN_RESPONSE),
+    token: tuple[int, object] | None = None,
     transport: httpx2.BaseTransport | None = None,
     port: int | None = None,
     timeout_seconds: float = 5,
 ) -> NotionCredentials:
+    answer = (200, notion_token_answer()) if token is None else token
     return sign_in_to_notion(
         "client-id",
         "client-secret",
         open_browser=browser,
         port=free_port() if port is None else port,
-        transport=transport or fake_api({"/v1/oauth/token": token}, [] if seen is None else seen),
+        transport=transport or fake_api({"/v1/oauth/token": answer}, [] if seen is None else seen),
         timeout_seconds=timeout_seconds,
     )
 
 
-def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
+def state_of(nbytes: int) -> str:
+    return f"state-of-{nbytes}-random-bytes"
+
+
+def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(notion_module.secrets, "token_urlsafe", state_of)
     seen: list[httpx2.Request] = []
     browser = FakeBrowser(approving)
+    port = free_port()
+    redirect_uri = f"http://localhost:{port}/callback"
 
-    credentials = sign_in(browser, seen)
+    credentials = sign_in(browser, seen, port=port)
 
     assert credentials == make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
     assert browser.finished() == [200]
@@ -88,16 +95,13 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
         "api.notion.com",
         "/v1/oauth/authorize",
     )
-    query = parse_qs(authorize.query)
-    assert len(query["state"][0]) >= 43
-    assert query == {
+    assert parse_qs(authorize.query) == {
         "response_type": ["code"],
         "client_id": ["client-id"],
-        "redirect_uri": [browser.redirect_uri],
-        "state": query["state"],
+        "redirect_uri": [redirect_uri],
+        "state": ["state-of-32-random-bytes"],
         "owner": ["user"],
     }
-    assert re.fullmatch(r"http://localhost:\d+/callback", browser.redirect_uri)
     assert [summarise(request) for request in seen] == [
         {
             "method": "POST",
@@ -107,7 +111,7 @@ def test_sign_in_exchanges_the_code_with_basic_auth_and_a_json_body() -> None:
             "body": {
                 "grant_type": "authorization_code",
                 "code": "the-code",
-                "redirect_uri": browser.redirect_uri,
+                "redirect_uri": redirect_uri,
             },
         }
     ]
@@ -173,7 +177,7 @@ def test_a_second_matching_callback_is_turned_away() -> None:
         deadline = time.monotonic() + 5
         while len(browser.statuses) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
-        return httpx2.Response(200, json=TOKEN_RESPONSE)
+        return httpx2.Response(200, json=notion_token_answer())
 
     credentials = sign_in(browser, transport=httpx2.MockTransport(answer_after_both_visits))
 
@@ -296,17 +300,20 @@ def test_a_token_answer_with_bad_fields_names_them_and_not_the_tokens(answer: ob
     assert_secret_not_in_error_chain(raised.value, "secret-refresh-value")
 
 
-WITHOUT_A_WORKSPACE_ID = {key: value for key, value in TOKEN_RESPONSE.items() if key != "workspace_id"}
 REFUSED_WORKSPACE_ID = "Notion's token answer is missing or has invalid fields: workspace_id"
+
+
+def token_answer_without_a_workspace_id() -> dict[str, object]:
+    return {key: value for key, value in notion_token_answer().items() if key != "workspace_id"}
 
 
 @pytest.mark.parametrize(
     "answer",
     [
-        WITHOUT_A_WORKSPACE_ID,
-        {**TOKEN_RESPONSE, "workspace_id": None},
-        {**TOKEN_RESPONSE, "workspace_id": "not-a-uuid"},
-        {**TOKEN_RESPONSE, "workspace_id": "a\x1b[2Jb"},
+        token_answer_without_a_workspace_id(),
+        notion_token_answer(workspace_id=None),
+        notion_token_answer(workspace_id="not-a-uuid"),
+        notion_token_answer(workspace_id="a\x1b[2Jb"),
     ],
     ids=["missing", "null", "not a uuid", "an escape sequence"],
 )
@@ -330,7 +337,7 @@ def test_a_token_answer_without_a_usable_workspace_id_has_its_token_revoked_befo
 
 def test_a_token_answer_without_a_workspace_id_whose_revoke_fails_says_to_remove_the_connection() -> None:
     routes: dict[str, tuple[int, object]] = {
-        "/v1/oauth/token": (200, WITHOUT_A_WORKSPACE_ID),
+        "/v1/oauth/token": (200, token_answer_without_a_workspace_id()),
         "/v1/oauth/revoke": (400, {}),
     }
 

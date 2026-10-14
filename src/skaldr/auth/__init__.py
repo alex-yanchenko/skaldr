@@ -1,4 +1,3 @@
-import unicodedata
 from types import TracebackType
 from typing import Generic, TypeVar
 
@@ -11,15 +10,12 @@ CaughtT = TypeVar("CaughtT", bound=Exception)
 
 
 def printable_only(text: str) -> str:
-    return "".join(_shown(character) for character in text)
+    kept = "".join(character for character in text if character.isspace() or _is_shown(character))
+    return " ".join(kept.split())
 
 
-def _shown(character: str) -> str:
-    if unicodedata.category(character) == "Zs":
-        return " "
-    if character in _JOINERS or character.isprintable():
-        return character
-    return ""
+def _is_shown(character: str) -> bool:
+    return character in _JOINERS or character.isprintable()
 
 
 class CaughtWithoutChaining(Generic[CaughtT]):

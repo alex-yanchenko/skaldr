@@ -60,8 +60,11 @@ def test_an_error_raised_after_the_block_carries_no_chain() -> None:
         ("Acme\N{IDEOGRAPHIC SPACE}Corp", "Acme Corp"),
         ("Acme\N{EM SPACE}Corp\N{NARROW NO-BREAK SPACE}Ltd", "Acme Corp Ltd"),
         ("\N{ZERO WIDTH NON-JOINER}\N{ZERO WIDTH JOINER}", "\N{ZERO WIDTH NON-JOINER}\N{ZERO WIDTH JOINER}"),
-        ("Acme\x1b[2J\x07\r\n\tCorp", "Acme[2JCorp"),
-        ("Acme\x85\x9bCorp", "AcmeCorp"),
+        ("Acme\x1b[2J\x07Corp", "Acme[2JCorp"),
+        ("Acme\x9bCorp", "AcmeCorp"),
+        ("Acme\r\n\tCorp\x85Ltd\N{LINE SEPARATOR}Inc", "Acme Corp Ltd Inc"),
+        ("  Acme \N{NO-BREAK SPACE}  Corp\n", "Acme Corp"),
+        ("\x07 Acme \x1b \x07", "Acme"),
         (
             "\N{LEFT-TO-RIGHT EMBEDDING}\N{RIGHT-TO-LEFT EMBEDDING}\N{POP DIRECTIONAL FORMATTING}"
             "\N{LEFT-TO-RIGHT OVERRIDE}\N{RIGHT-TO-LEFT OVERRIDE}Acme",
@@ -81,9 +84,12 @@ def test_an_error_raised_after_the_block_carries_no_chain() -> None:
         "zero width non-joiner and joiner",
         "c0 controls",
         "c1 controls",
+        "line breaks and tabs between words",
+        "runs of whitespace and whitespace at the ends",
+        "controls beside the whitespace at the ends",
         "bidi embeddings and overrides",
         "bidi isolates",
     ],
 )
-def test_printable_only_keeps_words_and_joiners_and_drops_controls(text: str, shown: str) -> None:
+def test_printable_only_keeps_words_apart_and_drops_controls(text: str, shown: str) -> None:
     assert printable_only(text) == shown

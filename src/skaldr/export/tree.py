@@ -6,6 +6,25 @@ from skaldr.models import MediaKind, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 ListKind = Literal["bullet", "number", "check"]
+AuthoredName = Literal[
+    "panel",
+    "grid cell",
+    "note",
+    "callout",
+    "toggle",
+    "section",
+    "part",
+    "legend",
+    "link card",
+    "link embed",
+    "chart",
+    "comparison",
+    "matrix",
+    "swimlane",
+    "request",
+    "request step",
+    "request verdict",
+]
 MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
@@ -68,6 +87,7 @@ class TableNode:
     rows: tuple[TableRow, ...]
     header_column: bool = False
     columns: tuple[TableColumn, ...] = ()
+    authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -98,6 +118,7 @@ class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
     icon: str | None = None
+    authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -105,6 +126,7 @@ class Callout:
 class Quote:
     lines: tuple[ExportRich, ...]
     cite: ExportRich = ()
+    authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -119,6 +141,7 @@ class Toggle:
     heading_level: HeadingLevel | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
+    authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -144,6 +167,7 @@ class Tab:
 @dataclass(frozen=True)
 class Tabs:
     tabs: tuple[Tab, ...]
+    authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -227,6 +251,8 @@ Node = (
     | TableOfContents
 )
 
+AuthoredNode = Callout | Quote | TableNode | Tabs | Toggle
+
 
 PagePartKind = Literal["header", "legend", "footer"]
 
@@ -276,8 +302,8 @@ def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:
     return tuple(with_authored_path(node, path) for node in nodes)
 
 
-def with_authored_path(node: Node, path: str) -> Node:
-    if node.authored_at is not None:
+def with_authored_path(node: Node, path: str | None) -> Node:
+    if path is None or node.authored_at is not None:
         return node
     match node:
         case ListNode():

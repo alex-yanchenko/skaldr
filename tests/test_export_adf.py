@@ -13,6 +13,7 @@ from skaldr.export.adf import (
     adf_json,
     render_adf,
     render_adf_document,
+    render_adf_regions,
 )
 from skaldr.export.adf import blocks as blocks_module
 from skaldr.export.adf.colors import PANEL_TYPE
@@ -853,12 +854,16 @@ def test_a_chart_is_its_data_table_alone() -> None:
     assert _rendered(bars) == expected
 
 
-def test_a_table_of_contents_is_a_bullet_list_of_its_titles() -> None:
+def test_a_table_of_contents_writes_nothing() -> None:
     node = TableOfContents((TocEntry("a", plain("First")), TocEntry("b", plain("Second"))))
 
-    assert _rendered(node) == _doc(
-        {"type": "bulletList", "content": [_item(_words("First")), _item(_words("Second"))]}
-    )
+    assert _rendered(_para("before"), node, _para("after")) == _doc(_words("before"), _words("after"))
+
+
+def test_a_table_of_contents_alone_leaves_the_empty_paragraph_every_document_has() -> None:
+    node = TableOfContents((TocEntry("a", plain("First")),))
+
+    assert _rendered(node) == _doc(_paragraph())
 
 
 def test_an_issue_key_in_a_paragraph_becomes_a_card_when_links_are_given() -> None:
@@ -910,15 +915,17 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "bulletList",
-    TableOfContents: "bulletList",
+}
+NODES_WRITING_A_FIRST_BLOCK = {
+    kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents
 }
 
 
 def test_each_minimal_node_type_has_an_expected_first_block() -> None:
-    assert set(FIRST_BLOCK_OF_EACH_NODE_TYPE) == set(MINIMAL_NODES)
+    assert set(FIRST_BLOCK_OF_EACH_NODE_TYPE) == set(NODES_WRITING_A_FIRST_BLOCK)
 
 
-@pytest.mark.parametrize("node", MINIMAL_NODES.values(), ids=lambda node: type(node).__name__)
+@pytest.mark.parametrize("node", NODES_WRITING_A_FIRST_BLOCK.values(), ids=lambda node: type(node).__name__)
 def test_every_lowered_node_type_writes_its_expected_first_block(node: Node) -> None:
     content = render_adf((node,))["content"]
 
@@ -941,6 +948,26 @@ def test_the_document_writer_writes_the_body_without_the_title() -> None:
     )
 
     assert json.loads(json.dumps(render_adf_document(document))) == _doc(_words("one"), _words("two"))
+
+
+def test_the_page_slices_into_the_blocks_of_each_region_numbered_across_the_whole_page() -> None:
+    checklist = ListNode("check", (ListEntry(plain("pack")),))
+    document = LoweredDocument(
+        "Report title",
+        (
+            BlockRegion(0, (_para("one"), checklist)),
+            BlockRegion(1, ()),
+            BlockRegion(2, (checklist, _para("two"))),
+        ),
+    )
+
+    regions = render_adf_regions(document)
+
+    assert json.loads(json.dumps(regions)) == [
+        [_words("one"), _task_list(1, _task_item(2, "TODO", "pack"))],
+        [],
+        [_task_list(3, _task_item(4, "TODO", "pack")), _words("two")],
+    ]
 
 
 def test_the_json_text_is_indented_unescaped_and_ends_in_a_newline() -> None:
