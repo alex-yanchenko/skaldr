@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -67,12 +69,18 @@ LEGACY_JIRA_UNREADABLE = (
     "then run `skaldr auth jira` again"
 )
 REAL_LOCK_FILE = store.lock_file
-WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain.\n"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain."
 AN_ENTRY = stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())
 WAITING_FOR_THE_KEYCHAIN = (
     "Waiting for the system keychain; if it is locked or shows a prompt for skaldr, "
-    "unlock it or answer there.\n"
+    "unlock it or answer there."
 )
+LOGGED_BY_THE_STORE = "skaldr.auth.store"
+
+
+def notice_logged(notice: str) -> list[tuple[str, int, str]]:
+    return [(LOGGED_BY_THE_STORE, logging.WARNING, notice)]
 
 
 def index_of(*, jira: list[str] | None = None, notion: list[str] | None = None) -> str:
@@ -766,7 +774,7 @@ def test_a_read_only_state_directory_is_named_in_the_error(
 
 
 def test_waiting_for_another_command_says_so_and_not_that_the_keychain_is_slow(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     other_command = FileLock(store.lock_file(), thread_local=False)
@@ -775,7 +783,40 @@ def test_waiting_for_another_command_says_so_and_not_that_the_keychain_is_slow(
 
     stored_jira_sign_ins()
 
-    assert capsys.readouterr().err == WAITING_FOR_THE_LOCK
+    assert (caplog.record_tuples, capsys.readouterr().err) == (notice_logged(WAITING_FOR_THE_LOCK), "")
+
+
+def test_a_program_that_sets_up_no_logging_shows_the_keychain_notice_on_stderr(tmp_path: Path) -> None:
+    script = "\n".join(
+        [
+            "import keyring",
+            "from skaldr.auth import store",
+            "from tests.factories.auth_factory import SlowKeyring",
+            "store.KEYCHAIN_NOTICE_SECONDS = 0.05",
+            "keyring.set_keyring(SlowKeyring(answers_after=0.3))",
+            "print(store.stored_jira_sign_ins())",
+        ]
+    )
+    environment = {
+        **os.environ,
+        "PYTHON_KEYRING_BACKEND": "keyring.backends.null.Keyring",
+        "XDG_STATE_HOME": str(tmp_path),
+    }
+
+    finished = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+        env=environment,
+    )
+
+    assert (finished.returncode, finished.stdout, finished.stderr) == (
+        0,
+        "[]\n",
+        f"{WAITING_FOR_THE_KEYCHAIN}\n",
+    )
 
 
 def test_nothing_saved_loads_as_signed_out() -> None:
@@ -975,7 +1016,7 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 
 
 def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     slow = SlowKeyring(answers_after=0.5)
@@ -984,8 +1025,11 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
 
     loaded = load_jira()
 
-    assert loaded == SignIn(make_jira_credentials(), "keychain")
-    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+    assert (loaded, caplog.record_tuples, capsys.readouterr().err) == (
+        SignIn(make_jira_credentials(), "keychain"),
+        notice_logged(WAITING_FOR_THE_KEYCHAIN),
+        "",
+    )
 
 
 @pytest.mark.parametrize(
@@ -998,7 +1042,10 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     ],
 )
 def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], operation: Callable[[], object]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+    operation: Callable[[], object],
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
@@ -1013,15 +1060,17 @@ def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
         slow.released.set()
 
     assert time.monotonic() - started < 2
-    assert capsys.readouterr().err == WAITING_FOR_THE_KEYCHAIN
+    assert (caplog.record_tuples, capsys.readouterr().err) == (notice_logged(WAITING_FOR_THE_KEYCHAIN), "")
 
 
 @pytest.mark.usefixtures("keychain")
-def test_a_prompt_keychain_prints_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_prompt_keychain_prints_nothing(
+    capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
     seed_notion(make_notion_credentials())
     load_notion()
 
-    assert capsys.readouterr().err == ""
+    assert (caplog.record_tuples, capsys.readouterr().err) == ([], "")
 
 
 INSECURE_BACKENDS = [

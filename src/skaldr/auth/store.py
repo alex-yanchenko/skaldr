@@ -1,6 +1,6 @@
 import json
+import logging
 import os
-import sys
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -22,6 +22,7 @@ from skaldr.auth import CaughtWithoutChaining, printable_only
 from skaldr.errors import AuthError
 from skaldr.services import Service
 
+_LOGGER = logging.getLogger(__name__)
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
 LEGACY_SELECTOR = "legacy"
@@ -507,7 +508,7 @@ def _wait_for_the_reply(
 ) -> _KeychainReply[Answer]:
     with suppress(Empty):
         return replies.get(timeout=KEYCHAIN_NOTICE_SECONDS)
-    print(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
+    _LOGGER.warning(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE)
     with suppress(Empty):
         return replies.get(timeout=KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS)
     raise KeychainTimeoutError(
