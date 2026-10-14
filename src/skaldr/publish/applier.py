@@ -192,26 +192,28 @@ class Applier:
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
+        request = SectionRequest(write, raw_sections, self._stamp(ref))
         return self._written(
             target_plan,
             ref,
             ([section_part(key)], rendered),
-            lambda item_id: transport.write_section(item_id, SectionRequest(write, raw_sections)),
+            lambda item_id: transport.write_section(item_id, request),
         )
+
+    def _stamp(self, ref: ItemRef) -> Stamp:
+        return Stamp(self.prepared.doc_id, ref.section_id)
 
     def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
         item = self._item(step.item)
         rendered = item.rendered.model_copy(update={"sections": step.content.sections})
         parts = [section_part(key) for key in (*step.written, *step.removed)]
         transport = self.transports.for_target(step.item.target)
-        raw_sections = self._raw_sections(step.item)
+        request = ContentWrite(step.content.sections, self._raw_sections(step.item), self._stamp(step.item))
         return self._written(
             target_plan,
             step.item,
             (parts, rendered),
-            lambda item_id: transport.write_content(
-                item_id, ContentWrite(step.content.sections, raw_sections)
-            ),
+            lambda item_id: transport.write_content(item_id, request),
         )
 
     def _write_fields(self, target_plan: TargetPlan, step: WriteFieldsStep) -> PublishState:
@@ -222,7 +224,7 @@ class Applier:
             step.content.fields,
             now.title,
             with_fields_named(now, [*item.rendered.fields, *step.content.fields]).fields,
-            Stamp(self.prepared.doc_id, step.item.section_id),
+            self._stamp(step.item),
             icon=step.content.icon,
             cover=step.content.cover,
             previous_icon=now.icon,
@@ -312,7 +314,7 @@ class Applier:
             remote = transport.create_item(
                 NewItem(
                     target_plan.target,
-                    Stamp(self.prepared.doc_id, step.item.section_id),
+                    self._stamp(step.item),
                     step.draft.content,
                     parent_id=parent_id,
                     into_id=step.into_id,

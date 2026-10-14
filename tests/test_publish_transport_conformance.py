@@ -187,11 +187,12 @@ def test_section_writes_add_replace_move_and_remove_by_key(under_test: Transport
     def raw() -> dict[str, str]:
         return dict(transport.read_item(item_id, CONTENT).raw_sections)
 
-    transport.write_section(item_id, SectionRequest(AddSection("tools", "Spade.\n", "intro"), raw()))
+    transport.write_section(item_id, SectionRequest(AddSection("tools", "Spade.\n", "intro"), raw(), STAMP))
     transport.write_section(
-        item_id, SectionRequest(ReplaceSection("planting", raw()["planting"], "Sow in May.\n", None), raw())
+        item_id,
+        SectionRequest(ReplaceSection("planting", raw()["planting"], "Sow in May.\n", None), raw(), STAMP),
     )
-    transport.write_section(item_id, SectionRequest(RemoveSection("intro", raw()["intro"]), raw()))
+    transport.write_section(item_id, SectionRequest(RemoveSection("intro", raw()["intro"]), raw(), STAMP))
 
     assert _sections(transport.read_item(item_id, CONTENT)) == _expected_sections(
         transport, {"planting": "Sow in May.\n", "tools": "Spade.\n"}
@@ -208,7 +209,9 @@ def test_a_section_write_quoting_text_the_service_no_longer_holds_is_rejected_an
     with pytest.raises(WriteRejectedError):
         transport.write_section(
             created.item_id,
-            SectionRequest(ReplaceSection("planting", "Sow in winter.\n", "Sow in May.\n", "intro"), raw),
+            SectionRequest(
+                ReplaceSection("planting", "Sow in winter.\n", "Sow in May.\n", "intro"), raw, STAMP
+            ),
         )
     assert list(transport.read_item(created.item_id, CONTENT).raw_sections.items()) == list(raw.items())
 
@@ -222,7 +225,7 @@ def test_a_content_write_sent_with_a_stale_layout_is_rejected_and_changes_nothin
 
     with pytest.raises(WriteRejectedError):
         transport.write_content(
-            created.item_id, ContentWrite({"tools": "Spade.\n", "intro": "Hello.\n"}, stale)
+            created.item_id, ContentWrite({"tools": "Spade.\n", "intro": "Hello.\n"}, stale, STAMP)
         )
     assert list(transport.read_item(created.item_id, CONTENT).raw_sections.items()) == list(
         created.raw_sections.items()
@@ -234,7 +237,7 @@ def test_a_content_write_replaces_every_section_in_order(under_test: TransportUn
     transport = instance.transport
     sections = {"tools": "Spade.\n", "planting": "Sow in May.\n"}
 
-    transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+    transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     assert _sections(transport.read_item(created.item_id, CONTENT)) == _expected_sections(transport, sections)
 
@@ -319,7 +322,7 @@ def test_the_marker_a_write_returns_covers_that_write(under_test: TransportUnder
     raw = dict(created.raw_sections)
 
     written = instance.transport.write_section(
-        created.item_id, SectionRequest(AddSection("tools", "Spade.\n", "planting"), raw)
+        created.item_id, SectionRequest(AddSection("tools", "Spade.\n", "planting"), raw, STAMP)
     )
 
     assert instance.transport.parts_edited_after(created.item_id, written.marker, CONTENT) == ()

@@ -384,6 +384,20 @@ def test_publishing_creates_the_document_and_its_split_page_and_publishing_again
     )
 
 
+def test_a_section_change_puts_back_the_stamp_a_person_deleted(tmp_path: Path) -> None:
+    seed_notion(make_notion_credentials())
+    notion = _notion_with_a_parent_page()
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    stamp = 'Published with skaldr from document garden-handbook, section tools {color="gray"}'
+    notion.edit_by_hand(TOOLS_PAGE, f"\n{stamp}", "")
+    write_garden_report(tmp_path, blocks=make_garden_blocks(tools="Rake."))
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (exit_code, notion.markdown_of(TOOLS_PAGE).splitlines()[-2:]) == (0, ["- Rake.", stamp])
+
+
 def test_a_changed_section_is_sent_as_one_search_and_replace(tmp_path: Path) -> None:
     seed_notion(make_notion_credentials())
     notion = _notion_with_a_parent_page()

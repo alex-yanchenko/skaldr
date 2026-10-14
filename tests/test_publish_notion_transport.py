@@ -309,6 +309,7 @@ def test_a_section_is_replaced_by_one_search_and_replace_that_quotes_its_comment
         SectionRequest(
             ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
             read.raw_sections,
+            STAMP,
         ),
     )
 
@@ -329,7 +330,7 @@ def test_an_added_section_is_placed_after_the_section_it_follows() -> None:
 
     written = transport.write_section(
         created.item_id,
-        SectionRequest(AddSection("tools", "## Tools\n- Spade.\n", "intro"), created.raw_sections),
+        SectionRequest(AddSection("tools", "## Tools\n- Spade.\n", "intro"), created.raw_sections, STAMP),
     )
 
     assert (
@@ -677,7 +678,7 @@ def test_a_moved_section_is_one_request_over_the_span_between_its_two_places() -
 
     transport.write_section(
         created.item_id,
-        SectionRequest(ReplaceSection("planting", PLANTING, PLANTING, None), created.raw_sections),
+        SectionRequest(ReplaceSection("planting", PLANTING, PLANTING, None), created.raw_sections, STAMP),
     )
 
     assert (_patches(notion), notion.markdown_of(created.item_id)) == (
@@ -697,6 +698,7 @@ def test_text_a_person_types_below_the_stamp_belongs_to_no_section_and_never_blo
         SectionRequest(
             ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
             read.raw_sections,
+            STAMP,
         ),
     )
 
@@ -719,6 +721,7 @@ def test_a_child_page_moved_into_a_section_stays_in_place_when_the_section_is_re
         SectionRequest(
             ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
             read.raw_sections,
+            STAMP,
         ),
     )
 
@@ -745,6 +748,7 @@ def test_a_section_holding_a_block_notion_cannot_show_as_markdown_is_not_rewritt
                     "planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"
                 ),
                 read.raw_sections,
+                STAMP,
             ),
         )
     assert notion.writes() == []
@@ -763,7 +767,9 @@ def test_a_move_that_would_not_fit_one_request_is_refused_before_anything_is_sen
     ):
         transport.write_section(
             created.item_id,
-            SectionRequest(ReplaceSection("b", sections["b"], sections["b"], None), created.raw_sections),
+            SectionRequest(
+                ReplaceSection("b", sections["b"], sections["b"], None), created.raw_sections, STAMP
+            ),
         )
     assert notion.writes() == []
 
@@ -828,6 +834,49 @@ def test_a_fields_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() 
     )
 
 
+def test_a_section_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+    read = transport.read_item(created.item_id, created.comparable)
+    notion.requests.clear()
+
+    written = transport.write_section(
+        created.item_id,
+        SectionRequest(
+            ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
+            read.raw_sections,
+            STAMP,
+        ),
+    )
+
+    assert (_patches(notion), written.stamp, notion.markdown_of(created.item_id)) == (
+        [
+            _update("## Planting\nSow in spring.", "## Planting\nSow in May.\n"),
+            _update("Sow in May.", f"Sow in May.\n{STAMP_LINE}\n"),
+        ],
+        STAMP,
+        f"{WELCOME}## Planting\nSow in May.\n{STAMP_LINE}",
+    )
+
+
+def test_a_content_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+    read = transport.read_item(created.item_id, created.comparable)
+    notion.requests.clear()
+
+    written = transport.write_content(
+        created.item_id, ContentWrite({"intro": WELCOME, "tools": TOOLS}, read.raw_sections, STAMP)
+    )
+
+    assert (written.stamp, notion.markdown_of(created.item_id)) == (
+        STAMP,
+        f"{WELCOME}{TOOLS}{STAMP_LINE}",
+    )
+
+
 def test_a_fields_write_refused_before_sending_does_not_put_a_deleted_stamp_back() -> None:
     notion = _notion()
     transport, created = _created(notion)
@@ -888,7 +937,8 @@ def test_a_section_write_to_a_page_edited_since_it_was_read_writes_nothing() -> 
         "again$",
     ):
         transport.write_section(
-            created.item_id, SectionRequest(AddSection("care", "## Care\n", "tools"), created.raw_sections)
+            created.item_id,
+            SectionRequest(AddSection("care", "## Care\n", "tools"), created.raw_sections, STAMP),
         )
     assert notion.writes() == []
 
@@ -1123,7 +1173,7 @@ def test_a_content_write_keeps_the_child_pages_of_a_section_it_removes(
     notion.edit_by_hand(created.item_id, after, f"{after}\n{CHILD}")
     read = transport.read_item(created.item_id, created.comparable)
 
-    transport.write_content(created.item_id, ContentWrite(written, read.raw_sections))
+    transport.write_content(created.item_id, ContentWrite(written, read.raw_sections, STAMP))
 
     assert notion.markdown_of(created.item_id) == markdown
 
@@ -1135,7 +1185,7 @@ def test_a_removed_middle_section_is_one_request_that_quotes_only_that_section()
 
     written = transport.write_section(
         created.item_id,
-        SectionRequest(RemoveSection("tools", created.raw_sections["tools"]), created.raw_sections),
+        SectionRequest(RemoveSection("tools", created.raw_sections["tools"]), created.raw_sections, STAMP),
     )
 
     assert (_patches(notion), list(written.raw_sections), notion.markdown_of(created.item_id)) == (
@@ -1227,7 +1277,7 @@ def test_an_empty_unstamped_page_gives_a_section_write_nothing_to_place_it_next_
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
 
     with pytest.raises(WriteRejectedError) as caught:
-        transport.write_section(EMPTY_ROW, SectionRequest(AddSection("tools", TOOLS, None), raw))
+        transport.write_section(EMPTY_ROW, SectionRequest(AddSection("tools", TOOLS, None), raw, STAMP))
 
     assert (str(caught.value), notion.writes()) == (
         f"Notion page {EMPTY_ROW} holds nothing skaldr can place the section next to",
@@ -1241,7 +1291,7 @@ def test_an_empty_unstamped_page_gives_a_content_write_nothing_to_place_it_next_
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
 
     with pytest.raises(WriteRejectedError) as caught:
-        transport.write_content(EMPTY_ROW, ContentWrite({"tools": TOOLS}, raw))
+        transport.write_content(EMPTY_ROW, ContentWrite({"tools": TOOLS}, raw, STAMP))
 
     assert (str(caught.value), notion.writes()) == (
         f"Notion page {EMPTY_ROW} holds nothing skaldr can place its content next to",
@@ -1277,6 +1327,7 @@ def test_a_section_over_the_blocks_one_request_carries_is_refused_before_anythin
             SectionRequest(
                 ReplaceSection("planting", created.raw_sections["planting"], planting, "intro"),
                 created.raw_sections,
+                STAMP,
             ),
         )
 
@@ -1372,6 +1423,7 @@ def test_a_section_with_a_comment_over_two_lines_is_replaced_quoting_both_marker
         SectionRequest(
             ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
             read.raw_sections,
+            STAMP,
         ),
     )
 

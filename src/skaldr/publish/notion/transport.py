@@ -241,7 +241,8 @@ class NotionTransport:
             raise WriteRejectedError(
                 f"Notion page {item_id} holds nothing skaldr can place the section next to"
             )
-        return self._written_with(item_id, current, replacement, dict(after), markdown)
+        missing_stamp = request.stamp if keyed.stamp is None else None
+        return self._written_with(item_id, current, replacement, dict(after), markdown, missing_stamp)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
@@ -255,7 +256,8 @@ class NotionTransport:
             raise WriteRejectedError(
                 f"Notion page {item_id} holds nothing skaldr can place its content next to"
             )
-        return self._written_with(item_id, current, replacement, dict(after), markdown)
+        missing_stamp = request.stamp if keyed.stamp is None else None
+        return self._written_with(item_id, current, replacement, dict(after), markdown, missing_stamp)
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         layout = self._layouts.get(_page_key(item_id))
@@ -365,9 +367,12 @@ class NotionTransport:
         replacement: Replacement,
         layout: Mapping[str, str],
         markdown: str,
+        stamp_to_put_back: Stamp | None,
     ) -> RemoteItem:
         if not replacement.changes_nothing:
             markdown = self._send(item_id, sections, replacement)
+        if stamp_to_put_back is not None:
+            markdown = self._stamp_put_back(item_id, markdown, layout, stamp_to_put_back)
         key = _page_key(item_id)
         self._written.add(key)
         self._published[key] = layout

@@ -95,12 +95,14 @@ SectionWrite = AddSection | ReplaceSection | RemoveSection
 class SectionRequest:
     change: SectionWrite
     raw_sections: RawSections
+    stamp: Stamp
 
 
 @dataclass(frozen=True)
 class ContentWrite:
     sections: Mapping[str, str]
     raw_sections: RawSections
+    stamp: Stamp
 
 
 @dataclass(frozen=True)
