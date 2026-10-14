@@ -59,6 +59,10 @@ class JiraConnector:
     def writes(self) -> WriteGranularity:
         return "content"
 
+    @property
+    def carries_look(self) -> bool:
+        return False
+
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return tuple(section_text(validated_blocks(blocks)) for blocks in render_adf_regions(page))
 

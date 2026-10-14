@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 from skaldr.errors import ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import ItemContent, Part, section_part
+from skaldr.publish.content import ItemContent, Part, differing_parts, section_part
 from skaldr.publish.jira.description import description_doc, section_blocks, section_text
 from skaldr.publish.jira.transport import JiraTransport
 from skaldr.publish.transport import (
@@ -22,8 +22,9 @@ from skaldr.publish.transport import (
     is_unset,
 )
 from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
-from tests.factories import make_jira_target, make_notion_target
+from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target
 from tests.factories.jira_factory import FakeJira
+from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import DOC_ID, FakeTransport
 
 STAMP = Stamp(DOC_ID, None)
@@ -35,6 +36,10 @@ CONTENT = ItemContent(
 )
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
 JIRA_TARGET = JiraTarget.model_validate(make_jira_target())
+SEEDLING = "🌱"
+SUNFLOWER = "🌻"
+COVER_URL = "https://example.com/garden.png"
+LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,7 @@ class TransportUnderTest:
     target: TargetBase
     writes_into_pages: bool
     reports_edits: bool
+    carries_look: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
 
 
@@ -64,6 +70,17 @@ def _fake_instance(transport: FakeTransport) -> Instance:
 
 def _fake() -> Instance:
     return _fake_instance(FakeTransport(strips_trailing_whitespace=True))
+
+
+def _notion() -> Instance:
+    notion = InMemoryNotion()
+    notion.add_database(NOTION_PAGE_ID)
+    empty_page = notion.add_row(numbered_id(900), "Blank page", NOTION_PAGE_ID)
+
+    def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
+        notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
+
+    return Instance(notion.transport(), empty_page, edit_section_by_hand)
 
 
 def _as_adf(text: str) -> str:
@@ -89,7 +106,13 @@ TRANSPORTS = [
         id="fake",
     ),
     pytest.param(
-        TransportUnderTest(_jira, JIRA_TARGET, writes_into_pages=False, reports_edits=True, spell=_as_adf),
+        TransportUnderTest(_notion, NOTION_TARGET, writes_into_pages=True, reports_edits=False),
+        id="notion",
+    ),
+    pytest.param(
+        TransportUnderTest(
+            _jira, JIRA_TARGET, writes_into_pages=False, reports_edits=True, carries_look=False, spell=_as_adf
+        ),
         id="jira",
     ),
 ]
@@ -184,6 +207,21 @@ def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be
     assert is_unset(released.comparable.fields.get("Area"))
 
 
+def test_a_release_clears_the_icon_skaldr_set_and_keeps_a_cover_it_did_not(
+    under_test: TransportUnderTest,
+) -> None:
+    if not under_test.carries_look:
+        pytest.skip("this transport shows no icon or cover")
+    instance = under_test.make()
+    transport = instance.transport
+    created = transport.create_item(NewItem(under_test.target, STAMP, LOOKING))
+
+    transport.release_item(created.item_id, Release(created.raw_sections, (), clears_icon=True))
+    released = transport.read_item(created.item_id, LOOKING)
+
+    assert (released.comparable.icon, released.comparable.cover, released.stamp) == (None, COVER_URL, None)
+
+
 def test_section_writes_add_replace_move_and_remove_by_key(under_test: TransportUnderTest) -> None:
     instance, created = _created(under_test)
     transport = instance.transport
@@ -193,11 +231,11 @@ def test_section_writes_add_replace_move_and_remove_by_key(under_test: Transport
         return dict(transport.read_item(item_id, _content(under_test)).raw_sections)
 
     spade, sow_in_may = under_test.spell("Spade.\n"), under_test.spell("Sow in May.\n")
-    transport.write_section(item_id, SectionRequest(AddSection("tools", spade, "intro"), raw()))
+    transport.write_section(item_id, SectionRequest(AddSection("tools", spade, "intro"), raw(), STAMP))
     transport.write_section(
-        item_id, SectionRequest(ReplaceSection("planting", raw()["planting"], sow_in_may, None), raw())
+        item_id, SectionRequest(ReplaceSection("planting", raw()["planting"], sow_in_may, None), raw(), STAMP)
     )
-    transport.write_section(item_id, SectionRequest(RemoveSection("intro", raw()["intro"]), raw()))
+    transport.write_section(item_id, SectionRequest(RemoveSection("intro", raw()["intro"]), raw(), STAMP))
 
     assert _sections(transport.read_item(item_id, _content(under_test))) == _expected_sections(
         transport, {"planting": sow_in_may, "tools": spade}
@@ -215,7 +253,7 @@ def test_a_section_write_quoting_text_the_service_no_longer_holds_is_rejected_an
     )
 
     with pytest.raises(WriteRejectedError):
-        transport.write_section(created.item_id, SectionRequest(replace_quoting_old_text, raw))
+        transport.write_section(created.item_id, SectionRequest(replace_quoting_old_text, raw, STAMP))
     assert list(transport.read_item(created.item_id, _content(under_test)).raw_sections.items()) == list(
         raw.items()
     )
@@ -230,7 +268,7 @@ def test_a_content_write_sent_with_a_stale_layout_is_rejected_and_changes_nothin
     sections = _spelled(under_test, {"tools": "Spade.\n", "intro": "Hello.\n"})
 
     with pytest.raises(WriteRejectedError):
-        transport.write_content(created.item_id, ContentWrite(sections, stale))
+        transport.write_content(created.item_id, ContentWrite(sections, stale, STAMP))
     assert list(transport.read_item(created.item_id, _content(under_test)).raw_sections.items()) == list(
         created.raw_sections.items()
     )
@@ -241,7 +279,7 @@ def test_a_content_write_replaces_every_section_in_order(under_test: TransportUn
     transport = instance.transport
     sections = _spelled(under_test, {"tools": "Spade.\n", "planting": "Sow in May.\n"})
 
-    transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+    transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     assert _sections(transport.read_item(created.item_id, _content(under_test))) == _expected_sections(
         transport, sections
@@ -270,26 +308,95 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
     assert is_unset(read.comparable.fields.get("Owner"))
 
 
+def test_a_fields_write_for_another_section_of_the_document_is_rejected_and_changes_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test, SECTION_STAMP)
+    transport = instance.transport
+
+    with pytest.raises(WriteRejectedError):
+        transport.write_fields(
+            created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, CONTENT.fields, STAMP)
+        )
+    read = transport.read_item(created.item_id, _content(under_test))
+
+    assert (read.comparable.title, read.comparable.fields, read.stamp) == (
+        CONTENT.title,
+        created.comparable.fields,
+        SECTION_STAMP,
+    )
+
+
+def test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them(
+    under_test: TransportUnderTest,
+) -> None:
+    if not under_test.carries_look:
+        pytest.skip("this transport shows no icon or cover")
+    instance = under_test.make()
+    transport = instance.transport
+    created = transport.create_item(NewItem(under_test.target, STAMP, LOOKING))
+
+    transport.write_fields(
+        created.item_id,
+        FieldsWrite(
+            LOOKING.title,
+            LOOKING.fields,
+            LOOKING.title,
+            LOOKING.fields,
+            STAMP,
+            icon=SUNFLOWER,
+            cover=None,
+            previous_icon=SEEDLING,
+            previous_cover=COVER_URL,
+        ),
+    )
+    read = transport.read_item(created.item_id, LOOKING)
+
+    assert (
+        (created.comparable.icon, created.comparable.cover),
+        (read.comparable.icon, read.comparable.cover),
+    ) == (
+        (SEEDLING, COVER_URL),
+        (SUNFLOWER, None),
+    )
+
+
 def test_the_marker_a_write_returns_covers_that_write(under_test: TransportUnderTest) -> None:
     instance, created = _created(under_test)
     raw = dict(created.raw_sections)
 
     written = instance.transport.write_section(
-        created.item_id, SectionRequest(AddSection("tools", under_test.spell("Spade.\n"), "planting"), raw)
+        created.item_id,
+        SectionRequest(AddSection("tools", under_test.spell("Spade.\n"), "planting"), raw, STAMP),
     )
 
     assert instance.transport.parts_edited_after(created.item_id, written.marker, _content(under_test)) == ()
 
 
-def test_a_hand_edit_after_a_marker_is_reported(under_test: TransportUnderTest) -> None:
-    if not under_test.reports_edits:
-        pytest.skip("this transport reports no edits by marker")
+def test_a_hand_edit_shows_in_the_comparable_text_a_read_returns(under_test: TransportUnderTest) -> None:
     instance, created = _created(under_test)
 
     instance.edit_section_by_hand(created.item_id, "planting", under_test.spell("Sow in June.\n"))
+    read = instance.transport.read_item(created.item_id, _content(under_test))
 
-    assert instance.transport.parts_edited_after(created.item_id, created.marker, _content(under_test)) == (
-        section_part("planting"),
+    assert _sections(read) == _expected_sections(
+        instance.transport, _spelled(under_test, {"intro": "Welcome.\n", "planting": "Sow in June.\n"})
+    )
+
+
+def test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+
+    instance.edit_section_by_hand(created.item_id, "planting", under_test.spell("Sow in June.\n"))
+    reported = instance.transport.parts_edited_after(created.item_id, created.marker, _content(under_test))
+    read = instance.transport.read_item(created.item_id, _content(under_test))
+
+    planting = (section_part("planting"),)
+    assert (reported, differing_parts(created.comparable, read.comparable)) == (
+        planting if under_test.reports_edits else (),
+        planting,
     )
 
 
@@ -331,6 +438,11 @@ class HidesHandEdits(FakeTransport):
         return ()
 
 
+class ReadsWhatItLastWrote(FakeTransport):
+    def edit_section_by_hand(self, item_id: str, key: str, text: str) -> None:  # noqa: ARG002
+        self.report_an_edit_without_changing_content(item_id, section_part(key))
+
+
 class DropsTheStampSection(FakeTransport):
     def create_item(self, request: NewItem, /) -> RemoteItem:
         return super().create_item(replace(request, stamp=Stamp(request.stamp.doc_id, None)))
@@ -348,6 +460,11 @@ class KeepsClearedFields(FakeTransport):
         return super().write_fields(item_id, replace(request, previous_fields=dict(request.fields)))
 
 
+class KeepsTheCover(FakeTransport):
+    def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
+        return super().write_fields(item_id, replace(request, cover=request.previous_cover))
+
+
 def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
     return TransportUnderTest(
         lambda: _fake_instance(transport_type()), NOTION_TARGET, writes_into_pages=True, reports_edits=True
@@ -362,7 +479,16 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             test_a_created_item_reads_back_keyed_and_ordered_like_the_content_in_the_services_form,
             id="reordered-sections",
         ),
-        pytest.param(HidesHandEdits, test_a_hand_edit_after_a_marker_is_reported, id="hidden-hand-edits"),
+        pytest.param(
+            HidesHandEdits,
+            test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            id="hidden-hand-edits",
+        ),
+        pytest.param(
+            ReadsWhatItLastWrote,
+            test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            id="hand-edits-missing-from-the-read",
+        ),
         pytest.param(
             DropsTheStampSection,
             test_the_stamp_carries_the_section_the_item_holds,
@@ -377,6 +503,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             KeepsClearedFields,
             test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_absent,
             id="keeps-cleared-fields",
+        ),
+        pytest.param(
+            KeepsTheCover,
+            test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them,
+            id="keeps-the-cover",
         ),
     ],
 )

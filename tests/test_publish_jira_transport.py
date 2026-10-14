@@ -138,7 +138,32 @@ def test_a_description_edit_made_after_the_read_stops_a_fields_write_before_it_i
 
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
         transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
-    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-1/changelog")]
+    assert jira.calls() == [
+        ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+        ("GET", "/rest/api/3/issue/DEMO-1/changelog"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("written", "named"),
+    [
+        pytest.param(Stamp("other-handbook", None), "doc_id 'other-handbook'", id="another-document"),
+        pytest.param(SECTION_STAMP, f"doc_id '{DOC_ID}', section 'planting'", id="a-section-of-the-document"),
+    ],
+)
+def test_fields_are_not_written_to_an_issue_stamped_for_another_document_or_section(
+    written: Stamp, named: str
+) -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    with pytest.raises(WriteRejectedError) as caught:
+        transport.write_fields(created.item_id, FieldsWrite("Other", {}, CONTENT.title, {}, written))
+
+    assert (str(caught.value), jira.calls()) == (
+        f"Jira issue {created.item_id} is not stamped with {named}",
+        [("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp")],
+    )
 
 
 def test_a_description_edit_landing_during_a_fields_write_is_not_taken_as_published() -> None:
@@ -151,7 +176,9 @@ def test_a_description_edit_landing_during_a_fields_write_is_not_taken_as_publis
     with pytest.raises(ConnectorError) as raised:
         transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
-        transport.write_content(created.item_id, ContentWrite(dict(CONTENT.sections), created.raw_sections))
+        transport.write_content(
+            created.item_id, ContentWrite(dict(CONTENT.sections), created.raw_sections, STAMP)
+        )
 
     assert (type(raised.value), str(raised.value), jira.issues["DEMO-1"].fields["description"]) == (
         ConnectorError,
@@ -168,7 +195,7 @@ def test_an_edit_landing_between_a_content_write_and_its_read_back_is_reported_l
     sections = {"planting": section_text([SOW_IN_MAY])}
 
     with pytest.raises(ConnectorError) as raised:
-        transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+        transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     assert (str(raised.value), transport.parts_edited_after(created.item_id, created.marker, CONTENT)) == (
         "DEMO-1 was edited in Jira while skaldr wrote to it (summary); the write landed, and the next "
@@ -230,7 +257,7 @@ def test_a_read_back_jira_saved_in_a_form_skaldr_does_not_expect_is_taken_as_pub
     transport, created = _created(jira)
     sections = {"planting": section_text([SOW_IN_MAY])}
 
-    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     saved: JsonValue = {
         "type": "paragraph",
@@ -298,7 +325,7 @@ def test_a_mention_jira_saves_under_the_persons_display_name_stays_in_sync_after
     updated = _with_planting(_asking(GARDENER), SOW_IN_MAY)
 
     written = transport.write_content(
-        created.item_id, ContentWrite(dict(updated.sections), after_create.raw_sections)
+        created.item_id, ContentWrite(dict(updated.sections), after_create.raw_sections, STAMP)
     )
     after_update = transport.read_item(created.item_id, updated)
 
@@ -553,7 +580,7 @@ def test_a_content_write_of_a_section_that_is_not_adf_blocks_is_a_rejected_write
         ),
     ):
         transport.write_content(
-            created.item_id, ContentWrite({"planting": "Sow in May."}, created.raw_sections)
+            created.item_id, ContentWrite({"planting": "Sow in May."}, created.raw_sections, STAMP)
         )
     assert jira.calls() == _read_calls("DEMO-1")
 
@@ -734,7 +761,7 @@ def test_a_content_write_replaces_the_description_and_layout_in_one_request() ->
     transport, created = _created(jira)
     sections = {"planting": section_text([SOW_IN_MAY]), "tools": section_text([_words("Spade.")])}
 
-    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     assert (jira.calls(), summarise(jira.requests[4])["body"], written.comparable.sections) == (
         [
@@ -764,7 +791,7 @@ def test_when_jira_drops_the_properties_of_an_edit_skaldr_puts_the_layout_withou
     transport, created = _created(jira)
     sections = {"planting": section_text([SOW_IN_MAY])}
 
-    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections))
+    written = transport.write_content(created.item_id, ContentWrite(sections, created.raw_sections, STAMP))
 
     assert (list(written.raw_sections), jira.calls()[5:]) == (
         ["planting"],
@@ -782,7 +809,9 @@ def test_a_content_write_against_a_description_edited_since_the_read_is_refused_
     jira.edit_by_hand(created.item_id, description={"version": 1, "type": "doc", "content": [PLANTING]})
 
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
-        transport.write_content(created.item_id, ContentWrite({"planting": "[]"}, created.raw_sections))
+        transport.write_content(
+            created.item_id, ContentWrite({"planting": "[]"}, created.raw_sections, STAMP)
+        )
     assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-1/changelog")]
 
 
@@ -795,7 +824,7 @@ def test_a_block_rewritten_by_hand_inside_a_section_is_refused_unsent() -> None:
 
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
         transport.write_content(
-            created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections)
+            created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections, STAMP)
         )
     assert (jira.calls(), list(transport.read_item(created.item_id, CONTENT).raw_sections)) == (
         [("GET", "/rest/api/3/issue/DEMO-1/changelog")],
@@ -809,7 +838,7 @@ def test_a_write_quoting_section_text_jira_does_not_hold_under_the_same_keys_is_
     stale = {**created.raw_sections, "intro": section_text([_words("Welcome, gardeners.")])}
 
     with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
-        transport.write_content(created.item_id, ContentWrite(dict(created.raw_sections), stale))
+        transport.write_content(created.item_id, ContentWrite(dict(created.raw_sections), stale, STAMP))
     assert jira.calls() == _read_calls("DEMO-1")
 
 
@@ -817,7 +846,7 @@ def test_an_empty_content_write_clears_the_description() -> None:
     jira = FakeJira()
     transport, created = _created(jira)
 
-    written = transport.write_content(created.item_id, ContentWrite({}, created.raw_sections))
+    written = transport.write_content(created.item_id, ContentWrite({}, created.raw_sections, STAMP))
 
     assert (jira.issues["DEMO-1"].fields["description"], written.raw_sections) == (None, {})
 
@@ -828,7 +857,7 @@ def test_a_section_write_rewrites_the_whole_description_with_that_section_change
     tools = section_text([_words("Spade.")])
 
     written = transport.write_section(
-        created.item_id, SectionRequest(AddSection("tools", tools, "intro"), created.raw_sections)
+        created.item_id, SectionRequest(AddSection("tools", tools, "intro"), created.raw_sections, STAMP)
     )
 
     assert (list(written.raw_sections), jira.issues["DEMO-1"].fields["description"]) == (
@@ -852,7 +881,7 @@ def test_a_section_write_quoting_text_jira_no_longer_holds_is_refused_unsent() -
         ),
     ):
         transport.write_section(
-            created.item_id, SectionRequest(RemoveSection("planting", "[]"), created.raw_sections)
+            created.item_id, SectionRequest(RemoveSection("planting", "[]"), created.raw_sections, STAMP)
         )
     assert jira.calls() == _read_calls("DEMO-1")
 
@@ -887,8 +916,12 @@ def test_a_fields_write_sends_only_what_changed(write: FieldsWrite, sent: dict[s
 
     transport.write_fields(created.item_id, write)
 
-    assert (jira.calls()[:2], summarise(jira.requests[1])["body"]) == (
-        [("GET", "/rest/api/3/issue/DEMO-1/changelog"), ("PUT", "/rest/api/3/issue/DEMO-1")],
+    assert (jira.calls()[:3], summarise(jira.requests[2])["body"]) == (
+        [
+            ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            ("GET", "/rest/api/3/issue/DEMO-1/changelog"),
+            ("PUT", "/rest/api/3/issue/DEMO-1"),
+        ],
         {"fields": sent},
     )
 
@@ -900,7 +933,11 @@ def test_a_fields_write_with_nothing_changed_sends_nothing_and_reads_back() -> N
     read = transport.write_fields(created.item_id, _fields_write({**FIELDS_WRITTEN, "labels": ["garden"]}))
 
     assert (jira.calls(), read.comparable) == (
-        [("GET", "/rest/api/3/issue/DEMO-1/changelog"), *_read_calls("DEMO-1")],
+        [
+            ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            ("GET", "/rest/api/3/issue/DEMO-1/changelog"),
+            *_read_calls("DEMO-1"),
+        ],
         CONTENT_AS_COMPARED,
     )
 
@@ -1357,7 +1394,7 @@ def test_two_writes_on_one_transport_ask_jira_who_is_signed_in_once() -> None:
 
     transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
     transport.write_content(
-        created.item_id, ContentWrite({"planting": section_text([SOW_IN_MAY])}, RAW_AFTER_CREATE)
+        created.item_id, ContentWrite({"planting": section_text([SOW_IN_MAY])}, RAW_AFTER_CREATE, STAMP)
     )
 
     assert [call for call in jira.calls() if call == ("GET", "/rest/api/3/myself")] == [
@@ -1371,7 +1408,7 @@ def _missing(path: str) -> str:
 
 def _write_the_same_content(transport: JiraTransport, created: RemoteItem) -> object:
     return transport.write_content(
-        created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections)
+        created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections, STAMP)
     )
 
 

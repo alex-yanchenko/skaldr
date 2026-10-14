@@ -33,6 +33,11 @@ class Stamp:
     doc_id: str
     section_id: str | None
 
+    @property
+    def named(self) -> str:
+        section = "" if self.section_id is None else f", section '{self.section_id}'"
+        return f"doc_id '{self.doc_id}'{section}"
+
 
 @dataclass(frozen=True)
 class RemoteItem:
@@ -95,18 +100,22 @@ SectionWrite = AddSection | ReplaceSection | RemoveSection
 class SectionRequest:
     change: SectionWrite
     raw_sections: RawSections
+    stamp: Stamp
 
 
 @dataclass(frozen=True)
 class ContentWrite:
     sections: Mapping[str, str]
     raw_sections: RawSections
+    stamp: Stamp
 
 
 @dataclass(frozen=True)
 class Release:
     raw_sections: RawSections
     field_names: tuple[str, ...]
+    clears_icon: bool = False
+    clears_cover: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,6 +125,18 @@ class FieldsWrite:
     previous_title: str
     previous_fields: JsonFields
     stamp: Stamp
+    icon: str | None = None
+    cover: str | None = None
+    previous_icon: str | None = None
+    previous_cover: str | None = None
+
+    @property
+    def changes_the_icon(self) -> bool:
+        return self.icon != self.previous_icon
+
+    @property
+    def changes_the_cover(self) -> bool:
+        return self.cover != self.previous_cover
 
     @property
     def changed_fields(self) -> JsonFields:
@@ -158,5 +179,7 @@ class Transport(Protocol):
     def parts_edited_after(
         self, item_id: str, marker: str | None, keyed_like: ItemContent, /
     ) -> tuple[Part, ...]: ...
+
+    def editor_name(self, user_id: str, /) -> str: ...
 
     def close(self) -> None: ...

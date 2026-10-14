@@ -256,6 +256,9 @@ class JiraTransport:
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         self._last_reads.pop(item_id, None)
+        stamped = self._stamp(item_id)
+        if stamped is not None and stamped.stamp != request.stamp:
+            raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
         self._remember_shapes(item_id, request.fields)
         self._refuse_unseen_edits(item_id, self._history(item_id))
         changes: dict[str, JsonValue] = {SUMMARY_FIELD: request.title} if request.changes_the_title else {}
@@ -308,6 +311,9 @@ class JiraTransport:
                 section_part(key) for key in keys if published.sections.get(key) != current.sections.get(key)
             ]
         return tuple(parts)
+
+    def editor_name(self, display_name: str, /) -> str:
+        return display_name
 
     def close(self) -> None:
         self._client.close()

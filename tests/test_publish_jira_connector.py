@@ -11,7 +11,6 @@ from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, render_adf_regions
 from skaldr.export.lower import lower_report
 from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish.cli import installed_connectors
 from skaldr.publish.content import ItemContent
 from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
 from skaldr.publish.jira import JiraConnector
@@ -57,14 +56,6 @@ def _publish(path: Path, jira: FakeJira, *, overwrite: bool = False) -> ApplyOut
 
 def _writes(jira: FakeJira) -> list[tuple[str, str]]:
     return [call for call in jira.calls() if call[0] != "GET"]
-
-
-def test_skaldr_ships_a_jira_connector_and_no_notion_one_yet() -> None:
-    registry = installed_connectors()
-
-    with pytest.raises(ConnectorError, match=r"^no connector publishes to notion$"):
-        registry.for_service("notion")
-    assert isinstance(registry.for_service("jira"), JiraConnector)
 
 
 def test_the_connector_replaces_whole_descriptions_never_writes_into_an_issue_and_caps_the_size() -> None:

@@ -4,7 +4,16 @@ from typing import Literal
 
 from skaldr.errors import PublishError
 from skaldr.publish.applier import Applied, Applier, StepListener
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, differing_parts, section_part
+from skaldr.publish.content import (
+    COVER,
+    FIELDS,
+    ICON,
+    TITLE,
+    ItemContent,
+    Part,
+    differing_parts,
+    section_part,
+)
 from skaldr.publish.drafts import ItemDraft, item_label
 from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item, refuse_moved_targets
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
@@ -263,7 +272,9 @@ def _changes_of_item(
 
 def _whole_item_parts(content: ItemContent) -> list[Part]:
     fields: list[Part] = [FIELDS] if content.fields else []
-    return [TITLE, *fields, *(section_part(key) for key in content.sections)]
+    icon: list[Part] = [ICON] if content.icon is not None else []
+    cover: list[Part] = [COVER] if content.cover is not None else []
+    return [TITLE, *fields, *icon, *cover, *(section_part(key) for key in content.sections)]
 
 
 def _yaml_changes(prepared: Prepared) -> tuple[YamlChange, ...]:

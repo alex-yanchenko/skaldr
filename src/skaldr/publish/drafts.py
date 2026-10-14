@@ -13,7 +13,7 @@ from skaldr.errors import PublishError
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
 from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, section_part
+from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
 from skaldr.services import SERVICE_NAMES
 
@@ -139,21 +139,29 @@ class _TargetContext:
         return f"{target_path}.where.fields"
 
 
+def _look_paths(section_id: str | None) -> dict[Part, str]:
+    return {ICON: "meta.icon", **({COVER: "meta.cover"} if section_id is None else {})}
+
+
 def _item_draft(
     context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
 ) -> ItemDraft:
     texts = context.connector.render_regions(context.report, page)
     keys = region_keys(context.authored_blocks, page.regions)
+    carries_look = context.connector.carries_look
     return ItemDraft(
         section_id,
         ItemContent(
             title=page.title,
             sections=dict(zip(keys, texts, strict=True)),
             fields=context.target.fields_for(section_id),
+            icon=page.icon if carries_look else None,
+            cover=page.cover if carries_look else None,
         ),
         {
             TITLE: title_path,
             FIELDS: context.fields_path(section_id),
+            **(_look_paths(section_id) if carries_look else {}),
             **{
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
             },

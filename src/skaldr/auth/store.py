@@ -40,11 +40,11 @@ Answer = TypeVar("Answer")
 
 Source = Literal["keychain", "environment"]
 
-_NOTION_ACCESS_TOKEN = "NOTION_ACCESS_TOKEN"
+NOTION_ACCESS_TOKEN_VARIABLE = "NOTION_ACCESS_TOKEN"
 _NOTION_CLIENT_ID = "NOTION_CLIENT_ID"
 _NOTION_CLIENT_SECRET = "NOTION_CLIENT_SECRET"
 _NOTION_CLIENT_ENVIRONMENT = (_NOTION_CLIENT_ID, _NOTION_CLIENT_SECRET)
-NOTION_ENVIRONMENT = (_NOTION_ACCESS_TOKEN, *_NOTION_CLIENT_ENVIRONMENT)
+NOTION_ENVIRONMENT = (NOTION_ACCESS_TOKEN_VARIABLE, *_NOTION_CLIENT_ENVIRONMENT)
 _JIRA_SITE = "JIRA_SITE"
 _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
@@ -206,11 +206,7 @@ def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
 def find_notion(workspace: str | None = None) -> StoredEntry[NotionCredentials] | None:
     wanted = None if workspace is None else _canonical_workspace_selector(workspace)
     found = _the_only_match(
-        stored_notion_sign_ins(),
-        wanted,
-        _is_workspace,
-        "Notion workspaces",
-        _describe_workspace,
+        stored_notion_sign_ins(), wanted, _is_workspace, "Notion workspaces", _describe_workspace
     )
     if found is None and wanted is not None and _is_uuid(wanted):
         return _in_the_keychain(lambda: _entry_named(_NOTION, wanted))
@@ -237,6 +233,22 @@ def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | Non
     if from_environment is not None:
         return SignIn(from_environment, "environment")
     return _signed_in(find_notion(workspace))
+
+
+def require_notion_for_a_target(workspace: str | None) -> SignIn[NotionCredentials]:
+    try:
+        sign_in = load_notion(workspace)
+    except SeveralSignInsError as exc:
+        raise AuthError(f"{exc} with `workspace` in the target's `where`") from exc
+    if sign_in is not None:
+        return sign_in
+    signed_in = stored_notion_sign_ins()
+    if workspace is None or not signed_in:
+        return require_notion(workspace)
+    raise AuthError(
+        f"No Notion sign-in matches workspace `{printable_only(workspace)}`; signed in to "
+        f"{', '.join(map(_describe_workspace, signed_in))}"
+    )
 
 
 def require_jira(site: str | None = None) -> SignIn[JiraCredentials]:
@@ -288,8 +300,10 @@ def _the_only_match(
 ) -> StoredEntry[CredentialsT] | None:
     chosen = entries if selector is None else [entry for entry in entries if matches(entry, selector)]
     if len(chosen) > 1:
+        named = "" if selector is None else f" named `{printable_only(selector)}`"
+        by_its_id = "" if selector is None else " by its id"
         raise SeveralSignInsError(
-            f"Signed in to several {plural} ({', '.join(map(describe, chosen))}); name one"
+            f"Signed in to several {plural}{named} ({', '.join(map(describe, chosen))}); name one{by_its_id}"
         )
     return chosen[0] if chosen else None
 
@@ -605,7 +619,7 @@ def _all_or_none_from_environment(names: Sequence[str]) -> Mapping[str, str] | N
 
 
 def notion_from_environment() -> NotionCredentials | None:
-    access_token = _environment(_NOTION_ACCESS_TOKEN)
+    access_token = _environment(NOTION_ACCESS_TOKEN_VARIABLE)
     if access_token is None:
         return None
     client = _all_or_none_from_environment(_NOTION_CLIENT_ENVIRONMENT) or {}
