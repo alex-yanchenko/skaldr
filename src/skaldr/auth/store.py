@@ -524,7 +524,7 @@ def _wait_for_the_reply(
         return replies.get(timeout=KEYCHAIN_NOTICE_SECONDS)
     _LOGGER.warning(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE)
     with suppress(Empty):
-        return replies.get(timeout=KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS)
+        return replies.get(timeout=max(0.0, KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS))
     raise KeychainTimeoutError(
         f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
         "unlock it or answer its prompt, then run the command again. A change skaldr asked for "

@@ -1123,6 +1123,27 @@ def test_a_keychain_that_never_answers_stops_with_an_error_after_one_notice(
     assert (caplog.record_tuples, capsys.readouterr().err) == (notice_logged(WAITING_FOR_THE_KEYCHAIN), "")
 
 
+def test_a_keychain_timeout_shorter_than_the_notice_delay_stops_with_the_timeout_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.1)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.05)
+    slow = SlowKeyring(answers_after=30)
+    keyring.set_keyring(slow)
+
+    try:
+        with pytest.raises(AuthError) as raised:
+            load_jira()
+    finally:
+        slow.released.set()
+
+    assert (str(raised.value), caplog.record_tuples) == (
+        "The system keychain did not answer within 0.05 seconds; unlock it or answer its prompt, then run "
+        "the command again. A change skaldr asked for may still be applied if the keychain answers later",
+        notice_logged(WAITING_FOR_THE_KEYCHAIN),
+    )
+
+
 @pytest.mark.usefixtures("keychain")
 def test_a_prompt_keychain_prints_nothing(
     capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
