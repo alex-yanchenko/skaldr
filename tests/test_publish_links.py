@@ -28,7 +28,12 @@ from tests.factories.publish_factory import (
     make_garden_blocks,
     write_garden_report,
 )
-from tests.factories.report_factory import NOTION_PAGE_URL, make_jira_target, make_notion_target
+from tests.factories.report_factory import (
+    NOTION_PAGE_ID,
+    NOTION_PAGE_URL,
+    make_jira_target,
+    make_notion_target,
+)
 
 JIRA_LABEL = "jira project PLAN under no parent issue"
 OPS_LABEL = "jira project OPS under no parent issue"
@@ -331,6 +336,25 @@ def test_a_section_no_longer_split_in_jira_unlinks_only_that_section(tmp_path: P
             "page-3": (_page("page-1", "Garden handbook"),),
             "page-4": (_page("page-2", "Tools"),),
         },
+    )
+
+
+def test_releasing_a_page_written_into_unlinks_its_issue_and_takes_the_links_off_the_page(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    written_into = make_notion_target(where={"page": NOTION_PAGE_ID})
+    path = write_garden_report(tmp_path, publish=_publish_block(written_into, _jira()))
+    _publish(path, transport)
+    write_garden_report(tmp_path, publish=_publish_block(_jira()))
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, _links_of(transport)) == (
+        Applied((f"release  document ({NOTION_PAGE_ID})", "unlink   document from Garden handbook")),
+        {NOTION_PAGE_ID: (), "page-2": ()},
     )
 
 
