@@ -4,7 +4,16 @@ from typing import Literal
 
 from skaldr.errors import PublishError
 from skaldr.publish.applier import Applied, Applier, StepListener
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, differing_parts, section_part
+from skaldr.publish.content import (
+    COVER,
+    FIELDS,
+    ICON,
+    TITLE,
+    ItemContent,
+    Part,
+    differing_parts,
+    section_part,
+)
 from skaldr.publish.drafts import ItemDraft, item_label
 from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item, refuse_moved_targets
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
@@ -199,23 +208,29 @@ def apply_publish(
 ) -> ApplyOutcome:
     with held_state_lock(prepared.state_path, prepared.document_path, "publish --apply"):
         prepared = _prepared_again_from_the_same_yaml(prepared)
-        loaded = prepared.state
-        transports = Transports(prepared)
-        preflight = _preflight(prepared, transports)
-        if not overwrite:
-            _refuse_missing_items(preflight)
-        edited = preflight.edited
-        prepared = preflight.prepared
-        refused, prepared = _refusal(prepared, edited, overwrite) if edited else (None, prepared)
-        _save_if_changed(prepared, loaded)
-        if refused is not None:
-            return refused
-        rewritten = {reading.item: reading.edited for reading in edited}
-        missing = [missing.item for missing in preflight.missing]
-        plan = plan_publish(prepared.drafts, prepared.state, prepared.registry, rewritten, missing)
-        written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
-        remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
-        return Applier(prepared, transports, remote, on_step, prepared.state).run(plan)
+        with Transports(prepared) as transports:
+            return _applied_with(prepared, transports, overwrite, on_step)
+
+
+def _applied_with(
+    prepared: Prepared, transports: Transports, overwrite: bool, on_step: StepListener
+) -> ApplyOutcome:
+    loaded = prepared.state
+    preflight = _preflight(prepared, transports)
+    if not overwrite:
+        _refuse_missing_items(preflight)
+    edited = preflight.edited
+    prepared = preflight.prepared
+    refused, prepared = _refusal(prepared, edited, overwrite) if edited else (None, prepared)
+    _save_if_changed(prepared, loaded)
+    if refused is not None:
+        return refused
+    rewritten = {reading.item: reading.edited for reading in edited}
+    missing = [missing.item for missing in preflight.missing]
+    plan = plan_publish(prepared.drafts, prepared.state, prepared.registry, rewritten, missing)
+    written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
+    remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
+    return Applier(prepared, transports, remote, on_step, prepared.state).run(plan)
 
 
 @dataclass(frozen=True)
@@ -227,7 +242,8 @@ class DryRun:
 
 def dry_run_publish(prepared: Prepared) -> DryRun:
     try:
-        preflight = _preflight(prepared, Transports(prepared))
+        with Transports(prepared) as transports:
+            preflight = _preflight(prepared, transports)
         _refuse_missing_items(preflight)
     except PublishError as exc:
         return DryRun(prepared.plan, (), str(exc))
@@ -256,7 +272,9 @@ def _changes_of_item(
 
 def _whole_item_parts(content: ItemContent) -> list[Part]:
     fields: list[Part] = [FIELDS] if content.fields else []
-    return [TITLE, *fields, *(section_part(key) for key in content.sections)]
+    icon: list[Part] = [ICON] if content.icon is not None else []
+    cover: list[Part] = [COVER] if content.cover is not None else []
+    return [TITLE, *fields, *icon, *cover, *(section_part(key) for key in content.sections)]
 
 
 def _yaml_changes(prepared: Prepared) -> tuple[YamlChange, ...]:
@@ -285,7 +303,8 @@ def diff_publish(prepared: Prepared) -> PublishDiff:
     with held_state_lock(prepared.state_path, prepared.document_path, "diff"):
         prepared = prepare_publish(prepared.document_path, prepared.registry)
         loaded = prepared.state
-        published = read_published(prepared, Transports(prepared))
+        with Transports(prepared) as transports:
+            published = read_published(prepared, transports)
         prepared = prepared.with_state(published.state)
         edited = [reading for reading in published.readings if reading.edited]
         prepared = prepared.with_state(_with_shown(prepared, edited))
@@ -326,7 +345,8 @@ def _status_of(ref: ItemRef, draft: ItemDraft | None, prepared: Prepared, facts:
 
 
 def publish_status(prepared: Prepared) -> tuple[ItemStatus, ...]:
-    published = read_published(prepared, Transports(prepared))
+    with Transports(prepared) as transports:
+        published = read_published(prepared, transports)
     facts = _StatusFacts(
         {reading.item: reading for reading in published.readings},
         {missing.item: missing.item_id for missing in published.missing},

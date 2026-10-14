@@ -11,7 +11,7 @@ from typing_extensions import assert_never
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields
 
-PartKind = Literal["title", "fields", "section"]
+PartKind = Literal["title", "fields", "icon", "cover", "section"]
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,8 @@ class Part:
 
 TITLE = Part("title")
 FIELDS = Part("fields")
+ICON = Part("icon")
+COVER = Part("cover")
 
 
 def section_part(key: str) -> Part:
@@ -36,6 +38,19 @@ class ItemContent(FrozenModel):
     title: str
     sections: dict[str, str] = Field(default_factory=dict[str, str])
     fields: JsonFields = Field(default_factory=JsonFields)
+    icon: str | None = None
+    cover: str | None = None
+
+
+def with_look_owned_by(content: ItemContent, *owners: ItemContent) -> ItemContent:
+    owns_the_icon = any(owner.icon is not None for owner in owners)
+    owns_the_cover = any(owner.cover is not None for owner in owners)
+    return content.model_copy(
+        update={
+            "icon": content.icon if owns_the_icon else None,
+            "cover": content.cover if owns_the_cover else None,
+        }
+    )
 
 
 UNSET_VALUES: tuple[JsonValue, ...] = (None, "", [], {})
@@ -124,6 +139,10 @@ def with_parts(before: ItemContent, after: ItemContent, parts: Sequence[Part]) -
                 content = content.model_copy(update={"title": after.title})
             case "fields":
                 content = content.model_copy(update={"fields": after.fields})
+            case "icon":
+                content = content.model_copy(update={"icon": after.icon})
+            case "cover":
+                content = content.model_copy(update={"cover": after.cover})
             case "section":
                 text = after.sections.get(part.key)
                 follows = order[order.index(part.key) - 1] if part.key in order[1:] else None
@@ -147,16 +166,20 @@ def differing_parts(published: ItemContent, current: ItemContent) -> tuple[Part,
     return (
         *((TITLE,) if published.title != current.title else ()),
         *(() if same_fields(published.fields, current.fields) else (FIELDS,)),
+        *((ICON,) if published.icon != current.icon else ()),
+        *((COVER,) if published.cover != current.cover else ()),
         *(section_part(key) for key in (*changes.written, *changes.removed)),
     )
 
 
 def content_digest(content: ItemContent) -> str:
+    look = {name: value for name, value in (("icon", content.icon), ("cover", content.cover)) if value}
     canonical = _canonical_json(
         {
             "title": content.title,
             "sections": [[key, text] for key, text in content.sections.items()],
             "fields": comparable(set_fields(content.fields)),
+            **look,
         }
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
