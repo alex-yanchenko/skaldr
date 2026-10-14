@@ -914,15 +914,17 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "bulletList",
-    TableOfContents: "paragraph",
+}
+NODES_WRITING_A_FIRST_BLOCK = {
+    kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents
 }
 
 
 def test_each_minimal_node_type_has_an_expected_first_block() -> None:
-    assert set(FIRST_BLOCK_OF_EACH_NODE_TYPE) == set(MINIMAL_NODES)
+    assert set(FIRST_BLOCK_OF_EACH_NODE_TYPE) == set(NODES_WRITING_A_FIRST_BLOCK)
 
 
-@pytest.mark.parametrize("node", MINIMAL_NODES.values(), ids=lambda node: type(node).__name__)
+@pytest.mark.parametrize("node", NODES_WRITING_A_FIRST_BLOCK.values(), ids=lambda node: type(node).__name__)
 def test_every_lowered_node_type_writes_its_expected_first_block(node: Node) -> None:
     content = render_adf((node,))["content"]
 
