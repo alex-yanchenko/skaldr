@@ -43,6 +43,7 @@ from skaldr.auth.store import (
 )
 from skaldr.errors import AuthError
 from skaldr.services import Service
+from tests.conftest import REPO_ROOT
 from tests.factories.auth_factory import (
     HEX_WORKSPACE_ID,
     OTHER_WORKSPACE_ID,
@@ -75,7 +76,6 @@ LEGACY_JIRA_UNREADABLE = (
     "then run `skaldr auth jira` again"
 )
 REAL_LOCK_FILE = store.lock_file
-REPO_ROOT = Path(__file__).resolve().parent.parent
 WAITING_FOR_THE_LOCK = "Waiting for another skaldr command to finish with the keychain."
 AN_ENTRY = stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())
 WAITING_FOR_THE_KEYCHAIN = (
