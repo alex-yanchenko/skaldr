@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 import pytest
 
 from skaldr.errors import ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import ItemContent, Part, section_part
+from skaldr.publish.content import ItemContent, Part, differing_parts, section_part
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
@@ -338,15 +338,19 @@ def test_a_hand_edit_shows_in_the_comparable_text_a_read_returns(under_test: Tra
     )
 
 
-def test_a_hand_edit_after_a_marker_is_reported(under_test: TransportUnderTest) -> None:
-    if not under_test.reports_edits:
-        pytest.skip("this transport reports no edits by marker")
+def test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read(
+    under_test: TransportUnderTest,
+) -> None:
     instance, created = _created(under_test)
 
     instance.edit_section_by_hand(created.item_id, "planting", "Sow in June.\n")
+    reported = instance.transport.parts_edited_after(created.item_id, created.marker, CONTENT)
+    read = instance.transport.read_item(created.item_id, CONTENT)
 
-    assert instance.transport.parts_edited_after(created.item_id, created.marker, CONTENT) == (
-        section_part("planting"),
+    planting = (section_part("planting"),)
+    assert (reported, differing_parts(created.comparable, read.comparable)) == (
+        planting if under_test.reports_edits else (),
+        planting,
     )
 
 
@@ -388,6 +392,11 @@ class HidesHandEdits(FakeTransport):
         return ()
 
 
+class ReadsWhatItLastWrote(FakeTransport):
+    def edit_section_by_hand(self, item_id: str, key: str, text: str) -> None:  # noqa: ARG002
+        self.report_an_edit_without_changing_content(item_id, section_part(key))
+
+
 class DropsTheStampSection(FakeTransport):
     def create_item(self, request: NewItem, /) -> RemoteItem:
         return super().create_item(replace(request, stamp=Stamp(request.stamp.doc_id, None)))
@@ -424,7 +433,16 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             test_a_created_item_reads_back_keyed_and_ordered_like_the_content_in_the_services_form,
             id="reordered-sections",
         ),
-        pytest.param(HidesHandEdits, test_a_hand_edit_after_a_marker_is_reported, id="hidden-hand-edits"),
+        pytest.param(
+            HidesHandEdits,
+            test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            id="hidden-hand-edits",
+        ),
+        pytest.param(
+            ReadsWhatItLastWrote,
+            test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            id="hand-edits-missing-from-the-read",
+        ),
         pytest.param(
             DropsTheStampSection,
             test_the_stamp_carries_the_section_the_item_holds,
