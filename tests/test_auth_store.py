@@ -1227,9 +1227,8 @@ def test_a_chained_keyring_of_secure_backends_is_saved_to(monkeypatch: pytest.Mo
         ("https://Example.atlassian.net/", "https://example.atlassian.net"),
         ("  https://example.atlassian.net/jira/your-work  ", "https://example.atlassian.net"),
         ("https://example.atlassian.net:443", "https://example.atlassian.net"),
-        ("https://example.atlassian.net:8443", "https://example.atlassian.net:8443"),
     ],
-    ids=["bare host", "trailing slash", "a page url", "the default port", "another port"],
+    ids=["bare host", "trailing slash", "a page url", "the default port"],
 )
 def test_a_typed_site_becomes_its_https_origin(typed: str, site: str) -> None:
     assert normalise_site(typed) == site

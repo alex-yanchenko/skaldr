@@ -51,6 +51,7 @@ _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
 JIRA_ENVIRONMENT = (_JIRA_SITE, _JIRA_EMAIL, _JIRA_API_TOKEN)
 _JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
+_HTTPS_PORT = 443
 _INSECURE_KEYRING_MODULES = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
 _SITE_REQUIREMENT = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
@@ -442,11 +443,11 @@ def _https_origin(typed: str) -> str | None:
         url = HttpUrl(text if "://" in text else f"https://{text}")
     except ValidationError:
         return None
-    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host):
+    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host) or url.port != _HTTPS_PORT:
         return None
     if _carries_userinfo_query_or_fragment(url):
         return None
-    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
+    return f"https://{url.host}"
 
 
 def _is_a_jira_cloud_host(host: str | None) -> bool:

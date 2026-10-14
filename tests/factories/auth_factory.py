@@ -226,6 +226,7 @@ REFUSED_SITES = (
     RefusedSite("an ip literal", "https://127.0.0.1"),
     RefusedSite("an ipv6 literal", "https://[::1]"),
     RefusedSite("localhost with a port", "localhost:22"),
+    RefusedSite("a jira cloud host on a port other than 443", "https://acme.atlassian.net:8443"),
     RefusedSite("a host outside atlassian.net", "https://evil.example"),
     RefusedSite("atlassian.net itself", "https://atlassian.net"),
     RefusedSite("atlassian.net inside another host", "https://acme.atlassian.net.evil.example"),
