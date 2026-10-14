@@ -10,6 +10,7 @@ from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
+    HTML_LINE_BREAK,
     LARGEST_ORDERED_MARKER_NUMBER,
     CommonMarkRuns,
     code_block_lines,
@@ -71,6 +72,8 @@ MATH_LANGUAGE: Final = "latex"
 BULLET_MARKER: Final = "*"
 BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "\N{NO-BREAK SPACE}"
+HARD_LINE_BREAK: Final = "\\\n"
+LINE_BREAK_ON_ONE_LINE: Final = " "
 OUT_OF_THE_LIST: Final = "move it out of the list, after the list"
 OUT_OF_THE_STEP: Final = "move it out of the step, after the walkthrough"
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
@@ -110,6 +113,12 @@ def _in_unicode_script_form(position: ScriptPosition, text: str) -> str:
 
 
 class _SlackRuns(CommonMarkRuns):
+    def __init__(self, written_line_break: str) -> None:
+        self.written_line_break = written_line_break
+
+    def line_break(self) -> str:
+        return self.written_line_break
+
     def unflanked_emphasis(self, _style: MarkerStyle, inner: str, /) -> str:
         return inner
 
@@ -403,15 +412,24 @@ def _with_lists_kept_apart(
 
 class _CanvasWriter:
     def __init__(self) -> None:
-        self.runs = _SlackRuns()
+        self.runs = _SlackRuns(LINE_BREAK_ON_ONE_LINE)
+        self.paragraph_runs = _SlackRuns(HARD_LINE_BREAK)
+        self.table_cell_runs = _SlackRuns(HTML_LINE_BREAK)
         self.nearest_heading = ""
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
 
+    def block_line(self, line: str) -> str:
+        escaped = escape_block_start(line)
+        return "\\" + escaped if escaped.startswith(CANVAS_FENCE) else escaped
+
     def block_text(self, runs: ExportRich) -> str:
-        text = escape_block_start(self.inline(runs))
-        return "\\" + text if text.startswith(CANVAS_FENCE) else text
+        return self.block_line(self.inline(runs))
+
+    def paragraph_lines(self, paragraph: Paragraph) -> list[str]:
+        text = self.paragraph_runs.write(paragraph.text)
+        return [self.block_line(line) for line in text.split("\n")] if text else []
 
     def list_lines(self, canvas_list: _List) -> list[str]:
         lines: list[str] = []
@@ -426,7 +444,7 @@ class _CanvasWriter:
         cells = table_width(table) * (1 + len(table.rows))
         if cells > SLACK_TABLE_CELL_LIMIT:
             raise _table_over_the_cell_limit(cells, self.nearest_heading)
-        return pipe_table_lines(table, self.inline)
+        return pipe_table_lines(table, self.table_cell_runs.write)
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
@@ -468,8 +486,7 @@ class _CanvasWriter:
                 self.nearest_heading = export_visible_text(block.text).strip() or self.nearest_heading
                 return [heading_line(min(block.level, DEEPEST_CANVAS_HEADING), self.inline(block.text))]
             case Paragraph():
-                text = self.block_text(block.text)
-                return [text] if text else []
+                return self.paragraph_lines(block)
             case _Title():
                 return self.title_lines(block)
             case _List():

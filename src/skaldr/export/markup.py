@@ -42,6 +42,7 @@ STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em",
 ENTITY_LOOKALIKE: Final = re.compile(r"&(?=#?\w+;)")
 LARGEST_ORDERED_MARKER_NUMBER: Final = 999_999_999
 DIVIDER_LINE: Final = "---"
+HTML_LINE_BREAK: Final = "<br>"
 BLOCK_START_MARKER = re.compile(r"^(#{1,6}|[-+]+|=+|>)(?=\s|$)")
 ORDERED_START_MARKER = re.compile(r"^(\d{1,9})([.)])(?=\s|$)")
 BACKTICK_RUN = re.compile(r"`+")
@@ -214,7 +215,7 @@ class MarkupRuns(TextRunWriter, ABC):
         return f"[{label}]({encode_url(run.url)})" if run.url else label
 
     def line_break(self) -> str:
-        return "<br>"
+        return HTML_LINE_BREAK
 
     def styled(self, style: StyleName, inner: str, /) -> str:
         match style:

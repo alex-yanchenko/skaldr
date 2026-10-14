@@ -166,6 +166,34 @@ def test_a_paragraph_is_its_inline_text_and_drops_its_tone() -> None:
     assert render_slack([Paragraph(_rich_text("Counted twice."), "warning")]) == "Counted twice.\n"
 
 
+def _broken_line(second: str) -> tuple[ExportRun, ...]:
+    return (Plain("one"), Break(), Plain(second))
+
+
+@pytest.mark.parametrize(
+    ("node", "text"),
+    [
+        pytest.param(Paragraph(_broken_line("two")), "one\\\ntwo\n", id="paragraph-hard-break"),
+        pytest.param(
+            Paragraph(_broken_line("# two")), "one\\\n\\# two\n", id="paragraph-line-after-the-break-escaped"
+        ),
+        pytest.param(
+            Callout("info", (Paragraph(_broken_line(":::")),)),
+            "::: {.callout}\n💡 one\\\n\\:::\n:::\n",
+            id="callout-paragraph-line-after-the-break-is-not-a-fence",
+        ),
+        pytest.param(Heading(2, _broken_line("two")), "## one two\n", id="heading-space"),
+        pytest.param(_bullets(ListEntry(_broken_line("two"))), "* one two\n", id="list-item-space"),
+        pytest.param(Quote((_broken_line("two"),)), "> one two\n", id="quote-space"),
+        pytest.param(Toggle(_broken_line("two"), None, ()), "**one two**\n", id="title-space"),
+    ],
+)
+def test_a_line_break_outside_a_table_cell_is_a_hard_break_in_a_paragraph_and_a_space_elsewhere(
+    node: Node, text: str
+) -> None:
+    assert render_slack([node]) == text
+
+
 @pytest.mark.parametrize(
     ("node", "text"),
     [
