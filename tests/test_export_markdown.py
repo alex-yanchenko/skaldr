@@ -68,7 +68,9 @@ from tests.factories import (
     folder_texts,
     in_a_grid_cell,
     in_an_open_section,
+    make_bullets,
     make_command_request,
+    make_paragraph,
     make_query_request,
     make_report,
     make_tab,
@@ -740,14 +742,6 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
     assert markdown_of(blocks) == "- a\n\n* b\n\n- [ ] c\n\n1. d\n\n1) e\n"
 
 
-def _bullets(*texts: str) -> ListNode:
-    return ListNode("bullet", tuple(ListEntry((Plain(text),)) for text in texts))
-
-
-def _para(text: str) -> Paragraph:
-    return Paragraph((Plain(text),))
-
-
 def _columns(*cells: tuple[Node, ...]) -> Columns:
     return Columns(tuple(GridColumn(1, cell) for cell in cells))
 
@@ -756,48 +750,48 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
     ("nodes", "markdown"),
     [
         pytest.param(
-            [_bullets("a", "b"), _columns((_bullets("c", "d"),), (_para("t"),))],
+            [make_bullets("a", "b"), _columns((make_bullets("c", "d"),), (make_paragraph("t"),))],
             "- a\n- b\n\n* c\n* d\n\nt\n",
             id="list-then-a-grid-opening-with-a-list",
         ),
         pytest.param(
-            [_columns((_para("t"),), (_bullets("c"),)), _bullets("d")],
+            [_columns((make_paragraph("t"),), (make_bullets("c"),)), make_bullets("d")],
             "t\n\n- c\n\n* d\n",
             id="grid-ending-with-a-list-then-a-list",
         ),
         pytest.param(
-            [_columns((_bullets("a"),)), _columns((_bullets("b"),)), _bullets("c")],
+            [_columns((make_bullets("a"),)), _columns((make_bullets("b"),)), make_bullets("c")],
             "- a\n\n* b\n\n- c\n",
             id="a-chain-of-lists-through-grids",
         ),
         pytest.param(
-            [_bullets("a"), _columns((_para(""),)), _bullets("b")],
+            [make_bullets("a"), _columns((make_paragraph(""),)), make_bullets("b")],
             "- a\n\n* b\n",
             id="a-grid-with-nothing-to-say-between-two-lists",
         ),
         pytest.param(
             [
-                Tabs((Tab((Plain("A"),), (_para("a"),)), Tab((Plain("B"),), (_bullets("x"),)))),
-                _bullets("z"),
+                Tabs((Tab((Plain("A"),), (make_paragraph("a"),)), Tab((Plain("B"),), (make_bullets("x"),)))),
+                make_bullets("z"),
             ],
             "**A**\n\na\n\n**B**\n\n- x\n\n* z\n",
             id="tabs-ending-with-a-list-then-a-list",
         ),
         pytest.param(
             [
-                _bullets("a"),
-                Tabs((Tab((Plain("A"),), (_bullets("x"),)), Tab((Plain("B"),), (_bullets("y"),)))),
+                make_bullets("a"),
+                Tabs((Tab((Plain("A"),), (make_bullets("x"),)), Tab((Plain("B"),), (make_bullets("y"),)))),
             ],
             "- a\n\n**A**\n\n- x\n\n**B**\n\n- y\n",
             id="a-tab-title-already-separates-lists",
         ),
         pytest.param(
-            [Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_bullets("p"),)), _bullets("z")],
+            [Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (make_bullets("p"),)), make_bullets("z")],
             '```mermaid\nflowchart LR\n    s1["A"]\n```\n\n- p\n\n* z\n',
             id="diagram-ending-with-a-list-then-a-list",
         ),
         pytest.param(
-            [Toggle((Plain("T"),), None, (_bullets("x"),)), _bullets("z")],
+            [Toggle((Plain("T"),), None, (make_bullets("x"),)), make_bullets("z")],
             "**T**\n\n- x\n\n* z\n",
             id="toggle-ending-with-a-list-then-a-list",
         ),
@@ -810,7 +804,7 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
             id="ordered-lists-either-side-of-a-grid",
         ),
         pytest.param(
-            [_bullets("a"), _columns((Callout("info", (_bullets("b"),)),)), _bullets("c")],
+            [make_bullets("a"), _columns((Callout("info", (make_bullets("b"),)),)), make_bullets("c")],
             "- a\n\n> 💡\n>\n> - b\n\n- c\n",
             id="a-quoted-list-in-a-grid-separates-the-lists-around-it",
         ),
@@ -836,13 +830,13 @@ def test_lists_around_an_authored_grid_stay_separate_lists_in_github() -> None:
 
 
 def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_that_follows() -> None:
-    callout = Callout("info", (Paragraph(()), _bullets("first", "second")))
+    callout = Callout("info", (Paragraph(()), make_bullets("first", "second")))
 
     assert render_markdown([callout]) == "> 💡\n>\n> - first\n> - second\n"
 
 
 def test_a_callout_with_an_empty_first_paragraph_puts_its_icon_before_a_later_paragraph() -> None:
-    callout = Callout("info", (Paragraph(()), _para("later")))
+    callout = Callout("info", (Paragraph(()), make_paragraph("later")))
 
     assert render_markdown([callout]) == "> 💡 later\n"
 
@@ -1182,7 +1176,7 @@ def test_a_bold_chip_directly_before_text_is_written_as_the_neighbour_allows(
 def test_a_table_of_contents_alternates_markers_with_the_bullet_lists_around_it() -> None:
     contents = TableOfContents((TocEntry("x", (Plain("Intro"),)),))
 
-    assert render_markdown([_bullets("a"), contents, _bullets("b")]) == "- a\n\n* Intro\n\n- b\n"
+    assert render_markdown([make_bullets("a"), contents, make_bullets("b")]) == "- a\n\n* Intro\n\n- b\n"
 
 
 def test_bold_after_a_dollar_sign_keeps_its_markers_because_ascii_punctuation_closes_the_gap() -> None:
@@ -1195,11 +1189,12 @@ def test_bold_after_a_dollar_sign_keeps_its_markers_because_ascii_punctuation_cl
     "nodes",
     [
         pytest.param(
-            [_bullets("a"), Toggle((), None, (_bullets("x"),)), _bullets("z")],
+            [make_bullets("a"), Toggle((), None, (make_bullets("x"),)), make_bullets("z")],
             id="toggle-with-an-empty-title",
         ),
         pytest.param(
-            [_bullets("a"), Tabs((Tab((), (_bullets("x"),)),)), _bullets("z")], id="tab-with-an-empty-title"
+            [make_bullets("a"), Tabs((Tab((), (make_bullets("x"),)),)), make_bullets("z")],
+            id="tab-with-an-empty-title",
         ),
     ],
 )
@@ -1208,7 +1203,7 @@ def test_a_list_either_side_of_a_block_with_an_empty_title_stays_a_separate_list
 
 
 def test_a_tab_with_an_empty_title_passes_the_list_before_it_through() -> None:
-    tabs = Tabs((Tab((Plain("A"),), (_bullets("x"),)), Tab((), (_bullets("y"),))))
+    tabs = Tabs((Tab((Plain("A"),), (make_bullets("x"),)), Tab((), (make_bullets("y"),))))
 
     assert render_markdown([tabs]) == "**A**\n\n- x\n\n* y\n"
 
@@ -1221,7 +1216,7 @@ def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.Mon
         return text
 
     monkeypatch.setattr(markdown_module, "escape_block_start", spy)
-    inner = Callout("info", (_para("deep"),))
+    inner = Callout("info", (make_paragraph("deep"),))
     outer = Callout("info", (Callout("info", (inner,)),))
 
     render_markdown([outer])

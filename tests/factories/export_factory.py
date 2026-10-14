@@ -8,8 +8,9 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import Node
+from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell
 from skaldr.models import AnyBlock, AuthoredBlock, parse_report
+from skaldr.richtext import Plain, Rich
 from tests.factories.report_factory import make_index_report, make_report
 
 BlockT = TypeVar("BlockT", bound=AnyBlock)
@@ -63,6 +64,28 @@ BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
         ],
     },
 ]
+
+
+def make_rich_text(text: str) -> Rich:
+    return (Plain(text),)
+
+
+def make_paragraph(text: str) -> Paragraph:
+    return Paragraph(make_rich_text(text))
+
+
+def make_list_entry(text: str, *children: Node, checked: bool = False) -> ListEntry:
+    return ListEntry(make_rich_text(text), checked, children)
+
+
+def make_bullets(*entries: ListEntry | str) -> ListNode:
+    return ListNode(
+        "bullet", tuple(make_list_entry(entry) if isinstance(entry, str) else entry for entry in entries)
+    )
+
+
+def make_table_cell(text: str) -> TableCell:
+    return TableCell(make_rich_text(text))
 
 
 def authored_block_types() -> set[str]:
