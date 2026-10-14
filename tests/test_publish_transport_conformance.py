@@ -51,6 +51,7 @@ class TransportUnderTest:
     target: TargetBase
     writes_into_pages: bool
     reports_edits: bool
+    carries_look: bool = True
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
@@ -248,6 +249,8 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
 def test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them(
     under_test: TransportUnderTest,
 ) -> None:
+    if not under_test.carries_look:
+        pytest.skip("this transport shows no icon or cover")
     instance = under_test.make()
     transport = instance.transport
     created = transport.create_item(NewItem(under_test.target, STAMP, LOOKING))

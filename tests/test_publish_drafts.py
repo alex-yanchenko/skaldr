@@ -124,6 +124,23 @@ def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_i
     )
 
 
+def _without_the_look(draft: ItemDraft) -> ItemDraft:
+    return ItemDraft(
+        draft.section_id,
+        draft.content.model_copy(update={"icon": None, "cover": None}),
+        {part: path for part, path in draft.paths.items() if part not in (ICON, COVER)},
+    )
+
+
+def test_a_connector_that_carries_no_icon_or_cover_drafts_neither_part() -> None:
+    report = authored_garden(meta=make_garden_meta(icon="🌱", cover=COVER_URL))
+
+    (looking,) = draft_targets(report, fake_registry(FakeTransport()))
+    (plain,) = draft_targets(report, fake_registry(FakeTransport(), carries_look=False))
+
+    assert plain.items == tuple(map(_without_the_look, looking.items))
+
+
 def test_a_split_section_without_overrides_takes_its_fields_from_where() -> None:
     report = authored_garden(
         publish=make_notion_publish(

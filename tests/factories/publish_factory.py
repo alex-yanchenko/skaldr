@@ -452,6 +452,7 @@ class FakeConnector:
     transport: FakeTransport = field(default_factory=FakeTransport)
     limits: tuple[ContentLimit, ...] = ()
     writes: WriteGranularity = "section"
+    carries_look: bool = True
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)
@@ -470,7 +471,12 @@ def fake_registry(
     limits: tuple[ContentLimit, ...] = (),
     target_types: tuple[type[TargetBase], ...] = (NotionTarget,),
     writes: WriteGranularity = "section",
+    *,
+    carries_look: bool = True,
 ) -> ConnectorRegistry:
     return ConnectorRegistry(
-        [FakeConnector(target_type, transport, limits, writes) for target_type in target_types]
+        [
+            FakeConnector(target_type, transport, limits, writes, carries_look=carries_look)
+            for target_type in target_types
+        ]
     )

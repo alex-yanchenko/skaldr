@@ -72,16 +72,17 @@ def test_skaldr_has_a_notion_connector_installed_and_none_for_jira() -> None:
         registry.for_target(JiraTarget.model_validate(make_jira_target()))
 
 
-def test_the_notion_connector_writes_one_section_at_a_time_within_one_creates_budget() -> None:
+def test_the_notion_connector_writes_sections_within_one_creates_budget_and_carries_the_look() -> None:
     connector = NotionConnector()
 
-    assert (connector.target_type, connector.writes, connector.limits) == (
+    assert (connector.target_type, connector.writes, connector.limits, connector.carries_look) == (
         NotionTarget,
         "section",
         (
             ContentLimit("section", 4_999, "Notion blocks", notion_block_count),
             ContentLimit("section", 200_000, "bytes of JSON", json_string_bytes),
         ),
+        True,
     )
 
 

@@ -46,6 +46,7 @@ class NotionConnector:
     target_type: type[TargetBase] = NotionTarget
     limits: tuple[ContentLimit, ...] = NOTION_LIMITS
     writes: WriteGranularity = "section"
+    carries_look: bool = True
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)

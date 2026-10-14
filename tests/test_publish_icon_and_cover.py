@@ -85,6 +85,24 @@ def test_a_first_publish_sets_the_icon_on_every_item_and_the_cover_on_the_docume
     )
 
 
+def test_a_connector_that_carries_no_icon_or_cover_never_plans_or_sends_them(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    registry = fake_registry(transport, carries_look=False)
+    path = write_garden_report(tmp_path, **_look(icon=SEEDLING, cover=COVER_URL))
+    first = apply_publish(prepare_publish(path, registry))
+    write_garden_report(tmp_path, **_look(icon=SUNFLOWER))
+    transport.forget_calls()
+
+    again = apply_publish(prepare_publish(path, registry))
+
+    assert (first, again, transport.writes(), _looks(transport)) == (
+        Applied(('create   document "Garden handbook"', 'create   section tools "Tools"')),
+        Applied(()),
+        [],
+        [(None, None), (None, None)],
+    )
+
+
 def test_a_changed_icon_and_a_removed_cover_are_written_to_each_item_that_shows_them(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(
