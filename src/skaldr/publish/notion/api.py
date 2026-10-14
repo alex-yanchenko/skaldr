@@ -1,4 +1,5 @@
 import math
+import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ from skaldr.publish_block.target import JsonFields
 
 Answer = TypeVar("Answer")
 Sleep = Callable[[float], None]
+Jitter = Callable[[], float]
 
 NOTION_API: Final = "https://api.notion.com"
 NOTION_VERSION: Final = "2026-03-11"
@@ -77,13 +79,6 @@ def _retry_after_seconds(response: httpx2.Response) -> float | None:
     except ValueError:
         return None
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
-
-
-def _wait_before_retrying(state: RetryCallState) -> float:
-    outcome = state.outcome
-    response = None if outcome is None or outcome.failed else outcome.result()
-    told = _retry_after_seconds(response) if isinstance(response, httpx2.Response) else None
-    return told if told is not None else _BACKOFF(state)
 
 
 def _last_answer(state: RetryCallState) -> httpx2.Response:
@@ -150,9 +145,11 @@ class NotionApi:
         *,
         transport: httpx2.BaseTransport | None = None,
         sleep: Sleep = time.sleep,
+        jitter: Jitter = random.random,
     ) -> None:
         self._tokens = tokens
         self._sleep = sleep
+        self._jitter = jitter
         self._client = httpx2.Client(base_url=NOTION_API, transport=transport, timeout=HTTP_TIMEOUT_SECONDS)
 
     def close(self) -> None:
@@ -226,17 +223,20 @@ class NotionApi:
         body = self._succeeded(answer, action)
         if answer.status_code != HTTPStatus.ACCEPTED:
             return _validated(dict[str, JsonValue], body, action)
-        task: PendingTask | SucceededTask | FailedTask = _validated(PendingTask, body, action)
+        task = _validated(_ASYNC_TASK, body, action)
         waited = 0.0
+        shortest_pause = 0.0
         while isinstance(task, PendingTask):
-            pause = max(float(task.poll_after_seconds), SHORTEST_POLL_SECONDS)
+            pause = max(float(task.poll_after_seconds), shortest_pause)
             if waited + pause > LONGEST_TASK_WAIT_SECONDS:
                 raise ConnectorError(
                     f"Notion had not finished {action.doing} after {waited:g} seconds (task {task.id}); the "
                     "change may still land, so read the page before publishing again"
                 )
-            self._sleep(pause)
+            if pause:
+                self._sleep(pause)
             waited += pause
+            shortest_pause = SHORTEST_POLL_SECONDS
             task = self._followed(task.id, action)
         if isinstance(task, FailedTask):
             raise notion_failure(task.error.status or HTTPStatus.BAD_REQUEST, task.error, action)
@@ -271,13 +271,19 @@ class NotionApi:
     ) -> httpx2.Response:
         retrying = Retrying(
             stop=stop_after_attempt(RETRY_ATTEMPTS),
-            wait=_wait_before_retrying,
+            wait=self._wait_before_retrying,
             retry=retry_if_result(_deserves_a_retry) | retry_if_exception(_unreachable_on_a_read(method)),
             sleep=self._sleep,
             retry_error_callback=_last_answer,
         )
         answer: httpx2.Response = retrying(self._request, method, path, body, action)
         return answer
+
+    def _wait_before_retrying(self, state: RetryCallState) -> float:
+        outcome = state.outcome
+        response = None if outcome is None or outcome.failed else outcome.result()
+        told = _retry_after_seconds(response) if isinstance(response, httpx2.Response) else None
+        return told if told is not None else _BACKOFF(state) * self._jitter()
 
     def _request(self, method: str, path: str, body: JsonFields | None, action: _Action) -> httpx2.Response:
         headers = {"Authorization": f"Bearer {self._tokens.access_token}", "Notion-Version": NOTION_VERSION}

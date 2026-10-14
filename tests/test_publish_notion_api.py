@@ -118,11 +118,13 @@ class Harness:
     api: NotionApi
 
 
-def _harness(*answers: Answer) -> Harness:
+def _harness(*answers: Answer, jitter: float = 1.0) -> Harness:
     notion = ScriptedNotion(list(answers))
     tokens = CountingTokens(iter(["second-token", "third-token"]))
     sleeps: list[float] = []
-    api = NotionApi(tokens, transport=httpx2.MockTransport(notion), sleep=sleeps.append)
+    api = NotionApi(
+        tokens, transport=httpx2.MockTransport(notion), sleep=sleeps.append, jitter=lambda: jitter
+    )
     return Harness(notion, tokens, sleeps, api)
 
 
@@ -192,14 +194,34 @@ def test_a_create_answered_with_an_async_task_is_polled_until_it_succeeds() -> N
     )
 
 
-def test_a_task_that_asks_for_no_pause_is_still_polled_after_a_short_one() -> None:
+def test_a_task_that_asks_for_no_pause_is_polled_at_once_and_after_a_short_pause_from_then_on() -> None:
     harness = _harness(
-        Answer(202, _task("queued", poll_after_seconds=0)), Answer(200, _task("succeeded", result=PAGE))
+        Answer(202, _task("queued", poll_after_seconds=0)),
+        Answer(200, _task("running", poll_after_seconds=0)),
+        Answer(200, _task("succeeded", result=PAGE)),
     )
 
     harness.api.create_page({"parent": {"page_id": PAGE_ID}})
 
-    assert harness.sleeps == [0.5]
+    assert (harness.sleeps, len(harness.notion.sent)) == ([0.5], 3)
+
+
+def test_a_task_already_finished_when_notion_accepts_the_request_is_not_polled() -> None:
+    harness = _harness(Answer(202, _task("succeeded", result=PAGE)))
+
+    page = harness.api.create_page({"parent": {"page_id": PAGE_ID}})
+
+    assert (page, harness.sleeps, len(harness.notion.sent)) == (Page.model_validate(PAGE), [], 1)
+
+
+def test_the_backoff_between_retries_is_jittered_and_a_retry_after_is_not() -> None:
+    busy = Answer(529, _error(529, "service_unavailable", "busy"))
+    limited = Answer(429, _error(429, "rate_limited", "slow down"), {"Retry-After": "2"})
+    harness = _harness(busy, busy, limited, busy, Answer(200, PAGE), jitter=0.5)
+
+    harness.api.update_page(PAGE_ID, {"in_trash": True})
+
+    assert harness.sleeps == [0.5, 1.0, 2.0, 4.0]
 
 
 def test_a_failed_async_task_is_refused_like_the_same_error_answered_at_once() -> None:
