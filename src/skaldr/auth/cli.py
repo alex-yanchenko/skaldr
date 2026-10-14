@@ -221,7 +221,11 @@ def _notion_token_was_revoked(
     try:
         revoke_notion_token(entry.credentials, transport=transport)
     except AuthError as exc:
-        print(f"warning: {exc}", file=sys.stderr)
+        print(
+            f"warning: {exc}. If the token was not already revoked, by an earlier logout for example, it is "
+            "still valid; remove the connection in Notion under Settings, Connections",
+            file=sys.stderr,
+        )
         return False
     return True
 

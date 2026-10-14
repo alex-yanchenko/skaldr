@@ -53,6 +53,10 @@ from tests.factories.auth_factory import (
 )
 
 SIGNED_IN_NOTION = make_notion_credentials(access_token="new-access", refresh_token="new-refresh")
+MAY_ALREADY_BE_REVOKED = (
+    ". If the token was not already revoked, by an earlier logout for example, it is still valid; "
+    "remove the connection in Notion under Settings, Connections"
+)
 EMPTY_INDEX = {("skaldr", "index"): '{"jira": [], "notion": []}'}
 
 
@@ -640,12 +644,12 @@ def test_logout_notion_revokes_the_token_and_forgets_it(
     [
         (
             legacy_entry_json(make_notion_credentials()),
-            "Notion did not revoke the token: HTTP 400",
+            f"Notion did not revoke the token: HTTP 400{MAY_ALREADY_BE_REVOKED}",
             EMPTY_INDEX,
         ),
         (
             legacy_entry_json(make_notion_credentials(client_id=None)),
-            "The Notion token cannot be revoked without the client ID and secret",
+            f"The Notion token cannot be revoked without the client ID and secret{MAY_ALREADY_BE_REVOKED}",
             EMPTY_INDEX,
         ),
         ("not json", "the stored Notion entry is unreadable, so its token was not revoked", {}),
@@ -681,7 +685,7 @@ def test_logout_notion_still_forgets_a_token_it_could_not_revoke(
         ),
         (
             400,
-            "warning: Notion did not revoke the token: HTTP 400\n"
+            f"warning: Notion did not revoke the token: HTTP 400{MAY_ALREADY_BE_REVOKED}\n"
             "error: The system keychain is unavailable: denied\n",
         ),
     ],
@@ -707,6 +711,32 @@ def test_logout_notion_says_whether_the_token_it_could_not_remove_was_revoked(
     )
 
 
+def test_logout_notion_run_again_after_a_failed_removal_says_the_token_may_already_be_revoked(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    refusing = DeleteRefusingKeyring()
+    keyring.set_keyring(refusing)
+    seed_notion(make_notion_credentials())
+    revoked = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (200, {})}, []))
+    first_run = capsys.readouterr()
+    keychain = InMemoryKeyring()
+    keychain.entries = dict(refusing.entries)
+    keyring.set_keyring(keychain)
+
+    removed = auth_cli.main(["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (400, {})}, []))
+
+    second_run = capsys.readouterr()
+    assert (revoked, first_run.err, removed, second_run.out, second_run.err, keychain.entries) == (
+        1,
+        "error: The Notion token was revoked, but removing it from the keychain failed (The system "
+        "keychain is unavailable: denied); run this logout again to remove it\n",
+        0,
+        "Signed out of Notion: removed from the keychain.\n",
+        f"warning: Notion did not revoke the token: HTTP 400{MAY_ALREADY_BE_REVOKED}\n",
+        EMPTY_INDEX,
+    )
+
+
 @pytest.mark.parametrize(
     ("revoke_status", "stderr"),
     [
@@ -716,7 +746,11 @@ def test_logout_notion_says_whether_the_token_it_could_not_remove_was_revoked(
             "removed its entry, which may remain; run this logout again to remove it\n"
             "\nerror: cancelled\n",
         ),
-        (400, "warning: Notion did not revoke the token: HTTP 400\n\nerror: cancelled\n"),
+        (
+            400,
+            f"warning: Notion did not revoke the token: HTTP 400{MAY_ALREADY_BE_REVOKED}\n"
+            "\nerror: cancelled\n",
+        ),
     ],
     ids=["after the revoke", "after a refused revoke"],
 )
