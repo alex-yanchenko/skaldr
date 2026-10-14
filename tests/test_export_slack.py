@@ -74,7 +74,8 @@ LIST_SEPARATOR = "\N{NO-BREAK SPACE}"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
 CANVAS_LIMIT_MESSAGE = (
-    "the canvas Markdown is 1,048,577 characters, over the 1,048,576 a Slack canvas can hold; "
+    "the canvas Markdown is 1,048,577 characters, over the 1,048,576 characters (1 MiB) "
+    "a Slack canvas can hold; "
     "split the document into several canvases or export it elsewhere"
 )
 
@@ -902,23 +903,32 @@ def test_a_document_built_from_yaml_exports_through_the_lowering() -> None:
     assert slack_of(blocks) == "## Counts\n\n::: {.callout}\n⚠️ **Recount**\n\nAisle 4 by **Friday**.\n:::\n"
 
 
-def _code_report(tmp_path: Path, code_length: int) -> Report:
-    blocks = [{"type": "code", "content": "x" * code_length}]
+def _code_report(tmp_path: Path, code_length: int, character: str = "x") -> Report:
+    blocks = [{"type": "code", "content": character * code_length}]
     return load_report(write_report(tmp_path, make_report(blocks=blocks)))
 
 
-def test_canvas_markdown_of_exactly_one_mebibyte_is_written(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "character",
+    [
+        pytest.param("x", id="one-byte-characters"),
+        pytest.param("\N{LATIN SMALL LETTER E WITH ACUTE}", id="two-byte-characters-counted-as-characters"),
+    ],
+)
+def test_canvas_markdown_of_exactly_1_048_576_characters_is_written(tmp_path: Path, character: str) -> None:
     out_dir = tmp_path / "out"
 
-    result = export_slack(_code_report(tmp_path, CANVAS_LIMIT_CODE_LENGTH), out_dir)
+    result = export_slack(_code_report(tmp_path, CANVAS_LIMIT_CODE_LENGTH, character), out_dir)
 
     assert (result, (out_dir / "page.md").read_text(encoding="utf-8")) == (
         ExportResult("Test Report", (out_dir / "page.md",)),
-        "```\n" + "x" * CANVAS_LIMIT_CODE_LENGTH + "\n```\n",
+        "```\n" + character * CANVAS_LIMIT_CODE_LENGTH + "\n```\n",
     )
 
 
-def test_canvas_markdown_over_one_mebibyte_is_rejected_before_anything_is_written(tmp_path: Path) -> None:
+def test_canvas_markdown_over_1_048_576_characters_is_rejected_before_anything_is_written(
+    tmp_path: Path,
+) -> None:
     out_dir = tmp_path / "out"
 
     with pytest.raises(ExportRejectedError) as raised:

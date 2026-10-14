@@ -59,7 +59,8 @@ from skaldr.models import (
 )
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
-SLACK_CANVAS_LIMIT: Final = 1_048_576
+# external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
+SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
 SLACK_TABLE_CELL_LIMIT: Final = 300
 DEEPEST_CANVAS_HEADING: Final = 3
 MOST_LAYOUT_COLUMNS: Final = 3
@@ -394,7 +395,7 @@ def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
     return ExportRejectedError(
         SLACK_TARGET,
         f"the canvas Markdown is {size:,} characters, "
-        f"over the {SLACK_CANVAS_LIMIT:,} a Slack canvas can hold",
+        f"over the {SLACK_CANVAS_CHARACTER_LIMIT:,} characters (1 MiB) a Slack canvas can hold",
         "split the document into several canvases or export it elsewhere",
     )
 
@@ -523,6 +524,6 @@ class _CanvasWriter:
 def render_slack(nodes: Sequence[Node]) -> str:
     blocks = _canvas_blocks(nodes, "top")
     text = "\n".join(_CanvasWriter().blocks(blocks)) + "\n"
-    if len(text) > SLACK_CANVAS_LIMIT:
+    if len(text) > SLACK_CANVAS_CHARACTER_LIMIT:
         raise _canvas_over_the_size_limit(len(text))
     return text
