@@ -3,7 +3,7 @@ import json
 import pytest
 
 from skaldr.export.budget import json_string_bytes
-from skaldr.export.notion import notion_block_count
+from skaldr.export.notion import notion_block_count, starts_a_block
 
 TABLE = (
     '<table fit-page-width="true" header-row="true">\n'
@@ -51,6 +51,26 @@ COLUMNS = (
 )
 def test_notion_blocks_count_each_block_a_line_opens(text: str, blocks: int) -> None:
     assert notion_block_count(text) == blocks
+
+
+@pytest.mark.parametrize(
+    ("stripped_line", "starts"),
+    [
+        pytest.param("Welcome.", True, id="paragraph"),
+        pytest.param("- Spade.", True, id="list-item"),
+        pytest.param("<tr>", True, id="table-row"),
+        pytest.param("", False, id="blank"),
+        pytest.param("</callout>", False, id="closing-tag"),
+        pytest.param("<summary>More</summary>", False, id="toggle-summary"),
+        pytest.param("<colgroup>", False, id="column-group"),
+        pytest.param('<col width="120">', False, id="column"),
+        pytest.param("<td>Spade</td>", False, id="cell"),
+    ],
+)
+def test_a_line_starts_a_block_unless_it_is_blank_or_closes_or_continues_one(
+    stripped_line: str, starts: bool
+) -> None:
+    assert starts_a_block(stripped_line) is starts
 
 
 def test_json_string_bytes_count_the_escaped_utf8_text_without_its_quotes() -> None:

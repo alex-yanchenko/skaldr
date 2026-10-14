@@ -536,6 +536,10 @@ def notion_fence_closer(stripped_line: str) -> str | None:
     return run.group(0) if run else None
 
 
+def starts_a_block(stripped_line: str) -> bool:
+    return bool(stripped_line) and LINE_INSIDE_A_BLOCK.fullmatch(stripped_line) is None
+
+
 def notion_block_count(text: str) -> int:
     count = 0
     closer: str | None = None
@@ -544,7 +548,7 @@ def notion_block_count(text: str) -> int:
         if closer is not None:
             closer = None if stripped == closer else closer
             continue
-        if not stripped or LINE_INSIDE_A_BLOCK.fullmatch(stripped):
+        if not starts_a_block(stripped):
             continue
         closer = notion_fence_closer(stripped)
         count += 1

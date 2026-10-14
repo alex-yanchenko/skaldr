@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 from typing import Final, Literal
 
 from skaldr.export.budget import json_string_bytes
-from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer
+from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer, starts_a_block
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish.transport import Stamp
 from skaldr.publish_block import notion_page_id
@@ -22,7 +22,6 @@ SPAN_TAG: Final = re.compile(r"<span\b([^>]*)>|</span>")
 DISCUSSION_ATTRIBUTE: Final = re.compile(r'\s*discussion-urls="[^"]*"')
 TABLE_OPENING: Final = re.compile(r"<table[\s>]")
 TABLE_CLOSING: Final = "</table>"
-BLOCK_CONTINUATION: Final = re.compile(r"</[a-z_]+>|<summary>.*</summary>")
 INDENTATION: Final = (" ", "\t")
 
 LineRole = Literal["published", "added", "child", "blank", "stamp", "below"]
@@ -183,9 +182,7 @@ class _PageLine:
 
     @property
     def starts_a_block(self) -> bool:
-        if not self.at_top_level or self.normalised is None:
-            return False
-        return BLOCK_CONTINUATION.fullmatch(self.normalised.strip()) is None
+        return self.at_top_level and self.normalised is not None and starts_a_block(self.normalised.strip())
 
     @property
     def unaligned_role(self) -> LineRole:
