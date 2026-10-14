@@ -36,13 +36,12 @@ from skaldr.publish.jira.api import (
 )
 
 API = "/rest/api/3"
-ATTEMPTS = 4
+MAX_ATTEMPTS = 4
 FIRST_BACKOFF_SECONDS = 2
-LONGEST_RETRY_AFTER_SECONDS = 60
+MAX_RETRY_AFTER_SECONDS = 60
 PAGE_SIZE = 100
 READ_METHODS = frozenset({"GET"})
-
-JSON = {"Content-Type": "application/json"}
+JSON_CONTENT_TYPE = {"Content-Type": "application/json"}
 
 Answer = TypeVar("Answer", bound=BaseModel)
 _BACKOFF = wait_exponential(multiplier=FIRST_BACKOFF_SECONDS)
@@ -57,6 +56,14 @@ NO_BODY: Final = _NoBody.NO_BODY
 
 def _json_bytes(body: JsonValue) -> bytes:
     return json.dumps(body, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _properties_body(properties: Sequence[EntityProperty]) -> list[JsonValue]:
+    return [prop.model_dump() for prop in properties]
+
+
+def _refusal_class(method: str) -> type[ConnectorError]:
+    return ConnectorError if method in READ_METHODS else WriteRejectedError
 
 
 class _ErrorBody(BaseModel):
@@ -85,7 +92,7 @@ def _wait(state: RetryCallState) -> float:
 def _worth_retrying(method: str) -> Callable[[httpx2.Response], bool]:
     def worth(response: httpx2.Response) -> bool:
         retry_after = _retry_after(response)
-        if retry_after is not None and retry_after > LONGEST_RETRY_AFTER_SECONDS:
+        if retry_after is not None and retry_after > MAX_RETRY_AFTER_SECONDS:
             return False
         if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
             return True
@@ -165,10 +172,7 @@ class JiraClient:
         self, fields: Mapping[str, JsonValue], properties: Sequence[EntityProperty]
     ) -> CreatedIssue:
         path = f"{API}/issue"
-        body: dict[str, JsonValue] = {
-            "fields": dict(fields),
-            "properties": [prop.model_dump() for prop in properties],
-        }
+        body: dict[str, JsonValue] = {"fields": dict(fields), "properties": _properties_body(properties)}
         return self._parsed(CreatedIssue, self._send("POST", path, body=body), path, "the created issue")
 
     def get_issue(self, key: str, field_names: Iterable[str]) -> Issue:
@@ -181,7 +185,7 @@ class JiraClient:
     ) -> None:
         body: dict[str, JsonValue] = {"fields": dict(fields)}
         if properties:
-            body["properties"] = [prop.model_dump() for prop in properties]
+            body["properties"] = _properties_body(properties)
         self._send("PUT", issue_path(key), key=key, body=body)
 
     def changelog(self, key: str) -> list[Changelog]:
@@ -240,17 +244,15 @@ class JiraClient:
         body: JsonValue | _NoBody = NO_BODY,
         missing_is_an_answer: bool = False,
     ) -> httpx2.Response:
-        attempts = 0
-
         def attempt() -> httpx2.Response:
-            nonlocal attempts
-            attempts += 1
             if isinstance(body, _NoBody):
                 return self._http.request(method, path, params=params)
-            return self._http.request(method, path, params=params, content=_json_bytes(body), headers=JSON)
+            return self._http.request(
+                method, path, params=params, content=_json_bytes(body), headers=JSON_CONTENT_TYPE
+            )
 
         retrying = Retrying(
-            stop=stop_after_attempt(ATTEMPTS),
+            stop=stop_after_attempt(MAX_ATTEMPTS),
             wait=_wait,
             retry=retry_if_result(_worth_retrying(method)) | retry_if_exception(_dropped_read(method)),
             sleep=self._sleep,
@@ -264,6 +266,7 @@ class JiraClient:
             raise ConnectorError(f"the request {method} {path} to Jira at {self.site} failed: {exc}") from exc
         if missing_is_an_answer and response.status_code == HTTPStatus.NOT_FOUND:
             return response
+        attempts: int = retrying.statistics["attempt_number"]
         self._refuse_a_failure(method, path, key, response, attempts)
         return response
 
@@ -276,9 +279,9 @@ class JiraClient:
         where = f"{method} {path}"
         detail = _detail(response)
         explained = f": {detail}" if detail else ""
+        refused = _refusal_class(method)
         if status == HTTPStatus.UNAUTHORIZED:
-            rejected = ConnectorError if method in READ_METHODS else WriteRejectedError
-            raise rejected(
+            raise refused(
                 f"Jira at {self.site} rejected the sign-in (HTTP 401); the API token may have expired or "
                 "been revoked, so run `skaldr auth jira`"
             )
@@ -287,17 +290,13 @@ class JiraClient:
                 f"Jira has no issue {key} that this account can see (HTTP 404 to {where})"
             )
         if status == HTTPStatus.TOO_MANY_REQUESTS:
-            refused = ConnectorError if method in READ_METHODS else WriteRejectedError
             raise refused(
                 f"Jira kept refusing {where} as too many requests (HTTP 429) after {_attempts(attempts)}; "
                 f"{_when_to_try_again(response)}"
             )
         if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
             raise ConnectorError(f"Jira answered HTTP {status} to {where}{explained}")
-        refusal = f"Jira refused {where} (HTTP {status}){explained}"
-        if method in READ_METHODS:
-            raise ConnectorError(refusal)
-        raise WriteRejectedError(refusal)
+        raise refused(f"Jira refused {where} (HTTP {status}){explained}")
 
     def _parsed(self, model: type[Answer], response: httpx2.Response, path: str, what: str) -> Answer:
         try:
