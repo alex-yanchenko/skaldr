@@ -57,7 +57,8 @@ class Gauge:
     maximum: float
 
 
-ExportRun = Run | Chip | Break | Mark | Gauge
+ChiplessExportRun = Run | Break | Mark | Gauge
+ExportRun = ChiplessExportRun | Chip
 ExportRich = tuple[ExportRun, ...]
 
 
@@ -65,9 +66,7 @@ def holds_a_chip(runs: ExportRich) -> bool:
     return any(isinstance(run, Chip) for run in runs)
 
 
-class ExportRunWriter(RunWriter[Written], Protocol[Written]):
-    def chip(self, run: Chip, /) -> Written: ...
-
+class ChiplessExportRunWriter(RunWriter[Written], Protocol[Written]):
     def line_break(self) -> Written: ...
 
     def mark(self, run: Mark, /) -> Written: ...
@@ -75,10 +74,12 @@ class ExportRunWriter(RunWriter[Written], Protocol[Written]):
     def gauge(self, run: Gauge, /) -> Written: ...
 
 
-def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Written:
+class ExportRunWriter(ChiplessExportRunWriter[Written], Protocol[Written]):
+    def chip(self, run: Chip, /) -> Written: ...
+
+
+def write_chipless_export_run(run: ChiplessExportRun, writer: ChiplessExportRunWriter[Written]) -> Written:
     match run:
-        case Chip():
-            return writer.chip(run)
         case Break():
             return writer.line_break()
         case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark() | DecisionMark():
@@ -87,6 +88,14 @@ def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Writte
             return writer.gauge(run)
         case _:
             return write_run(run, writer)
+
+
+def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Written:
+    match run:
+        case Chip():
+            return writer.chip(run)
+        case _:
+            return write_chipless_export_run(run, writer)
 
 
 def write_export_runs(runs: ExportRich, writer: ExportRunWriter[Written]) -> Written:

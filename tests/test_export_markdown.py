@@ -240,6 +240,12 @@ def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_
     assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
 
 
+def test_an_anchor_link_to_a_heading_whose_github_slug_is_empty_is_its_label() -> None:
+    nodes = [Heading(2, (Plain("!!!"),), "bang"), Paragraph((AnchorLink((Plain("x"),), "bang"),))]
+
+    assert render_markdown(nodes) == "## !!\\!\n\nx\n"
+
+
 def test_a_bang_ending_text_is_escaped_even_with_nothing_after_it() -> None:
     assert markdown_of([{"type": "text", "body": "Done!"}]) == "Done\\!\n"
 

@@ -91,22 +91,18 @@ def github_slug(text: str) -> str:
     return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
 
 
-class MarkdownRuns(CommonMarkRuns):
+class _MarkdownRuns(CommonMarkRuns):
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.heading_slugs = heading_slugs
 
-    def links_to(self, anchor: str, /) -> bool:
-        return anchor in self.heading_slugs
+    def heading_slug(self, anchor: str, /) -> str | None:
+        return self.heading_slugs.get(anchor)
 
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
         return styled_in_tags(style, inner)
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
-
-    def anchor_link(self, label: str, anchor: str, /) -> str:
-        slug = self.heading_slugs.get(anchor)
-        return f"[{label}](#{slug})" if slug else label
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")
@@ -171,7 +167,7 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
 
 class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
-        self.runs = MarkdownRuns(heading_slugs)
+        self.runs = _MarkdownRuns(heading_slugs)
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)

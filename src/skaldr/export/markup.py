@@ -1,27 +1,16 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final
 from urllib.parse import quote
 
-from typing_extensions import assert_never
+from typing_extensions import Self, assert_never
 
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
 from skaldr.export.glyphs import gauge_bar, mark_glyph
-from skaldr.export.runs import (
-    Break,
-    CheckMark,
-    Chip,
-    DecisionMark,
-    ExportRich,
-    Gauge,
-    IndicatorMark,
-    Mark,
-    StatusMark,
-    SwimlaneMark,
-)
+from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, write_chipless_export_run
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
 from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
@@ -34,7 +23,6 @@ from skaldr.richtext import (
     StyleName,
     TextRunWriter,
     Tinted,
-    write_run,
 )
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -247,11 +235,11 @@ class _Enclosing:
     styles: frozenset[MarkerStyle] = frozenset()
     marker_character: str = NO_CHARACTER
 
-    def inside(self, style: MarkerStyle) -> "_Enclosing":
-        return _Enclosing(self.styles.union((style,)), STYLE_MARKER[style][0])
+    def inside(self, style: MarkerStyle) -> Self:
+        return replace(self, styles=self.styles.union((style,)), marker_character=STYLE_MARKER[style][0])
 
-    def inside_brackets(self) -> "_Enclosing":
-        return _Enclosing(self.styles)
+    def inside_brackets(self) -> Self:
+        return replace(self, marker_character=NO_CHARACTER)
 
 
 def _writes_nothing_visible(pieces: Sequence[_Piece]) -> bool:
@@ -283,8 +271,8 @@ class CommonMarkRuns(MarkupRuns, ABC):
     @abstractmethod
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str: ...
 
-    def links_to(self, _anchor: str, /) -> bool:
-        return False
+    def heading_slug(self, _anchor: str, /) -> str | None:
+        return None
 
     def write(self, runs: ExportRich) -> str:
         return self._written(runs, _Enclosing())
@@ -336,28 +324,25 @@ class CommonMarkRuns(MarkupRuns, ABC):
                     pieces += self._pieces(run.runs, enclosing)
                 case Link():
                     pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
-                case AnchorLink() if not self.links_to(run.anchor):
-                    pieces += self._pieces(run.label, enclosing)
                 case AnchorLink():
-                    label = self._written(run.label, enclosing.inside_brackets())
-                    pieces.append(self.anchor_link(label, run.anchor))
+                    pieces += self._anchor_link_pieces(run, enclosing)
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
-                case Break():
-                    pieces.append(self.line_break())
-                case Gauge():
-                    pieces.append(self.gauge(run))
-                case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark() | DecisionMark():
-                    pieces.append(self.mark(run))
                 case _:
-                    pieces.append(write_run(run, self))
+                    pieces.append(write_chipless_export_run(run, self))
         return pieces
+
+    def _anchor_link_pieces(self, run: AnchorLink, enclosing: _Enclosing) -> list[_Piece]:
+        slug = self.heading_slug(run.anchor)
+        if not slug:
+            return self._pieces(run.label, enclosing)
+        return [self.anchor_link(self._written(run.label, enclosing.inside_brackets()), slug)]
 
     def code(self, text: str, /) -> str:
         return code_span(text)
 
-    def anchor_link(self, label: str, _anchor: str, /) -> str:
-        return label
+    def anchor_link(self, label: str, slug: str, /) -> str:
+        return f"[{label}](#{slug})"
 
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
