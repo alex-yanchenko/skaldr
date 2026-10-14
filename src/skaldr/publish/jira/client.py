@@ -84,9 +84,11 @@ def _wait(state: RetryCallState) -> float:
 
 def _worth_retrying(method: str) -> Callable[[httpx2.Response], bool]:
     def worth(response: httpx2.Response) -> bool:
+        retry_after = _retry_after(response)
+        if retry_after is not None and retry_after > LONGEST_RETRY_AFTER_SECONDS:
+            return False
         if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-            retry_after = _retry_after(response)
-            return retry_after is None or retry_after <= LONGEST_RETRY_AFTER_SECONDS
+            return True
         return method in READ_METHODS and response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR
 
     return worth

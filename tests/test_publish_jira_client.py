@@ -443,6 +443,17 @@ def test_a_server_error_on_a_read_waits_as_long_as_its_retry_after_asks() -> Non
     assert (issue.fields, jira.sleeps, len(jira.requests)) == ({"summary": "Garden handbook"}, [30.0], 2)
 
 
+def test_a_server_error_asking_to_wait_longer_than_a_minute_is_not_waited_for() -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(503, {"errorMessages": ["Maintenance"]}, {"Retry-After": "3600"}))
+
+    with pytest.raises(
+        ConnectorError, match=_exactly("Jira answered HTTP 503 to GET /rest/api/3/issue/DEMO-1: Maintenance")
+    ):
+        jira.client().get_issue("DEMO-1", ["summary"])
+    assert (jira.sleeps, len(jira.requests)) == ([], 1)
+
+
 def test_a_refused_write_carrying_a_retry_after_is_not_retried() -> None:
     jira = _seeded()
     jira.answer_next(Reply(400, {"errorMessages": ["Bad summary"]}, {"Retry-After": "1"}))
