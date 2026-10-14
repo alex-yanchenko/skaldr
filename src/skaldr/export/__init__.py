@@ -9,10 +9,12 @@ from pydantic import StringConstraints, ValidationError
 from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
 from skaldr.export.budget import character_budget
+from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
-from skaldr.export.slack import reject_what_a_canvas_cannot_show, render_slack
+from skaldr.export.slack import render_slack
+from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
@@ -126,8 +128,14 @@ def _chunk_pages(chunks: Sequence[str]) -> dict[str, str]:
     return {f"page.{index:0{width}d}.md": text for index, text in enumerate(chunks)}
 
 
-def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
+def _checked_document(report: Report, target: ExportTarget) -> LoweredDocument:
     document = lower_report(report)
+    reject_what_the_target_cannot_show(report, document, target)
+    return document
+
+
+def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
+    document = _checked_document(report, "notion")
     page_width = report.meta.notion_width
     if chunk is None:
         return _export_pages(
@@ -138,12 +146,12 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
 
 
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:
-    document = lower_report(report)
+    document = _checked_document(report, "markdown")
     return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
 
 
 def export_adf(report: Report, out_dir: Path) -> ExportResult:
-    document = lower_report(report)
+    document = _checked_document(report, "adf")
     adf = render_adf_document(document)
     size = compact_adf_length(adf)
     over_the_limit = (
@@ -155,6 +163,5 @@ def export_adf(report: Report, out_dir: Path) -> ExportResult:
 
 
 def export_slack(report: Report, out_dir: Path) -> ExportResult:
-    reject_what_a_canvas_cannot_show(report)
-    document = lower_report(report)
+    document = _checked_document(report, "slack")
     return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_slack(document.body)})

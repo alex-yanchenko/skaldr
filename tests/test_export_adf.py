@@ -6,9 +6,8 @@ from typing import get_args
 
 import pytest
 
-from skaldr.errors import ReportError
+from skaldr.errors import ExportRejectedError, ReportError
 from skaldr.export.adf import (
-    AdfUnsupportedError,
     IssueLinks,
     adf_json,
     render_adf,
@@ -17,6 +16,7 @@ from skaldr.export.adf import (
 )
 from skaldr.export.adf import blocks as blocks_module
 from skaldr.export.adf.colors import PANEL_TYPE
+from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.inline import plain
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import (
@@ -93,6 +93,12 @@ def _rendered(*nodes: Node, links: IssueLinks | None = None) -> Json:
 
 def _exactly(message: str) -> str:
     return f"^{re.escape(message)}$"
+
+
+def _refused(*nodes: Node) -> str:
+    with pytest.raises(ExportRejectedError) as refused:
+        reject_unshowable_nodes(nodes, "adf")
+    return str(refused.value)
 
 
 STRONG: Json = {"type": "strong"}
@@ -230,8 +236,9 @@ def test_a_numbered_list_continues_its_numbers_after_a_hoisted_block() -> None:
 def test_a_hoisted_block_the_container_cannot_hold_fails() -> None:
     node = Callout("info", (ListNode("bullet", (_text_entry("a", Callout("info", (_para("x"),))),)),))
 
-    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a callout inside a callout")):
-        _rendered(node)
+    assert (
+        _refused(node) == "ADF cannot place a callout inside a callout; move the callout out of the callout"
+    )
 
 
 def test_a_nested_list_that_cannot_fit_ends_only_its_own_list_and_the_rest_follows() -> None:
@@ -279,11 +286,10 @@ def test_a_list_hoisting_a_block_inside_a_panel_fails_naming_the_block_and_the_h
         Callout("info", (ListNode("bullet", (_text_entry("a", Toggle(plain("t"), None, (_para("x"),))),)),)),
     )
 
-    with pytest.raises(
-        AdfUnsupportedError,
-        match=_exactly("ADF cannot place a toggle inside a callout, under the heading 'Plan'"),
-    ):
-        _rendered(*refused)
+    assert _refused(*refused) == (
+        "ADF cannot place a toggle inside a callout, under the heading 'Plan'; "
+        "move the toggle out of the callout"
+    )
 
 
 def test_an_entry_with_no_text_is_an_empty_paragraph() -> None:
@@ -432,8 +438,7 @@ def test_a_task_entry_holding_a_toggle_inside_a_panel_fails() -> None:
     detail = Toggle(plain("t"), None, (_para("x"),))
     node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
 
-    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a toggle inside a callout")):
-        _rendered(node)
+    assert _refused(node) == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
 
 
 def test_rendering_the_same_tree_twice_is_byte_identical_and_local_ids_never_repeat() -> None:
@@ -504,8 +509,9 @@ def test_an_empty_callout_holds_an_empty_paragraph() -> None:
 def test_a_callout_cannot_hold_a_table() -> None:
     table = TableNode((TableCell(plain("h")),), ())
 
-    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a table inside a callout")):
-        _rendered(Callout("info", (table,)))
+    assert _refused(Callout("info", (table,))) == (
+        "ADF cannot place a table inside a callout; move the table out of the callout"
+    )
 
 
 def test_a_code_block_keeps_its_language_and_every_line() -> None:
@@ -754,18 +760,16 @@ def test_a_toggle_inside_a_toggle_is_a_nested_expand() -> None:
 def test_a_toggle_two_levels_down_has_no_form() -> None:
     node = Toggle(plain("a"), None, (Toggle(plain("b"), None, (Toggle(plain("c"), None, (_para("x"),)),)),))
 
-    with pytest.raises(
-        AdfUnsupportedError,
-        match=_exactly("ADF cannot place a toggle inside a toggle that is itself inside a toggle"),
-    ):
-        _rendered(node)
+    assert _refused(node) == (
+        "ADF cannot place a toggle inside a toggle that is itself inside a toggle; "
+        "move the toggle out of the toggle"
+    )
 
 
 def test_a_toggle_in_a_panel_has_no_form() -> None:
     node = Callout("info", (Toggle(plain("a"), None, (_para("x"),)),))
 
-    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF cannot place a toggle inside a callout")):
-        _rendered(node)
+    assert _refused(node) == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
 
 
 def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
@@ -773,6 +777,7 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
     allowed = Toggle(plain("a"), None, (table,))
     refused = Toggle(plain("a"), None, (Toggle(plain("b"), None, (table,)),))
 
+    reject_unshowable_nodes((allowed,), "adf")
     assert _rendered(allowed) == _doc(
         {
             "type": "expand",
@@ -780,11 +785,10 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
             "content": [_table(_row(_table_cell("tableHeader", "A")))],
         }
     )
-    with pytest.raises(
-        AdfUnsupportedError,
-        match=_exactly("ADF cannot place a table inside a toggle that is itself inside a toggle"),
-    ):
-        _rendered(refused)
+    assert _refused(refused) == (
+        "ADF cannot place a table inside a toggle that is itself inside a toggle; "
+        "move the table out of the toggle"
+    )
 
 
 def test_columns_are_written_one_after_another() -> None:
@@ -885,12 +889,14 @@ class FutureBlock:
 def test_a_lowered_node_with_no_adf_form_fails_naming_it(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(blocks_module, "Divider", FutureBlock)
 
-    with pytest.raises(AdfUnsupportedError, match=_exactly("ADF has no form for the lowered node Divider")):
+    with pytest.raises(
+        AssertionError, match=_exactly("Expected code to be unreachable, but got: Divider(authored_at=None)")
+    ):
         render_adf((Divider(),))
 
 
-def test_the_unsupported_error_is_a_report_error() -> None:
-    assert issubclass(AdfUnsupportedError, ReportError)
+def test_the_rejection_error_is_a_report_error() -> None:
+    assert issubclass(ExportRejectedError, ReportError)
 
 
 MINIMAL_NODES = minimal_nodes()

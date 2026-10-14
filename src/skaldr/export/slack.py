@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal
@@ -6,6 +6,7 @@ from typing import Final, Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportRejectedError
+from skaldr.export.capabilities import FIRST_LIST_NUMBER
 from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -23,10 +24,9 @@ from skaldr.export.markup import (
     quoted,
     spaced,
     styled,
-    table_width,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.runs import ExportRich
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -50,17 +50,11 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import SLACK_TARGET
-from skaldr.models import (
-    MEDIA_KIND_LABELS,
-    InnerGrid,
-    Report,
-    Walkthrough,
-)
+from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
-SLACK_TABLE_CELL_LIMIT: Final = 300
 DEEPEST_CANVAS_HEADING: Final = 3
 MOST_LAYOUT_COLUMNS: Final = 3
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
@@ -72,11 +66,8 @@ MATH_LANGUAGE: Final = "latex"
 BULLET_MARKER: Final = "*"
 BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "&nbsp;"
-FIRST_LIST_NUMBER: Final = 1
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
-OUT_OF_THE_LIST: Final = "move it out of the list, after the list"
-OUT_OF_THE_STEP: Final = "move it out of the step, after the walkthrough"
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -200,100 +191,22 @@ def _with_paragraph(text: ExportRich, paragraph: ExportRich) -> ExportRich:
     return (*text, Plain(" "), *paragraph)
 
 
-_HeldOutsideAListItem = (
-    TableNode
-    | CodeBlock
-    | DisplayMath
-    | Media
-    | Callout
-    | Quote
-    | Divider
-    | Toggle
-    | Columns
-    | Tabs
-    | Diagram
-    | TableOfContents
-    | Heading
-)
-
-
-def _what_a_list_item_cannot_hold(node: _HeldOutsideAListItem) -> str:
-    match node:
-        case CodeBlock():
-            return "a code block"
-        case TableNode():
-            return "a table"
-        case Quote():
-            return "a quote"
-        case Callout():
-            return "a callout"
-        case Media():
-            return "an image or a media link"
-        case Diagram():
-            return "a diagram"
-        case DisplayMath():
-            return "a math block"
-        case Heading():
-            return "a heading"
-        case Toggle():
-            return "a toggle"
-        case Tabs():
-            return "a set of tabs"
-        case Columns():
-            return "a column layout"
-        case Divider():
-            return "a divider"
-        case TableOfContents():
-            return "a table of contents"
-        case _:
-            assert_never(node)
-
-
-def _authored_on_its_own_inside_the_item(held: Node, holder: ListNode) -> bool:
-    return held.authored_at != holder.authored_at
-
-
-def _list_item_cannot_hold(what: str, held: Node, holder: ListNode) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        f"a Slack canvas list item holds only text and one nested list, so it cannot show {what}",
-        OUT_OF_THE_STEP if _authored_on_its_own_inside_the_item(held, holder) else OUT_OF_THE_LIST,
-        f"at {held.authored_at}" if held.authored_at else None,
-    )
-
-
-def _canvas_item(entry: ListEntry, holder: ListNode) -> _Item:
+def _canvas_item(entry: ListEntry) -> _Item:
     text = entry.text
     nested: _List | None = None
     for child in entry.children:
         match child:
-            case Paragraph() if nested is not None and child.text:
-                raise _list_item_cannot_hold("a paragraph after its nested list", child, holder)
-            case Paragraph():
+            case Paragraph() if nested is None:
                 text = _with_paragraph(text, child.text)
-            case ListNode() if nested is not None:
-                raise _list_item_cannot_hold("a second nested list", child, holder)
-            case ListNode():
+            case ListNode() if nested is None:
                 nested = _canvas_list(child)
             case _:
-                raise _list_item_cannot_hold(_what_a_list_item_cannot_hold(child), child, holder)
+                pass
     return _Item(text, entry.checked, nested)
 
 
-def _list_starting_past_one(node: ListNode) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        "a Slack canvas numbers every list from 1, so it cannot show a numbered list "
-        f"that starts at {node.start}",
-        "number the list from 1, or export it elsewhere",
-        f"at {node.authored_at}" if node.authored_at else None,
-    )
-
-
 def _canvas_list(node: ListNode) -> _List:
-    if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
-        raise _list_starting_past_one(node)
-    return _List(node.kind, tuple(_canvas_item(entry, node) for entry in node.entries))
+    return _List(node.kind, tuple(_canvas_item(entry) for entry in node.entries))
 
 
 def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
@@ -367,41 +280,6 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
             assert_never(kind)
 
 
-def _table_over_the_cell_limit(cells: int, nearest_heading: str) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        f"a table has {cells:,} cells, over the {SLACK_TABLE_CELL_LIMIT} a Slack canvas table can hold",
-        "split it into two tables or export it elsewhere",
-        f"under the heading '{nearest_heading}'" if nearest_heading else None,
-    )
-
-
-def _grid_in_a_walkthrough_step(path: str) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        "a Slack canvas cannot show a grid inside a walkthrough step, "
-        "since a canvas list item holds only text",
-        "move the grid out of the step, after the walkthrough",
-        f"at {path}",
-    )
-
-
-def _grids_in_walkthrough_steps(report: Report) -> Iterator[str]:
-    for path, block in report.located_blocks:
-        if not isinstance(block, Walkthrough):
-            continue
-        for step_index, step in enumerate(block.steps):
-            for index, detail in enumerate(step.detail):
-                if isinstance(detail, InnerGrid):
-                    yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-
-
-def reject_what_a_canvas_cannot_show(report: Report) -> None:
-    first_grid = next(_grids_in_walkthrough_steps(report), None)
-    if first_grid is not None:
-        raise _grid_in_a_walkthrough_step(first_grid)
-
-
 def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
     return ExportRejectedError(
         SLACK_TARGET,
@@ -427,7 +305,6 @@ class _CanvasWriter:
         self.runs = _SlackRuns(LINE_BREAK_ON_ONE_LINE)
         self.paragraph_runs = _SlackRuns(HARD_LINE_BREAK)
         self.table_cell_runs = _SlackRuns(HTML_LINE_BREAK)
-        self.nearest_heading = ""
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
@@ -453,9 +330,6 @@ class _CanvasWriter:
         return lines
 
     def table_lines(self, table: TableNode) -> list[str]:
-        cells = table_width(table) * (1 + len(table.rows))
-        if cells > SLACK_TABLE_CELL_LIMIT:
-            raise _table_over_the_cell_limit(cells, self.nearest_heading)
         return pipe_table_lines(table, self.table_cell_runs.write)
 
     def title_lines(self, title: _Title) -> list[str]:
@@ -497,7 +371,6 @@ class _CanvasWriter:
     def lines(self, block: _CanvasBlock) -> list[str]:
         match block:
             case Heading():
-                self.nearest_heading = export_visible_text(block.text).strip() or self.nearest_heading
                 return [heading_line(min(block.level, DEEPEST_CANVAS_HEADING), self.inline(block.text))]
             case Paragraph():
                 return self.paragraph_lines(block)

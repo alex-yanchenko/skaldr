@@ -49,6 +49,9 @@ class TargetBase(FrozenModel):
             )
         return names[0]
 
+    def builds_from(self, section_id: str | None) -> bool:
+        return self.from_sections is None or section_id in self.from_sections
+
     @abstractmethod
     def where_fields(self) -> JsonFields: ...
 

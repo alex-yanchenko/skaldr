@@ -4,6 +4,7 @@ from typing import Any, TypeVar, get_args
 import yaml
 
 from skaldr.export.budget import RenderedBlock
+from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
@@ -116,7 +117,10 @@ def markdown_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
 
 
 def slack_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
-    return render_slack(lowered(blocks, **overrides))
+    report = parse_report(make_report(blocks=blocks, **overrides))
+    document = lower_report(report)
+    reject_what_the_target_cannot_show(report, document, "slack")
+    return render_slack(document.body)
 
 
 def heading_sections(count: int, body: str) -> list[dict[str, Any]]:

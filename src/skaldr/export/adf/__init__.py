@@ -1,4 +1,3 @@
-from skaldr.errors import AdfUnsupportedError
 from skaldr.export.adf.blocks import (
     JIRA_DESCRIPTION_LIMIT,
     adf_json,
@@ -16,7 +15,6 @@ __all__ = [
     "AdfDoc",
     "AdfInline",
     "AdfRuns",
-    "AdfUnsupportedError",
     "IssueLinks",
     "adf_json",
     "compact_adf_length",

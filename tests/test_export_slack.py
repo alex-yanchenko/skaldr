@@ -11,6 +11,7 @@ import yaml
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
+from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.runs import Break, Chip, ExportRun, StatusMark
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
@@ -509,6 +510,7 @@ def test_a_table_of_up_to_300_cells_header_included_is_written(cells: int) -> No
 
 def _rejected(nodes: Sequence[Node]) -> dict[str, Any]:
     with pytest.raises(ExportRejectedError) as raised:
+        reject_unshowable_nodes(nodes, "slack")
         render_slack(nodes)
     return vars(raised.value)
 
@@ -1115,7 +1117,7 @@ def test_a_table_over_the_canvas_limit_is_rejected_before_anything_is_written(tm
         export_slack(report, out_dir)
 
     assert (vars(raised.value), out_dir.exists()) == (
-        _canvas_rejection(TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD),
+        _canvas_rejection(TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "at blocks.0.table"),
         False,
     )
 
@@ -1377,7 +1379,7 @@ def test_the_cli_refuses_a_table_over_the_canvas_limit_and_writes_nothing(
 
     captured = capsys.readouterr()
     assert (captured.err, captured.out, export_dir.exists()) == (
-        f"error: {TABLE_LIMIT_WHY}, under the heading 'Counts'; {TABLE_LIMIT_INSTEAD}\n",
+        f"error: {TABLE_LIMIT_WHY}, at blocks.1.table, under the heading 'Counts'; {TABLE_LIMIT_INSTEAD}\n",
         "",
         False,
     )

@@ -10,8 +10,10 @@ from typing_extensions import assert_never
 
 from skaldr import models
 from skaldr.errors import PublishError
+from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
+from skaldr.export_targets import PUBLISHED_AS
 from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
@@ -146,6 +148,7 @@ def _look_paths(section_id: str | None) -> dict[Part, str]:
 def _item_draft(
     context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
 ) -> ItemDraft:
+    reject_what_the_target_cannot_show(context.report, page, PUBLISHED_AS[context.target.service()])
     texts = context.connector.render_regions(context.report, page)
     keys = region_keys(context.authored_blocks, page.regions)
     carries_look = context.connector.carries_look
@@ -192,11 +195,7 @@ def _refuse_what_cannot_fit(
 
 def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> TargetDraft:
     target = context.target
-    chosen = [
-        region
-        for region in regions
-        if target.from_sections is None or region.section_id in target.from_sections
-    ]
+    chosen = [region for region in regions if target.builds_from(region.section_id)]
     on_the_document = [region for region in chosen if region.section_id not in target.split]
     document = _item_draft(
         context,
