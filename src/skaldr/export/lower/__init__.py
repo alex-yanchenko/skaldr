@@ -267,6 +267,7 @@ def _block_nodes(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
                 Callout(
                     "neutral",
                     (Paragraph(bold(block.title)), *_lower_blocks(block.blocks, lowering, depth)),
+                    shows_icon=False,
                     authored_as="panel",
                 )
             ]

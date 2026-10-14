@@ -610,7 +610,7 @@ content-type: application/json
 
 > ⚠️ **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
 
-> 📝 **Before the next count**
+> **Before the next count**
 >
 > - [x] Confirm the `bin > 12` rule with the site lead
 > - [ ] Re-label the 9-digit bins in aisle C

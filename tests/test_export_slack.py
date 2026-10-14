@@ -593,6 +593,12 @@ def test_a_callout_is_a_fenced_callout_whose_unindented_body_starts_with_its_ico
     assert render_slack([node]) == text
 
 
+def test_a_panel_is_a_fenced_callout_with_no_icon_as_on_the_page() -> None:
+    panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
+
+    assert slack_of([panel]) == "::: {.callout}\n**Card**\n\ninside\n:::\n"
+
+
 def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_it() -> None:
     columns = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (make_paragraph("right"),))))
     inner = Callout("danger", (make_paragraph("inner"),))

@@ -6,7 +6,7 @@ from typing import Final, Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportRejectedError
-from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
+from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -166,7 +166,7 @@ class _Mermaid:
 
 @dataclass(frozen=True)
 class _CanvasCallout:
-    icon: str
+    icon: str | None
     blocks: "tuple[_CanvasBlock, ...]"
 
 
@@ -290,7 +290,7 @@ def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
     outside: list[_CanvasBlock] = []
     for block in _canvas_blocks(node.children, "callout"):
         (outside if isinstance(block, _MOVED_OUT_OF_A_CALLOUT) else inside).append(block)
-    return [_CanvasCallout(node.icon or CALLOUT_ICON[node.tone], tuple(inside)), *outside]
+    return [_CanvasCallout(callout_icon(node), tuple(inside)), *outside]
 
 
 def _canvas_columns(node: Columns, place: Place) -> list[_CanvasBlock]:
@@ -469,6 +469,8 @@ class _CanvasWriter:
     def callout_lines(self, callout: _CanvasCallout) -> list[str]:
         rendered = self.rendered(callout.blocks)
         body = joined([lines for _, lines in rendered])
+        if callout.icon is None:
+            return [CALLOUT_OPEN, *body, CANVAS_FENCE]
         if rendered and isinstance(rendered[0][0], Paragraph | _Title):
             body[0] = f"{callout.icon} {body[0]}"
         else:

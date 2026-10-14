@@ -606,7 +606,7 @@ content-type: application/json
 :::
 
 ::: {.callout}
-📝 **Before the next count**
+**Before the next count**
 
 * [x] Confirm the `bin > 12` rule with the site lead
 * [ ] Re-label the 9-digit bins in aisle C
