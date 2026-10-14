@@ -15,6 +15,7 @@ from skaldr.publish.engine import (
     refusal_message,
 )
 from skaldr.publish.jira import JiraConnector
+from skaldr.publish.links import describe_links
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
@@ -72,7 +73,7 @@ def _dry_run(prepared: Prepared, document: Path) -> int:
     if _has_no_target_and_no_published_item(prepared) and dry_run.refusal is None:
         print(NOTHING_PUBLISHED)
         return 0
-    print("\n".join(describe_plan(dry_run.plan)))
+    print("\n".join([*describe_plan(dry_run.plan), *describe_links(dry_run.links)]))
     if dry_run.edits:
         print("\n".join(remote_edit_lines(dry_run.edits)))
     if dry_run.refusal is not None:
