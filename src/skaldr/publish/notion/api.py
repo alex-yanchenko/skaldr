@@ -31,6 +31,7 @@ from skaldr.publish.notion.responses import (
     PageMarkdown,
     PendingTask,
     SucceededTask,
+    User,
 )
 from skaldr.publish_block.target import JsonFields
 
@@ -154,6 +155,10 @@ class NotionApi:
 
     def close(self) -> None:
         self._client.close()
+
+    def user(self, user_id: str) -> User:
+        action = _Action(f"read user {user_id}", "reading", writes=False)
+        return self._get(User, f"/v1/users/{user_id}", action)
 
     def page(self, page_id: str) -> Page:
         return self._get(

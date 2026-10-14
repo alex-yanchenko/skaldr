@@ -31,6 +31,12 @@ class PartialUser(NotionResponse):
     id: str
 
 
+class User(NotionResponse):
+    object: Literal["user"]
+    id: str
+    name: str | None = None
+
+
 class RichTextItem(NotionResponse):
     plain_text: str
 

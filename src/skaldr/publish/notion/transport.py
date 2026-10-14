@@ -4,6 +4,7 @@ from typing import Final
 
 from pydantic import JsonValue
 
+from skaldr.auth import printable_only
 from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
@@ -196,6 +197,7 @@ class NotionTransport:
         self._layouts: dict[str, Mapping[str, str]] = {}
         self._published: dict[str, Mapping[str, str]] = {}
         self._written: set[str] = set()
+        self._editor_names: dict[str, str] = {}
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         sections = {key: comparable_text(text) for key, text in content.sections.items()}
@@ -316,8 +318,20 @@ class NotionTransport:
     ) -> tuple[Part, ...]:
         return ()
 
+    def editor_name(self, user_id: str, /) -> str:
+        if user_id not in self._editor_names:
+            self._editor_names[user_id] = self._name_notion_gives(user_id)
+        return self._editor_names[user_id]
+
     def close(self) -> None:
         self._api.close()
+
+    def _name_notion_gives(self, user_id: str) -> str:
+        try:
+            user = self._api.user(user_id)
+        except ConnectorError:
+            return user_id
+        return printable_only(user.name or "") or user_id
 
     def _live_page(self, item_id: str) -> Page:
         if notion_page_id(item_id) is None:

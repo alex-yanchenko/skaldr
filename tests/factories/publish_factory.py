@@ -356,6 +356,9 @@ class FakeTransport:
     def close(self) -> None:
         self.closes += 1
 
+    def editor_name(self, user_id: str, /) -> str:
+        return user_id
+
     def archive_item(self, item_id: str, /) -> None:
         self._write(("archive", item_id))
         self.items[item_id].archived = True

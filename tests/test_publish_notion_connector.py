@@ -23,7 +23,7 @@ from tests.factories.auth_factory import (
     make_notion_credentials,
     seed_notion,
 )
-from tests.factories.notion_factory import InMemoryNotion, Scripted, numbered_id
+from tests.factories.notion_factory import PERSON_ID, InMemoryNotion, Scripted, numbered_id
 from tests.factories.publish_factory import (
     DOC_ID,
     TARGET_LABEL,
@@ -396,6 +396,61 @@ def test_a_section_change_puts_back_the_stamp_a_person_deleted(tmp_path: Path) -
     exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
 
     assert (exit_code, notion.markdown_of(TOOLS_PAGE).splitlines()[-2:]) == (0, ["- Rake.", stamp])
+
+
+def _edited_by_lines_of_a_diff_after_two_hand_edits(
+    tmp_path: Path, notion: InMemoryNotion, capsys: pytest.CaptureFixture[str]
+) -> tuple[list[str], list[str]]:
+    seed_notion(make_notion_credentials())
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.edit_by_hand(DOCUMENT_PAGE, "Sow in spring.", "Sow in June.")
+    notion.edit_by_hand(TOOLS_PAGE, "- Spade.", "- Trowel.")
+    capsys.readouterr()
+    notion.requests.clear()
+
+    main(["diff", str(path)], registry=_registry(notion))
+
+    edited = [line for line in capsys.readouterr().out.splitlines() if "edited by" in line]
+    asked = [request.url.path for request in notion.requests if request.url.path.startswith("/v1/users/")]
+    return edited, asked
+
+
+def test_a_remote_edit_names_the_person_notion_says_made_it_and_asks_once_per_person(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion = _notion_with_a_parent_page()
+    notion.users[PERSON_ID] = "Rowan Ash"
+
+    edited, asked = _edited_by_lines_of_a_diff_after_two_hand_edits(tmp_path, notion, capsys)
+
+    assert (edited, asked) == (
+        [
+            f"+++ {TARGET_LABEL}, document: planting (blocks[2]), now, edited by Rowan Ash at "
+            "2026-10-09T12:06:00+00:00",
+            f"+++ {TARGET_LABEL}, section tools: tools (blocks[1]), now, edited by Rowan Ash at "
+            "2026-10-09T12:07:00+00:00",
+        ],
+        [f"/v1/users/{PERSON_ID}"],
+    )
+
+
+def test_a_remote_edit_by_a_person_notion_will_not_name_shows_their_id(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion = _notion_with_a_parent_page()
+
+    edited, asked = _edited_by_lines_of_a_diff_after_two_hand_edits(tmp_path, notion, capsys)
+
+    assert (edited, asked) == (
+        [
+            f"+++ {TARGET_LABEL}, document: planting (blocks[2]), now, edited by {PERSON_ID} at "
+            "2026-10-09T12:06:00+00:00",
+            f"+++ {TARGET_LABEL}, section tools: tools (blocks[1]), now, edited by {PERSON_ID} at "
+            "2026-10-09T12:07:00+00:00",
+        ],
+        [f"/v1/users/{PERSON_ID}"],
+    )
 
 
 def test_a_changed_section_is_sent_as_one_search_and_replace(tmp_path: Path) -> None:

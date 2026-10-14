@@ -23,6 +23,7 @@ BLOCK_PATH = re.compile(r"/v1/blocks/([^/]+)$")
 DATABASE_PATH = re.compile(r"/v1/databases/([^/]+)$")
 DATA_SOURCE_PATH = re.compile(r"/v1/data_sources/([^/]+)$")
 TASK_PATH = re.compile(r"/v1/async_tasks/([^/]+)$")
+USER_PATH = re.compile(r"/v1/users/([^/]+)$")
 UUID_PATHS = (PAGE_PATH, MARKDOWN_PATH, BLOCK_PATH, DATABASE_PATH)
 FENCE = re.compile(r"`{3,}|\$\$")
 
@@ -293,6 +294,9 @@ class InMemoryNotion:
     def _route(self, method: str, path: str, body: dict[str, Any]) -> httpx2.Response:
         if (method, path) == ("POST", "/v1/pages"):
             return self._create(body)
+        user = USER_PATH.fullmatch(path)
+        if method == "GET" and user is not None:
+            return self._user(user.group(1))
         for pattern, handler in (
             (MARKDOWN_PATH, self._markdown),
             (PAGE_PATH, self._page),
@@ -307,6 +311,12 @@ class InMemoryNotion:
             if found is not None:
                 return handler(method, found.group(1), body)
         return _error(400, "invalid_request_url", f"no route for {method} {path}")
+
+    def _user(self, user_id: str) -> httpx2.Response:
+        name = self.users.get(user_id)
+        if name is None:
+            return _error(404, "object_not_found", "Could not find user.")
+        return httpx2.Response(200, json={"object": "user", "id": user_id, "type": "person", "name": name})
 
     def _found(self, page_id: str) -> StoredPage | None:
         return self.pages.get(notion_page_id(page_id) or page_id)

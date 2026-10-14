@@ -270,6 +270,8 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 state = with_item(state, ref, prepared.target_named(label), settled)
             landed = set(unsettled) - set(edited)
             still_reported = tuple(part for part in reported if part not in landed)
+            if (edited or still_reported) and remote.edited_by is not None:
+                remote = replace(remote, edited_by=transport.editor_name(remote.edited_by))
             readings.append(Reading(ref, settled, remote, edited, still_reported))
     return PublishedReadings(readings, state, missing)
 
