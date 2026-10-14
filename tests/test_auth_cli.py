@@ -1101,6 +1101,14 @@ def test_logout_jira_for_a_site_nobody_signed_in_to_says_so(capsys: pytest.Captu
     assert stored_jira() == [make_jira_credentials()]
 
 
+def test_logout_jira_legacy_with_no_legacy_entry_says_so(capsys: pytest.CaptureFixture[str]) -> None:
+    save_jira(make_jira_credentials())
+
+    assert auth_cli.main(["logout", "jira", "legacy"]) == 0
+    assert capsys.readouterr().out == "Not signed in to Jira at legacy.\n"
+    assert stored_jira() == [make_jira_credentials()]
+
+
 def test_logout_refuses_a_jira_site_that_is_not_a_jira_cloud_origin(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

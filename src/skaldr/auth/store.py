@@ -109,7 +109,15 @@ def jira_credentials(
 ) -> JiraCredentials:
     with CaughtWithoutChaining(ValidationError) as invalid:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
-    raise AuthError(invalid.error.errors(include_input=False)[0]["msg"])
+    raise AuthError(_first_refusal(invalid.error))
+
+
+def _first_refusal(invalid: ValidationError) -> str:
+    return invalid.errors(include_input=False)[0]["msg"]
+
+
+def jira_selector(site: str | None) -> str | None:
+    return site if site is None or site == LEGACY_SELECTOR else normalise_site(site)
 
 
 @dataclass(frozen=True)
@@ -200,8 +208,10 @@ def stored_notion_sign_ins() -> list[StoredEntry[NotionCredentials]]:
 
 
 def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
-    names_an_origin = site is not None and site != LEGACY_SELECTOR
-    wanted = normalise_site(site) if site is not None and names_an_origin else site
+    return _find_jira_by_selector(jira_selector(site))
+
+
+def _find_jira_by_selector(wanted: str | None) -> StoredEntry[JiraCredentials] | None:
     found = _the_only_match(
         stored_jira_sign_ins(),
         wanted,
@@ -209,7 +219,7 @@ def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
         "Jira sites",
         lambda entry: entry.identifier or _UNREADABLE_LEGACY_ENTRY,
     )
-    if found is None and wanted is not None and names_an_origin:
+    if found is None and wanted is not None and wanted != LEGACY_SELECTOR:
         return _in_the_keychain(lambda: _entry_named(_JIRA, wanted))
     return found
 
@@ -237,10 +247,14 @@ def entry_for_workspace(
 
 
 def load_jira(site: str | None = None) -> SignIn[JiraCredentials] | None:
+    return _load_jira_by_selector(jira_selector(site))
+
+
+def _load_jira_by_selector(wanted: str | None) -> SignIn[JiraCredentials] | None:
     from_environment = jira_from_environment()
-    if from_environment is not None and (site is None or normalise_site(site) == from_environment.site):
+    if from_environment is not None and wanted in (None, from_environment.site):
         return SignIn(from_environment, "environment")
-    return _signed_in(find_jira(site))
+    return _signed_in(_find_jira_by_selector(wanted))
 
 
 def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | None:
@@ -251,9 +265,10 @@ def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | Non
 
 
 def require_jira(site: str | None = None) -> SignIn[JiraCredentials]:
-    sign_in = load_jira(site)
+    wanted = jira_selector(site)
+    sign_in = _load_jira_by_selector(wanted)
     if sign_in is None:
-        where = "" if site is None else f" at {normalise_site(site)}"
+        where = "" if wanted is None else f" at {wanted}"
         raise AuthError(f"Not signed in to Jira{where}; run `skaldr auth jira`")
     return sign_in
 
@@ -670,6 +685,11 @@ def jira_from_environment() -> JiraCredentials | None:
     values = _all_or_none_from_environment(JIRA_ENVIRONMENT)
     if values is None:
         return None
-    with CaughtWithoutChaining(AuthError) as refused:
-        return jira_credentials(values[_JIRA_SITE], values[_JIRA_EMAIL], values[_JIRA_API_TOKEN])
-    raise AuthError(f"{_JIRA_SITE}: {refused.error}")
+    with CaughtWithoutChaining(ValidationError) as invalid:
+        return JiraCredentials(
+            site=values[_JIRA_SITE],
+            email=values[_JIRA_EMAIL],
+            api_token=values[_JIRA_API_TOKEN],
+            display_name=None,
+        )
+    raise AuthError(f"{_JIRA_SITE}: {_first_refusal(invalid.error)}")

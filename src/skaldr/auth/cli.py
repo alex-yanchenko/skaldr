@@ -25,6 +25,7 @@ from skaldr.auth.store import (
     find_notion,
     forget,
     jira_from_environment,
+    jira_selector,
     normalise_site,
     notion_client_from_environment,
     notion_from_environment,
@@ -220,7 +221,7 @@ def _notion_token_was_revoked(
 def _log_out_of_jira(site: str | None) -> None:
     entry = find_jira(site)
     if entry is None:
-        where = "" if site is None else f" at {normalise_site(site)}"
+        where = "" if site is None else f" at {jira_selector(site)}"
         print(f"Not signed in to Jira{where}.")
         return
     if not forget(entry):

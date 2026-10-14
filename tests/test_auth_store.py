@@ -24,6 +24,7 @@ from skaldr.auth.store import (
     JiraCredentials,
     NotionCredentials,
     SignIn,
+    UnreadableEntryError,
     entry_for_workspace,
     find_jira,
     find_notion,
@@ -246,6 +247,20 @@ def test_the_jira_environment_answers_for_its_own_site_and_the_keychain_for_the_
     )
 
 
+def test_the_legacy_jira_entry_is_found_by_its_selector_while_the_environment_holds_a_site(
+    keychain: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keychain.entries[("skaldr", "jira")] = "not json"
+    monkeypatch.setenv("JIRA_SITE", "https://example.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "ci@example.com")
+    monkeypatch.setenv("JIRA_API_TOKEN", "env-token")
+
+    with pytest.raises(UnreadableEntryError) as raised:
+        load_jira("legacy")
+
+    assert str(raised.value) == LEGACY_JIRA_UNREADABLE
+
+
 def test_the_only_stored_notion_sign_in_is_found_without_naming_a_workspace() -> None:
     seed_notion(make_notion_credentials())
 
@@ -323,13 +338,14 @@ def test_a_notion_access_token_in_the_environment_is_skipped_when_a_workspace_is
             lambda: require_jira("example.atlassian.net"),
             "Not signed in to Jira at https://example.atlassian.net; run `skaldr auth jira`",
         ),
+        (lambda: require_jira("legacy"), "Not signed in to Jira at legacy; run `skaldr auth jira`"),
         (lambda: require_notion(), "Not signed in to Notion; run `skaldr auth notion`"),
         (
             lambda: require_notion(WORKSPACE_ID),
             f"Not signed in to Notion workspace {WORKSPACE_ID}; run `skaldr auth notion`",
         ),
     ],
-    ids=["jira", "a jira site", "notion", "a notion workspace"],
+    ids=["jira", "a jira site", "the legacy jira entry", "notion", "a notion workspace"],
 )
 def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
     find: Callable[[], object], refusal: str
