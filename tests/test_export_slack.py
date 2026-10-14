@@ -840,6 +840,52 @@ def test_emphasis_whose_markers_a_canvas_cannot_read_drops_its_style_and_never_b
     assert render_slack([Paragraph(runs)]) == f"{written}\n"
 
 
+COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "counts"}
+
+
+@pytest.mark.parametrize(
+    ("body", "written"),
+    [
+        pytest.param(
+            "**[*a*](https://x.io)**", "**[*a*](https://x.io)**", id="italic-in-a-link-label-in-a-bold"
+        ),
+        pytest.param(
+            "*[_a_](https://x.io)*", "*[a](https://x.io)*", id="italic-in-a-link-label-in-an-italic"
+        ),
+        pytest.param("**[*a*](#counts)**", "**a**", id="anchor-link-label-read-with-the-bold-around-it"),
+        pytest.param("**++*a*++**", "**a**", id="italic-inside-an-underline-at-the-edge-of-a-bold"),
+    ],
+)
+def test_emphasis_inside_a_label_or_an_underline_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
+    assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"## Counts\n\n{written}\n"
+
+
+@pytest.mark.parametrize(
+    ("runs", "written"),
+    [
+        pytest.param(
+            (
+                Styled(
+                    "bold",
+                    (Plain("x "), Styled("italic", _rich_text("a")), Styled("italic", _rich_text(" "))),
+                ),
+            ),
+            "**x a** ",
+            id="italic-before-a-trailing-blank-italic-closes-the-bold",
+        ),
+        pytest.param(
+            (Plain("x"), Styled("bold", _rich_text("(a)")), Styled("bold", _rich_text("b"))),
+            "x(a)**b**",
+            id="bold-straight-after-a-bold-written-plain-keeps-its-markers",
+        ),
+    ],
+)
+def test_emphasis_beside_emphasis_that_writes_no_marker_is_judged_on_what_is_written_on_a_canvas(
+    runs: tuple[ExportRun, ...], written: str
+) -> None:
+    assert render_slack([Paragraph(runs)]) == f"{written}\n"
+
+
 def test_emphasis_nested_in_the_same_emphasis_is_written_once_on_a_canvas() -> None:
     nested = Styled("italic", (Plain("a "), Styled("italic", _rich_text("b")), Plain(" c")))
 

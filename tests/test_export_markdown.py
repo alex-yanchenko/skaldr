@@ -1016,12 +1016,91 @@ def test_emphasis_nested_in_the_same_emphasis_is_written_once(body: str, markdow
             "<p><strong>x <em>a</em> y</strong></p>\n",
             id="away-from-the-edge-keeps-its-markers",
         ),
+        pytest.param(
+            "**++*a*++**",
+            "**<ins><em>a</em></ins>**\n",
+            "<p><strong><ins><em>a</em></ins></strong></p>\n",
+            id="italic-inside-an-underline-at-the-edge-of-a-bold",
+        ),
     ],
 )
 def test_emphasis_at_the_edge_of_emphasis_sharing_its_marker_character_is_written_as_html_tags(
     body: str, markdown: str, html: str
 ) -> None:
     written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "counts"}
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "**[*a*](https://x.io)**",
+            "**[*a*](https://x.io)**\n",
+            '<p><strong><a href="https://x.io"><em>a</em></a></strong></p>\n',
+            id="italic-in-a-link-label-in-a-bold",
+        ),
+        pytest.param(
+            "*[_a_](https://x.io)*",
+            "*[a](https://x.io)*\n",
+            '<p><em><a href="https://x.io">a</a></em></p>\n',
+            id="italic-in-a-link-label-in-an-italic",
+        ),
+        pytest.param(
+            "**[*a*](#counts)**",
+            "**[*a*](#counts)**\n",
+            '<p><strong><a href="#counts"><em>a</em></a></strong></p>\n',
+            id="italic-in-an-anchor-link-label-in-a-bold",
+        ),
+    ],
+)
+def test_emphasis_inside_a_link_label_keeps_its_markers_since_the_bracket_parts_it_from_the_enclosing_marker(
+    body: str, markdown: str, html: str
+) -> None:
+    written = markdown_of([COUNTS_HEADING, {"type": "text", "body": body}]).split("\n\n", 1)[1]
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+def test_the_label_of_an_anchor_link_to_no_heading_is_read_with_the_emphasis_around_it() -> None:
+    italic_label = (Styled("italic", (Plain("a"),)),)
+    paragraph = Paragraph((Styled("bold", (AnchorLink(italic_label, "nowhere"),)),))
+
+    written = render_markdown([paragraph])
+
+    assert (written, _github_html(written)) == ("**<em>a</em>**\n", "<p><strong><em>a</em></strong></p>\n")
+
+
+@pytest.mark.parametrize(
+    ("runs", "markdown", "html"),
+    [
+        pytest.param(
+            (
+                Styled(
+                    "bold",
+                    (Plain("x "), Styled("italic", (Plain("a"),)), Styled("italic", (Plain(" "),))),
+                ),
+            ),
+            "**x <em>a</em>** \n",
+            "<p><strong>x <em>a</em></strong></p>\n",
+            id="italic-before-a-trailing-blank-italic-closes-the-bold",
+        ),
+        pytest.param(
+            (Plain("x"), Styled("bold", (Plain("(a)"),)), Styled("bold", (Plain("b"),))),
+            "x<strong>(a)</strong>**b**\n",
+            "<p>x<strong>(a)</strong><strong>b</strong></p>\n",
+            id="bold-straight-after-a-bold-written-as-tags-keeps-its-markers",
+        ),
+    ],
+)
+def test_emphasis_beside_emphasis_that_writes_no_marker_is_judged_on_what_is_written(
+    runs: ExportRich, markdown: str, html: str
+) -> None:
+    written = render_markdown([Paragraph(runs)])
 
     assert (written, _github_html(written)) == (markdown, html)
 
