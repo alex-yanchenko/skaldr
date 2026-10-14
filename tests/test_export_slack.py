@@ -81,7 +81,7 @@ MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
 TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
 TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
-LIST_SEPARATOR = "\N{NO-BREAK SPACE}"
+LIST_SEPARATOR = "&nbsp;"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
 CANVAS_LIMIT_WHY = (
@@ -210,9 +210,7 @@ def test_a_line_break_outside_a_table_cell_is_a_hard_break_in_a_paragraph_and_a_
     [
         pytest.param(make_bullets(make_list_entry("a"), make_list_entry("b")), "* a\n* b\n", id="bullet"),
         pytest.param(
-            ListNode("number", (make_list_entry("a"), make_list_entry("b")), 3),
-            "3. a\n4. b\n",
-            id="number-start",
+            ListNode("number", (make_list_entry("a"), make_list_entry("b"))), "1. a\n2. b\n", id="number"
         ),
         pytest.param(
             ListNode("check", (make_list_entry("a"), make_list_entry("b", checked=True))),
@@ -222,17 +220,43 @@ def test_a_line_break_outside_a_table_cell_is_a_hard_break_in_a_paragraph_and_a_
         pytest.param(make_bullets(ListEntry(())), "*\n", id="bare-marker"),
         pytest.param(
             ListNode(
-                "number",
-                (make_list_entry("a", make_bullets(make_list_entry("b"))), make_list_entry("c")),
-                999_999_999,
+                "number", (make_list_entry("a", make_bullets(make_list_entry("b"))), make_list_entry("c"))
             ),
-            "999999999. a\n           * b\n999999999. c\n",
-            id="number-clamped-at-the-largest-commonmark-marker",
+            "1. a\n   * b\n2. c\n",
+            id="number-with-nested-bullets",
         ),
     ],
 )
 def test_a_list_writes_the_markers_slack_stores(node: ListNode, text: str) -> None:
     assert render_slack([node]) == text
+
+
+@pytest.mark.parametrize(
+    ("blocks", "start", "where"),
+    [
+        pytest.param(
+            [{"type": "list", "style": "number", "start": 4, "items": ["a", "b"]}],
+            4,
+            "at blocks.0.list",
+            id="list-block",
+        ),
+        pytest.param([{"type": "text", "body": "3. a\n4. b"}], 3, "at blocks.0.text", id="numbered-text"),
+        pytest.param(
+            [{"type": "text", "body": "- a\n- b\n\n  2. c"}], 2, "at blocks.0.text", id="nested-in-text"
+        ),
+    ],
+)
+def test_a_numbered_list_that_does_not_start_at_1_is_rejected_naming_its_path(
+    blocks: list[dict[str, Any]], start: int, where: str
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        slack_of(blocks)
+
+    assert vars(raised.value) == _canvas_rejection(
+        f"a Slack canvas numbers every list from 1, so it cannot show a numbered list that starts at {start}",
+        "number the list from 1, or export it elsewhere",
+        where,
+    )
 
 
 @pytest.mark.parametrize(
@@ -273,11 +297,12 @@ def test_a_nested_list_keeps_its_own_kind(kind: ListKind, nested_kind: ListKind,
 def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
     deepest = ListNode("number", (make_list_entry("c"),))
     middle = ListNode("number", (make_list_entry("b", deepest),))
+    tenth = make_list_entry("j", middle)
+    outer = ListNode("number", (*(make_list_entry(letter) for letter in "abcdefghi"), tenth))
 
-    assert (
-        render_slack([ListNode("number", (make_list_entry("a", middle),), 9)])
-        == "9. a\n   1. b\n      1. c\n"
-    )
+    first_nine = "".join(f"{number}. {letter}\n" for number, letter in enumerate("abcdefghi", start=1))
+
+    assert render_slack([outer]) == f"{first_nine}10. j\n    1. b\n       1. c\n"
 
 
 @pytest.mark.parametrize(
@@ -288,7 +313,7 @@ def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
         pytest.param(ListNode("check", (make_list_entry("b"),)), "* [ ] b", id="bullet-then-check"),
     ],
 )
-def test_two_lists_in_a_row_are_kept_apart_by_a_no_break_space_paragraph(
+def test_two_lists_in_a_row_are_kept_apart_by_an_nbsp_entity_paragraph(
     second: ListNode, second_text: str
 ) -> None:
     assert (
