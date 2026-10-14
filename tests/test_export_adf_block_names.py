@@ -6,7 +6,19 @@ import pytest
 from skaldr.export.adf import AdfUnsupportedError, render_adf
 from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
-from skaldr.export.tree import Callout, Node, Paragraph, Tab, TableCell, TableNode, Tabs, Toggle
+from skaldr.export.tree import (
+    Callout,
+    ListEntry,
+    ListKind,
+    ListNode,
+    Node,
+    Paragraph,
+    Tab,
+    TableCell,
+    TableNode,
+    Tabs,
+    Toggle,
+)
 from skaldr.models import load_report
 from tests.factories import (
     lowered,
@@ -111,7 +123,46 @@ def test_a_request_flow_step_with_two_cases_is_named_a_request_step() -> None:
     flow = {"type": "request_flow", "label": "Walk", "steps": [step, step]}
 
     assert _refusal(_in_a_panel(flow)) == (
-        "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow"
+        "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow.steps.0"
+    )
+
+
+def test_the_second_request_flow_step_is_named_by_its_own_index() -> None:
+    one_case = {
+        "label": "Read",
+        "method": "GET",
+        "url": "https://api.example.com/widgets",
+        "cases": [{"label": "a", "response": {"body": "1"}}],
+    }
+    two_cases = one_case | {
+        "cases": [{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
+    }
+    flow = {"type": "request_flow", "label": "Walk", "steps": [one_case, two_cases]}
+
+    assert _refusal(_in_a_panel(flow)) == (
+        "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow.steps.1"
+    )
+
+
+def _refused_comparison() -> TableNode:
+    return TableNode(
+        (TableCell(plain("h")),),
+        (),
+        authored_as="comparison",
+        authored_at="blocks.0.walkthrough.steps.0.detail.0.comparison",
+    )
+
+
+@pytest.mark.parametrize("kind", ["number", "bullet", "check"])
+def test_a_list_entry_child_refused_inside_a_callout_names_the_block_and_its_path(kind: ListKind) -> None:
+    entry = ListEntry(plain("step"), children=(_refused_comparison(),))
+    nodes: tuple[Node, ...] = (Callout("info", (ListNode(kind, (entry,)),)),)
+
+    with pytest.raises(AdfUnsupportedError) as refused:
+        render_adf(nodes)
+
+    assert str(refused.value) == (
+        "ADF cannot place a comparison inside a callout, at blocks.0.walkthrough.steps.0.detail.0.comparison"
     )
 
 

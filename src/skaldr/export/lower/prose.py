@@ -1,6 +1,6 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
 from typing_extensions import assert_never
 
@@ -10,6 +10,7 @@ from skaldr.export.inline import bold, italic, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
+    AuthoredName,
     Callout,
     CodeBlock,
     DisplayMath,
@@ -169,10 +170,10 @@ def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
 
 
 def _titled_callout(
-    tone: ToneName, block: models.Callout | models.Note, lowering: Lowering, authored_as: str
+    tone: ToneName, block: models.Callout | models.Note, lowering: Lowering, authored_as: AuthoredName
 ) -> list[Node]:
     heading: tuple[Node, ...] = (Paragraph(bold(block.title)),) if block.title else ()
-    return [Callout(tone, heading + lowering.prose(block.body), block.icon, authored_as)]
+    return [Callout(tone, heading + lowering.prose(block.body), block.icon, authored_as=authored_as)]
 
 
 def lower_callout(block: models.Callout, lowering: Lowering) -> list[Node]:
@@ -250,13 +251,19 @@ def lower_media(block: models.Media) -> list[Node]:
     return [Media(block.kind, block.src, caption=plain(block.caption or ""))]
 
 
+_LINK_NAME: Final[Mapping[Literal["card", "embed"], AuthoredName]] = {
+    "card": "link card",
+    "embed": "link embed",
+}
+
+
 def lower_link(block: models.Link) -> list[Node]:
     card = compute.link_card(block)
     link = Link(plain(card.title), card.url)
     if block.display == "inline":
         return [Paragraph((link,))]
     detail = " · ".join(part for part in (card.domain, card.caption) if part)
-    return [Quote(((Styled("bold", (link,)),),), plain(detail), authored_as=f"link {block.display}")]
+    return [Quote(((Styled("bold", (link,)),),), plain(detail), authored_as=_LINK_NAME[block.display])]
 
 
 def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:

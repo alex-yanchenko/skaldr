@@ -280,7 +280,7 @@ def _part(block: models.Part, lowering: Lowering) -> list[Node]:
     children = _lower_blocks(block.blocks, lowering, depth=0)
     anchor = lowering.anchor_of(block)
     if block.collapsed:
-        return [Toggle(plain(block.title), PART_HEADING_LEVEL, tuple(children), anchor, "part")]
+        return [Toggle(plain(block.title), PART_HEADING_LEVEL, tuple(children), anchor, authored_as="part")]
     return [Heading(PART_HEADING_LEVEL, plain(block.title), anchor), *children]
 
 
@@ -293,7 +293,7 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     children = [*updated, *facts, *_lower_blocks(block.blocks, lowering, depth + 1)]
     anchor = lowering.anchor_of(block)
     if block.collapsed:
-        return [Toggle(plain(block.title), level, tuple(children), anchor, "section")]
+        return [Toggle(plain(block.title), level, tuple(children), anchor, authored_as="section")]
     return [Heading(level, plain(block.title), anchor), *children]
 
 

@@ -45,6 +45,7 @@ from skaldr.export.adf.nodes import (
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.tree import (
+    AuthoredNode,
     Callout,
     CodeBlock,
     Columns,
@@ -85,10 +86,6 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
     "panel": _TEXT_BLOCKS | {"codeBlock", "rule"},
 }
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
-_CONTAINER_TERM: Final[Mapping[Container, str]] = {
-    "doc": "the document",
-}
-TOGGLE_NAME: Final = "toggle"
 _NODE_TERM: Final[Mapping[type, str]] = {
     Heading: "heading",
     Paragraph: "text",
@@ -113,12 +110,12 @@ GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
 def _authored_term(node: Node) -> str:
-    named = node.authored_as if isinstance(node, (Callout, Quote, TableNode, Tabs, Toggle)) else None
+    named = node.authored_as if isinstance(node, AuthoredNode) else None
     return named or _NODE_TERM[type(node)]
 
 
 def _authored_path(node: Node) -> str | None:
-    return node.authored_at if isinstance(node, (Callout, Quote, TableNode, Tabs, Toggle)) else None
+    return node.authored_at if isinstance(node, AuthoredNode) else None
 
 
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
@@ -176,7 +173,7 @@ class _AdfBlocks:
             case "nested_expand":
                 return f"a {self.expand_names[-1]} that is itself inside a {self.expand_names[-2]}"
             case "doc":
-                return _CONTAINER_TERM[container]
+                return "the document"
 
     def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
         for block in produced:
@@ -217,8 +214,10 @@ class _AdfBlocks:
             case Callout():
                 enclosing_name = self.panel_name
                 self.panel_name = node.authored_as or _NODE_TERM[Callout]
-                content = self.blocks(node.children, "panel") or [_empty_paragraph()]
-                self.panel_name = enclosing_name
+                try:
+                    content = self.blocks(node.children, "panel") or [_empty_paragraph()]
+                finally:
+                    self.panel_name = enclosing_name
                 panel = AdfPanelAttrs(panelType=PANEL_TYPE[node.tone])
                 return [AdfPanel(type="panel", attrs=panel, content=content)]
             case Quote():
@@ -231,7 +230,7 @@ class _AdfBlocks:
                 title = export_visible_text(node.title)
                 if node.heading_level is not None:
                     self.heading = title.strip() or self.heading
-                return [self.expand(container, node.authored_as or TOGGLE_NAME, title, node.children)]
+                return [self.expand(container, node.authored_as or _NODE_TERM[Toggle], title, node.children)]
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
