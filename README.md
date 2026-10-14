@@ -71,7 +71,7 @@ already have, which is the reliable way to a shareable PDF. (Printing a publishe
 a sandboxed frame the browser flattens to a snapshot, so the print CSS never applies.) `--pdf` needs
 a Chrome/Chromium/Edge on the machine; set `SKALDR_BROWSER` to point at one if it isn't auto-found.
 
-**Markdown, or ADF for Jira, for another tool.** `--export` writes the document as Markdown, or as the ADF JSON a Jira issue description takes, instead of HTML, to `out/<name>.<target>/page.md` (`page.adf.json` for ADF) or to the folder `--export-dir` names:
+**Markdown, ADF for Jira, or a Slack canvas, for another tool.** `--export` writes the document as Markdown, as the ADF JSON a Jira issue description takes, or as the Markdown a Slack canvas takes, instead of HTML, to `out/<name>.<target>/page.md` (`page.adf.json` for ADF) or to the folder `--export-dir` names:
 
 ```bash
 skaldr report.yaml --export markdown               # GitHub-flavored Markdown for a README, a PR body or a wiki
