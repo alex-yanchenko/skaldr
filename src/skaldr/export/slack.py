@@ -7,7 +7,6 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ExportRejectedError
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
-from skaldr.export.lower import Lowering, lower_blocks, lowering_for
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -53,11 +52,9 @@ from skaldr.export.tree import (
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import (
     MEDIA_KIND_LABELS,
-    AnyBlock,
     InnerGrid,
     Report,
     Walkthrough,
-    located_child_blocks,
 )
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
@@ -132,12 +129,6 @@ class _SlackRuns(CommonMarkRuns):
         return _in_unicode_script_form(position, text)
 
 
-class _ListItemCannotHoldError(Exception):
-    def __init__(self, what: str) -> None:
-        super().__init__(what)
-        self.what = what
-
-
 @dataclass(frozen=True)
 class _Item:
     text: ExportRich
@@ -200,10 +191,25 @@ def _with_paragraph(text: ExportRich, paragraph: ExportRich) -> ExportRich:
     return (*text, Plain(" "), *paragraph)
 
 
-def _what_a_list_item_cannot_hold(node: Node) -> str | None:
+_HeldOutsideAListItem = (
+    TableNode
+    | CodeBlock
+    | DisplayMath
+    | Media
+    | Callout
+    | Quote
+    | Divider
+    | Toggle
+    | Columns
+    | Tabs
+    | Diagram
+    | TableOfContents
+    | Heading
+)
+
+
+def _what_a_list_item_cannot_hold(node: _HeldOutsideAListItem) -> str:
     match node:
-        case Paragraph() | ListNode() | Divider() | TableOfContents():
-            return None
         case CodeBlock():
             return "a code block"
         case TableNode():
@@ -226,31 +232,47 @@ def _what_a_list_item_cannot_hold(node: Node) -> str | None:
             return "a set of tabs"
         case Columns():
             return "a column layout"
+        case Divider():
+            return "a divider"
+        case TableOfContents():
+            return "a table of contents"
         case _:
             assert_never(node)
 
 
-def _canvas_item(entry: ListEntry) -> _Item:
+def _authored_on_its_own_inside_the_item(held: Node, holder: ListNode) -> bool:
+    return held.authored_at != holder.authored_at
+
+
+def _list_item_cannot_hold(what: str, held: Node, holder: ListNode) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        f"a Slack canvas list item holds only text and one nested list, so it cannot show {what}",
+        OUT_OF_THE_STEP if _authored_on_its_own_inside_the_item(held, holder) else OUT_OF_THE_LIST,
+        f"at {held.authored_at}" if held.authored_at else None,
+    )
+
+
+def _canvas_item(entry: ListEntry, holder: ListNode) -> _Item:
     text = entry.text
     nested: _List | None = None
     for child in entry.children:
-        refused = _what_a_list_item_cannot_hold(child)
-        if refused is not None:
-            raise _ListItemCannotHoldError(refused)
         match child:
+            case Paragraph() if nested is not None and child.text:
+                raise _list_item_cannot_hold("a paragraph after its nested list", child, holder)
             case Paragraph():
                 text = _with_paragraph(text, child.text)
             case ListNode() if nested is not None:
-                raise _ListItemCannotHoldError("a second nested list")
+                raise _list_item_cannot_hold("a second nested list", child, holder)
             case ListNode():
                 nested = _canvas_list(child)
             case _:
-                continue
+                raise _list_item_cannot_hold(_what_a_list_item_cannot_hold(child), child, holder)
     return _Item(text, entry.checked, nested)
 
 
 def _canvas_list(node: ListNode) -> _List:
-    return _List(node.kind, tuple(_canvas_item(entry) for entry in node.entries), node.start)
+    return _List(node.kind, tuple(_canvas_item(entry, node) for entry in node.entries), node.start)
 
 
 def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
@@ -353,48 +375,10 @@ def _grids_in_walkthrough_steps(report: Report) -> Iterator[str]:
                     yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
 
 
-def _list_item_cannot_hold(
-    refusal: _ListItemCannotHoldError, instead: str, path: str | None
-) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        f"a Slack canvas list item holds only text and one nested list, so it cannot show {refusal.what}",
-        instead,
-        f"at {path}" if path else None,
-    )
-
-
-def _reject_a_step_detail_a_canvas_list_item_cannot_hold(
-    path: str, walkthrough: Walkthrough, lowering: Lowering
-) -> None:
-    for step_index, step in enumerate(walkthrough.steps):
-        children: list[Node] = []
-        for index, detail in enumerate(step.detail):
-            children += lower_blocks([detail], lowering)
-            try:
-                _canvas_item(ListEntry((), children=tuple(children)))
-            except _ListItemCannotHoldError as refusal:
-                detail_path = f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-                raise _list_item_cannot_hold(refusal, OUT_OF_THE_STEP, detail_path) from refusal
-
-
-def _reject_a_list_item_a_canvas_cannot_show(path: str, block: AnyBlock, lowering: Lowering) -> None:
-    try:
-        _canvas_blocks(lower_blocks([block], lowering), "top")
-    except _ListItemCannotHoldError as refusal:
-        raise _list_item_cannot_hold(refusal, OUT_OF_THE_LIST, path) from refusal
-
-
 def reject_what_a_canvas_cannot_show(report: Report) -> None:
     first_grid = next(_grids_in_walkthrough_steps(report), None)
     if first_grid is not None:
         raise _grid_in_a_walkthrough_step(first_grid)
-    lowering = lowering_for(report)
-    for path, block in report.located_blocks:
-        if isinstance(block, Walkthrough):
-            _reject_a_step_detail_a_canvas_list_item_cannot_hold(path, block, lowering)
-        elif not located_child_blocks(block):
-            _reject_a_list_item_a_canvas_cannot_show(path, block, lowering)
 
 
 def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
@@ -520,10 +504,7 @@ class _CanvasWriter:
 
 
 def render_slack(nodes: Sequence[Node]) -> str:
-    try:
-        blocks = _canvas_blocks(nodes, "top")
-    except _ListItemCannotHoldError as refusal:
-        raise _list_item_cannot_hold(refusal, OUT_OF_THE_LIST, None) from refusal
+    blocks = _canvas_blocks(nodes, "top")
     text = "\n".join(_CanvasWriter().blocks(blocks)) + "\n"
     if len(text) > SLACK_CANVAS_LIMIT:
         raise _canvas_over_the_size_limit(len(text))

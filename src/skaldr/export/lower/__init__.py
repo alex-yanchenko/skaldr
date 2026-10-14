@@ -54,6 +54,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
     capped_heading_level,
+    with_authored_path,
 )
 from skaldr.richtext import Plain
 
@@ -178,6 +179,12 @@ def _heading(block: models.Heading, lowering: Lowering, depth: int) -> list[Node
 
 
 def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list[Node]:
+    nodes = _block_nodes(block, lowering, depth)
+    path = lowering.path_of(block)
+    return nodes if path is None else [with_authored_path(node, path) for node in nodes]
+
+
+def _block_nodes(block: models.AnyBlock, lowering: Lowering, depth: int) -> list[Node]:
     match block:
         case models.Heading():
             return _heading(block, lowering, depth)
