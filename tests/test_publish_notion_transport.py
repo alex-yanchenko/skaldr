@@ -58,7 +58,7 @@ EMPTY_ROW = numbered_id(900).replace("-", "")
 SEEDLING = "🌱"
 SUNFLOWER = "🌻"
 COVER_URL = "https://example.com/garden.png"
-UPLOADED = "a file uploaded to Notion"
+UPLOADED = "a file uploaded to Notion (https://files.example.com/space/trowel.png)"
 CUSTOM_EMOJI_ID = "c0ffee00-0000-4000-8000-0000000000e1"
 SEEDLING_ICON = {"type": "emoji", "emoji": SEEDLING}
 GARDEN_COVER = {"type": "external", "external": {"url": COVER_URL}}
@@ -1011,8 +1011,8 @@ def test_an_icon_and_cover_that_did_not_change_are_not_sent() -> None:
     assert _patches(notion) == [{"properties": _title("Garden guide")}]
 
 
-def _uploaded(signature: str) -> dict[str, Any]:
-    url = f"https://files.example.com/space/trowel.png?signature={signature}"
+def _uploaded(signature: str, file_name: str = "trowel.png") -> dict[str, Any]:
+    url = f"https://files.example.com/space/{file_name}?signature={signature}"
     return {"type": "file", "file": {"url": url, "expiry_time": "2026-10-09T13:00:00.000Z"}}
 
 
@@ -1095,6 +1095,33 @@ def test_an_uploaded_icon_and_cover_read_the_same_after_notion_signs_their_addre
     second = transport.read_item(created.item_id, created.comparable)
 
     assert (differing_parts(first.comparable, second.comparable), second.comparable.icon) == ((), UPLOADED)
+
+
+def test_one_uploaded_icon_and_cover_swapped_for_another_file_reads_as_an_edit() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+    notion.set_look_by_hand(created.item_id, icon=_uploaded("first"), cover=_uploaded("first"))
+    first = transport.read_item(created.item_id, created.comparable)
+    notion.set_look_by_hand(
+        created.item_id, icon=_uploaded("second", "rake.png"), cover=_uploaded("second", "rake.png")
+    )
+
+    second = transport.read_item(created.item_id, created.comparable)
+
+    assert (differing_parts(first.comparable, second.comparable), second.comparable.icon) == (
+        (ICON, COVER),
+        "a file uploaded to Notion (https://files.example.com/space/rake.png)",
+    )
+
+
+def test_an_uploaded_file_notion_gives_no_address_for_reads_as_an_uploaded_file() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING, PAGE_TARGET)
+    notion.set_look_by_hand(created.item_id, icon={"type": "file"}, cover=GARDEN_COVER)
+
+    read = transport.read_item(created.item_id, created.comparable)
+
+    assert read.comparable.icon == "a file uploaded to Notion"
 
 
 def test_writing_into_a_page_sets_the_icon_and_cover_with_its_title_and_fields() -> None:

@@ -1,4 +1,5 @@
 from typing import Final, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import JsonValue
 from typing_extensions import assert_never
@@ -22,6 +23,13 @@ UPLOADED_FILE: Final = "a file uploaded to Notion"
 ImageSlot = Literal["icon", "cover"]
 
 
+def _uploaded_file_text(image: UploadedImage) -> str:
+    if image.file is None:
+        return UPLOADED_FILE
+    address = urlsplit(image.file.url)
+    return f"{UPLOADED_FILE} ({urlunsplit((address.scheme, address.netloc, address.path, '', ''))})"
+
+
 def _native_icon_text(image: NativeIconImage) -> str:
     color = f" ({image.icon.color})" if image.icon.color else ""
     return f"Notion icon {image.icon.name}{color}"
@@ -36,7 +44,7 @@ def _image_text(image: PageImage | None, slot: ImageSlot) -> str | None:
         case ExternalImage():
             return image.external.url
         case UploadedImage():
-            return UPLOADED_FILE
+            return _uploaded_file_text(image)
         case CustomEmojiImage():
             return f"Notion custom emoji {image.custom_emoji.id}"
         case NativeIconImage():

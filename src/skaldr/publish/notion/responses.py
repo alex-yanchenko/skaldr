@@ -190,6 +190,7 @@ class ExternalImage(NotionResponse):
 
 class UploadedImage(NotionResponse):
     type: Literal["file"]
+    file: LinkedFile | None = None
 
 
 class CustomEmojiImage(NotionResponse):
