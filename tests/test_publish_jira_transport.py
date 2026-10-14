@@ -1404,6 +1404,20 @@ def test_a_write_to_an_issue_deleted_after_the_read_is_item_not_found(
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
 
+def test_a_doc_id_that_starts_with_skaldr_still_gets_the_prefix_so_no_two_documents_share_a_label() -> None:
+    jira = FakeJira()
+    stamp = Stamp("skaldr-plan", None)
+    content = CONTENT.model_copy(update={"fields": {"labels": ["skaldr-plan"]}})
+    transport = _transport(jira)
+
+    created = transport.create_item(NewItem(TARGET, stamp, content))
+
+    assert (jira.issues["DEMO-1"].fields["labels"], created.comparable.fields) == (
+        ["skaldr-plan", "skaldr-skaldr-plan"],
+        {"labels": ["skaldr-plan"]},
+    )
+
+
 def test_closing_the_transport_closes_its_client() -> None:
     jira = FakeJira()
 
