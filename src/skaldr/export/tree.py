@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
@@ -66,6 +66,7 @@ class TableNode:
     header_column: bool = False
     columns: tuple[TableColumn, ...] = ()
     authored_as: str | None = field(default=None, compare=False)
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class Callout:
     children: "tuple[Node, ...]"
     icon: str | None = None
     authored_as: str | None = field(default=None, compare=False)
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,7 @@ class Quote:
     lines: tuple[ExportRich, ...]
     cite: ExportRich = ()
     authored_as: str | None = field(default=None, compare=False)
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,8 @@ class Toggle:
     heading_level: HeadingLevel | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
+    authored_as: str | None = field(default=None, compare=False)
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -137,6 +142,7 @@ class Tab:
 class Tabs:
     tabs: tuple[Tab, ...]
     authored_as: str | None = field(default=None, compare=False)
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -260,6 +266,38 @@ def heading_of(node: Node) -> Heading | None:
     if isinstance(node, Toggle) and node.heading_level is not None:
         return Heading(node.heading_level, node.title, node.anchor)
     return None
+
+
+def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:
+    return tuple(with_authored_path(node, path) for node in nodes)
+
+
+def with_authored_path(node: Node, path: str | None) -> Node:
+    if path is None:
+        return node
+    match node:
+        case ListNode():
+            entries = tuple(
+                replace(entry, children=_all_authored_at(entry.children, path)) for entry in node.entries
+            )
+            return replace(node, entries=entries)
+        case Callout() | Toggle():
+            children = _all_authored_at(node.children, path)
+            return replace(node, children=children, authored_at=node.authored_at or path)
+        case Tabs():
+            tabs = tuple(replace(tab, children=_all_authored_at(tab.children, path)) for tab in node.tabs)
+            return replace(node, tabs=tabs, authored_at=node.authored_at or path)
+        case Columns():
+            columns = tuple(
+                replace(column, children=_all_authored_at(column.children, path)) for column in node.columns
+            )
+            return replace(node, columns=columns)
+        case Diagram():
+            return replace(node, supplement=_all_authored_at(node.supplement, path))
+        case TableNode() | Quote():
+            return replace(node, authored_at=node.authored_at or path)
+        case Heading() | Paragraph() | CodeBlock() | DisplayMath() | Media() | Divider() | TableOfContents():
+            return node
 
 
 def nested_nodes(node: Node) -> tuple[Node, ...]:

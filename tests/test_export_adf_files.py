@@ -130,7 +130,8 @@ def test_the_cli_names_the_block_adf_cannot_place_and_writes_nothing(
     captured = capsys.readouterr()
     assert (captured.out, captured.err, export_dir.exists()) == (
         "",
-        "error: ADF cannot place a toggle inside a toggle that is itself inside a toggle\n",
+        "error: ADF cannot place a toggle inside a toggle that is itself inside a toggle, "
+        "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.toggle\n",
         False,
     )
 

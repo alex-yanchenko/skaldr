@@ -54,6 +54,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
     capped_heading_level,
+    with_authored_path,
 )
 from skaldr.richtext import Plain
 
@@ -174,6 +175,11 @@ def _heading(block: models.Heading, lowering: Lowering, depth: int) -> list[Node
 
 
 def _lower_block(block: models.AnyBlock, lowering: Lowering, depth: int) -> list[Node]:
+    path = lowering.path_of(block)
+    return [with_authored_path(node, path) for node in _block_nodes(block, lowering, depth)]
+
+
+def _block_nodes(block: models.AnyBlock, lowering: Lowering, depth: int) -> list[Node]:
     match block:
         case models.Heading():
             return _heading(block, lowering, depth)
@@ -274,7 +280,7 @@ def _part(block: models.Part, lowering: Lowering) -> list[Node]:
     children = _lower_blocks(block.blocks, lowering, depth=0)
     anchor = lowering.anchor_of(block)
     if block.collapsed:
-        return [Toggle(plain(block.title), PART_HEADING_LEVEL, tuple(children), anchor)]
+        return [Toggle(plain(block.title), PART_HEADING_LEVEL, tuple(children), anchor, "part")]
     return [Heading(PART_HEADING_LEVEL, plain(block.title), anchor), *children]
 
 
@@ -287,14 +293,14 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
     children = [*updated, *facts, *_lower_blocks(block.blocks, lowering, depth + 1)]
     anchor = lowering.anchor_of(block)
     if block.collapsed:
-        return [Toggle(plain(block.title), level, tuple(children), anchor)]
+        return [Toggle(plain(block.title), level, tuple(children), anchor, "section")]
     return [Heading(level, plain(block.title), anchor), *children]
 
 
 def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth: int) -> list[Node]:
     children = _lower_blocks(block.blocks, lowering, depth)
     if block.collapsed:
-        return [Toggle(plain(block.title), None, tuple(children))]
+        return [Toggle(plain(block.title), None, tuple(children), authored_as="toggle")]
     return [Paragraph(bold(block.title)), *children]
 
 
@@ -328,7 +334,7 @@ def _legend(lowering: Lowering, used: Sequence[tuple[str, models.Badge]]) -> lis
         if badge.legend is not False
     )
     title = plain(f"Legend: {compute.BADGE_LEGEND_SUBJECT}")
-    return [Toggle(title, None, (ListNode("bullet", entries),))]
+    return [Toggle(title, None, (ListNode("bullet", entries),), authored_as="legend")]
 
 
 def _with_the_legend(regions: Sequence[BlockRegion], legend: PagePart, legend_at: int | None) -> list[Region]:

@@ -113,8 +113,12 @@ GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
 def _authored_term(node: Node) -> str:
-    named = node.authored_as if isinstance(node, (Callout, Quote, TableNode, Tabs)) else None
+    named = node.authored_as if isinstance(node, (Callout, Quote, TableNode, Tabs, Toggle)) else None
     return named or _NODE_TERM[type(node)]
+
+
+def _authored_path(node: Node) -> str | None:
+    return node.authored_at if isinstance(node, (Callout, Quote, TableNode, Tabs, Toggle)) else None
 
 
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
@@ -178,6 +182,9 @@ class _AdfBlocks:
         for block in produced:
             if block["type"] not in _ALLOWED_BLOCKS[container]:
                 message = f"ADF cannot place a {_authored_term(node)} inside {self.container_term(container)}"
+                path = _authored_path(node)
+                if path:
+                    message += f", at {path}"
                 if self.heading:
                     message += f", under the heading '{self.heading}'"
                 raise AdfUnsupportedError(message)
@@ -224,7 +231,7 @@ class _AdfBlocks:
                 title = export_visible_text(node.title)
                 if node.heading_level is not None:
                     self.heading = title.strip() or self.heading
-                return [self.expand(container, TOGGLE_NAME, title, node.children)]
+                return [self.expand(container, node.authored_as or TOGGLE_NAME, title, node.children)]
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
