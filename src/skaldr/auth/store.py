@@ -24,8 +24,9 @@ from skaldr.services import Service
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
 LEGACY_SELECTOR = "legacy"
-_NAME_ONE = "name one"
-_NAME_THE_TARGET_WORKSPACE = "name one with `workspace` in the target's `where`"
+WhereToNameOne = Literal["", " with `workspace` in the target's `where`"]
+_ANYWHERE: WhereToNameOne = ""
+_IN_THE_TARGET: WhereToNameOne = " with `workspace` in the target's `where`"
 LOCK_TIMEOUT_SECONDS = 30.0
 _UNIDENTIFIED_WORKSPACE = "unidentified"
 _UNREADABLE_LEGACY_ENTRY = "an unreadable entry"
@@ -214,7 +215,7 @@ def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
 
 
 def find_notion(
-    workspace: str | None = None, how_to_name_one: str = _NAME_ONE
+    workspace: str | None = None, where_to_name_one: WhereToNameOne = _ANYWHERE
 ) -> StoredEntry[NotionCredentials] | None:
     wanted = None if workspace is None else _canonical_workspace_selector(workspace)
     found = _the_only_match(
@@ -223,7 +224,7 @@ def find_notion(
         _is_workspace,
         "Notion workspaces",
         _describe_workspace,
-        how_to_name_one,
+        where_to_name_one,
     )
     if found is None and wanted is not None and _is_uuid(wanted):
         return _in_the_keychain(lambda: _entry_named(_NOTION, wanted))
@@ -246,16 +247,16 @@ def load_jira(site: str | None = None) -> SignIn[JiraCredentials] | None:
 
 
 def load_notion(
-    workspace: str | None = None, how_to_name_one: str = _NAME_ONE
+    workspace: str | None = None, where_to_name_one: WhereToNameOne = _ANYWHERE
 ) -> SignIn[NotionCredentials] | None:
     from_environment = notion_from_environment() if workspace is None else None
     if from_environment is not None:
         return SignIn(from_environment, "environment")
-    return _signed_in(find_notion(workspace, how_to_name_one))
+    return _signed_in(find_notion(workspace, where_to_name_one))
 
 
 def require_notion_for_a_target(workspace: str | None) -> SignIn[NotionCredentials]:
-    sign_in = load_notion(workspace, _NAME_THE_TARGET_WORKSPACE)
+    sign_in = load_notion(workspace, _IN_THE_TARGET)
     if sign_in is not None:
         return sign_in
     signed_in = stored_notion_sign_ins()
@@ -313,12 +314,15 @@ def _the_only_match(
     matches: Callable[[StoredEntry[CredentialsT], str], bool],
     plural: str,
     describe: Callable[[StoredEntry[CredentialsT]], str],
-    how_to_name_one: str = _NAME_ONE,
+    where_to_name_one: WhereToNameOne = _ANYWHERE,
 ) -> StoredEntry[CredentialsT] | None:
     chosen = entries if selector is None else [entry for entry in entries if matches(entry, selector)]
     if len(chosen) > 1:
+        named = "" if selector is None else f" named `{printable_only(selector)}`"
+        by_its_id = "" if selector is None else " by its id"
         raise AuthError(
-            f"Signed in to several {plural} ({', '.join(map(describe, chosen))}); {how_to_name_one}"
+            f"Signed in to several {plural}{named} ({', '.join(map(describe, chosen))}); "
+            f"name one{by_its_id}{where_to_name_one}"
         )
     return chosen[0] if chosen else None
 

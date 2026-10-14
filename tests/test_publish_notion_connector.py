@@ -235,6 +235,22 @@ def test_a_target_without_a_workspace_names_the_key_to_set_when_signed_in_to_sev
     assert notion.requests == []
 
 
+def test_a_target_naming_a_workspace_two_sign_ins_share_is_told_to_name_one_by_its_id() -> None:
+    seed_notion(make_notion_credentials())
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID))
+    notion = _notion_with_a_parent_page()
+
+    with pytest.raises(AuthError) as caught:
+        _read_the_parent_page("Example Workspace", notion)
+
+    assert (str(caught.value), notion.requests) == (
+        f"Signed in to several Notion workspaces named `Example Workspace` (Example Workspace "
+        f"({WORKSPACE_ID}), Example Workspace ({OTHER_WORKSPACE_ID})); name one by its id with `workspace` "
+        "in the target's `where`",
+        [],
+    )
+
+
 @pytest.mark.parametrize("workspace", [WORKSPACE_ID, "Example Workspace"])
 def test_a_target_names_its_workspace_by_id_or_by_name_and_the_renewal_is_saved_to_that_entry(
     workspace: str,
