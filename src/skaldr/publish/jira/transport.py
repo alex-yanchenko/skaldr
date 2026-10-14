@@ -1,6 +1,7 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TypeVar
+from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
@@ -37,12 +38,16 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
+    LinksWrite,
     NewItem,
+    PairedLink,
     RawSections,
     Release,
     RemoteItem,
     RemoveSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import JiraTarget, TargetBase
@@ -55,7 +60,14 @@ from skaldr.publish_block.jira import (
     SUMMARY_FIELD,
 )
 from skaldr.publish_block.target import JsonFields
+from skaldr.services import SERVICES, Service
 
+GLOBAL_ID_PREFIX = "skaldr"
+GLOBAL_ID_SEPARATOR = ":"
+GLOBAL_ID_LIMIT = 255
+DOCUMENT_ITEM = "document"
+SECTION_ITEM = "section"
+BROWSE_PATH = "/browse/"
 STAMP_PROPERTY = "skaldr.stamp"
 LAYOUT_PROPERTY = "skaldr.layout"
 LABEL_PREFIX = "skaldr-"
@@ -118,6 +130,31 @@ def _projected(remote: JsonValue, written: JsonValue) -> JsonValue:
             for member in remote
         ]
     return remote
+
+
+def _link_prefix(stamp: Stamp) -> str:
+    item = [DOCUMENT_ITEM] if stamp.section_id is None else [SECTION_ITEM, stamp.section_id]
+    return GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item, ""])
+
+
+def _global_id(item_id: str, stamp: Stamp, link: PairedLink) -> str:
+    global_id = f"{_link_prefix(stamp)}{link.service}{GLOBAL_ID_SEPARATOR}{link.item_id}"
+    if len(global_id) > GLOBAL_ID_LIMIT:
+        raise WriteRejectedError(
+            f"the remote link from {item_id} to {link.service} item {link.item_id} needs a globalId of "
+            f"{len(global_id)} characters, over the {GLOBAL_ID_LIMIT} Jira takes; shorten the document's "
+            "doc_id or the section's id"
+        )
+    return global_id
+
+
+def _linked_service(global_id: str, prefix: str) -> Service | None:
+    if not global_id.startswith(prefix):
+        return None
+    named, separator, item_id = global_id.removeprefix(prefix).partition(GLOBAL_ID_SEPARATOR)
+    if not separator or not item_id:
+        return None
+    return next((service for service in SERVICES if service == named), None)
 
 
 def _archive_comment(stamp: StampValue) -> JsonValue:
@@ -275,6 +312,8 @@ class JiraTransport:
         current = self._stamp(item_id) or StampValue(doc_id=None)
         if current.archived:
             return
+        if current.stamp is not None:
+            self._unlink(item_id, current.stamp)
         status = _status(self._client.get_issue(item_id, [STATUS_FIELD]))
         if not status.is_done:
             done = self._done_transition(item_id, status)
@@ -315,8 +354,42 @@ class JiraTransport:
     def editor_name(self, display_name: str, /) -> str:
         return display_name
 
+    def item_link(self, item_id: str, _title: str, /) -> ItemLink:
+        return ItemLink(f"{self._client.site}{BROWSE_PATH}{quote(item_id, safe='')}", item_id)
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        return tuple(self._links_of(item_id, stamp).values())
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        stamped = self._stamp(item_id)
+        if stamped is not None and stamped.stamp != request.stamp:
+            raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
+        wanted = {_global_id(item_id, request.stamp, link): link for link in request.links}
+        current = self._links_of(item_id, request.stamp)
+        for global_id in current:
+            if global_id not in wanted:
+                self._client.delete_remote_link(item_id, global_id)
+        for global_id, link in wanted.items():
+            if current.get(global_id) != link.shown:
+                self._client.put_remote_link(item_id, global_id, link.url, link.title)
+        return request.shown
+
     def close(self) -> None:
         self._client.close()
+
+    def _links_of(self, item_id: str, stamp: Stamp) -> dict[str, ShownLink]:
+        prefix = _link_prefix(stamp)
+        found: dict[str, ShownLink] = {}
+        for link in self._client.remote_links(item_id):
+            global_id = link.global_id or ""
+            service = _linked_service(global_id, prefix)
+            if service is not None:
+                found[global_id] = ShownLink(service=service, url=link.linked.url, title=link.linked.title)
+        return found
+
+    def _unlink(self, item_id: str, stamp: Stamp) -> None:
+        for global_id in self._links_of(item_id, stamp):
+            self._client.delete_remote_link(item_id, global_id)
 
     def _read_back_created(
         self, item_id: str, content: ItemContent, layout: Layout, stamp: StampValue

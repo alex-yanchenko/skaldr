@@ -7,20 +7,30 @@ from difflib import SequenceMatcher
 from itertools import groupby
 from typing import Final, Literal, NamedTuple
 
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 from typing_extensions import Self
 
 from skaldr.export.budget import json_string_bytes
-from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer, starts_a_block
+from skaldr.export.markup import encode_url
+from skaldr.export.notion import EMPTY_BLOCK, NOTION_ESCAPES, notion_fence_closer, starts_a_block
 from skaldr.patterns import SLUG_PATTERN
-from skaldr.publish.transport import Stamp
+from skaldr.publish.transport import ShownLink, Stamp
 from skaldr.publish_block import notion_page_id
+from skaldr.services import SERVICE_NAMES, Service
 
 UNKEYED_SECTION: Final = "content skaldr did not publish"
 STAMP_WORDS: Final = "Published with skaldr from document"
 STAMP_COLOR: Final = '{color="gray"}'
+LINK_GROUP_SEPARATOR: Final = " · "
+LINK_SEPARATOR: Final = ", "
+SERVICES_BY_NAME: Final[dict[str, Service]] = {name: service for service, name in SERVICE_NAMES.items()}
 STAMP_PATTERN: Final = re.compile(
-    rf"{STAMP_WORDS} ({SLUG_PATTERN})(?:, section ({SLUG_PATTERN}))?(?: {re.escape(STAMP_COLOR)})?"
+    rf"{STAMP_WORDS} ({SLUG_PATTERN})(?:, section ({SLUG_PATTERN}))?"
+    rf"(?:{LINK_GROUP_SEPARATOR}((?:{'|'.join(SERVICES_BY_NAME)}) .*?))?"
+    rf"(?: {re.escape(STAMP_COLOR)})?"
 )
+STAMP_LINKS_PARSER: Final = MarkdownIt("commonmark")
 CHILD_REFERENCE: Final = re.compile(r'<(page|database)\b[^>]*?\burl="([^"]*)"[^>]*>.*</\1>')
 UNKNOWN_BLOCK: Final = re.compile(r"<unknown\b")
 SPAN_TAG: Final = re.compile(r"<span\b([^>]*)>|</span>")
@@ -35,14 +45,72 @@ KEPT_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"added", "child"})
 REMOVED_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"published", "blank"})
 
 
-def stamp_line(stamp: Stamp) -> str:
+def _by_service(links: Sequence[ShownLink]) -> dict[Service, list[ShownLink]]:
+    grouped: dict[Service, list[ShownLink]] = {}
+    for link in links:
+        grouped.setdefault(link.service, []).append(link)
+    return grouped
+
+
+def grouped_links(links: Sequence[ShownLink]) -> tuple[ShownLink, ...]:
+    return tuple(link for group in _by_service(links).values() for link in group)
+
+
+def _link_text(link: ShownLink) -> str:
+    return f"[{link.title.translate(NOTION_ESCAPES)}]({encode_url(link.url)})"
+
+
+def _links_text(links: Sequence[ShownLink]) -> str:
+    return "".join(
+        f"{LINK_GROUP_SEPARATOR}{SERVICE_NAMES[service]} {LINK_SEPARATOR.join(map(_link_text, group))}"
+        for service, group in _by_service(links).items()
+    )
+
+
+def stamp_line(stamp: Stamp, links: Sequence[ShownLink] = ()) -> str:
     section = "" if stamp.section_id is None else f", section {stamp.section_id}"
-    return f"{STAMP_WORDS} {stamp.doc_id}{section} {STAMP_COLOR}\n"
+    return f"{STAMP_WORDS} {stamp.doc_id}{section}{_links_text(links)} {STAMP_COLOR}\n"
 
 
 def _parsed_stamp(line: str) -> Stamp | None:
     found = STAMP_PATTERN.fullmatch(line.strip())
     return None if found is None else Stamp(found.group(1), found.group(2))
+
+
+def _service_named_last(text: str) -> Service | None:
+    named = text.rsplit(LINK_GROUP_SEPARATOR.strip(), 1)[-1].strip(LINK_SEPARATOR)
+    return SERVICES_BY_NAME.get(named)
+
+
+@dataclass
+class _LinkReading:
+    service: Service | None = None
+    url: str | None = None
+    title: list[str] = field(default_factory=list[str])
+    links: list[ShownLink] = field(default_factory=list[ShownLink])
+
+    def token(self, token: Token) -> None:
+        if token.type == "link_open":
+            self.url, self.title = str(token.attrGet("href") or ""), []
+        elif token.type == "link_close":
+            if self.service is not None and self.url is not None:
+                self.links.append(ShownLink(service=self.service, url=self.url, title="".join(self.title)))
+            self.url = None
+        elif self.url is not None:
+            self.title.append(token.content)
+        elif token.type == "text":
+            self.service = _service_named_last(token.content) or self.service
+
+
+def _parsed_stamp_links(line: str) -> tuple[ShownLink, ...]:
+    found = STAMP_PATTERN.fullmatch(line.strip())
+    if found is None or found.group(3) is None:
+        return ()
+    reading = _LinkReading()
+    for inline in STAMP_LINKS_PARSER.parseInline(found.group(3)):
+        for token in inline.children or []:
+            reading.token(token)
+    return tuple(reading.links)
 
 
 @dataclass
@@ -161,6 +229,7 @@ class KeyedPage:
     stamp: Stamp | None
     stamp_line: str | None
     child_ids: tuple[str, ...]
+    links: tuple[ShownLink, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -181,6 +250,10 @@ class _PageLine:
         if not self.at_top_level or self.normalised is None:
             return None
         return _parsed_stamp(self.normalised)
+
+    @property
+    def stamp_links(self) -> tuple[ShownLink, ...]:
+        return () if self.stamp is None or self.normalised is None else _parsed_stamp_links(self.normalised)
 
     @property
     def aligns(self) -> bool:
@@ -303,6 +376,7 @@ def keyed_page(markdown: str, layout: Mapping[str, str]) -> KeyedPage:
         child_ids=tuple(
             notion_page_id(url) or url for line in placed if (url := line.line.child_url) is not None
         ),
+        links=() if stamp is None else stamp.stamp_links,
     )
 
 

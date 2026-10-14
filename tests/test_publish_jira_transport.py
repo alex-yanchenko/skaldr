@@ -13,7 +13,9 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    LinksWrite,
     NewItem,
+    PairedLink,
     Release,
     RemoteItem,
     RemoveSection,
@@ -22,7 +24,7 @@ from skaldr.publish.transport import (
 )
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import make_jira_target, make_notion_target
-from tests.factories.auth_factory import summarise
+from tests.factories.auth_factory import basic_auth_header, summarise
 from tests.factories.jira_factory import (
     DONE,
     DONE_RESOLUTION,
@@ -967,6 +969,7 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
     assert (jira.calls(), issue.fields["status"], issue.comments, issue.properties["skaldr.stamp"]) == (
         [
             ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            ("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
             ("GET", "/rest/api/3/issue/DEMO-1"),
             ("GET", "/rest/api/3/issue/DEMO-1/transitions"),
             ("GET", "/rest/api/3/issue/DEMO-1/comment"),
@@ -1123,7 +1126,7 @@ def test_an_issue_already_done_is_marked_archived_without_a_transition_or_a_comm
 
     transport.archive_item(created.item_id)
 
-    assert (jira.calls()[2:], jira.issues["DEMO-1"].comments) == (
+    assert (jira.calls()[3:], jira.issues["DEMO-1"].comments) == (
         [("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp")],
         [],
     )
@@ -1152,7 +1155,7 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
 
     transport.archive_item(created.item_id)
 
-    assert summarise(jira.requests[6])["body"] == {"transition": {"id": "31"}}
+    assert summarise(jira.requests[7])["body"] == {"transition": {"id": "31"}}
 
 
 @pytest.mark.parametrize(
@@ -1463,7 +1466,7 @@ def test_archiving_through_a_close_that_sets_a_resolution_leaves_the_resolution_
     transport.archive_item(created.item_id)
 
     issue = jira.issues["DEMO-1"]
-    assert (issue.fields["status"], issue.fields["resolution"], summarise(jira.requests[6])["body"]) == (
+    assert (issue.fields["status"], issue.fields["resolution"], summarise(jira.requests[7])["body"]) == (
         DONE,
         DONE_RESOLUTION,
         {"transition": {"id": "31"}},
@@ -1581,4 +1584,146 @@ def test_the_comparable_form_normalises_each_section_and_drops_empty_ones() -> N
         title="Garden handbook",
         sections={"intro": section_text([INTRO, TABLE_AS_COMPARED])},
         fields=FIELDS_WRITTEN,
+    )
+
+
+HANDBOOK_PAGE_ID = "0123456789abcdef0123456789abcdef"
+ROTA_PAGE_ID = "fedcba9876543210fedcba9876543210"
+HANDBOOK_PAGE = PairedLink(
+    "notion", HANDBOOK_PAGE_ID, f"https://www.notion.so/{HANDBOOK_PAGE_ID}", "Garden handbook"
+)
+ROTA_PAGE = PairedLink("notion", ROTA_PAGE_ID, f"https://www.notion.so/{ROTA_PAGE_ID}", "Kitchen rota")
+
+
+def _remote_link(global_id: str | None, link: PairedLink, link_id: int) -> dict[str, JsonValue]:
+    return {"id": link_id, "globalId": global_id, "object": {"url": link.url, "title": link.title}}
+
+
+def _summarised(method: str, path: str, body: JsonValue = None) -> dict[str, object]:
+    return {
+        "method": method,
+        "url": f"{SITE}{path}",
+        "authorization": basic_auth_header("reader@example.com", "api-token"),
+        "content_type": None if body is None else "application/json",
+        "body": body,
+    }
+
+
+@pytest.mark.parametrize(
+    ("stamp", "global_id"),
+    [
+        pytest.param(STAMP, f"skaldr:garden-handbook:document:notion:{HANDBOOK_PAGE_ID}", id="document"),
+        pytest.param(
+            SECTION_STAMP, f"skaldr:garden-handbook:section:planting:notion:{HANDBOOK_PAGE_ID}", id="section"
+        ),
+    ],
+)
+def test_a_link_is_a_remote_link_whose_global_id_names_the_document_the_item_and_the_page(
+    stamp: Stamp, global_id: str
+) -> None:
+    jira = FakeJira()
+    transport = _transport(jira)
+    created = transport.create_item(NewItem(TARGET, stamp, CONTENT))
+    jira.forget_requests()
+
+    written = transport.write_links(created.item_id, LinksWrite(stamp, (HANDBOOK_PAGE,)))
+
+    assert (written, [summarise(request) for request in jira.requests]) == (
+        (HANDBOOK_PAGE.shown,),
+        [
+            _summarised("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            _summarised("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            _summarised(
+                "POST",
+                "/rest/api/3/issue/DEMO-1/remotelink",
+                {
+                    "globalId": global_id,
+                    "object": {
+                        "url": "https://www.notion.so/0123456789abcdef0123456789abcdef",
+                        "title": "Garden handbook",
+                    },
+                },
+            ),
+        ],
+    )
+
+
+def test_a_retitled_page_updates_its_link_in_place_and_a_page_no_longer_paired_loses_its_link() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE, ROTA_PAGE)))
+    retitled = PairedLink("notion", HANDBOOK_PAGE_ID, HANDBOOK_PAGE.url, "Garden guide")
+    jira.forget_requests()
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, (retitled,)))
+
+    assert (jira.issues["DEMO-1"].remote_links, [call for call in jira.calls() if call[0] != "GET"]) == (
+        [_remote_link(f"skaldr:garden-handbook:document:notion:{HANDBOOK_PAGE_ID}", retitled, 10_001)],
+        [
+            ("DELETE", "/rest/api/3/issue/DEMO-1/remotelink"),
+            ("POST", "/rest/api/3/issue/DEMO-1/remotelink"),
+        ],
+    )
+
+
+def test_remote_links_skaldr_did_not_write_for_this_item_are_neither_read_nor_removed() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    global_ids = [
+        None,
+        f"skaldr:kitchen-rota:document:notion:{ROTA_PAGE_ID}",
+        f"skaldr:garden-handbook:section:tools:notion:{ROTA_PAGE_ID}",
+        f"skaldr:garden-handbook:document:slack:{ROTA_PAGE_ID}",
+    ]
+    for global_id in global_ids:
+        jira.link_by_hand("DEMO-1", global_id, ROTA_PAGE.url, ROTA_PAGE.title)
+
+    read = transport.read_links(created.item_id, STAMP)
+    transport.write_links(created.item_id, LinksWrite(STAMP, ()))
+
+    assert (read, jira.issues["DEMO-1"].remote_links, [call[0] for call in jira.calls()]) == (
+        (),
+        [_remote_link(global_id, ROTA_PAGE, 10_001 + index) for index, global_id in enumerate(global_ids)],
+        ["GET", "GET", "GET"],
+    )
+
+
+def test_a_global_id_longer_than_jira_takes_is_refused_before_anything_is_sent() -> None:
+    jira = FakeJira()
+    transport = _transport(jira)
+    long_doc_id = "garden-" + "a" * 220
+    created = transport.create_item(NewItem(TARGET, Stamp(long_doc_id, None), CONTENT))
+    jira.forget_requests()
+    expected = (
+        "the remote link from DEMO-1 to notion item 0123456789abcdef0123456789abcdef needs a globalId of 283 "
+        "characters, over the 255 Jira takes; shorten the document's doc_id or the section's id"
+    )
+
+    with pytest.raises(WriteRejectedError, match=_exactly(expected)):
+        transport.write_links(created.item_id, LinksWrite(Stamp(long_doc_id, None), (HANDBOOK_PAGE,)))
+    assert [call for call in jira.calls() if call[0] != "GET"] == []
+
+
+def test_a_links_write_to_an_issue_of_another_document_is_refused_naming_the_stamp() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    with pytest.raises(
+        WriteRejectedError, match=_exactly("Jira issue DEMO-1 is not stamped with doc_id 'kitchen-rota'")
+    ):
+        transport.write_links(created.item_id, LinksWrite(Stamp("kitchen-rota", None), (HANDBOOK_PAGE,)))
+    assert jira.issues["DEMO-1"].remote_links == []
+
+
+def test_archiving_removes_the_links_skaldr_wrote_for_the_item_and_keeps_the_others() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE, ROTA_PAGE)))
+    jira.link_by_hand("DEMO-1", None, ROTA_PAGE.url, ROTA_PAGE.title)
+
+    transport.archive_item(created.item_id)
+
+    assert (jira.issues["DEMO-1"].remote_links, jira.issues["DEMO-1"].fields["status"]) == (
+        [_remote_link(None, ROTA_PAGE, 10_003)],
+        DONE,
     )

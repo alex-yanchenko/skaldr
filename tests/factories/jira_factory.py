@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 import httpx2
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from skaldr.publish.jira.client import JiraClient
 from tests.factories.auth_factory import make_jira_credentials
@@ -40,6 +40,7 @@ NOT_FOUND: dict[str, JsonValue] = {
 _API = "/rest/api/3"
 _AS_STORED = frozenset({"description", "status"})
 DISPLAY_NAMES = {"customfield_10010": "Story Points"}
+REMOTE_LINK_FIELD = "RemoteIssueLink"
 History = dict[str, JsonValue]
 Author = dict[str, JsonValue] | None
 
@@ -72,6 +73,11 @@ class _TransitionBody(BaseModel):
 
 class _CommentBody(BaseModel):
     body: JsonValue
+
+
+class _RemoteLinkBody(BaseModel):
+    global_id: str | None = Field(default=None, alias="globalId")
+    linked: dict[str, JsonValue] = Field(alias="object")
 
 
 @dataclass(frozen=True)
@@ -108,6 +114,7 @@ class FakeIssue:
     fields: dict[str, JsonValue]
     properties: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     comments: list[JsonValue] = field(default_factory=list[JsonValue])
+    remote_links: list[dict[str, JsonValue]] = field(default_factory=list[dict[str, JsonValue]])
 
 
 def _shown(value: JsonValue) -> str | None:
@@ -141,6 +148,7 @@ class FakeJira:
     adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     names_in_mentions: dict[str, str] = field(default_factory=dict[str, str])
     closes: int = 0
+    _remote_link_id: int = 10_000
     _issues_made: int = 0
     _history_ids: int = 10_000
     _local_ids: int = 0
@@ -226,7 +234,54 @@ class FakeJira:
             (rf"{issue}/transitions", "POST", self._transition),
             (rf"{issue}/comment", "POST", self._comment),
             (rf"{issue}/comment", "GET", self._comments),
+            (rf"{issue}/remotelink", "GET", self._remote_links),
+            (rf"{issue}/remotelink", "POST", self._put_remote_link),
+            (rf"{issue}/remotelink", "DELETE", self._delete_remote_link),
         ]
+
+    def link_by_hand(self, key: str, global_id: str | None, url: str, title: str) -> None:
+        self._remote_link_id += 1
+        self.issues[key].remote_links.append(
+            {"id": self._remote_link_id, "globalId": global_id, "object": {"url": url, "title": title}}
+        )
+
+    def _log_a_remote_link(self, key: str, title: JsonValue) -> None:
+        self._log(key, WRITER, [{"field": REMOTE_LINK_FIELD, "fieldtype": "jira", "toString": title}])
+
+    def _remote_links(self, _request: httpx2.Request, key: str) -> httpx2.Response:
+        issue = self._issue(key)
+        if isinstance(issue, httpx2.Response):
+            return issue
+        address = f"{SITE}{_API}/issue/{key}/remotelink"
+        links: list[JsonValue] = [{"self": f"{address}/{link['id']}", **link} for link in issue.remote_links]
+        return httpx2.Response(200, json=links)
+
+    def _put_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
+        issue = self._issue(key)
+        if isinstance(issue, httpx2.Response):
+            return issue
+        body = _RemoteLinkBody.model_validate_json(request.content)
+        found = next((link for link in issue.remote_links if link["globalId"] == body.global_id), None)
+        sent: dict[str, JsonValue] = {"globalId": body.global_id, "object": body.linked}
+        if found is not None:
+            found.update(sent)
+            return httpx2.Response(200, json={"id": found["id"]})
+        self._remote_link_id += 1
+        issue.remote_links.append({"id": self._remote_link_id, **sent})
+        self._log_a_remote_link(key, body.linked.get("title"))
+        return httpx2.Response(201, json={"id": self._remote_link_id})
+
+    def _delete_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
+        issue = self._issue(key)
+        if isinstance(issue, httpx2.Response):
+            return issue
+        global_id = request.url.params.get("globalId")
+        kept = [link for link in issue.remote_links if link["globalId"] != global_id]
+        if len(kept) == len(issue.remote_links):
+            return httpx2.Response(404, json={"errorMessages": ["No remote link with that globalId."]})
+        issue.remote_links = kept
+        self._log_a_remote_link(key, None)
+        return httpx2.Response(204)
 
     def _myself(self, _request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(200, json=WRITER)

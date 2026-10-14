@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
+from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
 
 __all__ = [
@@ -10,7 +11,10 @@ __all__ = [
     "AddSection",
     "ContentWrite",
     "FieldsWrite",
+    "ItemLink",
+    "LinksWrite",
     "NewItem",
+    "PairedLink",
     "RawSections",
     "Release",
     "RemoteItem",
@@ -18,11 +22,13 @@ __all__ = [
     "ReplaceSection",
     "SectionRequest",
     "SectionWrite",
+    "ShownLink",
     "Stamp",
     "Transport",
     "is_unset",
 ]
 from skaldr.publish_block.target import JsonFields, TargetBase
+from skaldr.services import Service
 
 RawSections = Mapping[str, str]
 NO_SECTIONS: RawSections = MappingProxyType({})
@@ -37,6 +43,40 @@ class Stamp:
     def named(self) -> str:
         section = "" if self.section_id is None else f", section '{self.section_id}'"
         return f"doc_id '{self.doc_id}'{section}"
+
+
+class ShownLink(FrozenModel):
+    service: Service
+    url: str
+    title: str
+
+
+@dataclass(frozen=True)
+class ItemLink:
+    url: str
+    title: str
+
+
+@dataclass(frozen=True)
+class PairedLink:
+    service: Service
+    item_id: str
+    url: str
+    title: str
+
+    @property
+    def shown(self) -> ShownLink:
+        return ShownLink(service=self.service, url=self.url, title=self.title)
+
+
+@dataclass(frozen=True)
+class LinksWrite:
+    stamp: Stamp
+    links: tuple[PairedLink, ...]
+
+    @property
+    def shown(self) -> tuple[ShownLink, ...]:
+        return tuple(link.shown for link in self.links)
 
 
 @dataclass(frozen=True)
@@ -181,5 +221,11 @@ class Transport(Protocol):
     ) -> tuple[Part, ...]: ...
 
     def editor_name(self, user_id: str, /) -> str: ...
+
+    def item_link(self, item_id: str, title: str, /) -> ItemLink: ...
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]: ...
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]: ...
 
     def close(self) -> None: ...

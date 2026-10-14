@@ -14,6 +14,8 @@ from skaldr.publish.jira.api import (
     EntityProperty,
     Issue,
     JiraUser,
+    RemoteLink,
+    RemoteObject,
     Status,
     StatusCategory,
     Transition,
@@ -223,6 +225,42 @@ def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:
                 "PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp", {"doc_id": "garden-handbook"}
             ),
             _request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+        ],
+    )
+
+
+def test_a_remote_link_is_posted_by_its_global_id_listed_and_deleted_by_its_global_id() -> None:
+    jira = _seeded()
+    client = jira.client()
+    global_id = "skaldr:garden-handbook:document:notion:0123456789abcdef0123456789abcdef"
+    page = "https://www.notion.so/0123456789abcdef0123456789abcdef"
+
+    client.put_remote_link("DEMO-1", global_id, page, "Garden handbook")
+    client.put_remote_link("DEMO-1", global_id, page, "Garden guide")
+    listed = client.remote_links("DEMO-1")
+    client.delete_remote_link("DEMO-1", global_id)
+
+    assert (listed, client.remote_links("DEMO-1"), [summarise(request) for request in jira.requests]) == (
+        [RemoteLink(globalId=global_id, object=RemoteObject(url=page, title="Garden guide"))],
+        [],
+        [
+            _request(
+                "POST",
+                "/rest/api/3/issue/DEMO-1/remotelink",
+                {"globalId": global_id, "object": {"url": page, "title": "Garden handbook"}},
+            ),
+            _request(
+                "POST",
+                "/rest/api/3/issue/DEMO-1/remotelink",
+                {"globalId": global_id, "object": {"url": page, "title": "Garden guide"}},
+            ),
+            _request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            _request(
+                "DELETE",
+                "/rest/api/3/issue/DEMO-1/remotelink"
+                "?globalId=skaldr%3Agarden-handbook%3Adocument%3Anotion%3A0123456789abcdef0123456789abcdef",
+            ),
+            _request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
         ],
     )
 

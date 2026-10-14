@@ -23,6 +23,7 @@ from skaldr.publish.notion.page_markdown import (
     SectionPairs,
     carried_into,
     comparable_text,
+    grouped_links,
     holds_an_unknown_block,
     joined,
     keyed_page,
@@ -44,12 +45,15 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
+    LinksWrite,
     NewItem,
     RawSections,
     Release,
     RemoteItem,
     RemoveSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import NotionTarget, notion_page_id
@@ -63,6 +67,7 @@ SECTION_JSON_BYTES: Final = 200_000
 DATABASE_BLOCK: Final = "child_database"
 PAGE_BLOCK: Final = "child_page"
 STAMP_KEY: Final = "skaldr stamp"
+NOTION_PAGE_ADDRESS: Final = "https://www.notion.so/"
 
 
 def _page_key(item_id: str) -> str:
@@ -316,6 +321,30 @@ class NotionTransport:
             self._editor_names[user_id] = self._name_notion_gives(user_id)
         return self._editor_names[user_id]
 
+    def item_link(self, item_id: str, title: str, /) -> ItemLink:
+        return ItemLink(f"{NOTION_PAGE_ADDRESS}{_page_key(item_id)}", title)
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        self._live_page(item_id)
+        keyed = keyed_page(self._api.page_markdown(item_id).markdown, {})
+        return keyed.links if keyed.stamp == stamp else ()
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        self._live_page(item_id)
+        markdown = self._api.page_markdown(item_id).markdown
+        layout = self._layouts.get(_page_key(item_id), {})
+        keyed = keyed_page(markdown, layout)
+        if keyed.stamp is not None and keyed.stamp != request.stamp:
+            raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
+        wanted = grouped_links(request.shown)
+        if keyed.stamp_line is None:
+            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp, wanted)
+        elif keyed.links != wanted:
+            line = stamp_line(request.stamp, wanted)
+            written = line if keyed.stamp_line.endswith("\n") else line.removesuffix("\n")
+            markdown = self._send(item_id, keyed.raw_sections, Replacement(keyed.stamp_line, written))
+        return keyed_page(markdown, layout).links
+
     def close(self) -> None:
         self._api.close()
 
@@ -385,9 +414,16 @@ class NotionTransport:
         self._published[key] = layout
         return self._remote(item_id, self._live_page(item_id), markdown, layout)
 
-    def _stamp_put_back(self, item_id: str, markdown: str, layout: Mapping[str, str], stamp: Stamp) -> str:
+    def _stamp_put_back(
+        self,
+        item_id: str,
+        markdown: str,
+        layout: Mapping[str, str],
+        stamp: Stamp,
+        links: Sequence[ShownLink] = (),
+    ) -> str:
         current = list(keyed_page(markdown, layout).raw_sections.items())
-        line = stamp_line(stamp)
+        line = stamp_line(stamp, links)
         if not markdown.strip():
             return self._api.update_markdown(item_id, _replace_content(line)).markdown
         replacement = section_replacement(current, [*current, (STAMP_KEY, line)], markdown, None)
