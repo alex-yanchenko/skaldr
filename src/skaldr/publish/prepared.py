@@ -1,5 +1,9 @@
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import TracebackType
+
+from typing_extensions import Self
 
 from skaldr.errors import PublishError
 from skaldr.publish.connector import ConnectorRegistry
@@ -50,11 +54,25 @@ def prepare_publish(document_path: Path, registry: ConnectorRegistry) -> Prepare
 class Transports:
     prepared: Prepared
     opened: dict[str, Transport] = field(default_factory=dict[str, Transport])
+    _closing: ExitStack = field(default_factory=ExitStack)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self._closing.close()
 
     def for_target(self, label: str, target: TargetBase | None = None) -> Transport:
         if label not in self.opened:
             named = target if target is not None else self.prepared.target_named(label)
-            self.opened[label] = self.prepared.registry.for_target(named).open_transport(named)
+            opened = self.prepared.registry.for_target(named).open_transport(named)
+            self._closing.callback(opened.close)
+            self.opened[label] = opened
         return self.opened[label]
 
 
