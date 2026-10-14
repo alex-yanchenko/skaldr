@@ -270,7 +270,7 @@ def test_a_publish_closes_the_jira_connection_it_opened_even_when_it_fails(tmp_p
     write_garden_report(
         tmp_path, publish=_jira_publish(split=["tools"]), blocks=make_garden_blocks(planting="Sow in May.")
     )
-    jira.fail_next("PUT", "/rest/api/3/issue/DEMO-1", Reply(400, {"errorMessages": ["Bad description"]}))
+    jira.answer_next("PUT", "/rest/api/3/issue/DEMO-1", Reply(400, {"errorMessages": ["Bad description"]}))
 
     with pytest.raises(ConnectorError):
         _publish(path, jira)

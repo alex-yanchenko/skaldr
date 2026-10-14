@@ -25,6 +25,11 @@ SITE = "https://example.atlassian.net"
 AUTHORIZATION = basic_auth_header("reader@example.com", "api-token")
 PARAGRAPH: JsonValue = {"version": 1, "type": "doc", "content": [{"type": "paragraph"}]}
 STAMP = EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook", "section_id": None})
+ISSUE = "/rest/api/3/issue/DEMO-1"
+CHANGELOG = f"{ISSUE}/changelog"
+COMMENTS = f"{ISSUE}/comment"
+CREATE = "/rest/api/3/issue"
+MYSELF = "/rest/api/3/myself"
 
 
 def _exactly(message: str) -> str:
@@ -153,7 +158,9 @@ def test_an_empty_changelog_is_one_request() -> None:
 
 def test_a_changelog_page_that_returns_nothing_ends_the_read_even_when_it_claims_more() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(200, {"startAt": 0, "maxResults": 100, "total": 9, "values": []}))
+    jira.answer_next(
+        "GET", CHANGELOG, Reply(200, {"startAt": 0, "maxResults": 100, "total": 9, "values": []})
+    )
 
     assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == ([], 1)
 
@@ -170,7 +177,7 @@ ONE_ENTRY: JsonValue = {"id": "10001", "items": [{"field": "summary", "fieldId":
 )
 def test_a_changelog_page_ends_the_read_on_either_its_total_or_its_last_flag(page: JsonValue) -> None:
     jira = _seeded()
-    jira.answer_next(Reply(200, page))
+    jira.answer_next("GET", CHANGELOG, Reply(200, page))
 
     assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == (
         [Changelog(id="10001", items=[ChangeDetails(field="summary", fieldId="summary")])],
@@ -186,7 +193,7 @@ def test_a_changelog_page_that_does_not_start_where_it_was_asked_to_is_an_error(
         "isLast": False,
         "values": [{"id": "10001", "items": [{"field": "summary", "fieldId": "summary"}]}],
     }
-    jira.answer_next(Reply(200, stuck), Reply(200, stuck))
+    jira.answer_next("GET", CHANGELOG, Reply(200, stuck), Reply(200, stuck))
 
     with pytest.raises(
         ConnectorError,
@@ -276,7 +283,7 @@ def test_the_comments_are_read_page_by_page_to_the_end() -> None:
 def test_a_comments_page_that_does_not_start_where_it_was_asked_to_is_an_error() -> None:
     jira = _seeded()
     stuck: JsonValue = {"startAt": 0, "total": 9, "comments": [{"id": "1", "body": PARAGRAPH}]}
-    jira.answer_next(Reply(200, stuck), Reply(200, stuck))
+    jira.answer_next("GET", COMMENTS, Reply(200, stuck), Reply(200, stuck))
 
     with pytest.raises(
         ConnectorError,
@@ -320,7 +327,7 @@ def test_an_issue_key_is_escaped_in_the_path() -> None:
 
 def test_a_rate_limited_request_waits_as_long_as_retry_after_asks_then_retries() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429, {}, {"Retry-After": "7"}))
+    jira.answer_next("GET", ISSUE, Reply(429, {}, {"Retry-After": "7"}))
 
     issue = jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -329,7 +336,7 @@ def test_a_rate_limited_request_waits_as_long_as_retry_after_asks_then_retries()
 
 def test_a_rate_limited_write_is_retried_too() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429, {}, {"Retry-After": "1"}))
+    jira.answer_next("PUT", ISSUE, Reply(429, {}, {"Retry-After": "1"}))
 
     jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
 
@@ -342,7 +349,7 @@ def test_a_rate_limited_write_is_retried_too() -> None:
 
 def test_without_retry_after_the_wait_doubles_from_two_seconds() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429), Reply(429, {}, {"Retry-After": "soon"}), Reply(503))
+    jira.answer_next("GET", ISSUE, Reply(429), Reply(429, {}, {"Retry-After": "soon"}), Reply(503))
 
     jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -351,7 +358,7 @@ def test_without_retry_after_the_wait_doubles_from_two_seconds() -> None:
 
 def test_after_four_rate_limited_attempts_the_request_fails_naming_the_limit() -> None:
     jira = _seeded()
-    jira.answer_next(*[Reply(429)] * 4)
+    jira.answer_next("GET", ISSUE, *[Reply(429)] * 4)
 
     with pytest.raises(ConnectorError) as raised:
         jira.client().get_issue("DEMO-1", ["summary"])
@@ -367,7 +374,7 @@ def test_after_four_rate_limited_attempts_the_request_fails_naming_the_limit() -
 
 def test_a_retry_after_longer_than_a_minute_is_not_waited_for_and_is_quoted() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429, {}, {"Retry-After": "3600"}))
+    jira.answer_next("GET", ISSUE, Reply(429, {}, {"Retry-After": "3600"}))
 
     with pytest.raises(
         ConnectorError,
@@ -383,7 +390,8 @@ def test_a_retry_after_longer_than_a_minute_is_not_waited_for_and_is_quoted() ->
 @pytest.mark.parametrize("call", ["create", "edit"])
 def test_a_write_still_rate_limited_after_four_attempts_is_a_rejected_write(call: str) -> None:
     jira = _seeded()
-    jira.answer_next(*[Reply(429, {}, {"Retry-After": "1"})] * 4)
+    method, path = ("POST", CREATE) if call == "create" else ("PUT", ISSUE)
+    jira.answer_next(method, path, *[Reply(429, {}, {"Retry-After": "1"})] * 4)
     client = jira.client()
 
     with pytest.raises(WriteRejectedError) as raised:
@@ -392,7 +400,6 @@ def test_a_write_still_rate_limited_after_four_attempts_is_a_rejected_write(call
         else:
             client.edit_issue("DEMO-1", {"summary": "Garden guide"})
 
-    method, path = ("POST", "/rest/api/3/issue") if call == "create" else ("PUT", "/rest/api/3/issue/DEMO-1")
     assert (str(raised.value), jira.sleeps) == (
         f"Jira kept refusing {method} {path} as too many requests (HTTP 429) after 4 attempts; Jira asked "
         "to wait 1 second, so publish again after that",
@@ -403,7 +410,7 @@ def test_a_write_still_rate_limited_after_four_attempts_is_a_rejected_write(call
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
 def test_a_server_error_on_a_read_is_retried(status: int) -> None:
     jira = _seeded()
-    jira.answer_next(Reply(status))
+    jira.answer_next("GET", ISSUE, Reply(status))
 
     jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -412,7 +419,7 @@ def test_a_server_error_on_a_read_is_retried(status: int) -> None:
 
 def test_a_read_that_keeps_failing_on_jiras_side_fails_after_four_attempts() -> None:
     jira = _seeded()
-    jira.answer_next(*[Reply(503, {"errorMessages": ["Service unavailable"]})] * 4)
+    jira.answer_next("GET", ISSUE, *[Reply(503, {"errorMessages": ["Service unavailable"]})] * 4)
 
     with pytest.raises(ConnectorError) as raised:
         jira.client().get_issue("DEMO-1", ["summary"])
@@ -427,7 +434,7 @@ def test_a_read_that_keeps_failing_on_jiras_side_fails_after_four_attempts() -> 
 
 def test_a_retry_after_of_exactly_a_minute_is_waited_for() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429, {}, {"Retry-After": "60"}))
+    jira.answer_next("GET", ISSUE, Reply(429, {}, {"Retry-After": "60"}))
 
     issue = jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -436,7 +443,7 @@ def test_a_retry_after_of_exactly_a_minute_is_waited_for() -> None:
 
 def test_a_server_error_on_a_read_waits_as_long_as_its_retry_after_asks() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(503, {}, {"Retry-After": "30"}))
+    jira.answer_next("GET", ISSUE, Reply(503, {}, {"Retry-After": "30"}))
 
     issue = jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -445,7 +452,7 @@ def test_a_server_error_on_a_read_waits_as_long_as_its_retry_after_asks() -> Non
 
 def test_a_server_error_asking_to_wait_longer_than_a_minute_is_not_waited_for() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(503, {"errorMessages": ["Maintenance"]}, {"Retry-After": "3600"}))
+    jira.answer_next("GET", ISSUE, Reply(503, {"errorMessages": ["Maintenance"]}, {"Retry-After": "3600"}))
 
     with pytest.raises(
         ConnectorError, match=_exactly("Jira answered HTTP 503 to GET /rest/api/3/issue/DEMO-1: Maintenance")
@@ -456,7 +463,7 @@ def test_a_server_error_asking_to_wait_longer_than_a_minute_is_not_waited_for() 
 
 def test_a_refused_write_carrying_a_retry_after_is_not_retried() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(400, {"errorMessages": ["Bad summary"]}, {"Retry-After": "1"}))
+    jira.answer_next("PUT", ISSUE, Reply(400, {"errorMessages": ["Bad summary"]}, {"Retry-After": "1"}))
 
     with pytest.raises(
         WriteRejectedError,
@@ -487,7 +494,10 @@ def test_a_not_found_on_a_request_that_names_no_issue_is_a_refusal_not_a_missing
     call: str, raised_type: type[ConnectorError], message: str
 ) -> None:
     jira = FakeJira()
-    jira.answer_next(Reply(404, {"errorMessages": ["No project could be found with key 'DEMO'."]}))
+    method, path = ("POST", CREATE) if call == "create" else ("GET", MYSELF)
+    jira.answer_next(
+        method, path, Reply(404, {"errorMessages": ["No project could be found with key 'DEMO'."]})
+    )
     client = jira.client()
 
     with pytest.raises(ConnectorError) as raised:
@@ -501,7 +511,7 @@ def test_a_not_found_on_a_request_that_names_no_issue_is_a_refusal_not_a_missing
 
 def test_a_server_error_on_a_write_is_not_retried_because_it_may_have_landed() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(503, {"errorMessages": ["Service unavailable"]}))
+    jira.answer_next("PUT", ISSUE, Reply(503, {"errorMessages": ["Service unavailable"]}))
 
     with pytest.raises(
         ConnectorError,
@@ -514,11 +524,11 @@ def test_a_server_error_on_a_write_is_not_retried_because_it_may_have_landed() -
 def test_a_dropped_connection_on_a_read_is_retried_and_on_a_write_is_not() -> None:
     jira = _seeded()
     dropped = httpx2.ConnectError("connection reset")
-    jira.answer_next(dropped)
+    jira.answer_next("GET", ISSUE, dropped)
     client = jira.client()
 
     client.get_issue("DEMO-1", ["summary"])
-    jira.answer_next(dropped)
+    jira.answer_next("PUT", ISSUE, dropped)
     with pytest.raises(
         ConnectorError,
         match=_exactly(f"could not reach Jira at {SITE} for PUT /rest/api/3/issue/DEMO-1: connection reset"),
@@ -537,7 +547,7 @@ def test_a_dropped_connection_on_a_read_is_retried_and_on_a_write_is_not() -> No
 
 def test_an_answer_httpx_cannot_decode_is_a_connector_error_and_is_not_retried() -> None:
     jira = _seeded()
-    jira.answer_next(httpx2.DecodingError("bad gzip stream"))
+    jira.answer_next("GET", ISSUE, httpx2.DecodingError("bad gzip stream"))
 
     with pytest.raises(ConnectorError) as raised:
         jira.client().get_issue("DEMO-1", ["summary"])
@@ -552,7 +562,7 @@ def test_an_answer_httpx_cannot_decode_is_a_connector_error_and_is_not_retried()
 
 def test_a_retry_after_in_digits_that_are_not_ascii_falls_back_to_the_doubling_wait() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(429, {}, {"Retry-After": "²".encode()}))
+    jira.answer_next("GET", ISSUE, Reply(429, {}, {"Retry-After": "²".encode()}))
 
     issue = jira.client().get_issue("DEMO-1", ["summary"])
 
@@ -574,7 +584,7 @@ def test_a_property_can_be_set_to_json_null() -> None:
 
 def test_a_read_that_never_connects_fails_after_four_attempts() -> None:
     jira = _seeded()
-    jira.answer_next(*[httpx2.ConnectError("connection refused")] * 4)
+    jira.answer_next("GET", ISSUE, *[httpx2.ConnectError("connection refused")] * 4)
 
     with pytest.raises(
         ConnectorError,
@@ -619,7 +629,7 @@ def test_a_missing_issue_is_item_not_found() -> None:
 )
 def test_a_definite_refusal_of_a_write_is_write_rejected(reply: Reply, message: str) -> None:
     jira = _seeded()
-    jira.answer_next(reply)
+    jira.answer_next("PUT", ISSUE, reply)
 
     with pytest.raises(WriteRejectedError, match=_exactly(message)):
         jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
@@ -627,7 +637,7 @@ def test_a_definite_refusal_of_a_write_is_write_rejected(reply: Reply, message: 
 
 def test_a_refused_read_is_a_connector_error_and_not_a_rejected_write() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(403, {"errorMessages": ["Forbidden"]}))
+    jira.answer_next("GET", ISSUE, Reply(403, {"errorMessages": ["Forbidden"]}))
 
     with pytest.raises(ConnectorError) as raised:
         jira.client().get_issue("DEMO-1", ["summary"])
@@ -645,7 +655,9 @@ def test_a_refused_read_is_a_connector_error_and_not_a_rejected_write() -> None:
 )
 def test_a_rejected_sign_in_says_to_sign_in_again(method: str, raised_type: type[ConnectorError]) -> None:
     jira = _seeded()
-    jira.answer_next(Reply(401, {"errorMessages": ["Unauthorized"]}))
+    jira.answer_next(
+        "GET" if method == "read" else "PUT", ISSUE, Reply(401, {"errorMessages": ["Unauthorized"]})
+    )
     client = jira.client()
 
     with pytest.raises(ConnectorError) as raised:
@@ -661,9 +673,27 @@ def test_a_rejected_sign_in_says_to_sign_in_again(method: str, raised_type: type
     )
 
 
+def test_the_fake_keeps_a_queued_answer_for_the_request_it_was_queued_for() -> None:
+    jira = _seeded()
+    jira.answer_next("PUT", ISSUE, Reply(400, {"errorMessages": ["Bad summary"]}))
+    client = jira.client()
+
+    issue = client.get_issue("DEMO-1", ["summary"])
+    with pytest.raises(
+        WriteRejectedError,
+        match=_exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
+    ):
+        client.edit_issue("DEMO-1", {"summary": "Garden guide"})
+
+    assert (issue.fields, jira.issues["DEMO-1"].fields["summary"]) == (
+        {"summary": "Garden handbook"},
+        "Garden handbook",
+    )
+
+
 def test_an_answer_skaldr_cannot_read_is_a_connector_error() -> None:
     jira = _seeded()
-    jira.answer_next(Reply(200, {"id": "10001"}))
+    jira.answer_next("GET", ISSUE, Reply(200, {"id": "10001"}))
 
     with pytest.raises(
         ConnectorError,

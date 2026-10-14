@@ -613,7 +613,7 @@ def test_a_failure_after_the_issue_is_created_names_the_created_issue(
     honours_properties: bool, method: str, path: str, refusal: Reply, cause: str
 ) -> None:
     jira = FakeJira(honours_properties_on_create=honours_properties)
-    jira.fail_next(method, path, refusal)
+    jira.answer_next(method, path, refusal)
 
     with pytest.raises(ConnectorError) as raised:
         _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT))
@@ -703,7 +703,8 @@ def test_a_missing_issue_reads_as_not_found_once_the_sign_in_is_confirmed() -> N
 
 def test_a_not_found_answered_to_a_sign_in_jira_no_longer_accepts_is_not_a_missing_issue() -> None:
     jira = FakeJira()
-    jira.answer_next(Reply(404, NOT_FOUND), Reply(401, {"errorMessages": ["Unauthorized"]}))
+    jira.answer_next("GET", "/rest/api/3/issue/DEMO-1/changelog", Reply(404, NOT_FOUND))
+    jira.answer_next("GET", "/rest/api/3/myself", Reply(401, {"errorMessages": ["Unauthorized"]}))
 
     with pytest.raises(ConnectorError) as raised:
         _transport(jira).read_item("DEMO-1", CONTENT)
@@ -952,7 +953,7 @@ def test_an_archive_retried_after_its_stamp_was_not_saved_finds_its_comment_and_
 ):
     jira = FakeJira()
     transport, created = _created(jira)
-    jira.fail_next(
+    jira.answer_next(
         "PUT",
         "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp",
         Reply(400, {"errorMessages": ["Bad value"]}),
@@ -1139,7 +1140,7 @@ def test_a_transition_that_fails_after_the_comment_never_gets_the_comment_posted
     raised: list[str] = []
 
     for refusal in refusals:
-        jira.fail_next("POST", "/rest/api/3/issue/DEMO-1/transitions", refusal)
+        jira.answer_next("POST", "/rest/api/3/issue/DEMO-1/transitions", refusal)
         with pytest.raises(ConnectorError) as failed:
             transport.archive_item(created.item_id)
         raised.append(str(failed.value))

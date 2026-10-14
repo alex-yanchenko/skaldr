@@ -78,6 +78,9 @@ class Reply:
         return httpx2.Response(self.status, json=self.body, headers=raw)
 
 
+Queued = Reply | httpx2.RequestError
+
+
 class _ClosableMockTransport(httpx2.MockTransport):
     def __init__(
         self, handler: Callable[[httpx2.Request], httpx2.Response], on_close: Callable[[], None]
@@ -119,9 +122,8 @@ class FakeJira:
     issues: dict[str, FakeIssue] = field(default_factory=dict[str, FakeIssue])
     histories: dict[str, list[History]] = field(default_factory=dict[str, list[History]])
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
-    queued: list[Reply | httpx2.RequestError] = field(default_factory=list[Reply | httpx2.RequestError])
+    queued: dict[tuple[str, str], list[Queued]] = field(default_factory=dict[tuple[str, str], list[Queued]])
     sleeps: list[float] = field(default_factory=list[float])
-    failing: dict[tuple[str, str], Reply] = field(default_factory=dict[tuple[str, str], Reply])
     edits_during_writes: dict[str, list[PlannedEdit]] = field(default_factory=dict[str, list[PlannedEdit]])
     edits_before_writes: dict[str, list[PlannedEdit]] = field(default_factory=dict[str, list[PlannedEdit]])
     adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
@@ -140,8 +142,8 @@ class FakeJira:
     def client(self) -> JiraClient:
         return JiraClient(make_jira_credentials(), transport=self.transport(), sleep=self.sleeps.append)
 
-    def answer_next(self, *replies: Reply | httpx2.RequestError) -> None:
-        self.queued.extend(replies)
+    def answer_next(self, method: str, path: str, *replies: Queued) -> None:
+        self.queued.setdefault((method, path), []).extend(replies)
 
     def calls(self) -> list[tuple[str, str]]:
         return [(request.method, unquote(request.url.path)) for request in self.requests]
@@ -168,9 +170,6 @@ class FakeJira:
     ) -> None:
         self.edits_before_writes.setdefault(key, []).append(PlannedEdit(author, dict(fields), dated))
 
-    def fail_next(self, method: str, path: str, reply: Reply) -> None:
-        self.failing[(method, path)] = reply
-
     def _make_planned_edits(self, key: str, planned: list[PlannedEdit]) -> None:
         for edit in planned:
             self._change(self.issues[key], edit.fields, edit.author, dated=edit.dated)
@@ -186,14 +185,12 @@ class FakeJira:
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
-        if self.queued:
-            queued = self.queued.pop(0)
+        waiting = self.queued.get((request.method, unquote(request.url.path)))
+        if waiting:
+            queued = waiting.pop(0)
             if isinstance(queued, httpx2.RequestError):
                 raise queued
             return queued.response()
-        failure = self.failing.pop((request.method, unquote(request.url.path)), None)
-        if failure is not None:
-            return failure.response()
         path = request.url.raw_path.decode().partition("?")[0]
         for pattern, method, answer in self._routes():
             matched = re.fullmatch(pattern, path)
