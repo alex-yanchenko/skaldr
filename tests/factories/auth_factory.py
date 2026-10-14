@@ -418,6 +418,17 @@ class SlowSaveKeyring(InMemoryKeyring):
         self.entries[(service, username)] = password
 
 
+class SlowDeleteKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.released = threading.Event()
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        self.released.wait(5)
+        super().delete_password(service, username)
+
+
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
     fields: dict[str, str | None] = {
         "site": "https://example.atlassian.net",

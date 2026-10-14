@@ -195,6 +195,14 @@ def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | 
 def _forget_after_the_revoke(entry: StoredEntry[NotionCredentials], revoked: bool) -> bool:
     try:
         return forget(entry)
+    except KeyboardInterrupt:
+        if revoked:
+            print(
+                "warning: the Notion token was revoked, but the logout was interrupted before the keychain "
+                "removed its entry, which may remain; run this logout again to remove it",
+                file=sys.stderr,
+            )
+        raise
     except AuthError as unremoved:
         if not revoked:
             raise

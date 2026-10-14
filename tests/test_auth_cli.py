@@ -1,8 +1,10 @@
+import _thread
 import builtins
 import json
 import re
 import socket
 import sys
+import threading
 from types import ModuleType
 from typing import Any, NoReturn
 
@@ -33,6 +35,7 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     PlaintextKeyring,
+    SlowDeleteKeyring,
     WriteFailingKeyring,
     approving,
     fake_api,
@@ -702,6 +705,38 @@ def test_logout_notion_says_whether_the_token_it_could_not_remove_was_revoked(
         stderr,
         [stored_entry("notion", f"notion:{WORKSPACE_ID}", make_notion_credentials())],
     )
+
+
+@pytest.mark.parametrize(
+    ("revoke_status", "stderr"),
+    [
+        (
+            200,
+            "warning: the Notion token was revoked, but the logout was interrupted before the keychain "
+            "removed its entry, which may remain; run this logout again to remove it\n"
+            "\nerror: cancelled\n",
+        ),
+        (400, "warning: Notion did not revoke the token: HTTP 400\n\nerror: cancelled\n"),
+    ],
+    ids=["after the revoke", "after a refused revoke"],
+)
+def test_logout_notion_interrupted_while_removing_the_entry_says_whether_the_token_was_revoked(
+    capsys: pytest.CaptureFixture[str], revoke_status: int, stderr: str
+) -> None:
+    slow = SlowDeleteKeyring()
+    keyring.set_keyring(slow)
+    seed_notion(make_notion_credentials())
+    threading.Timer(0.3, _thread.interrupt_main).start()
+
+    try:
+        exit_code = auth_cli.main(
+            ["logout", "notion"], transport=fake_api({"/v1/oauth/revoke": (revoke_status, {})}, [])
+        )
+    finally:
+        slow.released.set()
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err) == (1, "", stderr)
 
 
 @pytest.mark.parametrize("service", ["notion", "jira"])
