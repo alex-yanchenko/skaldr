@@ -63,6 +63,10 @@ NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
+CODE_FENCE_RUN: Final = re.compile(r"`{3,}")
+LINE_INSIDE_A_BLOCK: Final = re.compile(
+    r"</[a-z_]+>|<colgroup>|<col\b[^>]*>|<td\b.*</td>|<summary>.*</summary>"
+)
 NOTION_PLAIN_TEXT_LANGUAGE: Final = "plain text"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 NOTION_FULL_PAGE_WIDTH_PX: Final = 1200
@@ -523,6 +527,32 @@ def _rendered_blocks_by_position(
 
 def _rendered_blocks(nodes: Sequence[Node], room: TableRoom) -> list[RenderedBlock]:
     return [block for _, block in _rendered_blocks_by_position(nodes, room)]
+
+
+def notion_fence_closer(stripped_line: str) -> str | None:
+    if stripped_line == EQUATION_FENCE:
+        return EQUATION_FENCE
+    run = CODE_FENCE_RUN.match(stripped_line)
+    return run.group(0) if run else None
+
+
+def starts_a_block(stripped_line: str) -> bool:
+    return bool(stripped_line) and LINE_INSIDE_A_BLOCK.fullmatch(stripped_line) is None
+
+
+def notion_block_count(text: str) -> int:
+    count = 0
+    closer: str | None = None
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if closer is not None:
+            closer = None if stripped == closer else closer
+            continue
+        if not starts_a_block(stripped):
+            continue
+        closer = notion_fence_closer(stripped)
+        count += 1
+    return count
 
 
 def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:
