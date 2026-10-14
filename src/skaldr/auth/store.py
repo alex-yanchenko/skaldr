@@ -14,19 +14,17 @@ from filelock import FileLock, Timeout
 from keyring.backend import KeyringBackend
 from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
 from skaldr.auth import CaughtWithoutChaining, printable_only
-from skaldr.errors import AuthError
+from skaldr.auth.site import https_origin, normalise_site, site_refusal
+from skaldr.errors import AuthError, SeveralSignInsError
 from skaldr.services import Service
 
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
 LEGACY_SELECTOR = "legacy"
-WhereToNameOne = Literal["", " with `workspace` in the target's `where`"]
-_ANYWHERE: WhereToNameOne = ""
-_IN_THE_TARGET: WhereToNameOne = " with `workspace` in the target's `where`"
 LOCK_TIMEOUT_SECONDS = 30.0
 _UNIDENTIFIED_WORKSPACE = "unidentified"
 _UNREADABLE_LEGACY_ENTRY = "an unreadable entry"
@@ -51,9 +49,7 @@ _JIRA_SITE = "JIRA_SITE"
 _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
 JIRA_ENVIRONMENT = (_JIRA_SITE, _JIRA_EMAIL, _JIRA_API_TOKEN)
-_JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
 _INSECURE_KEYRING_MODULES = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
-_SITE_REQUIREMENT = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
 class UnreadableEntryError(AuthError):
@@ -82,9 +78,9 @@ class JiraCredentials(BaseModel):
     @field_validator("site")
     @classmethod
     def _site_is_an_https_origin(cls, site: str) -> str:
-        origin = _https_origin(site)
+        origin = https_origin(site)
         if origin is None:
-            raise PydanticCustomError("https_origin", "{refusal}", {"refusal": _site_refusal(site)})
+            raise PydanticCustomError("https_origin", "{refusal}", {"refusal": site_refusal(site)})
         return origin
 
 
@@ -95,13 +91,6 @@ CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials)
 class SignIn(Generic[CredentialsT]):
     credentials: CredentialsT
     source: Source
-
-
-def normalise_site(typed: str) -> str:
-    origin = _https_origin(typed)
-    if origin is None:
-        raise AuthError(_site_refusal(typed))
-    return origin
 
 
 def jira_credentials(
@@ -214,17 +203,10 @@ def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
     return found
 
 
-def find_notion(
-    workspace: str | None = None, where_to_name_one: WhereToNameOne = _ANYWHERE
-) -> StoredEntry[NotionCredentials] | None:
+def find_notion(workspace: str | None = None) -> StoredEntry[NotionCredentials] | None:
     wanted = None if workspace is None else _canonical_workspace_selector(workspace)
     found = _the_only_match(
-        stored_notion_sign_ins(),
-        wanted,
-        _is_workspace,
-        "Notion workspaces",
-        _describe_workspace,
-        where_to_name_one,
+        stored_notion_sign_ins(), wanted, _is_workspace, "Notion workspaces", _describe_workspace
     )
     if found is None and wanted is not None and _is_uuid(wanted):
         return _in_the_keychain(lambda: _entry_named(_NOTION, wanted))
@@ -246,17 +228,18 @@ def load_jira(site: str | None = None) -> SignIn[JiraCredentials] | None:
     return _signed_in(find_jira(site))
 
 
-def load_notion(
-    workspace: str | None = None, where_to_name_one: WhereToNameOne = _ANYWHERE
-) -> SignIn[NotionCredentials] | None:
+def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | None:
     from_environment = notion_from_environment() if workspace is None else None
     if from_environment is not None:
         return SignIn(from_environment, "environment")
-    return _signed_in(find_notion(workspace, where_to_name_one))
+    return _signed_in(find_notion(workspace))
 
 
 def require_notion_for_a_target(workspace: str | None) -> SignIn[NotionCredentials]:
-    sign_in = load_notion(workspace, _IN_THE_TARGET)
+    try:
+        sign_in = load_notion(workspace)
+    except SeveralSignInsError as exc:
+        raise AuthError(f"{exc} with `workspace` in the target's `where`") from exc
     if sign_in is not None:
         return sign_in
     signed_in = stored_notion_sign_ins()
@@ -314,15 +297,13 @@ def _the_only_match(
     matches: Callable[[StoredEntry[CredentialsT], str], bool],
     plural: str,
     describe: Callable[[StoredEntry[CredentialsT]], str],
-    where_to_name_one: WhereToNameOne = _ANYWHERE,
 ) -> StoredEntry[CredentialsT] | None:
     chosen = entries if selector is None else [entry for entry in entries if matches(entry, selector)]
     if len(chosen) > 1:
         named = "" if selector is None else f" named `{printable_only(selector)}`"
         by_its_id = "" if selector is None else " by its id"
-        raise AuthError(
-            f"Signed in to several {plural}{named} ({', '.join(map(describe, chosen))}); "
-            f"name one{by_its_id}{where_to_name_one}"
+        raise SeveralSignInsError(
+            f"Signed in to several {plural}{named} ({', '.join(map(describe, chosen))}); name one{by_its_id}"
         )
     return chosen[0] if chosen else None
 
@@ -459,36 +440,6 @@ def _entries(kind: _Kind[CredentialsT]) -> list[StoredEntry[CredentialsT]]:
         if stored is not None:
             entries.append(StoredEntry(kind.service, username, _parse(stored, kind.model), stored))
     return entries
-
-
-def _https_origin(typed: str) -> str | None:
-    text = typed.strip()
-    if "\\" in text:
-        return None
-    try:
-        url = HttpUrl(text if "://" in text else f"https://{text}")
-    except ValidationError:
-        return None
-    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host):
-        return None
-    if _carries_userinfo_query_or_fragment(url):
-        return None
-    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
-
-
-def _is_a_jira_cloud_host(host: str | None) -> bool:
-    return host is not None and host.endswith(_JIRA_CLOUD_HOST_SUFFIX)
-
-
-def _carries_userinfo_query_or_fragment(url: HttpUrl) -> bool:
-    parts = (url.username, url.password, url.query, url.fragment)
-    return any(part is not None for part in parts)
-
-
-def _site_refusal(typed: str) -> str:
-    if "@" in typed:
-        return f"{_SITE_REQUIREMENT}, with no user name or password before the host"
-    return f"{_SITE_REQUIREMENT}, not {typed!r}"
 
 
 @dataclass

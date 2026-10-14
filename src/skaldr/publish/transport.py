@@ -33,6 +33,11 @@ class Stamp:
     doc_id: str
     section_id: str | None
 
+    @property
+    def named(self) -> str:
+        section = "" if self.section_id is None else f", section '{self.section_id}'"
+        return f"doc_id '{self.doc_id}'{section}"
+
 
 @dataclass(frozen=True)
 class RemoteItem:

@@ -69,11 +69,6 @@ def _page_key(item_id: str) -> str:
     return notion_page_id(item_id) or item_id
 
 
-def _stamp_named(stamp: Stamp) -> str:
-    section = "" if stamp.section_id is None else f", section '{stamp.section_id}'"
-    return f"doc_id '{stamp.doc_id}'{section}"
-
-
 def _update_content(replacement: Replacement) -> JsonFields:
     return {
         "type": "update_content",
@@ -271,9 +266,7 @@ class NotionTransport:
         markdown = self._api.page_markdown(item_id).markdown
         stamp = keyed_page(markdown, layout).stamp
         if stamp is not None and stamp != request.stamp:
-            raise WriteRejectedError(
-                f"Notion page {item_id} is not stamped with {_stamp_named(request.stamp)}"
-            )
+            raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
         properties = {**title, **self._property_requests(page, values)}

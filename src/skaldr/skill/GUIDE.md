@@ -1254,7 +1254,7 @@ publish:
       where: { project: PLAN, issue_type: Task, parent: PLAN-100, fields: { labels: [onboarding] } }
       from: [st1, st2]               # build this target from these sections only
       split: [st1, st2]              # one child issue per section
-      overrides: { st2: { fields: { priority: High } } }
+      overrides: { st2: { fields: { priority: { name: High } } } }
 ```
 
 | Key | Meaning |
@@ -1278,7 +1278,7 @@ A rendered page embeds its source **without** the `publish` block: the block, th
 
 ## Publishing
 
-This version of skaldr publishes to Notion (see Publishing to Notion below). It has no Jira connection yet, so a document with a Jira target stops with `error: no connector publishes to jira`.
+This version of skaldr publishes to Notion and Jira (see Publishing to Notion and Publishing to Jira below). What follows is how the commands behave for every service.
 
 ```bash
 skaldr publish garden.yaml                      # dry run: reads the services, prints the plan, writes nothing
@@ -1351,6 +1351,50 @@ error: 1 part was edited in the service since the last publish, so nothing was w
 **Icon and cover.** `meta.icon` is the icon of the document's page and of every split section's page, sent as a Notion emoji icon (`{"type": "emoji", "emoji": "🧪"}`). `meta.cover` is the cover of the document's page only, sent as an external image Notion loads from that address (`{"type": "external", "external": {"url": "https://example.com/cover.png"}}`); a split section's page gets no cover. skaldr sets them when it creates a page or writes into one with `page`, and changes them with a page update when they change in the YAML. Removing `icon` or `cover` from the YAML clears it in Notion. An icon or cover the YAML does not set belongs to the people using the page, as a field skaldr never published does: skaldr never compares, replaces or clears it, and a page `page` names keeps the icon and cover it already has. Once the YAML sets one, a person changing or removing it in Notion is a remote edit, and the diff shows it as the emoji or address, as `Notion icon <name> (<color>)` for one of Notion's own icons, as `Notion custom emoji <id>`, or as `a file uploaded to Notion (<address>)`. Notion signs an uploaded file's address again each time the page is read, so skaldr compares that address without its query string: a new signature for the same file is not an edit, and swapping one uploaded file for another is. Adding an icon or cover to the YAML writes it over one a person set, without counting that as an edit. A release clears an icon or cover the YAML set, as it clears the fields skaldr set, and leaves one skaldr never set.
 
 **Notion's limits.** One request creates at most 5,000 blocks and stays under 450,000 bytes of JSON, so a page larger than that is created with the sections that fit and filled in by further requests that each add whole sections before the stamp. skaldr never splits a section, so a table always stays one table. A section that alone takes more than 4,999 Notion blocks or 200,000 bytes of JSON stops the plan before anything is sent, naming the section; give it its own page with `split`, or shorten it. A write that quotes more than one section, such as a move, is held to the same 450,000 bytes and 5,000 blocks per request, counting the old text and the new, and is refused before it is sent, naming the sections it quotes. Notion also limits how large a page may be after an update and refuses a larger one; the error says so, and the cure is the same: move sections into child pages with `split`. A request Notion rate-limits (429) or finds overloaded (529) is tried again, and so is a read that fails with another 5xx or cannot reach Notion (a timeout or a dropped connection), up to six attempts in all, waiting as long as Notion's `Retry-After` asks or, without one, a random part of a backoff that doubles from one second up to 30, so several runs do not retry in step. When `Retry-After` asks for more than a minute, on any request skaldr would try again, skaldr stops instead, naming the wait. A write that fails with any other 5xx, or whose answer never arrives, is not repeated, because it may have landed, and neither is a create Notion accepted for later whose progress skaldr then cannot follow. For a section write, the next run reads the page and carries on from there, and so does a target that writes into a `page`. A create under `parent_page` that stops this way is an interrupted create: the next `--apply` stops and names the parent and the title to look for (see the state file above).
+
+### Publishing to Jira
+
+**Sign in once.** Run `skaldr auth jira`: it asks for your Jira Cloud site (`https://example.atlassian.net`), your Atlassian account email and an API token you create at id.atlassian.com under Security, API tokens, checks them against the site and keeps them in the system keychain. In CI, set `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` (all three) instead; they win over the keychain. skaldr publishes with your one Jira sign-in; if you are signed in to more than one site, name the site this target publishes to with `site` in its `where` (an https site URL, written the way `skaldr auth` takes it), which is part of the target's place, so changing it is a move. Every issue skaldr creates or edits is created or edited by you, and Jira notifies watchers as it does for your own edits.
+
+```yaml
+publish:
+  doc_id: garden-handbook
+  targets:
+    - to: jira
+      where:
+        project: DEMO
+        issue_type: Task
+        parent: DEMO-100                  # optional: the document's issue goes under it
+        fields:
+          labels: [garden]
+          priority: { name: High }
+          components: [{ name: Beds }]
+          customfield_10010: 3            # a custom field, by its id
+      split: [tools, planting]            # each becomes its own issue under the document's issue
+      overrides: { planting: { fields: { priority: { name: Low } } } }
+```
+
+**`where`.** `project` is the project key and `issue_type` the issue type every created issue gets (a name such as Task or Story). `parent` puts the document's issue under an existing issue; each `split` section becomes an issue whose parent is the document's issue, so the issue type has to be one your project lets sit under that parent. `fields` holds any other field of a Jira create screen, keyed by the field's id as Jira's REST API names it (`labels`, `priority`, `components`, `duedate`, `customfield_10010`) and written in the shape that API takes: a priority is `{ name: High }`, components are a list of `{ name: ... }`, a select option is `{ value: ... }`, a person is `{ accountId: ... }`. skaldr compares each field in the shape you wrote it, so the extra keys Jira adds when it reads a field back (`self`, `id`, `iconUrl`) never count as an edit. A field Jira does not know, or a value it refuses, stops the run with Jira's own message, naming the field. `fields` and `overrides` may not set `summary`, `description`, `project`, `issuetype`, `parent` or `status`: skaldr sets the first five itself, and Jira changes a status only through a transition, so `skaldr --check` refuses them, naming the target and where they were set. `labels` is allowed, and skaldr adds its own label to yours.
+
+**What lands where.** The summary is the item's title. The description is the item's content in the Atlassian Document Format that `--export adf` writes (see Exporting as ADF for Jira). The labels are yours plus `skaldr-<doc_id>`, which skaldr keeps on every issue it publishes and leaves out when it compares labels. The prefix goes on every `doc_id`, one that already starts with `skaldr-` included (`skaldr-skaldr-plan`), so no two documents share a label. Two issue properties, which Jira stores with the issue and does not show, carry the rest: `skaldr.stamp` holds the `doc_id` and the section id, and `skaldr.layout` records which section each part of the description came from, so skaldr can tell later which section an edit touched. A `skaldr.stamp` that skaldr cannot read, such as one edited through the REST API, stops the run naming the issue, since skaldr cannot tell which document the issue belongs to; a `skaldr.layout` it cannot read only makes the whole description one section until the next write records it again.
+
+**Updates.** A description is one field in Jira and cannot be changed in part, so when any section of an item changes, skaldr replaces the item's whole description in one request, and leaves it alone when nothing in it changed. The summary and the fields go in one request holding only the ones that changed; a field removed from the YAML is cleared. A rate-limited request is sent again after the wait Jira asks for (up to a minute), and a read that fails on Jira's side is tried again after 2, 4 and 8 seconds, or after the wait Jira asks for when it names one; when Jira asks for more than a minute, skaldr stops instead of waiting; a write that fails on Jira's side is never sent twice, since it may have landed.
+
+**Edits made in Jira.** skaldr reads each issue's history after every write and remembers its own entry for that write. An entry after it that changes the summary, the description, the labels (when the YAML sets `labels`) or a field the YAML sets is an edit made in Jira when the issue no longer holds what skaldr published there, and `skaldr diff` shows it under the section, the title or the fields it changed, with who made it and when. An edit undone in Jira before the next publish is therefore not an edit. Comments, status changes and fields the YAML does not set are not edits. Since skaldr writes as you, an edit you make yourself in Jira counts too. Sections moved around in Jira keep their own text, but the new order counts as an edit to the moved sections.
+
+Right before each write, skaldr reads the issue's history again: an edit made since skaldr read the issue earlier in the run stops that write before it is sent. An edit that lands while skaldr writes, between its request and its read-back, stops the run after the write with `<issue> was edited in Jira while skaldr wrote to it (<fields>)`; the next `skaldr publish` or `skaldr diff` shows that edit, and the parts skaldr wrote count as published. An edit to the same field that lands in the instant before skaldr's write is replaced by it; the run then stops with `<issue>: skaldr's write replaced an edit made in Jira just before it (<field> in changelog <id> by <person> at <time>)`, so you can restore it from the issue's history. When the history holds only skaldr's own entry, or a new issue's history holds no entry yet, skaldr takes the issue as Jira saved it as the published copy, even where Jira stored skaldr's text in a slightly different form. A mention compares by the person's account id alone, because Jira rewrites a mention's text to the person's current display name when it saves the issue; a mention that points at another person counts as an edit, and changing only the text of a `[text](user:key)` link publishes nothing.
+
+**The description limit.** Jira takes at most 32,767 characters of description, counted on the compact ADF JSON. An item over that stops the plan before anything is sent, naming the item and its size:
+
+```text
+error: jira project DEMO under no parent issue, document: the item has 40,112 characters of ADF, over the 32,767 a Jira item can take; split the document further with `split`, or shorten it
+```
+
+skaldr never cuts a description short: move sections into their own issues with `split`.
+
+**Archiving.** skaldr never deletes an issue. An item whose section left the YAML or the `split` list is archived: skaldr adds a comment saying it archived the issue, moves the issue to a status in Jira's done category (by any transition the workflow offers to one), and marks its `skaldr.stamp` as archived, after which skaldr treats the issue as gone. skaldr notes the comment in `skaldr.stamp`, so if the transition fails, for example on a workflow rule that wants a resolution, publishing again retries the transition without commenting a second time. Before it adds the comment, skaldr looks for the same comment among the issue's comments, so a run that stopped after commenting and before noting it does not comment twice either. An issue already in a done status gets no transition and no comment. If the workflow offers no transition to a done status from the issue's current status, the run stops naming the issue; close it in Jira and publish again. An issue someone closes by hand is not archived: skaldr keeps publishing to it.
+
+**No writing into an existing issue.** Jira has no counterpart of Notion's `page`: skaldr writes only into issues it created, so a Jira target never adopts an issue and nothing is ever released.
 
 ## The render carries its own source
 

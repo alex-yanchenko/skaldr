@@ -6,13 +6,14 @@ from typing import Any
 import pytest
 
 from skaldr.auth.store import SignIn, load_notion
-from skaldr.errors import AuthError, ConnectorError, PublishError
+from skaldr.errors import AuthError, PublishError
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.cli import installed_connectors, main
 from skaldr.publish.content import ItemContent
 from skaldr.publish.drafts import authored_from, draft_targets
+from skaldr.publish.jira import JiraConnector
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_report
@@ -65,12 +66,13 @@ def _markdown_writes(notion: InMemoryNotion) -> list[Any]:
     ]
 
 
-def test_skaldr_has_a_notion_connector_installed_and_none_for_jira() -> None:
+def test_skaldr_has_a_notion_and_a_jira_connector_installed() -> None:
     registry = installed_connectors()
 
-    assert isinstance(registry.for_target(NotionTarget.model_validate(make_notion_target())), NotionConnector)
-    with pytest.raises(ConnectorError, match=r"^no connector publishes to jira$"):
-        registry.for_target(JiraTarget.model_validate(make_jira_target()))
+    assert (
+        type(registry.for_target(NotionTarget.model_validate(make_notion_target()))),
+        type(registry.for_target(JiraTarget.model_validate(make_jira_target()))),
+    ) == (NotionConnector, JiraConnector)
 
 
 def test_the_notion_connector_writes_sections_within_one_creates_budget_and_carries_the_look() -> None:
