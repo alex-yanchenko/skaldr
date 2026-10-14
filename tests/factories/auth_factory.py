@@ -28,6 +28,7 @@ WORKSPACE_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 HEX_WORKSPACE_ID = "abcdef01-2345-4678-89ab-cdef01234567"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
+SITE_ON_ANOTHER_PORT = "https://example.atlassian.net:8443"
 
 
 def rendered_traceback(error: BaseException) -> str:
@@ -438,6 +439,14 @@ def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
     }
     _refuse_unknown_fields(overrides, fields)
     return JiraCredentials.model_validate({**fields, **overrides})
+
+
+def store_jira_entry_an_earlier_skaldr_wrote(keychain: InMemoryKeyring, site: str) -> None:
+    username = f"jira:{site}"
+    keychain.entries[("skaldr", username)] = json.dumps(
+        {**make_jira_credentials().model_dump(), "site": site}
+    )
+    keychain.entries[("skaldr", "index")] = json.dumps({"jira": [username], "notion": []})
 
 
 def _refuse_unknown_fields(overrides: dict[str, str | None], fields: dict[str, str | None]) -> None:

@@ -16,9 +16,9 @@ from keyring.errors import KeyringError
 from skaldr.auth import cli as auth_cli
 from skaldr.auth.store import (
     JiraCredentials,
+    JiraLookup,
     NotionCredentials,
     SignIn,
-    StoredEntry,
     load_jira,
     load_notion,
     save_jira,
@@ -29,6 +29,7 @@ from skaldr.cli import main
 from skaldr.services import Service
 from tests.factories.auth_factory import (
     OTHER_WORKSPACE_ID,
+    SITE_ON_ANOTHER_PORT,
     WORKSPACE_ID,
     DeleteRefusingKeyring,
     FakeBrowser,
@@ -48,6 +49,7 @@ from tests.factories.auth_factory import (
     notion_token_answer,
     revoke_request_for,
     seed_notion,
+    store_jira_entry_an_earlier_skaldr_wrote,
     stored_entry,
     summarise,
 )
@@ -1123,7 +1125,7 @@ def test_logout_jira_keeps_a_sign_in_stored_after_it_was_read(
     newer = make_jira_credentials(api_token="newer-token")
     real_find = auth_cli.find_jira
 
-    def find_then_let_another_sign_in_land(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
+    def find_then_let_another_sign_in_land(site: str | None = None) -> JiraLookup:
         found = real_find(site)
         save_jira(newer)
         return found
@@ -1172,6 +1174,29 @@ def test_logout_jira_with_a_site_removes_only_that_one(capsys: pytest.CaptureFix
     assert capsys.readouterr().out == (
         "Signed out of Jira: removed from the keychain. Revoke the API token itself at "
         "https://id.atlassian.com/manage-profile/security/api-tokens\n"
+    )
+
+
+def test_a_jira_entry_for_a_site_skaldr_now_refuses_is_listed_with_its_logout_and_removed_by_it(
+    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store_jira_entry_an_earlier_skaldr_wrote(keychain, SITE_ON_ANOTHER_PORT)
+    save_jira(make_jira_credentials())
+
+    status_exit_code = auth_cli.main(["status"])
+    status = capsys.readouterr().out
+    logout_exit_code = auth_cli.main(["logout", "jira", SITE_ON_ANOTHER_PORT])
+
+    assert (status_exit_code, status, logout_exit_code, capsys.readouterr().out, stored_jira()) == (
+        1,
+        "notion  not signed in (run `skaldr auth notion`)\n"
+        "jira    error: The keychain entry for jira https://example.atlassian.net:8443 is unreadable; "
+        "run `skaldr auth logout jira https://example.atlassian.net:8443` to remove it\n"
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n",
+        0,
+        "Signed out of Jira: removed from the keychain. Revoke the API token itself at "
+        "https://id.atlassian.com/manage-profile/security/api-tokens\n",
+        [make_jira_credentials()],
     )
 
 

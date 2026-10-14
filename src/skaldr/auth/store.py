@@ -7,7 +7,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, SimpleQueue
-from typing import Generic, Literal, TypeVar, cast
+from typing import Generic, Literal, NamedTuple, TypeVar, cast
 from uuid import UUID
 
 import keyring
@@ -159,6 +159,11 @@ class StoredEntry(Generic[CredentialsT]):
                 f"`skaldr auth logout {self.service} {LEGACY_SELECTOR}` to remove it, then run "
                 f"`skaldr auth {self.service}` again"
             )
+        if not _a_sign_in_writes_an_entry_named(self.service, self.identifier):
+            return (
+                f"The keychain entry for {self.service} {self.identifier} is unreadable; "
+                f"run `skaldr auth logout {self.service} {self.identifier}` to remove it"
+            )
         return (
             f"The keychain entry for {self.service} {self.identifier} is unreadable; "
             f"run `skaldr auth {self.service}` again"
@@ -166,6 +171,12 @@ class StoredEntry(Generic[CredentialsT]):
 
 
 AnyStoredEntry = StoredEntry[JiraCredentials] | StoredEntry[NotionCredentials]
+
+
+def _a_sign_in_writes_an_entry_named(service: Service, identifier: str) -> bool:
+    if service == "jira":
+        return _https_origin(identifier) == identifier
+    return _is_uuid(identifier) and _canonical_workspace_selector(identifier) == identifier
 
 
 @dataclass(frozen=True)
@@ -207,13 +218,23 @@ def stored_notion_sign_ins() -> list[StoredEntry[NotionCredentials]]:
     return _in_the_keychain(lambda: _entries(_NOTION))
 
 
-def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
-    return _find_jira_by_selector(jira_selector(site))
+class JiraLookup(NamedTuple):
+    selector: str | None
+    entry: StoredEntry[JiraCredentials] | None
 
 
-def _find_jira_by_selector(wanted: str | None) -> StoredEntry[JiraCredentials] | None:
+def find_jira(site: str | None = None) -> JiraLookup:
+    entries = stored_jira_sign_ins()
+    stored_under_the_typed_name = site is not None and any(entry.identifier == site for entry in entries)
+    selector = site if stored_under_the_typed_name else jira_selector(site)
+    return JiraLookup(selector, _find_jira_among(entries, selector))
+
+
+def _find_jira_among(
+    entries: list[StoredEntry[JiraCredentials]], wanted: str | None
+) -> StoredEntry[JiraCredentials] | None:
     found = _the_only_match(
-        stored_jira_sign_ins(),
+        entries,
         wanted,
         _is_site,
         "Jira sites",
@@ -254,7 +275,7 @@ def _load_jira_by_selector(wanted: str | None) -> SignIn[JiraCredentials] | None
     from_environment = jira_from_environment()
     if from_environment is not None and wanted in (None, from_environment.site):
         return SignIn(from_environment, "environment")
-    return _signed_in(_find_jira_by_selector(wanted))
+    return _signed_in(_find_jira_among(stored_jira_sign_ins(), wanted))
 
 
 def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | None:

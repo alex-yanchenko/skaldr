@@ -22,6 +22,7 @@ from typing_extensions import override
 from skaldr.auth import store
 from skaldr.auth.store import (
     JiraCredentials,
+    JiraLookup,
     NotionCredentials,
     SignIn,
     UnreadableEntryError,
@@ -41,9 +42,11 @@ from skaldr.auth.store import (
     stored_notion_sign_ins,
 )
 from skaldr.errors import AuthError
+from skaldr.services import Service
 from tests.factories.auth_factory import (
     HEX_WORKSPACE_ID,
     OTHER_WORKSPACE_ID,
+    SITE_ON_ANOTHER_PORT,
     SITE_REFUSALS,
     SITE_WITH_A_PASSWORD,
     SITES_OFF_JIRA_CLOUD,
@@ -63,6 +66,7 @@ from tests.factories.auth_factory import (
     make_jira_credentials,
     make_notion_credentials,
     seed_notion,
+    store_jira_entry_an_earlier_skaldr_wrote,
     stored_entry,
 )
 
@@ -622,8 +626,21 @@ def test_an_unreadable_legacy_entry_is_found_with_the_selector_legacy(keychain: 
     save_jira(make_jira_credentials())
 
     assert (find_jira("legacy"), find_notion("legacy")) == (
-        stored_entry("jira", "jira", None),
+        JiraLookup("legacy", stored_entry("jira", "jira", None)),
         stored_entry("notion", "notion", None),
+    )
+
+
+def test_a_jira_lookup_returns_the_site_it_normalised_the_selector_to() -> None:
+    save_jira(make_jira_credentials())
+
+    assert (find_jira("Example.atlassian.net/"), find_jira("other.atlassian.net"), find_jira()) == (
+        JiraLookup(
+            "https://example.atlassian.net",
+            stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials()),
+        ),
+        JiraLookup("https://other.atlassian.net", None),
+        JiraLookup(None, stored_entry("jira", "jira:https://example.atlassian.net", make_jira_credentials())),
     )
 
 
@@ -637,6 +654,56 @@ def test_a_keyed_entry_that_cannot_be_read_names_its_site(keychain: InMemoryKeyr
     assert str(raised.value) == (
         "The keychain entry for jira https://example.atlassian.net is unreadable; "
         "run `skaldr auth jira` again"
+    )
+
+
+def test_a_jira_entry_for_a_site_skaldr_now_refuses_is_found_by_the_name_it_was_stored_under(
+    keychain: InMemoryKeyring,
+) -> None:
+    store_jira_entry_an_earlier_skaldr_wrote(keychain, SITE_ON_ANOTHER_PORT)
+    save_jira(make_jira_credentials())
+
+    assert find_jira(SITE_ON_ANOTHER_PORT) == JiraLookup(
+        SITE_ON_ANOTHER_PORT, stored_entry("jira", f"jira:{SITE_ON_ANOTHER_PORT}", None)
+    )
+
+
+def test_a_site_skaldr_refuses_and_nobody_stored_is_still_refused_as_a_selector(
+    keychain: InMemoryKeyring,
+) -> None:
+    store_jira_entry_an_earlier_skaldr_wrote(keychain, SITE_ON_ANOTHER_PORT)
+
+    with pytest.raises(AuthError) as raised:
+        find_jira("https://example.atlassian.net:9443")
+
+    assert str(raised.value) == (
+        "The Jira site must be an https URL like https://<site>.atlassian.net, "
+        "not 'https://example.atlassian.net:9443'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("service", "identifier", "load"),
+    [
+        ("jira", SITE_ON_ANOTHER_PORT, load_jira),
+        ("notion", "unidentified-2", load_notion),
+    ],
+    ids=["a jira site skaldr now refuses", "a moved notion entry"],
+)
+def test_an_unreadable_entry_no_sign_in_would_replace_names_the_logout_that_removes_it(
+    keychain: InMemoryKeyring, service: Service, identifier: str, load: Callable[[], object]
+) -> None:
+    keychain.entries[("skaldr", f"{service}:{identifier}")] = "not json"
+    keychain.entries[("skaldr", "index")] = json.dumps(
+        {"jira": [], "notion": [], service: [f"{service}:{identifier}"]}
+    )
+
+    with pytest.raises(AuthError) as raised:
+        load()
+
+    assert str(raised.value) == (
+        f"The keychain entry for {service} {identifier} is unreadable; "
+        f"run `skaldr auth logout {service} {identifier}` to remove it"
     )
 
 
