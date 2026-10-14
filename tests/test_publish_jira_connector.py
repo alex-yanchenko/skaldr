@@ -102,6 +102,20 @@ def test_opening_a_transport_without_a_jira_sign_in_says_how_to_sign_in() -> Non
         JiraConnector().open_transport(target)
 
 
+def test_a_target_naming_a_site_with_no_jira_sign_in_at_all_says_how_to_sign_in() -> None:
+    target = JiraTarget.model_validate(
+        make_jira_target(
+            where={"project": "DEMO", "issue_type": "Task", "site": "https://third.atlassian.net"}
+        )
+    )
+
+    with pytest.raises(
+        ConnectorError,
+        match=_exactly("Not signed in to Jira at https://third.atlassian.net; run `skaldr auth jira`"),
+    ):
+        JiraConnector().open_transport(target)
+
+
 def test_the_transport_signs_in_with_the_jira_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JIRA_SITE", SITE)
     monkeypatch.setenv("JIRA_EMAIL", "builder@example.com")

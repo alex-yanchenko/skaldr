@@ -124,18 +124,16 @@ def test_the_changelog_is_read_page_by_page_to_the_end() -> None:
 
     changelog = jira.client().changelog("DEMO-1")
 
-    assert (
-        [entry.id for entry in changelog],
-        changelog[0],
-        [summarise(request)["url"] for request in jira.requests],
-    ) == (
-        ["10001", "10002", "10003", "10004", "10005"],
-        Changelog(
-            id="10001",
-            author=UserDetails(accountId="account-editor", displayName="Robin Editor"),
-            created="2026-10-01T10:00:00.000+0000",
-            items=[ChangeDetails(field="summary", fieldId="summary")],
-        ),
+    assert (changelog, [summarise(request)["url"] for request in jira.requests]) == (
+        [
+            Changelog(
+                id=f"1000{number}",
+                author=UserDetails(accountId="account-editor", displayName="Robin Editor"),
+                created=f"2026-10-0{number}T10:00:00.000+0000",
+                items=[ChangeDetails(field="summary", fieldId="summary")],
+            )
+            for number in range(1, 6)
+        ],
         [
             f"{SITE}/rest/api/3/issue/DEMO-1/changelog?startAt=0&maxResults=100",
             f"{SITE}/rest/api/3/issue/DEMO-1/changelog?startAt=2&maxResults=100",
@@ -158,6 +156,26 @@ def test_a_changelog_page_that_returns_nothing_ends_the_read_even_when_it_claims
     jira.answer_next(Reply(200, {"startAt": 0, "maxResults": 100, "total": 9, "values": []}))
 
     assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == ([], 1)
+
+
+ONE_ENTRY: JsonValue = {"id": "10001", "items": [{"field": "summary", "fieldId": "summary"}]}
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        pytest.param({"startAt": 0, "total": 1, "values": [ONE_ENTRY]}, id="total-without-is-last"),
+        pytest.param({"startAt": 0, "isLast": True, "values": [ONE_ENTRY]}, id="is-last-without-total"),
+    ],
+)
+def test_a_changelog_page_ends_the_read_on_either_its_total_or_its_last_flag(page: JsonValue) -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(200, page))
+
+    assert (jira.client().changelog("DEMO-1"), len(jira.requests)) == (
+        [Changelog(id="10001", items=[ChangeDetails(field="summary", fieldId="summary")])],
+        1,
+    )
 
 
 def test_a_changelog_page_that_does_not_start_where_it_was_asked_to_is_an_error() -> None:
@@ -210,10 +228,12 @@ def test_transitions_are_listed_and_one_is_taken() -> None:
     client.transition("DEMO-1", CLOSE)
 
     done = Status(name="Done", statusCategory=StatusCategory(key="done"))
+    in_progress = Status(name="In Progress", statusCategory=StatusCategory(key="indeterminate"))
     status = jira.issues["DEMO-1"].fields["status"]
-    assert (offered[1], done.is_done, status, summarise(jira.requests[1])) == (
-        Transition(id=CLOSE, to=done),
+    assert (offered, done.is_done, in_progress.is_done, status, summarise(jira.requests[1])) == (
+        [Transition(id="11", to=in_progress), Transition(id=CLOSE, to=done)],
         True,
+        False,
         {"name": "Done", "statusCategory": {"key": "done"}},
         _request("POST", "/rest/api/3/issue/DEMO-1/transitions", {"transition": {"id": CLOSE}}),
     )
@@ -388,6 +408,84 @@ def test_a_server_error_on_a_read_is_retried(status: int) -> None:
     jira.client().get_issue("DEMO-1", ["summary"])
 
     assert (jira.sleeps, len(jira.requests)) == ([2.0], 2)
+
+
+def test_a_read_that_keeps_failing_on_jiras_side_fails_after_four_attempts() -> None:
+    jira = _seeded()
+    jira.answer_next(*[Reply(503, {"errorMessages": ["Service unavailable"]})] * 4)
+
+    with pytest.raises(ConnectorError) as raised:
+        jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (type(raised.value), str(raised.value), jira.sleeps, len(jira.requests)) == (
+        ConnectorError,
+        "Jira answered HTTP 503 to GET /rest/api/3/issue/DEMO-1: Service unavailable",
+        [2.0, 4.0, 8.0],
+        4,
+    )
+
+
+def test_a_retry_after_of_exactly_a_minute_is_waited_for() -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(429, {}, {"Retry-After": "60"}))
+
+    issue = jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (issue.fields, jira.sleeps, len(jira.requests)) == ({"summary": "Garden handbook"}, [60.0], 2)
+
+
+def test_a_server_error_on_a_read_waits_as_long_as_its_retry_after_asks() -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(503, {}, {"Retry-After": "30"}))
+
+    issue = jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (issue.fields, jira.sleeps, len(jira.requests)) == ({"summary": "Garden handbook"}, [30.0], 2)
+
+
+def test_a_refused_write_carrying_a_retry_after_is_not_retried() -> None:
+    jira = _seeded()
+    jira.answer_next(Reply(400, {"errorMessages": ["Bad summary"]}, {"Retry-After": "1"}))
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=_exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
+    ):
+        jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
+    assert (jira.sleeps, len(jira.requests)) == ([], 1)
+
+
+@pytest.mark.parametrize(
+    ("call", "raised_type", "message"),
+    [
+        pytest.param(
+            "create",
+            WriteRejectedError,
+            "Jira refused POST /rest/api/3/issue (HTTP 404): No project could be found with key 'DEMO'.",
+            id="create",
+        ),
+        pytest.param(
+            "myself",
+            ConnectorError,
+            "Jira refused GET /rest/api/3/myself (HTTP 404): No project could be found with key 'DEMO'.",
+            id="myself",
+        ),
+    ],
+)
+def test_a_not_found_on_a_request_that_names_no_issue_is_a_refusal_not_a_missing_issue(
+    call: str, raised_type: type[ConnectorError], message: str
+) -> None:
+    jira = FakeJira()
+    jira.answer_next(Reply(404, {"errorMessages": ["No project could be found with key 'DEMO'."]}))
+    client = jira.client()
+
+    with pytest.raises(ConnectorError) as raised:
+        if call == "create":
+            client.create_issue({"summary": "Garden guide"}, [])
+        else:
+            client.myself()
+
+    assert (type(raised.value), str(raised.value)) == (raised_type, message)
 
 
 def test_a_server_error_on_a_write_is_not_retried_because_it_may_have_landed() -> None:

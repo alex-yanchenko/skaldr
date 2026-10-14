@@ -32,6 +32,14 @@ _API = "/rest/api/3"
 _AS_STORED = frozenset({"description", "status"})
 DISPLAY_NAMES = {"customfield_10010": "Story Points"}
 History = dict[str, JsonValue]
+Author = dict[str, JsonValue] | None
+
+
+@dataclass(frozen=True)
+class PlannedEdit:
+    author: Author
+    fields: dict[str, JsonValue]
+    dated: bool = True
 
 
 class _EntityProperty(BaseModel):
@@ -114,12 +122,8 @@ class FakeJira:
     queued: list[Reply | httpx2.RequestError] = field(default_factory=list[Reply | httpx2.RequestError])
     sleeps: list[float] = field(default_factory=list[float])
     failing: dict[tuple[str, str], Reply] = field(default_factory=dict[tuple[str, str], Reply])
-    edits_during_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
-        default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
-    )
-    edits_before_writes: dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]] = field(
-        default_factory=dict[str, list[tuple[dict[str, JsonValue], dict[str, JsonValue]]]]
-    )
+    edits_during_writes: dict[str, list[PlannedEdit]] = field(default_factory=dict[str, list[PlannedEdit]])
+    edits_before_writes: dict[str, list[PlannedEdit]] = field(default_factory=dict[str, list[PlannedEdit]])
     adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     names_in_mentions: dict[str, str] = field(default_factory=dict[str, str])
     closes: int = 0
@@ -155,21 +159,24 @@ class FakeJira:
         self._change(self.issues[key], dict(fields), EDITOR)
 
     def edit_right_after_the_next_write(
-        self, key: str, author: dict[str, JsonValue] = EDITOR, **fields: JsonValue
+        self, key: str, author: Author = EDITOR, *, dated: bool = True, **fields: JsonValue
     ) -> None:
-        self.edits_during_writes.setdefault(key, []).append((author, dict(fields)))
+        self.edits_during_writes.setdefault(key, []).append(PlannedEdit(author, dict(fields), dated))
 
     def edit_right_before_the_next_write(
-        self, key: str, author: dict[str, JsonValue] = EDITOR, **fields: JsonValue
+        self, key: str, author: Author = EDITOR, *, dated: bool = True, **fields: JsonValue
     ) -> None:
-        self.edits_before_writes.setdefault(key, []).append((author, dict(fields)))
+        self.edits_before_writes.setdefault(key, []).append(PlannedEdit(author, dict(fields), dated))
 
     def fail_next(self, method: str, path: str, reply: Reply) -> None:
         self.failing[(method, path)] = reply
 
+    def _make_planned_edits(self, key: str, planned: list[PlannedEdit]) -> None:
+        for edit in planned:
+            self._change(self.issues[key], edit.fields, edit.author, dated=edit.dated)
+
     def _edit_after_writing(self, key: str) -> None:
-        for author, fields in self.edits_during_writes.pop(key, []):
-            self._change(self.issues[key], fields, author)
+        self._make_planned_edits(key, self.edits_during_writes.pop(key, []))
 
     def log_by_hand(self, key: str, *field_ids: str) -> None:
         self._log(key, EDITOR, [{"field": name, "fieldId": name} for name in field_ids])
@@ -256,9 +263,9 @@ class FakeJira:
             return issue
         names = request.url.params.get("fields", "").split(",")
         fields = {
-            name: issue.fields.get(name) if name in _AS_STORED else _decorated(issue.fields.get(name))
+            name: issue.fields[name] if name in _AS_STORED else _decorated(issue.fields[name])
             for name in names
-            if name
+            if name in issue.fields
         }
         issue_id = str(10_000 + int(issue.key.rsplit("-", 1)[1]))
         return httpx2.Response(200, json={"id": issue_id, "key": issue.key, "fields": fields})
@@ -271,8 +278,7 @@ class FakeJira:
         refused = self._refusal(body.fields)
         if refused is not None:
             return refused
-        for author, fields in self.edits_before_writes.pop(key, []):
-            self._change(issue, fields, author)
+        self._make_planned_edits(key, self.edits_before_writes.pop(key, []))
         changes = dict(body.fields)
         if "description" in changes:
             changes["description"] = self._stored(changes["description"])
@@ -282,7 +288,9 @@ class FakeJira:
         self._edit_after_writing(key)
         return httpx2.Response(204)
 
-    def _change(self, issue: FakeIssue, changes: dict[str, JsonValue], author: dict[str, JsonValue]) -> None:
+    def _change(
+        self, issue: FakeIssue, changes: dict[str, JsonValue], author: Author, *, dated: bool = True
+    ) -> None:
         items: list[dict[str, JsonValue]] = [
             {
                 "field": DISPLAY_NAMES.get(name, name),
@@ -296,18 +304,18 @@ class FakeJira:
         ]
         issue.fields.update(changes)
         if items:
-            self._log(issue.key, author, items)
+            self._log(issue.key, author, items, dated=dated)
 
-    def _log(self, key: str, author: dict[str, JsonValue], items: list[dict[str, JsonValue]]) -> None:
+    def _log(
+        self, key: str, author: Author, items: list[dict[str, JsonValue]], *, dated: bool = True
+    ) -> None:
         self._history_ids += 1
-        self.histories[key].append(
-            {
-                "id": str(self._history_ids),
-                "author": author,
-                "created": f"2026-10-0{1 + len(self.histories[key]) % 9}T10:00:00.000+0000",
-                "items": list(items),
-            }
-        )
+        entry: History = {"id": str(self._history_ids), "items": list(items)}
+        if author is not None:
+            entry["author"] = author
+        if dated:
+            entry["created"] = f"2026-10-0{1 + len(self.histories[key]) % 9}T10:00:00.000+0000"
+        self.histories[key].append(entry)
 
     def _changelog(self, request: httpx2.Request, key: str) -> httpx2.Response:
         issue = self._issue(key)

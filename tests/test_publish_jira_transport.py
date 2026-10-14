@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 import pytest
 from pydantic import JsonValue
@@ -1268,6 +1269,138 @@ def test_a_marker_that_is_not_ascii_digits_reads_as_no_marker(marker: str) -> No
     jira.edit_by_hand(created.item_id, summary="Garden guide")
 
     assert transport.parts_edited_after(created.item_id, marker, CONTENT) == (TITLE,)
+
+
+@pytest.mark.parametrize(
+    ("author", "dated", "described"),
+    [
+        pytest.param(None, True, "an unknown author at 2026-10-01T10:00:00.000+0000", id="no-author"),
+        pytest.param(
+            {"accountId": "account-editor", "displayName": ""},
+            True,
+            "an unknown author at 2026-10-01T10:00:00.000+0000",
+            id="blank-display-name",
+        ),
+        pytest.param(EDITOR, False, "Robin Editor at an unknown time", id="no-created-time"),
+    ],
+)
+def test_a_replaced_edit_without_an_author_or_a_time_is_named_as_unknown(
+    author: dict[str, JsonValue] | None, dated: bool, described: str
+) -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_before_the_next_write(created.item_id, author, dated=dated, summary="Garden notes")
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+
+    assert str(raised.value) == (
+        f"DEMO-1: skaldr's write replaced an edit made in Jira just before it (summary in changelog 10001 by "
+        f"{described}); restore it from the issue's history if it should stay"
+    )
+
+
+def test_a_read_names_no_editor_for_an_edit_jira_logged_without_an_author() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    jira.edit_right_after_the_next_write(created.item_id, None, dated=False, summary="Garden notes")
+    with pytest.raises(ConnectorError):
+        transport.write_fields(
+            created.item_id, _fields_write({**FIELDS_WRITTEN, "priority": {"name": "Low"}})
+        )
+
+    read = transport.read_item(created.item_id, CONTENT)
+
+    assert (read.edited_by, read.edited_at, read.comparable.title) == (None, None, "Garden notes")
+
+
+@pytest.mark.parametrize(
+    ("labels", "read_as"),
+    [
+        pytest.param("garden", ["garden"], id="bare-string"),
+        pytest.param("", [], id="blank-string"),
+        pytest.param(
+            ["garden", 5, None, {"name": "x"}, DOC_LABEL], ["garden"], id="members-that-are-not-strings"
+        ),
+    ],
+)
+def test_labels_jira_returns_in_an_unexpected_shape_read_as_their_string_members(
+    labels: JsonValue, read_as: list[str]
+) -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-3", summary="Notes", labels=labels).properties["skaldr.stamp"] = _stamp_value(STAMP)
+
+    read = _transport(jira).read_item("DEMO-3", ItemContent(title="", fields={"labels": None}))
+
+    assert read.comparable.fields == {"labels": read_as}
+
+
+@pytest.mark.parametrize("status", [pytest.param(None, id="absent"), pytest.param({}, id="empty")])
+def test_an_issue_whose_status_jira_does_not_name_cannot_be_archived(status: JsonValue) -> None:
+    jira = FakeJira()
+    issue = jira.seed("DEMO-3", summary="Notes")
+    if status is None:
+        del issue.fields["status"]
+    else:
+        issue.fields["status"] = status
+
+    with pytest.raises(ConnectorError, match=_exactly("Jira did not say which status DEMO-3 is in")):
+        _transport(jira).archive_item("DEMO-3")
+    assert (issue.comments, issue.properties) == ([], {})
+
+
+def test_two_writes_on_one_transport_ask_jira_who_is_signed_in_once() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+    transport.write_content(
+        created.item_id, ContentWrite({"planting": section_text([SOW_IN_MAY])}, RAW_AFTER_CREATE)
+    )
+
+    assert [call for call in jira.calls() if call == ("GET", "/rest/api/3/myself")] == [
+        ("GET", "/rest/api/3/myself")
+    ]
+
+
+def _missing(path: str) -> str:
+    return f"Jira has no issue DEMO-1 that this account can see (HTTP 404 to GET {path})"
+
+
+def _write_the_same_content(transport: JiraTransport, created: RemoteItem) -> object:
+    return transport.write_content(
+        created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections)
+    )
+
+
+def _retitle(transport: JiraTransport, created: RemoteItem) -> object:
+    return transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
+
+
+def _archive(transport: JiraTransport, created: RemoteItem) -> object:
+    transport.archive_item(created.item_id)
+    return None
+
+
+@pytest.mark.parametrize(
+    ("write", "message"),
+    [
+        pytest.param(_write_the_same_content, _missing("/rest/api/3/issue/DEMO-1/changelog"), id="content"),
+        pytest.param(_retitle, _missing("/rest/api/3/issue/DEMO-1/changelog"), id="fields"),
+        pytest.param(_archive, _missing("/rest/api/3/issue/DEMO-1"), id="archive"),
+    ],
+)
+def test_a_write_to_an_issue_deleted_after_the_read_is_item_not_found(
+    write: Callable[[JiraTransport, RemoteItem], object], message: str
+) -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.read_item(created.item_id, CONTENT)
+    jira.delete_by_hand(created.item_id)
+
+    with pytest.raises(ItemNotFoundError, match=_exactly(message)):
+        write(transport, created)
+    assert [call for call in jira.calls() if call[0] != "GET"] == []
 
 
 def test_closing_the_transport_closes_its_client() -> None:
