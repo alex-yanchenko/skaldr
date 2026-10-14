@@ -246,6 +246,25 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
     assert is_unset(read.comparable.fields.get("Owner"))
 
 
+def test_a_fields_write_for_another_section_of_the_document_is_rejected_and_changes_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test, SECTION_STAMP)
+    transport = instance.transport
+
+    with pytest.raises(WriteRejectedError):
+        transport.write_fields(
+            created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, CONTENT.fields, STAMP)
+        )
+    read = transport.read_item(created.item_id, CONTENT)
+
+    assert (read.comparable.title, read.comparable.fields, read.stamp) == (
+        CONTENT.title,
+        created.comparable.fields,
+        SECTION_STAMP,
+    )
+
+
 def test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them(
     under_test: TransportUnderTest,
 ) -> None:

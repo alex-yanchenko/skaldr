@@ -429,17 +429,45 @@ def test_fields_and_title_are_written_in_one_request_and_a_cleared_field_is_empt
     )
 
 
-def test_fields_are_not_written_to_a_page_stamped_by_another_document() -> None:
+@pytest.mark.parametrize(
+    ("stamped", "written", "named"),
+    [
+        pytest.param(STAMP, Stamp("kitchen-rota", None), "doc_id 'kitchen-rota'", id="another-document"),
+        pytest.param(
+            STAMP,
+            Stamp("garden-handbook", "tools"),
+            "doc_id 'garden-handbook', section 'tools'",
+            id="the-document-page-for-a-section",
+        ),
+        pytest.param(
+            Stamp("garden-handbook", "tools"),
+            Stamp("garden-handbook", "planting"),
+            "doc_id 'garden-handbook', section 'planting'",
+            id="another-section",
+        ),
+        pytest.param(
+            Stamp("garden-handbook", "tools"),
+            STAMP,
+            "doc_id 'garden-handbook'",
+            id="a-section-page-for-the-document",
+        ),
+    ],
+)
+def test_fields_are_not_written_to_a_page_stamped_for_another_document_or_section(
+    stamped: Stamp, written: Stamp, named: str
+) -> None:
     notion = _notion()
-    transport, created = _created(notion)
+    transport = notion.transport()
+    created = transport.create_item(NewItem(DATABASE_TARGET, stamped, CONTENT))
+    notion.requests.clear()
 
-    with pytest.raises(
-        WriteRejectedError, match=f"^Notion page {created.item_id} is not stamped with doc_id 'kitchen-rota'$"
-    ):
-        transport.write_fields(
-            created.item_id, FieldsWrite("Other", {}, CONTENT.title, {}, Stamp("kitchen-rota", None))
-        )
-    assert notion.writes() == []
+    with pytest.raises(WriteRejectedError) as caught:
+        transport.write_fields(created.item_id, FieldsWrite("Other", {}, CONTENT.title, {}, written))
+
+    assert (str(caught.value), notion.writes()) == (
+        f"Notion page {created.item_id} is not stamped with {named}",
+        [],
+    )
 
 
 def test_notion_reports_no_edit_the_text_comparison_does_not_already_show_and_asks_nothing() -> None:

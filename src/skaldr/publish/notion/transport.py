@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, TypeVar
+from typing import Final
 
 from pydantic import JsonValue
 
@@ -8,7 +8,7 @@ from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRej
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
 from skaldr.publish.content import ItemContent, Part, is_unset, placed_section
-from skaldr.publish.notion.api import NotionApi
+from skaldr.publish.notion.api import Answer, NotionApi
 from skaldr.publish.notion.icon_and_cover import (
     cover_text,
     icon_and_cover_to_change,
@@ -61,11 +61,14 @@ DATABASE_BLOCK: Final = "child_database"
 PAGE_BLOCK: Final = "child_page"
 STAMP_KEY: Final = "skaldr stamp"
 
-Answer = TypeVar("Answer")
-
 
 def _page_key(item_id: str) -> str:
     return notion_page_id(item_id) or item_id
+
+
+def _stamp_named(stamp: Stamp) -> str:
+    section = "" if stamp.section_id is None else f", section '{stamp.section_id}'"
+    return f"doc_id '{stamp.doc_id}'{section}"
 
 
 def _update_content(replacement: Replacement) -> JsonFields:
@@ -221,16 +224,14 @@ class NotionTransport:
         current = dict(request.raw_sections)
         if not isinstance(change, AddSection):
             current[change.key] = change.raw_current
-        keys = list(current)
-        follows = (
-            (keys[keys.index(change.key) - 1] if keys.index(change.key) > 0 else None)
-            if isinstance(change, RemoveSection)
-            else change.follows
-        )
-        new_text = carried_into(
-            current.get(change.key, ""), "" if isinstance(change, RemoveSection) else change.text
-        )
-        kept = new_text or None if isinstance(change, RemoveSection) else new_text
+        if isinstance(change, RemoveSection):
+            keys = list(current)
+            position = keys.index(change.key)
+            follows = keys[position - 1] if position > 0 else None
+            kept = carried_into(current[change.key], "") or None
+        else:
+            follows = change.follows
+            kept = carried_into(current.get(change.key, ""), change.text)
         after = list(placed_section(current, change.key, kept, follows).items())
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
@@ -263,9 +264,9 @@ class NotionTransport:
         page = self._live_page(item_id)
         markdown = self._api.page_markdown(item_id).markdown
         stamp = keyed_page(markdown, layout).stamp
-        if stamp is not None and stamp.doc_id != request.stamp.doc_id:
+        if stamp is not None and stamp != request.stamp:
             raise WriteRejectedError(
-                f"Notion page {item_id} is not stamped with doc_id '{request.stamp.doc_id}'"
+                f"Notion page {item_id} is not stamped with {_stamp_named(request.stamp)}"
             )
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
@@ -298,7 +299,7 @@ class NotionTransport:
         self._written.add(key)
         page = self._live_page(item_id)
         set_now = set_property_names(page)
-        cleared: dict[str, JsonValue] = {name: None for name in request.field_names if name in set_now}
+        cleared: dict[str, JsonValue] = dict.fromkeys(name for name in request.field_names if name in set_now)
         if cleared:
             self._api.update_page(item_id, {"properties": self._property_requests(page, cleared)})
 

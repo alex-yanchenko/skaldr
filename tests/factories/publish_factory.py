@@ -340,7 +340,7 @@ class FakeTransport:
         cover = (f"cover {request.cover}",) if request.changes_the_cover else ()
         self._write(("write_fields", item_id, *title, *changed, *cleared, *icon, *cover))
         item = self.items[item_id]
-        if item.stamp is None or item.stamp.doc_id != request.stamp.doc_id:
+        if item.stamp != request.stamp:
             raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
         nulled: JsonFields = (
             dict.fromkeys(request.cleared_fields) if self.reads_cleared_fields_as_null else {}
