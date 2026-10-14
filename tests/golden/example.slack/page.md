@@ -34,7 +34,7 @@ The count reconciles exactly: every unit lands in one bucket and the counts sum 
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.
 
-Every bin label now ends in a check digit. The cold room logged H2O condensation on 3 of 102 shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
+Every bin label now ends in a check digit. The cold room logged H₂O condensation on 3 of 10² shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 
 Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
 

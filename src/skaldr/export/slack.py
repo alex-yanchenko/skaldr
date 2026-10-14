@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal
@@ -66,11 +66,40 @@ MATH_LANGUAGE: Final = "latex"
 BULLET_MARKER: Final = "*"
 BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "\N{NO-BREAK SPACE}"
+UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
+    "superscript": str.maketrans(
+        "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
+        "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻⁼⁽⁾ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ",
+    ),
+    "subscript": str.maketrans(
+        "0123456789+-\N{MINUS SIGN}=()aehijklmnoprstuvx",
+        "₀₁₂₃₄₅₆₇₈₉₊₋₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ",
+    ),
+}
 Place = Literal["top", "callout", "column"]
 
 
 def _slack_date(day: date) -> str:
     return f"![](slack_date:{day.isoformat()})"
+
+
+def _script_without_a_unicode_form(
+    position: ScriptPosition, text: str, character: str
+) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        f"a Slack canvas cannot show the {position} '{text}', "
+        f"since '{character}' has no Unicode {position} form",
+        f"write the text without the {position} or export the document elsewhere",
+    )
+
+
+def _in_unicode_script_form(position: ScriptPosition, text: str) -> str:
+    forms = UNICODE_SCRIPT_FORMS[position]
+    without_a_form = next((character for character in text if ord(character) not in forms), None)
+    if without_a_form is not None:
+        raise _script_without_a_unicode_form(position, text, without_a_form)
+    return text.translate(forms)
 
 
 class _SlackRuns(CommonMarkRuns):
@@ -89,8 +118,8 @@ class _SlackRuns(CommonMarkRuns):
     def underline(self, inner: str, /) -> str:
         return inner
 
-    def script(self, _position: ScriptPosition, text: str, /) -> str:
-        return self.escape(text)
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        return _in_unicode_script_form(position, text)
 
 
 @dataclass(frozen=True)

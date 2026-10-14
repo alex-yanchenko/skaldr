@@ -599,8 +599,33 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Styled("strike", _rich_text("s")), "~~s~~", id="strike"),
         pytest.param(Styled("underline", _rich_text("u")), "u", id="underline-is-plain"),
         pytest.param(Tinted("danger", "warning", _rich_text("t")), "t", id="tint-is-plain"),
-        pytest.param(ScriptText("subscript", "2"), "2", id="subscript-is-plain"),
-        pytest.param(ScriptText("superscript", "*3"), "\\*3", id="superscript-is-plain-and-escaped"),
+        pytest.param(ScriptText("subscript", "2"), "\N{SUBSCRIPT TWO}", id="subscript-digit"),
+        pytest.param(
+            ScriptText("subscript", "i=0"),
+            "\N{LATIN SUBSCRIPT SMALL LETTER I}\N{SUBSCRIPT EQUALS SIGN}\N{SUBSCRIPT ZERO}",
+            id="subscript-letter-sign-and-digit",
+        ),
+        pytest.param(
+            ScriptText("superscript", "-3"),
+            "\N{SUPERSCRIPT MINUS}\N{SUPERSCRIPT THREE}",
+            id="superscript-hyphen-is-a-superscript-minus",
+        ),
+        pytest.param(
+            ScriptText("superscript", "(n+1)"),
+            "\N{SUPERSCRIPT LEFT PARENTHESIS}\N{SUPERSCRIPT LATIN SMALL LETTER N}\N{SUPERSCRIPT PLUS SIGN}"
+            "\N{SUPERSCRIPT ONE}\N{SUPERSCRIPT RIGHT PARENTHESIS}",
+            id="superscript-brackets-letter-and-sign",
+        ),
+        pytest.param(
+            ScriptText("superscript", "TM"),
+            "\N{MODIFIER LETTER CAPITAL T}\N{MODIFIER LETTER CAPITAL M}",
+            id="superscript-capitals",
+        ),
+        pytest.param(
+            ScriptText("superscript", "ao"),
+            "\N{MODIFIER LETTER SMALL A}\N{MODIFIER LETTER SMALL O}",
+            id="superscript-a-and-o-are-letters-not-ordinal-indicators",
+        ),
         pytest.param(Code("a`b"), "``a`b``", id="code-outgrows-its-backticks"),
         pytest.param(Chip("a*b", "blue"), "**a\\*b**", id="chip-is-bold"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
@@ -641,6 +666,39 @@ def test_a_table_of_contents_writes_nothing() -> None:
 )
 def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> None:
     assert render_slack([Paragraph((run,))]) == f"{written}\n"
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        pytest.param(
+            ScriptText("superscript", "*3"),
+            "a Slack canvas cannot show the superscript '*3', since '*' has no Unicode superscript form; "
+            "write the text without the superscript or export the document elsewhere",
+            id="superscript-punctuation",
+        ),
+        pytest.param(
+            ScriptText("superscript", "q"),
+            "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form; "
+            "write the text without the superscript or export the document elsewhere",
+            id="superscript-letter-with-no-form",
+        ),
+        pytest.param(
+            ScriptText("subscript", "ab"),
+            "a Slack canvas cannot show the subscript 'ab', since 'b' has no Unicode subscript form; "
+            "write the text without the subscript or export the document elsewhere",
+            id="subscript-letter-with-no-form",
+        ),
+        pytest.param(
+            ScriptText("subscript", "1 2"),
+            "a Slack canvas cannot show the subscript '1 2', since ' ' has no Unicode subscript form; "
+            "write the text without the subscript or export the document elsewhere",
+            id="subscript-space",
+        ),
+    ],
+)
+def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(run: ExportRun, message: str) -> None:
+    assert _rejection([Paragraph((run,))]) == ("slack", message)
 
 
 @pytest.mark.parametrize(

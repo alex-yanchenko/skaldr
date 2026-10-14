@@ -1457,7 +1457,8 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `media` | a link named by the caption, or by the kind (Video, Audio, File or PDF) when there is none |
 | badges | bold labels |
 | `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic); there the text is written without the mark. A mark inside the same mark is written once |
-| `++underline++`, `H~2~O`, `10^3^`, `[text]{tone=…}` | the text alone |
+| `++underline++`, `[text]{tone=…}` | the text alone |
+| `H~2~O`, `10^3^` | Unicode subscript and superscript characters, `H₂O` and `10³`, since a canvas has no subscript or superscript mark. Digits, `+`, `-`, `=` and brackets have both forms; a superscript also covers every lowercase letter but `q` and the capitals `A B D E G H I J K L M N O P R T U V W`, and a subscript the lowercase `a e h i j k l m n o p r s t u v x`. A subscript or superscript holding any other character, a space included, fails the export with an error naming its text and the first such character, since writing it bare would change its meaning (`10^3^` read as 103); write the text without the mark, or export the document elsewhere |
 | `` $`x_i`$ `` inline math | inline code |
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
 | `[Ada](user:ada)` | the label as text |
