@@ -315,7 +315,7 @@ def test_a_math_block_inside_a_panel_is_a_quoted_github_math_fence() -> None:
     callout = {"type": "callout", "tone": "info", "body": "Rate"}
     panel = {"type": "panel", "title": "P", "blocks": [callout, {"type": "math", "expression": "x_i"}]}
 
-    assert markdown_of([panel]) == "> 📝 **P**\n>\n> > 💡 Rate\n>\n> ```math\n> x_i\n> ```\n"
+    assert markdown_of([panel]) == "> **P**\n>\n> > 💡 Rate\n>\n> ```math\n> x_i\n> ```\n"
 
 
 def test_a_math_block_holding_a_backtick_fence_line_gets_a_longer_fence() -> None:
@@ -1442,7 +1442,7 @@ def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() 
     panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
     section = {"type": "section", "title": "Appendix", "blocks": [panel]}
 
-    assert markdown_of([section]) == "## Appendix\n\n> 📝 **Card**\n>\n> inside\n"
+    assert markdown_of([section]) == "## Appendix\n\n> **Card**\n>\n> inside\n"
 
 
 def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
@@ -1463,7 +1463,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "- **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
         "**Affects**: **api** **ops**\n\n"
         "- **Owners**: **web**\n\n"
-        "* ✅ Ship\n* ⛔ Vendor\n\n"
+        "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
         "* **Zone**: ████░░░░░░ 42.9%\n\n"
         "Jan to Dec\n\n"

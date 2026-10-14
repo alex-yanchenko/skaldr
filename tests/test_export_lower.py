@@ -1476,7 +1476,7 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
     ]
 
     assert lowered(blocks) == (
-        Callout("neutral", (Paragraph(bold("Next")), Paragraph((Plain("p"),)))),
+        Callout("neutral", (Paragraph(bold("Next")), Paragraph((Plain("p"),))), shows_icon=False),
         ListNode(
             "number",
             (

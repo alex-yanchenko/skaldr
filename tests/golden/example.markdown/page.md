@@ -142,7 +142,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 - 🔵 Overflow bins being re-counted by hand right now.
 - ⚪ Overflow re-scan scheduled for the next count.
 - ❌ Vendor short-ship: blocked, cannot count.
-- ⛔ Vendor escalation awaiting `OPS-1234` response.
+- ⏸️ Vendor escalation awaiting `OPS-1234` response.
 
 ### Follow-up checklist
 
@@ -250,7 +250,7 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 - **Zone C**: █████████░ 88.0%
 
 * ✅ Reconciliation gate passes.
-* ⛔ Awaiting `OPS-1234`.
+* ⏸️ Awaiting `OPS-1234`.
 
 ## Recount Zone C
 
@@ -610,7 +610,7 @@ content-type: application/json
 
 > ⚠️ **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
 
-> 📝 **Before the next count**
+> **Before the next count**
 >
 > - [x] Confirm the `bin > 12` rule with the site lead
 > - [ ] Re-label the 9-digit bins in aisle C

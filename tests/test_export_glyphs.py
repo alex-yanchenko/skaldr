@@ -4,6 +4,7 @@ import pytest
 
 from skaldr.export.glyphs import (
     CALLOUT_ICON,
+    callout_icon,
     check_glyph,
     decision_glyph,
     gauge_bar,
@@ -14,17 +15,31 @@ from skaldr.export.glyphs import (
     tab_icon,
 )
 from skaldr.export.runs import CheckMark, DecisionMark, IndicatorMark, Mark, StatusMark, SwimlaneMark
-from skaldr.export.tree import ToneName
+from skaldr.export.tree import Callout, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 
 
-def test_a_state_glyph_is_a_coloured_emoji_because_markdown_has_no_css_class_to_colour_it() -> None:
+@pytest.mark.parametrize(
+    ("callout", "icon"),
+    [
+        pytest.param(Callout("warning", ()), "⚠️", id="the-tone-icon"),
+        pytest.param(Callout("warning", (), "🧪"), "🧪", id="the-authored-icon"),
+        pytest.param(Callout("warning", (), "🧪", shows_icon=False), None, id="no-icon-even-when-authored"),
+    ],
+)
+def test_a_callout_shows_its_authored_icon_or_its_tones_unless_it_shows_none(
+    callout: Callout, icon: str | None
+) -> None:
+    assert callout_icon(callout) == icon
+
+
+def test_a_state_glyph_is_the_pages_symbol_as_a_coloured_emoji_since_markdown_has_no_css() -> None:
     assert {state: status_glyph(state) for state in get_args(StatusState)} == {
         "done": "✅",
         "current": "🔵",
         "pending": "⚪",
         "failed": "❌",
-        "blocked": "⛔",
+        "blocked": "⏸️",
     }
 
 

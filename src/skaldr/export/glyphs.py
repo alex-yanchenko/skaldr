@@ -5,7 +5,7 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr.export.runs import CheckMark, DecisionMark, IndicatorMark, Mark, StatusMark, SwimlaneMark
-from skaldr.export.tree import ToneName
+from skaldr.export.tree import Callout, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
@@ -28,6 +28,10 @@ def gauge_bar(value: float, maximum: float) -> str:
     return "█" * filled + "░" * (GAUGE_CELLS - filled)
 
 
+def callout_icon(callout: Callout) -> str | None:
+    return (callout.icon or CALLOUT_ICON[callout.tone]) if callout.shows_icon else None
+
+
 def tab_icon(tone: ToneName | None) -> str | None:
     return CALLOUT_ICON[tone] if tone in TAB_TONES else None
 
@@ -43,7 +47,7 @@ def status_glyph(state: StatusState) -> str:
         case "failed":
             return "❌"
         case "blocked":
-            return "⛔"
+            return "⏸️"
         case _:
             assert_never(state)
 

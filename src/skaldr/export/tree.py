@@ -118,6 +118,7 @@ class Callout:
     tone: ToneName
     children: "tuple[Node, ...]"
     icon: str | None = None
+    shows_icon: bool = True
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 

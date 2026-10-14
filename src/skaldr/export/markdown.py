@@ -6,7 +6,7 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
+from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -215,9 +215,11 @@ class _MarkdownWriter:
         return _Written.of([title, *spaced(body.lines)], body.tail)
 
     def callout_lines(self, node: Callout) -> list[str]:
-        icon = node.icon or CALLOUT_ICON[node.tone]
+        icon = callout_icon(node)
         body = self.blocks_after(node.children, None)
         lines = list(body.lines)
+        if icon is None:
+            return quoted(lines)
         if lines and body.opens_with_a_paragraph:
             lines[0] = f"{icon} {lines[0]}"
         else:

@@ -203,7 +203,7 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 - 🔵 Overflow bins being re-counted by hand right now.
 - ⚪ Overflow re-scan scheduled for the next count.
 - ❌ Vendor short-ship: blocked, cannot count.
-- ⛔ Vendor escalation awaiting `OPS-1234` response.
+- ⏸️ Vendor escalation awaiting `OPS-1234` response.
 ### Follow-up checklist
 - [x] Confirm the `bin > 12` scan rule with the site lead.
 - [ ] Ship the 9-digit bin-code widening behind the scan flag.
@@ -279,7 +279,7 @@ function pickWinner(a, b) {
 		- <span color="yellow">**Zone C**</span>: █████████░ 88.0%
 		<empty-block/>
 		- ✅ Reconciliation gate passes.
-		- ⛔ Awaiting `OPS-1234`.
+		- ⏸️ Awaiting `OPS-1234`.
 	</column>
 </columns>
 ## Recount Zone C

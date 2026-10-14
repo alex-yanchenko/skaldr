@@ -6,12 +6,11 @@ from typing import Final, Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportRejectedError
-from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
+from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
     HTML_LINE_BREAK,
-    LARGEST_ORDERED_MARKER_NUMBER,
     CommonMarkRuns,
     code_block_lines,
     code_span,
@@ -72,7 +71,8 @@ COLUMN_OPEN: Final = "::: {.column}"
 MATH_LANGUAGE: Final = "latex"
 BULLET_MARKER: Final = "*"
 BULLET_INDENT: Final = len(BULLET_MARKER) + 1
-LIST_SEPARATOR: Final = "\N{NO-BREAK SPACE}"
+LIST_SEPARATOR: Final = "&nbsp;"
+FIRST_LIST_NUMBER: Final = 1
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
 OUT_OF_THE_LIST: Final = "move it out of the list, after the list"
@@ -150,7 +150,6 @@ class _Item:
 class _List:
     kind: ListKind
     items: tuple[_Item, ...]
-    start: int
 
 
 @dataclass(frozen=True)
@@ -166,7 +165,7 @@ class _Mermaid:
 
 @dataclass(frozen=True)
 class _CanvasCallout:
-    icon: str
+    icon: str | None
     blocks: "tuple[_CanvasBlock, ...]"
 
 
@@ -281,8 +280,20 @@ def _canvas_item(entry: ListEntry, holder: ListNode) -> _Item:
     return _Item(text, entry.checked, nested)
 
 
+def _list_starting_past_one(node: ListNode) -> ExportRejectedError:
+    return ExportRejectedError(
+        SLACK_TARGET,
+        "a Slack canvas numbers every list from 1, so it cannot show a numbered list "
+        f"that starts at {node.start}",
+        "number the list from 1, or export it elsewhere",
+        f"at {node.authored_at}" if node.authored_at else None,
+    )
+
+
 def _canvas_list(node: ListNode) -> _List:
-    return _List(node.kind, tuple(_canvas_item(entry, node) for entry in node.entries), node.start)
+    if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
+        raise _list_starting_past_one(node)
+    return _List(node.kind, tuple(_canvas_item(entry, node) for entry in node.entries))
 
 
 def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
@@ -290,7 +301,7 @@ def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
     outside: list[_CanvasBlock] = []
     for block in _canvas_blocks(node.children, "callout"):
         (outside if isinstance(block, _MOVED_OUT_OF_A_CALLOUT) else inside).append(block)
-    return [_CanvasCallout(node.icon or CALLOUT_ICON[node.tone], tuple(inside)), *outside]
+    return [_CanvasCallout(callout_icon(node), tuple(inside)), *outside]
 
 
 def _canvas_columns(node: Columns, place: Place) -> list[_CanvasBlock]:
@@ -348,7 +359,7 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
         case "bullet":
             return BULLET_MARKER, BULLET_INDENT
         case "number":
-            marker = f"{min(number, LARGEST_ORDERED_MARKER_NUMBER)}."
+            marker = f"{number}."
             return marker, len(marker) + 1
         case "check":
             return f"{BULLET_MARKER} [{'x' if checked else ' '}]", BULLET_INDENT
@@ -434,7 +445,7 @@ class _CanvasWriter:
 
     def list_lines(self, canvas_list: _List) -> list[str]:
         lines: list[str] = []
-        for number, item in enumerate(canvas_list.items, start=canvas_list.start):
+        for number, item in enumerate(canvas_list.items, start=FIRST_LIST_NUMBER):
             marker, indent = _list_marker(canvas_list.kind, number, item.checked)
             lines.append(f"{marker} {self.block_text(item.text)}".rstrip())
             if item.nested is not None:
@@ -469,6 +480,8 @@ class _CanvasWriter:
     def callout_lines(self, callout: _CanvasCallout) -> list[str]:
         rendered = self.rendered(callout.blocks)
         body = joined([lines for _, lines in rendered])
+        if callout.icon is None:
+            return [CALLOUT_OPEN, *body, CANVAS_FENCE]
         if rendered and isinstance(rendered[0][0], Paragraph | _Title):
             body[0] = f"{callout.icon} {body[0]}"
         else:
