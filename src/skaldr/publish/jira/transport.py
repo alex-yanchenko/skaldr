@@ -343,7 +343,7 @@ class JiraTransport:
 
     def _description(self, sections: Mapping[str, Blocks], which: str) -> JsonValue:
         description = description_doc([block for blocks in sections.values() for block in blocks])
-        size = compact_adf_length(description) if isinstance(description, dict) else 0
+        size = 0 if description is None else compact_adf_length(description)
         if size > JIRA_DESCRIPTION_LIMIT:
             raise WriteRejectedError(
                 f"the description of {which} is {size:,} characters of ADF, over the "

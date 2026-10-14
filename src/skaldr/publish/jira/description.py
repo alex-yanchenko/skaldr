@@ -1,9 +1,9 @@
 import hashlib
 import json
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from difflib import SequenceMatcher
-from typing import Final
+from typing import Final, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
@@ -11,11 +11,13 @@ from skaldr.errors import ConnectorError
 from skaldr.export.adf import compact_adf_length
 
 UNKEYED_SECTION: Final = "(description)"
-BLOCK_DIGEST_LENGTH: Final = 16
-ANY_NODE: Final = "*"
-LEADING_GROUP: Final = -1
-SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
-    (ANY_NODE, "localId"): None,
+LAYOUT_DIGEST_LENGTH: Final = 16
+QUOTED_TEXT_LENGTH: Final = 40
+NOT_AN_ADF_DOCUMENT: Final = "the description Jira returned is not an ADF document"
+_ANY_NODE: Final = "*"
+_LEADING_GROUP: Final = -1
+_SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
+    (_ANY_NODE, "localId"): None,
     ("table", "displayMode"): None,
     ("table", "isNumberColumnEnabled"): (False,),
     ("table", "layout"): ("default", "center"),
@@ -29,7 +31,7 @@ SAVED_ATTRS: Final[Mapping[tuple[str, str], tuple[JsonValue, ...] | None]] = {
     ("mention", "userType"): None,
 }
 
-Blocks = list[JsonValue]
+Blocks: TypeAlias = list[JsonValue]
 _BLOCKS: Final = TypeAdapter(Blocks)
 _DECODER: Final = json.JSONDecoder()
 
@@ -53,9 +55,10 @@ def section_text(blocks: Sequence[JsonValue]) -> str:
     return json.dumps(list(blocks), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
-def _not_blocks(text: str) -> ConnectorError:
+def _not_blocks_error(text: str) -> ConnectorError:
     return ConnectorError(
-        f"a Jira section holds a JSON list of ADF blocks, and this one does not: {text[:40]!r}"
+        "a Jira section holds a JSON list of ADF blocks, and this one does not: "
+        f"{text[:QUOTED_TEXT_LENGTH]!r}"
     )
 
 
@@ -65,10 +68,10 @@ def section_blocks(text: str) -> Blocks:
     try:
         return _BLOCKS.validate_json(text)
     except ValidationError as exc:
-        raise _not_blocks(text) from exc
+        raise _not_blocks_error(text) from exc
 
 
-def as_blocks(blocks: object) -> Blocks:
+def validated_blocks(blocks: Sequence[object]) -> Blocks:
     return _BLOCKS.validate_python(blocks)
 
 
@@ -77,9 +80,9 @@ def _canonical(node: JsonValue) -> str:
 
 
 def _filled_in_by_jira(node_type: str, name: str, value: JsonValue) -> bool:
-    for key in ((ANY_NODE, name), (node_type, name)):
-        if key in SAVED_ATTRS:
-            defaults = SAVED_ATTRS[key]
+    for key in ((_ANY_NODE, name), (node_type, name)):
+        if key in _SAVED_ATTRS:
+            defaults = _SAVED_ATTRS[key]
             if defaults is None:
                 return True
             return any(value == default and type(value) is type(default) for default in defaults)
@@ -94,20 +97,20 @@ def _comparable_attrs(node_type: str, attrs: Mapping[str, JsonValue]) -> dict[st
     }
 
 
-def comparable_node(node: JsonValue) -> JsonValue:
-    if isinstance(node, list):
-        return [comparable_node(member) for member in node]
-    if not isinstance(node, dict):
-        return node
+def _comparable_marks(marks: Sequence[JsonValue]) -> list[JsonValue]:
+    return sorted((comparable_node(mark) for mark in marks), key=_canonical)
+
+
+def _comparable_object(node: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    node_type = node.get("type")
     kept: dict[str, JsonValue] = {}
     for name, value in node.items():
         if name == "attrs" and isinstance(value, dict):
-            node_type = node.get("type")
             attrs = _comparable_attrs(node_type if isinstance(node_type, str) else "", value)
             if attrs:
                 kept[name] = attrs
         elif name == "marks" and isinstance(value, list):
-            marks = sorted((comparable_node(mark) for mark in value), key=_canonical)
+            marks = _comparable_marks(value)
             if marks:
                 kept[name] = marks
         elif name != "content" or value != []:
@@ -115,16 +118,24 @@ def comparable_node(node: JsonValue) -> JsonValue:
     return kept
 
 
+def comparable_node(node: JsonValue) -> JsonValue:
+    if isinstance(node, list):
+        return [comparable_node(member) for member in node]
+    if isinstance(node, dict):
+        return _comparable_object(node)
+    return node
+
+
 def comparable_section(text: str) -> str:
     return section_text([comparable_node(block) for block in section_blocks(text)])
 
 
 def block_digest(block: JsonValue) -> str:
-    digest = hashlib.sha256(_canonical(comparable_node(block)).encode("utf-8")).hexdigest()
-    return digest[:BLOCK_DIGEST_LENGTH]
+    digest = hashlib.sha256(_canonical(comparable_node(block)).encode()).hexdigest()
+    return digest[:LAYOUT_DIGEST_LENGTH]
 
 
-def description_doc(blocks: Blocks) -> JsonValue:
+def description_doc(blocks: Blocks) -> dict[str, JsonValue] | None:
     if not blocks:
         return None
     return {"version": 1, "type": "doc", "content": list(blocks)}
@@ -134,12 +145,12 @@ def blocks_of(description: JsonValue) -> Blocks:
     if description is None:
         return []
     if not isinstance(description, dict):
-        raise ConnectorError("the description Jira returned is not an ADF document")
+        raise ConnectorError(NOT_AN_ADF_DOCUMENT)
     content = description.get("content")
     if content is None:
         return []
     if not isinstance(content, list):
-        raise ConnectorError("the description Jira returned is not an ADF document")
+        raise ConnectorError(NOT_AN_ADF_DOCUMENT)
     return list(content)
 
 
@@ -156,15 +167,15 @@ def _joined_blocks(joined: str) -> Blocks:
             decoded, position = _DECODER.raw_decode(joined, start)
             blocks += _BLOCKS.validate_python(decoded)
         except (json.JSONDecodeError, ValidationError) as exc:
-            raise _not_blocks(joined[start:]) from exc
+            raise _not_blocks_error(joined[start:]) from exc
 
 
 def description_length(joined: str) -> int:
     document = description_doc(_joined_blocks(joined))
-    return compact_adf_length(document) if isinstance(document, dict) else 0
+    return 0 if document is None else compact_adf_length(document)
 
 
-def layout_of(sections: Mapping[str, Iterable[JsonValue]]) -> Layout:
+def layout_of(sections: Mapping[str, Sequence[JsonValue]]) -> Layout:
     return Layout(
         sections=[
             LayoutSection(key=key, blocks=[block_digest(block) for block in blocks])
@@ -178,14 +189,14 @@ def _matched_owners(remote: Sequence[str], sections: Sequence[LayoutSection]) ->
     keys = [section.key for section in sections for _ in section.blocks]
     expected = [digest for section in sections for digest in section.blocks]
     owners: list[str] = []
-    for tag, first, end, remote_first, remote_end in SequenceMatcher(
+    for tag, expected_start, expected_end, remote_start, remote_end in SequenceMatcher(
         None, expected, list(remote), autojunk=False
     ).get_opcodes():
-        for position in range(remote_first, remote_end):
+        for position in range(remote_start, remote_end):
             if tag == "insert":
-                owners.append(keys[max(first - 1, 0)])
+                owners.append(keys[max(expected_start - 1, 0)])
             elif tag != "delete":
-                owners.append(keys[min(first + position - remote_first, end - 1)])
+                owners.append(keys[min(expected_start + position - remote_start, expected_end - 1)])
     return owners
 
 
@@ -202,8 +213,8 @@ def _anchors(sections: Sequence[LayoutSection], remote: Sequence[str]) -> dict[i
 def _anchored_groups(
     sections: Sequence[LayoutSection], anchors: Mapping[int, int]
 ) -> dict[int, list[LayoutSection]]:
-    groups: dict[int, list[LayoutSection]] = {LEADING_GROUP: []}
-    current = LEADING_GROUP
+    groups: dict[int, list[LayoutSection]] = {_LEADING_GROUP: []}
+    current = _LEADING_GROUP
     for index, section in enumerate(sections):
         if index in anchors:
             current = index
@@ -220,7 +231,7 @@ def _owners(blocks: Blocks, layout: Layout) -> list[str]:
     anchors = _anchors(sections, remote)
     groups = _anchored_groups(sections, anchors)
     starts = sorted((position, index) for index, position in anchors.items())
-    leading = groups[LEADING_GROUP] or groups[starts[0][1]]
+    leading = groups[_LEADING_GROUP] or groups[starts[0][1]]
     bounds = [0, *(position for position, _ in starts), len(blocks)]
     chosen = [leading, *(groups[index] for _, index in starts)]
     owners: list[str] = []
