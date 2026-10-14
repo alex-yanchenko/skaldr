@@ -82,11 +82,11 @@ TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
 LIST_SEPARATOR = "\N{NO-BREAK SPACE}"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
-CANVAS_LIMIT_MESSAGE = (
-    "the canvas Markdown is 1,048,577 characters, over the 1,048,576 characters (1 MiB) "
-    "a Slack canvas can hold; "
-    "split the document into several canvases or export it elsewhere"
+CANVAS_LIMIT_WHY = (
+    "the canvas Markdown is 1,048,577 characters, "
+    "over the 1,048,576 characters (1 MiB) a Slack canvas can hold"
 )
+CANVAS_LIMIT_INSTEAD = "split the document into several canvases or export it elsewhere"
 
 
 def _key_value_table() -> TableNode:
@@ -308,10 +308,6 @@ def _list_item_why(what: str) -> str:
     return f"a Slack canvas list item holds only text and one nested list, so it cannot show {what}"
 
 
-def _list_item_message(what: str) -> str:
-    return f"{_list_item_why(what)}; {OUT_OF_THE_LIST}"
-
-
 def _canvas_rejection(why: str, instead: str, where: str | None = None) -> dict[str, str | None]:
     return {"target": "slack", "why": why, "instead": instead, "where": where}
 
@@ -321,9 +317,8 @@ def test_a_second_list_in_one_list_item_is_rejected() -> None:
         "a", make_bullets(make_list_entry("b")), ListNode("number", (make_list_entry("c"),))
     )
 
-    assert _rejection([make_bullets(entry, make_list_entry("d"))]) == (
-        "slack",
-        _list_item_message("a second nested list"),
+    assert _rejected([make_bullets(entry, make_list_entry("d"))]) == _canvas_rejection(
+        _list_item_why("a second nested list"), OUT_OF_THE_LIST
     )
 
 
@@ -364,7 +359,7 @@ def test_a_block_a_list_item_cannot_hold_is_rejected_even_two_lists_deep(held: N
     nested = make_bullets(make_list_entry("c", held))
     nodes = [make_bullets(make_list_entry("a"), make_list_entry("b", nested)), make_paragraph("after")]
 
-    assert _rejection(nodes) == ("slack", _list_item_message(what))
+    assert _rejected(nodes) == _canvas_rejection(_list_item_why(what), OUT_OF_THE_LIST)
 
 
 def test_a_paragraph_before_a_nested_list_in_a_list_item_is_written_in_place() -> None:
@@ -440,37 +435,29 @@ def test_a_table_of_up_to_300_cells_header_included_is_written(cells: int) -> No
     assert render_slack([_one_column_table(cells)]) == _one_column_table_text(cells)
 
 
-def _rejection(nodes: Sequence[Node]) -> tuple[str, str]:
-    with pytest.raises(ExportRejectedError) as raised:
-        render_slack(nodes)
-    return raised.value.target, str(raised.value)
-
-
 def _rejected(nodes: Sequence[Node]) -> dict[str, Any]:
     with pytest.raises(ExportRejectedError) as raised:
         render_slack(nodes)
     return vars(raised.value)
 
 
-def test_a_table_over_300_cells_is_rejected() -> None:
-    assert _rejection([_one_column_table(301)]) == ("slack", f"{TABLE_LIMIT_WHY}; {TABLE_LIMIT_INSTEAD}")
+def test_a_table_over_300_cells_with_no_heading_above_it_is_rejected_naming_no_place() -> None:
+    assert _rejected([_one_column_table(301)]) == _canvas_rejection(TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD)
 
 
 def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> None:
     nodes = [Heading(2, make_rich_text("Counts")), Callout("info", (_one_column_table(301),))]
 
-    assert _rejection(nodes) == (
-        "slack",
-        f"{TABLE_LIMIT_WHY}, under the heading 'Counts'; {TABLE_LIMIT_INSTEAD}",
+    assert _rejected(nodes) == _canvas_rejection(
+        TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
     )
 
 
 def test_a_heading_without_text_leaves_the_heading_above_it_named_in_a_table_rejection() -> None:
     nodes = [Heading(2, make_rich_text("Counts")), Heading(3, ()), _one_column_table(301)]
 
-    assert _rejection(nodes) == (
-        "slack",
-        f"{TABLE_LIMIT_WHY}, under the heading 'Counts'; {TABLE_LIMIT_INSTEAD}",
+    assert _rejected(nodes) == _canvas_rejection(
+        TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
     )
 
 
@@ -480,9 +467,19 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
         tuple(TableRow((make_table_cell("v"),)) for _ in range(150)),
     )
 
-    assert _rejection([table]) == (
-        "slack",
-        f"a table has 302 cells, over the 300 a Slack canvas table can hold; {TABLE_LIMIT_INSTEAD}",
+    assert _rejected([table]) == _canvas_rejection(
+        "a table has 302 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+    )
+
+
+def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -> None:
+    table = TableNode(
+        tuple(make_table_cell(f"h{index}") for index in range(7)),
+        tuple(TableRow(tuple(make_table_cell("v") for _ in range(7))) for _ in range(142)),
+    )
+
+    assert _rejected([table]) == _canvas_rejection(
+        "a table has 1,001 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
     )
 
 
@@ -597,7 +594,7 @@ def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_i
 def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
     node = Callout("info", (make_bullets(make_list_entry("a", _key_value_table())),))
 
-    assert _rejection([node]) == ("slack", _list_item_message("a table"))
+    assert _rejected([node]) == _canvas_rejection(_list_item_why("a table"), OUT_OF_THE_LIST)
 
 
 def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
@@ -804,36 +801,38 @@ def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> 
 
 
 @pytest.mark.parametrize(
-    ("run", "message"),
+    ("run", "why", "instead"),
     [
         pytest.param(
             ScriptText("superscript", "*3"),
-            "a Slack canvas cannot show the superscript '*3', since '*' has no Unicode superscript form; "
+            "a Slack canvas cannot show the superscript '*3', since '*' has no Unicode superscript form",
             "write the text without the superscript or export the document elsewhere",
             id="superscript-punctuation",
         ),
         pytest.param(
             ScriptText("superscript", "q"),
-            "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form; "
+            "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form",
             "write the text without the superscript or export the document elsewhere",
             id="superscript-letter-with-no-form",
         ),
         pytest.param(
             ScriptText("subscript", "ab"),
-            "a Slack canvas cannot show the subscript 'ab', since 'b' has no Unicode subscript form; "
+            "a Slack canvas cannot show the subscript 'ab', since 'b' has no Unicode subscript form",
             "write the text without the subscript or export the document elsewhere",
             id="subscript-letter-with-no-form",
         ),
         pytest.param(
             ScriptText("subscript", "1 2"),
-            "a Slack canvas cannot show the subscript '1 2', since ' ' has no Unicode subscript form; "
+            "a Slack canvas cannot show the subscript '1 2', since ' ' has no Unicode subscript form",
             "write the text without the subscript or export the document elsewhere",
             id="subscript-space",
         ),
     ],
 )
-def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(run: ExportRun, message: str) -> None:
-    assert _rejection([Paragraph((run,))]) == ("slack", message)
+def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(
+    run: ExportRun, why: str, instead: str
+) -> None:
+    assert _rejected([Paragraph((run,))]) == _canvas_rejection(why, instead)
 
 
 @pytest.mark.parametrize(
@@ -1023,9 +1022,8 @@ def test_canvas_markdown_over_1_048_576_characters_is_rejected_before_anything_i
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(_code_report(tmp_path, CANVAS_LIMIT_CODE_LENGTH + 1), out_dir)
 
-    assert (raised.value.target, str(raised.value), out_dir.exists()) == (
-        "slack",
-        CANVAS_LIMIT_MESSAGE,
+    assert (vars(raised.value), out_dir.exists()) == (
+        _canvas_rejection(CANVAS_LIMIT_WHY, CANVAS_LIMIT_INSTEAD),
         False,
     )
 
@@ -1038,7 +1036,10 @@ def test_a_table_over_the_canvas_limit_is_rejected_before_anything_is_written(tm
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(report, out_dir)
 
-    assert (str(raised.value), out_dir.exists()) == (f"{TABLE_LIMIT_WHY}; {TABLE_LIMIT_INSTEAD}", False)
+    assert (vars(raised.value), out_dir.exists()) == (
+        _canvas_rejection(TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD),
+        False,
+    )
 
 
 def test_the_cli_exports_slack_and_writes_the_manifest_whose_title_names_the(
@@ -1102,9 +1103,13 @@ def test_a_grid_inside_a_walkthrough_step_is_rejected_before_anything_is_written
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(report, out_dir)
 
-    assert (raised.value.target, str(raised.value), out_dir.exists()) == (
-        "slack",
-        _walkthrough_grid_message(1),
+    assert (vars(raised.value), out_dir.exists()) == (
+        _canvas_rejection(
+            "a Slack canvas cannot show a grid inside a walkthrough step, "
+            "since a canvas list item holds only text",
+            "move the grid out of the step, after the walkthrough",
+            "at blocks.1.walkthrough.steps.1.detail.1.grid",
+        ),
         False,
     )
 
