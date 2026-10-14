@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
+from typing_extensions import Self
 
 from skaldr.auth.site import normalise_site
 from skaldr.errors import AuthError
@@ -10,7 +11,14 @@ from skaldr.services import JiraService
 
 JIRA_PROJECT_KEY_PATTERN = r"[A-Z][A-Z0-9_]+"
 JIRA_ISSUE_KEY_PATTERN = rf"{JIRA_PROJECT_KEY_PATTERN}-[1-9][0-9]*"
-FIELDS_SKALDR_SETS = frozenset({"summary", "description", "project", "issuetype", "parent", "status"})
+SUMMARY_FIELD = "summary"
+DESCRIPTION_FIELD = "description"
+PROJECT_FIELD = "project"
+ISSUE_TYPE_FIELD = "issuetype"
+PARENT_FIELD = "parent"
+STATUS_FIELD = "status"
+FIELDS_SKALDR_SETS_ITSELF = (SUMMARY_FIELD, DESCRIPTION_FIELD, PROJECT_FIELD, ISSUE_TYPE_FIELD, PARENT_FIELD)
+SKALDR_OWNED_FIELDS = frozenset({*FIELDS_SKALDR_SETS_ITSELF, STATUS_FIELD})
 
 
 class JiraWhere(FrozenModel):
@@ -41,7 +49,7 @@ class JiraWhere(FrozenModel):
 
     @field_validator("site")
     @classmethod
-    def _normalise_site_like_skaldr_auth(cls, site: str | None) -> str | None:
+    def _site_as_a_jira_cloud_https_origin(cls, site: str | None) -> str | None:
         if site is None:
             return None
         try:
@@ -50,14 +58,18 @@ class JiraWhere(FrozenModel):
             raise ValueError(str(exc)) from exc
 
 
-def _set_by_skaldr(fields: JsonFields, place: str) -> str | None:
-    taken = [name for name in sorted(fields) if name in FIELDS_SKALDR_SETS]
+def _in_words(names: tuple[str, ...]) -> str:
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _refusal_for_owned_fields(fields: JsonFields, place: str) -> str | None:
+    taken = sorted(fields.keys() & SKALDR_OWNED_FIELDS)
     if not taken:
         return None
     named = ", ".join(f"`{name}`" for name in taken)
     return (
-        f"a jira target cannot set {named} in `{place}`; skaldr sets summary, description, project, "
-        "issuetype and parent itself, and Jira changes status only through a transition"
+        f"a jira target cannot set {named} in `{place}`; skaldr sets {_in_words(FIELDS_SKALDR_SETS_ITSELF)} "
+        f"itself, and Jira changes {STATUS_FIELD} only through a transition"
     )
 
 
@@ -66,7 +78,7 @@ class JiraTarget(TargetBase):
     where: JiraWhere = Field(description="The Jira project, issue type and optional parent issue.")
 
     @model_validator(mode="after")
-    def _validate_fields_left_to_skaldr(self) -> "JiraTarget":
+    def _validate_fields_left_to_skaldr(self) -> Self:
         places = [
             (self.where.fields, "where.fields"),
             *(
@@ -75,7 +87,7 @@ class JiraTarget(TargetBase):
             ),
         ]
         for fields, place in places:
-            refusal = _set_by_skaldr(fields, place)
+            refusal = _refusal_for_owned_fields(fields, place)
             if refusal is not None:
                 raise ValueError(refusal)
         return self

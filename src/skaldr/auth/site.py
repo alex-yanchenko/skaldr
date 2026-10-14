@@ -3,6 +3,7 @@ from pydantic import HttpUrl, ValidationError
 from skaldr.errors import AuthError
 
 JIRA_CLOUD_HOST_SUFFIX = ".atlassian.net"
+HTTPS_DEFAULT_PORT = 443
 SITE_REQUIREMENT = "The Jira site must be an https URL like https://<site>.atlassian.net"
 
 
@@ -25,7 +26,7 @@ def https_origin(typed: str) -> str | None:
         return None
     if _carries_userinfo_query_or_fragment(url):
         return None
-    return f"https://{url.host}" + ("" if url.port in (None, 443) else f":{url.port}")
+    return f"https://{url.host}" + ("" if url.port == HTTPS_DEFAULT_PORT else f":{url.port}")
 
 
 def _is_a_jira_cloud_host(host: str | None) -> bool:
