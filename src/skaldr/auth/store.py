@@ -409,10 +409,8 @@ def _migrate_legacy_entry(kind: _Kind[CredentialsT]) -> None:
     credentials = None if legacy is None else _parse(legacy, kind.model)
     if credentials is None:
         return
-    serialized = credentials.model_dump_json()
-    username = _migration_username(kind, _username(kind, credentials), serialized)
-    _set(username, serialized)
-    _list(kind.service, username)
+    username = _migration_username(kind, _username(kind, credentials), credentials.model_dump_json())
+    _write(kind, username, credentials)
     _delete(kind.service)
 
 
@@ -584,13 +582,17 @@ def refuse_an_unusable_keychain() -> None:
 def _save(kind: _Kind[CredentialsT], credentials: CredentialsT) -> None:
     _refuse_an_insecure_keyring()
     username = _username(kind, credentials)
-    _in_the_keychain(lambda: _write(kind, username, credentials))
+
+    def migrate_then_write() -> None:
+        _migrate_legacy_entry(kind)
+        _write(kind, username, credentials)
+
+    _in_the_keychain(migrate_then_write)
 
 
 def _write(kind: _Kind[CredentialsT], username: str, credentials: CredentialsT) -> None:
-    _migrate_legacy_entry(kind)
-    _set(username, credentials.model_dump_json())
     _list(kind.service, username)
+    _set(username, credentials.model_dump_json())
 
 
 def _refuse_an_insecure_keyring() -> None:

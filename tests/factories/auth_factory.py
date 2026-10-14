@@ -95,6 +95,18 @@ class WriteFailingKeyring(InMemoryKeyring):
         raise self.failure
 
 
+class OneEntryRefusingKeyring(InMemoryKeyring):
+    def __init__(self, refused_username: str) -> None:
+        super().__init__()
+        self.refused_username = refused_username
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        if username == self.refused_username:
+            raise KeyringError(f"{username} refused")
+        super().set_password(service, username, password)
+
+
 def insecure_keyring_refusal(backend_name: str) -> str:
     return (
         f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "

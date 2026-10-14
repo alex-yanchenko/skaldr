@@ -50,6 +50,7 @@ from tests.factories.auth_factory import (
     InMemoryKeyring,
     LockedKeyring,
     NullKeyringSubclass,
+    OneEntryRefusingKeyring,
     PlaintextKeyring,
     PlaintextKeyringSubclass,
     ReadRecordingKeyring,
@@ -445,7 +446,50 @@ def test_a_legacy_entry_survives_a_migration_whose_write_fails() -> None:
     with pytest.raises(AuthError, match=r"^The system keychain is unavailable: denied$"):
         stored_jira_sign_ins()
 
-    assert failing.entries == {("skaldr", "jira"): legacy}
+    assert failing.entries == {
+        ("skaldr", "jira"): legacy,
+        ("skaldr", "index"): index_of(jira=["jira:https://example.atlassian.net"]),
+    }
+
+
+def test_a_save_whose_index_write_fails_stores_no_unlisted_secret() -> None:
+    refusing = OneEntryRefusingKeyring("index")
+    keyring.set_keyring(refusing)
+
+    with pytest.raises(AuthError, match=r"^The system keychain is unavailable: index refused$"):
+        save_jira(make_jira_credentials())
+
+    assert refusing.entries == {}
+
+
+def test_a_save_whose_entry_write_fails_leaves_only_an_index_row_that_reads_skip() -> None:
+    refusing = OneEntryRefusingKeyring("jira:https://example.atlassian.net")
+    keyring.set_keyring(refusing)
+
+    with pytest.raises(
+        AuthError, match=r"^The system keychain is unavailable: jira:https://example\.atlassian\.net refused$"
+    ):
+        save_jira(make_jira_credentials())
+
+    assert (refusing.entries, stored_jira_sign_ins()) == (
+        {("skaldr", "index"): index_of(jira=["jira:https://example.atlassian.net"])},
+        [],
+    )
+
+
+def test_saving_a_notion_sign_in_reads_the_legacy_entry_only_while_looking_up_the_stored_ones() -> None:
+    recording = ReadRecordingKeyring()
+    keyring.set_keyring(recording)
+
+    seed_notion(make_notion_credentials())
+
+    assert recording.reads == [
+        ("skaldr", "notion"),
+        ("skaldr", "index"),
+        ("skaldr", "notion"),
+        ("skaldr", f"notion:{WORKSPACE_ID}"),
+        ("skaldr", "index"),
+    ]
 
 
 def test_a_migration_never_writes_to_an_insecure_backend(plaintext_keyring: PlaintextKeyring) -> None:
