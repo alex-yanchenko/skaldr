@@ -30,7 +30,7 @@ CONTENT = ItemContent(
     sections={"intro": "Welcome.\n", "planting": "Sow in spring.\n"},
     fields={"Area": "Shed", "Owner": "Rowan"},
 )
-FORMATTED_CONTENT = ItemContent(
+COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
     title="Garden handbook",
     sections={
         "intro": '<span color="green">**Welcome.**</span>  \n\n',
@@ -282,7 +282,7 @@ def test_creating_into_an_empty_page_sets_its_title_and_the_requested_fields_and
 
 def test_the_comparable_form_of_a_comparable_form_is_itself(under_test: TransportUnderTest) -> None:
     transport = under_test.make().transport
-    once = transport.comparable_form(FORMATTED_CONTENT)
+    once = transport.comparable_form(COMPARABLE_FORM_IDEMPOTENCE_FIXTURE)
 
     assert transport.comparable_form(once) == once
 

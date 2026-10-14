@@ -25,8 +25,10 @@ from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish.transport import Stamp
 from tests.factories.publish_factory import (
     DOC_ID,
+    DROPPED_AFTER_WRITE,
     INTO_LABEL,
     INTRO_KEY,
+    LOST_WRITE,
     OTHER_DOC_ID,
     REFUSED_WRITE,
     TARGET_LABEL,
@@ -458,4 +460,53 @@ def test_a_remote_edit_after_the_transport_changed_its_form_is_shown_in_its_curr
     assert (statuses, diff) == (
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("edited remotely",))),
         PublishDiff((tools_edit,), ()),
+    )
+
+
+def test_an_archive_that_never_landed_is_sent_again_after_the_transport_changed_its_form(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
+    path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
+    transport.lose_the_next_write()
+    with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.ignores_span_colors = True
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes(), transport.items["page-2"].archived) == (
+        Applied(("archive  section tools (page-2)",)),
+        [("archive", "page-2")],
+        True,
+    )
+
+
+def test_a_partly_landed_write_after_the_transport_changed_its_form_writes_only_the_rest(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+    write_garden_report(
+        tmp_path,
+        publish=make_notion_publish(),
+        blocks=make_garden_blocks(tools="Rake.", planting="Sow in May."),
+    )
+    transport.land_only_the_first_section_of_the_next_content_write()
+    with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
+        apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+    transport.stop_failing()
+    transport.ignores_span_colors = True
+    transport.forget_calls()
+
+    outcome = apply_publish(prepare_publish(path, fake_registry(transport, writes="content")))
+
+    assert (outcome, transport.writes(), transport.items["page-1"].content) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        [("write_content", "page-1")],
+        _drafted(path),
     )
