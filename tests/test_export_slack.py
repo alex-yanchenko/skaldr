@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
@@ -41,7 +42,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Person, Report, load_report, parse_report
+from skaldr.models import Person, Report, Walkthrough, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -73,6 +74,7 @@ from tests.factories import (
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
+WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
@@ -121,21 +123,38 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
-    with pytest.raises(ExportRejectedError) as raised:
-        export_slack(load_report(EXAMPLE), tmp_path / "out")
-
-    assert str(raised.value) == _walkthrough_detail_message(
-        "blocks.64.walkthrough.steps.1.detail.1.code", "a code block"
+def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
+    return next(
+        f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
+        for path, block in report.located_blocks
+        if isinstance(block, Walkthrough)
+        for step_index, step in enumerate(block.steps)
+        for index, detail in enumerate(step.detail)
+        if detail.type not in CANVAS_STEP_DETAIL_TYPES
     )
 
 
-def test_the_example_reworked_for_a_canvas_exports_to_the_slack_golden_regenerated_by_the_export_command(
+def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
+    example = load_report(EXAMPLE)
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(example, tmp_path / "out")
+
+    assert vars(raised.value) == _canvas_rejection(
+        _list_item_why("a code block"),
+        OUT_OF_THE_STEP,
+        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(example)}",
+    )
+
+
+def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_slack_golden_rewrites(
     tmp_path: Path,
 ) -> None:
-    export_slack(parse_report(_example_reworked_for_a_canvas()), tmp_path)
+    out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
 
-    assert folder_texts(tmp_path) == folder_texts(SLACK_GOLDEN)
+    export_slack(parse_report(_example_reworked_for_a_canvas()), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(SLACK_GOLDEN)
 
 
 @pytest.mark.parametrize(
