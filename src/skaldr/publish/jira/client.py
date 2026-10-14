@@ -3,6 +3,7 @@ import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from http import HTTPStatus
+from types import TracebackType
 from typing import Final, TypeVar
 from urllib.parse import quote
 
@@ -16,6 +17,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from typing_extensions import Self
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS
 from skaldr.auth.store import JiraCredentials
@@ -138,6 +140,20 @@ class JiraClient:
             timeout=HTTP_TIMEOUT_SECONDS,
             transport=transport,
         )
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._http.close()
 
     def myself(self) -> JiraUser:
         path = f"{API}/myself"

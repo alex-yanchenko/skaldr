@@ -19,7 +19,7 @@ from skaldr.publish.jira.description import as_blocks, description_length, secti
 from skaldr.publish_block import JiraTarget
 from tests.factories import make_jira_target
 from tests.factories.auth_factory import basic_auth_header, make_jira_credentials
-from tests.factories.jira_factory import DONE, SITE, FakeJira
+from tests.factories.jira_factory import DONE, SITE, FakeJira, Reply
 from tests.factories.publish_factory import (
     DOC_ID,
     make_garden_blocks,
@@ -232,6 +232,22 @@ def test_publishing_creates_the_document_issue_then_each_split_section_under_it(
             {"doc_id": DOC_ID, "section_id": "tools", "commented": False, "archived": False},
         ),
     )
+
+
+def test_a_publish_closes_the_jira_connection_it_opened_even_when_it_fails(tmp_path: Path) -> None:
+    jira = FakeJira()
+    path = write_garden_report(tmp_path, publish=_jira_publish(split=["tools"]))
+    _publish(path, jira)
+    closed_after_success = jira.closes
+    write_garden_report(
+        tmp_path, publish=_jira_publish(split=["tools"]), blocks=make_garden_blocks(planting="Sow in May.")
+    )
+    jira.fail_next("PUT", "/rest/api/3/issue/DEMO-1", Reply(400, {"errorMessages": ["Bad description"]}))
+
+    with pytest.raises(ConnectorError):
+        _publish(path, jira)
+
+    assert (closed_after_success, jira.closes) == (1, 2)
 
 
 def test_publishing_again_unchanged_writes_nothing(tmp_path: Path) -> None:

@@ -271,6 +271,9 @@ class JiraTransport:
         if not any(comparable_node(comment.body) == wanted for comment in self._client.comments(item_id)):
             self._client.add_comment(item_id, body)
 
+    def close(self) -> None:
+        self._client.close()
+
     def release_item(self, _item_id: str, _request: Release, /) -> None:
         raise ConnectorError(NOTHING_TO_RELEASE)
 

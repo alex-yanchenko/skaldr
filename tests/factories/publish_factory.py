@@ -139,6 +139,7 @@ class FakeTransport:
     items: dict[str, FakeItem] = field(default_factory=dict[str, FakeItem])
     calls: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
     hand_edits: list[HandEdit] = field(default_factory=list[HandEdit])
+    closes: int = 0
     _revision: int = 0
     _items_made: int = 0
     _writes: int = 0
@@ -327,6 +328,9 @@ class FakeTransport:
         item.title = request.title
         item.revision = self._bump()
         return self._after_write(item_id)
+
+    def close(self) -> None:
+        self.closes += 1
 
     def archive_item(self, item_id: str, /) -> None:
         self._write(("archive", item_id))

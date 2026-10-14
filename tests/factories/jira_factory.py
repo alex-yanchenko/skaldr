@@ -70,6 +70,17 @@ class Reply:
         return httpx2.Response(self.status, json=self.body, headers=raw)
 
 
+class _ClosableMockTransport(httpx2.MockTransport):
+    def __init__(
+        self, handler: Callable[[httpx2.Request], httpx2.Response], on_close: Callable[[], None]
+    ) -> None:
+        super().__init__(handler)
+        self._on_close = on_close
+
+    def close(self) -> None:
+        self._on_close()
+
+
 @dataclass
 class FakeIssue:
     key: str
@@ -111,12 +122,16 @@ class FakeJira:
     )
     adds_to_paragraphs: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
     names_in_mentions: dict[str, str] = field(default_factory=dict[str, str])
+    closes: int = 0
     _issues_made: int = 0
     _history_ids: int = 10_000
     _local_ids: int = 0
 
     def transport(self) -> httpx2.MockTransport:
-        return httpx2.MockTransport(self.handle)
+        return _ClosableMockTransport(self.handle, self._count_a_close)
+
+    def _count_a_close(self) -> None:
+        self.closes += 1
 
     def client(self) -> JiraClient:
         return JiraClient(make_jira_credentials(), transport=self.transport(), sleep=self.sleeps.append)

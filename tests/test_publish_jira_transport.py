@@ -1270,6 +1270,14 @@ def test_a_marker_that_is_not_ascii_digits_reads_as_no_marker(marker: str) -> No
     assert transport.parts_edited_after(created.item_id, marker, CONTENT) == (TITLE,)
 
 
+def test_closing_the_transport_closes_its_client() -> None:
+    jira = FakeJira()
+
+    _transport(jira).close()
+
+    assert jira.closes == 1
+
+
 def test_the_comparable_form_normalises_each_section_and_drops_empty_ones() -> None:
     content = ItemContent(
         title="Garden handbook",

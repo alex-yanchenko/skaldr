@@ -268,6 +268,16 @@ def test_a_comments_page_that_does_not_start_where_it_was_asked_to_is_an_error()
         jira.client().comments("DEMO-1")
 
 
+def test_a_client_used_as_a_context_manager_closes_its_connections_on_leaving() -> None:
+    jira = FakeJira()
+
+    with jira.client() as client:
+        account = client.myself()
+        open_while_inside = jira.closes
+
+    assert (account, open_while_inside, jira.closes) == (JiraUser(accountId="account-writer"), 0, 1)
+
+
 def test_myself_names_the_signed_in_account() -> None:
     jira = FakeJira()
 
