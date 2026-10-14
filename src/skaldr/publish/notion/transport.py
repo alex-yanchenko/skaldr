@@ -407,6 +407,10 @@ class NotionTransport:
             raise WriteRejectedError(f"the Notion connector cannot publish to {target.place_label()}")
         parent_id = target.where.page_id
         block = self._api.block(parent_id)
+        if block.in_trash:
+            raise WriteRejectedError(
+                f"Notion page {parent_id} is in the trash, so skaldr cannot create a page under it"
+            )
         if block.type == PAGE_BLOCK:
             return _Parent({"page_id": parent_id}, {}, names_a_database=False, page_id=parent_id)
         if block.type != DATABASE_BLOCK:

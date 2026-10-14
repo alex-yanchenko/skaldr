@@ -198,6 +198,21 @@ def _sign_in_to_two_workspaces() -> None:
     seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace"))
 
 
+def test_a_transport_opened_for_a_target_of_another_service_signs_in_without_a_workspace() -> None:
+    _sign_in_to_two_workspaces()
+    notion = _notion_with_a_parent_page()
+    transport = _connector(notion).open_transport(JiraTarget.model_validate(make_jira_target()))
+
+    with pytest.raises(AuthError) as caught:
+        transport.read_item(NOTION_PAGE_ID, ItemContent(title=""))
+
+    assert (str(caught.value), notion.requests) == (
+        f"Signed in to several Notion workspaces (Example Workspace ({WORKSPACE_ID}), "
+        f"Other Workspace ({OTHER_WORKSPACE_ID})); name one with `workspace` in the target's `where`",
+        [],
+    )
+
+
 def test_a_target_without_a_workspace_uses_the_only_sign_in() -> None:
     seed_notion(make_notion_credentials(access_token="access-token"))
     notion = _notion_with_a_parent_page()

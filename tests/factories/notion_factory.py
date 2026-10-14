@@ -7,6 +7,7 @@ from typing import Any
 import httpx2
 from typing_extensions import override
 
+from skaldr.export.notion import notion_block_count
 from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.transport import NotionTransport
 from skaldr.publish_block import notion_page_id
@@ -62,6 +63,20 @@ def as_notion_stores(markdown: str) -> str:
     return "\n".join(stored)
 
 
+def _to_the_minute(moment: datetime) -> datetime:
+    return moment.replace(second=0, microsecond=0)
+
+
+def _written_markdown(body: dict[str, Any]) -> list[str]:
+    if "markdown" in body:
+        return [body["markdown"]]
+    if body.get("type") == "replace_content":
+        return [body["replace_content"]["new_str"]]
+    if body.get("type") == "update_content":
+        return [update["new_str"] for update in body["update_content"]["content_updates"]]
+    return []
+
+
 def _rich_text(text: str) -> list[dict[str, Any]]:
     return [{"type": "text", "plain_text": text, "text": {"content": text}}] if text else []
 
@@ -85,7 +100,7 @@ class StoredPage:
         return {
             "object": "page",
             "id": dashed(self.page_id),
-            "last_edited_time": self.last_edited_time.isoformat().replace("+00:00", ".000Z"),
+            "last_edited_time": _to_the_minute(self.last_edited_time).isoformat().replace("+00:00", ".000Z"),
             "last_edited_by": {"object": "user", "id": self.last_edited_by},
             "in_trash": self.in_trash,
             "icon": self.icon,
@@ -132,6 +147,17 @@ class Scripted:
         return method_matches and path_matches
 
 
+@dataclass(frozen=True)
+class RequestLimits:
+    json_bytes: int
+    blocks: int
+
+
+@dataclass(frozen=True)
+class _FailedTask:
+    error: dict[str, Any]
+
+
 @dataclass
 class InMemoryNotion:
     pages: dict[str, StoredPage] = field(default_factory=dict[str, StoredPage])
@@ -142,7 +168,15 @@ class InMemoryNotion:
     answers_writes_later: bool = True
     accepted_token: str = "access-token"
     closes: int = 0
-    _edits: int = 0
+    limits: RequestLimits | None = None
+    truncated_pages: set[str] = field(default_factory=set[str])
+    unknown_block_ids: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    data_source_counts: dict[str, int] = field(default_factory=dict[str, int])
+    other_blocks: dict[str, str] = field(default_factory=dict[str, str])
+    users: dict[str, str] = field(default_factory=dict[str, str])
+    seconds_per_edit: int = 60
+    _failing_task: dict[str, Any] | None = None
+    _clock: datetime = FIRST_EDIT
     _made: int = 0
 
     def api(self) -> NotionApi:
@@ -189,7 +223,19 @@ class InMemoryNotion:
         self._touch(page, PERSON_ID)
 
     def comment_on(self, page_id: str, text: str) -> None:
-        self.edit_by_hand(page_id, text, f'<span discussion-urls="discussion://comment-1">{text}</span>')
+        marked = "\n".join(
+            f'<span discussion-urls="discussion://comment-1">{line}</span>' for line in text.split("\n")
+        )
+        self.edit_by_hand(page_id, text, marked)
+
+    def add_unknown_block(self, page_id: str, after: str, block_id: str) -> str:
+        unknown = f'<unknown url="https://www.notion.so/{block_id}" alt="bookmark"/>'
+        self.edit_by_hand(page_id, after, f"{after}\n{unknown}")
+        self.unknown_block_ids.setdefault(notion_page_id(page_id) or page_id, []).append(block_id)
+        return unknown
+
+    def fail_the_next_task(self, status: int, code: str, message: str) -> None:
+        self._failing_task = {"object": "error", "status": status, "code": code, "message": message}
 
     def click_below_the_last_block(self, page_id: str) -> None:
         page = self.pages[notion_page_id(page_id) or page_id]
@@ -227,7 +273,22 @@ class InMemoryNotion:
             answer = self.scripted.pop(0)
             return httpx2.Response(answer.status, json=answer.body, headers=answer.headers)
         body: dict[str, Any] = json.loads(request.content) if request.content else {}
+        refusal = self._over_the_limits(request, body)
+        if refusal is not None:
+            return refusal
+        if self._failing_task is not None and request.method != "GET" and body.get("allow_async"):
+            failure, self._failing_task = self._failing_task, None
+            return self._later(_FailedTask(failure))
         return self._route(request.method, request.url.path, body)
+
+    def _over_the_limits(self, request: httpx2.Request, body: dict[str, Any]) -> httpx2.Response | None:
+        if self.limits is None or request.method == "GET":
+            return None
+        if len(request.content) > self.limits.json_bytes:
+            return _error(400, "validation_error", "Request body too large.")
+        if sum(map(notion_block_count, _written_markdown(body))) > self.limits.blocks:
+            return _error(400, "validation_error", "Too many blocks in one request.")
+        return None
 
     def _route(self, method: str, path: str, body: dict[str, Any]) -> httpx2.Response:
         if (method, path) == ("POST", "/v1/pages"):
@@ -288,7 +349,7 @@ class InMemoryNotion:
         if page is None:
             return _error(404, "object_not_found", "Could not find page.")
         if method == "GET":
-            return httpx2.Response(200, json=_markdown_json(page))
+            return httpx2.Response(200, json=self._markdown_answer(page))
         if page.in_trash:
             return _error(400, "validation_error", "Can't edit block that is archived.")
         if body["type"] == "replace_content":
@@ -303,7 +364,11 @@ class InMemoryNotion:
                 updated = updated.replace(update["old_str"], update["new_str"])
             page.markdown = as_notion_stores(updated)
         self._touch(page, BOT_ID)
-        return self._answer(body, _markdown_json(page))
+        return self._answer(body, self._markdown_answer(page))
+
+    def _markdown_answer(self, page: StoredPage) -> dict[str, Any]:
+        unknown = self.unknown_block_ids.get(page.page_id, [])
+        return _markdown_json(page, page.page_id in self.truncated_pages, unknown)
 
     def _create(self, body: dict[str, Any]) -> httpx2.Response:
         parent = body["parent"]
@@ -342,18 +407,29 @@ class InMemoryNotion:
 
     def _block(self, method: str, block_id: str, _body: dict[str, Any]) -> httpx2.Response:
         key = notion_page_id(block_id) or block_id
-        kind = "child_database" if key in self.databases else "child_page" if key in self.pages else None
+        kind = (
+            "child_database"
+            if key in self.databases
+            else "child_page"
+            if key in self.pages
+            else self.other_blocks.get(key)
+        )
         if method != "GET" or kind is None:
             return _error(404, "object_not_found", "Could not find block.")
+        in_trash = key in self.pages and self.pages[key].in_trash
         return httpx2.Response(
-            200, json={"object": "block", "id": dashed(key), "type": kind, "in_trash": False}
+            200, json={"object": "block", "id": dashed(key), "type": kind, "in_trash": in_trash}
         )
 
     def _database(self, _method: str, database_id: str, _body: dict[str, Any]) -> httpx2.Response:
         key = notion_page_id(database_id) or database_id
         if key not in self.databases:
             return _error(404, "object_not_found", "Could not find database.")
-        sources = [{"id": f"source-{key}", "name": "Garden"}]
+        count = self.data_source_counts.get(key, 1)
+        sources = [
+            {"id": f"source-{key}" if number == 0 else f"source-{key}-{number}", "name": "Garden"}
+            for number in range(count)
+        ]
         return httpx2.Response(200, json={"object": "database", "id": dashed(key), "data_sources": sources})
 
     def _data_source(self, _method: str, data_source_id: str, _body: dict[str, Any]) -> httpx2.Response:
@@ -367,18 +443,23 @@ class InMemoryNotion:
 
     def _task(self, _method: str, task_id: str, _body: dict[str, Any]) -> httpx2.Response:
         result = self.tasks.pop(task_id)
+        if isinstance(result, _FailedTask):
+            return httpx2.Response(200, json={**_task_json(task_id, "failed"), "error": result.error})
         return httpx2.Response(200, json={**_task_json(task_id, "succeeded"), "result": result})
 
     def _answer(self, body: dict[str, Any], result: dict[str, Any]) -> httpx2.Response:
         if not (body.get("allow_async") and self.answers_writes_later):
             return httpx2.Response(200, json=result)
+        return self._later(result)
+
+    def _later(self, result: dict[str, Any] | _FailedTask) -> httpx2.Response:
         task_id = f"task-{len(self.tasks) + len(self.requests)}"
         self.tasks[task_id] = result
         return httpx2.Response(202, json={**_task_json(task_id, "queued"), "poll_after_seconds": 1})
 
     def _edit_time(self) -> datetime:
-        self._edits += 1
-        return FIRST_EDIT + timedelta(minutes=self._edits)
+        self._clock += timedelta(seconds=self.seconds_per_edit)
+        return self._clock
 
     def _touch(self, page: StoredPage, editor: str) -> None:
         page.last_edited_time = self._edit_time()
@@ -414,13 +495,13 @@ def _task_json(task_id: str, status: str) -> dict[str, Any]:
     }
 
 
-def _markdown_json(page: StoredPage) -> dict[str, Any]:
+def _markdown_json(page: StoredPage, truncated: bool, unknown_block_ids: list[str]) -> dict[str, Any]:
     return {
         "object": "page_markdown",
         "id": dashed(page.page_id),
         "markdown": page.markdown,
-        "truncated": False,
-        "unknown_block_ids": [],
+        "truncated": truncated,
+        "unknown_block_ids": unknown_block_ids,
     }
 
 
