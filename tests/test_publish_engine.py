@@ -12,7 +12,6 @@ from skaldr.publish.engine import (
     Applied,
     ApplyOutcome,
     ItemStatus,
-    Prepared,
     PublishDiff,
     Refused,
     RemoteEdit,
@@ -126,6 +125,55 @@ def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: 
         [("write_section", "page-2", "tools")],
         _drafted(path, "tools"),
     )
+
+
+def _apply(path: Path, transport: FakeTransport) -> object:
+    return _publish(path, transport)
+
+
+def _dry_run(path: Path, transport: FakeTransport) -> object:
+    return dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+
+def _diff(path: Path, transport: FakeTransport) -> object:
+    return diff_publish(prepare_publish(path, fake_registry(transport)))
+
+
+def _status(path: Path, transport: FakeTransport) -> object:
+    return publish_status(prepare_publish(path, fake_registry(transport)))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(_apply, id="apply"),
+        pytest.param(_dry_run, id="dry-run"),
+        pytest.param(_diff, id="diff"),
+        pytest.param(_status, id="status"),
+    ],
+)
+def test_each_command_closes_the_transport_it_opened_once(
+    tmp_path: Path, command: Callable[[Path, FakeTransport], object]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    before = transport.closes
+
+    command(path, transport)
+
+    assert transport.closes - before == 1
+
+
+def test_an_apply_that_fails_still_closes_the_transport_it_opened(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.fail_on_write(1)
+    before = transport.closes
+
+    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
+        _publish(path, transport)
+
+    assert transport.closes - before == 1
 
 
 def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path: Path) -> None:
@@ -423,40 +471,3 @@ def test_an_unchanged_published_document_is_in_sync(tmp_path: Path) -> None:
         ItemStatus(DOCUMENT, "page-1", ("in sync",)),
         ItemStatus(TOOLS, "page-2", ("in sync",)),
     )
-
-
-def _apply(prepared: Prepared) -> object:
-    return apply_publish(prepared)
-
-
-@pytest.mark.parametrize(
-    "run",
-    [
-        pytest.param(_apply, id="apply"),
-        pytest.param(dry_run_publish, id="dry-run"),
-        pytest.param(diff_publish, id="diff"),
-        pytest.param(publish_status, id="status"),
-    ],
-)
-def test_every_command_closes_the_transport_it_opened(
-    tmp_path: Path, run: Callable[[Prepared], object]
-) -> None:
-    transport = FakeTransport()
-    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
-    closed_before = transport.closes
-
-    run(prepare_publish(path, fake_registry(transport)))
-
-    assert transport.closes - closed_before == 1
-
-
-def test_an_apply_that_fails_still_closes_the_transport_it_opened(tmp_path: Path) -> None:
-    transport = FakeTransport()
-    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
-    closed_before = transport.closes
-    transport.fail_on_write(1)
-
-    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
-        _publish(path, transport)
-
-    assert transport.closes - closed_before == 1

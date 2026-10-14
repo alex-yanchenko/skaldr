@@ -54,22 +54,26 @@ def prepare_publish(document_path: Path, registry: ConnectorRegistry) -> Prepare
 class Transports:
     prepared: Prepared
     opened: dict[str, Transport] = field(default_factory=dict[str, Transport])
-
-    def for_target(self, label: str, target: TargetBase | None = None) -> Transport:
-        if label not in self.opened:
-            named = target if target is not None else self.prepared.target_named(label)
-            self.opened[label] = self.prepared.registry.for_target(named).open_transport(named)
-        return self.opened[label]
+    _closing: ExitStack = field(default_factory=ExitStack)
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:
-        with ExitStack() as closing:
-            for transport in self.opened.values():
-                closing.callback(transport.close)
+        self._closing.close()
+
+    def for_target(self, label: str, target: TargetBase | None = None) -> Transport:
+        if label not in self.opened:
+            named = target if target is not None else self.prepared.target_named(label)
+            opened = self.prepared.registry.for_target(named).open_transport(named)
+            self._closing.callback(opened.close)
+            self.opened[label] = opened
+        return self.opened[label]
 
 
 def with_item(

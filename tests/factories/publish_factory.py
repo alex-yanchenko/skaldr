@@ -353,6 +353,9 @@ class FakeTransport:
         item.revision = self._bump()
         return self._after_write(item_id)
 
+    def close(self) -> None:
+        self.closes += 1
+
     def archive_item(self, item_id: str, /) -> None:
         self._write(("archive", item_id))
         self.items[item_id].archived = True
@@ -387,9 +390,6 @@ class FakeTransport:
             and (edit.part != ICON or keyed_like.icon is not None)
             and (edit.part != COVER or keyed_like.cover is not None)
         )
-
-    def close(self) -> None:
-        self.closes += 1
 
     def _stored(self, text: str) -> str:
         return text.rstrip() if self.strips_trailing_whitespace else text

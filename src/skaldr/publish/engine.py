@@ -209,10 +209,10 @@ def apply_publish(
     with held_state_lock(prepared.state_path, prepared.document_path, "publish --apply"):
         prepared = _prepared_again_from_the_same_yaml(prepared)
         with Transports(prepared) as transports:
-            return _apply_with(prepared, transports, overwrite, on_step)
+            return _applied_with(prepared, transports, overwrite, on_step)
 
 
-def _apply_with(
+def _applied_with(
     prepared: Prepared, transports: Transports, overwrite: bool, on_step: StepListener
 ) -> ApplyOutcome:
     loaded = prepared.state
