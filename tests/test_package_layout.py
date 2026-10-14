@@ -4,7 +4,7 @@ import sys
 import pytest
 
 PUBLISH_RUNTIME = "skaldr.publish"
-PUBLISH_EXTRA = ("authlib", "httpx2", "keyring")
+PUBLISH_EXTRA = ("authlib", "httpx2", "keyring", "tenacity")
 DOCUMENT_MODULES = ("skaldr.models", "skaldr.render", "skaldr.export", "skaldr.compute")
 LOADED_CLEANLY = (0, "")
 

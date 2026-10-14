@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from skaldr.publish.engine import (
     YamlChange,
     apply_publish,
     diff_publish,
+    dry_run_publish,
     prepare_publish,
     publish_status,
 )
@@ -127,6 +129,55 @@ def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: 
         [("write_section", "page-2", "tools")],
         _drafted(path, "tools"),
     )
+
+
+def _apply(path: Path, transport: FakeTransport) -> object:
+    return _publish(path, transport)
+
+
+def _dry_run(path: Path, transport: FakeTransport) -> object:
+    return dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+
+def _diff(path: Path, transport: FakeTransport) -> object:
+    return diff_publish(prepare_publish(path, fake_registry(transport)))
+
+
+def _status(path: Path, transport: FakeTransport) -> object:
+    return publish_status(prepare_publish(path, fake_registry(transport)))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(_apply, id="apply"),
+        pytest.param(_dry_run, id="dry-run"),
+        pytest.param(_diff, id="diff"),
+        pytest.param(_status, id="status"),
+    ],
+)
+def test_each_command_closes_the_transport_it_opened_once(
+    tmp_path: Path, command: Callable[[Path, FakeTransport], object]
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    before = transport.closes
+
+    command(path, transport)
+
+    assert transport.closes - before == 1
+
+
+def test_an_apply_that_fails_still_closes_the_transport_it_opened(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.fail_on_write(1)
+    before = transport.closes
+
+    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
+        _publish(path, transport)
+
+    assert transport.closes - before == 1
 
 
 def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path: Path) -> None:

@@ -4,7 +4,9 @@ import pytest
 from pydantic import JsonValue
 
 from skaldr.publish.content import (
+    COVER,
     FIELDS,
+    ICON,
     TITLE,
     ItemContent,
     SectionChanges,
@@ -15,7 +17,12 @@ from skaldr.publish.content import (
     same_fields,
     section_changes,
     section_part,
+    with_look_owned_by,
+    with_parts,
 )
+
+COVER_URL = "https://example.com/garden.png"
+OTHER_COVER_URL = "https://example.com/shed.png"
 
 
 @pytest.mark.parametrize(
@@ -119,6 +126,52 @@ def test_reordered_labels_are_not_a_differing_part() -> None:
     current = ItemContent(title="Tools", fields={"labels": ["y", "x"]})
 
     assert differing_parts(published, current) == ()
+
+
+def test_the_icon_and_the_cover_are_parts_of_their_own() -> None:
+    published = ItemContent(title="Tools", icon="🌱", cover=COVER_URL)
+    current = ItemContent(title="Tools", icon="🌻")
+
+    assert differing_parts(published, current) == (ICON, COVER)
+
+
+def test_writing_the_icon_and_the_cover_parts_takes_them_from_the_newer_content() -> None:
+    before = ItemContent(title="Tools", icon="🌱", cover=COVER_URL)
+    after = ItemContent(title="Garden tools", icon="🌻")
+
+    assert with_parts(before, after, [ICON, COVER]) == ItemContent(title="Tools", icon="🌻")
+
+
+@pytest.mark.parametrize(
+    ("owners", "expected"),
+    [
+        pytest.param((), ItemContent(title="Tools"), id="owned-by-nothing"),
+        pytest.param(
+            (ItemContent(title="", icon="🌱"),), ItemContent(title="Tools", icon="🔥"), id="icon-owned"
+        ),
+        pytest.param(
+            (ItemContent(title=""), ItemContent(title="", cover=COVER_URL)),
+            ItemContent(title="Tools", cover=OTHER_COVER_URL),
+            id="cover-owned-by-the-second",
+        ),
+    ],
+)
+def test_only_an_icon_or_cover_some_content_sets_is_kept(
+    owners: tuple[ItemContent, ...], expected: ItemContent
+) -> None:
+    remote = ItemContent(title="Tools", icon="🔥", cover=OTHER_COVER_URL)
+
+    assert with_look_owned_by(remote, *owners) == expected
+
+
+def test_the_digest_of_content_without_an_icon_or_cover_is_the_digest_it_always_had() -> None:
+    content = ItemContent(title="Tools", sections={"a": "A\n"}, fields={"labels": ["x", "y"]})
+
+    assert (
+        content_digest(content),
+        content_digest(content) == content_digest(content.model_copy(update={"icon": "🌱"})),
+        content_digest(content) == content_digest(content.model_copy(update={"cover": COVER_URL})),
+    ) == ("300524f6dd9bec32a3667db844a46c094620ef6792d8793b148962a796ed5d6d", False, False)
 
 
 def test_the_digest_ignores_label_order_and_follows_section_text() -> None:

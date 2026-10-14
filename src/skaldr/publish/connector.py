@@ -10,6 +10,7 @@ from skaldr.publish.transport import Transport
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
 from skaldr.services import Service
 
+SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 LimitScope = Literal["section", "item"]
 WriteGranularity = Literal["section", "content"]
 
@@ -31,6 +32,9 @@ class Connector(Protocol):
 
     @property
     def writes(self) -> WriteGranularity: ...
+
+    @property
+    def carries_look(self) -> bool: ...
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
 

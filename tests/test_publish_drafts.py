@@ -7,7 +7,7 @@ import pytest
 
 from skaldr.errors import PublishError
 from skaldr.publish import ContentLimit
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
+from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, section_part
 from skaldr.publish.drafts import Authored, ItemDraft, authored_from, draft_targets
 from tests.factories import make_report, make_section, make_table
 from tests.factories.publish_factory import (
@@ -16,8 +16,11 @@ from tests.factories.publish_factory import (
     FakeTransport,
     authored_garden,
     fake_registry,
+    make_garden_meta,
     make_notion_publish,
 )
+
+COVER_URL = "https://example.com/garden.png"
 
 HEADER = 'For new members {color="gray"}\n<table_of_contents/>\n'
 LEGEND = (
@@ -55,6 +58,8 @@ def test_an_unsplit_target_is_one_item_holding_every_region_of_the_page() -> Non
             {
                 TITLE: "meta.title",
                 FIELDS: WHERE_FIELDS,
+                ICON: "meta.icon",
+                COVER: "meta.cover",
                 section_part("page header"): "meta",
                 section_part("page legend"): "badges",
                 section_part(INTRO_KEY): "blocks[0]",
@@ -68,11 +73,12 @@ def test_an_unsplit_target_is_one_item_holding_every_region_of_the_page() -> Non
 
 def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_it_uses() -> None:
     report = authored_garden(
+        meta=make_garden_meta(icon="🌱", cover=COVER_URL),
         publish=make_notion_publish(
             split=["tools"],
             where={"parent_page": "0123456789abcdef0123456789abcdef", "fields": {"Area": "Shed"}},
             overrides={"tools": {"fields": {"Area": "Tool wall", "Owner": "Rowan"}}},
-        )
+        ),
     )
 
     (target,) = draft_targets(report, fake_registry(FakeTransport()))
@@ -84,10 +90,14 @@ def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_i
                 title="Garden handbook",
                 sections={"page header": HEADER, INTRO_KEY: INTRO, "planting": PLANTING},
                 fields={"Area": "Shed"},
+                icon="🌱",
+                cover=COVER_URL,
             ),
             {
                 TITLE: "meta.title",
                 FIELDS: WHERE_FIELDS,
+                ICON: "meta.icon",
+                COVER: "meta.cover",
                 section_part("page header"): "meta",
                 section_part(INTRO_KEY): "blocks[0]",
                 section_part("planting"): "blocks[2]",
@@ -100,16 +110,35 @@ def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_i
                     title="Tools",
                     sections={"page legend": LEGEND, "tools": TOOLS},
                     fields={"Area": "Tool wall", "Owner": "Rowan"},
+                    icon="🌱",
                 ),
                 {
                     TITLE: "blocks[1].title",
                     FIELDS: "publish.targets[0].overrides.tools.fields",
+                    ICON: "meta.icon",
                     section_part("page legend"): "badges",
                     section_part("tools"): "blocks[1]",
                 },
             ),
         ),
     )
+
+
+def _without_the_look(draft: ItemDraft) -> ItemDraft:
+    return ItemDraft(
+        draft.section_id,
+        draft.content.model_copy(update={"icon": None, "cover": None}),
+        {part: path for part, path in draft.paths.items() if part not in (ICON, COVER)},
+    )
+
+
+def test_a_connector_that_carries_no_icon_or_cover_drafts_neither_part() -> None:
+    report = authored_garden(meta=make_garden_meta(icon="🌱", cover=COVER_URL))
+
+    (looking,) = draft_targets(report, fake_registry(FakeTransport()))
+    (plain,) = draft_targets(report, fake_registry(FakeTransport(), carries_look=False))
+
+    assert plain.items == tuple(map(_without_the_look, looking.items))
 
 
 def test_a_split_section_without_overrides_takes_its_fields_from_where() -> None:

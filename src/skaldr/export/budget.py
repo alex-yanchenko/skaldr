@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 
@@ -52,6 +53,10 @@ class Budget:
 
 def characters(block: RenderedBlock) -> int:
     return sum(len(line) + 1 for line in block.lines)
+
+
+def json_string_bytes(text: str) -> int:
+    return len(json.dumps(text, ensure_ascii=False)[1:-1].encode("utf-8"))
 
 
 def character_budget(most: int) -> Budget:
