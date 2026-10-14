@@ -8,6 +8,7 @@ from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.jira.api import (
     ChangeDetails,
     Changelog,
+    ChangelogAuthor,
     Comment,
     CreatedIssue,
     EntityProperty,
@@ -16,7 +17,6 @@ from skaldr.publish.jira.api import (
     Status,
     StatusCategory,
     Transition,
-    UserDetails,
 )
 from tests.factories.auth_factory import basic_auth_header, summarise
 from tests.factories.jira_factory import CLOSE, FakeJira, Reply
@@ -128,7 +128,7 @@ def test_the_changelog_is_read_page_by_page_to_the_end() -> None:
         [
             Changelog(
                 id=f"1000{number}",
-                author=UserDetails(accountId="account-editor", displayName="Robin Editor"),
+                author=ChangelogAuthor(accountId="account-editor", displayName="Robin Editor"),
                 created=f"2026-10-0{number}T10:00:00.000+0000",
                 items=[ChangeDetails(field="summary", fieldId="summary")],
             )

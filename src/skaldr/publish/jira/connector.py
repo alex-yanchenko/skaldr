@@ -12,7 +12,7 @@ from skaldr.models import Report
 from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import description_length, section_text, validated_blocks
-from skaldr.publish.jira.transport import JiraTransport
+from skaldr.publish.jira.transport import JiraTransport, not_a_jira_target
 from skaldr.publish_block import JiraTarget, TargetBase
 from skaldr.publish_block.target import JsonFields
 
@@ -66,20 +66,18 @@ class JiraConnector:
         return None
 
     def open_transport(self, target: TargetBase, /) -> JiraTransport:
+        if not isinstance(target, JiraTarget):
+            raise ConnectorError(not_a_jira_target(target))
         try:
-            credentials = self.sign_in(_site_of(target))
+            credentials = self.sign_in(target.where.site)
         except AuthError as exc:
             raise ConnectorError(str(exc)) from exc
         client = JiraClient(credentials, transport=self.http_transport, sleep=self.sleep)
         return JiraTransport(client, _field_shapes(target))
 
 
-def _site_of(target: TargetBase) -> str | None:
-    return target.where.site if isinstance(target, JiraTarget) else None
-
-
-def _field_shapes(target: TargetBase) -> JsonFields:
-    shapes = dict(target.where_fields())
+def _field_shapes(target: JiraTarget) -> JsonFields:
+    shapes = dict(target.where.fields)
     for override in target.overrides.values():
         shapes.update(override.fields)
     return shapes

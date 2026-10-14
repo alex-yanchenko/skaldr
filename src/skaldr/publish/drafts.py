@@ -12,7 +12,7 @@ from skaldr import models
 from skaldr.errors import PublishError
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
-from skaldr.publish.connector import Connector, ConnectorRegistry, ContentLimit
+from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
 from skaldr.services import SERVICE_NAMES
@@ -21,7 +21,6 @@ DOCUMENT_ITEM_LABEL = "document"
 PAGE_PART_KEYS = {"header": "page header", "legend": "page legend", "footer": "page footer"}
 PAGE_PART_PATHS = {"header": "meta", "legend": "badges", "footer": "meta"}
 BLOCK_DIGEST_LENGTH = 8
-SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 NO_PUBLISH_BLOCK = (
     "the document has no `publish` block, so it has nowhere to publish; add one (see `skaldr --guide`)"
 )

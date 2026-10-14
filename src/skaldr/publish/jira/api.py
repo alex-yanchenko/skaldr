@@ -32,7 +32,7 @@ class Status(JiraModel):
         return self.status_category.key == DONE_CATEGORY
 
 
-class UserDetails(JiraModel):
+class ChangelogAuthor(JiraModel):
     account_id: str | None = Field(default=None, alias="accountId")
     display_name: str | None = Field(default=None, alias="displayName")
 
@@ -52,7 +52,7 @@ class ChangeDetails(JiraModel):
 
 class Changelog(JiraModel):
     id: str = Field(pattern=r"^[0-9]+$")
-    author: UserDetails | None = None
+    author: ChangelogAuthor | None = None
     created: str | None = None
     items: list[ChangeDetails] = Field(default_factory=list[ChangeDetails])
 

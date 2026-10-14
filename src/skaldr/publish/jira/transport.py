@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
+from skaldr.publish.connector import SPLIT_ADVICE
 from skaldr.publish.content import (
     FIELDS,
     TITLE,
@@ -18,7 +19,6 @@ from skaldr.publish.content import (
     set_fields,
     with_fields_named,
 )
-from skaldr.publish.drafts import SPLIT_ADVICE
 from skaldr.publish.jira.api import Changelog, EntityProperty, Issue, Status, Transition
 from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import (
@@ -45,20 +45,25 @@ from skaldr.publish.transport import (
     SectionRequest,
     Stamp,
 )
-from skaldr.publish_block import JiraTarget
+from skaldr.publish_block import JiraTarget, TargetBase
+from skaldr.publish_block.jira import (
+    DESCRIPTION_FIELD,
+    ISSUE_TYPE_FIELD,
+    PARENT_FIELD,
+    PROJECT_FIELD,
+    STATUS_FIELD,
+    SUMMARY_FIELD,
+)
 from skaldr.publish_block.target import JsonFields
 
 STAMP_PROPERTY = "skaldr.stamp"
 LAYOUT_PROPERTY = "skaldr.layout"
 LABEL_PREFIX = "skaldr-"
-SUMMARY = "summary"
-DESCRIPTION = "description"
 LABELS = "labels"
 NO_MARKER = -1
+UNKNOWN_AUTHOR = "an unknown author"
+UNKNOWN_TIME = "an unknown time"
 Stored = TypeVar("Stored", bound=BaseModel)
-NOTHING_TO_RELEASE = (
-    "Jira has nothing to release: skaldr writes only into issues it created, and archives those"
-)
 
 
 class StampValue(BaseModel):
@@ -76,6 +81,17 @@ class StampValue(BaseModel):
 
 def doc_label(doc_id: str) -> str:
     return f"{LABEL_PREFIX}{doc_id}"
+
+
+def not_a_jira_target(target: TargetBase) -> str:
+    return f"the Jira connector cannot publish to a {target.service()} target"
+
+
+def _changed_since_read(item_id: str) -> WriteRejectedError:
+    return WriteRejectedError(
+        f"{item_id} changed in Jira after skaldr read it, so skaldr did not write to it; publish again to "
+        "see the change"
+    )
 
 
 def _labels(value: JsonValue) -> list[str]:
@@ -104,8 +120,8 @@ def _projected(remote: JsonValue, written: JsonValue) -> JsonValue:
     return remote
 
 
-def _archive_comment(stamp: StampValue | None) -> JsonValue:
-    document = "the document" if stamp is None or stamp.doc_id is None else f"the document {stamp.doc_id}"
+def _archive_comment(stamp: StampValue) -> JsonValue:
+    document = "the document" if stamp.doc_id is None else f"the document {stamp.doc_id}"
     text = f"skaldr archived this issue: {document} no longer has the content it held."
     return description_doc([{"type": "paragraph", "content": [{"type": "text", "text": text}]}])
 
@@ -129,12 +145,24 @@ def _marker(number: int) -> str | None:
     return None if number == NO_MARKER else str(number)
 
 
+def _newest_entry(history: Iterable[Changelog]) -> Changelog | None:
+    return max(history, key=lambda entry: entry.number, default=None)
+
+
 def _newest(history: Iterable[Changelog]) -> int:
-    return max((entry.number for entry in history), default=NO_MARKER)
+    newest = _newest_entry(history)
+    return NO_MARKER if newest is None else newest.number
 
 
 def _names(entry: Changelog) -> set[str]:
     return {name for item in entry.items for name in item.names}
+
+
+def _status(issue: Issue) -> Status:
+    try:
+        return Status.model_validate(issue.fields.get(STATUS_FIELD))
+    except ValidationError as exc:
+        raise ConnectorError(f"Jira did not say which status {issue.key} is in") from exc
 
 
 @dataclass(frozen=True)
@@ -151,16 +179,16 @@ def _identities(entry: Changelog) -> set[str]:
 
 
 def _described(entry: Changelog, written: frozenset[str]) -> str:
-    author = "an unknown author" if entry.author is None else entry.author.display_name or "an unknown author"
-    when = entry.created or "an unknown time"
+    author = (entry.author and entry.author.display_name) or UNKNOWN_AUTHOR
+    when = entry.created or UNKNOWN_TIME
     fields = ", ".join(sorted(_identities(entry) & written))
     return f"{fields} in changelog {entry.id} by {author} at {when}"
 
 
 class JiraTransport:
-    def __init__(self, client: JiraClient, field_shapes: Mapping[str, JsonValue] | None = None) -> None:
+    def __init__(self, client: JiraClient, field_shapes: JsonFields | None = None) -> None:
         self._client = client
-        self._target_shapes: dict[str, JsonValue] = dict(field_shapes or {})
+        self._target_shapes: JsonFields = dict(field_shapes or {})
         self._field_shapes: dict[str, JsonFields] = {}
         self._markers: dict[str, int] = {}
         self._last_reads: dict[str, _Read] = {}
@@ -185,21 +213,21 @@ class JiraTransport:
             )
         target = request.target
         if not isinstance(target, JiraTarget):
-            raise WriteRejectedError(f"the Jira connector cannot publish to a {target.service()} target")
+            raise WriteRejectedError(not_a_jira_target(target))
         content = request.content
         sections = _sendable_blocks(content.sections)
         description = self._description(sections, f'the new issue "{content.title}"')
         fields: dict[str, JsonValue] = {
             **set_fields(content.fields),
             LABELS: _with_doc_label(content.fields.get(LABELS), request.stamp.doc_id),
-            "project": {"key": target.where.project},
-            "issuetype": {"name": target.where.issue_type},
-            SUMMARY: content.title,
-            DESCRIPTION: description,
+            PROJECT_FIELD: {"key": target.where.project},
+            ISSUE_TYPE_FIELD: {"name": target.where.issue_type},
+            SUMMARY_FIELD: content.title,
+            DESCRIPTION_FIELD: description,
         }
         parent = request.parent_id or target.where.parent
         if parent is not None:
-            fields["parent"] = {"key": parent}
+            fields[PARENT_FIELD] = {"key": parent}
         stamp = StampValue(doc_id=request.stamp.doc_id, section_id=request.stamp.section_id)
         layout = layout_of(sections)
         created = self._client.create_issue(
@@ -209,16 +237,6 @@ class JiraTransport:
             return self._read_back_created(created.key, content, layout, stamp)
         except ConnectorError as exc:
             raise ConnectorError(f"created {created.key} but could not read it back: {exc}") from exc
-
-    def _read_back_created(
-        self, item_id: str, content: ItemContent, layout: Layout, stamp: StampValue
-    ) -> RemoteItem:
-        self._remember_shapes(item_id, content.fields)
-        read = self._read_after_write(item_id, layout, stamp)
-        if not self._owned_entries(item_id, read.history):
-            return self._handed_over(item_id, read.remote, _newest(read.history))
-        published = replace(read.remote, comparable=self.comparable_form(content))
-        return self._handed_over(item_id, published, NO_MARKER)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         current = self._read_unchanged(item_id, request.raw_sections)
@@ -240,7 +258,7 @@ class JiraTransport:
         self._last_reads.pop(item_id, None)
         self._remember_shapes(item_id, request.fields)
         self._refuse_unseen_edits(item_id, self._history(item_id))
-        changes: dict[str, JsonValue] = {SUMMARY: request.title} if request.changes_the_title else {}
+        changes: dict[str, JsonValue] = {SUMMARY_FIELD: request.title} if request.changes_the_title else {}
         for name, value in request.changed_fields.items():
             changes[name] = _with_doc_label(value, request.stamp.doc_id) if name == LABELS else value
         for name in request.cleared_fields:
@@ -251,31 +269,24 @@ class JiraTransport:
 
     def archive_item(self, item_id: str, /) -> None:
         self._last_reads.pop(item_id, None)
-        stamp = self._stamp(item_id)
-        if stamp is not None and stamp.archived:
+        current = self._stamp(item_id) or StampValue(doc_id=None)
+        if current.archived:
             return
-        current = stamp or StampValue(doc_id=None)
-        status = self._status(self._client.get_issue(item_id, ["status"]))
+        status = _status(self._client.get_issue(item_id, [STATUS_FIELD]))
         if not status.is_done:
             done = self._done_transition(item_id, status)
             if not current.commented:
-                self._comment_once(item_id, _archive_comment(stamp))
+                self._comment_once(item_id, _archive_comment(current))
                 current = current.model_copy(update={"commented": True})
                 self._client.put_property(item_id, STAMP_PROPERTY, current.model_dump(mode="json"))
             self._client.transition(item_id, done.id)
         archived = current.model_copy(update={"archived": True})
         self._client.put_property(item_id, STAMP_PROPERTY, archived.model_dump(mode="json"))
 
-    def _comment_once(self, item_id: str, body: JsonValue) -> None:
-        wanted = comparable_node(body)
-        if not any(comparable_node(comment.body) == wanted for comment in self._client.comments(item_id)):
-            self._client.add_comment(item_id, body)
-
-    def close(self) -> None:
-        self._client.close()
-
     def release_item(self, _item_id: str, _request: Release, /) -> None:
-        raise ConnectorError(NOTHING_TO_RELEASE)
+        raise ConnectorError(
+            "Jira has nothing to release: skaldr writes only into issues it created, and archives those"
+        )
 
     def parts_edited_after(
         self, item_id: str, marker: str | None, keyed_like: ItemContent, /
@@ -286,17 +297,35 @@ class JiraTransport:
         touched = {name for entry in read.history if entry.number > since for name in _names(entry)}
         published = self.comparable_form(keyed_like)
         current = with_fields_named(read.remote.comparable, published.fields)
-        retitled = SUMMARY in touched and current.title != published.title
+        retitled = SUMMARY_FIELD in touched and current.title != published.title
         refielded = bool(touched & set(published.fields)) and not same_fields(
             published.fields, current.fields
         )
         parts = [*((TITLE,) if retitled else ()), *((FIELDS,) if refielded else ())]
-        if DESCRIPTION in touched:
+        if DESCRIPTION_FIELD in touched:
             keys = dict.fromkeys([*published.sections, *current.sections])
             parts += [
                 section_part(key) for key in keys if published.sections.get(key) != current.sections.get(key)
             ]
         return tuple(parts)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def _read_back_created(
+        self, item_id: str, content: ItemContent, layout: Layout, stamp: StampValue
+    ) -> RemoteItem:
+        self._remember_shapes(item_id, content.fields)
+        read = self._read_after_write(item_id, layout, stamp)
+        if not self._owned_entries(item_id, read.history):
+            return self._handed_over(item_id, read.remote, _newest(read.history))
+        published = replace(read.remote, comparable=self.comparable_form(content))
+        return self._handed_over(item_id, published, NO_MARKER)
+
+    def _comment_once(self, item_id: str, body: JsonValue) -> None:
+        wanted = comparable_node(body)
+        if not any(comparable_node(comment.body) == wanted for comment in self._client.comments(item_id)):
+            self._client.add_comment(item_id, body)
 
     def _last_read_holding(self, item_id: str, keyed_like: ItemContent) -> _Read:
         last = self._last_reads.pop(item_id, None)
@@ -315,7 +344,7 @@ class JiraTransport:
         return self._target_shapes.get(name) if is_unset(shape) else shape
 
     def _owned_names(self, item_id: str) -> set[str]:
-        return {SUMMARY, DESCRIPTION, *self._field_shapes.get(item_id, {})}
+        return {SUMMARY_FIELD, DESCRIPTION_FIELD, *self._field_shapes.get(item_id, {})}
 
     def _owned_entries(self, item_id: str, history: Iterable[Changelog]) -> list[Changelog]:
         owned = self._owned_names(item_id)
@@ -336,10 +365,7 @@ class JiraTransport:
     def _refuse_unseen_edits(self, item_id: str, history: Sequence[Changelog]) -> None:
         since = self._baseline(item_id, history)
         if self._owned_entries(item_id, (entry for entry in history if entry.number > since)):
-            raise WriteRejectedError(
-                f"{item_id} changed in Jira after skaldr read it, so skaldr did not write to it; publish "
-                "again to see the change"
-            )
+            raise _changed_since_read(item_id)
 
     def _description(self, sections: Mapping[str, Blocks], which: str) -> JsonValue:
         description = description_doc([block for blocks in sections.values() for block in blocks])
@@ -357,29 +383,24 @@ class JiraTransport:
         self._refuse_unseen_edits(item_id, history)
         current = dict(self._read_with(item_id, history).remote.raw_sections)
         if list(current.items()) != list(raw_sections.items()):
-            raise WriteRejectedError(
-                f"{item_id} changed in Jira after skaldr read it, so skaldr did not write to it; publish "
-                "again to see the change"
-            )
+            raise _changed_since_read(item_id)
         return current
 
     def _write_description(self, item_id: str, sections: Mapping[str, str]) -> RemoteItem:
         blocks = _sendable_blocks(sections)
         description = self._description(blocks, item_id)
         layout = layout_of(blocks)
-        self._client.edit_issue(item_id, {DESCRIPTION: description}, [_property(LAYOUT_PROPERTY, layout)])
+        self._client.edit_issue(
+            item_id, {DESCRIPTION_FIELD: description}, [_property(LAYOUT_PROPERTY, layout)]
+        )
         return self._verified(
-            item_id, self._read_after_write(item_id, layout, None), frozenset({DESCRIPTION})
+            item_id, self._read_after_write(item_id, layout, None), frozenset({DESCRIPTION_FIELD})
         )
 
     def _verified(self, item_id: str, read: _Read, written: frozenset[str]) -> RemoteItem:
         since = self._markers.get(item_id, NO_MARKER)
         later = [entry for entry in read.history if entry.number > since]
-        own = max(
-            (entry for entry in later if self._is_skaldrs(entry, written)),
-            key=lambda entry: entry.number,
-            default=None,
-        )
+        own = _newest_entry(entry for entry in later if self._is_skaldrs(entry, written))
         replaced = [
             entry
             for entry in later
@@ -428,7 +449,7 @@ class JiraTransport:
 
     def _read_with(self, item_id: str, history: tuple[Changelog, ...]) -> _Read:
         stamp, layout = self._stamp(item_id), self._layout(item_id)
-        names = list(dict.fromkeys([SUMMARY, DESCRIPTION, *self._field_shapes.get(item_id, {})]))
+        names = list(dict.fromkeys([SUMMARY_FIELD, DESCRIPTION_FIELD, *self._field_shapes.get(item_id, {})]))
         issue = self._client.get_issue(item_id, names)
         return self._assembled(item_id, issue, layout, stamp, history)
 
@@ -452,14 +473,14 @@ class JiraTransport:
         stamp: StampValue | None,
         history: Sequence[Changelog],
     ) -> RemoteItem:
-        sections = split_description(blocks_of(issue.fields.get(DESCRIPTION)), layout)
+        sections = split_description(blocks_of(issue.fields.get(DESCRIPTION_FIELD)), layout)
         raw = {key: section_text(blocks) for key, blocks in sections.items()}
-        summary = issue.fields.get(SUMMARY)
+        summary = issue.fields.get(SUMMARY_FIELD)
         fields = {
             name: self._read_field(issue, name, self._shape(item_id, name), stamp)
             for name in self._field_shapes.get(item_id, {})
         }
-        latest = max(self._owned_entries(item_id, history), key=lambda entry: entry.number, default=None)
+        latest = _newest_entry(self._owned_entries(item_id, history))
         return RemoteItem(
             item_id,
             ItemContent(
@@ -500,12 +521,6 @@ class JiraTransport:
             return self._property_value(item_id, LAYOUT_PROPERTY, Layout)
         except ValidationError:
             return None
-
-    def _status(self, issue: Issue) -> Status:
-        try:
-            return Status.model_validate(issue.fields.get("status"))
-        except ValidationError as exc:
-            raise ConnectorError(f"Jira did not say which status {issue.key} is in") from exc
 
     def _done_transition(self, item_id: str, status: Status) -> Transition:
         done = next((option for option in self._client.transitions(item_id) if option.to.is_done), None)

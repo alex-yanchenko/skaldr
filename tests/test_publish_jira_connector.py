@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from pydantic import JsonValue
 
-from skaldr.auth.store import save_jira
+from skaldr.auth.store import JiraCredentials, save_jira
 from skaldr.errors import ConnectorError, PublishError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, render_adf_regions
 from skaldr.export.lower import lower_report
@@ -16,8 +16,8 @@ from skaldr.publish.content import ItemContent
 from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
 from skaldr.publish.jira import JiraConnector
 from skaldr.publish.jira.description import description_length, section_text, validated_blocks
-from skaldr.publish_block import JiraTarget
-from tests.factories import make_jira_target
+from skaldr.publish_block import JiraTarget, NotionTarget
+from tests.factories import make_jira_target, make_notion_target
 from tests.factories.auth_factory import basic_auth_header, make_jira_credentials
 from tests.factories.jira_factory import DONE, SITE, FakeJira, Reply
 from tests.factories.publish_factory import (
@@ -100,6 +100,20 @@ def test_opening_a_transport_without_a_jira_sign_in_says_how_to_sign_in() -> Non
 
     with pytest.raises(ConnectorError, match=_exactly("Not signed in to Jira; run `skaldr auth jira`")):
         JiraConnector().open_transport(target)
+
+
+def test_opening_a_transport_for_a_notion_target_is_refused_before_any_sign_in() -> None:
+    signed_in_for: list[str | None] = []
+
+    def sign_in(site: str | None) -> JiraCredentials:
+        signed_in_for.append(site)
+        return make_jira_credentials()
+
+    with pytest.raises(
+        ConnectorError, match=_exactly("the Jira connector cannot publish to a notion target")
+    ):
+        JiraConnector(sign_in=sign_in).open_transport(NotionTarget.model_validate(make_notion_target()))
+    assert signed_in_for == []
 
 
 def test_a_target_naming_a_site_with_no_jira_sign_in_at_all_says_how_to_sign_in() -> None:
