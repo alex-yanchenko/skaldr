@@ -147,15 +147,16 @@ def _joined_blocks(joined: str) -> Blocks:
     blocks: Blocks = []
     position = 0
     while True:
-        rest = joined[position:]
-        position += len(rest) - len(rest.lstrip())
-        if position >= len(joined):
+        while position < len(joined) and joined[position].isspace():
+            position += 1
+        if position == len(joined):
             return blocks
+        start = position
         try:
-            decoded, position = _DECODER.raw_decode(joined, position)
+            decoded, position = _DECODER.raw_decode(joined, start)
             blocks += _BLOCKS.validate_python(decoded)
         except (json.JSONDecodeError, ValidationError) as exc:
-            raise _not_blocks(joined[position:]) from exc
+            raise _not_blocks(joined[start:]) from exc
 
 
 def description_length(joined: str) -> int:

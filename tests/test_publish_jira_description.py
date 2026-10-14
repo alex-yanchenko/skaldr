@@ -199,12 +199,21 @@ def test_a_description_that_is_not_an_adf_document_is_refused() -> None:
         blocks_of("Welcome.")
 
 
-def test_joined_sections_that_are_not_adf_block_lists_are_refused() -> None:
-    with pytest.raises(
-        ConnectorError,
-        match=f"^{re.escape('a Jira section holds a JSON list of ADF blocks, and this one does not: ')}",
-    ):
-        description_length(section_text([INTRO]) + "Welcome.\n")
+@pytest.mark.parametrize(
+    ("joined", "quoted"),
+    [
+        pytest.param(section_text([INTRO]) + "Welcome.\n", "'Welcome.\\n'", id="prose"),
+        pytest.param('[] {"type": "rule"} []', '\'{"type": "rule"} []\'', id="object-between-lists"),
+        pytest.param('[]\n  "rule"', "'\"rule\"'", id="string-after-a-list"),
+    ],
+)
+def test_joined_sections_that_are_not_adf_block_lists_are_refused_quoting_the_bad_value(
+    joined: str, quoted: str
+) -> None:
+    message = f"a Jira section holds a JSON list of ADF blocks, and this one does not: {quoted}"
+
+    with pytest.raises(ConnectorError, match=f"^{re.escape(message)}$"):
+        description_length(joined)
 
 
 def test_the_description_limit_measures_the_compact_document_of_the_joined_sections() -> None:
