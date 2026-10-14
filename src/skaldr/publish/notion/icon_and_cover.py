@@ -14,7 +14,7 @@ from skaldr.publish.notion.responses import (
     PageImage,
     UploadedImage,
 )
-from skaldr.publish.transport import FieldsWrite
+from skaldr.publish.transport import FieldsWrite, Release
 from skaldr.publish_block.target import JsonFields
 
 UPLOADED_FILE: Final = "a file uploaded to Notion"
@@ -74,4 +74,11 @@ def icon_and_cover_to_change(request: FieldsWrite) -> JsonFields:
     return {
         **({"icon": _icon_request(request.icon)} if request.changes_the_icon else {}),
         **({"cover": _cover_request(request.cover)} if request.changes_the_cover else {}),
+    }
+
+
+def icon_and_cover_to_clear(page: Page, request: Release) -> JsonFields:
+    return {
+        **({"icon": None} if request.clears_icon and page.icon is not None else {}),
+        **({"cover": None} if request.clears_cover and page.cover is not None else {}),
     }

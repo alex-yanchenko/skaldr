@@ -279,7 +279,13 @@ class Applier:
                 )
             case ReleaseStep():
                 transport = self.transports.for_target(target_plan.label)
-                release = Release(self._raw_sections(step.item), tuple(self._item(step.item).rendered.fields))
+                rendered = self._item(step.item).rendered
+                release = Release(
+                    self._raw_sections(step.item),
+                    tuple(rendered.fields),
+                    clears_icon=rendered.icon is not None,
+                    clears_cover=rendered.cover is not None,
+                )
                 return self._retired(
                     target_plan, step.item, "release", lambda: transport.release_item(step.item_id, release)
                 )

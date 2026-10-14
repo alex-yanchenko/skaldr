@@ -107,6 +107,8 @@ class ContentWrite:
 class Release:
     raw_sections: RawSections
     field_names: tuple[str, ...]
+    clears_icon: bool = False
+    clears_cover: bool = False
 
 
 @dataclass(frozen=True)

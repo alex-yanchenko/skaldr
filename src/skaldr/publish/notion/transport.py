@@ -12,6 +12,7 @@ from skaldr.publish.notion.api import Answer, NotionApi
 from skaldr.publish.notion.icon_and_cover import (
     cover_text,
     icon_and_cover_to_change,
+    icon_and_cover_to_clear,
     icon_and_cover_to_set,
     icon_text,
 )
@@ -300,8 +301,12 @@ class NotionTransport:
         page = self._live_page(item_id)
         set_now = set_property_names(page)
         cleared: dict[str, JsonValue] = dict.fromkeys(name for name in request.field_names if name in set_now)
-        if cleared:
-            self._api.update_page(item_id, {"properties": self._property_requests(page, cleared)})
+        body: JsonFields = {
+            **({"properties": self._property_requests(page, cleared)} if cleared else {}),
+            **icon_and_cover_to_clear(page, request),
+        }
+        if body:
+            self._api.update_page(item_id, body)
 
     def parts_edited_after(
         self, _item_id: str, _marker: str | None, _keyed_like: ItemContent, /

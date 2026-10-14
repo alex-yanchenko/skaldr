@@ -67,6 +67,10 @@ def _sent(notion: InMemoryNotion) -> list[tuple[str, str, Any]]:
     ]
 
 
+def _page_requests(notion: InMemoryNotion, page_id: str) -> list[tuple[str, Any]]:
+    return [(method, body) for method, path, body in _sent(notion) if path == f"/v1/pages/{page_id}"]
+
+
 def _created(
     notion: InMemoryNotion, content: ItemContent = CONTENT, target: NotionTarget = DATABASE_TARGET
 ) -> tuple[NotionTransport, RemoteItem]:
@@ -387,6 +391,45 @@ def test_a_release_removes_skaldrs_sections_and_stamp_in_one_request_and_clears_
         ],
         "",
     )
+
+
+AREA_CLEARED: dict[str, Any] = {"properties": {"Area": {"rich_text": []}}}
+
+
+@pytest.mark.parametrize(
+    ("clears_icon", "clears_cover", "update"),
+    [
+        pytest.param(True, True, {**AREA_CLEARED, "icon": None, "cover": None}, id="both-owned"),
+        pytest.param(True, False, {**AREA_CLEARED, "icon": None}, id="icon-owned"),
+        pytest.param(False, False, AREA_CLEARED, id="neither-owned"),
+    ],
+)
+def test_a_release_clears_the_icon_and_cover_skaldr_set_with_the_fields_in_one_update(
+    clears_icon: bool, clears_cover: bool, update: dict[str, Any]
+) -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING.model_copy(update={"fields": {"Area": "Shed"}}))
+
+    transport.release_item(
+        created.item_id,
+        Release(created.raw_sections, ("Area",), clears_icon=clears_icon, clears_cover=clears_cover),
+    )
+
+    assert _page_requests(notion, FIRST_PAGE) == [("GET", None), ("PATCH", update)]
+
+
+def test_a_release_sends_no_page_update_when_the_icon_skaldr_set_is_already_gone() -> None:
+    notion = _notion()
+    transport, created = _created(notion, LOOKING)
+    notion.set_look_by_hand(created.item_id, icon=None, cover=None)
+    read = transport.read_item(created.item_id, LOOKING)
+    notion.requests.clear()
+
+    transport.release_item(
+        created.item_id, Release(read.raw_sections, (), clears_icon=True, clears_cover=True)
+    )
+
+    assert _page_requests(notion, FIRST_PAGE) == [("GET", None)]
 
 
 def test_a_release_sent_with_a_layout_the_page_no_longer_has_changes_nothing() -> None:

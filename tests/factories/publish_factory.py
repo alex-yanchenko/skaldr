@@ -367,6 +367,8 @@ class FakeTransport:
             item.revision = self._bump()
             raise ConnectorError(DROPPED_AFTER_WRITE)
         item.fields = {name: value for name, value in item.fields.items() if name not in request.field_names}
+        item.icon = None if request.clears_icon else item.icon
+        item.cover = None if request.clears_cover else item.cover
         item.stamp = None
         item.revision = self._bump()
         self._drop_the_connection_if_asked()

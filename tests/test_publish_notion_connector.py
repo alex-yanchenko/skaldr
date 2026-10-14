@@ -23,8 +23,9 @@ from tests.factories.auth_factory import (
     make_notion_credentials,
     seed_notion,
 )
-from tests.factories.notion_factory import InMemoryNotion, numbered_id
+from tests.factories.notion_factory import InMemoryNotion, Scripted, numbered_id
 from tests.factories.publish_factory import (
+    DOC_ID,
     TARGET_LABEL,
     make_garden_blocks,
     make_garden_meta,
@@ -275,6 +276,31 @@ def test_every_command_closes_the_notion_client_it_opened(tmp_path: Path, comman
     exit_code = main([command[0], str(path), *command[1:]], registry=_registry(notion))
 
     assert (exit_code, notion.closes - closed_before) == (0, 1)
+
+
+def test_a_release_stopped_before_it_cleared_the_icon_is_sent_again_on_the_next_run(tmp_path: Path) -> None:
+    seed_notion(make_notion_credentials())
+    notion = InMemoryNotion()
+    notion.add_page(NOTION_PAGE_ID, "Blank page")
+    into_the_page = make_notion_publish(where={"page": NOTION_PAGE_ID})
+    path = write_garden_report(tmp_path, meta=make_garden_meta(icon=SEEDLING), publish=into_the_page)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    retired: dict[str, Any] = {"doc_id": DOC_ID, "targets": []}
+    write_garden_report(tmp_path, meta=make_garden_meta(icon=SEEDLING), publish=retired)
+    notion.scripted.append(
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{NOTION_PAGE_ID}")
+    )
+
+    interrupted = main(["publish", str(path), "--apply"], registry=_registry(notion))
+    icon_after_the_interruption = notion.pages[NOTION_PAGE_ID].icon
+    again = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (interrupted, icon_after_the_interruption, again, notion.pages[NOTION_PAGE_ID].icon) == (
+        1,
+        SEEDLING_ICON,
+        0,
+        None,
+    )
 
 
 def test_a_dry_run_that_renews_the_sign_in_saves_it_so_a_rotated_refresh_token_is_never_lost(

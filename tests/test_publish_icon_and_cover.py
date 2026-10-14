@@ -18,6 +18,7 @@ from skaldr.publish.engine import (
 )
 from skaldr.publish.plan import ItemRef
 from tests.factories.publish_factory import (
+    DOC_ID,
     TARGET_LABEL,
     FakeTransport,
     fake_registry,
@@ -216,6 +217,26 @@ def test_writing_into_a_page_sets_the_yaml_icon_and_keeps_a_cover_the_yaml_does_
         [(SEEDLING, COVER_URL)],
         Applied(()),
         [],
+    )
+
+
+def test_a_release_clears_the_icon_skaldr_set_and_keeps_a_cover_a_person_set(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    transport.seed(NOTION_PAGE_ID, "Blank page", None)
+    transport.items[NOTION_PAGE_ID].cover = COVER_URL
+    path = write_garden_report(
+        tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}), **_look(icon=SEEDLING)
+    )
+    _publish(path, transport)
+    write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": []}, **_look(icon=SEEDLING))
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes(), _looks(transport)) == (
+        Applied((f"release  document ({NOTION_PAGE_ID})",)),
+        [("release", NOTION_PAGE_ID)],
+        [(None, COVER_URL)],
     )
 
 

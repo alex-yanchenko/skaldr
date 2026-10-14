@@ -164,6 +164,21 @@ def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be
     assert is_unset(released.comparable.fields.get("Area"))
 
 
+def test_a_release_clears_the_icon_skaldr_set_and_keeps_a_cover_it_did_not(
+    under_test: TransportUnderTest,
+) -> None:
+    if not under_test.carries_look:
+        pytest.skip("this transport shows no icon or cover")
+    instance = under_test.make()
+    transport = instance.transport
+    created = transport.create_item(NewItem(under_test.target, STAMP, LOOKING))
+
+    transport.release_item(created.item_id, Release(created.raw_sections, (), clears_icon=True))
+    released = transport.read_item(created.item_id, LOOKING)
+
+    assert (released.comparable.icon, released.comparable.cover, released.stamp) == (None, COVER_URL, None)
+
+
 def test_section_writes_add_replace_move_and_remove_by_key(under_test: TransportUnderTest) -> None:
     instance, created = _created(under_test)
     transport = instance.transport

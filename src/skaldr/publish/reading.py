@@ -133,8 +133,10 @@ def _settled(
 
 def _released(remote: RemoteItem, item: PublishedItem) -> bool:
     owned_set = any(name in remote.set_properties for name in item.rendered.fields)
+    owned_icon = item.rendered.icon is not None and remote.comparable.icon is not None
+    owned_cover = item.rendered.cover is not None and remote.comparable.cover is not None
     blank = not any(text.strip() for text in remote.comparable.sections.values())
-    return remote.doc_id is None and blank and not owned_set
+    return remote.doc_id is None and blank and not (owned_set or owned_icon or owned_cover)
 
 
 def _retired_already(item: PublishedItem, remote: RemoteItem | None) -> bool:
