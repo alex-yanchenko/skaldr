@@ -10,7 +10,18 @@ from typing_extensions import assert_never
 
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
 from skaldr.export.glyphs import gauge_bar, mark_glyph
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, write_export_run
+from skaldr.export.runs import (
+    Break,
+    CheckMark,
+    Chip,
+    DecisionMark,
+    ExportRich,
+    Gauge,
+    IndicatorMark,
+    Mark,
+    StatusMark,
+    SwimlaneMark,
+)
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
 from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
@@ -23,6 +34,7 @@ from skaldr.richtext import (
     StyleName,
     TextRunWriter,
     Tinted,
+    write_run,
 )
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -166,9 +178,6 @@ class MarkupRuns(TextRunWriter, ABC):
 
     @abstractmethod
     def placeholder(self, name: str, /) -> str: ...
-
-    @abstractmethod
-    def chip(self, run: Chip, /) -> str: ...
 
     @abstractmethod
     def underline(self, inner: str, /) -> str: ...
@@ -333,8 +342,14 @@ class CommonMarkRuns(MarkupRuns, ABC):
                     pieces.append(self.anchor_link(label, run.anchor))
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
+                case Break():
+                    pieces.append(self.line_break())
+                case Gauge():
+                    pieces.append(self.gauge(run))
+                case StatusMark() | SwimlaneMark() | IndicatorMark() | CheckMark() | DecisionMark():
+                    pieces.append(self.mark(run))
                 case _:
-                    pieces.append(write_export_run(run, self))
+                    pieces.append(write_run(run, self))
         return pieces
 
     def code(self, text: str, /) -> str:
@@ -345,6 +360,3 @@ class CommonMarkRuns(MarkupRuns, ABC):
 
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
-
-    def chip(self, run: Chip, /) -> str:
-        return self.write((run,))
