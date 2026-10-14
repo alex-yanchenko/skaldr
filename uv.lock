@@ -1258,7 +1258,7 @@ requires-dist = [
     { name = "pygments", specifier = ">=2.8,<3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "roman", specifier = ">=5.2" },
-    { name = "tenacity", marker = "extra == 'publish'", specifier = ">=9.2,<10" },
+    { name = "tenacity", marker = "extra == 'publish'", specifier = ">=8.2,<10" },
     { name = "tinycss2", specifier = ">=1.5.1,<2" },
     { name = "typing-extensions", specifier = ">=4.6" },
 ]
