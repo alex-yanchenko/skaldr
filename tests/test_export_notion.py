@@ -222,7 +222,7 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow">**api**</span> method<br>⛔███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow">**api**</span> method<br>⏸️███░░░░░░░ wow\\![img](https://e.com/x.png)'
     )
 
 
@@ -411,7 +411,7 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         "- **Lag**: 3 days → flat\n"
         '**Affects**: <span color="blue">**api**</span> <span color="brown">**ops**</span>\n'
         '- **Owners**: <span color="purple">**web**</span>\n<empty-block/>\n'
-        "- ✅ Ship\n- ⛔ Vendor\n<empty-block/>\n"
+        "- ✅ Ship\n- ⏸️ Vendor\n<empty-block/>\n"
         '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
         '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
         'Jan to Dec {color="gray"}\n'

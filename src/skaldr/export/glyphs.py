@@ -43,7 +43,7 @@ def status_glyph(state: StatusState) -> str:
         case "failed":
             return "❌"
         case "blocked":
-            return "⛔"
+            return "⏸️"
         case _:
             assert_never(state)
 

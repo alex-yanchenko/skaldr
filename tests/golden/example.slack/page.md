@@ -126,7 +126,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 * 🔵 Overflow bins being re-counted by hand right now.
 * ⚪ Overflow re-scan scheduled for the next count.
 * ❌ Vendor short-ship: blocked, cannot count.
-* ⛔ Vendor escalation awaiting `OPS-1234` response.
+* ⏸️ Vendor escalation awaiting `OPS-1234` response.
 
 ### Follow-up checklist
 
@@ -236,7 +236,7 @@ The cards on the left summarise; the panels below break down count progress and 
  
 
 * ✅ Reconciliation gate passes.
-* ⛔ Awaiting `OPS-1234`.
+* ⏸️ Awaiting `OPS-1234`.
 
 ## Recount Zone C
 

@@ -18,13 +18,13 @@ from skaldr.export.tree import ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
 
 
-def test_a_state_glyph_is_a_coloured_emoji_because_markdown_has_no_css_class_to_colour_it() -> None:
+def test_a_state_glyph_is_the_pages_symbol_as_a_coloured_emoji_since_markdown_has_no_css_to_colour_it() -> None:
     assert {state: status_glyph(state) for state in get_args(StatusState)} == {
         "done": "✅",
         "current": "🔵",
         "pending": "⚪",
         "failed": "❌",
-        "blocked": "⛔",
+        "blocked": "⏸️",
     }
 
 

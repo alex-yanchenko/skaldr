@@ -1463,7 +1463,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "- **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
         "**Affects**: **api** **ops**\n\n"
         "- **Owners**: **web**\n\n"
-        "* ✅ Ship\n* ⛔ Vendor\n\n"
+        "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
         "* **Zone**: ████░░░░░░ 42.9%\n\n"
         "Jan to Dec\n\n"
