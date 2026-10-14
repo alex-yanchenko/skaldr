@@ -163,21 +163,27 @@ class LockedKeyring(KeyringBackend):
         raise KeyringError("locked")
 
 
-TOKEN_RESPONSE: dict[str, object] = {
-    "access_token": "new-access",
-    "token_type": "bearer",
-    "refresh_token": "new-refresh",
-    "bot_id": "bot-id",
-    "workspace_id": "11111111-1111-4111-8111-111111111111",
-    "workspace_name": "Example Workspace",
-    "owner": {"type": "user"},
-}
+def notion_token_answer(**overrides: object) -> dict[str, object]:
+    return {
+        "access_token": "new-access",
+        "token_type": "bearer",
+        "refresh_token": "new-refresh",
+        "bot_id": "bot-id",
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "workspace_name": "Example Workspace",
+        "owner": {"type": "user"},
+        **overrides,
+    }
 
-MYSELF: dict[str, object] = {
-    "accountId": "account-id",
-    "displayName": "Example Reader",
-    "emailAddress": "reader@example.com",
-}
+
+def jira_myself_answer(**overrides: object) -> dict[str, object]:
+    return {
+        "accountId": "account-id",
+        "displayName": "Example Reader",
+        "emailAddress": "reader@example.com",
+        **overrides,
+    }
+
 
 Visit = Callable[[str], str]
 
@@ -277,8 +283,7 @@ class FakeBrowser:
         self.visits = visits
         self.resolves_localhost_to = resolves_localhost_to
         self.opened: list[str] = []
-        self.statuses: list[int] = []
-        self.failures: list[BaseException] = []
+        self.statuses: list[int | str] = []
         self._thread: threading.Thread | None = None
 
     def __call__(self, url: str) -> None:
@@ -301,18 +306,12 @@ class FakeBrowser:
                 for target in targets:
                     self.statuses.append(client.get(target).status_code)
         except httpx2.HTTPError as exc:
-            self.failures.append(exc)
+            self.statuses.append(f"could not reach the callback server: {exc!r}")
 
-    def finished(self) -> list[int]:
+    def finished(self) -> list[int | str]:
         if self._thread is not None:
             self._thread.join(timeout=5)
-        if self.failures:
-            pytest.fail(f"the fake browser could not reach the callback server: {self.failures}")
         return self.statuses
-
-    @property
-    def redirect_uri(self) -> str:
-        return parse_qs(urlsplit(self.opened[0]).query)["redirect_uri"][0]
 
 
 def fake_api(routes: dict[str, tuple[int, object]], seen: list[httpx2.Request]) -> httpx2.MockTransport:

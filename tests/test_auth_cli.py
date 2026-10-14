@@ -26,9 +26,7 @@ from skaldr.auth.store import (
 from skaldr.cli import main
 from skaldr.services import Service
 from tests.factories.auth_factory import (
-    MYSELF,
     OTHER_WORKSPACE_ID,
-    TOKEN_RESPONSE,
     WORKSPACE_ID,
     DeleteRefusingKeyring,
     FakeBrowser,
@@ -40,9 +38,11 @@ from tests.factories.auth_factory import (
     fake_api,
     free_port,
     insecure_keyring_refusal,
+    jira_myself_answer,
     legacy_entry_json,
     make_jira_credentials,
     make_notion_credentials,
+    notion_token_answer,
     revoke_request_for,
     seed_notion,
     stored_entry,
@@ -93,7 +93,9 @@ def test_auth_jira_verifies_the_token_and_saves_it(
     answer_prompts(monkeypatch, typed, hidden)
     seen: list[httpx2.Request] = []
 
-    exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, MYSELF)}, seen))
+    exit_code = auth_cli.main(
+        ["jira"], transport=fake_api({"/rest/api/3/myself": (200, jira_myself_answer())}, seen)
+    )
 
     assert (exit_code, typed, hidden, len(seen)) == (0, [], [], 1)
     assert load_jira() == SignIn(make_jira_credentials(), "keychain")
@@ -109,7 +111,7 @@ def test_auth_jira_leaves_out_a_display_name_it_cannot_show(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], display_name: str
 ) -> None:
     answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
-    myself = {**MYSELF, "displayName": display_name}
+    myself = jira_myself_answer(displayName=display_name)
 
     exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
 
@@ -123,7 +125,7 @@ def test_auth_jira_prints_only_the_printable_part_of_the_display_name(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     answer_prompts(monkeypatch, ["example.atlassian.net", "reader@example.com"], ["api-token"])
-    myself = {**MYSELF, "displayName": "Example\x1b[2J Reader\x07\r\n"}
+    myself = jira_myself_answer(displayName="Example\x1b[2J Reader\x07\r\n")
 
     exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
 
@@ -185,7 +187,7 @@ def test_auth_notion_prompts_for_the_client_signs_in_and_saves(
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(port)],
-        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
+        transport=fake_api({"/v1/oauth/token": (200, notion_token_answer())}, []),
         open_browser=browser,
     )
 
@@ -208,7 +210,7 @@ def test_auth_notion_takes_the_client_from_the_environment_without_prompting(
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
-        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
+        transport=fake_api({"/v1/oauth/token": (200, notion_token_answer())}, []),
         open_browser=browser,
     )
 
@@ -224,7 +226,7 @@ def test_auth_notion_names_a_workspace_notion_left_unnamed(
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
-        transport=fake_api({"/v1/oauth/token": (200, {**TOKEN_RESPONSE, "workspace_name": None})}, []),
+        transport=fake_api({"/v1/oauth/token": (200, notion_token_answer(workspace_name=None))}, []),
         open_browser=browser,
     )
 
@@ -239,7 +241,7 @@ def test_auth_notion_prints_only_the_printable_part_of_the_workspace_name(
 ) -> None:
     notion_client_in_environment(monkeypatch)
     browser = FakeBrowser(approving)
-    token = {**TOKEN_RESPONSE, "workspace_name": "Example\x1b[2J\N{RIGHT-TO-LEFT OVERRIDE} Workspace\r\n"}
+    token = notion_token_answer(workspace_name="Example\x1b[2J\N{RIGHT-TO-LEFT OVERRIDE} Workspace\r\n")
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
@@ -267,7 +269,7 @@ def test_auth_notion_prompts_only_for_what_the_environment_lacks(
 
     exit_code = auth_cli.main(
         ["notion", "--port", str(free_port())],
-        transport=fake_api({"/v1/oauth/token": (200, TOKEN_RESPONSE)}, []),
+        transport=fake_api({"/v1/oauth/token": (200, notion_token_answer())}, []),
         open_browser=browser,
     )
 
@@ -315,7 +317,7 @@ def sign_in_to_notion_with_a_failing_save(
     keyring.set_keyring(WriteFailingKeyring(failure))
     browser = FakeBrowser(approving)
     routes: dict[str, tuple[int, object]] = {
-        "/v1/oauth/token": (200, TOKEN_RESPONSE),
+        "/v1/oauth/token": (200, notion_token_answer()),
         "/v1/oauth/revoke": (revoke_status, {}),
     }
     exit_code = auth_cli.main(
@@ -813,7 +815,7 @@ def test_auth_jira_for_a_second_site_keeps_the_first(
 ) -> None:
     save_jira(make_jira_credentials())
     answer_prompts(monkeypatch, ["other.atlassian.net", "reader@example.com"], ["other-token"])
-    myself = {**MYSELF, "displayName": "Other Reader"}
+    myself = jira_myself_answer(displayName="Other Reader")
 
     exit_code = auth_cli.main(["jira"], transport=fake_api({"/rest/api/3/myself": (200, myself)}, []))
 
@@ -835,13 +837,12 @@ def run_notion_sign_in(
     monkeypatch: pytest.MonkeyPatch,
     seen: list[httpx2.Request],
     *,
-    token: dict[str, object] = TOKEN_RESPONSE,
     revoke_status: int = 200,
 ) -> int:
     notion_client_in_environment(monkeypatch)
     browser = FakeBrowser(approving)
     routes: dict[str, tuple[int, object]] = {
-        "/v1/oauth/token": (200, token),
+        "/v1/oauth/token": (200, notion_token_answer()),
         "/v1/oauth/revoke": (revoke_status, {}),
     }
     exit_code = auth_cli.main(
