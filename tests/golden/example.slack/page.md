@@ -364,17 +364,15 @@ flowchart LR
 1. **Freeze the aisle and pull the expected list** *before any scanning* Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
    * One row per bin, with the expected quantity.
    * Flag overflow bins (`bin > 12`): they take the manual path.
-2. **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count. `reconcile`
-3. **Escalate anything that still won't balance**
+2. **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
+3. **Escalate anything that still won't balance** A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
+
+`reconcile`
 
 ```
 counted = dedupe(scans, key="pallet_id")
 assert sum(counted) == expected
 ```
-
-::: {.callout}
-⚠️ A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
-:::
 
 ## Pulling a bin from the WMS yourself
 

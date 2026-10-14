@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
@@ -40,7 +41,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Person, Report, load_report
+from skaldr.models import Person, Report, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -63,6 +64,7 @@ from tests.factories import folder_texts, make_report, slack_of, write_report
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
+CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
@@ -107,8 +109,37 @@ def _one_column_table_text(cells: int) -> str:
     return "\n".join(["| h |", "| --- |", *["| v |"] * (cells - 1)]) + "\n"
 
 
-def test_the_example_exports_to_the_slack_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_slack(load_report(EXAMPLE), tmp_path)
+def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "text", "body": detail["body"]} if detail["type"] == "callout" else detail
+
+
+def _example_reworked_for_a_canvas() -> dict[str, Any]:
+    data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    blocks: list[dict[str, Any]] = []
+    for block in data["blocks"]:
+        blocks.append(block)
+        if block["type"] != "walkthrough":
+            continue
+        for step in block["steps"]:
+            detail = [_step_detail_reworked_for_a_canvas(inner) for inner in step["detail"]]
+            step["detail"] = [inner for inner in detail if inner["type"] in CANVAS_STEP_DETAIL_TYPES]
+            blocks += [inner for inner in detail if inner["type"] not in CANVAS_STEP_DETAIL_TYPES]
+    return {**data, "blocks": blocks}
+
+
+def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(load_report(EXAMPLE), tmp_path / "out")
+
+    assert str(raised.value) == _walkthrough_detail_message(
+        "blocks.64.walkthrough.steps.1.detail.1.code", "a code block"
+    )
+
+
+def test_the_example_reworked_for_a_canvas_exports_to_the_slack_golden_regenerated_by_the_export_command(
+    tmp_path: Path,
+) -> None:
+    export_slack(parse_report(_example_reworked_for_a_canvas()), tmp_path)
 
     assert folder_texts(tmp_path) == folder_texts(SLACK_GOLDEN)
 
@@ -235,11 +266,19 @@ def test_lists_with_a_paragraph_between_them_need_no_separator() -> None:
     )
 
 
-def test_a_second_list_in_one_list_item_moves_after_the_whole_list_kept_apart_from_it() -> None:
+def _list_item_message(what: str) -> str:
+    return (
+        f"a Slack canvas list item holds only text and one nested list, so it cannot show {what}; "
+        "move it out of the list, after the list"
+    )
+
+
+def test_a_second_list_in_one_list_item_is_rejected() -> None:
     entry = _list_entry("a", _bullets(_list_entry("b")), ListNode("number", (_list_entry("c"),)))
 
-    assert (
-        render_slack([_bullets(entry, _list_entry("d"))]) == f"* a\n  * b\n* d\n\n{LIST_SEPARATOR}\n\n1. c\n"
+    assert _rejection([_bullets(entry, _list_entry("d"))]) == (
+        "slack",
+        _list_item_message("a second nested list"),
     )
 
 
@@ -253,44 +292,40 @@ def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:
 
 
 @pytest.mark.parametrize(
-    ("moved", "text"),
+    ("held", "what"),
     [
-        pytest.param(CodeBlock("x", "bash"), "```bash\nx\n```", id="code"),
-        pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
-        pytest.param(Quote((_rich_text("said"),)), "> said", id="quote"),
-        pytest.param(
-            Callout("info", (_paragraph("careful"),)), "::: {.callout}\n💡 careful\n:::", id="callout"
-        ),
+        pytest.param(CodeBlock("x", "bash"), "a code block", id="code"),
+        pytest.param(_key_value_table(), "a table", id="table"),
+        pytest.param(Quote((_rich_text("said"),)), "a quote", id="quote"),
+        pytest.param(Callout("info", (_paragraph("careful"),)), "a callout", id="callout"),
         pytest.param(
             Media("image", "https://example.com/a.png", _rich_text("a chart")),
-            "![a chart](https://example.com/a.png)",
+            "an image or a media link",
             id="media",
         ),
-        pytest.param(Diagram(ONE_NODE_GRAPH), MERMAID_ONE_NODE, id="diagram"),
-        pytest.param(DisplayMath("x^2"), "```latex\nx^2\n```", id="math"),
-        pytest.param(Heading(2, _rich_text("Inner")), "## Inner", id="heading"),
+        pytest.param(Diagram(ONE_NODE_GRAPH), "a diagram", id="diagram"),
+        pytest.param(DisplayMath("x^2"), "a math block", id="math"),
+        pytest.param(Heading(2, _rich_text("Inner")), "a heading", id="heading"),
+        pytest.param(Toggle(_rich_text("More"), None, (_paragraph("x"),)), "a toggle", id="toggle"),
+        pytest.param(Tabs((Tab(_rich_text("A"), (_paragraph("x"),)),)), "a set of tabs", id="tabs"),
+        pytest.param(
+            Columns((GridColumn(50, (_paragraph("l"),)), GridColumn(50, (_paragraph("r"),)))),
+            "a column layout",
+            id="columns",
+        ),
     ],
 )
-def test_a_block_a_list_item_cannot_hold_moves_after_the_whole_top_level_list(moved: Node, text: str) -> None:
-    nested = _bullets(_list_entry("c", moved))
+def test_a_block_a_list_item_cannot_hold_is_rejected_even_two_lists_deep(held: Node, what: str) -> None:
+    nested = _bullets(_list_entry("c", held))
     nodes = [_bullets(_list_entry("a"), _list_entry("b", nested)), _paragraph("after")]
 
-    assert render_slack(nodes) == f"* a\n* b\n  * c\n\n{text}\n\nafter\n"
+    assert _rejection(nodes) == ("slack", _list_item_message(what))
 
 
-def test_the_rest_of_a_list_item_moves_with_its_first_block_so_the_order_holds() -> None:
-    entry = _list_entry(
-        "a", _paragraph("lead"), CodeBlock("x"), _paragraph("tail"), _bullets(_list_entry("n"))
-    )
-    nodes = [ListNode("number", (entry, _list_entry("b"))), _paragraph("after")]
+def test_a_paragraph_before_a_nested_list_in_a_list_item_is_written_in_place() -> None:
+    entry = _list_entry("a", _paragraph("lead"), _bullets(_list_entry("n")))
 
-    assert render_slack(nodes) == "1. a lead\n2. b\n\n```\nx\n```\n\ntail\n\n* n\n\nafter\n"
-
-
-def test_blocks_moved_from_several_list_items_keep_their_order() -> None:
-    nodes = [_bullets(_list_entry("a", CodeBlock("one")), _list_entry("b", CodeBlock("two")))]
-
-    assert render_slack(nodes) == "* a\n* b\n\n```\none\n```\n\n```\ntwo\n```\n"
+    assert render_slack([ListNode("number", (entry, _list_entry("b")))]) == "1. a lead\n   * n\n2. b\n"
 
 
 def test_a_divider_and_a_table_of_contents_inside_a_list_item_are_dropped() -> None:
@@ -426,11 +461,6 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
         ),
         pytest.param(Callout("info", ()), "::: {.callout}\n💡\n:::\n", id="empty"),
         pytest.param(
-            Callout("success", (_bullets(_list_entry("a", CodeBlock("x"))),)),
-            "::: {.callout}\n✅\n\n* a\n\n```\nx\n```\n:::\n",
-            id="list-moves-its-code-within-the-callout",
-        ),
-        pytest.param(
             Callout("info", (Toggle(_rich_text("T"), None, (_paragraph("x"),)),)),
             "::: {.callout}\n💡 **T**\n\nx\n:::\n",
             id="led-by-a-toggle-title",
@@ -464,10 +494,10 @@ def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_i
     )
 
 
-def test_a_table_moved_out_of_a_list_in_a_callout_moves_on_after_the_callout() -> None:
+def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
     node = Callout("info", (_bullets(_list_entry("a", _key_value_table())),))
 
-    assert render_slack([node]) == "::: {.callout}\n💡\n\n* a\n:::\n\n| k |\n| --- |\n| v |\n"
+    assert _rejection([node]) == ("slack", _list_item_message("a table"))
 
 
 def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
@@ -537,11 +567,6 @@ def test_more_than_three_columns_are_their_children_one_after_another() -> None:
     [
         pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
         pytest.param(Callout("info", (_paragraph("c"),)), "::: {.callout}\n💡 c\n:::", id="callout"),
-        pytest.param(
-            _bullets(_list_entry("a", _key_value_table())),
-            "* a\n\n| k |\n| --- |\n| v |",
-            id="table-from-a-list",
-        ),
     ],
 )
 def test_columns_holding_a_table_or_callout_are_their_children_one_after_another(
@@ -907,6 +932,107 @@ def test_a_grid_inside_a_walkthrough_step_is_rejected_before_anything_is_written
         _walkthrough_grid_message(1),
         False,
     )
+
+
+def _walkthrough_detail_message(path: str, what: str) -> str:
+    return (
+        f"a Slack canvas list item holds only text and one nested list, so it cannot show {what}, at {path}; "
+        "move it out of the step, after the walkthrough"
+    )
+
+
+def _walkthrough_whose_second_step_holds(detail: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "walkthrough",
+        "steps": [
+            {"label": "Freeze", "detail": [{"type": "text", "body": "Lock the aisle."}]},
+            {"label": "Scan", "detail": [{"type": "list", "items": ["Twice.", "Then reconcile."]}, detail]},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("detail", "what"),
+    [
+        pytest.param({"type": "code", "content": "recount --aisle 4"}, "a code block", id="code"),
+        pytest.param(
+            {"type": "callout", "tone": "warning", "body": "Stop first."}, "a callout", id="callout"
+        ),
+        pytest.param({"type": "math", "expression": "x^2"}, "a math block", id="math"),
+        pytest.param({"type": "list", "items": ["one", "two"]}, "a second nested list", id="second-list"),
+    ],
+)
+def test_a_walkthrough_step_holding_a_block_a_canvas_list_item_cannot_hold_is_rejected_naming_its_path(
+    tmp_path: Path, detail: dict[str, Any], what: str
+) -> None:
+    blocks = [{"type": "heading", "text": "Recount"}, _walkthrough_whose_second_step_holds(detail)]
+    report = load_report(write_report(tmp_path, make_report(blocks=blocks)))
+    out_dir = tmp_path / "out"
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(report, out_dir)
+
+    path = f"blocks.1.walkthrough.steps.1.detail.1.{detail['type']}"
+    assert (raised.value.target, str(raised.value), out_dir.exists()) == (
+        "slack",
+        _walkthrough_detail_message(path, what),
+        False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("block", "path"),
+    [
+        pytest.param(
+            {"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\n1. c\n2. d"}]},
+            "blocks.0.def_list",
+            id="definition",
+        ),
+        pytest.param(
+            {"type": "text", "body": "- a\n  - b\n  - c\n\n  1. d\n  2. e\n- f"},
+            "blocks.0.text",
+            id="text-body-list",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": "- a\n  - b\n  - c\n\n  1. d\n  2. e\n- f"},
+            "blocks.0.callout",
+            id="callout-body-list",
+        ),
+    ],
+)
+def test_a_list_item_holding_two_nested_lists_is_rejected_naming_the_block_that_holds_it(
+    tmp_path: Path, block: dict[str, Any], path: str
+) -> None:
+    report = load_report(write_report(tmp_path, make_report(blocks=[block])))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(report, tmp_path / "out")
+
+    assert str(raised.value) == (
+        "a Slack canvas list item holds only text and one nested list, so it cannot show a second nested "
+        f"list, at {path}; move it out of the list, after the list"
+    )
+
+
+def test_the_cli_refuses_a_code_block_inside_a_walkthrough_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    walkthrough = _walkthrough_whose_second_step_holds({"type": "code", "content": "recount"})
+    data_path = write_report(tmp_path, make_report(blocks=[walkthrough]))
+    export_dir = tmp_path / "exported"
+
+    assert main([str(data_path), "--export", "slack", "--export-dir", str(export_dir)]) == 1
+
+    captured = capsys.readouterr()
+    message = _walkthrough_detail_message("blocks.0.walkthrough.steps.1.detail.1.code", "a code block")
+    assert (captured.err, captured.out, export_dir.exists()) == (f"error: {message}\n", "", False)
+
+
+def test_a_walkthrough_step_with_text_then_one_list_exports_as_one_list_item() -> None:
+    detail = [{"type": "text", "body": "Twice."}, {"type": "list", "items": ["a", "b"]}]
+    walkthrough = {"type": "walkthrough", "steps": [{"label": "Scan", "detail": detail}]}
+
+    assert slack_of([walkthrough]) == "1. **Scan** Twice.\n   * a\n   * b\n"
 
 
 def test_a_walkthrough_whose_steps_hold_no_grid_exports() -> None:
