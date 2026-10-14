@@ -232,6 +232,22 @@ class _Emphasis:
 _Piece = str | _Emphasis
 
 
+@dataclass(frozen=True)
+class _Enclosing:
+    styles: frozenset[MarkerStyle] = frozenset()
+    marker_character: str = NO_CHARACTER
+
+    def inside(self, style: MarkerStyle) -> "_Enclosing":
+        return _Enclosing(self.styles.union((style,)), STYLE_MARKER[style][0])
+
+    def inside_brackets(self) -> "_Enclosing":
+        return _Enclosing(self.styles)
+
+
+def _writes_nothing_visible(pieces: Sequence[_Piece]) -> bool:
+    return all(not (piece if isinstance(piece, str) else piece.inner).strip() for piece in pieces)
+
+
 def _marker_style(style: StyleName) -> MarkerStyle | None:
     match style:
         case "bold" | "italic" | "strike":
@@ -261,7 +277,10 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return False
 
     def write(self, runs: ExportRich) -> str:
-        pieces = self._pieces(runs)
+        return self._written(runs, _Enclosing())
+
+    def _written(self, runs: ExportRich, enclosing: _Enclosing) -> str:
+        pieces = self._pieces(runs, enclosing)
         written = ""
         open_marker_character = NO_CHARACTER
         for index, piece in enumerate(pieces):
@@ -273,9 +292,14 @@ class CommonMarkRuns(MarkupRuns, ABC):
             runs_into_the_previous_marker = (
                 marker[0] == open_marker_character and piece.inner == piece.inner.lstrip()
             )
+            runs_into_the_enclosing_marker = marker[0] == enclosing.marker_character and (
+                not written.strip() or _writes_nothing_visible(pieces[index + 1 :])
+            )
             following = _first_character(pieces[index + 1 :]) or LINE_EDGE
-            if runs_into_the_previous_marker or not markers_flank(
-                piece.inner, written[-1:] or LINE_EDGE, following
+            if (
+                runs_into_the_previous_marker
+                or runs_into_the_enclosing_marker
+                or not markers_flank(piece.inner, written[-1:] or LINE_EDGE, following)
             ):
                 emphasis = self.unflanked_emphasis(piece.style, piece.inner)
             else:
@@ -284,24 +308,29 @@ class CommonMarkRuns(MarkupRuns, ABC):
             open_marker_character = marker[0] if emphasis.endswith(marker) else NO_CHARACTER
         return written
 
-    def _pieces(self, runs: ExportRich) -> list[_Piece]:
+    def _styled_pieces(self, run: Styled, enclosing: _Enclosing) -> list[_Piece]:
+        marker_style = _marker_style(run.style)
+        if marker_style is None:
+            return [self.underline(self._written(run.runs, enclosing))]
+        if marker_style in enclosing.styles:
+            return self._pieces(run.runs, enclosing)
+        return [_Emphasis(marker_style, self._written(run.runs, enclosing.inside(marker_style)))]
+
+    def _pieces(self, runs: ExportRich, enclosing: _Enclosing) -> list[_Piece]:
         pieces: list[_Piece] = []
         for run in runs:
             match run:
                 case Styled():
-                    inner = self.write(run.runs)
-                    marker_style = _marker_style(run.style)
-                    pieces.append(
-                        self.underline(inner) if marker_style is None else _Emphasis(marker_style, inner)
-                    )
+                    pieces += self._styled_pieces(run, enclosing)
                 case Tinted():
-                    pieces += self._pieces(run.runs)
+                    pieces += self._pieces(run.runs, enclosing)
                 case Link():
-                    pieces.append(self.link(self.write(run.label), run.url))
+                    pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
                 case AnchorLink() if not self.links_to(run.anchor):
-                    pieces += self._pieces(run.label)
+                    pieces += self._pieces(run.label, enclosing)
                 case AnchorLink():
-                    pieces.append(self.anchor_link(self.write(run.label), run.anchor))
+                    label = self._written(run.label, enclosing.inside_brackets())
+                    pieces.append(self.anchor_link(label, run.anchor))
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
                 case _:

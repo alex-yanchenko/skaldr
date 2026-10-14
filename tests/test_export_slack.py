@@ -662,12 +662,28 @@ def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> 
         pytest.param(
             (Styled("strike", _rich_text("(s)")), Plain("t")), "(s)t", id="strike-followed-by-a-letter"
         ),
+        pytest.param(
+            (
+                Styled(
+                    "bold",
+                    (Styled("italic", _rich_text("a")), Plain(" x"), Styled("italic", _rich_text("y"))),
+                ),
+            ),
+            "**a xy**",
+            id="italic-at-both-edges-of-a-bold",
+        ),
     ],
 )
 def test_emphasis_whose_markers_a_canvas_cannot_read_drops_its_style_and_never_becomes_a_tag(
     runs: tuple[ExportRun, ...], written: str
 ) -> None:
     assert render_slack([Paragraph(runs)]) == f"{written}\n"
+
+
+def test_emphasis_nested_in_the_same_emphasis_is_written_once_on_a_canvas() -> None:
+    nested = Styled("italic", (Plain("a "), Styled("italic", _rich_text("b")), Plain(" c")))
+
+    assert render_slack([Paragraph((nested,))]) == "*a b c*\n"
 
 
 def test_canvas_special_characters_are_escaped_in_text_but_not_dollars() -> None:

@@ -1389,6 +1389,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
 | `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
+| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where GitHub would not read them, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic), since their markers would run together into one; there the mark is a `<strong>`, `<em>` or `<del>` tag. A mark inside the same mark, such as an italic word in an italic sentence, is written once | the same marks |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
@@ -1455,7 +1456,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it |
 | `media` | a link named by the caption, or by the kind (Video, Audio, File or PDF) when there is none |
 | badges | bold labels |
-| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter; there the text is written without the mark |
+| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic); there the text is written without the mark. A mark inside the same mark is written once |
 | `++underline++`, `H~2~O`, `10^3^`, `[text]{tone=…}` | the text alone |
 | `` $`x_i`$ `` inline math | inline code |
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |

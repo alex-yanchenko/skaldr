@@ -958,6 +958,77 @@ def test_emphasis_written_straight_after_emphasis_never_merges_its_markers_into_
 @pytest.mark.parametrize(
     ("body", "markdown", "html"),
     [
+        pytest.param("*_b_*", "*b*\n", "<p><em>b</em></p>\n", id="italic-in-italic-is-not-bold"),
+        pytest.param("_*b* c_", "*b c*\n", "<p><em>b c</em></p>\n", id="italic-opening-an-italic"),
+        pytest.param("**__b__**", "**b**\n", "<p><strong>b</strong></p>\n", id="bold-in-bold"),
+        pytest.param("__**b** c__", "**b c**\n", "<p><strong>b c</strong></p>\n", id="bold-opening-a-bold"),
+        pytest.param("~~~~b~~~~", "~~b~~\n", "<p><s>b</s></p>\n", id="strike-in-strike-opens-no-code-fence"),
+        pytest.param(
+            "*a **_b_ c** d*",
+            "*a **b c** d*\n",
+            "<p><em>a <strong>b c</strong> d</em></p>\n",
+            id="italic-two-levels-down",
+        ),
+    ],
+)
+def test_emphasis_nested_in_the_same_emphasis_is_written_once(body: str, markdown: str, html: str) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
+        pytest.param(
+            "**_a_ x*y*z**",
+            "**<em>a</em> x*y*z**\n",
+            "<p><strong><em>a</em> x<em>y</em>z</strong></p>\n",
+            id="italic-opening-a-bold",
+        ),
+        pytest.param(
+            "**x*y*z _a_**",
+            "**x*y*z <em>a</em>**\n",
+            "<p><strong>x<em>y</em>z <em>a</em></strong></p>\n",
+            id="italic-closing-a-bold",
+        ),
+        pytest.param(
+            "_**a** x**y**z_",
+            "*<strong>a</strong> x**y**z*\n",
+            "<p><em><strong>a</strong> x<strong>y</strong>z</em></p>\n",
+            id="bold-opening-an-italic",
+        ),
+        pytest.param(
+            "**_a_ ~~b~~**",
+            "**<em>a</em> ~~b~~**\n",
+            "<p><strong><em>a</em> <s>b</s></strong></p>\n",
+            id="italic-opening-a-bold-that-ends-in-a-strike",
+        ),
+        pytest.param(
+            "**~~a~~ b**",
+            "**~~a~~ b**\n",
+            "<p><strong><s>a</s> b</strong></p>\n",
+            id="a-different-marker-character-keeps-its-markers",
+        ),
+        pytest.param(
+            "**x _a_ y**",
+            "**x *a* y**\n",
+            "<p><strong>x <em>a</em> y</strong></p>\n",
+            id="away-from-the-edge-keeps-its-markers",
+        ),
+    ],
+)
+def test_emphasis_at_the_edge_of_emphasis_sharing_its_marker_character_is_written_as_html_tags(
+    body: str, markdown: str, html: str
+) -> None:
+    written = markdown_of([{"type": "text", "body": body}])
+
+    assert (written, _github_html(written)) == (markdown, html)
+
+
+@pytest.mark.parametrize(
+    ("body", "markdown", "html"),
+    [
         pytest.param(
             "“**(a)**” and —**(b)**—",
             "“**(a)**” and —**(b)**—\n",
