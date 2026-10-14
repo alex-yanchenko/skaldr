@@ -104,7 +104,7 @@ class OneEntryRefusingKeyring(InMemoryKeyring):
     def set_password(self, service: str, username: str, password: str) -> None:
         if username == self.refused_username:
             raise KeyringError(f"{username} refused")
-        super().set_password(service, username, password)
+        self.entries[(service, username)] = password
 
 
 def insecure_keyring_refusal(backend_name: str) -> str:
