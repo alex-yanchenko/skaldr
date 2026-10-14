@@ -308,6 +308,74 @@ def test_a_moved_section_whose_first_block_was_also_edited_joins_the_section_bef
     assert _split(PLANTING, hoe, RAKE, INTRO) == {"planting": [PLANTING, hoe, RAKE], "intro": [INTRO]}
 
 
+SHARED = _words("Before you start.")
+WEEDS = _words("Pull weeds.")
+SHARED_FIRST_BLOCKS: dict[str, list[JsonValue]] = {
+    "intro": [INTRO],
+    "tools": [SHARED, TOOLS],
+    "planting": [PLANTING],
+    "weeding": [SHARED, WEEDS],
+}
+
+
+def _split_shared(*blocks: JsonValue) -> dict[str, list[JsonValue]]:
+    return split_description(list(blocks), layout_of(SHARED_FIRST_BLOCKS))
+
+
+@pytest.mark.parametrize(
+    ("blocks", "expected"),
+    [
+        pytest.param(
+            [INTRO, SHARED, WEEDS, PLANTING, SHARED, TOOLS],
+            {"intro": [INTRO], "weeding": [SHARED, WEEDS], "planting": [PLANTING], "tools": [SHARED, TOOLS]},
+            id="swapped-sections-that-share-a-first-block",
+        ),
+        pytest.param(
+            [INTRO, SHARED, TOOLS, SHARED, WEEDS, PLANTING],
+            {"intro": [INTRO], "tools": [SHARED, TOOLS], "weeding": [SHARED, WEEDS], "planting": [PLANTING]},
+            id="a-section-moved-next-to-its-twin",
+        ),
+        pytest.param(
+            [SHARED, WEEDS, SHARED, TOOLS],
+            {"weeding": [SHARED, WEEDS], "tools": [SHARED, TOOLS]},
+            id="only-the-twins-left-and-swapped",
+        ),
+    ],
+)
+def test_sections_that_share_their_first_block_keep_their_own_blocks_when_moved(
+    blocks: list[JsonValue], expected: dict[str, list[JsonValue]]
+) -> None:
+    split = _split_shared(*blocks)
+
+    assert (list(split), split) == (list(expected), expected)
+
+
+def test_a_deleted_section_takes_its_copy_of_a_shared_first_block_with_it() -> None:
+    assert _split_shared(INTRO, SHARED, WEEDS, PLANTING) == {
+        "intro": [INTRO],
+        "weeding": [SHARED, WEEDS],
+        "planting": [PLANTING],
+    }
+
+
+def test_a_deleted_copy_of_a_shared_first_block_is_taken_from_the_section_that_lost_it() -> None:
+    assert _split_shared(INTRO, TOOLS, PLANTING, SHARED, WEEDS) == {
+        "intro": [INTRO],
+        "tools": [TOOLS],
+        "planting": [PLANTING],
+        "weeding": [SHARED, WEEDS],
+    }
+
+
+def test_a_section_whose_text_sits_inside_a_longer_section_is_not_anchored_inside_it() -> None:
+    layout = layout_of({"tools": [INTRO, TOOLS], "intro": [INTRO], "planting": [PLANTING]})
+
+    assert split_description([INTRO, TOOLS, PLANTING], layout) == {
+        "tools": [INTRO, TOOLS],
+        "planting": [PLANTING],
+    }
+
+
 def test_an_empty_description_has_no_sections() -> None:
     assert (split_description([], layout_of(SECTIONS)), split_description([], None)) == ({}, {})
 

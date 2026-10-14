@@ -200,14 +200,41 @@ def _matched_owners(remote: Sequence[str], sections: Sequence[LayoutSection]) ->
     return owners
 
 
+def _run_starts(run: Sequence[str], remote: Sequence[str]) -> list[int]:
+    width = len(run)
+    return [
+        start for start in range(len(remote) - width + 1) if list(remote[start : start + width]) == list(run)
+    ]
+
+
+def _whole_run_anchors(sections: Sequence[LayoutSection], remote: Sequence[str]) -> dict[int, int]:
+    runs = Counter(tuple(section.blocks) for section in sections)
+    anchors: dict[int, int] = {}
+    claimed: set[int] = set()
+    for index in sorted(range(len(sections)), key=lambda index: -len(sections[index].blocks)):
+        run = sections[index].blocks
+        starts = _run_starts(run, remote) if runs[tuple(run)] == 1 else []
+        if len(starts) != 1:
+            continue
+        span = set(range(starts[0], starts[0] + len(run)))
+        if not span & claimed:
+            anchors[index] = starts[0]
+            claimed |= span
+    return anchors
+
+
 def _anchors(sections: Sequence[LayoutSection], remote: Sequence[str]) -> dict[int, int]:
+    anchors = _whole_run_anchors(sections, remote)
+    taken = set(anchors.values())
     expected = Counter(digest for section in sections for digest in section.blocks)
     found = Counter(remote)
-    return {
-        index: remote.index(section.blocks[0])
-        for index, section in enumerate(sections)
-        if expected[section.blocks[0]] == 1 and found[section.blocks[0]] == 1
-    }
+    for index, section in enumerate(sections):
+        first = section.blocks[0]
+        if index not in anchors and expected[first] == 1 and found[first] == 1:
+            position = remote.index(first)
+            if position not in taken:
+                anchors[index] = position
+    return anchors
 
 
 def _anchored_groups(
