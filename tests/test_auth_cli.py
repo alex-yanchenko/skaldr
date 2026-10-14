@@ -344,8 +344,20 @@ def revokes_among(seen: list[httpx2.Request]) -> list[dict[str, object]]:
             "connection in Notion under Settings, Connections.\n",
         ),
         (KeyboardInterrupt(), 200, "\nerror: cancelled\n"),
+        (
+            KeyboardInterrupt(),
+            400,
+            "error: Saving to the keychain failed (KeyboardInterrupt). The token Notion just issued could "
+            "not be saved, and revoking it failed too (Notion did not revoke the token: HTTP 400), so remove "
+            "the connection in Notion under Settings, Connections.\n",
+        ),
     ],
-    ids=["the revoke succeeds", "the revoke fails too", "interrupted at a keychain prompt"],
+    ids=[
+        "the revoke succeeds",
+        "the revoke fails too",
+        "interrupted at a keychain prompt",
+        "interrupted at a keychain prompt and the revoke fails",
+    ],
 )
 def test_auth_notion_revokes_a_token_the_keychain_did_not_save(
     monkeypatch: pytest.MonkeyPatch,
