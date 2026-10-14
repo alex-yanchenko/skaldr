@@ -15,6 +15,7 @@ from skaldr.export.capabilities import (
     Held,
     Rejection,
 )
+from skaldr.export.lower import assemble_page, lower_regions, lowering_for
 from skaldr.export.markup import table_width
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.tree import (
@@ -40,7 +41,7 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
-from skaldr.export_targets import ExportTarget
+from skaldr.export_targets import PUBLISHED_AS, ExportTarget
 from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
 
 Container = Literal["document", "callout", "toggle", "toggle inside a toggle"]
@@ -302,3 +303,17 @@ def reject_what_the_target_cannot_show(
     rejected = _first_rejection(chain(model_hits(report, document), tree_hits(document.body)), target)
     if rejected is not None:
         raise rejected
+
+
+def reject_what_the_targets_cannot_show(report: Report, targets: Sequence[ExportTarget]) -> None:
+    lowering = lowering_for(report)
+    regions = lower_regions(lowering)
+    published = report.publish.targets if report.publish is not None else []
+    for publish_target in published:
+        chosen = [region for region in regions if publish_target.builds_from(region.section_id)]
+        page = assemble_page(chosen, lowering)
+        reject_what_the_target_cannot_show(report, page, PUBLISHED_AS[publish_target.service()])
+    if targets:
+        whole = assemble_page(regions, lowering)
+        for target in dict.fromkeys(targets):
+            reject_what_the_target_cannot_show(report, whole, target)

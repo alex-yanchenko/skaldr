@@ -27,7 +27,11 @@ Text holding a lone surrogate, which only a YAML escape such as `"\ud800"` can p
 can hold, fails the same way with its path. A failed reconciliation is listed with the other block errors in the file. A page-wide check (an
 undeclared badge key, a repeated table, matrix, reference or heading id) runs once every block is
 valid and names each place involved after `at`. Run `skaldr --check <file>` to validate without
-rendering; read the path, fix, re-run. Add an output flag and the check becomes a gate on that
+rendering; read the path, fix, re-run. `--check` also refuses a block an export target cannot show,
+the same refusal `--export` and `skaldr publish` make, for each target the document's `publish` block
+names (a Jira target as `adf`, a Notion target as `notion`, each over the sections it is built from)
+and for each target you name with `--for`: `skaldr --check --for slack --for adf plan.yaml` fails
+with the block's path, why the target cannot show it and what to write instead. Add an output flag and the check becomes a gate on that
 render: `skaldr --check --strict plan.yaml -o plan.html --if-stale` validates and writes in one
 invocation, and writes nothing at all if the check fails.
 
@@ -1272,7 +1276,8 @@ publish:
 - every id in `from` and `split` names exactly one top-level `section` by its `id:` (a heading id or a title does not count), appears once in its list, and no two top-level sections share an id;
 - every `split` id sits inside `from` when `from` is given, and every `overrides` key is a `split` id;
 - a Notion page is a URL on notion.so, notion.site or notion.com, or a page id; a Jira project key is an uppercase letter followed by uppercase letters, digits or `_`, a `parent` is an issue key such as `PLAN-100`, and `issue_type` is not blank;
-- no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue.
+- no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue;
+- the sections a target is built from hold no block the target cannot show: a Jira target is checked as `--export adf` and a Notion target as `--export notion` (see *Exporting as ADF for Jira*), and `skaldr publish` makes the same check before it sends anything.
 
 A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
 
@@ -1416,7 +1421,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look. A block a target cannot show the way the page shows it is refused rather than written badly: the export stops before it writes anything, with an error naming the block's path in the YAML, why the target cannot show it and what to write instead. The ADF and Slack sections below list the blocks each of them refuses. The rest of this section shows how the GitHub-flavored and Notion exports write each block:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look. A block a target cannot show the way the page shows it is refused rather than written badly: the export stops before it writes anything, with an error naming the block's path in the YAML, why the target cannot show it and what to write instead, and `skaldr --check --for <target>` makes the same check without exporting. The ADF and Slack sections below list the blocks each of them refuses. The rest of this section shows how the GitHub-flavored and Notion exports write each block:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
