@@ -4,7 +4,17 @@ from skaldr import compute
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import ExportRich
-from skaldr.export.tree import Callout, CodeBlock, ListEntry, Node, Paragraph, Tab, Tabs
+from skaldr.export.tree import (
+    AuthoredName,
+    Callout,
+    CodeBlock,
+    ListEntry,
+    Node,
+    Paragraph,
+    Tab,
+    Tabs,
+    with_authored_path,
+)
 from skaldr.models import (
     Request,
     RequestCapture,
@@ -60,11 +70,11 @@ def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tup
     nodes += [_response_caption(core, case), _response_block(case)]
     if case.verdict:
         verdict = Paragraph(with_bold_label("Verdict", lowering.rich(case.verdict)))
-        nodes.append(Callout(compute.case_tone(case), (verdict,)))
+        nodes.append(Callout(compute.case_tone(case), (verdict,), authored_as="request verdict"))
     return tuple(nodes)
 
 
-def _cases(core: RequestLike, lowering: Lowering) -> list[Node]:
+def _cases(core: RequestLike, lowering: Lowering, authored_as: AuthoredName) -> list[Node]:
     if len(core.cases) == 1:
         case = core.cases[0]
         return [Paragraph(italic(plain(case.label))), *_case_nodes(core, case, lowering)]
@@ -72,7 +82,7 @@ def _cases(core: RequestLike, lowering: Lowering) -> list[Node]:
         Tab(plain(case.label), _case_nodes(core, case, lowering), compute.case_tone(case))
         for case in core.cases
     )
-    return [Tabs(tabs)]
+    return [Tabs(tabs, authored_as=authored_as)]
 
 
 def _variable_entry(variable: RequestVariable) -> ListEntry:
@@ -109,13 +119,15 @@ def lower_request(block: Request, lowering: Lowering) -> list[Node]:
     return [
         Paragraph(bold(block.label)),
         *_variables(compute.reader_variables(block)),
-        *_cases(block, lowering),
+        *_cases(block, lowering, "request"),
     ]
 
 
 def lower_request_flow(block: RequestFlow, lowering: Lowering) -> list[Node]:
     nodes: list[Node] = [Paragraph(bold(block.label)), *_variables(compute.reader_variables(block))]
+    flow_path = lowering.path_of(block)
     for index, step in enumerate(block.steps, start=1):
+        step_path = f"{flow_path}.steps.{index - 1}" if flow_path else None
         nodes.append(Paragraph(_step_title(step, index, len(block.steps))))
-        nodes += _cases(step, lowering)
+        nodes += [with_authored_path(node, step_path) for node in _cases(step, lowering, "request step")]
     return nodes

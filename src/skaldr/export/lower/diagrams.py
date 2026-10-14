@@ -120,7 +120,7 @@ def _donut_table(block: Chart) -> TableNode:
         for item, legend in zip(block.slices, chart_legend(block), strict=True)
     )
     total = TableRow(plain_cells(TOTAL_LABEL, compute.fmt(donut_total(block)), ""), emphasis="total")
-    return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total))
+    return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total), authored_as="chart")
 
 
 def _mermaid_cannot_label_its_series(block: Chart) -> bool:
@@ -139,6 +139,7 @@ def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
             TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
             for series in block.series
         ),
+        authored_as="chart",
     )
     if _mermaid_cannot_label_its_series(block):
         return table
