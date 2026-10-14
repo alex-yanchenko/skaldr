@@ -34,6 +34,12 @@ def test_skill_ships_the_thin_skill_guide_and_example() -> None:
     assert (skill / "example.yaml").is_file()
 
 
+def test_skill_md_says_an_export_takes_the_place_of_the_html_output() -> None:
+    skill_md = (package_path("skill") / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "`--export adf` or `--export slack` in place of `-o`;" in skill_md
+
+
 def test_skill_md_is_thin_and_defers_to_the_tool() -> None:
     """The installed SKILL.md must stay version-agnostic — it points at `skaldr --guide` rather
     than restating the block catalog (which would drift across versions)."""

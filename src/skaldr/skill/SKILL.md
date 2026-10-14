@@ -19,7 +19,7 @@ skaldr is a **CLI already on your PATH**. Do not look for a source repo, a `uv r
 `python -m`; just run `skaldr`. You write one YAML file; skaldr renders one HTML page and owns the design.
 
 It covers visual structure (flows, tables, cards, charts, timelines) plus living-doc support
-(freshness stamps, `!include`, rollups, `--live`). Run `skaldr --guide` for the full block palette.
+(freshness stamps, `!include`, rollups, `--live`).
 
 **If it turns out not to fit,** because the content is really freeform prose, or a diagram skaldr
 can't express, or `skaldr` isn't on PATH, say so in one line and fall back to markdown or
@@ -39,8 +39,9 @@ fabrication, so honesty is on you.
    - `skaldr --guide` for every block, the rules, the `table`, and a complete example.
    - `skaldr --write-schema /tmp/skaldr.schema.json` for the exact fields and types.
 2. **Write the YAML** from real evidence, following the guide.
-3. **Render:** `skaldr report.yaml -o report.html`. For GitHub, Notion, Jira or Slack,
-   `--export markdown`, `--export notion`, `--export adf` or `--export slack` write `out/<name>.<target>/`.
+3. **Render:** `skaldr report.yaml -o report.html`. For GitHub, Notion, Jira or Slack, use
+   `--export markdown`, `--export notion`, `--export adf` or `--export slack` in place of `-o`;
+   each writes `out/<name>.<target>/`.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
    (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = skaldr prints `OK` and the output
    file exists. To validate without writing anything (e.g. over a glob), use
