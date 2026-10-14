@@ -25,6 +25,7 @@ def export_dir(tmp_path: Path) -> Path:
     [
         pytest.param("notion", "Hi.\n", id="notion"),
         pytest.param("markdown", "# Test Report\n\nHi.\n", id="markdown"),
+        pytest.param("slack", "Hi.\n", id="slack"),
     ],
 )
 def test_the_cli_exports_the_page_and_prints_its_path(
@@ -168,6 +169,7 @@ def test_a_symlinked_page_gets_the_export_in_its_target_and_stays_a_link(
         pytest.param(["--export-dir", "d"], DIR_OR_CHUNK_ALONE, id="dir-alone"),
         pytest.param(["--export-dir", ""], DIR_OR_CHUNK_ALONE, id="empty-dir-alone"),
         pytest.param(["--export", "markdown", "--chunk", "100"], CHUNK_NOTION_ONLY, id="chunk-markdown"),
+        pytest.param(["--export", "slack", "--chunk", "100"], CHUNK_NOTION_ONLY, id="chunk-slack"),
         pytest.param(["--export", "notion", "--chunk", "0"], CHUNK_NOT_POSITIVE, id="chunk-zero"),
         pytest.param(["--export", "notion", "--chunk", "-5"], CHUNK_NOT_POSITIVE, id="chunk-negative"),
         pytest.param(["--export", "jira"], "invalid choice: 'jira'", id="unknown-target"),

@@ -168,6 +168,10 @@ def _lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering, depth: 
     return [node for block in blocks for node in _lower_block(block, lowering, depth)]
 
 
+def lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering) -> list[Node]:
+    return _lower_blocks(blocks, lowering, 0)
+
+
 def _heading(block: models.Heading, lowering: Lowering, depth: int) -> list[Node]:
     heading = Heading(capped_heading_level(block.level + depth), plain(block.text), lowering.anchor_of(block))
     subheading: list[Node] = [Paragraph(italic(lowering.rich(block.sub)), "muted")] if block.sub else []

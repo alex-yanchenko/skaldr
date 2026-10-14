@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
@@ -38,12 +37,14 @@ class Heading:
     level: HeadingLevel
     text: ExportRich
     anchor: str | None = None
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
 class Paragraph:
     text: ExportRich
     tone: ToneName | None = None
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class ListNode:
     kind: ListKind
     entries: tuple[ListEntry, ...]
     start: int = 1
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -93,11 +95,13 @@ class TableNode:
 class CodeBlock:
     content: str
     language: str = ""
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
 class DisplayMath:
     expression: str
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -106,6 +110,7 @@ class Media:
     url: str
     description: ExportRich = ()
     caption: ExportRich = ()
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -127,7 +132,7 @@ class Quote:
 
 @dataclass(frozen=True)
 class Divider:
-    pass
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -149,6 +154,7 @@ class GridColumn:
 @dataclass(frozen=True)
 class Columns:
     columns: tuple[GridColumn, ...]
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -212,6 +218,7 @@ Figure = Graph | PieChart | XYChart
 class Diagram:
     figure: Figure
     supplement: "tuple[Node, ...]" = ()
+    authored_at: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -223,6 +230,7 @@ class TocEntry:
 @dataclass(frozen=True)
 class TableOfContents:
     entries: tuple[TocEntry, ...]
+    authored_at: str | None = field(default=None, compare=False)
 
 
 Node = (
@@ -290,54 +298,43 @@ def heading_of(node: Node) -> Heading | None:
     return None
 
 
-def _unchanged(after: Sequence[object], before: Sequence[object]) -> bool:
-    return all(new is old for new, old in zip(after, before, strict=True))
-
-
 def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:
-    stamped = tuple(with_authored_path(node, path) for node in nodes)
-    return nodes if _unchanged(stamped, nodes) else stamped
-
-
-def _entry_authored_at(entry: ListEntry, path: str) -> ListEntry:
-    children = _all_authored_at(entry.children, path)
-    return entry if children is entry.children else replace(entry, children=children)
-
-
-def _tab_authored_at(tab: Tab, path: str) -> Tab:
-    children = _all_authored_at(tab.children, path)
-    return tab if children is tab.children else replace(tab, children=children)
-
-
-def _column_authored_at(column: GridColumn, path: str) -> GridColumn:
-    children = _all_authored_at(column.children, path)
-    return column if children is column.children else replace(column, children=children)
+    return tuple(with_authored_path(node, path) for node in nodes)
 
 
 def with_authored_path(node: Node, path: str | None) -> Node:
-    if path is None:
+    if path is None or node.authored_at is not None:
         return node
     match node:
-        case Callout() | Toggle() | Tabs() | TableNode() | Quote() if node.authored_at:
-            return node
         case ListNode():
-            entries = tuple(_entry_authored_at(entry, path) for entry in node.entries)
-            return node if _unchanged(entries, node.entries) else replace(node, entries=entries)
+            entries = tuple(
+                replace(entry, children=_all_authored_at(entry.children, path)) for entry in node.entries
+            )
+            return replace(node, entries=entries, authored_at=path)
         case Callout() | Toggle():
             return replace(node, children=_all_authored_at(node.children, path), authored_at=path)
-        case Tabs():
-            tabs = tuple(_tab_authored_at(tab, path) for tab in node.tabs)
-            return replace(node, tabs=tabs, authored_at=path)
         case Columns():
-            columns = tuple(_column_authored_at(column, path) for column in node.columns)
-            return node if _unchanged(columns, node.columns) else replace(node, columns=columns)
+            columns = tuple(
+                replace(column, children=_all_authored_at(column.children, path)) for column in node.columns
+            )
+            return replace(node, columns=columns, authored_at=path)
+        case Tabs():
+            tabs = tuple(replace(tab, children=_all_authored_at(tab.children, path)) for tab in node.tabs)
+            return replace(node, tabs=tabs, authored_at=path)
         case Diagram():
-            supplement = _all_authored_at(node.supplement, path)
-            return node if supplement is node.supplement else replace(node, supplement=supplement)
-        case TableNode() | Quote():
+            return replace(node, supplement=_all_authored_at(node.supplement, path), authored_at=path)
+        case (
+            Heading()
+            | Paragraph()
+            | TableNode()
+            | CodeBlock()
+            | DisplayMath()
+            | Media()
+            | Quote()
+            | Divider()
+            | TableOfContents()
+        ):
             return replace(node, authored_at=path)
-        case Heading() | Paragraph() | CodeBlock() | DisplayMath() | Media() | Divider() | TableOfContents():
-            return node
 
 
 def nested_nodes(node: Node) -> tuple[Node, ...]:

@@ -1416,7 +1416,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira, described in the next section. Write the YAML the same way for every output; what changes is how some blocks look:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
@@ -1445,6 +1445,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
 | `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
+| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where GitHub would not read them, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic), since their markers would run together into one; there the mark is a `<strong>`, `<em>` or `<del>` tag. A mark inside the same mark, such as an italic word in an italic sentence, is written once | the same marks |
 | `++underline++` | an `<ins>` tag | an underline span |
 | `H~2~O`, `10^3^` | `<sub>` and `<sup>` tags | inline math (`` $`_{\text{2}}`$ ``), since Notion has no subscript or superscript |
 | `[text]{tone=… bg=…}` | the text alone | a text colour span around a background colour span |
@@ -1487,6 +1488,39 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `[text](doc:id)` | the text alone, because a page id exists only once the document is published |
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export with an error naming the block in the document's own terms, what it was inside, its path in the YAML, and the nearest heading above it, for example `ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading 'Totals'` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle, at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle`. The block, and the panel, grid cell, toggle, collapsed section or part, or set of tabs that refuses it, are named as you wrote them (`ADF cannot place a comparison inside a panel`, `ADF cannot place a toggle inside a toggle that is itself inside a section`), so a `link` card is a link card, a `comparison` is a comparison, and a `note` is a note, even though ADF would write each as a quote, a table or a panel. In a document built by an `index`, the path counts the parts as blocks of the index (`blocks.0.part.blocks.1.toggle`). Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
+
+## Exporting for a Slack canvas
+
+`skaldr report.yaml --export slack` writes the document as the Markdown a Slack canvas takes, to `out/<name>.slack/page.md` (or the folder `--export-dir` names). Nothing is sent anywhere: whatever creates the canvas (Slack's `canvases.create`, or an agent's Slack connector) uses the `title` in the folder's `.skaldr-export.json` as the canvas title and `page.md` as its body. Like the Notion export, the file holds the body only, since a canvas shows its title above the body. The folder keeps its `.skaldr-export.json` list, with the same overwrite rules as the Markdown exports. `--chunk` does not apply.
+
+| Block | Canvas Markdown |
+| --- | --- |
+| `heading` | `#`, `##` or `###`; a canvas has no deeper heading, so a heading that would be deeper, such as a level 4 heading or a level 3 heading inside a section, is `###` |
+| `text`, and prose in other blocks | a paragraph; tones are dropped |
+| a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and one nested list; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text when it comes before the item's nested list. A list item holding anything else, such as a paragraph after its nested list, a code block, table, quote, callout, image, media, diagram, math block, heading, toggle, tabs, divider or a second nested list, fails the export with an error naming the YAML path of the block that holds it, since a canvas could only show it after the whole list, away from its item. A canvas joins two lists in a row into one, so a paragraph holding a single no-break space keeps them apart, such as a `fact_strip` right before a `cards` block |
+| `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
+| `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
+| `flow`, `fan`, `chart` | the same Mermaid block as the GitHub-flavored export, which a canvas shows as a code block of the diagram's source, with the list of steps or the data table under it |
+| `quote` | quoted lines, with the citation on its own line in italics |
+| `divider` | `---` at the top level; dropped inside a list item or a grid column |
+| a collapsed `section` | a heading at its level, then its content |
+| `toggle` | its bold title, then its content |
+| `tabs`, a multi-case `request` | each tab as a bold title, led by an icon when its tone is info, success, warning or danger, then its content |
+| `grid` | a `::: {.layout}` of `::: {.column}` blocks when it has at most three cells and none of them holds a table or a callout (a toned cell is a callout); otherwise its cells one after another |
+| `table`, `comparison`, `matrix`, `swimlane` | a pipe table under its header row; tones and widths are dropped, a `\|` in a cell is escaped, and the lines of a cell are joined with `<br>` |
+| a table of contents | nothing, since a canvas has no links to its own headings |
+| `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it |
+| `media` | a link named by the caption, or by the kind (Video, Audio, File or PDF) when there is none |
+| badges | bold labels |
+| `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic); there the text is written without the mark. A mark inside the same mark is written once |
+| `++underline++`, `[text]{tone=…}` | the text alone |
+| `H~2~O`, `10^3^` | Unicode subscript and superscript characters, `H₂O` and `10³`, since a canvas has no subscript or superscript mark. Digits, `+`, `-`, `=` and brackets have both forms; a superscript also covers every lowercase letter but `q` and the capitals `A B D E G H I J K L M N O P R T U V W`, and a subscript the lowercase `a e h i j k l m n o p r s t u v x`. A subscript or superscript holding any other character, a space included, fails the export with an error naming its text and the first such character, since writing it bare would change its meaning (`10^3^` read as 103); write the text without the mark, or export the document elsewhere |
+| `` $`x_i`$ `` inline math | inline code |
+| `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
+| `[Ada](user:ada)` | the label as text |
+| a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
+
+A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text`, `callout` or `def_list` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.def_list`); move the second list or the paragraph out of the list.
 
 ## What you never write
 

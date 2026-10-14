@@ -23,6 +23,7 @@ from skaldr.export import (
     export_adf,
     export_markdown,
     export_notion,
+    export_slack,
 )
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
@@ -280,7 +281,8 @@ def main(argv: list[str] | None = None) -> int:
         choices=EXPORT_TARGETS,
         help="write the document as Markdown or ADF instead of HTML: `notion` writes Notion-flavored "
         "Markdown for a Notion page; `markdown` writes GitHub-flavored Markdown for a README, a PR body or "
-        "a wiki; `adf` writes the Atlassian Document Format JSON a Jira issue description takes.",
+        "a wiki; `adf` writes the Atlassian Document Format JSON a Jira issue description takes; `slack` "
+        "writes the Markdown a Slack canvas takes.",
     )
     parser.add_argument(
         "--export-dir",
@@ -660,6 +662,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
                 result = export_markdown(report, out_dir)
             case "adf":
                 result = export_adf(report, out_dir)
+            case "slack":
+                result = export_slack(report, out_dir)
             case _:
                 assert_never(target)
     except (ReportError, OSError) as exc:

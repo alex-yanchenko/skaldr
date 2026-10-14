@@ -2,7 +2,7 @@ import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final, Literal, get_args
+from typing import Annotated, Final
 
 from pydantic import StringConstraints, ValidationError
 
@@ -12,10 +12,11 @@ from skaldr.export.budget import character_budget
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
+from skaldr.export.slack import reject_what_a_canvas_cannot_show, render_slack
+from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
 from skaldr.replace_file import replace_file
-from skaldr.services import NotionService
 
 __all__ = [
     "EXPORT_MANIFEST",
@@ -25,11 +26,11 @@ __all__ = [
     "export_adf",
     "export_markdown",
     "export_notion",
+    "export_slack",
 ]
 
-ExportTarget = Literal[NotionService, "markdown", "adf"]
-EXPORT_TARGETS: Final[tuple[ExportTarget, ...]] = get_args(ExportTarget)
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
+MARKDOWN_PAGE_NAME: Final = "page.md"
 ADF_PAGE_NAME: Final = "page.adf.json"
 ExportedPageName = Annotated[
     str, StringConstraints(pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|page\.adf\.json)$")
@@ -129,14 +130,16 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
     document = lower_report(report)
     page_width = report.meta.notion_width
     if chunk is None:
-        return _export_pages(out_dir, document.title, {"page.md": render_notion(document.body, page_width)})
+        return _export_pages(
+            out_dir, document.title, {MARKDOWN_PAGE_NAME: render_notion(document.body, page_width)}
+        )
     split = chunk_notion(document.body, character_budget(chunk), page_width)
     return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
 
 
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:
     document = lower_report(report)
-    return _export_pages(out_dir, document.title, {"page.md": render_markdown_document(document)})
+    return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
 
 
 def export_adf(report: Report, out_dir: Path) -> ExportResult:
@@ -149,3 +152,9 @@ def export_adf(report: Report, out_dir: Path) -> ExportResult:
         else ()
     )
     return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+
+
+def export_slack(report: Report, out_dir: Path) -> ExportResult:
+    reject_what_a_canvas_cannot_show(report)
+    document = lower_report(report)
+    return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_slack(document.body)})
