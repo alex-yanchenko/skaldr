@@ -11,21 +11,26 @@ from skaldr.auth.notion import NotionSession, renewed_notion_credentials
 from skaldr.auth.store import NotionCredentials, SignIn, load_notion
 from skaldr.errors import AuthError
 from tests.factories.auth_factory import (
-    TOKEN_RESPONSE,
     InMemoryKeyring,
     SlowSaveKeyring,
     WriteFailingKeyring,
     basic_auth_header,
     fake_api,
     make_notion_credentials,
+    notion_token_answer,
     refusing_connections,
     rendered_traceback,
     seed_notion,
     summarise,
 )
 
-RENEWED = {**TOKEN_RESPONSE, "access_token": "renewed-access", "refresh_token": "renewed-refresh"}
 RUN_AUTH_AGAIN = "; run `skaldr auth notion` again"
+
+
+def _renewed(**overrides: object) -> dict[str, object]:
+    return notion_token_answer(
+        **{"access_token": "renewed-access", "refresh_token": "renewed-refresh", **overrides}
+    )
 
 
 def _token_endpoint(answer: tuple[int, object], seen: list[httpx2.Request]) -> httpx2.MockTransport:
@@ -36,7 +41,7 @@ def test_renewing_sends_the_refresh_token_with_basic_auth_and_a_json_body() -> N
     seen: list[httpx2.Request] = []
 
     renewed = renewed_notion_credentials(
-        make_notion_credentials(), transport=_token_endpoint((200, RENEWED), seen)
+        make_notion_credentials(), transport=_token_endpoint((200, _renewed()), seen)
     )
 
     assert renewed == make_notion_credentials(access_token="renewed-access", refresh_token="renewed-refresh")
@@ -52,7 +57,7 @@ def test_renewing_sends_the_refresh_token_with_basic_auth_and_a_json_body() -> N
 
 
 def test_renewing_keeps_the_refresh_token_when_notion_issues_no_new_one() -> None:
-    answer = {**RENEWED, "refresh_token": None}
+    answer = _renewed(refresh_token=None)
 
     renewed = renewed_notion_credentials(
         make_notion_credentials(), transport=_token_endpoint((200, answer), [])
@@ -84,7 +89,7 @@ def test_a_sign_in_without_what_renewing_needs_is_refused_without_a_request(
 
     with pytest.raises(AuthError, match=f"^{re.escape(message)}$"):
         renewed_notion_credentials(
-            make_notion_credentials(**{missing: None}), transport=_token_endpoint((200, RENEWED), seen)
+            make_notion_credentials(**{missing: None}), transport=_token_endpoint((200, _renewed()), seen)
         )
     assert seen == []
 
@@ -110,7 +115,7 @@ def test_a_session_from_the_keychain_saves_the_renewed_sign_in_there() -> None:
     seed_notion(make_notion_credentials())
     stored = load_notion()
     assert stored is not None
-    session = NotionSession(stored, transport=_token_endpoint((200, RENEWED), []))
+    session = NotionSession(stored, transport=_token_endpoint((200, _renewed()), []))
 
     session.renew()
 
@@ -121,7 +126,7 @@ def test_a_session_from_the_keychain_saves_the_renewed_sign_in_there() -> None:
 def test_a_session_from_the_environment_is_never_renewed_or_saved() -> None:
     seen: list[httpx2.Request] = []
     from_environment = SignIn(make_notion_credentials(refresh_token=None), "environment")
-    session = NotionSession(from_environment, transport=_token_endpoint((200, RENEWED), seen))
+    session = NotionSession(from_environment, transport=_token_endpoint((200, _renewed()), seen))
 
     with pytest.raises(
         AuthError,
@@ -137,7 +142,7 @@ def _renewing_only(refresh_token: str, seen: list[str]) -> httpx2.MockTransport:
         seen.append(sent)
         if sent != refresh_token:
             return httpx2.Response(400, json={"error": "invalid_grant"})
-        return httpx2.Response(200, json=RENEWED)
+        return httpx2.Response(200, json=_renewed())
 
     return httpx2.MockTransport(answer)
 
@@ -178,7 +183,7 @@ def test_a_renewal_the_keychain_refuses_to_save_says_to_sign_in_again_and_keeps_
     keychain: InMemoryKeyring,
 ) -> None:
     seed_notion(make_notion_credentials())
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen := []))
+    session = NotionSession(_stored(), transport=_token_endpoint((200, _renewed()), seen := []))
     failing = WriteFailingKeyring(KeyringError("locked"))
     failing.entries = dict(keychain.entries)
     keyring.set_keyring(failing)
@@ -201,7 +206,7 @@ def test_a_renewal_whose_keychain_save_times_out_says_to_sign_in_again(
     keychain: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seed_notion(make_notion_credentials())
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), []))
+    session = NotionSession(_stored(), transport=_token_endpoint((200, _renewed()), []))
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
     monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 0.2)
     slow = SlowSaveKeyring()
@@ -227,7 +232,7 @@ def test_a_renewal_whose_keychain_save_times_out_says_to_sign_in_again(
 def test_a_sign_in_that_could_not_be_saved_after_renewal_is_not_renewed() -> None:
     seen: list[httpx2.Request] = []
     unidentified = SignIn(make_notion_credentials(workspace_id=None), "keychain")
-    session = NotionSession(unidentified, transport=_token_endpoint((200, RENEWED), seen))
+    session = NotionSession(unidentified, transport=_token_endpoint((200, _renewed()), seen))
 
     with pytest.raises(
         AuthError,
@@ -243,7 +248,7 @@ def test_a_sign_in_that_could_not_be_saved_after_renewal_is_not_renewed() -> Non
 def test_a_session_first_takes_a_newer_token_another_run_stored_without_asking_notion() -> None:
     seed_notion(make_notion_credentials())
     seen: list[httpx2.Request] = []
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen))
+    session = NotionSession(_stored(), transport=_token_endpoint((200, _renewed()), seen))
     seed_notion(make_notion_credentials(access_token="other-access", refresh_token="other-refresh"))
 
     session.renew()
@@ -264,7 +269,7 @@ def test_a_stored_token_that_is_refused_too_is_renewed_with_its_refresh_token() 
 
 def test_a_session_renews_with_notion_only_once() -> None:
     seed_notion(make_notion_credentials())
-    session = NotionSession(_stored(), transport=_token_endpoint((200, RENEWED), seen := []))
+    session = NotionSession(_stored(), transport=_token_endpoint((200, _renewed()), seen := []))
     session.renew()
 
     with pytest.raises(AuthError, match=re.escape(f"Notion refused the renewed sign-in{RUN_AUTH_AGAIN}")):

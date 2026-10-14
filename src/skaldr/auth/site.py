@@ -22,11 +22,11 @@ def https_origin(typed: str) -> str | None:
         url = HttpUrl(text if "://" in text else f"https://{text}")
     except ValidationError:
         return None
-    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host):
+    if url.scheme != "https" or not _is_a_jira_cloud_host(url.host) or url.port != HTTPS_DEFAULT_PORT:
         return None
     if _carries_userinfo_query_or_fragment(url):
         return None
-    return f"https://{url.host}" + ("" if url.port == HTTPS_DEFAULT_PORT else f":{url.port}")
+    return f"https://{url.host}"
 
 
 def _is_a_jira_cloud_host(host: str | None) -> bool:

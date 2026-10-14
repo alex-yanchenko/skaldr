@@ -28,6 +28,7 @@ WORKSPACE_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 HEX_WORKSPACE_ID = "abcdef01-2345-4678-89ab-cdef01234567"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
+SITE_ON_ANOTHER_PORT = "https://example.atlassian.net:8443"
 
 
 def rendered_traceback(error: BaseException) -> str:
@@ -95,6 +96,24 @@ class WriteFailingKeyring(InMemoryKeyring):
         raise self.failure
 
 
+class OneEntryRefusingKeyring(InMemoryKeyring):
+    def __init__(self, refused_username: str) -> None:
+        super().__init__()
+        self.refused_username = refused_username
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        if username == self.refused_username:
+            raise KeyringError(f"{username} refused")
+        self.entries[(service, username)] = password
+
+
+class DeleteRefusingKeyring(InMemoryKeyring):
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        raise KeyringError("denied")
+
+
 def insecure_keyring_refusal(backend_name: str) -> str:
     return (
         f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "
@@ -145,21 +164,27 @@ class LockedKeyring(KeyringBackend):
         raise KeyringError("locked")
 
 
-TOKEN_RESPONSE: dict[str, object] = {
-    "access_token": "new-access",
-    "token_type": "bearer",
-    "refresh_token": "new-refresh",
-    "bot_id": "bot-id",
-    "workspace_id": "11111111-1111-4111-8111-111111111111",
-    "workspace_name": "Example Workspace",
-    "owner": {"type": "user"},
-}
+def notion_token_answer(**overrides: object) -> dict[str, object]:
+    return {
+        "access_token": "new-access",
+        "token_type": "bearer",
+        "refresh_token": "new-refresh",
+        "bot_id": "bot-id",
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "workspace_name": "Example Workspace",
+        "owner": {"type": "user"},
+        **overrides,
+    }
 
-MYSELF: dict[str, object] = {
-    "accountId": "account-id",
-    "displayName": "Example Reader",
-    "emailAddress": "reader@example.com",
-}
+
+def jira_myself_answer(**overrides: object) -> dict[str, object]:
+    return {
+        "accountId": "account-id",
+        "displayName": "Example Reader",
+        "emailAddress": "reader@example.com",
+        **overrides,
+    }
+
 
 Visit = Callable[[str], str]
 
@@ -208,6 +233,7 @@ REFUSED_SITES = (
     RefusedSite("an ip literal", "https://127.0.0.1"),
     RefusedSite("an ipv6 literal", "https://[::1]"),
     RefusedSite("localhost with a port", "localhost:22"),
+    RefusedSite("a jira cloud host on a port other than 443", "https://acme.atlassian.net:8443"),
     RefusedSite("a host outside atlassian.net", "https://evil.example"),
     RefusedSite("atlassian.net itself", "https://atlassian.net"),
     RefusedSite("atlassian.net inside another host", "https://acme.atlassian.net.evil.example"),
@@ -258,8 +284,7 @@ class FakeBrowser:
         self.visits = visits
         self.resolves_localhost_to = resolves_localhost_to
         self.opened: list[str] = []
-        self.statuses: list[int] = []
-        self.failures: list[BaseException] = []
+        self.statuses: list[int | str] = []
         self._thread: threading.Thread | None = None
 
     def __call__(self, url: str) -> None:
@@ -282,18 +307,12 @@ class FakeBrowser:
                 for target in targets:
                     self.statuses.append(client.get(target).status_code)
         except httpx2.HTTPError as exc:
-            self.failures.append(exc)
+            self.statuses.append(f"could not reach the callback server: {exc!r}")
 
-    def finished(self) -> list[int]:
+    def finished(self) -> list[int | str]:
         if self._thread is not None:
             self._thread.join(timeout=5)
-        if self.failures:
-            pytest.fail(f"the fake browser could not reach the callback server: {self.failures}")
         return self.statuses
-
-    @property
-    def redirect_uri(self) -> str:
-        return parse_qs(urlsplit(self.opened[0]).query)["redirect_uri"][0]
 
 
 def fake_api(routes: dict[str, tuple[int, object]], seen: list[httpx2.Request]) -> httpx2.MockTransport:
@@ -400,6 +419,17 @@ class SlowSaveKeyring(InMemoryKeyring):
         self.entries[(service, username)] = password
 
 
+class SlowDeleteKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.released = threading.Event()
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        self.released.wait(5)
+        super().delete_password(service, username)
+
+
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
     fields: dict[str, str | None] = {
         "site": "https://example.atlassian.net",
@@ -409,6 +439,14 @@ def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
     }
     _refuse_unknown_fields(overrides, fields)
     return JiraCredentials.model_validate({**fields, **overrides})
+
+
+def store_jira_entry_an_earlier_skaldr_wrote(keychain: InMemoryKeyring, site: str) -> None:
+    username = f"jira:{site}"
+    keychain.entries[("skaldr", username)] = json.dumps(
+        {**make_jira_credentials().model_dump(), "site": site}
+    )
+    keychain.entries[("skaldr", "index")] = json.dumps({"jira": [username], "notion": []})
 
 
 def _refuse_unknown_fields(overrides: dict[str, str | None], fields: dict[str, str | None]) -> None:

@@ -183,12 +183,32 @@ def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | 
         print(f"Not signed in to Notion{where}.")
         return
     revoked = _notion_token_was_revoked(entry, transport)
-    if not forget(entry):
+    if not _forget_after_the_revoke(entry, revoked):
         outcome = "The Notion token was revoked" if revoked else "The Notion token was not revoked"
         print(f"{outcome}, but a newer sign-in was stored in the meantime and was kept.")
         return
     outcome = "token revoked and removed from the keychain" if revoked else "removed from the keychain"
     print(f"Signed out of Notion: {outcome}.")
+
+
+def _forget_after_the_revoke(entry: StoredEntry[NotionCredentials], revoked: bool) -> bool:
+    try:
+        return forget(entry)
+    except KeyboardInterrupt:
+        if revoked:
+            print(
+                "warning: the Notion token was revoked, but the logout was interrupted before the keychain "
+                "removed its entry, which may remain; run this logout again to remove it",
+                file=sys.stderr,
+            )
+        raise
+    except AuthError as unremoved:
+        if not revoked:
+            raise
+        raise AuthError(
+            f"The Notion token was revoked, but removing it from the keychain failed ({unremoved}); "
+            "run this logout again to remove it"
+        ) from unremoved
 
 
 def _notion_token_was_revoked(
@@ -200,15 +220,19 @@ def _notion_token_was_revoked(
     try:
         revoke_notion_token(entry.credentials, transport=transport)
     except AuthError as exc:
-        print(f"warning: {exc}", file=sys.stderr)
+        print(
+            f"warning: {exc}. If the token was not already revoked, by an earlier logout for example, it is "
+            "still valid; remove the connection in Notion under Settings, Connections",
+            file=sys.stderr,
+        )
         return False
     return True
 
 
 def _log_out_of_jira(site: str | None) -> None:
-    entry = find_jira(site)
+    selector, entry = find_jira(site)
     if entry is None:
-        where = "" if site is None else f" at {normalise_site(site)}"
+        where = "" if selector is None else f" at {selector}"
         print(f"Not signed in to Jira{where}.")
         return
     if not forget(entry):

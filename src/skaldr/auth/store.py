@@ -1,12 +1,13 @@
 import json
+import logging
 import os
-import sys
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, Literal, TypeVar, cast
+from queue import Empty, SimpleQueue
+from typing import Generic, Literal, NamedTuple, TypeAlias, TypeVar, cast
 from uuid import UUID
 
 import keyring
@@ -22,6 +23,7 @@ from skaldr.auth.site import https_origin, normalise_site, site_refusal
 from skaldr.errors import AuthError, SeveralSignInsError
 from skaldr.services import Service
 
+_LOGGER = logging.getLogger(__name__)
 KEYCHAIN_SERVICE = "skaldr"
 KEYCHAIN_INDEX_USERNAME = "index"
 LEGACY_SELECTOR = "legacy"
@@ -94,11 +96,19 @@ class SignIn(Generic[CredentialsT]):
 
 
 def jira_credentials(
-    site: str, email: str, api_token: str, display_name: str | None = None
+    site: str, email: str, api_token: str, display_name: str | None = None, *, refusal_prefix: str = ""
 ) -> JiraCredentials:
     with CaughtWithoutChaining(ValidationError) as invalid:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
-    raise AuthError(invalid.error.errors(include_input=False)[0]["msg"])
+    raise AuthError(f"{refusal_prefix}{_first_refusal(invalid.error)}")
+
+
+def _first_refusal(invalid: ValidationError) -> str:
+    return invalid.errors(include_input=False)[0]["msg"]
+
+
+def jira_selector(site: str | None) -> str | None:
+    return site if site is None or site == LEGACY_SELECTOR else normalise_site(site)
 
 
 @dataclass(frozen=True)
@@ -140,6 +150,11 @@ class StoredEntry(Generic[CredentialsT]):
                 f"`skaldr auth logout {self.service} {LEGACY_SELECTOR}` to remove it, then run "
                 f"`skaldr auth {self.service}` again"
             )
+        if not _a_sign_in_writes_an_entry_named(self.service, self.identifier):
+            return (
+                f"The keychain entry for {self.service} {self.identifier} is unreadable; "
+                f"run `skaldr auth logout {self.service} {self.identifier}` to remove it"
+            )
         return (
             f"The keychain entry for {self.service} {self.identifier} is unreadable; "
             f"run `skaldr auth {self.service}` again"
@@ -147,6 +162,12 @@ class StoredEntry(Generic[CredentialsT]):
 
 
 AnyStoredEntry = StoredEntry[JiraCredentials] | StoredEntry[NotionCredentials]
+
+
+def _a_sign_in_writes_an_entry_named(service: Service, identifier: str) -> bool:
+    if service == "jira":
+        return https_origin(identifier) == identifier
+    return _is_uuid(identifier) and _canonical_workspace_selector(identifier) == identifier
 
 
 @dataclass(frozen=True)
@@ -188,17 +209,29 @@ def stored_notion_sign_ins() -> list[StoredEntry[NotionCredentials]]:
     return _in_the_keychain(lambda: _entries(_NOTION))
 
 
-def find_jira(site: str | None = None) -> StoredEntry[JiraCredentials] | None:
-    names_an_origin = site is not None and site != LEGACY_SELECTOR
-    wanted = normalise_site(site) if site is not None and names_an_origin else site
+class JiraLookup(NamedTuple):
+    selector: str | None
+    entry: StoredEntry[JiraCredentials] | None
+
+
+def find_jira(site: str | None = None) -> JiraLookup:
+    entries = stored_jira_sign_ins()
+    stored_under_the_typed_name = site is not None and any(entry.identifier == site for entry in entries)
+    selector = site if stored_under_the_typed_name else jira_selector(site)
+    return JiraLookup(selector, _find_jira_among(entries, selector))
+
+
+def _find_jira_among(
+    entries: list[StoredEntry[JiraCredentials]], wanted: str | None
+) -> StoredEntry[JiraCredentials] | None:
     found = _the_only_match(
-        stored_jira_sign_ins(),
+        entries,
         wanted,
         _is_site,
         "Jira sites",
         lambda entry: entry.identifier or _UNREADABLE_LEGACY_ENTRY,
     )
-    if found is None and wanted is not None and names_an_origin:
+    if found is None and wanted is not None and wanted != LEGACY_SELECTOR:
         return _in_the_keychain(lambda: _entry_named(_JIRA, wanted))
     return found
 
@@ -222,10 +255,14 @@ def entry_for_workspace(
 
 
 def load_jira(site: str | None = None) -> SignIn[JiraCredentials] | None:
+    return _load_jira_by_selector(jira_selector(site))
+
+
+def _load_jira_by_selector(wanted: str | None) -> SignIn[JiraCredentials] | None:
     from_environment = jira_from_environment()
-    if from_environment is not None and (site is None or normalise_site(site) == from_environment.site):
+    if from_environment is not None and wanted in (None, from_environment.site):
         return SignIn(from_environment, "environment")
-    return _signed_in(find_jira(site))
+    return _signed_in(_find_jira_among(stored_jira_sign_ins(), wanted))
 
 
 def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | None:
@@ -252,9 +289,10 @@ def require_notion_for_a_target(workspace: str | None) -> SignIn[NotionCredentia
 
 
 def require_jira(site: str | None = None) -> SignIn[JiraCredentials]:
-    sign_in = load_jira(site)
+    wanted = jira_selector(site)
+    sign_in = _load_jira_by_selector(wanted)
     if sign_in is None:
-        where = "" if site is None else f" at {normalise_site(site)}"
+        where = "" if wanted is None else f" at {wanted}"
         raise AuthError(f"Not signed in to Jira{where}; run `skaldr auth jira`")
     return sign_in
 
@@ -316,8 +354,15 @@ def _is_workspace(entry: StoredEntry[NotionCredentials], selector: str) -> bool:
     return (
         entry.identifier == selector
         or (selector == LEGACY_SELECTOR and entry.identifier is None)
-        or (entry.credentials is not None and entry.credentials.workspace_name == selector)
+        or _shows_the_workspace_name(entry, selector)
     )
+
+
+def _shows_the_workspace_name(entry: StoredEntry[NotionCredentials], selector: str) -> bool:
+    if entry.credentials is None:
+        return False
+    shown = printable_only(entry.credentials.workspace_name or "")
+    return shown != "" and shown == printable_only(selector)
 
 
 def _is_uuid(text: str) -> bool:
@@ -415,10 +460,8 @@ def _migrate_legacy_entry(kind: _Kind[CredentialsT]) -> None:
     credentials = None if legacy is None else _parse(legacy, kind.model)
     if credentials is None:
         return
-    serialized = credentials.model_dump_json()
-    username = _migration_username(kind, _username(kind, credentials), serialized)
-    _set(username, serialized)
-    _list(kind.service, username)
+    username = _migration_username(kind, _username(kind, credentials), credentials.model_dump_json())
+    _write(kind, username, credentials)
     _delete(kind.service)
 
 
@@ -442,10 +485,12 @@ def _entries(kind: _Kind[CredentialsT]) -> list[StoredEntry[CredentialsT]]:
     return entries
 
 
-@dataclass
-class _KeychainReply(Generic[Answer]):
-    value: Answer | None = None
-    error: BaseException | None = None
+@dataclass(frozen=True)
+class _Answered(Generic[Answer]):
+    value: Answer
+
+
+_KeychainReply: TypeAlias = _Answered[Answer] | BaseException
 
 
 class KeychainTimeoutError(AuthError):
@@ -459,32 +504,37 @@ class KeychainWaitInterrupted(KeyboardInterrupt):
 def _from_the_keychain(
     ask: Callable[[], Answer], still_waiting_for_the_lock: Callable[[], bool] = lambda: False
 ) -> Answer:
-    answered = threading.Event()
-    reply: _KeychainReply[Answer] = _KeychainReply()
+    replies: SimpleQueue[_KeychainReply[Answer]] = SimpleQueue()
 
     def ask_and_record() -> None:
         try:
-            reply.value = ask()
+            replies.put(_Answered(ask()))
         except BaseException as exc:
-            reply.error = exc
-        finally:
-            answered.set()
+            replies.put(exc)
 
     threading.Thread(target=ask_and_record, name="skaldr-keychain", daemon=True).start()
     try:
-        if not answered.wait(KEYCHAIN_NOTICE_SECONDS):
-            print(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
-            if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
-                raise KeychainTimeoutError(
-                    f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
-                    "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
-                    "may still be applied if the keychain answers later"
-                )
+        reply = _wait_for_the_reply(replies, still_waiting_for_the_lock)
     except KeyboardInterrupt as interrupted:
         raise KeychainWaitInterrupted from interrupted
-    if reply.error is not None:
-        raise reply.error
-    return cast("Answer", reply.value)
+    if isinstance(reply, BaseException):
+        raise reply
+    return reply.value
+
+
+def _wait_for_the_reply(
+    replies: SimpleQueue[_KeychainReply[Answer]], still_waiting_for_the_lock: Callable[[], bool]
+) -> _KeychainReply[Answer]:
+    with suppress(Empty):
+        return replies.get(timeout=KEYCHAIN_NOTICE_SECONDS)
+    _LOGGER.warning(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE)
+    with suppress(Empty):
+        return replies.get(timeout=max(0.0, KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS))
+    raise KeychainTimeoutError(
+        f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
+        "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
+        "may still be applied if the keychain answers later"
+    )
 
 
 @contextmanager
@@ -553,13 +603,17 @@ def refuse_an_unusable_keychain() -> None:
 def _save(kind: _Kind[CredentialsT], credentials: CredentialsT) -> None:
     _refuse_an_insecure_keyring()
     username = _username(kind, credentials)
-    _in_the_keychain(lambda: _write(kind, username, credentials))
+
+    def migrate_then_write() -> None:
+        _migrate_legacy_entry(kind)
+        _write(kind, username, credentials)
+
+    _in_the_keychain(migrate_then_write)
 
 
 def _write(kind: _Kind[CredentialsT], username: str, credentials: CredentialsT) -> None:
-    _migrate_legacy_entry(kind)
-    _set(username, credentials.model_dump_json())
     _list(kind.service, username)
+    _set(username, credentials.model_dump_json())
 
 
 def _refuse_an_insecure_keyring() -> None:
@@ -636,6 +690,9 @@ def jira_from_environment() -> JiraCredentials | None:
     values = _all_or_none_from_environment(JIRA_ENVIRONMENT)
     if values is None:
         return None
-    with CaughtWithoutChaining(AuthError) as refused:
-        return jira_credentials(values[_JIRA_SITE], values[_JIRA_EMAIL], values[_JIRA_API_TOKEN])
-    raise AuthError(f"{_JIRA_SITE}: {refused.error}")
+    return jira_credentials(
+        values[_JIRA_SITE],
+        values[_JIRA_EMAIL],
+        values[_JIRA_API_TOKEN],
+        refusal_prefix=f"{_JIRA_SITE}: ",
+    )
