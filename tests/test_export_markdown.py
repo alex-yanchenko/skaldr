@@ -1060,6 +1060,19 @@ def test_emphasis_beside_non_ascii_punctuation_keeps_its_markers(body: str, mark
         pytest.param("(a)", " ", "", False, id="an-empty-neighbour-after-is-not-punctuation"),
         pytest.param("a", "", "", True, id="letters-inside-need-no-neighbour-at-all"),
         pytest.param("(a)", "$", "!", True, id="ascii-punctuation-neighbours"),
+        pytest.param(
+            "(a)",
+            "\N{LINE SEPARATOR}",
+            "\n",
+            False,
+            id="a-line-separator-before-is-not-commonmark-whitespace",
+        ),
+        pytest.param(
+            "(a)", "\n", "\N{NEXT LINE}", False, id="a-next-line-control-after-is-not-commonmark-whitespace"
+        ),
+        pytest.param(
+            "(a)", "\N{IDEOGRAPHIC SPACE}", "\t", True, id="an-ideographic-space-and-a-tab-are-whitespace"
+        ),
     ],
 )
 def test_markers_flank_only_when_the_neighbours_let_github_open_and_close_them(
