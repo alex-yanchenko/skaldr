@@ -57,9 +57,9 @@ def part_text(content: ItemContent | None, part: Part) -> str | None:
         case "fields":
             return json.dumps(comparable(set_fields(content.fields)), indent=2, ensure_ascii=False) + "\n"
         case "icon":
-            return None if content.icon is None else content.icon + "\n"
+            return None if content.icon is None else f"{content.icon}\n"
         case "cover":
-            return None if content.cover is None else content.cover + "\n"
+            return None if content.cover is None else f"{content.cover}\n"
         case "section":
             return content.sections.get(part.key)
         case _:

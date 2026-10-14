@@ -231,7 +231,6 @@ class PageMarkdown(NotionResponse):
     id: str
     markdown: str
     truncated: bool
-    unknown_block_ids: list[str] = Field(default_factory=list[str])
 
 
 class Block(NotionResponse):

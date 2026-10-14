@@ -19,6 +19,7 @@ from skaldr.publish.notion.icon_and_cover import (
 from skaldr.publish.notion.page_markdown import (
     KeyedPage,
     Replacement,
+    SectionPairs,
     carried_into,
     comparable_text,
     holds_an_unknown_block,
@@ -127,7 +128,7 @@ def _finished_after_a_change(page_id: str, title: str, finish: Callable[[], Answ
 
 
 def _with_children_of_removed_sections(
-    current: Mapping[str, str], after: Sequence[tuple[str, str]]
+    current: Mapping[str, str], after: SectionPairs
 ) -> list[tuple[str, str]]:
     texts = dict(after)
     order = list(current)
@@ -338,7 +339,7 @@ class NotionTransport:
             item_id,
             ItemContent(
                 title=title_text(page),
-                sections=keyed.sections,
+                sections=dict(keyed.sections),
                 fields=property_fields(page),
                 icon=icon_text(page),
                 cover=cover_text(page),

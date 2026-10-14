@@ -1,8 +1,13 @@
+import os
 import re
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Final, Literal
+from itertools import groupby
+from typing import Final, Literal, NamedTuple
+
+from typing_extensions import Self
 
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import EMPTY_BLOCK, notion_fence_closer, starts_a_block
@@ -25,6 +30,7 @@ TABLE_CLOSING: Final = "</table>"
 INDENTATION: Final = (" ", "\t")
 
 LineRole = Literal["published", "added", "child", "blank", "stamp", "below"]
+SectionPairs = Sequence[tuple[str, str]]
 KEPT_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"added", "child"})
 REMOVED_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"published", "blank"})
 
@@ -150,8 +156,8 @@ def joined(pieces: Sequence[str]) -> str:
 
 @dataclass(frozen=True)
 class KeyedPage:
-    raw_sections: dict[str, str]
-    sections: dict[str, str]
+    raw_sections: Mapping[str, str]
+    sections: Mapping[str, str]
     stamp: Stamp | None
     stamp_line: str | None
     child_ids: tuple[str, ...]
@@ -206,19 +212,19 @@ def _last_stamp_at(lines: Sequence[_PageLine]) -> int | None:
 
 @dataclass(frozen=True)
 class _Layout:
-    keys: list[str]
-    lines: list[str]
+    keys: tuple[str, ...]
+    lines: tuple[str, ...]
     fallback: str
 
     @classmethod
-    def of(cls, layout: Mapping[str, str]) -> "_Layout":
+    def of(cls, layout: Mapping[str, str]) -> Self:
         keys: list[str] = []
         lines: list[str] = []
         for key, text in layout.items():
             expected = _lines_of(comparable_text(without_comment_markers(text)))
             keys += [key] * len(expected)
             lines += expected
-        return cls(keys, lines, next(iter(layout), UNKEYED_SECTION))
+        return cls(tuple(keys), tuple(lines), next(iter(layout), UNKEYED_SECTION))
 
     def key_of_inserted(self, position: int) -> str:
         if not self.keys:
@@ -300,12 +306,17 @@ def keyed_page(markdown: str, layout: Mapping[str, str]) -> KeyedPage:
     )
 
 
+class _Child(NamedTuple):
+    lines_before: int
+    raw: str
+
+
 def carried_into(raw: str, text: str) -> str:
-    children: list[tuple[int, str]] = []
+    children: list[_Child] = []
     lines_before = 0
     for line in _page_lines(raw):
         if line.child_url is not None:
-            children.append((lines_before, line.raw if line.raw.endswith("\n") else f"{line.raw}\n"))
+            children.append(_Child(lines_before, line.raw if line.raw.endswith("\n") else f"{line.raw}\n"))
         elif line.normalised is not None:
             lines_before += 1
     if not children:
@@ -318,9 +329,11 @@ def carried_into(raw: str, text: str) -> str:
             normaliser.at_block_level and not new_lines[index].startswith(INDENTATION)
         )
         if at_a_boundary:
-            due = [child for position, child in children if min(position, len(new_lines)) <= index]
-            pieces += due
-            children = children[len(due) :]
+            placed_here = [
+                child.raw for child in children if min(child.lines_before, len(new_lines)) <= index
+            ]
+            pieces += placed_here
+            children = children[len(placed_here) :]
         if index < len(new_lines):
             pieces.append(new_lines[index])
             normaliser.line(new_lines[index].removesuffix("\n"))
@@ -341,50 +354,43 @@ class Replacement:
 NO_REPLACEMENT: Final = Replacement("", "")
 
 
-def _released_runs(placed: Sequence[_Placed]) -> list[tuple[int, int]]:
+def _released_runs(placed: Sequence[_Placed]) -> list[range]:
     kept_blocks = {line.block for line in placed if line.role in KEPT_WHEN_RELEASED}
     removed = [
         line.role == "stamp" or (line.role in REMOVED_WHEN_RELEASED and line.block not in kept_blocks)
         for line in placed
     ]
-    runs: list[tuple[int, int]] = []
-    for index, gone in enumerate(removed):
-        if not gone:
-            continue
-        if runs and runs[-1][1] == index:
-            runs[-1] = (runs[-1][0], index + 1)
-        else:
-            runs.append((index, index + 1))
+    runs: list[range] = []
+    for gone, indexed in groupby(enumerate(removed), key=lambda pair: pair[1]):
+        if gone:
+            indexes = [index for index, _ in indexed]
+            runs.append(range(indexes[0], indexes[-1] + 1))
     return runs
 
 
-def _chunks_of_whole_blocks(
-    placed: Sequence[_Placed], run: tuple[int, int], most_bytes: int
-) -> list[tuple[int, int]]:
-    blocks: dict[int, int] = {}
-    for line in placed[run[0] : run[1]]:
-        blocks[line.block] = blocks.get(line.block, 0) + json_string_bytes(line.line.raw)
-    chunks: list[tuple[int, int]] = []
-    start, size = run[0], 0
-    for index in range(run[0], run[1]):
+def _chunks_of_whole_blocks(placed: Sequence[_Placed], run: range, most_bytes: int) -> list[range]:
+    blocks: Counter[int] = Counter()
+    for index in run:
+        blocks[placed[index].block] += json_string_bytes(placed[index].line.raw)
+    chunks: list[range] = []
+    start, size = run.start, 0
+    for index in run:
         block = placed[index].block
-        opens_a_block = index == run[0] or block != placed[index - 1].block
+        opens_a_block = index == run.start or block != placed[index - 1].block
         if opens_a_block and size and size + blocks[block] > most_bytes:
-            chunks.append((start, index))
+            chunks.append(range(start, index))
             start, size = index, 0
         size += blocks[block] if opens_a_block else 0
-    chunks.append((start, run[1]))
+    chunks.append(range(start, run.stop))
     return chunks
 
 
-def _raw(placed: Sequence[_Placed]) -> str:
+def _raw_text_of(placed: Sequence[_Placed]) -> str:
     return "".join(line.line.raw for line in placed)
 
 
-def _unique_removal(
-    placed: Sequence[_Placed], chunk: tuple[int, int], page: str, gone: set[int]
-) -> Replacement:
-    start, end = chunk
+def _unique_removal(placed: Sequence[_Placed], chunk: range, page: str, gone: set[int]) -> Replacement:
+    start, end = chunk.start, chunk.stop
     removed = placed[start:end]
     before: list[_Placed] = []
     after: list[_Placed] = []
@@ -392,7 +398,7 @@ def _unique_removal(
     def may_quote(index: int) -> bool:
         return index not in gone and _quotable(placed[index].line.raw, with_markers=True)
 
-    while page.count(_raw([*before, *removed, *after])) != 1:
+    while page.count(_raw_text_of([*before, *removed, *after])) != 1:
         if start > 0 and may_quote(start - 1):
             start -= 1
             before.insert(0, placed[start])
@@ -402,7 +408,7 @@ def _unique_removal(
         else:
             break
     quoted = tuple(dict.fromkeys(line.key for line in removed if line.key is not None))
-    return Replacement(_raw([*before, *removed, *after]), _raw([*before, *after]), quoted)
+    return Replacement(_raw_text_of([*before, *removed, *after]), _raw_text_of([*before, *after]), quoted)
 
 
 def release_replacements(markdown: str, layout: Mapping[str, str], most_bytes: int) -> list[Replacement]:
@@ -414,31 +420,25 @@ def release_replacements(markdown: str, layout: Mapping[str, str], most_bytes: i
         for chunk in _chunks_of_whole_blocks(placed, run, most_bytes):
             replacement = _unique_removal(placed, chunk, page, gone)
             page = page.replace(replacement.old_str, replacement.new_str, 1)
-            gone |= set(range(*chunk))
+            gone |= set(chunk)
             replacements.append(replacement)
     return replacements
 
 
-def _common_prefix(before: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]]) -> int:
-    count = 0
-    while count < min(len(before), len(after)) and before[count] == after[count]:
-        count += 1
-    return count
+def _common_prefix(before: SectionPairs, after: SectionPairs) -> int:
+    return len(os.path.commonprefix([list(before), list(after)]))
 
 
-def _common_suffix(before: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]], prefix: int) -> int:
-    count = 0
+def _common_suffix(before: SectionPairs, after: SectionPairs, prefix: int) -> int:
     room = min(len(before), len(after)) - prefix
-    while count < room and before[-1 - count] == after[-1 - count]:
-        count += 1
-    return count
+    return min(len(os.path.commonprefix([list(reversed(before)), list(reversed(after))])), room)
 
 
-def _texts(pairs: Sequence[tuple[str, str]]) -> list[str]:
+def _texts(pairs: SectionPairs) -> list[str]:
     return [text for _, text in pairs]
 
 
-def _keys(pairs: Sequence[tuple[str, str]]) -> tuple[str, ...]:
+def _keys(pairs: SectionPairs) -> tuple[str, ...]:
     return tuple(key for key, _ in pairs)
 
 
@@ -446,7 +446,7 @@ def _quotable(line: str, with_markers: bool) -> bool:
     return not holds_an_unknown_block(line) and (with_markers or DISCUSSION_ATTRIBUTE.search(line) is None)
 
 
-def _offset_of(current: Sequence[tuple[str, str]], index: int) -> int:
+def _offset_of(current: SectionPairs, index: int) -> int:
     return len(joined([*_texts(current[:index]), "\0"])) - 1
 
 
@@ -473,7 +473,7 @@ def _unique_edge(
 
 
 def _anchored_insertion(
-    current: Sequence[tuple[str, str]], at: int, inserted: str, page: str, stamp: str | None
+    current: SectionPairs, at: int, inserted: str, page: str, stamp: str | None
 ) -> Replacement | None:
     before = current[at - 1] if at > 0 else None
     after = current[at] if at < len(current) else None
@@ -494,7 +494,7 @@ def _anchored_insertion(
 
 
 def section_replacement(
-    current: Sequence[tuple[str, str]], after: Sequence[tuple[str, str]], page: str, stamp: str | None
+    current: SectionPairs, after: SectionPairs, page: str, stamp: str | None
 ) -> Replacement | None:
     start = _common_prefix(current, after)
     suffix = _common_suffix(current, after, start)

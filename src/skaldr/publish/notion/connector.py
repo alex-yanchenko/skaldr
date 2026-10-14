@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx2
 
@@ -42,7 +42,7 @@ class _SignedInOnFirstUse:
 @dataclass(frozen=True)
 class NotionConnector:
     http: httpx2.BaseTransport | None = None
-    sleep: Sleep = field(default=time.sleep)
+    sleep: Sleep = time.sleep
     target_type: type[TargetBase] = NotionTarget
     limits: tuple[ContentLimit, ...] = NOTION_LIMITS
     writes: WriteGranularity = "section"

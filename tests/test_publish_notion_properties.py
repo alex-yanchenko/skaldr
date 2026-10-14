@@ -1,8 +1,8 @@
 import re
-from typing import Any
+from typing import Any, get_args
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, Tag
 
 from skaldr.errors import WriteRejectedError
 from skaldr.publish.notion.properties import (
@@ -13,7 +13,15 @@ from skaldr.publish.notion.properties import (
     title_request,
     title_text,
 )
-from skaldr.publish.notion.responses import Page
+from skaldr.publish.notion.responses import (
+    OTHER_IMAGE,
+    OTHER_PROPERTY,
+    READ_IMAGE_TYPES,
+    READ_PROPERTY_TYPES,
+    Page,
+    PageImage,
+    PropertyValue,
+)
 
 
 def _text(content: str) -> dict[str, Any]:
@@ -58,6 +66,29 @@ EVERY_KIND = _page(
     Made={"id": "o", "type": "created_time", "created_time": "2026-10-01T00:00:00.000Z"},
     Score={"id": "p", "type": "formula", "formula": {"type": "number", "number": 3}},
 )
+
+
+def _tags_of(union: object) -> tuple[str, ...]:
+    members: tuple[object, ...] = get_args(get_args(union)[0])
+    tags: list[str] = []
+    for member in members:
+        tag = get_args(member)[1]
+        assert isinstance(tag, Tag)
+        tags.append(tag.tag)
+    return tuple(tags)
+
+
+@pytest.mark.parametrize(
+    ("union", "read", "other"),
+    [
+        pytest.param(PropertyValue, READ_PROPERTY_TYPES, OTHER_PROPERTY, id="properties"),
+        pytest.param(PageImage, READ_IMAGE_TYPES, OTHER_IMAGE, id="icons-and-covers"),
+    ],
+)
+def test_the_types_read_are_the_tags_of_their_union_in_order(
+    union: object, read: tuple[str, ...], other: str
+) -> None:
+    assert _tags_of(union) == (*read, other)
 
 
 def test_the_title_reads_as_its_plain_text() -> None:
