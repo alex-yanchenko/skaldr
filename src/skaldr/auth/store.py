@@ -7,7 +7,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, SimpleQueue
-from typing import Generic, Literal, NamedTuple, TypeVar, cast
+from typing import Generic, Literal, NamedTuple, TypeAlias, TypeVar, cast
 from uuid import UUID
 
 import keyring
@@ -105,11 +105,11 @@ def normalise_site(typed: str) -> str:
 
 
 def jira_credentials(
-    site: str, email: str, api_token: str, display_name: str | None = None
+    site: str, email: str, api_token: str, display_name: str | None = None, *, refusal_prefix: str = ""
 ) -> JiraCredentials:
     with CaughtWithoutChaining(ValidationError) as invalid:
         return JiraCredentials(site=site, email=email, api_token=api_token, display_name=display_name)
-    raise AuthError(_first_refusal(invalid.error))
+    raise AuthError(f"{refusal_prefix}{_first_refusal(invalid.error)}")
 
 
 def _first_refusal(invalid: ValidationError) -> str:
@@ -513,7 +513,7 @@ class _Answered(Generic[Answer]):
     value: Answer
 
 
-_KeychainReply = _Answered[Answer] | BaseException
+_KeychainReply: TypeAlias = _Answered[Answer] | BaseException
 
 
 class KeychainTimeoutError(AuthError):
@@ -713,11 +713,9 @@ def jira_from_environment() -> JiraCredentials | None:
     values = _all_or_none_from_environment(JIRA_ENVIRONMENT)
     if values is None:
         return None
-    with CaughtWithoutChaining(ValidationError) as invalid:
-        return JiraCredentials(
-            site=values[_JIRA_SITE],
-            email=values[_JIRA_EMAIL],
-            api_token=values[_JIRA_API_TOKEN],
-            display_name=None,
-        )
-    raise AuthError(f"{_JIRA_SITE}: {_first_refusal(invalid.error)}")
+    return jira_credentials(
+        values[_JIRA_SITE],
+        values[_JIRA_EMAIL],
+        values[_JIRA_API_TOKEN],
+        refusal_prefix=f"{_JIRA_SITE}: ",
+    )
