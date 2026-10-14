@@ -107,6 +107,12 @@ class OneEntryRefusingKeyring(InMemoryKeyring):
         self.entries[(service, username)] = password
 
 
+class DeleteRefusingKeyring(InMemoryKeyring):
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        raise KeyringError("denied")
+
+
 def insecure_keyring_refusal(backend_name: str) -> str:
     return (
         f"skaldr will not save to the keyring backend {backend_name}: the keyrings.alt backends store "

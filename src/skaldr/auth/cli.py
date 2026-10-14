@@ -183,12 +183,24 @@ def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | 
         print(f"Not signed in to Notion{where}.")
         return
     revoked = _notion_token_was_revoked(entry, transport)
-    if not forget(entry):
+    if not _forget_after_the_revoke(entry, revoked):
         outcome = "The Notion token was revoked" if revoked else "The Notion token was not revoked"
         print(f"{outcome}, but a newer sign-in was stored in the meantime and was kept.")
         return
     outcome = "token revoked and removed from the keychain" if revoked else "removed from the keychain"
     print(f"Signed out of Notion: {outcome}.")
+
+
+def _forget_after_the_revoke(entry: StoredEntry[NotionCredentials], revoked: bool) -> bool:
+    try:
+        return forget(entry)
+    except AuthError as unremoved:
+        if not revoked:
+            raise
+        raise AuthError(
+            f"The Notion token was revoked, but removing it from the keychain failed ({unremoved}); "
+            "run this logout again to remove it"
+        ) from unremoved
 
 
 def _notion_token_was_revoked(
