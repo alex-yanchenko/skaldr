@@ -337,8 +337,9 @@ def test_two_workspaces_with_one_name_are_refused_when_the_name_is_the_selector(
         load_notion("Example Workspace")
 
     assert str(raised.value) == (
-        "Signed in to several Notion workspaces (Example Workspace (11111111-1111-4111-8111-111111111111), "
-        "Example Workspace (22222222-2222-4222-8222-222222222222)); name one"
+        "Signed in to several Notion workspaces named `Example Workspace` (Example Workspace "
+        "(11111111-1111-4111-8111-111111111111), Example Workspace (22222222-2222-4222-8222-222222222222)); "
+        "name one by its id"
     )
 
 

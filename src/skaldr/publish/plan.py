@@ -8,7 +8,9 @@ from typing_extensions import assert_never
 from skaldr.errors import PublishError
 from skaldr.publish.connector import Connector, ConnectorRegistry, WriteGranularity
 from skaldr.publish.content import (
+    COVER,
     FIELDS,
+    ICON,
     TITLE,
     ItemContent,
     Part,
@@ -113,7 +115,12 @@ def published_item(published: PublishedTarget | None, section_id: str | None) ->
 
 
 def _field_parts(last: ItemContent, content: ItemContent, rewritten: Collection[Part]) -> tuple[Part, ...]:
-    differs = {TITLE: last.title != content.title, FIELDS: not same_fields(last.fields, content.fields)}
+    differs = {
+        TITLE: last.title != content.title,
+        FIELDS: not same_fields(last.fields, content.fields),
+        ICON: last.icon != content.icon,
+        COVER: last.cover != content.cover,
+    }
     return tuple(part for part, changed in differs.items() if changed or part in rewritten)
 
 

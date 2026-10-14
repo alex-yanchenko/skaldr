@@ -29,6 +29,7 @@ class Lowering:
     matrix_tallies: Mapping[str, compute.DerivedTally]
     table_tallies: Mapping[str, compute.DerivedTally]
     section_titles: Mapping[str, str]
+    block_paths: Mapping[int, str]
 
     def rich(self, text: str) -> Rich:
         return rich_line(text, self.rich_context)
@@ -64,6 +65,9 @@ class Lowering:
 
     def anchor_of(self, block: AnyBlock) -> str | None:
         return self.anchors.get(id(block))
+
+    def path_of(self, block: AnyBlock) -> str | None:
+        return self.block_paths.get(id(block))
 
     def chip(self, key: str) -> Chip:
         badge = self.report.badges[key]
@@ -103,6 +107,7 @@ def lowering_for(report: Report) -> Lowering:
         matrix_tallies=compute.matrix_tallies(report),
         table_tallies=compute.table_tallies(report),
         section_titles=compute.section_titles_by_id(report),
+        block_paths={id(block): path for path, block in report.located_blocks},
     )
 
 

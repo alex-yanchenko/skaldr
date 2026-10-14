@@ -172,7 +172,7 @@ def lower_comparison(block: models.Comparison, lowering: Lowering) -> list[Node]
         )
         for row in block.rows
     ]
-    return [TableNode(header, tuple(rows), header_column=True)]
+    return [TableNode(header, tuple(rows), header_column=True, authored_as="comparison")]
 
 
 def _matrix_cell(cell: models.MatrixCell | None, lowering: Lowering) -> TableCell:
@@ -189,7 +189,7 @@ def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:
         TableRow((TableCell(plain(row_name)), *(_matrix_cell(cell, lowering) for cell in grid_row)))
         for row_name, grid_row in zip(block.rows, compute.matrix_grid(block), strict=True)
     ]
-    return [TableNode(header, tuple(rows), header_column=True)]
+    return [TableNode(header, tuple(rows), header_column=True, authored_as="matrix")]
 
 
 def _swim_step(block: models.Swimlane, step: models.SwimlaneStep, show_group: bool) -> ExportRich:
@@ -276,5 +276,7 @@ def lower_swimlane(block: models.Swimlane) -> list[Node]:
             *(TableCell(plain(compute.fmt(totals["columns"][column.key]))) for column in block.columns),
         )
         rows.append(TableRow(footer, emphasis="total"))
-    table = TableNode(_swimlane_header(block, totals), tuple(rows), header_column=True)
+    table = TableNode(
+        _swimlane_header(block, totals), tuple(rows), header_column=True, authored_as="swimlane"
+    )
     return [table, *_state_legend(compute.swimlane_marked_state_legend(block))]

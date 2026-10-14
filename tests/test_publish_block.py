@@ -20,6 +20,7 @@ from tests.factories import (
     make_report,
     make_section,
 )
+from tests.factories.auth_factory import site_refusal
 
 OTHER_NOTION_PAGE_ID = "fedcba9876543210fedcba9876543210"
 SPLIT_ON_INNER: dict[str, Any] = {"doc_id": "plan", "targets": [make_notion_target(split=["inner"])]}
@@ -47,6 +48,10 @@ blocks:
   - { type: text, body: "Hello." }
 """
 CANNOT_CUT = "the publish block could not be left out of the page"
+SET_BY_SKALDR = (
+    "skaldr sets summary, description, project, issuetype and parent itself, and Jira changes status only "
+    "through a transition"
+)
 
 
 def _parse(publish: dict[str, Any]) -> Publish | None:
@@ -65,6 +70,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
             "project": "PLAN",
             "issue_type": "Task",
             "parent": "PLAN-100",
+            "site": "example.atlassian.net",
             "fields": {"labels": ["team"]},
         },
         "from": ["st1", "st2"],
@@ -81,7 +87,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
         "targets": [
             {
                 "to": "notion",
-                "where": {"parent_page": NOTION_PAGE_URL, "page": None, "fields": {}},
+                "where": {"parent_page": NOTION_PAGE_URL, "page": None, "workspace": None, "fields": {}},
                 "from": None,
                 "split": ["st1"],
                 "overrides": {},
@@ -92,6 +98,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                     "project": "PLAN",
                     "issue_type": "Task",
                     "parent": "PLAN-100",
+                    "site": "https://example.atlassian.net",
                     "fields": {"labels": ["team"]},
                 },
                 "from": ["st1", "st2"],
@@ -104,6 +111,21 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
 
 def test_a_report_without_a_publish_block_has_none() -> None:
     assert parse_report(make_report()).publish is None
+
+
+def test_a_notion_target_may_name_a_workspace_that_is_not_part_of_its_place() -> None:
+    in_workspace = make_notion_target(
+        where={"parent_page": NOTION_PAGE_URL, "workspace": "Example Workspace"}
+    )
+    publish = _parse({"doc_id": "plan", "targets": [in_workspace]})
+
+    assert publish is not None
+    target = publish.targets[0]
+    assert (target.model_dump(mode="json")["where"], target.place_key(), target.place_label()) == (
+        {"parent_page": NOTION_PAGE_URL, "page": None, "workspace": "Example Workspace", "fields": {}},
+        ("notion", NOTION_PAGE_ID),
+        f"notion page {NOTION_PAGE_ID}",
+    )
 
 
 @pytest.mark.parametrize(
@@ -172,10 +194,39 @@ def test_a_notion_target_names_one_page(where: dict[str, Any], message: str) -> 
             "publish.targets.0.jira.where.issue_type: String should have at least 1 character",
             id="blank-issue-type",
         ),
+        pytest.param(
+            {"project": "PLAN", "issue_type": "Task", "site": "http://example.atlassian.net"},
+            f"publish.targets.0.jira.where.site: Value error, {site_refusal('http://example.atlassian.net')}",
+            id="site-not-https",
+        ),
     ],
 )
 def test_a_jira_target_checks_its_keys(where: dict[str, Any], message: str) -> None:
     _rejects({"doc_id": "plan", "targets": [{"to": "jira", "where": where}]}, message)
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        pytest.param(
+            make_jira_target(where={"project": "PLAN", "issue_type": "Task", "fields": {"summary": "x"}}),
+            f"a jira target cannot set `summary` in `where.fields`; {SET_BY_SKALDR}",
+            id="where",
+        ),
+        pytest.param(
+            make_jira_target(
+                split=["st1"],
+                overrides={
+                    "st1": {"fields": {"status": {"name": "Done"}, "description": "x", "labels": ["a"]}}
+                },
+            ),
+            f"a jira target cannot set `description`, `status` in `overrides.st1.fields`; {SET_BY_SKALDR}",
+            id="override",
+        ),
+    ],
+)
+def test_a_jira_target_leaves_the_fields_skaldr_sets_to_skaldr(target: dict[str, Any], message: str) -> None:
+    _rejects({"doc_id": "plan", "targets": [target]}, message)
 
 
 def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
@@ -188,6 +239,7 @@ def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
         "project": "AB_1",
         "issue_type": "Task",
         "parent": "AB_1-7",
+        "site": None,
         "fields": {},
     }
 
@@ -280,8 +332,8 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
         pytest.param(
             [make_jira_target(), make_jira_target(where={"project": "OPS", "issue_type": "Task"})],
             [
-                (("jira", "PLAN", ""), "jira project PLAN under no parent issue"),
-                (("jira", "OPS", ""), "jira project OPS under no parent issue"),
+                (("jira", "PLAN", "", ""), "jira project PLAN under no parent issue"),
+                (("jira", "OPS", "", ""), "jira project OPS under no parent issue"),
             ],
             id="two-jira-projects",
         ),
@@ -291,10 +343,33 @@ def test_two_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], me
                 make_jira_target(where={"project": "PLAN", "issue_type": "Task", "parent": "PLAN-2"}),
             ],
             [
-                (("jira", "PLAN", "PLAN-1"), "jira project PLAN under PLAN-1"),
-                (("jira", "PLAN", "PLAN-2"), "jira project PLAN under PLAN-2"),
+                (("jira", "PLAN", "PLAN-1", ""), "jira project PLAN under PLAN-1"),
+                (("jira", "PLAN", "PLAN-2", ""), "jira project PLAN under PLAN-2"),
             ],
             id="one-jira-project-under-two-parents",
+        ),
+        pytest.param(
+            [
+                make_jira_target(
+                    where={"project": "PLAN", "issue_type": "Task", "site": "one.atlassian.net"}
+                ),
+                make_jira_target(
+                    where={"project": "PLAN", "issue_type": "Task", "site": "https://two.atlassian.net/jira"}
+                ),
+                make_jira_target(),
+            ],
+            [
+                (
+                    ("jira", "PLAN", "", "https://one.atlassian.net"),
+                    "jira project PLAN under no parent issue on https://one.atlassian.net",
+                ),
+                (
+                    ("jira", "PLAN", "", "https://two.atlassian.net"),
+                    "jira project PLAN under no parent issue on https://two.atlassian.net",
+                ),
+                (("jira", "PLAN", "", ""), "jira project PLAN under no parent issue"),
+            ],
+            id="one-jira-project-on-two-sites-and-on-the-signed-in-one",
         ),
     ],
 )
@@ -305,7 +380,7 @@ def test_targets_in_different_places_are_accepted_and_each_has_its_own_label(
 
     assert publish is not None
     assert [(target.place_key(), target.location_label()) for target in publish.targets] == locations
-    assert [hasattr(target, "location_key") for target in publish.targets] == [False, False]
+    assert [hasattr(target, "location_key") for target in publish.targets] == [False] * len(targets)
 
 
 @pytest.mark.parametrize(
@@ -611,3 +686,17 @@ def test_two_sources_with_the_same_values_compare_equal(left: str, right: str) -
 )
 def test_two_sources_with_different_values_compare_unequal(left: str, right: str) -> None:
     assert not _same_documents(_document(left), _document(right))
+
+
+def test_a_jira_site_is_read_the_way_skaldr_auth_reads_it() -> None:
+    where = {"project": "PLAN", "issue_type": "Task", "site": " Example.atlassian.net/jira "}
+
+    publish = _parse({"doc_id": "plan", "targets": [make_jira_target(where=where)]})
+
+    assert publish is not None
+    assert publish.model_dump(mode="json", exclude_none=True)["targets"][0]["where"] == {
+        "project": "PLAN",
+        "issue_type": "Task",
+        "site": "https://example.atlassian.net",
+        "fields": {},
+    }
