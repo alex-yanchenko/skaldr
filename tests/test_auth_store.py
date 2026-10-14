@@ -285,6 +285,25 @@ def test_a_notion_workspace_is_found_by_its_id_or_its_name() -> None:
     )
 
 
+def test_a_notion_workspace_is_found_by_its_name_as_status_shows_it_or_as_notion_sent_it() -> None:
+    spaced = make_notion_credentials(workspace_name="Acme  Corp\t\n")
+    seed_notion(spaced)
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="Other Workspace"))
+
+    assert (load_notion("Acme Corp"), load_notion("Acme  Corp\t\n"), load_notion(" Acme\tCorp ")) == (
+        SignIn(spaced, "keychain"),
+        SignIn(spaced, "keychain"),
+        SignIn(spaced, "keychain"),
+    )
+
+
+def test_an_empty_workspace_name_does_not_select_a_workspace_without_a_name() -> None:
+    seed_notion(make_notion_credentials(workspace_name=None))
+    seed_notion(make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID, workspace_name="\t"))
+
+    assert (load_notion(""), load_notion(" ")) == (None, None)
+
+
 def test_a_notion_workspace_nobody_signed_in_to_finds_nothing() -> None:
     seed_notion(make_notion_credentials())
 

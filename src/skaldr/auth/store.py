@@ -326,8 +326,15 @@ def _is_workspace(entry: StoredEntry[NotionCredentials], selector: str) -> bool:
     return (
         entry.identifier == selector
         or (selector == LEGACY_SELECTOR and entry.identifier is None)
-        or (entry.credentials is not None and entry.credentials.workspace_name == selector)
+        or _shows_the_workspace_name(entry, selector)
     )
+
+
+def _shows_the_workspace_name(entry: StoredEntry[NotionCredentials], selector: str) -> bool:
+    if entry.credentials is None:
+        return False
+    shown = printable_only(entry.credentials.workspace_name or "")
+    return shown != "" and shown == printable_only(selector)
 
 
 def _is_uuid(text: str) -> bool:
