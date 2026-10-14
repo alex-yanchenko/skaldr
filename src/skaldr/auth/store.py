@@ -3,9 +3,10 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from queue import Empty, SimpleQueue
 from typing import Generic, Literal, TypeVar, cast
 from uuid import UUID
 
@@ -464,10 +465,12 @@ def _site_refusal(typed: str) -> str:
     return f"{_SITE_REQUIREMENT}, not {typed!r}"
 
 
-@dataclass
-class _KeychainReply(Generic[Answer]):
-    value: Answer | None = None
-    error: BaseException | None = None
+@dataclass(frozen=True)
+class _Answered(Generic[Answer]):
+    value: Answer
+
+
+_KeychainReply = _Answered[Answer] | BaseException
 
 
 class KeychainTimeoutError(AuthError):
@@ -481,32 +484,37 @@ class KeychainWaitInterrupted(KeyboardInterrupt):
 def _from_the_keychain(
     ask: Callable[[], Answer], still_waiting_for_the_lock: Callable[[], bool] = lambda: False
 ) -> Answer:
-    answered = threading.Event()
-    reply: _KeychainReply[Answer] = _KeychainReply()
+    replies: SimpleQueue[_KeychainReply[Answer]] = SimpleQueue()
 
     def ask_and_record() -> None:
         try:
-            reply.value = ask()
+            replies.put(_Answered(ask()))
         except BaseException as exc:
-            reply.error = exc
-        finally:
-            answered.set()
+            replies.put(exc)
 
     threading.Thread(target=ask_and_record, name="skaldr-keychain", daemon=True).start()
     try:
-        if not answered.wait(KEYCHAIN_NOTICE_SECONDS):
-            print(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
-            if not answered.wait(KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS):
-                raise KeychainTimeoutError(
-                    f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
-                    "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
-                    "may still be applied if the keychain answers later"
-                )
+        reply = _wait_for_the_reply(replies, still_waiting_for_the_lock)
     except KeyboardInterrupt as interrupted:
         raise KeychainWaitInterrupted from interrupted
-    if reply.error is not None:
-        raise reply.error
-    return cast("Answer", reply.value)
+    if isinstance(reply, BaseException):
+        raise reply
+    return reply.value
+
+
+def _wait_for_the_reply(
+    replies: SimpleQueue[_KeychainReply[Answer]], still_waiting_for_the_lock: Callable[[], bool]
+) -> _KeychainReply[Answer]:
+    with suppress(Empty):
+        return replies.get(timeout=KEYCHAIN_NOTICE_SECONDS)
+    print(LOCK_WAIT_NOTICE if still_waiting_for_the_lock() else KEYCHAIN_WAIT_NOTICE, file=sys.stderr)
+    with suppress(Empty):
+        return replies.get(timeout=KEYCHAIN_TIMEOUT_SECONDS - KEYCHAIN_NOTICE_SECONDS)
+    raise KeychainTimeoutError(
+        f"The system keychain did not answer within {KEYCHAIN_TIMEOUT_SECONDS:g} seconds; "
+        "unlock it or answer its prompt, then run the command again. A change skaldr asked for "
+        "may still be applied if the keychain answers later"
+    )
 
 
 @contextmanager
