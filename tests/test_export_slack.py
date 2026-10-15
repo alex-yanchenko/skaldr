@@ -59,7 +59,8 @@ from skaldr.richtext import (
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import (
-    accepted_by,
+    accepted_example,
+    example_data,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -68,14 +69,14 @@ from tests.factories import (
     make_rich_text,
     make_section,
     make_table_cell,
-    read_yaml,
     refusal_of,
+    refused_block_types,
     slack_of,
     write_report,
 )
 from tests.factories.capability_factory import LONG_TABLE
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
 WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
@@ -120,7 +121,7 @@ def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]
 
 
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
-    data = read_yaml(EXAMPLE)
+    data = example_data()
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
         blocks.append(block)
@@ -145,7 +146,7 @@ def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
 
 
 def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path: Path) -> None:
-    data = read_yaml(EXAMPLE)
+    data = example_data()
     walkthrough = parse_report(
         {**data, "blocks": [block for block in data["blocks"] if block["type"] == "walkthrough"]}
     )
@@ -160,14 +161,18 @@ def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path:
     )
 
 
-def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_slack_golden_rewrites(
+def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
+    reworked = _example_reworked_for_a_canvas()
 
-    export_slack(parse_report(accepted_by(_example_reworked_for_a_canvas(), "slack")), out_dir)
+    export_slack(accepted_example("slack", reworked), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(SLACK_GOLDEN)
+    assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_REWORKED_EXAMPLE,
+        folder_texts(SLACK_GOLDEN),
+    )
 
 
 @pytest.mark.parametrize(

@@ -59,6 +59,10 @@ def cell(text: str, tone: ToneName | None = None) -> TableCell:
     return TableCell(plain(text), tone)
 
 
+def pie_over_its_table() -> Diagram:
+    return Diagram(PieChart((PieSlice("a", 1),)), (TableNode((cell("Slice"),), (TableRow((cell("a"),)),)),))
+
+
 def minimal_nodes() -> Mapping[type, Node]:
     return {
         Heading: Heading(1, plain("h")),
@@ -74,7 +78,7 @@ def minimal_nodes() -> Mapping[type, Node]:
         Toggle: Toggle(plain("t"), None, (para("c"),)),
         Columns: Columns((GridColumn(100, (para("c"),)),)),
         Tabs: Tabs((Tab(plain("t"), (para("c"),)),)),
-        Diagram: Diagram(PieChart((PieSlice("a", 1),)), (TableNode((cell("h"),), ()),)),
+        Diagram: pie_over_its_table(),
         TableOfContents: TableOfContents((TocEntry("a", plain("t")),)),
     }
 
@@ -151,5 +155,5 @@ def showcase_nodes() -> tuple[Node, ...]:
         ),
         Tabs((Tab(plain("Case one"), (para("a"),), tone="success"), Tab(plain("Case two"), (para("b"),)))),
         Columns((GridColumn(60, (para("left"),)), GridColumn(40, (para("right"),)))),
-        Diagram(PieChart((PieSlice("a", 1),)), (TableNode((cell("Slice"),), (TableRow((cell("a"),)),)),)),
+        pie_over_its_table(),
     )

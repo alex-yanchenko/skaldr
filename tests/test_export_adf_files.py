@@ -7,11 +7,20 @@ import pytest
 from skaldr.cli import main
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_adf
 from skaldr.export.adf import compact_adf_length
-from skaldr.models import load_report, parse_report
+from skaldr.models import load_report
 from tests.conftest import REPO_ROOT
-from tests.factories import accepted_by, folder_texts, make_report, make_toggle, read_yaml, write_report
+from tests.factories import (
+    REFUSED_IN_THE_EXAMPLE,
+    accepted_by,
+    accepted_example,
+    example_data,
+    folder_texts,
+    make_report,
+    make_toggle,
+    refused_block_types,
+    write_report,
+)
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 ADF_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.adf"
 WRITE_ADF_GOLDEN = "SKALDR_WRITE_ADF_GOLDEN"
 HI_DOCUMENT = {
@@ -26,14 +35,15 @@ def export_dir(tmp_path: Path) -> Path:
     return tmp_path / "exported"
 
 
-def test_what_adf_accepts_of_the_example_exports_to_the_golden_skaldr_write_adf_golden_rewrites(
-    tmp_path: Path,
-) -> None:
+def test_the_example_less_the_blocks_adf_refuses_matches_the_adf_golden(tmp_path: Path) -> None:
     out_dir = ADF_GOLDEN if os.environ.get(WRITE_ADF_GOLDEN) else tmp_path
 
-    export_adf(parse_report(accepted_by(read_yaml(EXAMPLE), "adf")), out_dir)
+    export_adf(accepted_example("adf"), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(ADF_GOLDEN)
+    assert (refused_block_types(example_data(), "adf"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_EXAMPLE["adf"],
+        folder_texts(ADF_GOLDEN),
+    )
 
 
 def test_an_adf_export_writes_the_body_as_page_adf_json_without_the_title(tmp_path: Path) -> None:
@@ -156,7 +166,7 @@ def test_the_compact_length_counts_characters_of_the_json_a_description_field_re
 def test_an_adf_export_over_the_jira_limit_names_the_size_and_the_limit(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
 
-    result = export_adf(parse_report(accepted_by(read_yaml(EXAMPLE), "adf")), out_dir)
+    result = export_adf(accepted_example("adf"), out_dir)
 
     written = json.loads((out_dir / "page.adf.json").read_text(encoding="utf-8"))
     assert result.oversized_sections == (_oversize_warning(compact_adf_length(written)),)
@@ -172,7 +182,7 @@ def test_an_adf_export_within_the_limit_has_no_warning(tmp_path: Path) -> None:
 def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(
     tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    data_path = write_report(tmp_path, accepted_by(read_yaml(EXAMPLE), "adf"))
+    data_path = write_report(tmp_path, accepted_by(example_data(), "adf"))
 
     assert main([str(data_path), "--export", "adf", "--export-dir", str(export_dir)]) == 0
 

@@ -223,10 +223,13 @@ SEVERAL_SERIES_CHARTS: dict[str, dict[str, Any]] = {
     "two-series-line": xy_chart("line", [4, 6], [1, 2]),
     "two-series-stacked-bar": xy_chart("bar", [4, 6], [1, 2], stacked=True),
 }
+EVERY_CHART: dict[str, dict[str, Any]] = {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_CHARTS}
 
 
 DATA_IMAGE: dict[str, Any] = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "Aisle 12"}
 WEB_IMAGE: dict[str, Any] = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12"}
+HTTP_IMAGE: dict[str, Any] = {**WEB_IMAGE, "src": "http://example.com/aisle.png"}
+HTTP_IMAGE_MARKDOWN = "![Aisle 12](http://example.com/aisle.png)\n"
 HOST_THE_IMAGE = "host the image and give its https address"
 MATH_BLOCKS: list[dict[str, Any]] = [
     {"type": "math", "expression": "x^2 + 1"},
@@ -412,10 +415,22 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
 }
 DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
-    "markdown-flow": AcceptedCase("markdown", [FLOW]),
+    "markdown-flow": AcceptedCase(
+        "markdown",
+        [FLOW],
+        "# Plan\n\n```mermaid\nflowchart LR\n"
+        '    s1["1: Scan"]:::info\n    s2["2: Count"]\n    s1 --> s2\n    s2 -.-> s1\n'
+        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n```\n\n- **Count**\n  - twice\n",
+    ),
     "notion-flow": AcceptedCase("notion", [FLOW]),
     "markdown-fan": AcceptedCase("markdown", [FAN]),
-    "notion-fan": AcceptedCase("notion", [FAN]),
+    "notion-fan": AcceptedCase(
+        "notion",
+        [FAN],
+        '```mermaid\nflowchart LR\n    hub["Count"]:::accent\n    s1["Scans"]\n'
+        '    s2["Recounts<br>overflow only"]\n    s1 --> hub\n    s2 --> hub\n'
+        "    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328\n```\n",
+    ),
     "markdown-flow-with-a-styled-note": AcceptedCase("markdown", flow_with_a_note("by **aisle** and `bin`")),
     "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
     "markdown-flow-note-with-unicode-scripts": AcceptedCase(
@@ -433,10 +448,30 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     **{
         f"{target}-chart-{name}": AcceptedCase(target, [chart])
         for target in EXPORT_TARGETS
-        for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_CHARTS}.items()
+        for name, chart in EVERY_CHART.items()
     },
+    "markdown-chart-donut": AcceptedCase(
+        "markdown",
+        [DONUT],
+        '# Plan\n\n```mermaid\npie\n    "Fixed" : 9\n    "Open" : 3\n```\n\n'
+        "| Slice | Value | Share |\n| --- | --- | --- |\n"
+        "| Fixed | 9 | 75% |\n| Open | 3 | 25% |\n| **Total** | **12** |  |\n",
+    ),
+    "slack-chart-two-series-stacked-bar": AcceptedCase(
+        "slack",
+        [SEVERAL_SERIES_CHARTS["two-series-stacked-bar"]],
+        "| Series | Mon | Tue |\n| --- | --- | --- |\n"
+        "| Zone 1 | 4 | 6 |\n| Zone 2 | 1 | 2 |\n| **Total** | **5** | **8** |\n",
+    ),
     **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
+    "markdown-math": AcceptedCase(
+        "markdown", MATH_BLOCKS, "# Plan\n\n```math\nx^2 + 1\n```\n\nrate $`x_i`$ now\n"
+    ),
+    "slack-math": AcceptedCase("slack", MATH_BLOCKS, "```latex\nx^2 + 1\n```\n\nrate `x_i` now\n"),
     **{f"{target}-web-image": AcceptedCase(target, [WEB_IMAGE]) for target in EXPORT_TARGETS},
+    "notion-http-image": AcceptedCase("notion", [HTTP_IMAGE], HTTP_IMAGE_MARKDOWN),
+    "slack-http-image": AcceptedCase("slack", [HTTP_IMAGE], HTTP_IMAGE_MARKDOWN),
+    "adf-http-image": AcceptedCase("adf", [HTTP_IMAGE]),
 }
 ALL_REFUSALS: dict[str, RefusedCase] = {**SEEDED_REFUSALS, **DIAGRAM_REFUSALS}
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]

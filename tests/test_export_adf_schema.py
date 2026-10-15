@@ -10,11 +10,10 @@ from skaldr.export.lower import lower_report
 from skaldr.export.tree import Node
 from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_by, make_report, read_yaml
+from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_example, make_report
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 
 ADF_SCHEMA_FILE = REPO_ROOT / "tests" / "schemas" / "adf-schema-57.7.4-full.json"
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SITE = IssueLinks("https://example.atlassian.net", frozenset({"PLAN"}))
 
 
@@ -102,7 +101,5 @@ def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf_document(lowered)) == []
 
 
-def test_what_adf_accepts_of_the_example_document_is_accepted_by_the_adf_schema() -> None:
-    accepted = parse_report(accepted_by(read_yaml(EXAMPLE), "adf"))
-
-    assert _problems(render_adf_document(lower_report(accepted), SITE)) == []
+def test_the_example_less_the_blocks_adf_refuses_is_valid_adf() -> None:
+    assert _problems(render_adf_document(lower_report(accepted_example("adf")), SITE)) == []

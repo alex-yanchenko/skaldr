@@ -193,9 +193,7 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
         pytest.param("about 10^3^", (Plain("about 10"), ScriptText("superscript", "3")), id="superscript"),
     ],
 )
-def test_a_graph_node_keeps_the_runs_of_its_note_for_the_check_and_lists_no_step_for_a_note_alone(
-    note: str, runs: Rich
-) -> None:
+def test_a_graph_node_keeps_its_note_s_runs_and_a_note_alone_adds_no_step_list(note: str, runs: Rich) -> None:
     flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
     references = {"type": "references", "items": [{"key": "sop", "text": "SOP", "url": "https://e.com/sop"}]}
 
@@ -1016,7 +1014,7 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
     )
 
 
-def test_a_range_lowers_to_nothing_since_every_export_refuses_it() -> None:
+def test_a_range_lowers_to_no_node() -> None:
     block = {
         "type": "range",
         "axis": {"min": "Jan", "max": "Dec"},

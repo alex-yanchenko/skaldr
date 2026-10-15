@@ -15,7 +15,6 @@ from tests.conftest import REPO_ROOT
 from tests.factories import make_report
 
 TABLE_CELL_FIELDS = frozenset({"Group.rows", "Table.rows"})
-RANGE_SEGMENTS = "segments"
 PLAIN_TEXT_FIELDS = frozenset(
     {
         "Badge.label",
@@ -223,7 +222,7 @@ def _report(source: str) -> models.Report:
 
 
 @pytest.mark.parametrize("source", ["data/example.yaml", "examples/sales-pipeline.yaml", "multi-paragraph"])
-def test_render_and_export_parse_exactly_the_validated_strings_except_a_range_no_export_writes(
+def test_export_parses_each_validated_string_the_page_parses_but_a_range_s(
     monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
     report = _report(source)
@@ -236,9 +235,7 @@ def test_render_and_export_parse_exactly_the_validated_strings_except_a_range_no
     lower_report(report)
 
     validated = {text for _, text in rich_text_strings(report) if text}
-    outside_a_range = {
-        text for path, text in rich_text_strings(report) if text and RANGE_SEGMENTS not in path
-    }
+    outside_a_range = {text for path, text in rich_text_strings(report) if text and "segments" not in path}
     assert (rendered - {""}, exported - {""}) == (validated, outside_a_range)
 
 

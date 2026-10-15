@@ -321,7 +321,7 @@ def test_a_stacked_bar_chart_with_one_series_is_drawn_as_the_same_mermaid_chart_
         ),
     ],
 )
-def test_the_check_finds_each_swapped_feature_where_a_target_would_refuse_it(
+def test_the_check_names_the_yaml_path_of_each_swapped_feature(
     monkeypatch: pytest.MonkeyPatch, feature: Feature, blocks: list[dict[str, Any]], where: str
 ) -> None:
     refusing = Rejection("refused", "instead")
@@ -360,7 +360,7 @@ def test_adf_writes_math_as_a_latex_code_block_and_inline_math_as_a_code_mark() 
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
-def test_the_shipped_example_stays_an_html_showcase_that_every_export_refuses_for_its_range(
+def test_every_export_refuses_the_shipped_example_at_its_range(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], target: ExportTarget
 ) -> None:
     export_dir = tmp_path / "exported"

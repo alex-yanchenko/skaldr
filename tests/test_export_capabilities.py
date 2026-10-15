@@ -15,19 +15,21 @@ from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.conftest import REPO_ROOT
 from tests.factories import (
-    blocks_the_target_refuses,
+    REFUSED_IN_THE_EXAMPLE,
+    example_data,
     make_jira_target,
+    make_notion_target,
     make_report,
     make_section,
-    read_yaml,
+    refused_block_types,
     write_report,
 )
 from tests.factories.capability_factory import (
     ADF_CASES,
     ALL_REFUSALS,
     CLEAN_BLOCKS,
+    DIAGRAM_REFUSALS,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
@@ -40,7 +42,6 @@ from tests.factories.capability_factory import (
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
 Verdict = Literal["keep", "reject", "swap"]
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
@@ -74,12 +75,6 @@ REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
     for feature, cells in CAPABILITIES.items()
     for target, capability in cells.items()
     if isinstance(capability, Rejection)
-}
-REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
-    "markdown": ["range", "image"],
-    "notion": ["range", "image"],
-    "adf": ["range", "flow", "image", "fan"],
-    "slack": ["range", "flow", "image", "fan", "walkthrough"],
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
@@ -132,7 +127,7 @@ def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
     reject_what_the_target_cannot_show(report, lower_report(report), target)
 
 
-def _publish_with_a_fake_jira(data_path: Path, transport: FakeTransport) -> int:
+def _publish_with_fake_connectors(data_path: Path, transport: FakeTransport) -> int:
     registry = ConnectorRegistry(
         [FakeConnector(NotionTarget, transport), FakeConnector(JiraTarget, transport, export_target="adf")]
     )
@@ -191,12 +186,7 @@ def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> 
 
 
 def test_each_target_refuses_these_top_level_blocks_of_the_example() -> None:
-    example = parse_report(read_yaml(EXAMPLE))
-
-    refused = {
-        target: [example.blocks[index].type for index in blocks_the_target_refuses(example, target)]
-        for target in EXPORT_TARGETS
-    }
+    refused = {target: refused_block_types(example_data(), target) for target in EXPORT_TARGETS}
 
     assert refused == REFUSED_IN_THE_EXAMPLE
 
@@ -253,14 +243,38 @@ def test_a_clean_document_exports_to_every_target(tmp_path: Path, target: Export
     assert main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "exported")]) == 0
 
 
-@pytest.mark.parametrize("case", ADF_CASES)
+@pytest.mark.parametrize(
+    "case",
+    [pytest.param(DIAGRAM_REFUSALS[name], id=name) for name in ("notion-range", "notion-data-image")],
+)
+def test_publishing_to_notion_refuses_each_notion_case_before_any_transport_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
+) -> None:
+    data_path = write_report(tmp_path, published_report(case.blocks, make_notion_target()))
+    transport = FakeTransport()
+
+    exit_code = _publish_with_fake_connectors(data_path, transport)
+
+    assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        *ADF_CASES,
+        *(
+            pytest.param(DIAGRAM_REFUSALS[name], id=name)
+            for name in ("adf-range", "adf-flow", "adf-data-image")
+        ),
+    ],
+)
 def test_publishing_to_jira_refuses_each_adf_case_before_any_transport_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
 ) -> None:
     data_path = write_report(tmp_path, published_report(case.blocks, make_jira_target()))
     transport = FakeTransport()
 
-    exit_code = _publish_with_a_fake_jira(data_path, transport)
+    exit_code = _publish_with_fake_connectors(data_path, transport)
 
     assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
 
@@ -270,13 +284,13 @@ def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tm
     target = make_jira_target(**{"from": ["kept"]})
     data_path = write_report(tmp_path, published_report(blocks, target))
 
-    assert _publish_with_a_fake_jira(data_path, FakeTransport()) == 0
+    assert _publish_with_fake_connectors(data_path, FakeTransport()) == 0
 
 
 def test_publishing_a_clean_document_to_jira_sends_it(tmp_path: Path) -> None:
     data_path = write_report(tmp_path, published_report(CLEAN_BLOCKS, make_jira_target()))
     transport = FakeTransport()
 
-    assert _publish_with_a_fake_jira(data_path, transport) == 0
+    assert _publish_with_fake_connectors(data_path, transport) == 0
 
     assert transport.writes() != []

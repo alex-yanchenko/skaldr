@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypeVar, get_args
+from typing import Any, TypeVar, cast, get_args
 
 import pytest
 import yaml
@@ -17,6 +17,14 @@ from skaldr.export_targets import ExportTarget
 from skaldr.models import AnyBlock, AuthoredBlock, Report, parse_report
 from skaldr.richtext import Plain, Rich
 from tests.factories.report_factory import make_index_report, make_report
+
+EXAMPLE = Path(__file__).resolve().parents[2] / "data" / "example.yaml"
+REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
+    "markdown": ["range", "image"],
+    "notion": ["range", "image"],
+    "adf": ["range", "flow", "image", "fan"],
+    "slack": ["range", "flow", "image", "fan", "walkthrough"],
+}
 
 BlockT = TypeVar("BlockT", bound=AnyBlock)
 
@@ -145,8 +153,20 @@ def accepted_by(data: dict[str, Any], target: ExportTarget) -> dict[str, Any]:
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data
+    return cast("dict[str, Any]", yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def example_data() -> dict[str, Any]:
+    return read_yaml(EXAMPLE)
+
+
+def accepted_example(target: ExportTarget, data: dict[str, Any] | None = None) -> Report:
+    return parse_report(accepted_by(example_data() if data is None else data, target))
+
+
+def refused_block_types(data: dict[str, Any], target: ExportTarget) -> list[str]:
+    report = parse_report(data)
+    return [report.blocks[index].type for index in blocks_the_target_refuses(report, target)]
 
 
 def refusal_of(nodes: Sequence[Node], target: ExportTarget) -> ExportRejectedError:

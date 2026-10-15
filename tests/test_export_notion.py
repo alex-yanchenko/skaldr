@@ -68,8 +68,10 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
-    accepted_by,
+    REFUSED_IN_THE_EXAMPLE,
+    accepted_example,
     authored_block_types,
+    example_data,
     folder_texts,
     heading_sections,
     in_a_grid_cell,
@@ -83,7 +85,7 @@ from tests.factories import (
     make_table,
     make_toggle,
     notion_of,
-    read_yaml,
+    refused_block_types,
     rendered_block_count,
 )
 
@@ -609,14 +611,15 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_what_notion_accepts_of_the_example_exports_to_the_golden_skaldr_write_notion_golden_rewrites(
-    tmp_path: Path,
-) -> None:
+def test_the_example_less_the_blocks_notion_refuses_matches_the_notion_golden(tmp_path: Path) -> None:
     out_dir = NOTION_GOLDEN if os.environ.get(WRITE_NOTION_GOLDEN) else tmp_path
 
-    export_notion(parse_report(accepted_by(read_yaml(EXAMPLE), "notion")), out_dir)
+    export_notion(accepted_example("notion"), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(NOTION_GOLDEN)
+    assert (refused_block_types(example_data(), "notion"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_EXAMPLE["notion"],
+        folder_texts(NOTION_GOLDEN),
+    )
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:

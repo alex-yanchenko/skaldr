@@ -66,7 +66,9 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
-    accepted_by,
+    REFUSED_IN_THE_EXAMPLE,
+    accepted_example,
+    example_data,
     folder_texts,
     in_a_grid_cell,
     in_an_open_section,
@@ -79,22 +81,22 @@ from tests.factories import (
     make_tabs,
     make_toggle,
     markdown_of,
-    read_yaml,
+    refused_block_types,
 )
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
 WRITE_MARKDOWN_GOLDEN = "SKALDR_WRITE_MARKDOWN_GOLDEN"
 
 
-def test_what_github_accepts_of_the_example_exports_to_the_golden_skaldr_write_markdown_golden_rewrites(
-    tmp_path: Path,
-) -> None:
+def test_the_example_less_the_blocks_github_refuses_matches_the_markdown_golden(tmp_path: Path) -> None:
     out_dir = MARKDOWN_GOLDEN if os.environ.get(WRITE_MARKDOWN_GOLDEN) else tmp_path
 
-    export_markdown(parse_report(accepted_by(read_yaml(EXAMPLE), "markdown")), out_dir)
+    export_markdown(accepted_example("markdown"), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(MARKDOWN_GOLDEN)
+    assert (refused_block_types(example_data(), "markdown"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_EXAMPLE["markdown"],
+        folder_texts(MARKDOWN_GOLDEN),
+    )
 
 
 def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
