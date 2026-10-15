@@ -2,10 +2,11 @@ import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, NoReturn
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
@@ -101,6 +102,14 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
         return styled_in_tags(style, inner)
+
+    def refuse_a_tint(self) -> NoReturn:
+        raise ExportInvariantError(
+            "GitHub Markdown cannot colour or highlight text; the export check should have refused it"
+        )
+
+    def require_links_to_its_own_headings(self) -> None:
+        return
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))

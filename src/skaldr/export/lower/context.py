@@ -4,7 +4,7 @@ from typing import Final
 
 from skaldr import compute
 from skaldr.export.inline import bold, one_line, plain, rich_line
-from skaldr.export.runs import Chip, ExportRich
+from skaldr.export.runs import Chip, ExportRich, TonedLabel
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
 from skaldr.models import (
     AnyBlock,
@@ -15,7 +15,7 @@ from skaldr.models import (
     iter_reference_items,
 )
 from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks
-from skaldr.richtext import Plain, Rich, RichContext, Tinted
+from skaldr.richtext import Plain, Rich, RichContext
 
 TEXT_BULLET: Final = "• "
 NESTED_TEXT_BULLET: Final = "◦ "
@@ -126,8 +126,8 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
     return runs
 
 
-def toned(tone: ToneLiteral | None, runs: Rich) -> Rich:
-    return (Tinted(tone, None, runs),) if tone and runs else runs
+def toned(tone: ToneLiteral | None, runs: Rich) -> ExportRich:
+    return (TonedLabel(tone, runs),) if tone and runs else runs
 
 
 def with_bold_label(label: str | None, text: ExportRich, tone: ToneLiteral | None = None) -> ExportRich:

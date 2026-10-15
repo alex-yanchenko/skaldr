@@ -8,6 +8,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
+from skaldr.export import render_export
 from skaldr.export.adf import render_adf
 from skaldr.export.capabilities import (
     CAPABILITIES,
@@ -34,7 +35,6 @@ from skaldr.publish_block import JiraTarget, NotionTarget
 from skaldr.richtext import Plain
 from tests.factories import (
     REFUSED_IN_THE_EXAMPLE,
-    example_data,
     make_jira_target,
     make_notion_target,
     make_report,
@@ -51,10 +51,18 @@ from tests.factories.capability_factory import (
     ALL_REFUSALS,
     CANVAS_CALLOUT_WHY,
     CLEAN_BLOCKS,
+    COLOURED_TEXT,
     DIAGRAM_REFUSALS,
+    HIGHLIGHTED_TEXT,
+    LETTERED_LIST,
+    LINK_TO_A_SECTION,
+    LINK_TO_ANOTHER_DOCUMENT,
+    LIST_IN_A_QUOTE,
+    NOTION_CASES,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
+    UNDERLINED_TEXT,
     RefusedCase,
     in_a_panel,
     one_cell_grid,
@@ -63,6 +71,7 @@ from tests.factories.capability_factory import (
     two_cell_grid,
     walkthrough_holding,
 )
+from tests.factories.example_factory import example_for
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
 Verdict = Literal["keep", "reject", "swap"]
@@ -77,7 +86,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "toggle inside a toggle inside a toggle": {"adf": "reject"},
     "block inside a list item": {"slack": "reject"},
     "block inside a walkthrough step": {"slack": "reject"},
-    "numbered list starting past 1": {"slack": "reject"},
+    "numbered list starting past 1": {"notion": "reject", "slack": "reject"},
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
@@ -148,18 +157,50 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "image from a data: URI": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
     "chart with several series": {"markdown": "swap", "notion": "swap", "adf": "swap", "slack": "swap"},
 }
-VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {**SEEDED_VERDICTS, **DIAGRAM_VERDICTS}
 REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
     (feature, target)
     for feature, cells in CAPABILITIES.items()
     for target, capability in cells.items()
     if isinstance(capability, Rejection)
 }
+TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+    "colour span": {"markdown": "reject", "slack": "reject"},
+    "highlight span": {"markdown": "reject", "adf": "reject", "slack": "reject"},
+    "colour and highlight span": {
+        "markdown": "reject",
+        "notion": "reject",
+        "adf": "reject",
+        "slack": "reject",
+    },
+    "underline": {"slack": "reject"},
+    "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
+    "link to another skaldr document": {"notion": "reject", "adf": "reject", "slack": "reject"},
+    "inline code holding a backtick": {"notion": "reject"},
+    "inline code holding a closing tag in a table cell": {"notion": "reject"},
+    "inline code holding a closing tag in a coloured, highlighted or underlined span": {"notion": "reject"},
+    "highlight span inside a toned walkthrough step title": {"notion": "reject"},
+    "list numbered with letters or roman numerals": {"adf": "reject", "slack": "reject"},
+    "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step": {
+        "adf": "reject"
+    },
+    "list inside a quote": {"slack": "reject"},
+}
+VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+    **SEEDED_VERDICTS,
+    **DIAGRAM_VERDICTS,
+    **TEXT_AND_LIST_VERDICTS,
+}
+
+
+def _targets_refusing(blocks: list[dict[str, Any]]) -> set[ExportTarget]:
+    return {case.target for case in SEEDED_REFUSALS.values() if case.blocks == blocks}
+
+
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
     for other in EXPORT_TARGETS
-    if other != case.target and other not in case.also_refused_by
+    if other not in _targets_refusing(case.blocks) and other not in case.also_refused_by
 ]
 ALSO_REFUSED_BY = [
     pytest.param(case, other, id=f"{name}-also-refused-by-{other}")
@@ -193,13 +234,29 @@ def _verdict(capability: Capability) -> Verdict:
             return capability
 
 
-def _first_refused_feature(case: RefusedCase) -> Feature:
+def _refused_features(case: RefusedCase) -> list[Feature]:
     report = parse_report(make_report(blocks=case.blocks))
-    return next(
+    return [
         hit.details.feature
         for hit in feature_hits(report, lower_report(report))
         if isinstance(CAPABILITIES[hit.details.feature][case.target], Rejection)
-    )
+    ]
+
+
+def _first_refused_feature(case: RefusedCase) -> Feature:
+    return _refused_features(case)[0]
+
+
+SEEDED_CASES_REFUSED_FOR_ONE_FEATURE = [
+    pytest.param(case, id=name)
+    for name, case in SEEDED_REFUSALS.items()
+    if set(_refused_features(case)) == {case.feature}
+]
+SEEDED_CASES_REFUSED_FOR_MORE_FEATURES = [
+    pytest.param(case, id=name)
+    for name, case in SEEDED_REFUSALS.items()
+    if set(_refused_features(case)) != {case.feature}
+]
 
 
 def _adf_expands(*titles: str) -> list[dict[str, Any]]:
@@ -263,13 +320,23 @@ def test_every_rejection_in_the_table_has_a_seeded_case_and_every_seeded_case_na
     assert (refused, set(named)) == (named, REJECTION_CELLS)
 
 
-@pytest.mark.parametrize("case", SEEDED_CASES)
+@pytest.mark.parametrize("case", SEEDED_CASES_REFUSED_FOR_ONE_FEATURE)
 def test_each_seeded_case_passes_once_the_cell_it_names_keeps_the_feature(
     monkeypatch: pytest.MonkeyPatch, case: RefusedCase
 ) -> None:
     monkeypatch.setitem(CAPABILITIES[case.feature], case.target, "keep")
 
     _check(case.blocks, case.target)
+
+
+@pytest.mark.parametrize("case", SEEDED_CASES_REFUSED_FOR_MORE_FEATURES)
+def test_a_seeded_case_refused_for_several_features_reports_the_next_once_its_cell_keeps_the_feature(
+    monkeypatch: pytest.MonkeyPatch, case: RefusedCase
+) -> None:
+    next_feature = next(feature for feature in _refused_features(case) if feature != case.feature)
+    monkeypatch.setitem(CAPABILITIES[case.feature], case.target, "keep")
+
+    assert _first_refused_feature(case) == next_feature
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)
@@ -281,8 +348,58 @@ def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCa
 
 
 @pytest.mark.parametrize(("case", "other"), KEPT_BY_THE_OTHER_TARGETS)
-def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, other: ExportTarget) -> None:
-    _check(case.blocks, other)
+def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
+    case: RefusedCase, other: ExportTarget
+) -> None:
+    report = parse_report(make_report(blocks=case.blocks))
+
+    assert render_export(report, other).pages != {}
+
+
+@pytest.mark.parametrize(
+    ("blocks", "target", "page"),
+    [
+        pytest.param(
+            COLOURED_TEXT, "notion", 'Zone C is <span color="red">behind</span>.\n', id="colour-on-notion"
+        ),
+        pytest.param(
+            HIGHLIGHTED_TEXT,
+            "notion",
+            'The recount is <span color="yellow_bg">due Friday</span>.\n',
+            id="highlight-on-notion",
+        ),
+        pytest.param(
+            UNDERLINED_TEXT,
+            "markdown",
+            "# Test Report\n\nEvery label ends in a <ins>check digit</ins>.\n",
+            id="underline-on-github",
+        ),
+        pytest.param(
+            LETTERED_LIST, "markdown", "# Test Report\n\n- a. a\n- b. b\n", id="lettered-list-on-github"
+        ),
+        pytest.param(
+            LINK_TO_ANOTHER_DOCUMENT,
+            "markdown",
+            "# Test Report\n\nIt follows [the plan](cold-room-plan.md).\n",
+            id="doc-link-on-github",
+        ),
+        pytest.param(
+            LINK_TO_A_SECTION,
+            "markdown",
+            "# Test Report\n\n## Counts\n\nTen.\n\nSee [the counts](#counts).\n",
+            id="same-page-link-on-github",
+        ),
+        pytest.param(
+            LIST_IN_A_QUOTE, "notion", "> Count:<br>• aisles<br>• bins\n", id="list-in-a-quote-on-notion"
+        ),
+    ],
+)
+def test_a_target_that_keeps_what_another_refuses_writes_it_as_the_page_shows_it(
+    blocks: list[dict[str, Any]], target: ExportTarget, page: str
+) -> None:
+    report = parse_report(make_report(blocks=blocks))
+
+    assert render_export(report, target).pages == {"page.md": page}
 
 
 @pytest.mark.parametrize(("case", "other"), ALSO_REFUSED_BY)
@@ -301,7 +418,7 @@ def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> 
 
 
 def test_each_target_refuses_these_top_level_blocks_of_the_example() -> None:
-    refused = {target: refused_block_types(example_data(), target) for target in EXPORT_TARGETS}
+    refused = {target: refused_block_types(example_for(target), target) for target in EXPORT_TARGETS}
 
     assert refused == REFUSED_IN_THE_EXAMPLE
 
@@ -397,13 +514,69 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
-def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
-    blocks = [*in_a_panel({"type": "divider"}), two_cell_grid(text_grid())]
+def test_a_refusal_in_the_source_line_of_the_footer_names_meta_source() -> None:
+    meta = {"title": "Counts", "source": "the [cold room]{tone=danger} log"}
+    report = parse_report(make_report(meta=meta))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, lower_report(report), "markdown")
+
+    assert vars(raised.value) == {
+        "target": "markdown",
+        "why": "GitHub Markdown cannot colour text, so it cannot show the colour of 'cold room'",
+        "instead": "write the text without the colour or export the document elsewhere",
+        "where": "at meta.source",
+    }
+
+
+@pytest.mark.parametrize(
+    ("blocks", "where"),
+    [
+        pytest.param([*COLOURED_TEXT, *LETTERED_LIST], "at blocks.0.text", id="text-before-a-list"),
+        pytest.param(
+            [*in_a_panel({"type": "divider"}), two_cell_grid(text_grid())],
+            "at blocks.0.panel.blocks.0.divider",
+            id="panel-before-a-grid",
+        ),
+    ],
+)
+def test_the_first_refusal_reported_is_the_first_in_the_document(
+    blocks: list[dict[str, Any]], where: str
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert raised.value.where == where
+
+
+def test_a_refusal_in_a_nested_list_is_reported_before_one_in_the_next_item() -> None:
+    blocks = [{"type": "text", "body": "- a\n  - ++u++\n- [c]{tone=danger}"}]
 
     with pytest.raises(ExportRejectedError) as raised:
         _check(blocks, "slack")
 
-    assert raised.value.where == "at blocks.0.panel.blocks.0.divider"
+    assert vars(raised.value) == {
+        "target": "slack",
+        "why": "a Slack canvas cannot underline text, so it cannot show the underline on 'u'",
+        "instead": "write the text without the underline or export the document elsewhere",
+        "where": "at blocks.0.text",
+    }
+
+
+def test_a_refusal_in_a_walkthrough_step_is_reported_before_one_in_the_next_step_title() -> None:
+    steps = [
+        {"label": "Scan", "detail": [text_grid()]},
+        {
+            "label": "Count",
+            "sub": "the [cold room]{tone=danger}",
+            "detail": [{"type": "text", "body": "Ten."}],
+        },
+    ]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([{"type": "walkthrough", "steps": steps}], "slack")
+
+    assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
 def _filler(count: int) -> list[dict[str, Any]]:
@@ -450,6 +623,17 @@ def test_a_refusal_found_on_the_model_is_reported_when_no_lowered_node_follows_i
 @pytest.mark.parametrize(
     ("blocks", "target", "refusal"),
     [
+        pytest.param(
+            in_a_panel({"type": "callout", "tone": "info", "body": "The [recount]{bg=warning} is due."}),
+            "adf",
+            {
+                "target": "adf",
+                "why": "ADF cannot place a callout inside a panel",
+                "instead": "move the callout out of the panel",
+                "where": "at blocks.0.panel.blocks.0.callout",
+            },
+            id="adf-callout-in-a-panel-before-a-highlight-in-its-text",
+        ),
         pytest.param(
             in_a_panel(make_toggle(make_toggle(TABLE))),
             "adf",
@@ -536,7 +720,10 @@ def test_a_clean_document_exports_to_every_target(tmp_path: Path, target: Export
 
 @pytest.mark.parametrize(
     "case",
-    [pytest.param(DIAGRAM_REFUSALS[name], id=name) for name in ("notion-range", "notion-data-image")],
+    [
+        *NOTION_CASES,
+        *(pytest.param(DIAGRAM_REFUSALS[name], id=name) for name in ("notion-range", "notion-data-image")),
+    ],
 )
 def test_publishing_to_notion_refuses_each_notion_case_before_any_transport_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
@@ -568,6 +755,15 @@ def test_publishing_to_jira_refuses_each_adf_case_before_any_transport_call(
     exit_code = _publish_with_fake_connectors(data_path, transport)
 
     assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
+
+
+def test_publishing_a_clean_document_to_notion_sends_it(tmp_path: Path) -> None:
+    data_path = write_report(tmp_path, published_report(CLEAN_BLOCKS, make_notion_target()))
+    transport = FakeTransport()
+
+    assert _publish_with_fake_connectors(data_path, transport) == 0
+
+    assert transport.writes() != []
 
 
 def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tmp_path: Path) -> None:

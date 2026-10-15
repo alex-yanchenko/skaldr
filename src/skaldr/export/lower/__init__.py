@@ -60,6 +60,7 @@ from skaldr.richtext import Plain
 PART_HEADING_LEVEL = 1
 SECTION_HEADING_LEVEL = 2
 FOOTER_SEPARATOR = " · "
+FOOTER_SOURCE_PATH = "meta.source"
 
 
 def lower_report(report: models.Report) -> LoweredDocument:
@@ -146,7 +147,11 @@ def _subtitle(report: models.Report) -> tuple[Node, ...]:
 
 def _footer(report: models.Report, lowering: Lowering) -> tuple[Node, ...]:
     footer = compute.provenance_footer(report)
-    return (Paragraph(_footer_runs(footer, lowering), "muted"),) if footer else ()
+    return (
+        (Paragraph(_footer_runs(footer, lowering), "muted", authored_at=FOOTER_SOURCE_PATH),)
+        if footer
+        else ()
+    )
 
 
 def _footer_runs(footer: compute.Provenance, lowering: Lowering) -> ExportRich:

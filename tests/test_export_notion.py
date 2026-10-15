@@ -1,5 +1,4 @@
 import json
-import os
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -7,8 +6,8 @@ from typing import Any, get_args
 
 import pytest
 
-from skaldr.errors import ReportError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
+from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
+from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion, render_export
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
@@ -19,7 +18,7 @@ from skaldr.export.notion import (
     notion_inline,
     render_notion,
 )
-from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, SectionLink, StatusMark, TonedLabel
 from skaldr.export.tree import (
     Callout,
     Columns,
@@ -57,6 +56,7 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    DocumentLink,
     Placeholder,
     Plain,
     ScriptText,
@@ -64,14 +64,12 @@ from skaldr.richtext import (
     Tinted,
     parse_rich,
 )
-from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
     REFUSED_IN_THE_EXAMPLE,
     accepted_example,
     authored_block_types,
-    example_data,
     folder_texts,
     heading_sections,
     in_a_grid_cell,
@@ -88,10 +86,15 @@ from tests.factories import (
     refused_block_types,
     rendered_block_count,
 )
+from tests.factories.capability_factory import toned_step_titled
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
-NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
-WRITE_NOTION_GOLDEN = "SKALDR_WRITE_NOTION_GOLDEN"
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
@@ -217,7 +220,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Plain(" "),
         Chip("api", "amber"),
         Plain(" "),
-        AnchorLink((Plain("method"),), "method"),
+        SectionLink((Plain("method"),), "method"),
         Break(),
         StatusMark("blocked"),
         Gauge(3, 10),
@@ -263,11 +266,6 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
         pytest.param("[late]{tone=danger}", '<span color="red">late</span>', id="color"),
         pytest.param("[due]{bg=amber}", '<span color="yellow_bg">due</span>', id="highlight"),
         pytest.param(
-            "[**now** a|b]{tone=accent bg=sky}",
-            '<span color="purple"><span color="pink_bg">**now** a\\|b</span></span>',
-            id="color-around-highlight",
-        ),
-        pytest.param(
             "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone\\=info\\}", id="no-span-stays-prose"
         ),
         pytest.param(
@@ -279,6 +277,305 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
 )
 def test_an_attribute_span_is_a_notion_color_span(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            parse_rich("[a [x]{tone=info} b]{tone=danger}"),
+            '<span color="red">a </span><span color="blue">x</span><span color="red"> b</span>',
+            id="colour-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("[p [q]{bg=sky} r]{bg=warning}"),
+            '<span color="yellow_bg">p </span><span color="pink_bg">q</span>'
+            '<span color="yellow_bg"> r</span>',
+            id="highlight-inside-a-highlight",
+        ),
+        pytest.param(
+            parse_rich("[[x]{tone=info} b]{tone=danger}"),
+            '<span color="blue">x</span><span color="red"> b</span>',
+            id="inner-span-first",
+        ),
+        pytest.param(
+            parse_rich("[a **[x]{tone=info}** b]{tone=danger}"),
+            '<span color="red">a </span>**<span color="blue">x</span>**<span color="red"> b</span>',
+            id="inner-span-in-bold",
+        ),
+        pytest.param(
+            parse_rich("[a [[x]{tone=info} y]{tone=success} b]{tone=danger}"),
+            '<span color="red">a </span><span color="blue">x</span><span color="green"> y</span>'
+            '<span color="red"> b</span>',
+            id="three-deep",
+        ),
+        pytest.param(
+            (
+                TonedLabel(
+                    "danger", (Styled("bold", (Plain("Scan"),)), Plain(" "), *parse_rich("[cold]{tone=info}"))
+                ),
+            ),
+            '<span color="red">**Scan** </span><span color="blue">cold</span>',
+            id="author-colour-inside-a-toned-label",
+        ),
+    ],
+)
+def test_a_span_inside_a_span_of_the_same_kind_is_written_beside_it_as_notion_shows_it(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            parse_rich("[a ++u++ b]{tone=danger}"),
+            '<span color="red">a </span><span color="red" underline="true">u</span>'
+            '<span color="red"> b</span>',
+            id="underline-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("++a [c]{tone=danger} b++"),
+            '<span underline="true">a </span><span color="red" underline="true">c</span>'
+            '<span underline="true"> b</span>',
+            id="colour-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("++[h]{bg=warning}++"),
+            '<span color="yellow_bg" underline="true">h</span>',
+            id="highlight-filling-an-underline",
+        ),
+        pytest.param(
+            parse_rich("[a ++b [c]{tone=info}++ d]{tone=danger}"),
+            '<span color="red">a </span><span color="red" underline="true">b </span>'
+            '<span color="blue" underline="true">c</span><span color="red"> d</span>',
+            id="colour-inside-an-underline-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("++a **[c]{tone=info}**++"),
+            '<span underline="true">a </span>**<span color="blue" underline="true">c</span>**',
+            id="colour-in-bold-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("++fill {{owner}}++"),
+            '<span underline="true">fill </span>'
+            '<span color="yellow_bg" underline="true">\\{\\{owner\\}\\}</span>',
+            id="placeholder-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("[due {{date}} now]{bg=sky}"),
+            '<span color="pink_bg">due </span><span color="yellow_bg">\\{\\{date\\}\\}</span>'
+            '<span color="pink_bg"> now</span>',
+            id="placeholder-inside-a-highlight",
+        ),
+        pytest.param(
+            parse_rich("[ask {{owner}} first]{tone=danger}"),
+            '<span color="red">ask </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>'
+            '<span color="red"> first</span>',
+            id="placeholder-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("[++ask {{owner}}++ first]{tone=danger}"),
+            '<span color="red" underline="true">ask </span>'
+            '<span color="yellow_bg" underline="true">\\{\\{owner\\}\\}</span>'
+            '<span color="red"> first</span>',
+            id="placeholder-inside-an-underline-inside-a-colour",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("ask "), Placeholder("owner"))),),
+            '<span color="red">ask </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>',
+            id="placeholder-inside-a-toned-label",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("Scan "), Styled("underline", (Plain("now"),)))),),
+            '<span color="red">Scan </span><span color="red" underline="true">now</span>',
+            id="underline-inside-a-toned-label",
+        ),
+    ],
+)
+def test_spans_of_different_attributes_are_written_side_by_side_each_carrying_every_enclosing_attribute(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+def test_an_underline_inside_a_colour_passes_the_notion_check_and_is_written_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Zone [a ++u++ b]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Zone <span color="red">a </span><span color="red" underline="true">u</span>'
+        '<span color="red"> b</span>.\n'
+    }
+
+
+def test_a_colour_inside_a_colour_passes_the_notion_check_and_is_written_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Zone [a [x]{tone=info} b]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Zone <span color="red">a </span><span color="blue">x</span><span color="red"> b</span>.\n'
+    }
+
+
+def test_a_blank_in_a_colour_span_passes_the_notion_check_and_is_written_as_a_highlight_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Ask [the {{owner}} first]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Ask <span color="red">the </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>'
+        '<span color="red"> first</span>.\n'
+    }
+
+
+def test_a_blank_in_a_toned_step_title_is_written_on_notion_beside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("ask {{owner}} first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">ask </span>'
+        '<span color="yellow_bg">\\{\\{owner\\}\\}</span><span color="red"> first</span>*\n\tBoth aisles.\n'
+    }
+
+
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            (TonedLabel("danger", (Plain("run "), Code("</b>"), Plain(" first"))),),
+            '<span color="red">run </span>`</b>`<span color="red"> first</span>',
+            id="beside-the-text",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Styled("italic", (Code("</b>"),)),)),),
+            "*`</b>`*",
+            id="alone-in-italic",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("see "), Code("List<int>"))),),
+            '<span color="red">see `List<int>`</span>',
+            id="code-without-a-closing-tag-stays-inside",
+        ),
+    ],
+)
+def test_code_holding_a_closing_tag_in_a_toned_label_is_written_outside_the_generated_span(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+def test_code_holding_a_closing_tag_in_a_toned_step_title_is_written_outside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("run `</span>` first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">run </span>`</span>`'
+        '<span color="red"> first</span>*\n\tBoth aisles.\n'
+    }
+
+
+def test_code_holding_a_closing_tag_in_an_author_colour_in_a_toned_step_title_is_refused_for_notion() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("run [`</span>`]{tone=info} first")))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        render_export(report, "notion")
+
+    assert vars(raised.value) == {
+        "target": "notion",
+        "why": "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+        "as in '</span>'",
+        "instead": "write the code outside the coloured, highlighted or underlined text, or without '</'",
+        "where": "at blocks.0.walkthrough",
+    }
+
+
+def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("the [cold room]{tone=info} first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">the </span>'
+        '<span color="blue">cold room</span><span color="red"> first</span>*\n\tBoth aisles.\n'
+    }
+
+
+@pytest.mark.parametrize(
+    ("runs", "message"),
+    [
+        pytest.param(
+            (Tinted("danger", None, (Tinted(None, "sky", (Plain("x"),)),)),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
+            "the export check should have refused it",
+            id="highlight-inside-a-colour",
+        ),
+        pytest.param(
+            (Tinted(None, "sky", (Styled("bold", (Tinted("danger", None, (Plain("x"),)),)),)),),
+            "Notion holds no span inside a span, so it cannot show a colour inside a highlight; "
+            "the export check should have refused it",
+            id="colour-inside-bold-inside-a-highlight",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Tinted(None, "sky", (Plain("x"),)),)),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
+            "the export check should have refused it",
+            id="highlight-inside-a-toned-label",
+        ),
+        pytest.param(
+            (Tinted("danger", None, (Plain("see "), Code("</span>"))),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</span>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-a-colour",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Styled("underline", (Code("</b>"),)),)),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</b>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-an-underline-inside-a-toned-label",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Tinted("info", None, (Code("</b>"),)),)),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</b>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-a-colour-inside-a-toned-label",
+        ),
+        pytest.param(
+            (Styled("underline", (Plain("see "), Code("</span>"))),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</span>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-an-underline",
+        ),
+    ],
+)
+def test_the_notion_writer_refuses_a_span_nesting_the_check_refuses_as_an_invariant(
+    runs: ExportRich, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        notion_inline(runs)
+
+    assert str(raised.value) == message
+
+
+@pytest.mark.parametrize(
+    ("runs", "message"),
+    [
+        pytest.param(
+            (Tinted("accent", "sky", (Plain("lots"),)),),
+            "a Notion text run takes a colour or a highlight, not both; "
+            "the export check should have refused it",
+            id="colour-and-highlight",
+        ),
+        pytest.param(
+            (DocumentLink((Plain("the plan"),), "cold-room-plan", None),),
+            "this target cannot link to another skaldr document; the export check should have refused it",
+            id="link-to-another-document",
+        ),
+        pytest.param(
+            (AnchorLink((Plain("the counts"),), "counts"),),
+            "a Notion page cannot link to its own headings; the export check should have refused it",
+            id="link-to-a-heading-the-author-wrote",
+        ),
+    ],
+)
+def test_the_notion_writer_refuses_what_the_export_check_refuses_as_an_invariant(
+    runs: ExportRich, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError, match=f"^{re.escape(message)}$"):
+        notion_inline(runs)
 
 
 def test_emphasis_beside_a_notion_color_span_keeps_its_markers_because_the_span_tag_closes_it() -> None:
@@ -317,8 +614,16 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
     )
 
 
-def test_code_with_a_backtick_becomes_escaped_text_because_notion_has_no_longer_code_fence() -> None:
-    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```plain text\nx\n```\n"
+def test_a_code_label_holding_a_backtick_is_refused_for_notion() -> None:
+    report = parse_report(make_report(blocks=[{"type": "code", "label": "a`b", "content": "x"}]))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        render_export(report, "notion")
+
+    assert str(raised.value) == (
+        "Notion cannot show inline code holding a backtick, as in 'a`b', at blocks.0.code; "
+        "write the code in a code block, or without the backtick"
+    )
 
 
 def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
@@ -400,7 +705,7 @@ def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_i
 
 
 def test_a_toned_title_is_coloured_text_and_the_rest_of_the_line_stays_plain() -> None:
-    entry = ListEntry((Tinted("info", None, (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
+    entry = ListEntry((TonedLabel("info", (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
 
     assert render_notion([ListNode("number", (entry,))]) == '1. <span color="blue">**Go**</span>: now\n'
 
@@ -611,14 +916,23 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_the_example_less_the_blocks_notion_refuses_matches_the_notion_golden(tmp_path: Path) -> None:
-    out_dir = NOTION_GOLDEN if os.environ.get(WRITE_NOTION_GOLDEN) else tmp_path
+def test_the_example_is_refused_for_notion_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_notion(load_report(EXAMPLE), tmp_path)
+
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["notion"]
+
+
+def test_the_example_reworked_for_notion_less_the_blocks_notion_refuses_matches_the_notion_golden(
+    tmp_path: Path,
+) -> None:
+    out_dir = golden_or_scratch_folder("notion", tmp_path)
 
     export_notion(accepted_example("notion"), out_dir)
 
-    assert (refused_block_types(example_data(), "notion"), folder_texts(out_dir)) == (
+    assert (refused_block_types(example_for("notion"), "notion"), folder_texts(out_dir)) == (
         REFUSED_IN_THE_EXAMPLE["notion"],
-        folder_texts(NOTION_GOLDEN),
+        folder_texts(golden_of("notion")),
     )
 
 
@@ -826,26 +1140,13 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
     )
 
 
-@pytest.mark.parametrize(
-    ("cell", "written"),
-    [
-        pytest.param(
-            "close with `</td></tr>` here",
-            "close with \\</td\\>\\</tr\\> here",
-            id="a-closing-tag-is-escaped-text",
-        ),
-        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
-    ],
-)
-def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole(
-    cell: str, written: str
-) -> None:
-    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": cell}])
+def test_code_holding_an_angle_bracket_in_a_table_cell_stays_code() -> None:
+    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": "a `List<int>` type"}])
 
     assert notion_of([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
-        f"\t<tr>\n\t\t<td>{written}</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>a `List<int>` type</td>\n\t</tr>\n"
         "</table>\n"
     )
 
@@ -853,23 +1154,37 @@ def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_
 @pytest.mark.parametrize(
     ("text", "notion"),
     [
-        pytest.param(
-            "[see `</span>` here]{tone=danger}",
-            '<span color="red">see \\</span\\> here</span>',
-            id="a-closing-tag-inside-a-colour-span",
-        ),
-        pytest.param("inline `</callout>` code", "inline \\</callout\\> code", id="a-closing-tag"),
-        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
-        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag-stays-code"),
-        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket-stays-code"),
+        pytest.param("inline `</callout>` code", "inline `</callout>` code", id="a-closing-tag"),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket"),
+        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag"),
+        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket"),
     ],
 )
-def test_code_holding_a_closing_tag_is_escaped_text_anywhere(text: str, notion: str) -> None:
+def test_code_holding_an_angle_bracket_or_a_closing_tag_outside_a_table_stays_code(
+    text: str, notion: str
+) -> None:
     assert notion_inline(parse_rich(text)) == notion
 
 
-def test_code_holding_a_backtick_is_escaped_text() -> None:
-    assert notion_inline((Code("a`b<i>"),)) == "a\\`b\\<i\\>"
+def test_the_notion_writer_refuses_code_holding_a_backtick_as_an_invariant() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        notion_inline((Code("a`b"),))
+
+    assert str(raised.value) == (
+        "Notion cannot show inline code holding a backtick, 'a`b'; the export check should have refused it"
+    )
+
+
+def test_the_notion_writer_refuses_code_holding_a_closing_tag_in_a_table_cell_as_an_invariant() -> None:
+    table = TableNode((TableCell((Code("</td>"),)),), ())
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([table])
+
+    assert str(raised.value) == (
+        "Notion loses a table cell whose inline code holds '</', '</td>'; "
+        "the export check should have refused it"
+    )
 
 
 def test_a_single_weighted_column_takes_the_whole_page_width() -> None:
@@ -1166,11 +1481,6 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
 @pytest.mark.parametrize(
     ("options", "notion"),
     [
-        pytest.param(
-            {"start": 9},
-            "- 9\\. c\n- 10\\. d\n\t1. e\n",
-            id="a-start-past-one-is-bullets-led-by-the-escaped-number-and-a-nested-list-is-native",
-        ),
         pytest.param({"start": 1}, "1. c\n2. d\n\t1. e\n", id="a-start-of-one-is-native"),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
         pytest.param(
@@ -1189,20 +1499,13 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     assert notion_of([block]) == notion
 
 
-def test_a_numbered_list_past_nine_digits_keeps_every_number_as_text() -> None:
-    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a", "b"]}
+def test_the_notion_writer_refuses_a_numbered_list_starting_past_1_as_an_invariant() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([ListNode("number", (ListEntry((Plain("three"),)),), start=3)])
 
-    assert notion_of([block]) == "- 999999999\\. a\n- 1000000000\\. b\n"
-
-
-def test_a_numbered_list_written_as_bullets_is_kept_apart_from_a_bullet_list_after_it() -> None:
-    blocks = [
-        {"type": "list", "style": "number", "start": 3, "items": ["three"]},
-        {"type": "list", "items": ["dot"]},
-        {"type": "list", "style": "number", "items": ["one"]},
-    ]
-
-    assert notion_of(blocks) == "- 3\\. three\n<empty-block/>\n- dot\n1. one\n"
+    assert str(raised.value) == (
+        "Notion numbers every list from 1, not from 3; the export check should have refused it"
+    )
 
 
 def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:
@@ -1827,11 +2130,6 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
             {"type": "callout", "tone": "info", "body": "1. a\n2. b"},
             '<callout icon="💡" color="blue_bg">\n\t1. a\n\t2. b\n</callout>\n',
             id="a-numbered-list-from-one-is-native",
-        ),
-        pytest.param(
-            {"type": "text", "body": "3. a\n4. b"},
-            "- 3\\. a\n- 4\\. b\n",
-            id="a-numbered-list-from-three-keeps-its-numbers",
         ),
         pytest.param(
             {"type": "text", "body": "- a\n- b\n\nOutro\n\n- c\n- d\n* e\n* f"},

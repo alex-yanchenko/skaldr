@@ -16,9 +16,9 @@ from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import AnyBlock, AuthoredBlock, Report, parse_report
 from skaldr.richtext import Plain, Rich
+from tests.factories.example_factory import EXAMPLE, example_for
 from tests.factories.report_factory import make_index_report, make_report
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
     "markdown": ["range", "image"],
     "notion": ["range", "image"],
@@ -161,7 +161,7 @@ def example_data() -> dict[str, Any]:
 
 
 def accepted_example(target: ExportTarget, data: dict[str, Any] | None = None) -> Report:
-    return parse_report(accepted_by(example_data() if data is None else data, target))
+    return parse_report(accepted_by(example_for(target) if data is None else data, target))
 
 
 def refused_block_types(data: dict[str, Any], target: ExportTarget) -> list[str]:

@@ -6,7 +6,7 @@ from typing import get_args
 
 import pytest
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, ExportInvariantError
 from skaldr.export.adf import IssueLinks, write_adf_runs
 from skaldr.export.adf.colors import BADGE_LOZENGE
 from skaldr.export.runs import (
@@ -17,8 +17,10 @@ from skaldr.export.runs import (
     ExportRich,
     Gauge,
     IndicatorMark,
+    SectionLink,
     StatusMark,
     SwimlaneMark,
+    TonedLabel,
 )
 from skaldr.models import BadgeColorLiteral, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import (
@@ -131,13 +133,21 @@ def test_code_drops_a_text_colour() -> None:
 
 
 def test_a_tinted_run_becomes_a_text_colour() -> None:
-    runs = (Tinted("danger", "warning", (Plain("x"),)),)
+    runs = (Tinted("danger", None, (Plain("x"),)),)
 
     assert _written(runs) == [_text("x", {"type": "textColor", "attrs": {"color": "#DE350B"}})]
 
 
-def test_a_tinted_run_with_only_a_background_adds_no_mark() -> None:
-    assert _written((Tinted(None, "warning", (Plain("x"),)),)) == [_text("x")]
+@pytest.mark.parametrize(
+    "tone", [pytest.param(None, id="highlight-alone"), pytest.param("danger", id="colour-and-highlight")]
+)
+def test_a_highlight_is_an_invariant_the_check_backs(tone: ToneLiteral | None) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((Tinted(tone, "warning", (Plain("x"),)),))
+
+    assert str(raised.value) == (
+        "a Jira description does not show a text highlight; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(("position", "kind"), [("subscript", "sub"), ("superscript", "sup")])
@@ -145,8 +155,23 @@ def test_a_script_becomes_a_subsup_mark(position: ScriptPosition, kind: str) -> 
     assert _written((ScriptText(position, "2"),)) == [_text("2", {"type": "subsup", "attrs": {"type": kind}})]
 
 
-def test_an_anchor_link_keeps_only_its_label() -> None:
-    assert _written((AnchorLink((Plain("Jump"),), "target"),)) == [_text("Jump")]
+def test_a_section_link_keeps_only_its_label() -> None:
+    assert _written((SectionLink((Plain("Jump"),), "target"),)) == [_text("Jump")]
+
+
+def test_a_toned_label_becomes_a_text_colour() -> None:
+    runs = (TonedLabel("danger", (Plain("Scan"),)),)
+
+    assert _written(runs) == [_text("Scan", {"type": "textColor", "attrs": {"color": "#DE350B"}})]
+
+
+def test_an_authored_link_to_a_heading_is_an_invariant_the_check_backs() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((AnchorLink((Plain("the counts"),), "counts"),))
+
+    assert str(raised.value) == (
+        "a Jira description cannot link to its own headings; the export check should have refused it"
+    )
 
 
 def test_a_citation_with_a_url_links_its_number() -> None:
@@ -426,5 +451,10 @@ def test_an_issue_link_without_a_url_is_the_label_as_plain_text() -> None:
     assert _written((IssueLink((Plain("ABC-123"),), "ABC-123", None),)) == [_text("ABC-123")]
 
 
-def test_a_document_link_is_the_label_as_plain_text() -> None:
-    assert _written((DocumentLink((Plain("the plan"),), "onboarding-plan", "st2"),)) == [_text("the plan")]
+def test_a_link_to_another_document_is_an_invariant_the_check_backs() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((DocumentLink((Plain("the plan"),), "onboarding-plan", "st2"),))
+
+    assert str(raised.value) == (
+        "a Jira description cannot link to another skaldr document; the export check should have refused it"
+    )

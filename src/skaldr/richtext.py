@@ -33,7 +33,6 @@ from skaldr.typed_links import (
     DOC_SCHEME,
     JIRA_SCHEME,
     USER_SCHEME,
-    DocumentTarget,
     date_target,
     document_target,
     issue_key,
@@ -68,6 +67,10 @@ class Link:
 class AnchorLink:
     label: "Rich"
     anchor: str
+    document_link: str | None = None
+
+    def as_written(self) -> str:
+        return self.document_link or ANCHOR_PREFIX + self.anchor
 
 
 @dataclass(frozen=True)
@@ -223,21 +226,22 @@ def _typed_link_run(url: str, label: Rich, rules: RichContext) -> Run | None:
         key = issue_key(url)
         return IssueLink(label, key, issue_url(rules.jira_site, key) if rules.jira_site else None)
     if url.startswith(DOC_SCHEME):
-        return _document_run(document_target(url), label, rules)
+        return _document_run(url, label, rules)
     return None
 
 
-def _document_run(target: DocumentTarget, label: Rich, rules: RichContext) -> Run:
+def _document_run(url: str, label: Rich, rules: RichContext) -> Run:
+    target = document_target(url)
     part = rules.part_anchors.get(target.doc_id)
     if part is None:
         return DocumentLink(label, target.doc_id, target.section)
     if target.section is None:
-        return AnchorLink(label, part.anchor)
+        return AnchorLink(label, part.anchor, document_link=url)
     if target.section not in part.section_ids:
         raise ReportError(
             f"rich text links to unknown section '{target.section}' of document '{target.doc_id}'"
         )
-    return AnchorLink(label, target.section)
+    return AnchorLink(label, target.section, document_link=url)
 
 
 def _link_runs(url: str, label: Rich, rules: RichContext) -> Rich:

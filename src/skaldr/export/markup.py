@@ -3,14 +3,23 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Final
+from typing import Final, NoReturn
 from urllib.parse import quote
 
 from typing_extensions import Self, assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
 from skaldr.export.glyphs import gauge_bar, mark_glyph
-from skaldr.export.runs import Chip, ExportRich, Gauge, Mark, write_chipless_export_run
+from skaldr.export.runs import (
+    Chip,
+    ExportRich,
+    Gauge,
+    Mark,
+    SectionLink,
+    TonedLabel,
+    write_chipless_export_run,
+)
 from skaldr.export.tree import CodeBlock, TableNode, TableRow
 from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
@@ -195,8 +204,10 @@ class MarkupRuns(TextRunWriter, ABC):
     def issue_link(self, label: str, _key: str, url: str | None, /) -> str:
         return self.link(label, url) if url else label
 
-    def document_link(self, label: str, _doc_id: str, _section: str | None, /) -> str:
-        return label
+    def document_link(self, _label: str, _doc_id: str, _section: str | None, /) -> str:
+        raise ExportInvariantError(
+            "this target cannot link to another skaldr document; the export check should have refused it"
+        )
 
     def citation(self, run: Citation, /) -> str:
         label = self.escape(f"[{run.number}]")
@@ -219,6 +230,12 @@ class MarkupRuns(TextRunWriter, ABC):
 
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)
+
+    def section_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def toned_label(self, _tone: ToneLiteral, inner: str, /) -> str:
+        return inner
 
 
 @dataclass(frozen=True)
@@ -271,6 +288,12 @@ class CommonMarkRuns(MarkupRuns, ABC):
     @abstractmethod
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str: ...
 
+    @abstractmethod
+    def refuse_a_tint(self) -> NoReturn: ...
+
+    @abstractmethod
+    def require_links_to_its_own_headings(self) -> None: ...
+
     def heading_slug(self, _anchor: str, /) -> str | None:
         return None
 
@@ -321,10 +344,15 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Styled():
                     pieces += self._styled_pieces(run, enclosing)
                 case Tinted():
+                    self.refuse_a_tint()
+                case TonedLabel():
                     pieces += self._pieces(run.runs, enclosing)
                 case Link():
                     pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
                 case AnchorLink():
+                    self.require_links_to_its_own_headings()
+                    pieces += self._anchor_link_pieces(run, enclosing)
+                case SectionLink():
                     pieces += self._anchor_link_pieces(run, enclosing)
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
@@ -332,7 +360,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                     pieces.append(write_chipless_export_run(run, self))
         return pieces
 
-    def _anchor_link_pieces(self, run: AnchorLink, enclosing: _Enclosing) -> list[_Piece]:
+    def _anchor_link_pieces(self, run: AnchorLink | SectionLink, enclosing: _Enclosing) -> list[_Piece]:
         slug = self.heading_slug(run.anchor)
         if not slug:
             return self._pieces(run.label, enclosing)

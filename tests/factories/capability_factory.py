@@ -31,6 +31,7 @@ class RefusedCase:
     why: str
     instead: str
     where: str
+    unfilled_placeholders_note: str = ""
     also_refused_by: tuple[ExportTarget, ...] = ()
 
     def rejection(self) -> dict[str, str]:
@@ -168,6 +169,558 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.text",
     ),
 }
+COLOURED_TEXT = [{"type": "text", "body": "Zone C is [behind]{tone=danger}."}]
+HIGHLIGHTED_TEXT = [{"type": "text", "body": "The recount is [due Friday]{bg=warning}."}]
+COLOURED_AND_HIGHLIGHTED_TEXT = [{"type": "text", "body": "The [vendor lots]{tone=accent bg=sky} stay open."}]
+UNDERLINED_TEXT = [{"type": "text", "body": "Every label ends in a ++check digit++."}]
+LINK_TO_A_SECTION = [
+    {"type": "section", "id": "counts", "title": "Counts", "blocks": [{"type": "text", "body": "Ten."}]},
+    {"type": "text", "body": "See [the counts](#counts)."},
+]
+LINK_TO_ANOTHER_DOCUMENT = [{"type": "text", "body": "It follows [the plan](doc:cold-room-plan#recount)."}]
+WITHOUT_THE_COLOUR = "write the text without the colour or export the document elsewhere"
+WITHOUT_THE_HIGHLIGHT = "write the text without the highlight or export the document elsewhere"
+JIRA_HIGHLIGHT_WHY = (
+    "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'"
+)
+GITHUB_COLOUR_WHY = "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'"
+GITHUB_HIGHLIGHT_WHY = "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'"
+CANVAS_COLOUR_WHY = "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'"
+OWN_HEADING_INSTEAD = "write the heading's name without the link, or export the document elsewhere"
+OWN_HEADING_WHY = (
+    "{target} cannot link to its own headings, so it cannot show the link 'the counts' to '#counts'"
+)
+OTHER_DOCUMENT_INSTEAD = "link to the document's https address, or export it elsewhere"
+OTHER_DOCUMENT_WHY = (
+    "{target} cannot link 'the plan' to the document 'cold-room-plan', "
+    "since skaldr has no address for that document there"
+)
+INLINE_REFUSALS: dict[str, RefusedCase] = {
+    "markdown-colour-span": RefusedCase(
+        "markdown",
+        "colour span",
+        COLOURED_TEXT,
+        GITHUB_COLOUR_WHY.format(text="behind"),
+        WITHOUT_THE_COLOUR,
+        "at blocks.0.text",
+    ),
+    "slack-colour-span": RefusedCase(
+        "slack",
+        "colour span",
+        COLOURED_TEXT,
+        CANVAS_COLOUR_WHY.format(text="behind"),
+        WITHOUT_THE_COLOUR,
+        "at blocks.0.text",
+    ),
+    "slack-highlight-span": RefusedCase(
+        "slack",
+        "highlight span",
+        HIGHLIGHTED_TEXT,
+        "a Slack canvas cannot highlight text, so it cannot show the highlight on 'due Friday'",
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "markdown-highlight-span": RefusedCase(
+        "markdown",
+        "highlight span",
+        HIGHLIGHTED_TEXT,
+        GITHUB_HIGHLIGHT_WHY.format(text="due Friday"),
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "adf-highlight-span": RefusedCase(
+        "adf",
+        "highlight span",
+        HIGHLIGHTED_TEXT,
+        JIRA_HIGHLIGHT_WHY.format(text="due Friday"),
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "adf-colour-and-highlight-span": RefusedCase(
+        "adf",
+        "colour and highlight span",
+        COLOURED_AND_HIGHLIGHTED_TEXT,
+        JIRA_HIGHLIGHT_WHY.format(text="vendor lots"),
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "markdown-colour-and-highlight-span": RefusedCase(
+        "markdown",
+        "colour and highlight span",
+        COLOURED_AND_HIGHLIGHTED_TEXT,
+        GITHUB_COLOUR_WHY.format(text="vendor lots"),
+        WITHOUT_THE_COLOUR,
+        "at blocks.0.text",
+    ),
+    "notion-colour-and-highlight-span": RefusedCase(
+        "notion",
+        "colour and highlight span",
+        COLOURED_AND_HIGHLIGHTED_TEXT,
+        "a Notion text run takes a colour or a highlight, not both, so it cannot show both on 'vendor lots'",
+        "keep either the colour or the highlight on the text",
+        "at blocks.0.text",
+    ),
+    "slack-colour-and-highlight-span": RefusedCase(
+        "slack",
+        "colour and highlight span",
+        COLOURED_AND_HIGHLIGHTED_TEXT,
+        CANVAS_COLOUR_WHY.format(text="vendor lots"),
+        WITHOUT_THE_COLOUR,
+        "at blocks.0.text",
+    ),
+    "slack-underline": RefusedCase(
+        "slack",
+        "underline",
+        UNDERLINED_TEXT,
+        "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit'",
+        "write the text without the underline or export the document elsewhere",
+        "at blocks.0.text",
+    ),
+    "notion-link-to-a-heading": RefusedCase(
+        "notion",
+        "link to a heading of the same document",
+        LINK_TO_A_SECTION,
+        OWN_HEADING_WHY.format(target="a Notion page"),
+        OWN_HEADING_INSTEAD,
+        "at blocks.1.text",
+    ),
+    "adf-link-to-a-heading": RefusedCase(
+        "adf",
+        "link to a heading of the same document",
+        LINK_TO_A_SECTION,
+        OWN_HEADING_WHY.format(target="a Jira description"),
+        OWN_HEADING_INSTEAD,
+        "at blocks.1.text",
+    ),
+    "slack-link-to-a-heading": RefusedCase(
+        "slack",
+        "link to a heading of the same document",
+        LINK_TO_A_SECTION,
+        OWN_HEADING_WHY.format(target="a Slack canvas"),
+        OWN_HEADING_INSTEAD,
+        "at blocks.1.text",
+    ),
+    "notion-link-to-another-document": RefusedCase(
+        "notion",
+        "link to another skaldr document",
+        LINK_TO_ANOTHER_DOCUMENT,
+        OTHER_DOCUMENT_WHY.format(target="Notion"),
+        OTHER_DOCUMENT_INSTEAD,
+        "at blocks.0.text",
+    ),
+    "slack-link-to-another-document": RefusedCase(
+        "slack",
+        "link to another skaldr document",
+        LINK_TO_ANOTHER_DOCUMENT,
+        OTHER_DOCUMENT_WHY.format(target="a Slack canvas"),
+        OTHER_DOCUMENT_INSTEAD,
+        "at blocks.0.text",
+    ),
+    "adf-link-to-another-document": RefusedCase(
+        "adf",
+        "link to another skaldr document",
+        LINK_TO_ANOTHER_DOCUMENT,
+        OTHER_DOCUMENT_WHY.format(target="a Jira description"),
+        OTHER_DOCUMENT_INSTEAD,
+        "at blocks.0.text",
+    ),
+    "notion-inline-code-holding-a-backtick": RefusedCase(
+        "notion",
+        "inline code holding a backtick",
+        [{"type": "text", "body": "Split on `` a`b `` first."}],
+        "Notion cannot show inline code holding a backtick, as in 'a`b'",
+        "write the code in a code block, or without the backtick",
+        "at blocks.0.text",
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-a-table-cell": RefusedCase(
+        "notion",
+        "inline code holding a closing tag in a table cell",
+        [
+            {
+                "type": "table",
+                "columns": [{"key": "tag", "label": "Tag"}],
+                "rows": [{"tag": "Ends with `</td>`."}],
+            }
+        ],
+        "Notion loses a table cell whose inline code holds '</', as in '</td>'",
+        "write the code outside the table, or without '</'",
+        "at blocks.0.table",
+    ),
+}
+AT_THE_TEXT = "at blocks.0.text"
+NOTION_BOTH_WHY = (
+    "a Notion text run takes a colour or a highlight, not both, so it cannot show both on '{text}'"
+)
+NOTION_BOTH_INSTEAD = "keep either the colour or the highlight on the text"
+CANVAS_HIGHLIGHT_WHY = "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'"
+SPAN_CODE_WHY = (
+    "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+    "as in '{code}'"
+)
+SPAN_CODE_INSTEAD = "write the code outside the coloured, highlighted or underlined text, or without '</'"
+SPAN_CODE_FEATURE: Feature = "inline code holding a closing tag in a coloured, highlighted or underlined span"
+ONE_OWNER_UNFILLED = "  (1 unfilled placeholder: owner)"
+STEP_PATH_OF_THE_TITLE = "at blocks.0.walkthrough"
+
+
+def toned_step_titled(sub: str) -> list[dict[str, Any]]:
+    step = {
+        "label": "Scan",
+        "tone": "danger",
+        "sub": sub,
+        "detail": [{"type": "text", "body": "Both aisles."}],
+    }
+    return [{"type": "walkthrough", "steps": [step]}]
+
+
+@dataclass(frozen=True)
+class NestedSpans:
+    body: str
+    coloured: str
+    highlighted: str
+    inner: str
+    outer_is_a_colour: bool
+
+    def refusals(self, name: str) -> dict[str, RefusedCase]:
+        blocks = [{"type": "text", "body": self.body}]
+        outer = self.coloured if self.outer_is_a_colour else self.highlighted
+        canvas_why = CANVAS_COLOUR_WHY if self.outer_is_a_colour else CANVAS_HIGHLIGHT_WHY
+        github_why = GITHUB_COLOUR_WHY if self.outer_is_a_colour else GITHUB_HIGHLIGHT_WHY
+        outer_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
+        outer_feature: Feature = "colour span" if self.outer_is_a_colour else "highlight span"
+        jira_why = JIRA_HIGHLIGHT_WHY.format(text=self.highlighted)
+        return {
+            f"markdown-{name}": RefusedCase(
+                "markdown", outer_feature, blocks, github_why.format(text=outer), outer_instead, AT_THE_TEXT
+            ),
+            f"notion-{name}": RefusedCase(
+                "notion",
+                "colour and highlight span",
+                blocks,
+                NOTION_BOTH_WHY.format(text=self.inner),
+                NOTION_BOTH_INSTEAD,
+                AT_THE_TEXT,
+            ),
+            f"adf-{name}": RefusedCase(
+                "adf", "highlight span", blocks, jira_why, WITHOUT_THE_HIGHLIGHT, AT_THE_TEXT
+            ),
+            f"slack-{name}": RefusedCase(
+                "slack", outer_feature, blocks, canvas_why.format(text=outer), outer_instead, AT_THE_TEXT
+            ),
+        }
+
+
+HIGHLIGHT_IN_A_STEP_TITLE = toned_step_titled("the [cold room]{bg=sky} first")
+CODE_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Write [code `</span>` inside]{tone=danger}."}]
+CODE_IN_AN_UNDERLINE = [{"type": "text", "body": "Write ++code `</span>` inside++."}]
+UNDERLINED_CODE_IN_A_STEP_TITLE = toned_step_titled("run ++`</span>`++ first")
+PLACEHOLDER_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Ask [{{owner}} first]{tone=danger}."}]
+SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
+    **NestedSpans("Zone [[x]{bg=sky}]{tone=danger}.", "x", "x", "x", outer_is_a_colour=True).refusals(
+        "highlight-inside-a-colour-span"
+    ),
+    **NestedSpans("Zone [a [x]{bg=sky} b]{tone=danger}.", "a x b", "x", "x", outer_is_a_colour=True).refusals(
+        "highlight-inside-part-of-a-colour-span"
+    ),
+    **NestedSpans(
+        "Zone [a [x]{tone=danger} b]{bg=sky}.", "x", "a x b", "x", outer_is_a_colour=False
+    ).refusals("colour-inside-part-of-a-highlight-span"),
+    "notion-highlight-inside-a-toned-step-title": RefusedCase(
+        "notion",
+        "highlight span inside a toned walkthrough step title",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
+        "so it cannot show the highlight on 'cold room'",
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "markdown-highlight-inside-a-toned-step-title": RefusedCase(
+        "markdown",
+        "highlight span",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        GITHUB_HIGHLIGHT_WHY.format(text="cold room"),
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "adf-highlight-inside-a-toned-step-title": RefusedCase(
+        "adf",
+        "highlight span",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        JIRA_HIGHLIGHT_WHY.format(text="cold room"),
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "slack-highlight-inside-a-toned-step-title": RefusedCase(
+        "slack",
+        "highlight span",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        CANVAS_HIGHLIGHT_WHY.format(text="cold room"),
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "notion",
+        SPAN_CODE_FEATURE,
+        CODE_IN_A_COLOUR_SPAN,
+        SPAN_CODE_WHY.format(code="</span>"),
+        SPAN_CODE_INSTEAD,
+        AT_THE_TEXT,
+    ),
+    "markdown-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "markdown",
+        "colour span",
+        CODE_IN_A_COLOUR_SPAN,
+        GITHUB_COLOUR_WHY.format(text="code </span> inside"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "slack",
+        "colour span",
+        CODE_IN_A_COLOUR_SPAN,
+        CANVAS_COLOUR_WHY.format(text="code </span> inside"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-an-underline-in-a-toned-step-title": RefusedCase(
+        "notion",
+        SPAN_CODE_FEATURE,
+        UNDERLINED_CODE_IN_A_STEP_TITLE,
+        SPAN_CODE_WHY.format(code="</span>"),
+        SPAN_CODE_INSTEAD,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-an-underline-in-a-toned-step-title": RefusedCase(
+        "slack",
+        "underline",
+        UNDERLINED_CODE_IN_A_STEP_TITLE,
+        "a Slack canvas cannot underline text, so it cannot show the underline on '</span>'",
+        "write the text without the underline or export the document elsewhere",
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-an-underline": RefusedCase(
+        "notion",
+        SPAN_CODE_FEATURE,
+        CODE_IN_AN_UNDERLINE,
+        SPAN_CODE_WHY.format(code="</span>"),
+        SPAN_CODE_INSTEAD,
+        AT_THE_TEXT,
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-an-underline": RefusedCase(
+        "slack",
+        "underline",
+        CODE_IN_AN_UNDERLINE,
+        "a Slack canvas cannot underline text, so it cannot show the underline on 'code </span> inside'",
+        "write the text without the underline or export the document elsewhere",
+        AT_THE_TEXT,
+    ),
+    "markdown-placeholder-inside-a-colour-span": RefusedCase(
+        "markdown",
+        "colour span",
+        PLACEHOLDER_IN_A_COLOUR_SPAN,
+        GITHUB_COLOUR_WHY.format(text="owner first"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+        ONE_OWNER_UNFILLED,
+    ),
+    "slack-placeholder-inside-a-colour-span": RefusedCase(
+        "slack",
+        "colour span",
+        PLACEHOLDER_IN_A_COLOUR_SPAN,
+        CANVAS_COLOUR_WHY.format(text="owner first"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+        ONE_OWNER_UNFILLED,
+    ),
+}
+LIST_FROM_3 = [{"type": "text", "body": "3. a\n4. b"}]
+ROMAN_LIST = [{"type": "list", "style": "number", "numbering": "roman", "items": ["a", "b"]}]
+LETTERED_LIST = [{"type": "list", "style": "number", "numbering": "letters", "items": ["a", "b"]}]
+TABLE_IN_A_STEP = [walkthrough_holding(TABLE)]
+CALLOUT_IN_A_STEP = [walkthrough_holding({"type": "callout", "tone": "info", "body": "Lock it."})]
+LIST_IN_A_QUOTE = [{"type": "quote", "body": "Count:\n\n- aisles\n- bins"}]
+DIGITS_ONLY_INSTEAD = "number the list with digits, or export it elsewhere"
+ADF_DIGITS_ONLY_WHY = (
+    "ADF numbers a list only with digits, so it cannot show a list numbered with {numbering}"
+)
+CANVAS_DIGITS_ONLY_WHY = (
+    "a Slack canvas numbers a list only with digits, so it cannot show a list numbered with {numbering}"
+)
+STEP_PATH = "at blocks.0.walkthrough.steps.0.detail.0"
+ADF_DIVIDER_IN_A_STEP_WHY = (
+    "ADF cannot place a divider inside a walkthrough step, since Jira writes a step as a list item"
+)
+TEXT_NUMBERING: Feature = "list numbered with letters or roman numerals"
+FENCED_IN_A_LIST_ITEM: Feature = (
+    "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
+)
+LIST_STEP_AND_QUOTE_REFUSALS: dict[str, RefusedCase] = {
+    "notion-numbered-list-starting-past-1": RefusedCase(
+        "notion",
+        "numbered list starting past 1",
+        LIST_FROM_3,
+        "Notion numbers every list from 1, so it cannot show a numbered list that starts at 3",
+        "number the list from 1, or export it elsewhere",
+        "at blocks.0.text",
+    ),
+    "adf-list-numbered-with-roman-numerals": RefusedCase(
+        "adf",
+        TEXT_NUMBERING,
+        ROMAN_LIST,
+        ADF_DIGITS_ONLY_WHY.format(numbering="roman numerals"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "slack-list-numbered-with-roman-numerals": RefusedCase(
+        "slack",
+        TEXT_NUMBERING,
+        ROMAN_LIST,
+        CANVAS_DIGITS_ONLY_WHY.format(numbering="roman numerals"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "adf-list-numbered-with-letters": RefusedCase(
+        "adf",
+        TEXT_NUMBERING,
+        LETTERED_LIST,
+        ADF_DIGITS_ONLY_WHY.format(numbering="letters"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "slack-list-numbered-with-letters": RefusedCase(
+        "slack",
+        TEXT_NUMBERING,
+        LETTERED_LIST,
+        CANVAS_DIGITS_ONLY_WHY.format(numbering="letters"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "adf-table-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        FENCED_IN_A_LIST_ITEM,
+        TABLE_IN_A_STEP,
+        "ADF cannot place a table inside a walkthrough step",
+        "move the table out of the step, after the walkthrough",
+        f"{STEP_PATH}.table",
+    ),
+    "slack-table-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "block inside a walkthrough step",
+        TABLE_IN_A_STEP,
+        LIST_ITEM_WHY.format(what="a table"),
+        OUT_OF_THE_STEP,
+        f"{STEP_PATH}.table",
+    ),
+    "adf-callout-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        FENCED_IN_A_LIST_ITEM,
+        CALLOUT_IN_A_STEP,
+        "ADF cannot place a callout inside a walkthrough step",
+        "move the callout out of the step, after the walkthrough",
+        f"{STEP_PATH}.callout",
+    ),
+    "slack-callout-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "block inside a walkthrough step",
+        CALLOUT_IN_A_STEP,
+        LIST_ITEM_WHY.format(what="a callout"),
+        OUT_OF_THE_STEP,
+        f"{STEP_PATH}.callout",
+    ),
+    "slack-list-inside-a-quote": RefusedCase(
+        "slack",
+        "list inside a quote",
+        LIST_IN_A_QUOTE,
+        "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
+        "move the list out of the quote, after it",
+        "at blocks.0.quote",
+    ),
+}
+
+
+def under_a_heading_in_a_step(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "heading", "text": "Plan"}, walkthrough_holding(detail)]
+
+
+def refusals_of_a_block_in_a_step(detail: dict[str, Any], held: str) -> dict[str, RefusedCase]:
+    blocks = under_a_heading_in_a_step(detail)
+    name = detail["type"]
+    path = f"at blocks.1.walkthrough.steps.0.detail.0.{name}"
+    return {
+        f"adf-{name}-in-a-walkthrough-step": RefusedCase(
+            "adf",
+            FENCED_IN_A_LIST_ITEM,
+            blocks,
+            f"ADF cannot place a {held} inside a walkthrough step",
+            f"move the {held} out of the step, after the walkthrough",
+            f"{path}, under the heading 'Plan'",
+        ),
+        f"slack-{name}-in-a-walkthrough-step": RefusedCase(
+            "slack",
+            "block inside a walkthrough step",
+            blocks,
+            LIST_ITEM_WHY.format(what=f"a {held}"),
+            OUT_OF_THE_STEP,
+            path,
+        ),
+    }
+
+
+def grid_holding_a_table() -> dict[str, Any]:
+    grid = text_grid()
+    grid["cells"][0]["blocks"] = [TABLE]
+    return grid
+
+
+TWO_TABS = {
+    "type": "tabs",
+    "tabs": [
+        {"label": "One", "blocks": [{"type": "text", "body": "x"}]},
+        {"label": "Two", "blocks": [{"type": "text", "body": "y"}]},
+    ],
+}
+GRID_IN_A_STEP_UNDER_A_HEADING = under_a_heading_in_a_step(grid_holding_a_table())
+DIVIDER_IN_A_STEP_UNDER_A_HEADING = under_a_heading_in_a_step({"type": "divider"})
+DIVIDER_IN_A_STEP_PATH = "at blocks.1.walkthrough.steps.0.detail.0.divider"
+BLOCK_IN_A_STEP_REFUSALS: dict[str, RefusedCase] = {
+    **refusals_of_a_block_in_a_step({"type": "heading", "text": "Lock"}, "heading"),
+    **refusals_of_a_block_in_a_step({"type": "quote", "body": "Count twice."}, "quote"),
+    **refusals_of_a_block_in_a_step(make_toggle(), "toggle"),
+    **refusals_of_a_block_in_a_step(TWO_TABS, "set of tabs"),
+    "adf-divider-in-a-walkthrough-step-under-a-heading": RefusedCase(
+        "adf",
+        "divider inside a walkthrough step",
+        DIVIDER_IN_A_STEP_UNDER_A_HEADING,
+        ADF_DIVIDER_IN_A_STEP_WHY,
+        "move the divider out of the step, after the walkthrough",
+        f"{DIVIDER_IN_A_STEP_PATH}, under the heading 'Plan'",
+    ),
+    "slack-divider-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "block inside a walkthrough step",
+        DIVIDER_IN_A_STEP_UNDER_A_HEADING,
+        LIST_ITEM_WHY.format(what="a divider"),
+        OUT_OF_THE_STEP,
+        DIVIDER_IN_A_STEP_PATH,
+    ),
+    "adf-table-in-a-grid-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        FENCED_IN_A_LIST_ITEM,
+        GRID_IN_A_STEP_UNDER_A_HEADING,
+        "ADF cannot place a table inside a walkthrough step",
+        "move the table out of the step, after the walkthrough",
+        "at blocks.1.walkthrough.steps.0.detail.0.grid.cells.0.blocks.0.table, under the heading 'Plan'",
+    ),
+    "slack-grid-holding-a-table-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "grid inside a walkthrough step",
+        GRID_IN_A_STEP_UNDER_A_HEADING,
+        "a Slack canvas cannot show a grid inside a walkthrough step, "
+        "since a canvas list item holds only text",
+        "move the grid out of the step, after the walkthrough",
+        "at blocks.1.walkthrough.steps.0.detail.0.grid",
+    ),
+}
 CANVAS_CALLOUT_WHY = (
     "a Slack canvas callout holds only text, headings, lists, quotes, code blocks and images, "
     "so it cannot show the {held} inside a panel"
@@ -245,7 +798,7 @@ CONTAINER_ADF_REFUSALS: dict[str, RefusedCase] = {
         "adf",
         "divider inside a walkthrough step",
         [walkthrough_holding({"type": "divider"})],
-        "ADF cannot place a divider inside a walkthrough step, since Jira writes a step as a list item",
+        ADF_DIVIDER_IN_A_STEP_WHY,
         "move the divider out of the step, after the walkthrough",
         "at blocks.0.walkthrough.steps.0.detail.0.divider",
         also_refused_by=("slack",),
@@ -374,12 +927,20 @@ SEEDED_REFUSALS: dict[str, RefusedCase] = {
     **SLACK_REFUSALS,
     **CONTAINER_ADF_REFUSALS,
     **CONTAINER_SLACK_REFUSALS,
+    **INLINE_REFUSALS,
+    **SPAN_NESTING_REFUSALS,
+    **LIST_STEP_AND_QUOTE_REFUSALS,
+    **BLOCK_IN_A_STEP_REFUSALS,
 }
-ADF_CASES = [pytest.param(case, id=name) for name, case in {**ADF_REFUSALS, **CONTAINER_ADF_REFUSALS}.items()]
+ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
+NOTION_CASES = [
+    pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "notion"
+]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]
 
 CLEAN_BLOCKS: list[dict[str, Any]] = [
     {"type": "heading", "text": "Plan"},
+    {"type": "text", "body": "Close it with `</callout>` and type it as `List<int>`."},
     {"type": "text", "body": "1. a\n2. b"},
     {"type": "panel", "title": "Plan", "blocks": [{"type": "text", "body": "Inside."}]},
     {
@@ -397,6 +958,18 @@ CLEAN_BLOCKS: list[dict[str, Any]] = [
     make_toggle(TABLE),
     make_toggle(make_toggle()),
     walkthrough_holding({"type": "text", "body": "Lock the aisle."}),
+    {
+        "type": "section",
+        "id": "counts",
+        "title": "Counts",
+        "fields": {"links": {"relates": ["totals"]}},
+        "blocks": [{"type": "text", "body": "Ten."}],
+    },
+    {"type": "section", "id": "totals", "title": "Totals", "blocks": [{"type": "text", "body": "Twenty."}]},
+    {
+        "type": "walkthrough",
+        "steps": [{"label": "Scan", "tone": "info", "detail": [{"type": "text", "body": "Both aisles."}]}],
+    },
 ]
 
 RANGE: dict[str, Any] = {

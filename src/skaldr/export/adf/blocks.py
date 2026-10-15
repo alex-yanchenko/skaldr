@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import count, takewhile
+from itertools import count
 from typing import Final, Literal
 
 from typing_extensions import Never
@@ -103,15 +103,13 @@ def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], conta
             )
 
 
-def _require_no_divider_in_a_list_item(child: Node) -> None:
-    if isinstance(child, Divider):
-        raise ExportInvariantError(
-            "ADF does not allow a rule inside a list item; the export check should have refused it"
-        )
-
-
-def _fits_in_a_list_item(block: AdfBlock) -> bool:
-    return block["type"] in _LIST_ITEM_BLOCKS
+def _require_a_list_item_holds(node: Node, produced: Iterable[AdfBlock]) -> None:
+    for block in produced:
+        if block["type"] not in _LIST_ITEM_BLOCKS:
+            raise ExportInvariantError(
+                f"ADF does not allow a {block['type']} inside a list item, written from a "
+                f"{type(node).__name__}; the export check should have refused it"
+            )
 
 
 def _empty_paragraph() -> AdfParagraph:
@@ -240,19 +238,8 @@ class _AdfBlocks:
             return []
         if node.kind == "check":
             return self.task_blocks(node, container)
-        written: list[AdfBlock] = []
-        items: list[AdfListItem] = []
-        first_number = node.start
-        for number, entry in enumerate(node.entries, start=node.start):
-            item, overflow = self.list_item(entry, container)
-            items.append(item)
-            if overflow:
-                written += [self.listed(node.kind, items, first_number), *overflow]
-                items = []
-                first_number = number + 1
-        if items:
-            written.append(self.listed(node.kind, items, first_number))
-        return written
+        items = [self.list_item(entry, container) for entry in node.entries]
+        return [self.listed(node.kind, items, node.start)]
 
     def listed(self, kind: Literal["bullet", "number"], items: list[AdfListItem], first: int) -> AdfBlock:
         if kind == "bullet":
@@ -261,34 +248,21 @@ class _AdfBlocks:
             return AdfOrderedList(type="orderedList", content=items)
         return AdfOrderedList(type="orderedList", attrs=AdfOrderedListAttrs(order=first), content=items)
 
-    def list_item(self, entry: ListEntry, container: Container) -> tuple[AdfListItem, list[AdfBlock]]:
+    def list_item(self, entry: ListEntry, container: Container) -> AdfListItem:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
-        overflow: list[AdfBlock] = []
         for child in entry.children:
-            _require_no_divider_in_a_list_item(child)
             produced = self.node_blocks(child, container)
-            fitting = [] if overflow else list(takewhile(_fits_in_a_list_item, produced))
-            content += fitting
-            overflow += produced[len(fitting) :]
-        return AdfListItem(type="listItem", content=content), overflow
+            _require_a_list_item_holds(child, produced)
+            content += produced
+        return AdfListItem(type="listItem", content=content)
 
     def task_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
-        written: list[AdfBlock] = []
-        list_id: str | None = None
+        attrs = AdfTaskListAttrs(localId=self.local_id("task-list"))
         content: list[AdfTaskItem | AdfTaskList] = []
         for entry in node.entries:
-            list_id = list_id or self.local_id("task-list")
             content.append(self.task_item(entry))
-            nested, overflow = self.task_details(entry.children, container)
-            content += nested
-            if overflow:
-                attrs = AdfTaskListAttrs(localId=list_id)
-                written += [AdfTaskList(type="taskList", attrs=attrs, content=content), *overflow]
-                list_id, content = None, []
-        if list_id is not None:
-            attrs = AdfTaskListAttrs(localId=list_id)
-            written.append(AdfTaskList(type="taskList", attrs=attrs, content=content))
-        return written
+            content += self.nested_task_lists(entry.children, container)
+        return [AdfTaskList(type="taskList", attrs=attrs, content=content)]
 
     def task_item(self, entry: ListEntry) -> AdfTaskItem:
         state = "DONE" if entry.checked else "TODO"
@@ -300,22 +274,20 @@ class _AdfBlocks:
             item["content"] = text
         return item
 
-    def task_details(
-        self, children: Sequence[Node], container: Container
-    ) -> tuple[list[AdfTaskList], list[AdfBlock]]:
+    def nested_task_lists(self, children: Sequence[Node], container: Container) -> list[AdfTaskList]:
         nested: list[AdfTaskList] = []
-        overflow: list[AdfBlock] = []
         for child in children:
-            _require_no_divider_in_a_list_item(child)
             produced = self.node_blocks(child, container)
-            is_a_task_list = isinstance(child, ListNode) and child.kind == "check"
-            if produced and is_a_task_list and not overflow:
-                first = produced[0]
-                if first["type"] == "taskList":
-                    nested.append(first)
-                    produced = produced[1:]
-            overflow += produced
-        return nested, overflow
+            _require_a_list_item_holds(child, produced)
+            for block in produced:
+                if block["type"] != "taskList":
+                    raise ExportInvariantError(
+                        f"ADF does not allow a {block['type']} inside a task item, written from a "
+                        f"{type(child).__name__}; "
+                        "skaldr lowers a checklist entry's detail only as a nested checklist"
+                    )
+                nested.append(block)
+        return nested
 
     def cell_paragraph(self, cell: TableCell, bold: bool) -> AdfParagraph:
         content = self.inline(cell.text)

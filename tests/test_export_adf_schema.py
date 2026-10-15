@@ -101,5 +101,5 @@ def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf_document(lowered)) == []
 
 
-def test_the_example_less_the_blocks_adf_refuses_is_valid_adf() -> None:
+def test_the_example_reworked_for_jira_less_the_blocks_adf_refuses_is_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf_document(lower_report(accepted_example("adf")), SITE)) == []

@@ -8,12 +8,14 @@ import pytest
 
 from skaldr import compute
 from skaldr.cli import main
-from skaldr.errors import ReportError
+from skaldr.errors import ExportRejectedError, ReportError
+from skaldr.export import render_export
 from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import Heading, Paragraph, TableOfContents, TocEntry, Toggle
+from skaldr.export_targets import ExportTarget
 from skaldr.models import Person, Report, Text, content_files, load_report, parse_report
 from skaldr.render import render_html
 from tests.factories import (
@@ -731,7 +733,43 @@ def test_a_document_link_to_a_part_of_the_index_is_an_in_page_anchor(tmp_path: P
     assert 'href="#st2">the plan</a>' in html
     assert 'href="#test-report">all of it</a>' in html
     assert render_markdown(body).startswith("[the plan](#st2) and [all of it](#test-report)\n")
-    assert render_notion(body).startswith("the plan and all of it\n")
+
+
+@pytest.mark.parametrize(
+    ("target", "page"),
+    [
+        pytest.param("notion", "a Notion page", id="notion"),
+        pytest.param("adf", "a Jira description", id="adf"),
+        pytest.param("slack", "a Slack canvas", id="slack"),
+    ],
+)
+@pytest.mark.parametrize(
+    "link",
+    [
+        pytest.param("doc:onboarding-plan#st2", id="to-a-section"),
+        pytest.param("doc:onboarding-plan", id="to-the-part"),
+    ],
+)
+def test_a_document_link_to_a_part_of_the_index_is_refused_naming_the_link_as_written(
+    tmp_path: Path, target: ExportTarget, page: str, link: str
+) -> None:
+    report = load_report(_index_with_a_linked_part(tmp_path, f"[the plan]({link})"))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        render_export(report, target)
+
+    assert str(raised.value) == (
+        f"{page} cannot link to its own headings, so it cannot show the link 'the plan' to '{link}', "
+        "at blocks.0.text; write the heading's name without the link, or export the document elsewhere"
+    )
+
+
+def test_a_document_link_to_a_part_of_the_index_is_kept_as_an_in_page_link_on_github(tmp_path: Path) -> None:
+    report = load_report(_index_with_a_linked_part(tmp_path, "[the plan](doc:onboarding-plan#st2)"))
+
+    assert render_export(report, "markdown").pages == {
+        "page.md": "# Combined\n\n[the plan](#st2)\n\n# Test Report\n\nIntro.\n\n## st1\n\nx\n\n## st2\n\nx\n"
+    }
 
 
 def test_a_document_link_to_a_document_outside_the_index_stays_a_file_link(tmp_path: Path) -> None:
