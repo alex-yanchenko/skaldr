@@ -1,5 +1,4 @@
 import json
-import os
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -10,7 +9,7 @@ import pytest
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
-from skaldr.export.runs import Break, Chip, ExportRun, StatusMark
+from skaldr.export.runs import Break, Chip, ExportRun, SectionLink, StatusMark, TonedLabel
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
     Callout,
@@ -58,10 +57,8 @@ from skaldr.richtext import (
     Styled,
     Tinted,
 )
-from tests.conftest import REPO_ROOT
 from tests.factories import (
     accepted_example,
-    example_data,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -76,10 +73,15 @@ from tests.factories import (
     write_report,
 )
 from tests.factories.capability_factory import LONG_TABLE
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
-SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
-WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_COLUMN_REFUSED_TYPES = ("callout", "note", "table", "divider")
 FULL_GRID_SPAN = 6
@@ -146,7 +148,7 @@ def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
-    data = example_data()
+    data = example_for("slack")
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
         if block["type"] == "grid":
@@ -160,6 +162,13 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
             step["detail"] = [inner for inner in detail if inner["type"] in CANVAS_STEP_DETAIL_TYPES]
             blocks += [inner for inner in detail if inner["type"] not in CANVAS_STEP_DETAIL_TYPES]
     return {**data, "blocks": blocks}
+
+
+def test_the_example_is_refused_for_slack_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(load_report(EXAMPLE), tmp_path / "out")
+
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["slack"]
 
 
 def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
@@ -184,7 +193,7 @@ def _first_toned_cell_of_a_column_layout(report: Report) -> tuple[str, str]:
 
 
 def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path: Path) -> None:
-    data = example_data()
+    data = example_for("slack")
     walkthrough = parse_report(
         {**data, "blocks": [block for block in data["blocks"] if block["type"] == "walkthrough"]}
     )
@@ -200,7 +209,7 @@ def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path:
 
 
 def test_the_grid_of_the_example_is_rejected_for_its_first_toned_cell(tmp_path: Path) -> None:
-    data = example_data()
+    data = example_for("slack")
     grids = parse_report(
         {**data, "blocks": [block for block in data["blocks"] if block["type"] in ("heading", "grid")]}
     )
@@ -219,14 +228,14 @@ def test_the_grid_of_the_example_is_rejected_for_its_first_toned_cell(tmp_path: 
 def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack_golden(
     tmp_path: Path,
 ) -> None:
-    out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
+    out_dir = golden_or_scratch_folder("slack", tmp_path)
     reworked = _example_reworked_for_a_canvas()
 
     export_slack(accepted_example("slack", reworked), out_dir)
 
     assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
         REFUSED_IN_THE_REWORKED_EXAMPLE,
-        folder_texts(SLACK_GOLDEN),
+        folder_texts(golden_of("slack")),
     )
 
 
@@ -339,25 +348,25 @@ def test_a_numbered_list_that_does_not_start_at_1_is_rejected_naming_its_path(
     )
 
 
-@pytest.mark.parametrize(
-    ("block", "text"),
-    [
-        pytest.param({"type": "quote", "body": "3. a\n4. b"}, "> 3\\. a\n>\n> 4\\. b\n", id="quote"),
-        pytest.param(
-            {
-                "type": "table",
-                "columns": [{"key": "n", "label": "N", "kind": "text"}],
-                "rows": [{"n": "3. a\n4. b"}],
-            },
-            "| N |\n| --- |\n| 3. a<br>4. b |\n",
-            id="table-cell",
-        ),
-    ],
-)
-def test_a_numbered_list_in_a_quote_or_a_table_cell_keeps_its_numbers_as_text(
-    block: dict[str, Any], text: str
-) -> None:
-    assert slack_of([block]) == text
+def test_a_numbered_list_in_a_table_cell_keeps_its_numbers_as_text() -> None:
+    block = {
+        "type": "table",
+        "columns": [{"key": "n", "label": "N", "kind": "text"}],
+        "rows": [{"n": "3. a\n4. b"}],
+    }
+
+    assert slack_of([block]) == "| N |\n| --- |\n| 3. a<br>4. b |\n"
+
+
+def test_a_numbered_list_in_a_quote_is_refused_since_a_canvas_quote_holds_only_text() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        slack_of([{"type": "quote", "body": "3. a\n4. b"}])
+
+    assert vars(raised.value) == _canvas_rejection(
+        "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
+        "move the list out of the quote, after it",
+        "at blocks.0.quote",
+    )
 
 
 @pytest.mark.parametrize(
@@ -630,6 +639,35 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_a_numbered_list_st
         "a Slack canvas numbers every list from 1, so it has no form for a list starting at 3; "
         "the export check should have refused it"
     )
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        pytest.param(
+            AnchorLink(make_rich_text("the counts"), "counts"),
+            "a Slack canvas cannot link to its own headings; the export check should have refused it",
+            id="link-to-a-heading-the-author-wrote",
+        ),
+        pytest.param(
+            Tinted("danger", None, make_rich_text("behind")),
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="colour-span",
+        ),
+        pytest.param(
+            Tinted(None, "warning", make_rich_text("due")),
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="highlight-span",
+        ),
+    ],
+)
+def test_the_canvas_writer_alone_raises_an_internal_error_for_an_authored_mark_the_check_refuses(
+    run: ExportRun, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Paragraph((run,))])
+
+    assert str(raised.value) == message
 
 
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_table_over_300_cells() -> None:
@@ -974,8 +1012,7 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Styled("bold", make_rich_text("b")), "**b**", id="bold"),
         pytest.param(Styled("italic", make_rich_text("i")), "*i*", id="italic"),
         pytest.param(Styled("strike", make_rich_text("s")), "~~s~~", id="strike"),
-        pytest.param(Styled("underline", make_rich_text("u")), "u", id="underline-is-plain"),
-        pytest.param(Tinted("danger", "warning", make_rich_text("t")), "t", id="tint-is-plain"),
+        pytest.param(TonedLabel("danger", make_rich_text("t")), "t", id="toned-label-is-plain"),
         pytest.param(ScriptText("subscript", "2"), "\N{SUBSCRIPT TWO}", id="subscript-digit"),
         pytest.param(
             ScriptText("subscript", "i=0"),
@@ -1006,7 +1043,9 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Code("a`b"), "``a`b``", id="code-outgrows-its-backticks"),
         pytest.param(Chip("a*b", "blue"), "**a\\*b**", id="chip-is-bold"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
-        pytest.param(AnchorLink(make_rich_text("method"), "method"), "method", id="anchor-link-is-its-label"),
+        pytest.param(
+            SectionLink(make_rich_text("method"), "method"), "method", id="section-link-is-its-label"
+        ),
         pytest.param(
             DateMention(make_rich_text("1 Oct"), date(2026, 10, 1), None),
             "![](slack_date:2026-10-01)",
@@ -1028,11 +1067,6 @@ def test_a_table_of_contents_writes_nothing() -> None:
             Link(make_rich_text("x"), "mailto:ops@example.com"), "[x](mailto:ops@example.com)", id="mailto"
         ),
         pytest.param(InlineMath("x_i"), "`x_i`", id="inline-math-is-code"),
-        pytest.param(
-            DocumentLink(make_rich_text("the plan"), "plan", None),
-            "the plan",
-            id="document-link-is-its-label",
-        ),
         pytest.param(
             IssueLink(make_rich_text("ABC-1"), "ABC-1", "https://example.atlassian.net/browse/ABC-1"),
             "[ABC-1](https://example.atlassian.net/browse/ABC-1)",
@@ -1180,12 +1214,34 @@ COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "co
         pytest.param(
             "*[_a_](https://x.io)*", "*[a](https://x.io)*", id="italic-in-a-link-label-in-an-italic"
         ),
-        pytest.param("**[*a*](#counts)**", "**a**", id="anchor-link-label-read-with-the-bold-around-it"),
-        pytest.param("**++*a*++**", "**a**", id="italic-inside-an-underline-at-the-edge-of-a-bold"),
     ],
 )
-def test_emphasis_inside_a_label_or_an_underline_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
+def test_emphasis_inside_a_link_label_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
     assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"## Counts\n\n{written}\n"
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        pytest.param(
+            Styled("underline", make_rich_text("u")),
+            "a Slack canvas has no underline; the export check should have refused it",
+            id="underline",
+        ),
+        pytest.param(
+            DocumentLink(make_rich_text("the plan"), "plan", None),
+            "this target cannot link to another skaldr document; the export check should have refused it",
+            id="link-to-another-document",
+        ),
+    ],
+)
+def test_the_canvas_writer_refuses_what_the_export_check_refuses_as_an_invariant(
+    run: ExportRun, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Paragraph((run,))])
+
+    assert str(raised.value) == message
 
 
 @pytest.mark.parametrize(

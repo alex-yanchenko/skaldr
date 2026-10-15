@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Literal
+from typing import Final, Literal, NoReturn
 
 from typing_extensions import assert_never
 
@@ -89,6 +89,16 @@ class _SlackRuns(CommonMarkRuns):
     def unflanked_emphasis(self, _style: MarkerStyle, inner: str, /) -> str:
         return inner
 
+    def refuse_a_tint(self) -> NoReturn:
+        raise ExportInvariantError(
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it"
+        )
+
+    def require_links_to_its_own_headings(self) -> None:
+        raise ExportInvariantError(
+            "a Slack canvas cannot link to its own headings; the export check should have refused it"
+        )
+
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
 
@@ -99,8 +109,8 @@ class _SlackRuns(CommonMarkRuns):
         require_the_swap("inline math", "slack")
         return code_span(expression)
 
-    def underline(self, inner: str, /) -> str:
-        return inner
+    def underline(self, _inner: str, /) -> str:
+        raise ExportInvariantError("a Slack canvas has no underline; the export check should have refused it")
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
         return in_unicode_script_form(position, text, TARGET_SUBJECTS["slack"])

@@ -8,7 +8,7 @@ from skaldr import compute, models
 from skaldr.code_language import block_code_language
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
-from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
+from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, SectionLink, StatusMark
 from skaldr.export.tree import (
     AuthoredName,
     Callout,
@@ -23,7 +23,7 @@ from skaldr.export.tree import (
     Quote,
     ToneName,
 )
-from skaldr.richtext import AnchorLink, Code, Link, Plain, Styled
+from skaldr.richtext import Code, Link, Plain, Styled
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -99,7 +99,7 @@ def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> li
 def _fact_values(fact: compute.SectionFact) -> ExportRich:
     if all(value.kind != "link" for value in fact.values):
         return plain(", ".join(value.text for value in fact.values))
-    return spaced(tuple((AnchorLink(plain(value.text), value.anchor or ""),) for value in fact.values), ", ")
+    return spaced(tuple((SectionLink(plain(value.text), value.anchor or ""),) for value in fact.values), ", ")
 
 
 def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:

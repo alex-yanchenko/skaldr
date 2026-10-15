@@ -1,13 +1,15 @@
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
+from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -22,7 +24,18 @@ from skaldr.export.markup import (
     styled,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
+from skaldr.export.runs import (
+    Chip,
+    ExportRich,
+    ExportRun,
+    SpanKind,
+    TonedLabel,
+    export_visible_text,
+    holds_a_chip,
+    nested_runs,
+    write_export_run_around,
+    write_export_runs,
+)
 from skaldr.export.swaps import (
     data_table_swapped_in,
     figure_mermaid_draws,
@@ -57,16 +70,14 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, Person, ToneLiteral
-from skaldr.richtext import ScriptPosition
+from skaldr.richtext import Code, Placeholder, ScriptPosition, Styled, Tinted
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
-CLOSING_TAG_OPENER: Final = "</"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
-NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
@@ -96,6 +107,7 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "teal": "brown",
     "sky": "pink",
 }
+PLACEHOLDER_HIGHLIGHT: Final = BLOCK_COLOR["warning"] + BACKGROUND_SUFFIX
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
@@ -133,6 +145,7 @@ def latex_text(text: str) -> str:
 class _NotionRuns(MarkupRuns):
     inside_bold: bool = False
     on_fill: bool = False
+    in_a_table_cell: bool = False
 
     def escape(self, text: str, /) -> str:
         return text.translate(NOTION_ESCAPES)
@@ -148,10 +161,22 @@ class _NotionRuns(MarkupRuns):
         return self.code(piece) if is_file_name else self.escape(piece)
 
     def code(self, text: str, /) -> str:
-        return self.escape(text) if "`" in text or CLOSING_TAG_OPENER in text else f"`{text}`"
+        if BACKTICK in text:
+            raise ExportInvariantError(
+                f"Notion cannot show inline code holding a backtick, '{text}'; "
+                "the export check should have refused it"
+            )
+        if self.in_a_table_cell and CLOSING_TAG_OPENER in text:
+            raise ExportInvariantError(
+                f"Notion loses a table cell whose inline code holds '</', '{text}'; "
+                "the export check should have refused it"
+            )
+        return f"`{text}`"
 
-    def anchor_link(self, label: str, _anchor: str, /) -> str:
-        return label
+    def anchor_link(self, _label: str, _anchor: str, /) -> str:
+        raise ExportInvariantError(
+            "a Notion page cannot link to its own headings; the export check should have refused it"
+        )
 
     def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
         finish = f' end="{end.isoformat()}"' if end else ""
@@ -162,8 +187,11 @@ class _NotionRuns(MarkupRuns):
             return label
         return f'<mention-user url="{person.notion}">{label}</mention-user>'
 
+    def blank(self, name: str, /) -> str:
+        return self.escape("{{" + name + "}}")
+
     def placeholder(self, name: str, /) -> str:
-        return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
+        return _placeholder_written_in(_Span(), name, self)
 
     def chip(self, run: Chip, /) -> str:
         label = self.text(run.label)
@@ -171,24 +199,144 @@ class _NotionRuns(MarkupRuns):
         return bolded if self.on_fill else _colored_span(CHIP_COLOR[run.tone], bolded)
 
     def underline(self, inner: str, /) -> str:
-        return f'<span underline="true">{inner}</span>'
+        return _Span().underlined().around(inner)
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
         return self.math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
-        highlighted = (
-            _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
-        )
-        return _colored_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
+        return _Span().tinted(tone, background).around(inner)
+
+    def toned_label(self, tone: ToneLiteral, inner: str, /) -> str:
+        return _Span().tinted(tone, None).around(inner)
 
 
 def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 
-def notion_inline(runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False) -> str:
-    return write_export_runs(runs, _NotionRuns(inside_bold, on_fill))
+def _codes_holding_a_closing_tag(runs: Iterable[ExportRun]) -> Iterator[str]:
+    for run in runs:
+        if isinstance(run, Code) and CLOSING_TAG_OPENER in run.text:
+            yield run.text
+        yield from _codes_holding_a_closing_tag(nested_runs(run))
+
+
+@dataclass(frozen=True)
+class _Span:
+    color: str | None = None
+    kind: SpanKind | None = None
+    underline: bool = False
+    colour_is_generated: bool = False
+
+    def coloured(self, kind: SpanKind, color: str) -> "_Span":
+        if self.kind is not None and self.kind != kind:
+            raise ExportInvariantError(
+                f"Notion holds no span inside a span, so it cannot show a {kind} inside a {self.kind}; "
+                "the export check should have refused it"
+            )
+        return replace(self, color=color, kind=kind, colour_is_generated=False)
+
+    def toned(self, tone: ToneLiteral) -> "_Span":
+        return replace(self.coloured("colour", BLOCK_COLOR[tone]), colour_is_generated=True)
+
+    def leaves_out(self, run: ExportRun) -> bool:
+        return (
+            self.colour_is_generated
+            and not self.underline
+            and isinstance(run, Code)
+            and CLOSING_TAG_OPENER in run.text
+        )
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None) -> "_Span":
+        if tone and background:
+            raise ExportInvariantError(
+                "a Notion text run takes a colour or a highlight, not both; "
+                "the export check should have refused it"
+            )
+        if background:
+            return self.coloured("highlight", BLOCK_COLOR[background] + BACKGROUND_SUFFIX)
+        return self.coloured("colour", BLOCK_COLOR[tone]) if tone else self
+
+    def underlined(self) -> "_Span":
+        return replace(self, underline=True)
+
+    def for_a_blank(self) -> "_Span":
+        return replace(self, color=PLACEHOLDER_HIGHLIGHT, kind="highlight")
+
+    def _attributes(self) -> str:
+        color = f' color="{self.color}"' if self.color else ""
+        return color + (' underline="true"' if self.underline else "")
+
+    def around(self, inner: str) -> str:
+        attributes = self._attributes()
+        return f"<span{attributes}>{inner}</span>" if attributes and inner else inner
+
+    def holding(self, runs: ExportRich, writer: "_NotionRuns") -> str:
+        if self._attributes():
+            closing = next(_codes_holding_a_closing_tag(runs), None)
+            if closing is not None:
+                raise ExportInvariantError(
+                    "Notion closes a coloured, highlighted or underlined span early at inline code "
+                    f"holding '</', '{closing}'; the export check should have refused it"
+                )
+        return self.around(write_export_runs(runs, writer))
+
+
+def _placeholder_written_in(span: _Span, name: str, writer: "_NotionRuns") -> str:
+    return span.for_a_blank().around(writer.blank(name))
+
+
+def _is_a_span(run: ExportRun) -> bool:
+    match run:
+        case Tinted() | TonedLabel() | Placeholder():
+            return True
+        case Styled():
+            return run.style == "underline"
+        case _:
+            return False
+
+
+def _splits_the_span(span: _Span, run: ExportRun) -> bool:
+    return _is_a_span(run) or span.leaves_out(run)
+
+
+def _holds_a_split(span: _Span, run: ExportRun) -> bool:
+    return any(_splits_the_span(span, inner) or _holds_a_split(span, inner) for inner in nested_runs(run))
+
+
+def _written_in(span: _Span, runs: ExportRich, writer: "_NotionRuns") -> str:
+    parts: list[str] = []
+    inside_the_span: list[ExportRun] = []
+    for run in runs:
+        if not _splits_the_span(span, run) and not _holds_a_split(span, run):
+            inside_the_span.append(run)
+            continue
+        parts.append(span.holding(tuple(inside_the_span), writer))
+        inside_the_span = []
+        parts.append(_run_written_in(span, run, writer))
+    parts.append(span.holding(tuple(inside_the_span), writer))
+    return writer.concat(parts)
+
+
+def _run_written_in(span: _Span, run: ExportRun, writer: "_NotionRuns") -> str:
+    match run:
+        case Tinted():
+            return _written_in(span.tinted(run.tone, run.background), run.runs, writer)
+        case TonedLabel():
+            return _written_in(span.toned(run.tone), run.runs, writer)
+        case Styled() if run.style == "underline":
+            return _written_in(span.underlined(), run.runs, writer)
+        case Placeholder():
+            return _placeholder_written_in(span, run.name, writer)
+        case _:
+            return write_export_run_around(run, _written_in(span, nested_runs(run), writer), writer)
+
+
+def notion_inline(
+    runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False, in_a_table_cell: bool = False
+) -> str:
+    return _written_in(_Span(), runs, _NotionRuns(inside_bold, on_fill, in_a_table_cell))
 
 
 def _block_text(runs: ExportRich) -> str:
@@ -212,7 +360,7 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
 
 
 def _table_cell_text(cell: TableCell, *, inside_bold: bool, on_fill: bool = False) -> str:
-    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill)
+    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 
@@ -333,20 +481,12 @@ def _table_lines(table: TableNode, room: TableRoom) -> list[str]:
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
-def _numbers_as_bullets(node: ListNode) -> bool:
-    return node.kind == "number" and node.start != NOTION_LIST_START
-
-
-def _written_kind(node: ListNode) -> ListKind:
-    return "bullet" if _numbers_as_bullets(node) else node.kind
-
-
 def _list_marker(node: ListNode, index: int, checked: bool) -> str:
     match node.kind:
         case "bullet":
             return "-"
         case "number":
-            return f"- {index}\\." if _numbers_as_bullets(node) else f"{index}."
+            return f"{index}."
         case "check":
             return "- [x]" if checked else "- [ ]"
         case _:
@@ -354,6 +494,11 @@ def _list_marker(node: ListNode, index: int, checked: bool) -> str:
 
 
 def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
+    if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
+        raise ExportInvariantError(
+            f"Notion numbers every list from 1, not from {node.start}; "
+            "the export check should have refused it"
+        )
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node, index, entry.checked)
@@ -449,7 +594,7 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
 
 
 def _list_kind(node: Node) -> ListKind | None:
-    return _written_kind(node) if isinstance(node, ListNode) else None
+    return node.kind if isinstance(node, ListNode) else None
 
 
 def _notion_blocks(nodes: Sequence[Node], room: TableRoom) -> list[str]:

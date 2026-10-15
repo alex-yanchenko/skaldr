@@ -125,10 +125,10 @@ Lead with the reconciliation gate: it is the one number leadership tracks.
 
 ### Re-count procedure, from step iv
 
-* iv. Freeze inbound moves in the overflow aisles.
-* v. Re-scan every bin with the widened reader.
-  * i. Start with the aisles that held the 260 skipped units.
-* vi. Re-run reconciliation and compare against the first count.
+1. Freeze inbound moves in the overflow aisles.
+2. Re-scan every bin with the widened reader.
+   1. Start with the aisles that held the 260 skipped units.
+3. Re-run reconciliation and compare against the first count.
 
 ### Decisions
 

@@ -58,7 +58,7 @@ def test_check_without_a_target_passes_what_only_a_target_refuses(
 
     assert main(["--check", str(data_path)]) == 0
 
-    assert capsys.readouterr().out == f"OK    {data_path}\n"
+    assert capsys.readouterr().out == f"OK    {data_path}{case.unfilled_placeholders_note}\n"
 
 
 @pytest.mark.parametrize(

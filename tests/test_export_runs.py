@@ -8,8 +8,12 @@ from skaldr.export.runs import (
     ExportRunWriter,
     Gauge,
     Mark,
+    SectionLink,
     StatusMark,
+    TonedLabel,
     mark_name,
+    nested_runs,
+    write_export_run_around,
     write_export_runs,
 )
 from skaldr.models import Person, ToneLiteral
@@ -17,8 +21,12 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    DateMention,
+    DocumentLink,
     InlineMath,
+    IssueLink,
     Link,
+    PersonMention,
     Placeholder,
     Plain,
     ScriptPosition,
@@ -101,6 +109,12 @@ class _MarkedNodeRuns:
     def gauge(self, run: Gauge, /) -> MarkedNodes:
         return _leaf("gauge", f"{run.value}/{run.maximum}")
 
+    def section_link(self, label: MarkedNodes, anchor: str, /) -> MarkedNodes:
+        return _with_mark(f"section={anchor}", label)
+
+    def toned_label(self, tone: ToneLiteral, inner: MarkedNodes, /) -> MarkedNodes:
+        return _with_mark(f"label tone={tone}", inner)
+
 
 def _structured_writer() -> ExportRunWriter[MarkedNodes]:
     return _MarkedNodeRuns()
@@ -147,4 +161,69 @@ def test_an_export_run_writer_builds_chips_breaks_marks_and_gauges_as_nodes_of_t
         ("text", "lead", ("bold",)),
         ("status", "done", ()),
         ("gauge", "3/4", ()),
+    )
+
+
+def test_a_section_link_and_a_toned_label_reach_their_own_writer_methods_apart_from_authored_ones() -> None:
+    runs: ExportRich = (
+        SectionLink((Plain("Totals"),), "totals"),
+        AnchorLink((Plain("Counts"),), "counts"),
+        TonedLabel("info", (Styled("bold", (Plain("Scan"),)),)),
+        Tinted("info", None, (Plain("Seal"),)),
+    )
+
+    assert write_export_runs(runs, _structured_writer()) == (
+        ("text", "Totals", ("section=totals",)),
+        ("text", "Counts", ("anchor=counts",)),
+        ("text", "Scan", ("bold", "label tone=info")),
+        ("text", "Seal", ("tint=info/None",)),
+    )
+
+
+def test_the_nested_runs_of_a_run_are_its_label_or_its_runs_and_a_leaf_holds_none() -> None:
+    held = (Styled("italic", (Plain("hot"),)),)
+    runs: ExportRich = (
+        Link(held, "https://example.com"),
+        SectionLink(held, "totals"),
+        Tinted("danger", None, held),
+        TonedLabel("info", held),
+        Code("x"),
+        Chip("api", "blue"),
+    )
+
+    assert [nested_runs(run) for run in runs] == [held, held, held, held, (), ()]
+
+
+def test_a_run_written_around_its_nested_runs_written_apart_is_the_run_written_whole() -> None:
+    held = (Styled("italic", (Plain("hot"),)),)
+    runs: ExportRich = (
+        Link(held, "https://example.com"),
+        AnchorLink(held, "top"),
+        DateMention(held, date(2026, 10, 1), None),
+        PersonMention(held, "ada", Person()),
+        IssueLink(held, "ABC-1", None),
+        DocumentLink(held, "plan", None),
+        Styled("bold", held),
+        Tinted("danger", None, held),
+        SectionLink(held, "totals"),
+        TonedLabel("info", held),
+        Code("x"),
+        Placeholder("who"),
+        Break(),
+        StatusMark("done"),
+        Gauge(3, 4),
+        Chip("api", "blue"),
+    )
+    writer = _structured_writer()
+
+    assert [write_export_run_around(run, write_runs(nested_runs(run), writer), writer) for run in runs] == [
+        write_export_runs((run,), writer) for run in runs
+    ]
+
+
+def test_a_run_written_around_other_written_runs_wraps_those_runs() -> None:
+    link = Link((Plain("hot"),), "https://example.com")
+
+    assert write_export_run_around(link, _leaf("text", "cold"), _structured_writer()) == (
+        ("text", "cold", ("link=https://example.com",)),
     )

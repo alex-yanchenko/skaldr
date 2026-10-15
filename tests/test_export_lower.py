@@ -16,6 +16,7 @@ from skaldr.export.runs import (
     IndicatorMark,
     StatusMark,
     SwimlaneMark,
+    TonedLabel,
 )
 from skaldr.export.tree import (
     BlockRegion,
@@ -884,12 +885,12 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         ),
         pytest.param(
             {"label": "Site", "value": "West", "tone": "danger"},
-            (Tinted("danger", None, bold("Site")), Plain(": "), Plain("West")),
+            (TonedLabel("danger", bold("Site")), Plain(": "), Plain("West")),
             id="tone-colours-the-label-only",
         ),
         pytest.param(
             {"label": "Cost", "value": 5, "tone": "danger", "delta": {"label": "-8%", "tone": "success"}},
-            (Tinted("danger", None, bold("Cost")), Plain(": "), Plain("5"), Plain(" "), Chip("-8%", "green")),
+            (TonedLabel("danger", bold("Cost")), Plain(": "), Plain("5"), Plain(" "), Chip("-8%", "green")),
             id="a-toned-delta-keeps-its-own-colour-beside-the-coloured-label",
         ),
         pytest.param({"label": " ", "value": 7}, (Plain("7"),), id="blank-label"),
@@ -1006,7 +1007,7 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
             (
                 ListEntry(
                     (
-                        Tinted("warning", None, bold("Zone")),
+                        TonedLabel("warning", bold("Zone")),
                         Plain(": "),
                         Gauge(5, 10),
                         Plain(" "),
@@ -1116,6 +1117,36 @@ def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_
                 ListEntry(
                     (Plain(second), Plain("b")),
                     children=(ListNode("bullet", (ListEntry((Plain(nested), Plain("c"))),)),),
+                ),
+            ),
+        ),
+    )
+
+
+def test_a_checklist_entry_holds_only_its_nested_checklist() -> None:
+    block = {
+        "type": "list",
+        "style": "check",
+        "items": [{"text": "a", "checked": True, "items": [{"text": "b", "items": ["c"]}]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "check",
+            (
+                ListEntry(
+                    (Plain("a"),),
+                    checked=True,
+                    children=(
+                        ListNode(
+                            "check",
+                            (
+                                ListEntry(
+                                    (Plain("b"),), children=(ListNode("check", (ListEntry((Plain("c"),)),)),)
+                                ),
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),
@@ -1412,7 +1443,7 @@ def test_a_panel_and_a_walkthrough_carry_their_content() -> None:
             "number",
             (
                 ListEntry(
-                    (Tinted("info", None, (*bold("Go"), Plain(" "), Styled("italic", (Plain("first"),)))),),
+                    (TonedLabel("info", (*bold("Go"), Plain(" "), Styled("italic", (Plain("first"),)))),),
                     children=(Paragraph((Plain("d"),)),),
                 ),
             ),

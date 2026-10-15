@@ -2909,7 +2909,10 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "orderedList",
+      "attrs": {
+        "order": 4
+      },
       "content": [
         {
           "type": "listItem",
@@ -2919,7 +2922,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "iv. Freeze inbound moves in the overflow aisles."
+                  "text": "Freeze inbound moves in the overflow aisles."
                 }
               ]
             }
@@ -2933,12 +2936,12 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "v. Re-scan every bin with the widened reader."
+                  "text": "Re-scan every bin with the widened reader."
                 }
               ]
             },
             {
-              "type": "bulletList",
+              "type": "orderedList",
               "content": [
                 {
                   "type": "listItem",
@@ -2948,7 +2951,7 @@
                       "content": [
                         {
                           "type": "text",
-                          "text": "i. Start with the aisles that held the 260 skipped units."
+                          "text": "Start with the aisles that held the 260 skipped units."
                         }
                       ]
                     }
@@ -2966,7 +2969,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "vi. Re-run reconciliation and compare against the first count."
+                  "text": "Re-run reconciliation and compare against the first count."
                 }
               ]
             }
@@ -6026,23 +6029,15 @@
                   ]
                 }
               ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "panel",
-      "attrs": {
-        "panelType": "warning"
-      },
-      "content": [
-        {
-          "type": "paragraph",
-          "content": [
+            },
             {
-              "type": "text",
-              "text": "A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers."
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers."
+                }
+              ]
             }
           ]
         }

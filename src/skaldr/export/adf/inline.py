@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, ExportInvariantError
 from skaldr.export.adf.colors import BADGE_LOZENGE, TEXT_COLOR
 from skaldr.export.adf.nodes import (
     AdfCode,
@@ -247,7 +247,12 @@ class AdfRuns:
         mark = AdfLink(type="link", attrs=AdfLinkAttrs(href=url))
         return with_mark(tuple(map(_as_text_in_a_link, label)), mark)
 
-    def anchor_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
+    def anchor_link(self, _label: AdfInlines, _anchor: str, /) -> AdfInlines:
+        raise ExportInvariantError(
+            "a Jira description cannot link to its own headings; the export check should have refused it"
+        )
+
+    def section_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
         return label
 
     def date_mention(self, _label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
@@ -266,8 +271,11 @@ class AdfRuns:
             return label
         return (AdfInlineCard(type="inlineCard", attrs=AdfInlineCardAttrs(url=url)),)
 
-    def document_link(self, label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
-        return label
+    def document_link(self, _label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
+        raise ExportInvariantError(
+            "a Jira description cannot link to another skaldr document; "
+            "the export check should have refused it"
+        )
 
     def citation(self, run: Citation, /) -> AdfInlines:
         label = (_plain_text(f"[{run.number}]"),)
@@ -286,9 +294,16 @@ class AdfRuns:
         return with_mark((_plain_text(text),), AdfSubsup(type="subsup", attrs=kind))
 
     def tinted(
-        self, tone: ToneLiteral | None, _background: ToneLiteral | None, inner: AdfInlines, /
+        self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlines, /
     ) -> AdfInlines:
+        if background is not None:
+            raise ExportInvariantError(
+                "a Jira description does not show a text highlight; the export check should have refused it"
+            )
         return inner if tone is None else with_mark(inner, text_color_mark(tone))
+
+    def toned_label(self, tone: ToneLiteral, inner: AdfInlines, /) -> AdfInlines:
+        return with_mark(inner, text_color_mark(tone))
 
     def math(self, expression: str, /) -> AdfInlines:
         require_the_swap("inline math", "adf")
