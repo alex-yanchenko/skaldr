@@ -9,7 +9,7 @@ from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish.connector import WriteGranularity
+from skaldr.publish.connector import LeftByASplitWrite, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.state import PublishState
@@ -250,6 +250,11 @@ class FakeTransport:
     def edit_section_by_hand(self, item_id: str, key: str, text: str) -> None:
         self.items[item_id].raw_sections[key] = self._stored(text)
         self.report_an_edit_without_changing_content(item_id, section_part(key))
+
+    def leave_a_section_half_written(self, item_id: str, key: str, text: str) -> None:
+        item = self.items[item_id]
+        item.raw_sections[key] = self._stored(text)
+        item.revision = self._bump()
 
     def delete_section_by_hand(self, item_id: str, key: str) -> None:
         del self.items[item_id].raw_sections[key]
@@ -529,6 +534,7 @@ class FakeConnector:
     writes: WriteGranularity = "section"
     carries_look: bool = True
     export_target: ExportTarget = "notion"
+    left_by_a_split_write: LeftByASplitWrite | None = None
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)
@@ -549,10 +555,18 @@ def fake_registry(
     writes: WriteGranularity = "section",
     *,
     carries_look: bool = True,
+    left_by_a_split_write: LeftByASplitWrite | None = None,
 ) -> ConnectorRegistry:
     return ConnectorRegistry(
         [
-            FakeConnector(target_type, transport, limits, writes, carries_look=carries_look)
+            FakeConnector(
+                target_type,
+                transport,
+                limits,
+                writes,
+                carries_look=carries_look,
+                left_by_a_split_write=left_by_a_split_write,
+            )
             for target_type in target_types
         ]
     )

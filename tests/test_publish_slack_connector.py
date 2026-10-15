@@ -217,28 +217,70 @@ def test_a_changed_section_is_inserted_again_and_its_old_blocks_deleted(tmp_path
     )
 
 
+PLANTING_REWRITTEN = (
+    "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n## Planting\n\n"
+    f"Sow in late spring.\n\n{DOCUMENT_STAMP_LINKING_TOOLS}\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("landed_edits", "left_halfway"),
+    [
+        pytest.param(1, ["## Planting", "Sow in late spring.", "## Planting", "Sow in spring."], id="insert"),
+        pytest.param(2, ["## Planting", "Sow in late spring.", "## Planting"], id="insert-and-one-delete"),
+    ],
+)
 def test_a_section_write_that_stopped_halfway_is_finished_by_the_next_publish(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], landed_edits: int, left_halfway: list[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    _planting_rewritten(tmp_path)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, after=landed_edits)
+    capsys.readouterr()
+
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    halfway = slack.canvases[DOCUMENT_CANVAS].blocks[2:-1]
+    error = capsys.readouterr().err
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (stopped, finished, halfway, slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        0,
+        left_halfway,
+        PLANTING_REWRITTEN,
+    )
+    assert error.startswith(f"error: Slack canvas {DOCUMENT_CANVAS} is partly written, so publish again")
+
+
+@pytest.mark.parametrize(
+    ("deleted", "left"),
+    [
+        pytest.param("Sow in late spring.", "## Planting", id="new-text"),
+        pytest.param("## Planting", "Sow in late spring.", id="new-heading"),
+    ],
+)
+def test_a_block_deleted_by_hand_after_a_section_write_stopped_is_an_edit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], deleted: str, left: str
 ) -> None:
     slack = InMemorySlack()
     path = _published(tmp_path, slack)
     _planting_rewritten(tmp_path)
     slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, after=1)
+    main(["publish", str(path), "--apply"], registry=_registry(slack))
+    slack.delete_block_by_hand(DOCUMENT_CANVAS, deleted)
     capsys.readouterr()
+    slack.forget_requests()
 
-    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
-    halfway = slack.markdown_of(DOCUMENT_CANVAS)
-    error = capsys.readouterr().err
-    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    refused = main(["publish", str(path), "--apply"], registry=_registry(slack))
 
-    assert (stopped, finished, halfway.count("## Planting"), slack.markdown_of(DOCUMENT_CANVAS)) == (
+    assert (refused, slack.writes(), capsys.readouterr().out) == (
         1,
-        0,
-        2,
-        "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n## Planting\n\n"
-        f"Sow in late spring.\n\n{DOCUMENT_STAMP_LINKING_TOOLS}\n",
+        [],
+        "--- slack canvases, document: planting (blocks[2]), as published\n"
+        "+++ slack canvases, document: planting (blocks[2]), now\n"
+        f"@@ -1,3 +1,5 @@\n+{left}\n+\n ## Planting\n \n Sow in spring.\n",
     )
-    assert error.startswith(f"error: Slack canvas {DOCUMENT_CANVAS} is partly written, so publish again")
 
 
 def test_an_edit_made_in_slack_stops_the_publish_until_it_is_overwritten(

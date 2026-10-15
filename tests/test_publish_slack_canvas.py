@@ -12,6 +12,7 @@ from skaldr.publish.slack.canvas_markdown import (
     comparable_text,
     html_sections,
     keyed_canvas,
+    left_by_a_split_canvas_write,
 )
 from skaldr.publish.transport import ShownLink, Stamp
 
@@ -326,6 +327,34 @@ def test_the_archived_line_names_the_document() -> None:
         "skaldr archived this canvas: the document garden-handbook no longer publishes here.",
         "skaldr archived this canvas: the document no longer publishes here.",
     )
+
+
+SOW_IN_SPRING = "## Planting\n\nSow in spring.\n"
+SOW_IN_MAY = "## Planting\n\nSow in May.\n"
+
+
+@pytest.mark.parametrize(
+    ("current", "expected", "left"),
+    [
+        pytest.param(f"{SOW_IN_MAY}\n{SOW_IN_SPRING}", SOW_IN_MAY, True, id="inserted-before-any-delete"),
+        pytest.param(f"{SOW_IN_MAY}\n## Planting\n", SOW_IN_MAY, True, id="inserted-and-one-deleted"),
+        pytest.param("## Planting\n", SOW_IN_MAY, True, id="deleted-first-partly"),
+        pytest.param(None, SOW_IN_MAY, True, id="deleted-first-wholly"),
+        pytest.param("## Planting\n", None, True, id="removal-partly-done"),
+        pytest.param(
+            "Sow in May.\n\n## Planting\n\nSow in spring.\n", SOW_IN_MAY, False, id="a-new-block-gone"
+        ),
+        pytest.param(f"## Planting\n\n{SOW_IN_SPRING}", SOW_IN_MAY, False, id="a-new-block-gone-later"),
+        pytest.param("Sow in spring.\n", SOW_IN_MAY, False, id="an-old-block-gone-from-the-front"),
+        pytest.param("Sow in spring.\n\n## Planting\n", SOW_IN_MAY, False, id="old-blocks-reordered"),
+        pytest.param(f"{SOW_IN_MAY}\nWater daily.\n", SOW_IN_MAY, False, id="a-block-nobody-published"),
+        pytest.param("Sow in spring.\n", None, False, id="removal-from-the-front"),
+    ],
+)
+def test_a_split_write_leaves_the_new_blocks_before_a_shrinking_head_of_the_old_or_that_head_alone(
+    current: str | None, expected: str | None, left: bool
+) -> None:
+    assert left_by_a_split_canvas_write(current, SOW_IN_SPRING, expected) is left
 
 
 @pytest.mark.parametrize(

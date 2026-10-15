@@ -195,6 +195,11 @@ class InMemorySlack:
         canvas.blocks.insert(at, text)
         canvas.generation += 1
 
+    def delete_block_by_hand(self, canvas_id: str, text: str) -> None:
+        canvas = self.canvases[canvas_id]
+        canvas.blocks.remove(text)
+        canvas.generation += 1
+
     def rename_by_hand(self, canvas_id: str, title: str) -> None:
         self.canvases[canvas_id].title = title
 

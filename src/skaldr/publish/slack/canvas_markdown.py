@@ -147,6 +147,15 @@ def comparable_text(text: str) -> str:
     return _blocks_text(_comparable_blocks(text))
 
 
+def left_by_a_split_canvas_write(current: str | None, published: str | None, expected: str | None) -> bool:
+    now = _comparable_blocks(current or "")
+    old = _comparable_blocks(published or "")
+    new = _comparable_blocks(expected or "")
+    inserted_first = [[*new, *old[:kept]] for kept in range(len(old) + 1)]
+    deleted_first = [old[:kept] for kept in range(len(old) + 1)]
+    return now in [*inserted_first, *deleted_first]
+
+
 def canvas_markdown_of(texts: Sequence[str]) -> str:
     return _blocks_text([text.strip("\n") for text in texts if text.strip("\n")])
 
