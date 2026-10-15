@@ -9,6 +9,14 @@ from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRej
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count
 from skaldr.publish.content import ItemContent, Part, is_unset, placed_section
+from skaldr.publish.keyed import (
+    ReadLayouts,
+    comparable_sections,
+    finished_after_a_change,
+    finished_after_a_create,
+    refuse_a_change_since_the_read,
+    refused_when_not_found,
+)
 from skaldr.publish.notion.api import Answer, NotionApi
 from skaldr.publish.notion.icon_and_cover import (
     cover_text,
@@ -111,20 +119,8 @@ def _with_nothing_sent(prepare: Callable[[], Answer]) -> Answer:
         raise WriteRejectedError(str(exc)) from exc
 
 
-def _refused_or_unknown(send: Callable[[], Answer]) -> Answer:
-    try:
-        return send()
-    except (ItemNotFoundError, AuthError) as exc:
-        raise WriteRejectedError(str(exc)) from exc
-
-
-def _finished_after_a_change(page_id: str, title: str, finish: Callable[[], Answer]) -> Answer:
-    try:
-        return finish()
-    except (ConnectorError, AuthError) as exc:
-        raise ConnectorError(
-            f'skaldr wrote Notion page {page_id} for "{title}" but could not finish writing it: {exc}'
-        ) from exc
+def _page_named(item_id: str) -> str:
+    return f"Notion page {item_id}"
 
 
 def _with_children_of_removed_sections(
@@ -193,22 +189,18 @@ class _Parent:
 class NotionTransport:
     def __init__(self, api: NotionApi) -> None:
         self._api = api
-        self._layouts: dict[str, Mapping[str, str]] = {}
-        self._published: dict[str, Mapping[str, str]] = {}
-        self._written: set[str] = set()
+        self._read = ReadLayouts()
         self._editor_names: dict[str, str] = {}
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
-        sections = {key: comparable_text(text) for key, text in content.sections.items()}
-        return content.model_copy(update={"sections": {key: text for key, text in sections.items() if text}})
+        return comparable_sections(content, comparable_text)
 
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         page = self._live_page(item_id)
         markdown = self._api.page_markdown(item_id).markdown
         key = _page_key(item_id)
-        if key not in self._written and keyed_like.sections:
-            self._published[key] = keyed_like.sections
-        return self._remote(item_id, page, markdown, self._layout_to_read(item_id, keyed_like))
+        self._read.note_the_read(key, keyed_like)
+        return self._remote(item_id, page, markdown, self._read.to_read(key, keyed_like))
 
     def create_item(self, request: NewItem, /) -> RemoteItem:
         if request.into_id is not None:
@@ -216,10 +208,13 @@ class NotionTransport:
         stamp = stamp_line(request.stamp)
         batches = _create_batches(list(request.content.sections.values()), stamp)
         body = _with_nothing_sent(lambda: self._create_body(request, batches[0], stamp))
-        page = _refused_or_unknown(lambda: self._api.create_page(body))
+        page = refused_when_not_found(lambda: self._api.create_page(body))
         item_id = _page_key(page.id)
-        return _finished_after_a_change(
-            item_id, request.content.title, lambda: self._finish_create(item_id, request.content, batches[1:])
+        return finished_after_a_create(
+            _page_named(item_id),
+            item_id,
+            request.content.title,
+            lambda: self._finish_create(item_id, request.content, batches[1:]),
         )
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
@@ -261,7 +256,7 @@ class NotionTransport:
         return self._written_with(item_id, current, replacement, dict(after), markdown, missing_stamp)
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
-        layout = self._layouts.get(_page_key(item_id))
+        layout = self._read.layouts.get(_page_key(item_id))
         if layout is None:
             raise ConnectorError(
                 f"skaldr has not read Notion page {item_id} in this run, so it cannot tell its sections apart"
@@ -294,12 +289,10 @@ class NotionTransport:
     def release_item(self, item_id: str, request: Release, /) -> None:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         key = _page_key(item_id)
-        layout = self._published.get(key, request.raw_sections)
+        layout = self._read.published.get(key, request.raw_sections)
         for replacement in release_replacements(markdown, layout, REQUEST_JSON_BYTES):
             self._send(item_id, keyed.raw_sections, replacement)
-        self._layouts[key] = {}
-        self._published[key] = {}
-        self._written.add(key)
+        self._read.note_released(key)
         page = self._live_page(item_id)
         set_now = set_property_names(page)
         cleared: dict[str, JsonValue] = dict.fromkeys(name for name in request.field_names if name in set_now)
@@ -325,14 +318,14 @@ class NotionTransport:
 
     def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
         self._live_page(item_id)
-        layout = self._layouts.get(_page_key(item_id), {})
+        layout = self._read.layouts.get(_page_key(item_id), {})
         keyed = keyed_page(self._api.page_markdown(item_id).markdown, layout)
         return keyed.links if keyed.stamp == stamp else ()
 
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
         self._live_page(item_id)
         markdown = self._api.page_markdown(item_id).markdown
-        layout = self._layouts.get(_page_key(item_id), {})
+        layout = self._read.layouts.get(_page_key(item_id), {})
         keyed = keyed_page(markdown, layout)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
@@ -364,15 +357,9 @@ class NotionTransport:
             raise ItemNotFoundError(f"Notion page {item_id} is in the trash")
         return page
 
-    def _layout_to_read(self, item_id: str, keyed_like: ItemContent) -> Mapping[str, str]:
-        key = _page_key(item_id)
-        if key in self._written:
-            return self._layouts[key]
-        return keyed_like.sections or self._layouts.get(key, {})
-
     def _remote(self, item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
         keyed = keyed_page(markdown, layout)
-        self._layouts[_page_key(item_id)] = keyed.sections
+        self._read.layouts[_page_key(item_id)] = keyed.sections
         edited_at = page.last_edited_time.isoformat()
         return RemoteItem(
             item_id,
@@ -411,9 +398,7 @@ class NotionTransport:
             markdown = self._send(item_id, sections, replacement)
         if stamp_to_put_back is not None:
             markdown = self._stamp_put_back(item_id, markdown, layout, stamp_to_put_back)
-        key = _page_key(item_id)
-        self._written.add(key)
-        self._published[key] = layout
+        self._read.note_written(_page_key(item_id), layout)
         return self._remote(item_id, self._live_page(item_id), markdown, layout)
 
     def _stamp_put_back(
@@ -438,10 +423,7 @@ class NotionTransport:
     def _unchanged_since_read(self, item_id: str, raw_sections: RawSections) -> tuple[KeyedPage, str]:
         markdown = self._api.page_markdown(item_id).markdown
         keyed = keyed_page(markdown, raw_sections)
-        if list(keyed.raw_sections.items()) != list(raw_sections.items()):
-            raise WriteRejectedError(
-                f"Notion page {item_id} changed after skaldr read it, so nothing was written; publish again"
-            )
+        refuse_a_change_since_the_read(_page_named(item_id), raw_sections, keyed.raw_sections)
         return keyed, markdown
 
     def _property_requests(self, page: Page, values: Mapping[str, JsonValue]) -> JsonFields:
@@ -510,9 +492,7 @@ class NotionTransport:
                 item_id, _update_content(Replacement(stamp, joined([*batch, stamp])))
             ).markdown
         layout = self.comparable_form(content).sections
-        key = _page_key(item_id)
-        self._written.add(key)
-        self._published[key] = layout
+        self._read.note_written(_page_key(item_id), layout)
         return self._remote(item_id, self._live_page(item_id), markdown, layout)
 
     def _into_page_request(self, item_id: str, request: NewItem) -> JsonFields:
@@ -530,7 +510,7 @@ class NotionTransport:
         stamp = stamp_line(request.stamp)
         batches = _create_batches(list(content.sections.values()), stamp)
         page_request = _with_nothing_sent(lambda: self._into_page_request(item_id, request))
-        _refused_or_unknown(
+        refused_when_not_found(
             lambda: self._api.update_markdown(item_id, _replace_content(joined([*batches[0], stamp])))
         )
 
@@ -538,7 +518,7 @@ class NotionTransport:
             self._api.update_page(item_id, page_request)
             return self._finish_create(item_id, content, batches[1:])
 
-        return _finished_after_a_change(item_id, content.title, finish)
+        return finished_after_a_change(_page_named(item_id), content.title, finish)
 
 
 def _property_requests(kinds: Mapping[str, str], values: Mapping[str, JsonValue], holder: str) -> JsonFields:

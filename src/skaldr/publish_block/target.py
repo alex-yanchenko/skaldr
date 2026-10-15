@@ -62,5 +62,9 @@ class TargetBase(FrozenModel):
     @abstractmethod
     def place_label(self) -> str: ...
 
+    @classmethod
+    def links_its_sections_from_the_document(cls) -> bool:
+        return False
+
     def location_label(self) -> str:
         return self.place_label()

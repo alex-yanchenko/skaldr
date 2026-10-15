@@ -3,13 +3,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish.connector import WriteGranularity
+from skaldr.publish.connector import LeftByASplitWrite, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.state import PublishState
@@ -41,6 +41,7 @@ INTO_LABEL = f"{TARGET_LABEL} (written into)"
 REFUSED_WRITE = "the service refused the write"
 DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
 LOST_WRITE = "the connection dropped before the service saw the write"
+UNFINISHED_CREATE = "the service created the item but the read back failed:"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
 SPAN_COLOR = re.compile(r'(<span[^>]*?) color="[^"]*"')
 FAKE_ITEM_ADDRESS = "https://items.example.com/"
@@ -184,7 +185,11 @@ class FakeTransport:
     _landing_one_section_of: int | None = None
     _landing_part_of_release: int | None = None
     _creating_into_without_a_stamp: bool = False
+    _leaving_unfinished: int | None = None
     _editing_during_write: tuple[str, str, str] | None = None
+
+    def leave_a_create_unfinished(self, count_from_now: int) -> None:
+        self._leaving_unfinished = self._writes + count_from_now
 
     def land_part_of_the_next_release(self, after_writes: int = 0) -> None:
         self._landing_part_of_release = self._writes + after_writes + 1
@@ -235,6 +240,7 @@ class FakeTransport:
         self._landing_one_section_of = None
         self._landing_part_of_release = None
         self._creating_into_without_a_stamp = False
+        self._leaving_unfinished = None
 
     def comment_on(self, item_id: str, key: str) -> None:
         item = self.items[item_id]
@@ -245,12 +251,20 @@ class FakeTransport:
         self.items[item_id].raw_sections[key] = self._stored(text)
         self.report_an_edit_without_changing_content(item_id, section_part(key))
 
+    def leave_a_section_half_written(self, item_id: str, key: str, text: str) -> None:
+        item = self.items[item_id]
+        item.raw_sections[key] = self._stored(text)
+        item.revision = self._bump()
+
     def delete_section_by_hand(self, item_id: str, key: str) -> None:
         del self.items[item_id].raw_sections[key]
         self.report_an_edit_without_changing_content(item_id, section_part(key))
 
     def delete_item_by_hand(self, item_id: str) -> None:
         del self.items[item_id]
+
+    def stamp_by_hand(self, item_id: str, stamp: Stamp | None) -> None:
+        self.items[item_id].stamp = stamp
 
     def set_icon_by_hand(self, item_id: str, icon: str | None) -> None:
         self.items[item_id].icon = icon
@@ -350,6 +364,8 @@ class FakeTransport:
             icon=content.icon,
             cover=content.cover,
         )
+        if self._writes == self._leaving_unfinished:
+            raise CreatedButUnfinishedError(f"{UNFINISHED_CREATE} {item_id}", item_id)
         return self._after_write(item_id)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
@@ -518,6 +534,7 @@ class FakeConnector:
     writes: WriteGranularity = "section"
     carries_look: bool = True
     export_target: ExportTarget = "notion"
+    left_by_a_split_write: LeftByASplitWrite | None = None
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)
@@ -538,10 +555,18 @@ def fake_registry(
     writes: WriteGranularity = "section",
     *,
     carries_look: bool = True,
+    left_by_a_split_write: LeftByASplitWrite | None = None,
 ) -> ConnectorRegistry:
     return ConnectorRegistry(
         [
-            FakeConnector(target_type, transport, limits, writes, carries_look=carries_look)
+            FakeConnector(
+                target_type,
+                transport,
+                limits,
+                writes,
+                carries_look=carries_look,
+                left_by_a_split_write=left_by_a_split_write,
+            )
             for target_type in target_types
         ]
     )

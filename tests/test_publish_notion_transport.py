@@ -6,7 +6,13 @@ from typing import Any
 
 import pytest
 
-from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import (
+    AuthError,
+    ConnectorError,
+    CreatedButUnfinishedError,
+    ItemNotFoundError,
+    WriteRejectedError,
+)
 from skaldr.publish.content import (
     COVER,
     FIELDS,
@@ -289,13 +295,14 @@ def test_an_append_that_fails_after_the_create_is_not_a_rejected_write_because_t
     refusal = {"object": "error", "status": 400, "code": "validation_error", "message": "too large"}
     notion.scripted = [Scripted(400, refusal, method="PATCH")]
 
-    with pytest.raises(ConnectorError) as caught:
+    with pytest.raises(CreatedButUnfinishedError) as caught:
         transport.create_item(NewItem(PAGE_TARGET, STAMP, ItemContent(title="Big", sections=sections)))
 
-    assert (type(caught.value), str(caught.value)) == (
-        ConnectorError,
-        f'skaldr wrote Notion page {FIRST_PAGE} for "Big" but could not finish writing it: Notion refused to '
-        f"change the content of page {FIRST_PAGE}: too large (validation_error)",
+    assert (str(caught.value), caught.value.item_id) == (
+        f'skaldr created Notion page {FIRST_PAGE} for "Big" but could not finish writing it: Notion refused '
+        f"to change the content of page {FIRST_PAGE}: too large (validation_error); the next publish "
+        "records it",
+        FIRST_PAGE,
     )
 
 

@@ -25,11 +25,13 @@ from skaldr.publish.transport import (
     Transport,
     is_unset,
 )
-from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
-from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target
+from skaldr.publish_block import JiraTarget, NotionTarget, SlackTarget, TargetBase
+from skaldr.publish_block.target import JsonFields
+from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_slack_target
 from tests.factories.jira_factory import SITE, FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import DOC_ID, FakeTransport
+from tests.factories.slack_factory import TEAM_ID, WORKSPACE_URL, InMemorySlack
 
 OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
 STAMP = Stamp(DOC_ID, None)
@@ -76,7 +78,16 @@ JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
     },
     fields={"Area": "Shed", "labels": ["soil", "seeds"]},
 )
+SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
+    title="Garden handbook",
+    sections={
+        "intro": "- Sow in spring.\n\n&nbsp;\n\n- [x] Water daily.\n",
+        "beds": "| Bed | Crop |\n| --- | :---: |\n| North | ![](@U0EXAMPLE1) |\n",
+        "spacer": "&nbsp;\n",
+    },
+)
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
+SLACK_TARGET = SlackTarget.model_validate(make_slack_target())
 JIRA_TARGET = JiraTarget.model_validate(make_jira_target())
 SEEDLING = "🌱"
 SUNFLOWER = "🌻"
@@ -125,6 +136,7 @@ class TransportUnderTest:
     writes_into_pages: bool
     reports_edits: bool
     carries_look: bool = True
+    carries_fields: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
     form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
     links: tuple[ShownLink, ...] = ISSUE_LINKS
@@ -202,6 +214,30 @@ def _jira_stamp_refusal(item_id: str, stamp: Stamp) -> str:
     return f"Jira issue {item_id} is not stamped with {stamp.named}"
 
 
+def _slack() -> Instance:
+    slack = InMemorySlack()
+    empty_canvas = slack.add_canvas("Blank page")
+
+    def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
+        slack.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
+
+    return Instance(
+        slack.transport(),
+        empty_canvas,
+        edit_section_by_hand,
+        lambda: len(slack.writes()),
+        lambda: slack.add_canvas("Blank canvas", "Welcome.\n"),
+    )
+
+
+def _slack_link(item_id: str, title: str) -> ItemLink:
+    return ItemLink(f"{WORKSPACE_URL}docs/{TEAM_ID}/{item_id}", title)
+
+
+def _slack_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Slack canvas {item_id} is not stamped with {stamp.named}"
+
+
 TRANSPORTS = [
     pytest.param(
         TransportUnderTest(_fake, NOTION_TARGET, writes_into_pages=True, reports_edits=True),
@@ -234,6 +270,20 @@ TRANSPORTS = [
         ),
         id="jira",
     ),
+    pytest.param(
+        TransportUnderTest(
+            _slack,
+            SLACK_TARGET,
+            writes_into_pages=True,
+            reports_edits=False,
+            carries_look=False,
+            carries_fields=False,
+            form_fixture=SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
+            expected_link=_slack_link,
+            stamp_refusal=_slack_stamp_refusal,
+        ),
+        id="slack",
+    ),
 ]
 
 
@@ -245,7 +295,8 @@ def under_test(request: pytest.FixtureRequest) -> TransportUnderTest:
 
 def _content(under_test: TransportUnderTest) -> ItemContent:
     sections = {key: under_test.spell(text) for key, text in CONTENT.sections.items()}
-    return CONTENT.model_copy(update={"sections": sections})
+    fields = CONTENT.fields if under_test.carries_fields else {}
+    return CONTENT.model_copy(update={"sections": sections, "fields": fields})
 
 
 def _spelled(under_test: TransportUnderTest, sections: dict[str, str]) -> dict[str, str]:
@@ -320,7 +371,7 @@ def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be
 
     assert (_sections(released), released.comparable.fields.get("Owner"), released.stamp) == (
         [],
-        "Rowan",
+        _content(under_test).fields.get("Owner"),
         None,
     )
     assert is_unset(released.comparable.fields.get("Area"))
@@ -410,18 +461,17 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
 ) -> None:
     instance, created = _created(under_test)
     transport = instance.transport
+    fields: JsonFields = {"Area": "Orchard"} if under_test.carries_fields else {}
 
     transport.write_fields(
         created.item_id,
-        FieldsWrite(
-            "Garden guide", {"Area": "Orchard"}, CONTENT.title, {"Area": "Shed", "Owner": "Rowan"}, STAMP
-        ),
+        FieldsWrite("Garden guide", fields, CONTENT.title, _content(under_test).fields, STAMP),
     )
     read = transport.read_item(created.item_id, _content(under_test))
 
     assert (read.comparable.title, read.comparable.fields.get("Area"), read.stamp) == (
         "Garden guide",
-        "Orchard",
+        fields.get("Area"),
         STAMP,
     )
     assert is_unset(read.comparable.fields.get("Owner"))
@@ -435,7 +485,8 @@ def test_a_fields_write_for_another_section_of_the_document_is_rejected_and_chan
 
     with pytest.raises(WriteRejectedError):
         transport.write_fields(
-            created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, CONTENT.fields, STAMP)
+            created.item_id,
+            FieldsWrite("Garden guide", {}, CONTENT.title, _content(under_test).fields, STAMP),
         )
     read = transport.read_item(created.item_id, _content(under_test))
 
@@ -533,12 +584,13 @@ def test_creating_into_an_empty_page_sets_its_title_and_the_requested_fields_and
         NewItem(under_test.target, STAMP, _content(under_test), into_id=page_id, into_raw_sections=raw)
     )
     read = transport.read_item(page_id, _content(under_test))
+    fields: JsonFields = {"Status": None, **CONTENT.fields} if under_test.carries_fields else {}
 
     assert (created.item_id, _sections(read), read.comparable.title, read.comparable.fields, read.stamp) == (
         page_id,
         _expected_sections(transport, dict(_content(under_test).sections)),
         CONTENT.title,
-        {"Status": None, **CONTENT.fields},
+        fields,
         STAMP,
     )
 
@@ -819,108 +871,133 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
     )
 
 
+PLANTING_EDIT = "(Part(kind='section', key='planting'),)"
+BOTH_ISSUE_LINKS = f"({ISSUE_LINKS[0]!r}, {ISSUE_LINKS[1]!r})"
+LINKS_NOT_READ_BACK = "At index 1 diff: frozenset() != frozenset({"
+NO_LINKS_READ = "assert frozenset() == frozenset({"
+
+
 @pytest.mark.parametrize(
-    ("mutant", "check"),
+    ("mutant", "check", "failing"),
     [
         pytest.param(
             ReordersSections,
             test_a_created_item_reads_back_keyed_and_ordered_like_the_content_in_the_services_form,
+            "At index 0 diff: [('planting', 'Sow in spring.\\n'), ('intro', 'Welcome.\\n')]",
             id="reordered-sections",
         ),
         pytest.param(
             HidesHandEdits,
             test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            f"At index 0 diff: () != {PLANTING_EDIT}",
             id="hidden-hand-edits",
         ),
         pytest.param(
             ReadsWhatItLastWrote,
             test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            f"At index 1 diff: () != {PLANTING_EDIT}",
             id="hand-edits-missing-from-the-read",
         ),
         pytest.param(
             DropsTheStampSection,
             test_the_stamp_carries_the_section_the_item_holds,
+            "section_id: None != 'tools'",
             id="stamp-without-section",
         ),
         pytest.param(
             LandsBeforeRejecting,
             test_a_content_write_sent_with_a_stale_layout_is_rejected_and_changes_nothing,
+            "Left contains one more item: ('tools', 'Spade.\\n')",
             id="lands-before-rejecting",
         ),
         pytest.param(
             KeepsClearedFields,
             test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_absent,
+            "At index 1 diff: 'Shed' != 'Orchard'",
             id="keeps-cleared-fields",
         ),
         pytest.param(
             KeepsTheCover,
             test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them,
+            f"At index 1 diff: ('{SUNFLOWER}', 'https://example.com/garden.png') != ('{SUNFLOWER}', None)",
             id="keeps-the-cover",
         ),
         pytest.param(
             ClosesEverySectionAgain,
             test_the_comparable_form_of_a_comparable_form_is_itself,
+            "assert ItemContent(",
             id="comparable-form-not-idempotent",
         ),
         pytest.param(
             NamesItemsByTitle,
             test_a_link_to_an_item_names_it_by_the_address_the_service_gives_it,
+            "url: 'https://items.example.com/Garden handbook' != 'https://items.example.com/page-2'",
             id="link-by-title",
         ),
         pytest.param(
             ForgetsLinks,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            LINKS_NOT_READ_BACK,
             id="forgets-links",
         ),
         pytest.param(
             AddsEachSentLinkBesideTheOthers,
             test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled,
+            f"Left contains one more item: {ISSUE_LINKS[1]!r}",
             id="doubles-a-moved-link",
         ),
         pytest.param(
             RewritesLinksEachTime,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            "At index 3 diff: 4 != 3",
             id="rewrites-unchanged-links",
         ),
         pytest.param(
             ReadsItemsWithoutTheirLinks,
             test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read,
+            NO_LINKS_READ,
             id="items-read-without-their-links",
         ),
         pytest.param(
             KeepsOldLinks,
             test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link,
+            f"At index 0 diff: {BOTH_ISSUE_LINKS} != ({ISSUE_LINKS[0]!r},)",
             id="keeps-old-links",
         ),
         pytest.param(
             ReportsLinksAsEdits,
             test_links_change_neither_the_content_nor_the_stamp_and_never_count_as_an_edit,
+            "At index 1 diff: (Part(kind='section', key='intro'),) != ()",
             id="links-reported-as-edits",
         ),
         pytest.param(
             DropsLinksOnSectionWrites,
             test_a_section_write_after_links_keeps_them,
+            NO_LINKS_READ,
             id="section-write-drops-links",
         ),
         pytest.param(
             LinksBeforeCheckingTheStamp,
             test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing,
+            f"At index 0 diff: {BOTH_ISSUE_LINKS} != ()",
             id="links-before-checking-the-stamp",
         ),
         pytest.param(
             ReadsLinksOfAnyStamp,
             test_links_are_read_only_for_the_stamp_the_item_carries,
+            f"Left contains 2 more items, first extra item: {ISSUE_LINKS[0]!r}",
             id="links-read-for-any-stamp",
         ),
         pytest.param(
             LinksWithoutStamping,
             test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links,
+            LINKS_NOT_READ_BACK,
             id="links-without-stamping",
         ),
     ],
 )
 def test_each_contract_check_fails_on_a_transport_that_breaks_it(
-    mutant: type[FakeTransport], check: Callable[[TransportUnderTest], None]
+    mutant: type[FakeTransport], check: Callable[[TransportUnderTest], None], failing: str
 ) -> None:
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=re.escape(failing)):
         check(_mutant(mutant))

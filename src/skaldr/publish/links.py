@@ -49,10 +49,16 @@ def paired_items(drafts: Sequence[TargetDraft]) -> dict[ItemRef, tuple[ItemRef, 
     by_section: defaultdict[str | None, list[tuple[str, ItemRef]]] = defaultdict(list[tuple[str, ItemRef]])
     for service, ref in drafted:
         by_section[ref.section_id].append((service, ref))
-    return {
+    pairs = {
         ref: tuple(other for other_service, other in by_section[ref.section_id] if other_service != service)
         for service, ref in drafted
     }
+    for draft in drafts:
+        document = ItemRef(draft.label, None)
+        if draft.target.links_its_sections_from_the_document() and document in pairs:
+            sections = (ItemRef(draft.label, item.section_id) for item in draft.sections)
+            pairs[document] = (*pairs[document], *sections)
+    return pairs
 
 
 def _service_and_title(link: ShownLink) -> str:

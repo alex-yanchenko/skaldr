@@ -3567,7 +3567,8 @@
             "discriminator": {
               "mapping": {
                 "jira": "#/$defs/JiraTarget",
-                "notion": "#/$defs/NotionTarget"
+                "notion": "#/$defs/NotionTarget",
+                "slack": "#/$defs/SlackTarget"
               },
               "propertyName": "to"
             },
@@ -3577,6 +3578,9 @@
               },
               {
                 "$ref": "#/$defs/JiraTarget"
+              },
+              {
+                "$ref": "#/$defs/SlackTarget"
               }
             ]
           },
@@ -5069,6 +5073,105 @@
         }
       },
       "title": "SectionFields",
+      "type": "object"
+    },
+    "SlackTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Top-level section ids this target is built from, kept in document order. Left out: the whole document.",
+          "title": "From"
+        },
+        "split": {
+          "description": "Top-level section ids that each become their own child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the document.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Split",
+          "type": "array"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TargetOverride"
+          },
+          "description": "Per-item field values keyed by a split section id, applied over `where.fields`.",
+          "title": "Overrides",
+          "type": "object"
+        },
+        "to": {
+          "const": "slack",
+          "description": "Publish to Slack canvases: `slack`.",
+          "title": "To",
+          "type": "string"
+        },
+        "where": {
+          "$ref": "#/$defs/SlackWhere",
+          "description": "The conversation each new canvas is shared with, or the canvas the document is written into. Left out: canvases shared with no one."
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "SlackTarget",
+      "type": "object"
+    },
+    "SlackWhere": {
+      "additionalProperties": false,
+      "properties": {
+        "conversation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Slack channel or DM id (C..., G... or D...), or a link to one, that skaldr lets read each canvas it creates and where it posts the link to the document's canvas, once, when it creates it; the document's canvas links each section canvas in its stamp. Left out: the canvases are shared with no one. Not part of the target's place, so changing it moves no canvas.",
+          "title": "Conversation"
+        },
+        "canvas": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An existing Slack canvas id (F...), or a link to it, the document is written into, replacing its content.",
+          "title": "Canvas"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The id or name of the signed-in Slack workspace to publish with; needed only when signed in to several. Part of the target's place, so naming another workspace is a move, which skaldr refuses.",
+          "title": "Workspace"
+        }
+      },
+      "title": "SlackWhere",
       "type": "object"
     },
     "StatusItem": {
@@ -6672,7 +6775,7 @@
         }
       ],
       "default": null,
-      "description": "Where the document publishes (Notion pages, Jira issues). Omitted from the source embedded in a rendered page. Not yet accepted on an index document."
+      "description": "Where the document publishes (Notion pages, Jira issues, Slack canvases). Omitted from the source embedded in a rendered page. Not yet accepted on an index document."
     }
   },
   "required": [

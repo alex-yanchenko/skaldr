@@ -8,11 +8,12 @@ from skaldr.frozen_model import FrozenModel
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish_block.jira import JiraTarget
 from skaldr.publish_block.notion import NotionTarget
+from skaldr.publish_block.slack import SlackTarget
 from skaldr.publish_block.target import Location, TargetBase
 
 NOT_A_SECTION = "which is not the id of a top-level section (a section is named by its `id:`)"
 
-_AnyPublishTarget = NotionTarget | JiraTarget
+_AnyPublishTarget = NotionTarget | JiraTarget | SlackTarget
 PublishTarget = Annotated[_AnyPublishTarget, Field(discriminator="to")]
 PUBLISH_TARGET_TYPES: Final[tuple[type[TargetBase], ...]] = get_args(_AnyPublishTarget)
 

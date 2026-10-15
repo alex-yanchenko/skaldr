@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -206,4 +207,134 @@ def test_an_adoption_that_wrote_the_content_but_not_the_stamp_is_written_again(t
         Applied((f'create   document "Garden handbook" into {NOTION_PAGE_ID}',)),
         [("create", "Garden handbook", "", NOTION_PAGE_ID)],
         Stamp(DOC_ID, None),
+    )
+
+
+def _write_of_planting_interrupted(tmp_path: Path, transport: FakeTransport) -> Path:
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    _publish(path, transport)
+    write_garden_report(
+        tmp_path, publish=make_notion_publish(), blocks=make_garden_blocks(planting="Sow in May.")
+    )
+    transport.lose_the_next_write()
+    _interrupted(path, transport, LOST_WRITE)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("publish", "label"),
+    [
+        pytest.param(make_notion_publish(), TARGET_LABEL, id="notion"),
+        pytest.param(JIRA_PUBLISH, "jira project PLAN under no parent issue", id="jira"),
+    ],
+)
+@pytest.mark.parametrize(
+    "by_hand",
+    [
+        pytest.param("## Planting\n", id="a-line-deleted"),
+        pytest.param("Sow in May.\n## Planting\n", id="lines-reordered"),
+        pytest.param("", id="the-section-deleted"),
+    ],
+)
+def test_a_section_edited_after_an_interrupted_write_to_a_service_that_writes_a_part_at_once_is_an_edit(
+    tmp_path: Path, publish: dict[str, Any], label: str, by_hand: str
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=publish)
+    _publish(path, transport)
+    write_garden_report(tmp_path, publish=publish, blocks=make_garden_blocks(planting="Sow in May."))
+    transport.drop_the_connection_after_write(1)
+    _interrupted(path, transport, DROPPED_AFTER_WRITE)
+    transport.edit_section_by_hand("page-1", "planting", by_hand)
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (
+                RemoteEdit(
+                    ItemRef(label, None),
+                    section_part("planting"),
+                    "blocks[2]",
+                    "## Planting\nSow in spring.\n",
+                    by_hand,
+                    None,
+                    None,
+                ),
+            ),
+            "edited",
+        ),
+        [],
+    )
+
+
+def _any_text_a_split_write_left(_current: str | None, _published: str | None, _expected: str | None) -> bool:
+    return True
+
+
+def _publish_splitting_writes(path: Path, transport: FakeTransport) -> ApplyOutcome:
+    registry = fake_registry(transport, left_by_a_split_write=_any_text_a_split_write_left)
+    return apply_publish(prepare_publish(path, registry))
+
+
+def test_a_section_a_split_write_left_unfinished_is_written_again_on_a_service_that_splits_writes(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _write_of_planting_interrupted(tmp_path, transport)
+    transport.leave_a_section_half_written("page-1", "planting", "## Planting\n")
+
+    outcome = _publish_splitting_writes(path, transport)
+
+    assert (outcome, transport.items["page-1"].raw_sections["planting"]) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        "## Planting\nSow in May.\n",
+    )
+
+
+def test_a_section_the_service_reports_as_edited_is_an_edit_even_where_a_split_write_could_leave_it(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _write_of_planting_interrupted(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", "## Planting\n")
+
+    outcome = _publish_splitting_writes(path, transport)
+
+    assert outcome == Refused(
+        (
+            RemoteEdit(
+                DOCUMENT,
+                section_part("planting"),
+                "blocks[2]",
+                "## Planting\nSow in spring.\n",
+                "## Planting\n",
+                None,
+                None,
+            ),
+        ),
+        "edited",
+    )
+
+
+def test_a_line_nobody_published_in_a_section_an_interrupted_write_left_is_an_edit(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _write_of_planting_interrupted(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", "## Planting\nSow in May.\nWater daily.\n")
+
+    outcome = _publish(path, transport)
+
+    assert outcome == Refused(
+        (
+            RemoteEdit(
+                DOCUMENT,
+                section_part("planting"),
+                "blocks[2]",
+                "## Planting\nSow in spring.\n",
+                "## Planting\nSow in May.\nWater daily.\n",
+                None,
+                None,
+            ),
+        ),
+        "edited",
     )

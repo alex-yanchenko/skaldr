@@ -62,12 +62,17 @@ class PublishedTarget(FrozenModel):
         return [*document, *self.sections.items()]
 
 
+def _is_unset(value: str | None) -> bool:
+    return value is None
+
+
 class PendingCreate(FrozenModel):
     target: str
     section_id: str | None
     parent_id: str | None
     title: str
     into_id: str | None = None
+    created_id: str | None = Field(default=None, exclude_if=_is_unset)
     service: Service | None = None
     target_as_written: JsonFields | None = None
 

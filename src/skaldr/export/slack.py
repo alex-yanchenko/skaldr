@@ -27,13 +27,14 @@ from skaldr.export.markup import (
     heading_line,
     indent_lines,
     joined,
+    label_then,
     pipe_table_lines,
     quoted,
     spaced,
     styled,
     table_width,
 )
-from skaldr.export.runs import ExportRich
+from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
@@ -47,6 +48,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListKind,
     ListNode,
+    LoweredDocument,
     Media,
     Node,
     Paragraph,
@@ -58,7 +60,8 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS, Person
-from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
+from skaldr.richtext import DateMention, MarkerStyle, Plain, ScriptPosition
+from skaldr.typed_links import date_target_text
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
@@ -104,8 +107,14 @@ class _SlackRuns(CommonMarkRuns):
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
 
-    def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
-        return f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
+        canvas_date = f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)
+        return label_then(label, canvas_date)
+
+    def date_mention_around(self, run: DateMention, written_label: str, /) -> str:
+        if export_visible_text(run.label).strip() == date_target_text(run.start, run.end):
+            return self.date_mention("", run.start, run.end)
+        return super().date_mention_around(run, written_label)
 
     def person_mention(self, label: str, _key: str, person: Person, /) -> str:
         if person.slack is None:
@@ -429,6 +438,26 @@ class _CanvasWriter:
 
     def blocks(self, blocks: Sequence[_CanvasBlock]) -> list[str]:
         return joined([lines for _, lines in self.rendered(blocks)])
+
+
+def _with_a_list_separator_where_lists_meet(
+    rendered: list[tuple[_CanvasBlock, list[str]]], last_before: _CanvasBlock | None
+) -> list[tuple[_CanvasBlock, list[str]]]:
+    if rendered and isinstance(rendered[0][0], _List) and isinstance(last_before, _List):
+        return [(_LIST_SEPARATOR_PARAGRAPH, [LIST_SEPARATOR]), *rendered]
+    return rendered
+
+
+def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
+    writer = _CanvasWriter()
+    texts: list[str] = []
+    last_block: _CanvasBlock | None = None
+    for region in document.regions:
+        rendered = writer.rendered(_canvas_blocks(region.nodes, "top"))
+        rendered = _with_a_list_separator_where_lists_meet(rendered, last_block)
+        texts.append("\n".join(joined([lines for _, lines in rendered])) + "\n" if rendered else "")
+        last_block = rendered[-1][0] if rendered else last_block
+    return tuple(texts)
 
 
 def render_slack(nodes: Sequence[Node]) -> str:

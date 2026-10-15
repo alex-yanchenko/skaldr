@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterator, Mapping
+from datetime import date
 from typing import Any, Protocol
 
 import pytest
@@ -7,8 +8,9 @@ from jsonschema import Draft4Validator, ValidationError
 
 from skaldr.export.adf import IssueLinks, render_adf, render_adf_document
 from skaldr.export.lower import lower_report
-from skaldr.export.tree import Node
+from skaldr.export.tree import Node, Paragraph
 from skaldr.models import parse_report
+from skaldr.richtext import DateMention, Plain, Styled
 from tests.conftest import REPO_ROOT
 from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_example, make_report
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -93,6 +95,40 @@ def test_every_lowered_node_type_writes_a_document_the_adf_schema_accepts(node: 
 
 def test_a_document_using_every_block_inline_and_mark_is_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf(showcase_nodes(), SITE)) == []
+
+
+def test_a_date_with_a_label_and_a_date_range_with_a_label_are_accepted_by_the_adf_schema() -> None:
+    paragraph = Paragraph(
+        (
+            DateMention((Styled("bold", (Plain("1 Oct"),)),), date(2026, 10, 1), None),
+            Plain(" "),
+            DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9)),
+        )
+    )
+
+    document = render_adf((paragraph,))
+
+    assert (document, _problems(document)) == (
+        {
+            "version": 1,
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": "1 Oct", "marks": [{"type": "strong"}]},
+                        {"type": "text", "text": " "},
+                        {"type": "date", "attrs": {"timestamp": "1790812800000"}},
+                        {"type": "text", "text": " the week "},
+                        {"type": "date", "attrs": {"timestamp": "1791158400000"}},
+                        {"type": "text", "text": " to "},
+                        {"type": "date", "attrs": {"timestamp": "1791504000000"}},
+                    ],
+                }
+            ],
+        },
+        [],
+    )
 
 
 def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:

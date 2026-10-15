@@ -27,7 +27,7 @@ from skaldr.publish.reading import (
     read_items_written_into,
     read_published,
     remote_edits,
-    settle_interrupted_adoptions,
+    settle_interrupted_creates,
     shown_token,
 )
 from skaldr.publish.state import PendingCreate, PublishState, held_state_lock, save_state
@@ -175,7 +175,7 @@ class _Preflight:
 
 def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
     refuse_overlong_link_ids(prepared)
-    prepared = prepared.with_state(settle_interrupted_adoptions(prepared, transports))
+    prepared = prepared.with_state(settle_interrupted_creates(prepared, transports))
     refuse_moved_targets(prepared.drafts, prepared.state)
     _refuse_an_interrupted_create(prepared)
     published = read_published(prepared, transports)

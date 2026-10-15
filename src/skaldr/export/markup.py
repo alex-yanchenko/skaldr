@@ -27,6 +27,7 @@ from skaldr.models import BADGE_COLOR_TONE, Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
+    DateMention,
     Link,
     MarkerStyle,
     ScriptPosition,
@@ -34,6 +35,7 @@ from skaldr.richtext import (
     StyleName,
     TextRunWriter,
     Tinted,
+    write_runs,
 )
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -56,6 +58,10 @@ def wrap_around_core(inner: str, opener: str, closer: str) -> str:
     lead = inner[: len(inner) - len(inner.lstrip())]
     trail = inner[len(inner.rstrip()) :]
     return f"{lead}{opener}{core}{closer}{trail}"
+
+
+def label_then(label: str, written_date: str) -> str:
+    return f"{label} {written_date}" if label.strip() else written_date
 
 
 def styled(style: MarkerStyle, inner: str) -> str:
@@ -204,6 +210,9 @@ class MarkupRuns(TextRunWriter, ABC):
 
     def date_mention(self, label: str, _start: date, _end: date | None, /) -> str:
         return label
+
+    def date_mention_around(self, run: DateMention, written_label: str, /) -> str:
+        return self.date_mention(written_label, run.start, run.end)
 
     def person_mention(self, label: str, _key: str, _person: Person, /) -> str:
         return label
@@ -375,6 +384,8 @@ class CommonMarkRuns(MarkupRuns, ABC):
                     pieces += self._anchor_link_pieces(run, enclosing)
                 case SectionLink():
                     pieces += self._anchor_link_pieces(run, enclosing)
+                case DateMention():
+                    pieces.append(self.date_mention_around(run, write_runs(run.label, self)))
                 case Chip():
                     pieces += [
                         self._tone_dot_prefix(BADGE_COLOR_TONE[run.tone]),

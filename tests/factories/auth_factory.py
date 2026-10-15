@@ -19,6 +19,7 @@ from skaldr.auth.store import (
     CredentialsT,
     JiraCredentials,
     NotionCredentials,
+    SlackCredentials,
     StoredEntry,
     save_notion_returning_the_replaced,
 )
@@ -439,6 +440,34 @@ def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
     }
     _refuse_unknown_fields(overrides, fields)
     return JiraCredentials.model_validate({**fields, **overrides})
+
+
+SLACK_USER_TOKEN = "xoxp-0000-example-token"
+
+
+def make_slack_credentials(**overrides: str | None) -> SlackCredentials:
+    fields: dict[str, str | None] = {
+        "access_token": SLACK_USER_TOKEN,
+        "team_id": "T0EXAMPLE1",
+        "team_name": "Example Garden",
+        "user_id": "U0EXAMPLE1",
+        "user_name": "rowan",
+        "url": "https://example-garden.slack.com/",
+    }
+    _refuse_unknown_fields(overrides, fields)
+    return SlackCredentials.model_validate({**fields, **overrides})
+
+
+def slack_auth_answer(**overrides: object) -> dict[str, object]:
+    return {
+        "ok": True,
+        "url": "https://example-garden.slack.com/",
+        "team": "Example Garden",
+        "user": "rowan",
+        "team_id": "T0EXAMPLE1",
+        "user_id": "U0EXAMPLE1",
+        **overrides,
+    }
 
 
 def store_jira_entry_an_earlier_skaldr_wrote(keychain: InMemoryKeyring, site: str) -> None:

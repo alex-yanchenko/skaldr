@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from skaldr.auth.store import save_slack
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
@@ -22,11 +23,17 @@ from skaldr.publish.jira import JiraConnector
 from skaldr.publish.links import LinkStep, describe_links, paired_items
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.plan import ItemRef
+from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.state import load_state, save_state, state_path_for
 from skaldr.publish.transport import ShownLink, Stamp
-from skaldr.publish_block import JiraTarget, NotionTarget
+from skaldr.publish_block import JiraTarget, NotionTarget, SlackTarget
 from skaldr.publish_block.target import JsonFields
-from tests.factories.auth_factory import make_jira_credentials, make_notion_credentials, seed_notion
+from tests.factories.auth_factory import (
+    make_jira_credentials,
+    make_notion_credentials,
+    make_slack_credentials,
+    seed_notion,
+)
 from tests.factories.jira_factory import FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import (
@@ -49,7 +56,11 @@ from tests.factories.report_factory import (
     NOTION_PAGE_URL,
     make_jira_target,
     make_notion_target,
+    make_slack_target,
 )
+from tests.factories.slack_factory import TEAM_ID as SLACK_TEAM
+from tests.factories.slack_factory import WORKSPACE_URL as SLACK_WORKSPACE_URL
+from tests.factories.slack_factory import InMemorySlack
 
 JIRA_LABEL = "jira project PLAN under no parent issue"
 OPS_LABEL = "jira project OPS under no parent issue"
@@ -59,6 +70,8 @@ OTHER_LABEL = f"notion page {OTHER_PAGE_ID}"
 NOTION_DOCUMENT = ItemRef(TARGET_LABEL, None)
 NOTION_TOOLS = ItemRef(TARGET_LABEL, "tools")
 JIRA_DOCUMENT = ItemRef(JIRA_LABEL, None)
+SLACK_DOCUMENT = ItemRef("slack canvases", None)
+SLACK_TOOLS = ItemRef("slack canvases", "tools")
 JIRA_TOOLS = ItemRef(JIRA_LABEL, "tools")
 FIRST_LINKS = (
     "link     document to jira project PLAN under no parent issue, document",
@@ -88,7 +101,7 @@ LINKED_BOTH_WAYS = _publish_block(_notion(split=["tools"]), _jira("DEMO", split=
 
 
 def _registry(transport: FakeTransport) -> ConnectorRegistry:
-    return fake_registry(transport, target_types=(NotionTarget, JiraTarget))
+    return fake_registry(transport, target_types=(NotionTarget, JiraTarget, SlackTarget))
 
 
 def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
@@ -157,6 +170,15 @@ def _links_of(transport: FakeTransport) -> dict[str, tuple[ShownLink, ...]]:
             ),
             {NOTION_DOCUMENT: (), NOTION_TOOLS: (), ItemRef(OTHER_LABEL, None): ()},
             id="one-service-only",
+        ),
+        pytest.param(
+            _publish_block(_notion(), make_slack_target(where={}, split=["tools"])),
+            {
+                NOTION_DOCUMENT: (SLACK_DOCUMENT,),
+                SLACK_DOCUMENT: (NOTION_DOCUMENT, SLACK_TOOLS),
+                SLACK_TOOLS: (),
+            },
+            id="a-document-canvas-links-its-section-canvases",
         ),
     ],
 )
@@ -785,6 +807,63 @@ def test_removing_the_jira_target_deletes_its_remote_links_and_drops_the_issues_
         [],
         [],
     )
+
+
+def test_a_canvas_links_its_notion_page_and_jira_issue_in_its_stamp_and_both_link_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion, jira, registry = _services()
+    save_slack(make_slack_credentials())
+    slack = InMemorySlack()
+    registry = ConnectorRegistry(
+        [registry.for_service("notion"), registry.for_service("jira"), SlackConnector(http=slack.mock())]
+    )
+    publish = _publish_block(_notion(), _jira("DEMO"), make_slack_target(where={}))
+    path = write_garden_report(tmp_path, publish=publish)
+
+    first = main(["publish", str(path), "--apply"], registry=registry)
+    capsys.readouterr()
+    writes = (len(notion.writes()), len(jira.requests), len(slack.writes()))
+    again = main(["publish", str(path), "--apply"], registry=registry)
+
+    canvas_link = f"{SLACK_WORKSPACE_URL}docs/{SLACK_TEAM}/F000000001"
+    assert (
+        first,
+        slack.markdown_of("F000000001").splitlines()[-1],
+        notion.markdown_of(DOCUMENT_PAGE).splitlines()[-1],
+        _remote_link_bodies(jira),
+    ) == (
+        0,
+        "Published with skaldr from document garden-handbook · Notion "
+        f"[Garden handbook](https://www.notion.so/{DOCUMENT_PAGE}) · Jira "
+        "[DEMO-1](https://example.atlassian.net/browse/DEMO-1)",
+        "Published with skaldr from document garden-handbook · Jira "
+        "[DEMO-1](https://example.atlassian.net/browse/DEMO-1) · Slack "
+        f'[Garden handbook]({canvas_link}) {{color="gray"}}',
+        [
+            (
+                "/rest/api/3/issue/DEMO-1/remotelink",
+                {
+                    "globalId": f"skaldr:garden-handbook:document:notion:{DOCUMENT_PAGE}",
+                    "object": {"url": f"https://www.notion.so/{DOCUMENT_PAGE}", "title": "Garden handbook"},
+                },
+            ),
+            (
+                "/rest/api/3/issue/DEMO-1/remotelink",
+                {
+                    "globalId": "skaldr:garden-handbook:document:slack:F000000001",
+                    "object": {"url": canvas_link, "title": "Garden handbook"},
+                },
+            ),
+        ],
+    )
+    assert (
+        again,
+        capsys.readouterr().out.splitlines()[-1],
+        notion.writes()[writes[0] :],
+        [call for call in jira.calls()[writes[1] :] if call[0] != "GET"],
+        slack.writes()[writes[2] :],
+    ) == (0, "Nothing to publish: every item matches the YAML.", [], [], [])
 
 
 def test_the_dry_run_prints_the_links_after_the_plan(

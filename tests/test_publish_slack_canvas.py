@@ -1,0 +1,423 @@
+import pytest
+
+from skaldr.publish.slack.canvas_markdown import (
+    UNKEYED_SECTION,
+    CanvasBlock,
+    HtmlSection,
+    archived_line,
+    canvas_blocks,
+    canvas_markdown_of,
+    canvas_stamp_line,
+    comparable_block,
+    comparable_text,
+    html_sections,
+    keyed_canvas,
+    left_by_a_split_canvas_write,
+)
+from skaldr.publish.transport import ShownLink, Stamp
+
+STAMP = Stamp("garden-handbook", None)
+STAMP_LINE = "Published with skaldr from document garden-handbook"
+INTRO = "Welcome to the garden.\n"
+TOOLS = "## Tools\n\n- Spade.\n- Rake.\n"
+PLANTING = "## Planting\n\nSow in spring.\n"
+LAYOUT = {"intro": INTRO, "tools": TOOLS, "planting": PLANTING}
+STORED = (
+    "# Garden handbook\n\n"
+    "Welcome to the garden.\n\n"
+    "## Tools\n\n"
+    "* Spade.\n* Rake.\n\n"
+    "## Planting\n\n"
+    "Sow in spring.\n\n"
+    f"{STAMP_LINE}\n"
+)
+DEMO_12 = ShownLink(
+    service="jira", item_id="DEMO-12", url="https://example.atlassian.net/browse/DEMO-12", title="DEMO-12"
+)
+HANDBOOK_PAGE = ShownLink(
+    service="notion",
+    item_id="0123456789abcdef0123456789abcdef",
+    url="https://www.notion.so/0123456789abcdef0123456789abcdef",
+    title="Garden handbook",
+)
+
+
+@pytest.mark.parametrize(
+    ("markdown", "blocks"),
+    [
+        pytest.param("", [], id="empty"),
+        pytest.param("\n\n", [], id="only-blank-lines"),
+        pytest.param("One.\n\nTwo.\n", ["One.", "Two."], id="paragraphs"),
+        pytest.param("One.\n\n\n\nTwo.", ["One.", "Two."], id="several-blank-lines-and-no-final-newline"),
+        pytest.param("first\\\nsecond\n", ["first\\\nsecond"], id="hard-break-keeps-one-block"),
+        pytest.param(
+            "```bash\nrun\n\nagain\n```\n\nAfter.\n",
+            ["```bash\nrun\n\nagain\n```", "After."],
+            id="fence-with-a-blank-line",
+        ),
+        pytest.param(
+            "````\n```\n\n````\n\nAfter.\n",
+            ["````\n```\n\n````", "After."],
+            id="longer-fence-holds-a-shorter",
+        ),
+        pytest.param(
+            "::: {.callout}\nFirst.\n\nSecond.\n:::\n\nAfter.\n",
+            ["::: {.callout}\nFirst.\n\nSecond.\n:::", "After."],
+            id="callout-with-a-blank-line",
+        ),
+        pytest.param(
+            "::: {.layout}\n::: {.column}\nLeft.\n\n:::\n::: {.column}\nRight.\n:::\n:::\n\nAfter.\n",
+            ["::: {.layout}\n::: {.column}\nLeft.\n\n:::\n::: {.column}\nRight.\n:::\n:::", "After."],
+            id="nested-containers",
+        ),
+        pytest.param("* a\n\n \n\n* b\n", ["* a", " ", "* b"], id="a-space-paragraph-is-a-block"),
+        pytest.param(
+            "|A|B|\n|  ---  |  ---  |\n|1|2|\n\n\nAfter.\n",
+            ["|A|B|\n|  ---  |  ---  |\n|1|2|", "After."],
+            id="table-and-its-extra-blank-line",
+        ),
+    ],
+)
+def test_a_canvas_splits_into_the_blocks_slack_keeps_apart(markdown: str, blocks: list[str]) -> None:
+    assert canvas_blocks(markdown) == blocks
+
+
+@pytest.mark.parametrize(
+    ("block", "comparable"),
+    [
+        pytest.param("- Spade.\n- Rake.", "* Spade.\n* Rake.", id="dash-bullets"),
+        pytest.param("- [ ] water\n  - [x] seed", "* [ ] water\n  * [x] seed", id="nested-check-items"),
+        pytest.param("+ Spade.", "* Spade.", id="plus-bullet"),
+        pytest.param("---", "---", id="divider"),
+        pytest.param(
+            "| A | B |\n| --- | :---: |\n| 1 | 2 \\| 3 |",
+            "|A|B|\n|---|---|\n|1|2 \\| 3|",
+            id="table-as-sent",
+        ),
+        pytest.param("|A|B|\n|  ---  |  ---  |\n|1|2|", "|A|B|\n|---|---|\n|1|2|", id="table-as-stored"),
+        pytest.param(
+            "Ask ![](@U0EXAMPLE1) in ![](#C0EXAMPLE1).", "Ask <@U0EXAMPLE1> in <#C0EXAMPLE1>.", id="mentions"
+        ),
+        pytest.param("first\\\nsecond", "first\nsecond", id="hard-break"),
+        pytest.param("Sow.   ", "Sow.", id="trailing-spaces"),
+        pytest.param("&nbsp;", "", id="list-separator-as-sent"),
+        pytest.param(" ", "", id="list-separator-as-stored"),
+        pytest.param("\xa0", "", id="no-break-space"),
+        pytest.param("one\n \ntwo", "one\ntwo", id="space-line-inside-a-paragraph"),
+        pytest.param(
+            "```text\n- keep  \n![](@U0EXAMPLE1)\n```", "```text\n- keep  \n![](@U0EXAMPLE1)\n```", id="code"
+        ),
+        pytest.param("::: {.callout}\n- one\n\n:::", "::: {.callout}\n* one\n:::", id="callout"),
+    ],
+)
+def test_a_block_compares_in_the_form_slack_stores(block: str, comparable: str) -> None:
+    assert comparable_block(block) == comparable
+
+
+def test_a_comparable_text_is_its_own_comparable_text() -> None:
+    once = comparable_text("- a\n\n&nbsp;\n\n- [x] b\n\n| A |\n| --- |\n| 1 \\| 2 |\n\n```\n\n- c\n```\n")
+
+    assert (once, comparable_text(once)) == (
+        "* a\n\n* [x] b\n\n|A|\n|---|\n|1 \\| 2|\n\n```\n\n- c\n```\n",
+        "* a\n\n* [x] b\n\n|A|\n|---|\n|1 \\| 2|\n\n```\n\n- c\n```\n",
+    )
+
+
+def test_an_empty_text_compares_as_nothing() -> None:
+    assert (comparable_text(""), comparable_text("&nbsp;\n")) == ("", "")
+
+
+def test_sections_are_written_as_blocks_apart_from_one_another() -> None:
+    assert canvas_markdown_of([INTRO, "", TOOLS, f"{STAMP_LINE}"]) == (
+        f"Welcome to the garden.\n\n## Tools\n\n- Spade.\n- Rake.\n\n{STAMP_LINE}\n"
+    )
+
+
+def test_a_canvas_reads_keyed_by_section_under_its_title_and_over_its_stamp() -> None:
+    keyed = keyed_canvas(STORED + "\nA note someone added below.\n", LAYOUT)
+
+    assert (
+        keyed.title,
+        dict(keyed.raw_sections),
+        dict(keyed.sections),
+        keyed.stamp,
+        keyed.links,
+        [(block.key, block.role) for block in keyed.blocks],
+        keyed.content_start,
+        keyed.stamp_at,
+    ) == (
+        "Garden handbook",
+        {
+            "intro": "Welcome to the garden.\n",
+            "tools": "## Tools\n\n* Spade.\n* Rake.\n",
+            "planting": "## Planting\n\nSow in spring.\n",
+        },
+        {
+            "intro": "Welcome to the garden.\n",
+            "tools": "## Tools\n\n* Spade.\n* Rake.\n",
+            "planting": "## Planting\n\nSow in spring.\n",
+        },
+        STAMP,
+        (),
+        [
+            (None, "title"),
+            ("intro", "published"),
+            ("tools", "published"),
+            ("tools", "published"),
+            ("planting", "published"),
+            ("planting", "published"),
+            (None, "stamp"),
+            (None, "below"),
+        ],
+        1,
+        6,
+    )
+
+
+def test_a_block_edited_by_hand_stays_in_its_section_as_added() -> None:
+    edited = STORED.replace("Sow in spring.", "Sow in June.")
+
+    keyed = keyed_canvas(edited, LAYOUT)
+
+    assert (keyed.sections["planting"], keyed.blocks[5]) == (
+        "## Planting\n\nSow in June.\n",
+        CanvasBlock("Sow in June.", "planting", "added"),
+    )
+
+
+def test_a_block_added_by_hand_between_sections_opens_the_next_one_and_inside_a_section_joins_it() -> None:
+    added = STORED.replace("* Rake.\n\n", "* Rake.\n\nBring gloves.\n\n").replace(
+        "## Planting\n\n", "## Planting\n\nIn the north beds:\n\n"
+    )
+
+    keyed = keyed_canvas(added, LAYOUT)
+
+    assert (keyed.raw_sections["tools"], keyed.raw_sections["planting"]) == (
+        "## Tools\n\n* Spade.\n* Rake.\n",
+        "Bring gloves.\n\n## Planting\n\nIn the north beds:\n\nSow in spring.\n",
+    )
+
+
+def test_a_separator_paragraph_belongs_to_the_section_around_it() -> None:
+    layout = {"lists": "- a\n\n&nbsp;\n\n- [ ] b\n"}
+
+    keyed = keyed_canvas("# T\n\n* a\n\n \n\n* [ ] b\n", layout)
+
+    assert (dict(keyed.raw_sections), [block.role for block in keyed.blocks]) == (
+        {"lists": "* a\n\n \n\n* [ ] b\n"},
+        ["title", "published", "blank", "published"],
+    )
+
+
+def test_a_canvas_read_with_no_layout_keys_its_content_as_unpublished() -> None:
+    keyed = keyed_canvas("# Blank page\n\nA line.\n", {})
+
+    assert (keyed.title, dict(keyed.raw_sections), keyed.blocks[1]) == (
+        "Blank page",
+        {UNKEYED_SECTION: "A line.\n"},
+        CanvasBlock("A line.", UNKEYED_SECTION, "added"),
+    )
+
+
+def test_an_empty_canvas_has_its_title_and_nothing_else() -> None:
+    keyed = keyed_canvas("# Blank page\n", LAYOUT)
+
+    assert (keyed.title, dict(keyed.raw_sections), keyed.stamp, keyed.content_start, keyed.stamp_at) == (
+        "Blank page",
+        {},
+        None,
+        1,
+        None,
+    )
+
+
+def test_a_canvas_without_a_title_heading_has_a_blank_title() -> None:
+    keyed = keyed_canvas("Welcome to the garden.\n", {"intro": INTRO})
+
+    assert (keyed.title, keyed.content_start, dict(keyed.raw_sections)) == ("", 0, {"intro": INTRO})
+
+
+def test_the_stamp_names_its_links_and_reads_them_back() -> None:
+    line = canvas_stamp_line(Stamp("garden-handbook", "tools"), (DEMO_12, HANDBOOK_PAGE))
+
+    keyed = keyed_canvas(f"# Tools\n\n## Tools\n\n{line}\n", {"tools": "## Tools\n"})
+
+    assert (line, keyed.stamp, keyed.links) == (
+        "Published with skaldr from document garden-handbook, section tools · Jira "
+        "[DEMO-12](https://example.atlassian.net/browse/DEMO-12) · Notion "
+        "[Garden handbook](https://www.notion.so/0123456789abcdef0123456789abcdef)",
+        Stamp("garden-handbook", "tools"),
+        (DEMO_12, HANDBOOK_PAGE),
+    )
+
+
+def test_a_link_title_is_escaped_for_the_canvas() -> None:
+    renamed = DEMO_12.model_copy(update={"title": "GARDEN_OPS [north]"})
+
+    assert canvas_stamp_line(STAMP, (renamed,)) == (
+        "Published with skaldr from document garden-handbook · Jira "
+        "[GARDEN\\_OPS \\[north\\]](https://example.atlassian.net/browse/DEMO-12)"
+    )
+
+
+def test_stamp_text_inside_a_code_block_is_content() -> None:
+    code = f"```\n{STAMP_LINE}\n```"
+
+    keyed = keyed_canvas(f"# T\n\n{code}\n", {"code": code + "\n"})
+
+    assert (keyed.stamp, dict(keyed.raw_sections)) == (None, {"code": code + "\n"})
+
+
+def test_the_last_stamp_counts_and_an_earlier_one_is_content() -> None:
+    other = "Published with skaldr from document kitchen-rota"
+
+    keyed = keyed_canvas(f"# T\n\n{INTRO}\n{other}\n\n{STAMP_LINE}\n", {"intro": INTRO})
+
+    assert (keyed.stamp, keyed.raw_sections["intro"]) == (STAMP, f"{INTRO}\n{other}\n")
+
+
+@pytest.mark.parametrize(
+    ("markdown", "archived", "opens_with_the_archived_line"),
+    [
+        pytest.param(
+            f"# Garden handbook (archived by skaldr)\n\n{archived_line('garden-handbook')}\n",
+            True,
+            True,
+            id="archived",
+        ),
+        pytest.param(f"# Garden handbook\n\n{archived_line(None)}\n", False, True, id="not-yet-renamed"),
+        pytest.param(
+            f"# T\n\n{archived_line(None)}\n\nA note kept below.\n", False, True, id="content-kept-below"
+        ),
+        pytest.param("# Garden handbook (archived by skaldr)\n\nWelcome.\n", True, False, id="title-marker"),
+        pytest.param(
+            f"# T\n\nWelcome.\n\n{archived_line(None)}\n", False, False, id="archived-line-not-first"
+        ),
+        pytest.param(
+            f"# T\n\n{archived_line(None)} Welcome back.\n", False, False, id="archived-words-then-more-text"
+        ),
+        pytest.param(STORED, False, False, id="published"),
+    ],
+)
+def test_a_canvas_is_archived_by_its_title_marker_and_an_unfinished_archive_by_its_opening_line(
+    markdown: str, archived: bool, opens_with_the_archived_line: bool
+) -> None:
+    keyed = keyed_canvas(markdown, LAYOUT)
+
+    assert (keyed.archived, keyed.opens_with_the_archived_line) == (archived, opens_with_the_archived_line)
+
+
+@pytest.mark.parametrize(
+    ("keys", "position"),
+    [
+        pytest.param(["intro", "tools"], 4, id="after-the-last-block-of-the-key-before"),
+        pytest.param(["intro", "tools", "harvest"], 4, id="a-key-the-canvas-does-not-hold-is-passed-over"),
+        pytest.param(["harvest", "pruning"], 1, id="no-key-held-goes-after-the-title"),
+        pytest.param([], 1, id="first-goes-after-the-title"),
+    ],
+)
+def test_a_section_goes_after_the_last_block_of_the_nearest_key_before_it_that_the_canvas_holds(
+    keys: list[str], position: int
+) -> None:
+    assert keyed_canvas(STORED, LAYOUT).position_after(keys) == position
+
+
+def test_the_archived_line_names_the_document() -> None:
+    assert (archived_line("garden-handbook"), archived_line(None)) == (
+        "skaldr archived this canvas: the document garden-handbook no longer publishes here.",
+        "skaldr archived this canvas: the document no longer publishes here.",
+    )
+
+
+SOW_IN_SPRING = "## Planting\n\nSow in spring.\n"
+SOW_IN_MAY = "## Planting\n\nSow in May.\n"
+
+
+@pytest.mark.parametrize(
+    ("current", "expected", "left"),
+    [
+        pytest.param(f"{SOW_IN_MAY}\n{SOW_IN_SPRING}", SOW_IN_MAY, True, id="inserted-before-any-delete"),
+        pytest.param(f"{SOW_IN_MAY}\n## Planting\n", SOW_IN_MAY, True, id="inserted-and-one-deleted"),
+        pytest.param("## Planting\n", SOW_IN_MAY, True, id="deleted-first-partly"),
+        pytest.param(None, SOW_IN_MAY, True, id="deleted-first-wholly"),
+        pytest.param("## Planting\n", None, True, id="removal-partly-done"),
+        pytest.param(
+            "Sow in May.\n\n## Planting\n\nSow in spring.\n", SOW_IN_MAY, False, id="a-new-block-gone"
+        ),
+        pytest.param(f"## Planting\n\n{SOW_IN_SPRING}", SOW_IN_MAY, False, id="a-new-block-gone-later"),
+        pytest.param("Sow in spring.\n", SOW_IN_MAY, False, id="an-old-block-gone-from-the-front"),
+        pytest.param("Sow in spring.\n\n## Planting\n", SOW_IN_MAY, False, id="old-blocks-reordered"),
+        pytest.param(f"{SOW_IN_MAY}\nWater daily.\n", SOW_IN_MAY, False, id="a-block-nobody-published"),
+        pytest.param("Sow in spring.\n", None, False, id="removal-from-the-front"),
+    ],
+)
+def test_a_split_write_leaves_the_new_blocks_before_a_shrinking_head_of_the_old_or_that_head_alone(
+    current: str | None, expected: str | None, left: bool
+) -> None:
+    assert left_by_a_split_canvas_write(current, SOW_IN_SPRING, expected) is left
+
+
+@pytest.mark.parametrize(
+    ("html", "sections"),
+    [
+        pytest.param(
+            "<h1 id='temp:C:1'>Garden</h1><p id='temp:C:2'>Welcome <b>all</b>.</p><hr id='temp:C:3'>"
+            "<ul id='temp:C:4'><li id='temp:C:5'>Spade</li><li id='temp:C:6'>Rake &amp; hoe</li></ul>",
+            (
+                HtmlSection("temp:C:1", ("garden",)),
+                HtmlSection("temp:C:2", ("welcome", "all")),
+                HtmlSection("temp:C:3", ()),
+                HtmlSection("temp:C:4", ("spade", "rake", "hoe")),
+            ),
+            id="top-level-elements",
+        ),
+        pytest.param(
+            "<html><head><title>x</title><meta charset='utf-8'></head><body><p id='a'>Bed</p><br/>"
+            "<img id='b' src='x.png'/></body></html>",
+            (HtmlSection("a", ("bed",)), HtmlSection(None, ()), HtmlSection("b", ())),
+            id="document-wrapper-and-void-elements",
+        ),
+        pytest.param("", (), id="empty"),
+    ],
+)
+def test_each_top_level_element_of_the_html_gives_its_section_id_and_words(
+    html: str, sections: tuple[HtmlSection, ...]
+) -> None:
+    assert html_sections(html) == sections
+
+
+@pytest.mark.parametrize(
+    ("words", "block", "shown"),
+    [
+        pytest.param(("sow", "in", "spring"), "Sow in spring.", True, id="paragraph"),
+        pytest.param(("planting",), "## Planting", True, id="heading"),
+        pytest.param(("spade", "rake"), "* Spade.\n* Rake.", True, id="list-markers"),
+        pytest.param(("spade", "rake"), "1. Spade.\n2. Rake.", True, id="numbered-list"),
+        pytest.param(("spade", "rake"), "- [x] Spade.\n- [ ] Rake.", True, id="checklist-marks"),
+        pytest.param(("run", "again"), "```bash\nrun again\n```", True, id="fence-language"),
+        pytest.param(
+            ("bed", "crop", "north", "beans"),
+            "|Bed|Crop|\n|  ---  |  ---  |\n|North|Beans|",
+            True,
+            id="table",
+        ),
+        pytest.param(
+            ("see", "demo", "12"),
+            "See [DEMO-12](https://example.atlassian.net/browse/DEMO-12)",
+            True,
+            id="link-text",
+        ),
+        pytest.param(("ask", "rowan", "first"), "Ask <@U0EXAMPLE1> first", True, id="mention-shown-by-name"),
+        pytest.param(("ask", "first"), "Ask ![](@U0EXAMPLE1) first", True, id="mention-as-sent"),
+        pytest.param(("bring", "gloves"), "Bring gloves :gloves:", True, id="emoji-shown-as-a-picture"),
+        pytest.param((), "&nbsp;", True, id="list-separator"),
+        pytest.param(("note",), "::: {.callout}\nNote\n:::", True, id="callout"),
+        pytest.param(("planting",), "Sow in spring.", False, id="another-block"),
+        pytest.param(("sow", "in"), "Sow in spring.", False, id="words-missing"),
+        pytest.param(("spring", "in", "sow"), "Sow in spring.", False, id="words-out-of-order"),
+    ],
+)
+def test_an_html_section_shows_a_block_when_it_holds_the_blocks_words_in_order(
+    words: tuple[str, ...], block: str, shown: bool
+) -> None:
+    assert HtmlSection("temp:C:1", words).shows(block) is shown

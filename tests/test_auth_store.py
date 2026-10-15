@@ -716,7 +716,8 @@ def test_an_unreadable_index_is_reported_and_leaves_the_keychain_alone(keychain:
 
     assert (str(raised.value), keychain.entries) == (
         "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry "
-        "named index under skaldr, then name each Jira site or Notion workspace to find its sign-in again",
+        "named index under skaldr, then name each Jira site, Notion workspace or Slack workspace to find its "
+        "sign-in again",
         {("skaldr", "index"): "not json"},
     )
 

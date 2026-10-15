@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,7 @@ from skaldr.models import BadgeColorLiteral, ToneLiteral, load_report, parse_rep
 from skaldr.richtext import (
     AnchorLink,
     Citation,
+    DateMention,
     Link,
     Placeholder,
     Plain,
@@ -253,6 +255,18 @@ def test_an_inline_run_becomes_markdown(run: ExportRun, written: str) -> None:
     nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph((run,))]
 
     assert render_markdown(nodes) == f"## How we count\n\n{written}\n"
+
+
+def test_a_date_chip_inside_a_link_label_is_written_inside_the_link() -> None:
+    chip = DateMention((Plain("1 Oct"),), date(2026, 10, 1), None)
+    week = DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9))
+
+    link = Link((Plain("due "), chip, Plain(" "), week), "https://e.com")
+
+    assert render_markdown([Paragraph((link,))]) == (
+        '[due <time datetime="2026-10-01">1 Oct</time> '
+        '<span data-range="2026-10-05/2026-10-09">the week</span>](https://e.com)\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -1220,16 +1234,23 @@ def _spliced(*texts: str) -> ExportRich:
             id="a-letter-after-a-space-changes-nothing",
         ),
         pytest.param(
-            parse_rich("*a **(x)**[t](date:2026-10-01)* z"),
+            parse_rich("*a **(x)**[t](jira:AB-1)* z"),
             "*a <strong>(x)</strong>t* z\n",
             "<p><em>a <strong>(x)</strong>t</em> z</p>\n",
             id="nested-emphasis-falls-back-on-its-own",
         ),
         pytest.param(
-            (Link(parse_rich("**(x)**[t](date:2026-10-01)"), "https://x.io"),),
+            (Link(parse_rich("**(x)**[t](jira:AB-1)"), "https://x.io"),),
             "[<strong>(x)</strong>t](https://x.io)\n",
             '<p><a href="https://x.io"><strong>(x)</strong>t</a></p>\n',
             id="inside-a-link-label",
+        ),
+        pytest.param(
+            parse_rich("**(x)**[t](date:2026-10-01) and [**(y)**](date:2026-10-02)z"),
+            '**(x)**<time datetime="2026-10-01">t</time> and <time datetime="2026-10-02">**(y)**</time>z\n',
+            '<p><strong>(x)</strong><time datetime="2026-10-01">t</time> and '
+            '<time datetime="2026-10-02"><strong>(y)</strong></time>z</p>\n',
+            id="markers-beside-a-date-chip-stay",
         ),
     ],
 )

@@ -9,6 +9,7 @@ import pytest
 from skaldr.errors import PublishError
 from skaldr.publish.content import ItemContent
 from skaldr.publish.state import (
+    PendingCreate,
     PublishedItem,
     PublishedTarget,
     PublishState,
@@ -85,6 +86,44 @@ def test_a_state_file_saved_before_links_loads_with_no_links_and_one_with_links_
     assert (before_links, with_links.targets[TARGET_LABEL].document) == (
         _state(),
         None if document is None else document.model_copy(update={"links": (issue,)}),
+    )
+
+
+def test_a_pending_create_writes_the_created_id_only_once_it_has_one_so_an_older_skaldr_can_read_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "garden.skaldr-state.json"
+    waiting = PendingCreate(
+        target=TARGET_LABEL, section_id=None, parent_id="0123456789abcdef0123456789abcdef", title="Garden"
+    )
+    created = waiting.model_copy(update={"created_id": "F000000001"})
+    save_state(path, PublishState(doc_id=DOC_ID, pending_creates=[waiting, created]))
+
+    saved = json.loads(path.read_text(encoding="utf-8"))["pending_creates"]
+
+    assert (saved, load_state(path, DOC_ID).pending_creates) == (
+        [
+            {
+                "target": TARGET_LABEL,
+                "section_id": None,
+                "parent_id": "0123456789abcdef0123456789abcdef",
+                "title": "Garden",
+                "into_id": None,
+                "service": None,
+                "target_as_written": None,
+            },
+            {
+                "target": TARGET_LABEL,
+                "section_id": None,
+                "parent_id": "0123456789abcdef0123456789abcdef",
+                "title": "Garden",
+                "into_id": None,
+                "created_id": "F000000001",
+                "service": None,
+                "target_as_written": None,
+            },
+        ],
+        [waiting, created],
     )
 
 

@@ -19,6 +19,7 @@ from skaldr.publish.links import describe_links
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.output import diff_json, diff_lines, remote_edit_lines, status_line
 from skaldr.publish.plan import describe_plan
+from skaldr.publish.slack.connector import SlackConnector
 
 NOTHING_PUBLISHED = (
     "Nothing to publish: the `publish` block has no targets and no item of this document is published."
@@ -26,14 +27,14 @@ NOTHING_PUBLISHED = (
 
 
 def installed_connectors() -> ConnectorRegistry:
-    return ConnectorRegistry((NotionConnector(), JiraConnector()))
+    return ConnectorRegistry((NotionConnector(), JiraConnector(), SlackConnector()))
 
 
 def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="skaldr",
-        description="Publish a skaldr document to the Notion pages and Jira issues its `publish` block "
-        "names.",
+        description="Publish a skaldr document to the Notion pages, Jira issues and Slack canvases its "
+        "`publish` block names.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     publish = commands.add_parser(
