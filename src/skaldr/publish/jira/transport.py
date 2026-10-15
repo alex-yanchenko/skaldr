@@ -5,7 +5,7 @@ from typing import TypeVar
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 from typing_extensions import Self
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
 from skaldr.publish.connector import SPLIT_ADVICE
 from skaldr.publish.content import (
@@ -290,7 +290,10 @@ class JiraTransport:
         try:
             return self._read_back_created(created.key, content, layout, stamp)
         except ConnectorError as exc:
-            raise ConnectorError(f"created {created.key} but could not read it back: {exc}") from exc
+            raise CreatedButUnfinishedError(
+                f"created {created.key} but could not read it back: {exc}; the next publish records it",
+                created.key,
+            ) from exc
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         current = self._read_unchanged(item_id, request.raw_sections)

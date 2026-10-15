@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing_extensions import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError
+from skaldr.publish.connector import LeftByASplitWrite
 from skaldr.publish.content import (
     ItemContent,
     Part,
@@ -20,7 +21,7 @@ from skaldr.publish.content import (
 from skaldr.publish.drafts import ItemDraft
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
-from skaldr.publish.state import PendingCreate, PublishedItem, PublishState
+from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import RemoteItem, Transport
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, Service
@@ -96,19 +97,39 @@ def _has_content(remote: RemoteItem) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class _InterruptedWrite:
+    transport: Transport
+    left_by_a_split_write: LeftByASplitWrite | None
+    reported: tuple[Part, ...]
+
+    def half_written(self, item: PublishedItem, remote: RemoteItem, parts: Sequence[Part]) -> list[Part]:
+        left = self.left_by_a_split_write
+        if item.writing is None or left is None:
+            return []
+        saved = self.transport.comparable_form(item.remote)
+        expected = self.transport.comparable_form(item.writing.rendered)
+        return [
+            part
+            for part in parts
+            if part not in self.reported
+            and left(part_text(remote.comparable, part), part_text(saved, part), part_text(expected, part))
+        ]
+
+
 def _settled(
-    item: PublishedItem, remote: RemoteItem, edited: tuple[Part, ...], transport: Transport
+    item: PublishedItem, remote: RemoteItem, edited: tuple[Part, ...], interrupted: _InterruptedWrite
 ) -> tuple[PublishedItem, tuple[Part, ...]]:
     if item.writing is None:
         return item, edited
-    expected = transport.comparable_form(item.writing.rendered)
-    landed = [
-        part.part
-        for part in item.writing.parts
-        if part.part in edited and part_text(remote.comparable, part.part) == part_text(expected, part.part)
-    ]
-    rest = tuple(part for part in edited if part not in landed)
-    rendered = with_parts(item.rendered, item.writing.rendered, landed)
+    expected = interrupted.transport.comparable_form(item.writing.rendered)
+    written = [part.part for part in item.writing.parts if part.part in edited]
+    landed = [part for part in written if part_text(remote.comparable, part) == part_text(expected, part)]
+    half_written = interrupted.half_written(item, remote, [part for part in written if part not in landed])
+    rest = tuple(part for part in edited if part not in landed and part not in half_written)
+    rendered = with_parts(
+        with_parts(item.rendered, item.writing.rendered, landed), remote.comparable, half_written
+    )
     if not rest:
         settled = item.model_copy(
             update={
@@ -125,7 +146,7 @@ def _settled(
     settled = item.model_copy(
         update={
             "rendered": rendered,
-            "remote": with_parts(item.remote, remote.comparable, landed),
+            "remote": with_parts(item.remote, remote.comparable, [*landed, *half_written]),
             "writing": still_writing if landed else item.writing,
         }
     )
@@ -209,19 +230,25 @@ def _pending_target(prepared: Prepared, pending: PendingCreate) -> TargetBase:
     return target_type.model_validate(pending.target_as_written)
 
 
-def settle_interrupted_adoptions(prepared: Prepared, transports: Transports) -> PublishState:
+def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> PublishState:
     state = prepared.state
     for pending in prepared.state.pending_creates:
-        if pending.into_id is None:
+        item_id = pending.into_id or pending.created_id
+        if item_id is None:
             continue
         target = _pending_target(prepared, pending)
         transport = transports.for_target(pending.target, target)
-        remote = _read_or_none(transport, pending.into_id, NOT_YET_PUBLISHED)
+        remote = _read_or_none(transport, item_id, NOT_YET_PUBLISHED)
+        ref = ItemRef(pending.target, pending.section_id)
+        created_by_skaldr = pending.into_id is None
+        if remote is not None and created_by_skaldr:
+            refuse_another_documents_item(ref, remote, prepared.doc_id)
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
-        if remote is not None and remote.doc_id == prepared.doc_id:
-            ref = ItemRef(pending.target, pending.section_id)
-            state = with_item(state, ref, target, _adopted(remote, prepared.draft_of(ref), transport))
+        if remote is not None and (created_by_skaldr or remote.doc_id == prepared.doc_id):
+            held = _adopted(remote, prepared.draft_of(ref), transport)
+            origin: ItemOrigin = "created" if created_by_skaldr else "adopted"
+            state = with_item(state, ref, target, held.model_copy(update={"origin": origin}))
     return state
 
 
@@ -238,6 +265,7 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
     state = prepared.state
     for label, published_target in prepared.state.targets.items():
         transport = transports.for_target(label)
+        split_writes = prepared.registry.for_target(prepared.target_named(label)).left_by_a_split_write
         for section_id, held in published_target.held_items():
             ref = ItemRef(label, section_id)
             draft = prepared.draft_of(ref)
@@ -262,7 +290,8 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             reported = tuple(transport.parts_edited_after(item.item_id, item.marker, published))
             compared = _owned_part_of(read.comparable, [item.rendered])
             unsettled = tuple(dict.fromkeys([*differing_parts(published, compared), *reported]))
-            settled, edited = _settled(item, remote, unsettled, transport)
+            interrupted = _InterruptedWrite(transport, split_writes, reported)
+            settled, edited = _settled(item, remote, unsettled, interrupted)
             if settled != item:
                 state = with_item(state, ref, prepared.target_named(label), settled)
             landed = set(unsettled) - set(edited)

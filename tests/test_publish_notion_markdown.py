@@ -305,6 +305,25 @@ def test_the_stamp_groups_its_links_by_service_in_the_order_each_service_first_a
     )
 
 
+def test_the_stamp_names_a_paired_slack_canvas_and_reads_it_back_by_its_canvas_id() -> None:
+    canvas = ShownLink(
+        service="slack",
+        item_id="F0EXAMPLE1",
+        url="https://example.slack.com/docs/T0EXAMPLE1/F0EXAMPLE1",
+        title="Handbook",
+    )
+    written = stamp_line(Stamp("garden-handbook", None), (DEMO_12, canvas))
+
+    keyed = keyed_page(_page(INTRO, written), {"intro": INTRO})
+
+    assert (written, keyed.links) == (
+        "Published with skaldr from document garden-handbook · Jira "
+        "[DEMO-12](https://example.atlassian.net/browse/DEMO-12) · Slack "
+        '[Handbook](https://example.slack.com/docs/T0EXAMPLE1/F0EXAMPLE1) {color="gray"}\n',
+        (DEMO_12, canvas),
+    )
+
+
 def test_a_stamp_written_before_links_existed_reads_with_no_links() -> None:
     keyed = keyed_page(_page(INTRO, STAMP_LINE), {"intro": INTRO})
 

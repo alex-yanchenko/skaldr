@@ -43,6 +43,12 @@ class WriteRejectedError(ConnectorError):
     pass
 
 
+class CreatedButUnfinishedError(ConnectorError):
+    def __init__(self, message: str, item_id: str) -> None:
+        self.item_id = item_id
+        super().__init__(message)
+
+
 class RegionNotFoundError(LookupError):
     pass
 

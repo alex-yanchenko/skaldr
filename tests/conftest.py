@@ -11,7 +11,7 @@ import pytest
 
 from skaldr.auth import store
 from skaldr.auth.notion import CALLBACK_THREAD_PREFIX
-from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT
+from skaldr.auth.store import JIRA_ENVIRONMENT, NOTION_ENVIRONMENT, SLACK_ENVIRONMENT
 from tests.factories.auth_factory import InMemoryKeyring, PlaintextKeyring
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +36,7 @@ def _finish_keychain_threads() -> list[str]:
 
 @pytest.fixture(autouse=True)
 def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
-    for name in (*NOTION_ENVIRONMENT, *JIRA_ENVIRONMENT):
+    for name in (*NOTION_ENVIRONMENT, *JIRA_ENVIRONMENT, *SLACK_ENVIRONMENT):
         monkeypatch.delenv(name, raising=False)
     _refuse_a_keyring_that_is_not_in_memory("before the test")
     in_memory = InMemoryKeyring()

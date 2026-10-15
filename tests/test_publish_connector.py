@@ -8,9 +8,9 @@ from skaldr.errors import ConnectorError
 from skaldr.export import ExportTarget
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import installed_connectors
-from skaldr.publish_block import PUBLISH_TARGET_TYPES, JiraTarget, NotionTarget, TargetBase
+from skaldr.publish_block import PUBLISH_TARGET_TYPES, JiraTarget, NotionTarget, SlackTarget, TargetBase
 from skaldr.services import SERVICES
-from tests.factories import make_jira_target, make_notion_target
+from tests.factories import make_jira_target, make_notion_target, make_slack_target
 from tests.factories.publish_factory import FakeConnector
 
 
@@ -30,8 +30,8 @@ class FreeTextTarget(TargetBase):
     to: str
 
 
-def test_the_service_vocabulary_names_notion_and_jira() -> None:
-    assert SERVICES == ("notion", "jira")
+def test_the_service_vocabulary_names_notion_jira_and_slack() -> None:
+    assert SERVICES == ("notion", "jira", "slack")
 
 
 def test_each_service_has_one_publish_block_target_in_vocabulary_order() -> None:
@@ -45,7 +45,8 @@ def test_each_service_has_one_publish_block_target_in_vocabulary_order() -> None
 )
 def test_a_target_whose_to_names_no_single_service_is_refused(target_type: type[TargetBase]) -> None:
     expected = (
-        f"{target_type.__name__} names no service: its `to` field must be a Literal of one of notion, jira"
+        f"{target_type.__name__} names no service: its `to` field must be a Literal of one of "
+        "notion, jira, slack"
     )
 
     with pytest.raises(TypeError, match=f"^{re.escape(expected)}$"):
@@ -58,6 +59,7 @@ def test_each_installed_connector_names_the_export_it_renders() -> None:
     assert {service: registry.for_service(service).export_target for service in SERVICES} == {
         "notion": "notion",
         "jira": "adf",
+        "slack": "slack",
     }
 
 
@@ -67,8 +69,8 @@ def test_the_export_flavors_are_notion_markdown_adf_and_slack() -> None:
 
 @pytest.mark.parametrize(
     ("target_type", "authored"),
-    [(NotionTarget, make_notion_target), (JiraTarget, make_jira_target)],
-    ids=["notion", "jira"],
+    [(NotionTarget, make_notion_target), (JiraTarget, make_jira_target), (SlackTarget, make_slack_target)],
+    ids=["notion", "jira", "slack"],
 )
 def test_a_target_finds_the_connector_registered_for_its_service(
     target_type: type[TargetBase], authored: Callable[[], dict[str, Any]]
@@ -94,7 +96,7 @@ def test_two_connectors_for_one_service_are_refused() -> None:
 def test_a_connector_for_a_target_the_publish_block_does_not_list_is_refused() -> None:
     expected = (
         "a connector publishes UnlistedNotionTarget, which is not one of the publish block's targets "
-        "(NotionTarget, JiraTarget)"
+        "(NotionTarget, JiraTarget, SlackTarget)"
     )
 
     with pytest.raises(ConnectorError, match=f"^{re.escape(expected)}$"):

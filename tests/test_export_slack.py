@@ -10,8 +10,9 @@ from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
 from skaldr.export.runs import Break, Chip, ExportRun, SectionLink, StatusMark, TonedLabel
-from skaldr.export.slack import render_slack
+from skaldr.export.slack import render_slack, render_slack_regions
 from skaldr.export.tree import (
+    BlockRegion,
     Callout,
     CodeBlock,
     Columns,
@@ -26,8 +27,10 @@ from skaldr.export.tree import (
     ListEntry,
     ListKind,
     ListNode,
+    LoweredDocument,
     Media,
     Node,
+    PagePart,
     Paragraph,
     Quote,
     Tab,
@@ -1746,6 +1749,32 @@ def test_the_cli_refuses_a_grid_inside_a_walkthrough_step(
         f"error: {_walkthrough_grid_message(0)}\n",
         "",
         False,
+    )
+
+
+def test_each_region_is_written_on_its_own_and_together_they_read_as_the_whole_canvas() -> None:
+    document = LoweredDocument(
+        "Garden handbook",
+        (
+            PagePart("header", (make_paragraph("For new members"),)),
+            BlockRegion(0, (make_bullets("Spade.", "Rake."),), section_id="tools"),
+            BlockRegion(1, (make_bullets("Sow in spring."),), section_id="planting"),
+            BlockRegion(2, (), section_id="empty"),
+            BlockRegion(3, (Heading(2, make_rich_text("Notes")),), section_id="notes"),
+        ),
+    )
+
+    regions = render_slack_regions(document)
+
+    assert (regions, "\n".join(region for region in regions if region)) == (
+        (
+            "For new members\n",
+            "* Spade.\n* Rake.\n",
+            "&nbsp;\n\n* Sow in spring.\n",
+            "",
+            "## Notes\n",
+        ),
+        render_slack(document.body),
     )
 
 
