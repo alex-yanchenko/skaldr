@@ -9,8 +9,17 @@ import pytest
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.adf import render_adf
-from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap, swaps
-from skaldr.export.check import reject_what_the_target_cannot_show
+from skaldr.export.capabilities import (
+    CAPABILITIES,
+    TARGET_SUBJECTS,
+    Capability,
+    Details,
+    Feature,
+    Rejection,
+    Swap,
+    swaps,
+)
+from skaldr.export.check import feature_hits, reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
@@ -24,19 +33,25 @@ from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
 from skaldr.richtext import Plain
 from tests.factories import (
+    REFUSED_IN_THE_EXAMPLE,
+    example_data,
     make_jira_target,
+    make_notion_target,
     make_report,
     make_request,
     make_section,
     make_tabs,
     make_toggle,
+    refused_block_types,
     write_index_document,
     write_report,
 )
 from tests.factories.capability_factory import (
     ADF_CASES,
+    ALL_REFUSALS,
     CANVAS_CALLOUT_WHY,
     CLEAN_BLOCKS,
+    DIAGRAM_REFUSALS,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
@@ -119,6 +134,27 @@ PANES_WRITTEN_AS_TITLES: dict[ExportTarget, object] = {
     "markdown": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
     "slack": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
 }
+DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+    "range": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
+    "flow diagram": {"adf": "reject", "slack": "reject"},
+    "fan diagram": {"adf": "reject", "slack": "reject"},
+    "link, citation, math or strikethrough in a flow or fan step's note": {
+        "markdown": "reject",
+        "notion": "reject",
+    },
+    "chart": {"adf": "swap", "slack": "swap"},
+    "math block": {"adf": "swap", "slack": "swap"},
+    "inline math": {"adf": "swap", "slack": "swap"},
+    "image from a data: URI": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
+    "chart with several series": {"markdown": "swap", "notion": "swap", "adf": "swap", "slack": "swap"},
+}
+VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {**SEEDED_VERDICTS, **DIAGRAM_VERDICTS}
+REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
+    (feature, target)
+    for feature, cells in CAPABILITIES.items()
+    for target, capability in cells.items()
+    if isinstance(capability, Rejection)
+}
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
@@ -157,6 +193,15 @@ def _verdict(capability: Capability) -> Verdict:
             return capability
 
 
+def _first_refused_feature(case: RefusedCase) -> Feature:
+    report = parse_report(make_report(blocks=case.blocks))
+    return next(
+        hit.details.feature
+        for hit in feature_hits(report, lower_report(report))
+        if isinstance(CAPABILITIES[hit.details.feature][case.target], Rejection)
+    )
+
+
 def _adf_expands(*titles: str) -> list[dict[str, Any]]:
     return [
         {
@@ -177,7 +222,7 @@ def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
     reject_what_the_target_cannot_show(report, lower_report(report), target)
 
 
-def _publish_with_a_fake_jira(data_path: Path, transport: FakeTransport) -> int:
+def _publish_with_fake_connectors(data_path: Path, transport: FakeTransport) -> int:
     registry = ConnectorRegistry(
         [FakeConnector(NotionTarget, transport), FakeConnector(JiraTarget, transport, export_target="adf")]
     )
@@ -192,7 +237,7 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
 
     assert verdicts == {
         feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
-        for feature, seeded in SEEDED_VERDICTS.items()
+        for feature, seeded in VERDICTS.items()
     }
 
 
@@ -212,14 +257,10 @@ def test_every_rejection_names_only_details_its_feature_supplies(
 
 
 def test_every_rejection_in_the_table_has_a_seeded_case_and_every_seeded_case_names_a_rejection() -> None:
-    rejections = {
-        (feature, target)
-        for feature, cells in CAPABILITIES.items()
-        for target, capability in cells.items()
-        if isinstance(capability, Rejection)
-    }
+    named = [(case.feature, case.target) for case in ALL_REFUSALS.values()]
+    refused = [(_first_refused_feature(case), case.target) for case in ALL_REFUSALS.values()]
 
-    assert {(case.feature, case.target) for case in SEEDED_REFUSALS.values()} == rejections
+    assert (refused, set(named)) == (named, REJECTION_CELLS)
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)
@@ -259,6 +300,12 @@ def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> 
     _check(CLEAN_BLOCKS, target)
 
 
+def test_each_target_refuses_these_top_level_blocks_of_the_example() -> None:
+    refused = {target: refused_block_types(example_data(), target) for target in EXPORT_TARGETS}
+
+    assert refused == REFUSED_IN_THE_EXAMPLE
+
+
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
 @pytest.mark.parametrize("block", SWAPPED_BLOCKS)
 def test_a_block_a_target_swaps_for_another_form_passes_the_check(
@@ -288,8 +335,7 @@ def test_a_writer_that_swaps_panes_refuses_panes_whose_cell_is_not_a_swap(
         RENDERERS[target]([node])
 
     assert str(raised.value) == (
-        f"the capability table keeps a {feature} on {target}, "
-        "but its writer has no form for it other than toggles"
+        f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
     )
 
 
@@ -488,14 +534,38 @@ def test_a_clean_document_exports_to_every_target(tmp_path: Path, target: Export
     assert main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "exported")]) == 0
 
 
-@pytest.mark.parametrize("case", ADF_CASES)
+@pytest.mark.parametrize(
+    "case",
+    [pytest.param(DIAGRAM_REFUSALS[name], id=name) for name in ("notion-range", "notion-data-image")],
+)
+def test_publishing_to_notion_refuses_each_notion_case_before_any_transport_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
+) -> None:
+    data_path = write_report(tmp_path, published_report(case.blocks, make_notion_target()))
+    transport = FakeTransport()
+
+    exit_code = _publish_with_fake_connectors(data_path, transport)
+
+    assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        *ADF_CASES,
+        *(
+            pytest.param(DIAGRAM_REFUSALS[name], id=name)
+            for name in ("adf-range", "adf-flow", "adf-data-image")
+        ),
+    ],
+)
 def test_publishing_to_jira_refuses_each_adf_case_before_any_transport_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
 ) -> None:
     data_path = write_report(tmp_path, published_report(case.blocks, make_jira_target()))
     transport = FakeTransport()
 
-    exit_code = _publish_with_a_fake_jira(data_path, transport)
+    exit_code = _publish_with_fake_connectors(data_path, transport)
 
     assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
 
@@ -505,13 +575,13 @@ def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tm
     target = make_jira_target(**{"from": ["kept"]})
     data_path = write_report(tmp_path, published_report(blocks, target))
 
-    assert _publish_with_a_fake_jira(data_path, FakeTransport()) == 0
+    assert _publish_with_fake_connectors(data_path, FakeTransport()) == 0
 
 
 def test_publishing_a_clean_document_to_jira_sends_it(tmp_path: Path) -> None:
     data_path = write_report(tmp_path, published_report(CLEAN_BLOCKS, make_jira_target()))
     transport = FakeTransport()
 
-    assert _publish_with_a_fake_jira(data_path, transport) == 0
+    assert _publish_with_fake_connectors(data_path, transport) == 0
 
     assert transport.writes() != []

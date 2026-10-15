@@ -24,24 +24,6 @@ from skaldr.export.tree import (
     XYChartMark,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
-from skaldr.richtext import (
-    AnchorLink,
-    Citation,
-    Code,
-    DateMention,
-    DocumentLink,
-    InlineMath,
-    IssueLink,
-    Link,
-    PersonMention,
-    Placeholder,
-    Plain,
-    Run,
-    ScriptText,
-    Styled,
-    Tinted,
-    visible_text,
-)
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -49,7 +31,7 @@ TOTAL_LABEL: Final = "Total"
 
 
 def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") -> GraphNode:
-    note = visible_text(lowering.rich(step.note)) if step.note else ""
+    note = lowering.rich(step.note) if step.note else ()
     return GraphNode(key, one_line(prefix + step.label), note, step.tone)
 
 
@@ -63,29 +45,8 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
     return ListEntry(text, children=children)
 
 
-def _loses_meaning_in_a_plain_label(run: Run) -> bool:
-    match run:
-        case Link() | AnchorLink() | IssueLink() | DocumentLink() | Citation() | InlineMath() | ScriptText():
-            return True
-        case DateMention() | PersonMention():
-            return any(map(_loses_meaning_in_a_plain_label, run.label))
-        case Styled() | Tinted():
-            return any(map(_loses_meaning_in_a_plain_label, run.runs))
-        case Plain() | Code() | Placeholder():
-            return False
-        case _:
-            assert_never(run)
-
-
-def _diagram_cannot_show_all_of(step: FlowStep, lowering: Lowering) -> bool:
-    note_loses_meaning = (
-        any(map(_loses_meaning_in_a_plain_label, lowering.rich(step.note))) if step.note else False
-    )
-    return bool(step.points or step.badges) or note_loses_meaning
-
-
 def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ...]:
-    detailed = [step for step in steps if _diagram_cannot_show_all_of(step, lowering)]
+    detailed = [step for step in steps if step.points or step.badges]
     return (bullets(_step_entry(step, lowering) for step in detailed),) if detailed else ()
 
 
@@ -98,7 +59,7 @@ def lower_flow(block: Flow, lowering: Lowering) -> list[Node]:
     edges = [GraphEdge(source, target) for source, target in pairwise(keys)]
     if block.loop:
         edges.append(GraphEdge(keys[-1], keys[0], dashed=True))
-    graph = Graph("TB" if block.style == "steps" else "LR", nodes, tuple(edges))
+    graph = Graph("TB" if block.style == "steps" else "LR", nodes, tuple(edges), "flow")
     return [Diagram(graph, _supplement(block.steps, lowering))]
 
 
@@ -110,7 +71,7 @@ def lower_fan(block: Fan, lowering: Lowering) -> list[Node]:
         GraphEdge(spoke.key, "hub") if block.direction == "in" else GraphEdge("hub", spoke.key)
         for spoke in spokes
     )
-    graph = Graph("LR", (_graph_node("hub", block.hub, lowering), *spokes), edges)
+    graph = Graph("LR", (_graph_node("hub", block.hub, lowering), *spokes), edges, "fan")
     return [Diagram(graph, _supplement([block.hub, *block.spokes], lowering))]
 
 
@@ -123,28 +84,28 @@ def _donut_table(block: Chart) -> TableNode:
     return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total), authored_as="chart")
 
 
-def _mermaid_cannot_label_its_series(block: Chart) -> bool:
-    return block.stacked or len(block.series) > 1
-
-
 def _donut(block: Chart) -> Diagram:
     pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
     return Diagram(pie, (_donut_table(block),))
 
 
-def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
-    table = TableNode(
-        plain_cells(SERIES_COLUMN, *block.categories),
-        tuple(
-            TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
-            for series in block.series
-        ),
-        authored_as="chart",
+def _stack_totals(block: Chart) -> tuple[TableRow, ...]:
+    if not block.stacked or len(block.series) < 2:
+        return ()
+    stacks = (sum(values) for values in zip(*(series.values for series in block.series), strict=True))
+    return (TableRow(plain_cells(TOTAL_LABEL, *map(compute.fmt, stacks)), emphasis="total"),)
+
+
+def _xy_chart(block: Chart, mark: XYChartMark) -> Diagram:
+    rows = tuple(
+        TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
+        for series in block.series
     )
-    if _mermaid_cannot_label_its_series(block):
-        return table
-    chart = XYChart(mark, tuple(block.categories), tuple(tuple(series.values) for series in block.series))
-    return Diagram(chart, (table,))
+    table = TableNode(
+        plain_cells(SERIES_COLUMN, *block.categories), (*rows, *_stack_totals(block)), authored_as="chart"
+    )
+    values = tuple(tuple(series.values) for series in block.series)
+    return Diagram(XYChart(mark, tuple(block.categories), values, block.stacked), (table,))
 
 
 def lower_chart(block: Chart) -> list[Node]:

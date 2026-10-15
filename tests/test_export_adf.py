@@ -27,9 +27,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Graph,
-    GraphEdge,
-    GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
@@ -59,10 +56,10 @@ from skaldr.export.tree import (
 from skaldr.richtext import Code, Plain, Styled
 from tests.factories import check_nodes, lowered, make_command_request, refusal_of
 from tests.factories.adf_factory import cell as _cell
-from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
 from tests.factories.adf_factory import text_entry as _text_entry
+from tests.factories.capability_factory import xy_chart
 
 Json = Mapping[str, object]
 
@@ -856,45 +853,10 @@ def test_a_request_with_several_cases_is_one_expand_per_case_titled_with_its_sta
     )
 
 
-def test_a_flow_diagram_is_a_bullet_list_of_its_steps_and_where_each_leads() -> None:
-    node = Diagram(_flow(), (ListNode("bullet", (_text_entry("detail"),)),))
-
-    assert _rendered(node) == _doc(
-        {
-            "type": "bulletList",
-            "content": [
-                _item(_paragraph(_text("1: Draft: write it → 2: Review"))),
-                _item(_paragraph(_text("2: Review → 3: Ship"))),
-                _item(_paragraph(_text("3: Ship → 1: Draft (loop back)"))),
-            ],
-        },
-        {"type": "bulletList", "content": [_item(_words("detail"))]},
-    )
-
-
-def test_a_fan_diagram_names_each_spoke_its_hub_leads_to() -> None:
-    graph = Graph(
-        "LR",
-        (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
-        (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
-    )
-
-    assert _rendered(Diagram(graph)) == _doc(
-        {
-            "type": "bulletList",
-            "content": [
-                _item(_paragraph(_text("Hub → A, B"))),
-                _item(_words("A")),
-                _item(_words("B")),
-            ],
-        }
-    )
-
-
 def test_a_chart_is_its_data_table_alone() -> None:
     table = TableNode((_cell("Slice"), _cell("Value")), (TableRow((_cell("a"), _cell("1"))),))
     pie = Diagram(PieChart((PieSlice("a", 1),)), (table,))
-    bars = Diagram(XYChart("bar", ("x",), ((1.0,),)), (table,))
+    bars = Diagram(XYChart("bar", ("x",), ((1.0,),), stacked=False), (table,))
 
     expected = _doc(
         _table(
@@ -904,6 +866,41 @@ def test_a_chart_is_its_data_table_alone() -> None:
     )
     assert _rendered(pie) == expected
     assert _rendered(bars) == expected
+
+
+def _series_table(*rows: tuple[str, str, str], total: tuple[str, str, str] | None = None) -> Json:
+    header = _row(*(_table_cell("tableHeader", text) for text in ("Series", "Mon", "Tue")))
+    body = [_row(*(_table_cell("tableCell", text) for text in row)) for row in rows]
+    if total is not None:
+        bold = [{"type": "tableCell", "content": [_paragraph(_text(text, STRONG))]} for text in total]
+        body.append(_row(*bold))
+    return _doc(_table(header, *body))
+
+
+@pytest.mark.parametrize(
+    "chart",
+    [
+        pytest.param(xy_chart("line", [4, 6]), id="line"),
+        pytest.param(xy_chart("bar", [4, 6]), id="bar"),
+        pytest.param(xy_chart("bar", [4, 6], stacked=True), id="stacked-bar"),
+    ],
+)
+def test_adf_writes_a_chart_with_one_series_as_a_table_of_that_series(chart: dict[str, object]) -> None:
+    assert render_adf(lowered([chart])) == _series_table(("Zone 1", "4", "6"))
+
+
+def test_adf_writes_a_line_chart_with_several_series_as_a_table_with_a_row_per_series() -> None:
+    chart = xy_chart("line", [4, 6], [1, 2])
+
+    assert render_adf(lowered([chart])) == _series_table(("Zone 1", "4", "6"), ("Zone 2", "1", "2"))
+
+
+def test_adf_writes_a_stacked_chart_with_several_series_with_a_bold_total_row() -> None:
+    chart = xy_chart("bar", [4, 6], [1, 2], stacked=True)
+
+    assert render_adf(lowered([chart])) == _series_table(
+        ("Zone 1", "4", "6"), ("Zone 2", "1", "2"), total=("Total", "5", "8")
+    )
 
 
 def test_a_table_of_contents_writes_nothing() -> None:
@@ -979,7 +976,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Toggle: "expand",
     Columns: "paragraph",
     Tabs: "expand",
-    Diagram: "bulletList",
+    Diagram: "table",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

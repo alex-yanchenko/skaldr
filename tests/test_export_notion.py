@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -67,7 +68,10 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    REFUSED_IN_THE_EXAMPLE,
+    accepted_example,
     authored_block_types,
+    example_data,
     folder_texts,
     heading_sections,
     in_a_grid_cell,
@@ -81,11 +85,13 @@ from tests.factories import (
     make_table,
     make_toggle,
     notion_of,
+    refused_block_types,
     rendered_block_count,
 )
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
+WRITE_NOTION_GOLDEN = "SKALDR_WRITE_NOTION_GOLDEN"
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
@@ -414,8 +420,6 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         "- ✅ Ship\n- ⏸️ Vendor\n<empty-block/>\n"
         '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
         '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
-        'Jan to Dec {color="gray"}\n'
-        '- <span color="red">**Q1**</span>: 25.0%, slow\n- **Rest**: 75.0%\n'
     )
 
 
@@ -582,7 +586,7 @@ def test_block_nodes_become_notion_blocks() -> None:
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
         Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
         Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
-        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
+        Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (Paragraph((Plain("detail"),)),)),
     ]
 
     assert render_notion(nodes) == (
@@ -607,10 +611,15 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_notion(load_report(EXAMPLE), tmp_path)
+def test_the_example_less_the_blocks_notion_refuses_matches_the_notion_golden(tmp_path: Path) -> None:
+    out_dir = NOTION_GOLDEN if os.environ.get(WRITE_NOTION_GOLDEN) else tmp_path
 
-    assert folder_texts(tmp_path) == folder_texts(NOTION_GOLDEN)
+    export_notion(accepted_example("notion"), out_dir)
+
+    assert (refused_block_types(example_data(), "notion"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_EXAMPLE["notion"],
+        folder_texts(NOTION_GOLDEN),
+    )
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
@@ -701,7 +710,7 @@ def test_a_tab_toggle_without_a_title_is_titled_by_its_icon_alone_or_nothing(
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
-    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"))
 
     assert render_notion([diagram, Paragraph((Plain("after"),))]) == (
         '```mermaid\nflowchart LR\n    s1["A"]\n```\nafter\n'
@@ -1960,7 +1969,9 @@ def test_a_long_header_widens_its_column_as_much_as_long_body_text_does() -> Non
         pytest.param(Callout("info", (_two_column_table(),)), id="callout"),
         pytest.param(Toggle((Plain("t"),), None, (_two_column_table(),)), id="toggle"),
         pytest.param(Tabs((Tab((Plain("t"),), (_two_column_table(),)),)), id="tabs"),
-        pytest.param(Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_two_column_table(),)), id="diagram"),
+        pytest.param(
+            Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (_two_column_table(),)), id="diagram"
+        ),
     ],
 )
 def test_a_table_nested_in_any_block_is_sized_to_the_full_page(container: Node) -> None:

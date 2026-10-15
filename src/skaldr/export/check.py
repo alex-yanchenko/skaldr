@@ -15,6 +15,7 @@ from skaldr.export.capabilities import (
     GRID_CELL_FEATURES,
     PANES_FEATURES,
     PLACEMENTS,
+    RICH_STEP_NOTE,
     CellCount,
     Container,
     Details,
@@ -27,6 +28,7 @@ from skaldr.export.capabilities import (
     HeldByAListItem,
     ListItemFeature,
     ListStart,
+    Occurrence,
     Panes,
     Placement,
     Rejection,
@@ -48,6 +50,7 @@ from skaldr.export.runs import (
     SwimlaneMark,
     export_visible_text,
 )
+from skaldr.export.swaps import figure_feature
 from skaldr.export.tree import (
     AuthoredNode,
     BlockRegion,
@@ -57,6 +60,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    Graph,
     Heading,
     ListEntry,
     ListNode,
@@ -72,7 +76,17 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import AnyBlock, Grid, InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.models import (
+    AnyBlock,
+    Grid,
+    Image,
+    InnerGrid,
+    Range,
+    Report,
+    Walkthrough,
+    is_data_uri,
+    walk_located_block,
+)
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -111,6 +125,16 @@ _GRID_CELL_AUTHORED_AS: Final = "grid cell"
 
 DocumentPosition = tuple[tuple[int, int, str], ...]
 LocatedDetails = tuple[str, Details]
+
+
+_RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
+    Link,
+    AnchorLink,
+    IssueLink,
+    DocumentLink,
+    Citation,
+    InlineMath,
+)
 
 
 @dataclass(frozen=True)
@@ -248,18 +272,18 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             assert_never(node)
 
 
-def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
+def _every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
     for run in runs:
+        yield run
         match run:
-            case ScriptText():
-                yield run
             case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
-                yield from _scripts(run.label)
+                yield from _every_run_within(run.label)
             case Styled() | Tinted():
-                yield from _scripts(run.runs)
+                yield from _every_run_within(run.runs)
             case (
                 Plain()
                 | Code()
+                | ScriptText()
                 | Citation()
                 | Placeholder()
                 | InlineMath()
@@ -275,6 +299,24 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
                 pass
             case _:
                 assert_never(run)
+
+
+def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
+    return (run for run in _every_run_within(runs) if isinstance(run, ScriptText))
+
+
+def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
+    match run:
+        case ScriptText():
+            return character_without_a_unicode_form(run.position, run.text) is not None
+        case Styled():
+            return run.style == "strike"
+        case _:
+            return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
+
+
+def _loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
+    return any(map(_a_diagram_label_cannot_hold, _every_run_within(runs)))
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -321,9 +363,17 @@ class _TreeWalk:
             if character is not None:
                 yield self.hit(ScriptForm(script.position, script.text, character), node.authored_at)
 
+    def math_hits(self, node: Node) -> Iterator[FeatureHit]:
+        if isinstance(node, DisplayMath):
+            yield self.hit(Occurrence("math block"), node.authored_at)
+        own_runs = _every_run_within(chain.from_iterable(_own_texts(node)))
+        if any(isinstance(run, InlineMath) for run in own_runs):
+            yield self.hit(Occurrence("inline math"), node.authored_at)
+
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)
         yield from self.script_hits(node)
+        yield from self.math_hits(node)
         if place.in_a_column:
             yield from self.grid_cell_hits(node)
         yield from self.placement_hits(node, place)
@@ -351,6 +401,7 @@ class _TreeWalk:
                     yield self.hit(GridCells(len(node.columns)), node.authored_at)
                 yield from self.nodes(nested_nodes(node), place.in_a_column_of_the_tree())
             case Diagram():
+                yield from self.diagram_hits(node)
                 yield from self.nodes(nested_nodes(node), place)
             case (
                 Paragraph() | CodeBlock() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents()
@@ -358,6 +409,14 @@ class _TreeWalk:
                 pass
             case _:
                 assert_never(node)
+
+    def diagram_hits(self, node: Diagram) -> Iterator[FeatureHit]:
+        yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
+        figure = node.figure
+        if isinstance(figure, Graph) and any(
+            _loses_meaning_in_a_diagram_label(step.note) for step in figure.nodes
+        ):
+            yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
@@ -402,7 +461,7 @@ class _TreeWalk:
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
         cells = table_width(node) * (1 + len(node.rows))
         if cells > CANVAS_TABLE_CELL_LIMIT:
-            yield self.hit(CellCount(cells), node.authored_at)
+            yield self.hit(CellCount(cells, _term(node)), node.authored_at)
 
 
 def _shows_columns(block: AnyBlock) -> bool:
@@ -432,12 +491,24 @@ def _located_blocks(report: Report, document: LoweredDocument) -> list[tuple[str
     ]
 
 
-def _model_hits(located: Iterable[tuple[str, AnyBlock]]) -> Iterator[LocatedDetails]:
-    for path, block in located:
-        if isinstance(block, Walkthrough):
+def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
+    match block:
+        case Walkthrough():
             yield from _grids_in_walkthrough_steps(path, block)
-        if isinstance(block, Grid):
+        case Grid():
             yield from _grids_in_grid_cells(path, block)
+        case Range():
+            yield path, Occurrence("range")
+        case Image() if is_data_uri(block.src):
+            yield path, Occurrence("image from a data: URI")
+        case _:
+            return
+
+
+def _model_hits_in_document_order(report: Report, document: LoweredDocument) -> list[LocatedDetails]:
+    located = _located_blocks(report, document)
+    hits = (hit for path, block in located for hit in _block_hits(path, block))
+    return sorted(hits, key=lambda each: _document_position(each[0]))
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -445,6 +516,10 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     if rejection.names_the_heading and hit.heading:
         places.append(f"under the heading '{hit.heading}'")
     return ", ".join(places) or None
+
+
+def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
+    return _TreeWalk(_model_hits_in_document_order(report, document)).document(document.body)
 
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
@@ -463,5 +538,4 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    walk = _TreeWalk(_model_hits(_located_blocks(report, document)))
-    _raise_the_first_rejection(walk.document(document.body), target)
+    _raise_the_first_rejection(feature_hits(report, document), target)

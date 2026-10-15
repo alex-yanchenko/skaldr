@@ -23,7 +23,13 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
-from skaldr.export.swaps import tabs_swapped_for_toggles
+from skaldr.export.swaps import (
+    data_table_swapped_in,
+    figure_mermaid_draws,
+    swaps_the_figure,
+    tabs_swapped_for_toggles,
+    web_address_of,
+)
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
     Callout,
@@ -357,9 +363,10 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
 
 
 def _media_line(node: Media) -> str:
+    url = encode_url(web_address_of(node, "notion"))
     if node.kind == "image":
-        return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
-    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+        return f"![{notion_inline(node.caption or node.description)}]({url})"
+    return f'<{node.kind} src="{url}">{notion_inline(node.caption)}</{node.kind}>'
 
 
 def _quote_line(node: Quote) -> str:
@@ -428,8 +435,13 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return _columns_lines(node, room)
         case Tabs():
             return _tabs_lines(node, room)
+        case Diagram() if swaps_the_figure(node, "notion"):
+            return _notion_blocks(data_table_swapped_in(node, "notion"), room)
         case Diagram():
-            return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement, room)]
+            return [
+                *mermaid_fence_lines(figure_mermaid_draws(node, "notion")),
+                *_notion_blocks(node.supplement, room),
+            ]
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:

@@ -18,10 +18,6 @@ Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray
 - **Vendor: escalate**: 400 (4.0%) <span color="green">**▼ −90**</span> <span color="red">**Vendor**</span>
 - <span color="purple">**Count status**</span>: HEALTHY
 - <span color="gray">**Total units**</span>: 10,000
-<empty-block/>
-- <span color="green">**Matched cleanly**</span>: 85.0%, 8,500 units
-- <span color="yellow">**Floor-fixable**</span>: 11.0%, 1,100
-- <span color="red">**Vendor**</span>: 4.0%, 400
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
@@ -258,7 +254,6 @@ function pickWinner(a, b) {
 +  return a.code.localeCompare(b.code);
 }
 ```
-*Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).* {color="gray"}
 ![Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).](https://example.com/photos/aisle-12.png)
 <video src="https://example.com/videos/dock-walkthrough.mp4">Dock walkthrough, 4 minutes</video>
 > **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**<br>*example.com · Revision 7*

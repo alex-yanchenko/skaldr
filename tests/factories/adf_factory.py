@@ -10,9 +10,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Graph,
-    GraphEdge,
-    GraphNode,
     GridColumn,
     Heading,
     ListEntry,
@@ -62,12 +59,8 @@ def cell(text: str, tone: ToneName | None = None) -> TableCell:
     return TableCell(plain(text), tone)
 
 
-def flow_graph() -> Graph:
-    return Graph(
-        "TB",
-        (GraphNode("s1", "1: Draft", "write it"), GraphNode("s2", "2: Review"), GraphNode("s3", "3: Ship")),
-        (GraphEdge("s1", "s2"), GraphEdge("s2", "s3"), GraphEdge("s3", "s1", dashed=True)),
-    )
+def pie_over_its_table() -> Diagram:
+    return Diagram(PieChart((PieSlice("a", 1),)), (TableNode((cell("Slice"),), (TableRow((cell("a"),)),)),))
 
 
 def minimal_nodes() -> Mapping[type, Node]:
@@ -85,7 +78,7 @@ def minimal_nodes() -> Mapping[type, Node]:
         Toggle: Toggle(plain("t"), None, (para("c"),)),
         Columns: Columns((GridColumn(100, (para("c"),)),)),
         Tabs: Tabs((Tab(plain("t"), (para("c"),)),)),
-        Diagram: Diagram(flow_graph()),
+        Diagram: pie_over_its_table(),
         TableOfContents: TableOfContents((TocEntry("a", plain("t")),)),
     }
 
@@ -162,6 +155,5 @@ def showcase_nodes() -> tuple[Node, ...]:
         ),
         Tabs((Tab(plain("Case one"), (para("a"),), tone="success"), Tab(plain("Case two"), (para("b"),)))),
         Columns((GridColumn(60, (para("left"),)), GridColumn(40, (para("right"),)))),
-        Diagram(flow_graph(), (ListNode("bullet", (text_entry("detail"),)),)),
-        Diagram(PieChart((PieSlice("a", 1),)), (TableNode((cell("Slice"),), (TableRow((cell("a"),)),)),)),
+        pie_over_its_table(),
     )

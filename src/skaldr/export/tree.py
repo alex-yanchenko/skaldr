@@ -28,6 +28,7 @@ PanesKind = Literal["tabs", "request cases"]
 MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
+GraphKind = Literal["flow", "fan"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 COLUMN_RATIO_TOTAL: Final = 100
 
@@ -177,7 +178,7 @@ class Tabs:
 class GraphNode:
     key: str
     label: str
-    note: str = ""
+    note: ExportRich = ()
     tone: ToneName | None = None
 
 
@@ -193,6 +194,7 @@ class Graph:
     direction: Literal["TB", "LR"]
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
+    kind: GraphKind
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,7 @@ class XYChart:
     mark: XYChartMark
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
+    stacked: bool
 
 
 Figure = Graph | PieChart | XYChart

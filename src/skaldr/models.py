@@ -82,6 +82,11 @@ def _url_defect(url: str) -> str | None:
 LINK_URL_WORDING = "an http://, https://, or mailto: link"
 WEB_URL_SCHEMES = ("http://", "https://")
 WEB_URL_WORDING = "an http:// or https:// link"
+DATA_URI_SCHEME: Final = "data:"
+
+
+def is_data_uri(src: str) -> bool:
+    return src.startswith(DATA_URI_SCHEME)
 
 
 def _require_scheme_and_well_formed(url: str, subject: str, schemes: tuple[str, ...], wording: str) -> None:
@@ -883,7 +888,7 @@ class Image(_Block):
 
     @model_validator(mode="after")
     def _data_uri_or_web_url(self) -> "Image":
-        if self.src.startswith("data:"):
+        if is_data_uri(self.src):
             return self
         if not self.src.startswith(WEB_URL_SCHEMES):
             raise ValueError("'src' must be a data: URI or an http:// or https:// URL")

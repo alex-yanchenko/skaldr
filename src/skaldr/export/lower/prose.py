@@ -6,7 +6,7 @@ from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.code_language import block_code_language
-from skaldr.export.inline import bold, italic, one_line, plain
+from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
@@ -200,33 +200,6 @@ def lower_meter(block: models.Meter) -> list[Node]:
     return [bullets(_meter_entry(item) for item in block.items)]
 
 
-def _range_segment(segment: models.RangeSegment, total: float, lowering: Lowering) -> ListEntry:
-    share = plain(compute.pct(segment.span, total))
-    if segment.sub:
-        share += (Plain(", "), *lowering.rich(segment.sub))
-    return ListEntry(with_bold_label(segment.label, share, segment.tone))
-
-
-def _axis_ends(axis: models.RangeAxis | None) -> list[Node]:
-    start = (axis.min or "").strip() if axis else ""
-    end = (axis.max or "").strip() if axis else ""
-    if start and end:
-        words = f"{start} to {end}"
-    elif start or end:
-        words = f"From {start}" if start else f"To {end}"
-    else:
-        return []
-    return [Paragraph(plain(words), "muted")]
-
-
-def lower_range(block: models.Range, lowering: Lowering) -> list[Node]:
-    total = sum(segment.span for segment in block.segments)
-    return [
-        *_axis_ends(block.axis),
-        bullets(_range_segment(segment, total, lowering) for segment in block.segments),
-    ]
-
-
 def lower_code(block: models.Code) -> list[Node]:
     label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
     language = "diff" if block.mode == "diff" else block_code_language(block)
@@ -242,9 +215,7 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
 
 
 def lower_image(block: models.Image) -> list[Node]:
-    if block.src.startswith(models.WEB_URL_SCHEMES):
-        return [Media("image", block.src, plain(block.alt), plain(block.caption or ""))]
-    return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
+    return [Media("image", block.src, plain(block.alt), plain(block.caption or ""))]
 
 
 def lower_media(block: models.Media) -> list[Node]:

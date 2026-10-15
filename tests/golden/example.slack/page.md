@@ -24,12 +24,6 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 * **Count status**: HEALTHY
 * **Total units**: 10,000
 
-&nbsp;
-
-* **Matched cleanly**: 85.0%, 8,500 units
-* **Floor-fixable**: 11.0%, 1,100
-* **Vendor**: 4.0%, 400
-
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.
@@ -41,26 +35,6 @@ Zone C is behind schedule, its recount is due Friday, and the vendor lots stay o
 The recount runs ![](slack_date:2026-07-10) to ![](slack_date:2026-07-14), is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows the cold room plan.
 
 ### Count pipeline
-
-```mermaid
-flowchart LR
-    s1["1: Scan"]:::info
-    s2["2: Reconcile"]:::accent
-    s3["3: Flag"]:::warning
-    s4["4: Fix"]:::success
-    s5["5: Recount"]
-    s1 --> s2
-    s2 --> s3
-    s3 --> s4
-    s4 --> s5
-    s5 -.-> s1
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
-```
-
-* **Flag** **System**
 
 ### Discrepancy resolution across teams
 
@@ -200,8 +174,6 @@ function pickWinner(a, b) {
 }
 ```
 
-*Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).*
-
 ![Aisle 12 with overflow bins](https://example.com/photos/aisle-12.png)
 
 *Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).*
@@ -280,24 +252,11 @@ One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reaso
 
 **Open discrepancies over the count window**
 
-```mermaid
-xychart-beta
-    x-axis ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"]
-    line [1500, 1180, 760, 410, 150]
-```
-
 | Series | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 |
 | --- | --- | --- | --- | --- | --- |
 | Open | 1,500 | 1,180 | 760 | 410 | 150 |
 
 **How discrepancies resolved**
-
-```mermaid
-pie
-    "Fixed on floor" : 900
-    "System defect" : 760
-    "Vendor" : 400
-```
 
 | Slice | Value | Share |
 | --- | --- | --- |
@@ -344,20 +303,6 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 :::
 
 ## Where the count comes from
-
-```mermaid
-flowchart LR
-    hub["Reconciled count"]:::accent
-    s1["Handheld scans<br>per-aisle, live"]:::info
-    s2["Fixed-reader gates"]:::info
-    s3["Manual recount<br>overflow aisles only"]:::warning
-    s1 --> hub
-    s2 --> hub
-    s3 --> hub
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
-```
 
 ## How to run the recount
 

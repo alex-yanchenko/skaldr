@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import load_report, parse_report
+from skaldr.models import parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -65,6 +66,9 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    REFUSED_IN_THE_EXAMPLE,
+    accepted_example,
+    example_data,
     folder_texts,
     in_a_grid_cell,
     in_an_open_section,
@@ -77,16 +81,22 @@ from tests.factories import (
     make_tabs,
     make_toggle,
     markdown_of,
+    refused_block_types,
 )
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
+WRITE_MARKDOWN_GOLDEN = "SKALDR_WRITE_MARKDOWN_GOLDEN"
 
 
-def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_markdown(load_report(EXAMPLE), tmp_path)
+def test_the_example_less_the_blocks_github_refuses_matches_the_markdown_golden(tmp_path: Path) -> None:
+    out_dir = MARKDOWN_GOLDEN if os.environ.get(WRITE_MARKDOWN_GOLDEN) else tmp_path
 
-    assert folder_texts(tmp_path) == folder_texts(MARKDOWN_GOLDEN)
+    export_markdown(accepted_example("markdown"), out_dir)
+
+    assert (refused_block_types(example_data(), "markdown"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_EXAMPLE["markdown"],
+        folder_texts(MARKDOWN_GOLDEN),
+    )
 
 
 def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
@@ -165,7 +175,7 @@ def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
-    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"))
 
     assert render_markdown([diagram, Paragraph((Plain("after"),))]) == (
         '```mermaid\nflowchart LR\n    s1["A"]\n```\n\nafter\n'
@@ -786,7 +796,10 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
             id="a-tab-title-already-separates-lists",
         ),
         pytest.param(
-            [Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (make_bullets("p"),)), make_bullets("z")],
+            [
+                Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (make_bullets("p"),)),
+                make_bullets("z"),
+            ],
             '```mermaid\nflowchart LR\n    s1["A"]\n```\n\n- p\n\n* z\n',
             id="diagram-ending-with-a-list-then-a-list",
         ),
@@ -1465,9 +1478,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "- **Owners**: **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
-        "* **Zone**: ████░░░░░░ 42.9%\n\n"
-        "Jan to Dec\n\n"
-        "- **Q1**: 25.0%, slow\n- **Rest**: 75.0%\n"
+        "* **Zone**: ████░░░░░░ 42.9%\n"
     )
 
 

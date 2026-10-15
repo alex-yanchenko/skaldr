@@ -1,11 +1,11 @@
 import json
 import os
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
@@ -41,7 +41,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Grid, Person, Report, load_report, parse_report
+from skaldr.models import Grid, Person, Report, Walkthrough, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -60,6 +60,8 @@ from skaldr.richtext import (
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    accepted_example,
+    example_data,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -69,22 +71,22 @@ from tests.factories import (
     make_section,
     make_table_cell,
     refusal_of,
+    refused_block_types,
     slack_of,
     write_report,
 )
 from tests.factories.capability_factory import LONG_TABLE
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
 WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_COLUMN_REFUSED_TYPES = ("callout", "note", "table", "divider")
 FULL_GRID_SPAN = 6
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
-MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
-ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
-TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
-TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
+ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), (), "flow")
+TABLE_LIMIT_WHY = "the table takes 301 cells as a Slack canvas table, over the 300 such a table can hold"
+TABLE_LIMIT_INSTEAD = "split the table in two or export it elsewhere"
 LIST_SEPARATOR = "&nbsp;"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
@@ -144,7 +146,7 @@ def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
-    data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    data = example_data()
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
         if block["type"] == "grid":
@@ -160,6 +162,17 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
+def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
+    return next(
+        f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
+        for path, block in report.located_blocks
+        if isinstance(block, Walkthrough)
+        for step_index, step in enumerate(block.steps)
+        for index, detail in enumerate(step.detail)
+        if detail.type not in CANVAS_STEP_DETAIL_TYPES
+    )
+
+
 def _first_toned_cell_of_a_column_layout(report: Report) -> tuple[str, str]:
     return next(
         (f"{path}.cells.{cell_index}", cell.tone)
@@ -170,12 +183,31 @@ def _first_toned_cell_of_a_column_layout(report: Report) -> tuple[str, str]:
     )
 
 
-def test_the_example_is_rejected_for_its_first_toned_grid_cell(tmp_path: Path) -> None:
-    example = load_report(EXAMPLE)
-    path, tone = _first_toned_cell_of_a_column_layout(example)
+def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path: Path) -> None:
+    data = example_data()
+    walkthrough = parse_report(
+        {**data, "blocks": [block for block in data["blocks"] if block["type"] == "walkthrough"]}
+    )
 
     with pytest.raises(ExportRejectedError) as raised:
-        export_slack(example, tmp_path / "out")
+        export_slack(walkthrough, tmp_path / "out")
+
+    assert vars(raised.value) == _canvas_rejection(
+        _list_item_why("a code block"),
+        OUT_OF_THE_STEP,
+        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(walkthrough)}",
+    )
+
+
+def test_the_grid_of_the_example_is_rejected_for_its_first_toned_cell(tmp_path: Path) -> None:
+    data = example_data()
+    grids = parse_report(
+        {**data, "blocks": [block for block in data["blocks"] if block["type"] in ("heading", "grid")]}
+    )
+    path, tone = _first_toned_cell_of_a_column_layout(grids)
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(grids, tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
         f"a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
@@ -184,14 +216,18 @@ def test_the_example_is_rejected_for_its_first_toned_grid_cell(tmp_path: Path) -
     )
 
 
-def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_slack_golden_rewrites(
+def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
+    reworked = _example_reworked_for_a_canvas()
 
-    export_slack(parse_report(_example_reworked_for_a_canvas()), out_dir)
+    export_slack(accepted_example("slack", reworked), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(SLACK_GOLDEN)
+    assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_REWORKED_EXAMPLE,
+        folder_texts(SLACK_GOLDEN),
+    )
 
 
 @pytest.mark.parametrize(
@@ -651,7 +687,8 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 302 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 302 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
     )
 
 
@@ -662,7 +699,17 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 1,001 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 1,001 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
+    )
+
+
+def test_a_table_kind_block_over_300_cells_is_named_by_its_own_block_type() -> None:
+    table = replace(_one_column_table(301), authored_as="matrix")
+
+    assert vars(refusal_of([table], "slack")) == _canvas_rejection(
+        "the matrix takes 301 cells as a Slack canvas table, over the 300 such a table can hold",
+        "split the matrix in two or export it elsewhere",
     )
 
 
@@ -673,15 +720,6 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
         pytest.param(CodeBlock("x"), "```\nx\n```\n", id="code-without-language"),
         pytest.param(CodeBlock("a ``` b"), "````\na ``` b\n````\n", id="code-with-a-fence-inside"),
         pytest.param(DisplayMath("e = mc^2"), "```latex\ne = mc^2\n```\n", id="math"),
-        pytest.param(Diagram(ONE_NODE_GRAPH), f"{MERMAID_ONE_NODE}\n", id="diagram"),
-        pytest.param(
-            Diagram(
-                ONE_NODE_GRAPH,
-                (make_bullets(make_list_entry("A", make_bullets(make_list_entry("by aisle")))),),
-            ),
-            f"{MERMAID_ONE_NODE}\n\n* A\n  * by aisle\n",
-            id="diagram-with-its-supplement",
-        ),
     ],
 )
 def test_a_fenced_block_carries_its_language(node: Node, text: str) -> None:

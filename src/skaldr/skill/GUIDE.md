@@ -352,7 +352,9 @@ show as a picture there: an `image` or `media` block with a URL shows as a card 
 (`Image`, `Video`, `Audio`, `File` or `PDF`), its alt text or caption, and the URL's host, and the
 card links to the URL. An `image` needs `alt`, and a blank `alt` fails the build. A URL must start
 with `http://` or `https://` and may not hold a username or password. A `media` block takes http(s)
-URLs only.
+URLs only. Every export refuses an `image` with a `data:` source, since none of its targets can show
+one; in a document you export, host the image and give its https address (for a Slack canvas,
+upload it to Slack and give its permalink).
 
 ```yaml
 - type: image
@@ -520,6 +522,15 @@ than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (
 `neutral·info·success·warning·danger·accent`) accents a node's border + number; use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
 
+The GitHub-flavored and Notion exports draw a flow as a Mermaid diagram, whose labels hold plain text
+only, so they refuse a step whose `note` holds a link, citation, inline math, struck-through text, or a
+subscript or superscript with no Unicode form; keep such a note plain and put the rest in a text block
+after the flow. A subscript or superscript with a Unicode form, such as `H~2~O`, is written as `H₂O`, with
+the same characters a Slack canvas takes. Any other mark in a note, such as bold, italic, underline, a
+colour or inline code, keeps its characters and loses its formatting. The ADF and Slack
+canvas exports cannot draw a diagram, so they refuse a document holding a `flow`; for those targets,
+write the steps as a numbered list.
+
 ## The `fan`
 
 A one-to-many shape: several nodes converging into one, or one branching out to several. Reach for
@@ -540,6 +551,10 @@ sit in a dashed well; a single arrow joins them to the `hub` (the one). `directi
 `hub` and `spokes` are flow nodes: each takes `label`, optional `tone`, `note` (rich, one line),
 `points` (detail bullets), and `badges`. Use `direction: out` for the reverse (one hub branching to
 the spokes).
+
+As with a `flow`, the GitHub-flavored and Notion exports draw a fan as a Mermaid diagram, and the
+ADF and Slack canvas exports refuse a document holding one; for those targets, write the hub and
+its spokes as a list.
 
 ## The `walkthrough`
 
@@ -590,6 +605,10 @@ line; an optional `axis` labels the extent's ends.
 Reach for it when the **relative size of spans** is the message. For a single ratio use `meter`; for a
 trend or distribution use `chart`; for an ordered set of stages use `flow`.
 
+No export can draw a range bar. Every `--export` target, `skaldr publish` and
+`skaldr --check --for <target>` refuse a document holding a `range`; in a document you export, use a
+`meter` or a `table` instead.
+
 ## The `chart`
 
 Render-time SVG: self-contained, no JS. You give the data; skaldr computes the scale, ticks,
@@ -604,6 +623,14 @@ figures and `meter` for a single ratio.
 `bar`/`line` take `categories` (the x-axis) and `series` (each `{label, values, tone?}`, with one value
 per category); `donut` takes `slices` (each `{label, value, tone?}`). `tone` is optional: skaldr
 colours any unset series/slice from the palette so they stay distinct.
+
+The GitHub-flavored and Notion exports draw a donut, or a bar or line chart with one series, as a
+Mermaid chart over its data table. A Mermaid chart has no legend, so they write a chart with several
+series as its data table alone. The ADF and Slack canvas exports write every chart as its data table.
+The table holds every value the chart draws, and for stacked bars with several series a `Total` row
+holds each category's stack. A row keeps the `tone` set on its series or slice, where the target shows a
+row's tone; the colour the page picks for a series or slice with no `tone` is not carried, since the
+label in the row's first cell tells it apart.
 
 ```yaml
 - type: chart
@@ -1434,12 +1461,12 @@ case, where the page is shared as a URL an agent later has to read back.
 
 ## Exporting as Markdown
 
-`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look. A block a target cannot show the way the page shows it is refused rather than written badly: the export stops before it writes anything, with an error naming the block's path in the YAML, why the target cannot show it and what to write instead, and `skaldr --check --for <target>` runs the same export in memory and writes nothing, so it refuses exactly what the export refuses. When a document holds several such blocks, the error names the first in the document, and a container the target refuses before anything inside it. The ADF and Slack sections below list the blocks each of them refuses and, apart from those, the size each target can hold, which skaldr measures on the written output rather than on the blocks. The rest of this section shows how the GitHub-flavored and Notion exports write each block:
+`skaldr report.yaml --export markdown` writes GitHub-flavored Markdown and `--export notion` writes Notion-flavored Markdown, each to `out/<name>.<target>/page.md` (or the folder `--export-dir` names); `--export adf` writes the ADF JSON for Jira and `--export slack` the Markdown for a Slack canvas, each described in the sections below. Write the YAML the same way for every output; what changes is how some blocks look. A block a target cannot show the way the page shows it is refused rather than written badly: the export stops before it writes anything, with an error naming the block's path in the YAML, why the target cannot show it and what to write instead, and `skaldr --check --for <target>` runs the same export in memory and writes nothing, so it refuses exactly what the export refuses. When a document holds several such blocks, the error names the first in the document, and a container the target refuses before anything inside it. Each export section lists the blocks its target refuses, and the ADF and Slack sections also the size each target can hold, which skaldr measures on the written output rather than on the blocks. The rest of this section shows how the GitHub-flavored and Notion exports write each block:
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges, or note links, citations, inline math, subscripts and superscripts it can't show | the same |
-| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
+| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it cannot show | the same |
+| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series, stacked or not, is a Mermaid xy chart over its data table; a chart with several series is its data table alone, with a `Total` row of each category's stack for stacked bars | the same |
 | `callout`, `note`, a toned `grid` cell | a quote led by an icon | a native callout |
 | `panel` | a quote led by its bold title and no icon, as on the page | a native callout |
 | a list inside a set-apart body | a Markdown list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number | a native list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number, since a Notion cell or quote holds only text; a list in a muted `text` body keeps the normal text colour |
@@ -1456,11 +1483,10 @@ case, where the page is shared as a URL an agent later has to read back.
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |
 | badges | bold labels | bold text in the badge's colour, or in the normal text colour inside a filled table cell, where the fill carries the colour; each badge colour has its own Notion colour, and since Notion has no teal or light blue, `teal` is brown and `sky` is pink there and everywhere else a colour reaches Notion (highlights, text colours, cell and column backgrounds) |
 | a table row's `tone` (including a `tint_by` tint, and a chart slice's or series' row in its data table) | dropped | the background of one cell: the first cell that holds a badge, or the row's first cell when none does; a cell's own `tone` wins in that cell; a `group` row is a full-width band |
-| tones on meters, cards, ranges and walkthrough steps | dropped | the item's bold label (and a walkthrough step's subtitle) in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge, including a derived card, leaves its colour to the badge, and an item with no label shows no colour |
+| tones on meters, cards and walkthrough steps | dropped | the item's bold label (and a walkthrough step's subtitle) in the tone's colour, and the rest of the item in the normal text colour; a card that shows a badge, including a derived card, leaves its colour to the badge, and an item with no label shows no colour |
 | tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
-| `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
 | `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
@@ -1476,6 +1502,12 @@ case, where the page is shared as a URL an agent later has to read back.
 | an inline `` `code` `` span holding a closing tag (`</`) or a backtick | inline code | the same text as plain prose, since Notion reads a closing tag inside inline code as markup: `</td>` ends a table cell early and `</span>` breaks a coloured span; code such as `List<int>` or `<br>` stays inline code |
 | `math` | a ` ```math ` fence | a `$$` equation block |
 
+The GitHub-flavored and Notion exports refuse:
+
+- a `range`, since neither can draw a range bar; use a `meter` or a `table`.
+- a `flow` or `fan` step whose `note` holds a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form (see the Slack canvas section for the characters that have one), since a Mermaid label holds plain text only; write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
+- an `image` with a `data:` source, since neither shows an image from a `data:` URI; host the image and give its https address.
+
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then a `Cover image` link when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
 ## Exporting as ADF for Jira
@@ -1488,14 +1520,13 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `text`, and prose in other blocks | a paragraph; a toned paragraph gets the tone's text colour |
 | a list | a bullet, ordered (with its start number) or task list, nested as written |
 | `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
-| `code` | a code block with its language; a `math` block is a code block in `latex` |
+| `code` | a code block with its language; a `math` block is a code block in `latex`, since ADF has no math, and `` $`x_i`$ `` inline math is inline code holding the LaTeX |
 | `quote` | a block quote, the citation in italics |
 | `divider` | a rule |
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
 | a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand; a tab's title is led by an icon when its tone is info, success, warning or danger, and a request case's by the icon of its status |
 | `grid` | its cells one after another |
-| `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
-| `chart` | its data table |
+| `chart` | its data table in place of the chart, since ADF cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, and for stacked bars with several series a bold `Total` row of each category's stack |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
 | a table of contents | nothing, because a Jira heading has no anchor for an entry to link to |
@@ -1505,6 +1536,13 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `[text](user:key)` | a mention of the person's `jira` account id, shown as "@" and the text; a person with no `jira` id is the text alone |
 | `[text](jira:KEY)` | a live issue card when a Jira site is known (`jira_site`); otherwise the text alone |
 | `[text](doc:id)` | the text alone, because a page id exists only once the document is published |
+
+The ADF export refuses:
+
+- a `range`, since ADF cannot draw a range bar; use a `meter` or a `table`.
+- a `flow`, since ADF cannot draw a diagram; write the steps as a numbered list.
+- a `fan`, for the same reason; write the hub and its spokes as a list.
+- an `image` with a `data:` source, since Jira embeds only files attached to the issue; host the image and give its https address.
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A divider in a walkthrough step fails the export, since ADF cannot place a rule inside a list item; move it out of the step, after the walkthrough. A block ADF cannot place at all stops the export, and a publish to Jira, before anything is written or sent, with an error naming the block in the document's own terms, what it was inside, its path in the YAML, the nearest heading above it, and what to do instead, for example `ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading 'Totals'; move the table out of the panel` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle, at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle; move the toggle out of the toggle`. The block, and the panel, grid cell, toggle, collapsed section or part, or set of tabs that refuses it, are named as you wrote them (`ADF cannot place a comparison inside a panel`, `ADF cannot place a toggle inside a toggle that is itself inside a section`), so a `link` card is a link card, a `comparison` is a comparison, and a `note` is a note, even though ADF would write each as a quote, a table or a panel. In a document built by an `index`, the path counts the parts as blocks of the index (`blocks.0.part.blocks.1.toggle`). Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
@@ -1518,8 +1556,8 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `text`, and prose in other blocks | a paragraph; tones are dropped |
 | a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and one nested list; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text when it comes before the item's nested list. A list item holding anything else, such as a paragraph after its nested list, a code block, table, quote, callout, image, media, diagram, math block, heading, toggle, tabs, divider or a second nested list, fails the export with an error naming the YAML path of the block that holds it, since a canvas could only show it after the whole list, away from its item. A canvas joins two lists in a row into one, even a bullet list and a check list, so a paragraph holding `&nbsp;`, which the canvas stores as a single no-break space, keeps them apart, such as a `fact_strip` right before a `cards` block. A canvas numbers every list from 1, so a numbered list that starts at another number fails the export with an error naming its YAML path |
 | `callout`, `note`, `panel` | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`; a `panel` has no icon, as on the page, so its body starts with its bold title. A canvas callout holds only text, headings, lists, quotes, code blocks and images, so a panel holding a table, a `callout` or `note`, a toggle, tabs or a divider fails the export with an error naming that block's path in the YAML. A `chart`, `comparison`, `matrix` or `swimlane` is written as a table, a request with several cases as tabs, and a request case's verdict as a callout, so a panel holding one fails the same way, naming the block you wrote; move the block out of the panel |
-| `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
-| `flow`, `fan`, `chart` | the same Mermaid block as the GitHub-flavored export, which a canvas shows as a code block of the diagram's source, with the list of steps or the data table under it |
+| `code` | a fenced block with its language; a `math` block is a fenced block in `latex`, since a canvas has no math |
+| `chart` | its data table in place of the chart, since a canvas cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, and for stacked bars with several series a bold `Total` row of each category's stack |
 | `quote` | quoted lines, with the citation on its own line in italics |
 | `divider` | `---`; a canvas list item, column or callout cannot hold one, so a divider in a walkthrough step, a grid cell or a panel fails the export |
 | a collapsed `section` | a heading at its level, then its content |
@@ -1534,12 +1572,19 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic); there the text is written without the mark. A mark inside the same mark is written once |
 | `++underline++`, `[text]{tone=…}` | the text alone |
 | `H~2~O`, `10^3^` | Unicode subscript and superscript characters, `H₂O` and `10³`, since a canvas has no subscript or superscript mark. Digits, `+`, `-`, `=` and brackets have both forms; a superscript also covers every lowercase letter but `q` and the capitals `A B D E G H I J K L M N O P R T U V W`, and a subscript the lowercase `a e h i j k l m n o p r s t u v x`. A subscript or superscript holding any other character, a space included, fails the export with an error naming its text, the first such character and the path in the YAML of the block that holds it, since writing it bare would change its meaning (`10^3^` read as 103); write the text without the mark, or export the document elsewhere |
-| `` $`x_i`$ `` inline math | inline code |
+| `` $`x_i`$ `` inline math | inline code holding the LaTeX |
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
 | `[Ada](user:ada)` | the label as text |
 | a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
 
-A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count, its path in the YAML and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters, and `skaldr --check --for slack` fails it too, since it writes the canvas in memory to measure it. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` of two or more cells in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A grid of one cell, in a step or in a grid cell, shows no columns, so it is its cell's blocks and they are checked where it stands. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text`, `callout` or `def_list` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.def_list`); move the second list or the paragraph out of the list.
+The canvas export refuses:
+
+- a `range`, since a canvas cannot draw a range bar; use a `meter` or a `table`.
+- a `flow`, since a canvas cannot draw a diagram; write the steps as a numbered list.
+- a `fan`, for the same reason; write the hub and its spokes as a list.
+- an `image` with a `data:` source, since a canvas cannot show one; upload the image to Slack and give its permalink.
+
+A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count, its path in the YAML and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A `chart`, which a canvas shows as its data table, counts the same way, and the error names the chart; split its data into two charts. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters, and `skaldr --check --for slack` fails it too, since it writes the canvas in memory to measure it. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` of two or more cells in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A grid of one cell, in a step or in a grid cell, shows no columns, so it is its cell's blocks and they are checked where it stands. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text`, `callout` or `def_list` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.def_list`); move the second list or the paragraph out of the list.
 
 ## What you never write
 
