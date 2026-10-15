@@ -19,6 +19,7 @@ from skaldr.models import (
     MAX_STRIP_LABELS,
     Report,
     Request,
+    StatusState,
     ToneLiteral,
     load_report,
     package_path,
@@ -491,6 +492,20 @@ def test_a_nested_numbered_list_keeps_the_numbering_and_counts_from_one() -> Non
     assert (
         '<ol class="list" start="3" type="a"><li>a<ol class="list" type="a"><li>b</li></ol></li></ol>' in html
     )
+
+
+def test_a_status_list_reads_its_glyphs_from_the_shared_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    states = get_args(StatusState)
+    rows = {state: compute.StatusGlyph(f"page-{state}", f"export-{state}") for state in states}
+    monkeypatch.setattr(compute, "STATUS_GLYPHS", rows)
+    block = {"type": "status_list", "items": [{"state": "blocked", "text": "Vendor"}]}
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<ul class="status-list"><li class="blocked"><span class="glyph">page-blocked</span>'
+        "<span>Vendor</span></li></ul>"
+    ) in html
 
 
 def test_a_decision_list_leads_each_item_with_a_decided_or_open_glyph() -> None:
