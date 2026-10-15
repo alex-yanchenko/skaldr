@@ -123,8 +123,8 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     "slack-table-over-300-cells": RefusedCase(
         "slack",
         [{"type": "heading", "text": "Counts"}, LONG_TABLE],
-        "a table has 301 cells, over the 300 a Slack canvas table can hold",
-        "split it into two tables or export it elsewhere",
+        "the table takes 301 cells as a Slack canvas table, over the 300 such a table can hold",
+        "split the table in two or export it elsewhere",
         "at blocks.1.table, under the heading 'Counts'",
     ),
     "slack-grid-in-a-walkthrough-step": RefusedCase(
@@ -226,6 +226,12 @@ SEVERAL_SERIES_CHARTS: dict[str, dict[str, Any]] = {
     "two-series-stacked-bar": xy_chart("bar", [4, 6], [1, 2], stacked=True),
 }
 EVERY_CHART: dict[str, dict[str, Any]] = {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_CHARTS}
+LONG_CHART: dict[str, Any] = {
+    "type": "chart",
+    "variant": "bar",
+    "categories": [f"Day {day}" for day in range(1, 161)],
+    "series": [{"label": "Zone 1", "values": [1] * 160}],
+}
 
 
 DATA_IMAGE: dict[str, Any] = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "Aisle 12"}
@@ -418,6 +424,13 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         "Notion cannot show an image from a data: URI",
         HOST_THE_IMAGE,
         "at blocks.0.tabs.tabs.0.blocks.0.image",
+    ),
+    "slack-chart-whose-data-table-is-over-300-cells": RefusedCase(
+        "slack",
+        [{"type": "heading", "text": "Counts"}, LONG_CHART],
+        "the chart takes 322 cells as a Slack canvas table, over the 300 such a table can hold",
+        "split the chart in two or export it elsewhere",
+        "at blocks.1.chart, under the heading 'Counts'",
     ),
     "adf-flow-with-a-rich-note-is-refused-as-a-flow": RefusedCase(
         "adf",

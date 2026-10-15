@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
@@ -82,8 +83,8 @@ WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), (), "flow")
-TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
-TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
+TABLE_LIMIT_WHY = "the table takes 301 cells as a Slack canvas table, over the 300 such a table can hold"
+TABLE_LIMIT_INSTEAD = "split the table in two or export it elsewhere"
 LIST_SEPARATOR = "&nbsp;"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
@@ -614,7 +615,8 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 302 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 302 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
     )
 
 
@@ -625,7 +627,17 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 1,001 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 1,001 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
+    )
+
+
+def test_a_table_kind_block_over_300_cells_is_named_by_its_own_block_type() -> None:
+    table = replace(_one_column_table(301), authored_as="matrix")
+
+    assert vars(refusal_of([table], "slack")) == _canvas_rejection(
+        "the matrix takes 301 cells as a Slack canvas table, over the 300 such a table can hold",
+        "split the matrix in two or export it elsewhere",
     )
 
 

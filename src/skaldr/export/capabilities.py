@@ -82,6 +82,7 @@ class ListStart:
 @dataclass(frozen=True)
 class CellCount:
     cells: int
+    held: str
     limit: int = CANVAS_TABLE_CELL_LIMIT
     feature: CellCountFeature = field(default="table over 300 cells", init=False)
 
@@ -185,8 +186,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "table over 300 cells": _kept_except(
         {
             "slack": Rejection(
-                "a table has {cells:,} cells, over the {limit} a Slack canvas table can hold",
-                "split it into two tables or export it elsewhere",
+                "the {held} takes {cells:,} cells as a Slack canvas table, "
+                "over the {limit} such a table can hold",
+                "split the {held} in two or export it elsewhere",
                 names_the_heading=True,
             )
         }

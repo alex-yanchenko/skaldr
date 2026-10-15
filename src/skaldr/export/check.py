@@ -423,7 +423,7 @@ class _TreeWalk:
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
         cells = table_width(node) * (1 + len(node.rows))
         if cells > CANVAS_TABLE_CELL_LIMIT:
-            yield self.hit(CellCount(cells), node.authored_at)
+            yield self.hit(CellCount(cells, _term(node)), node.authored_at)
 
 
 def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[LocatedDetails]:
