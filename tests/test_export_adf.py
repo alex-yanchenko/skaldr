@@ -54,7 +54,13 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.richtext import Code, Plain, Styled
-from tests.factories import check_nodes, lowered, make_command_request, refusal_of
+from tests.factories import (
+    API_AND_RISK_BADGES,
+    check_nodes,
+    lowered,
+    make_command_request,
+    refusal_of,
+)
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
@@ -857,6 +863,53 @@ def test_an_issue_key_in_a_paragraph_becomes_a_card_when_links_are_given() -> No
             _text("see "),
             {"type": "inlineCard", "attrs": {"url": "https://example.atlassian.net/browse/PLAN-3"}},
         )
+    )
+
+
+API_LEGEND: Json = {
+    "type": "expand",
+    "attrs": {"title": "Legend: badges used on this page"},
+    "content": [
+        {
+            "type": "bulletList",
+            "content": [
+                _item(
+                    _paragraph(
+                        {"type": "status", "attrs": {"text": "api", "color": "blue"}}, _text(" the API")
+                    )
+                )
+            ],
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("tone", "label_marks"),
+    [
+        pytest.param("danger", [STRONG, {"type": "textColor", "attrs": {"color": "#DE350B"}}], id="other"),
+        pytest.param("info", [STRONG], id="same"),
+    ],
+)
+def test_a_card_label_keeps_its_colour_unless_a_badge_of_the_same_tone_shows_it(
+    tone: str, label_marks: list[Json]
+) -> None:
+    card = {"label": "Err", "value": "3", "tone": tone, "badges": ["API"]}
+
+    assert render_adf(lowered([{"type": "cards", "items": [card]}], badges=API_AND_RISK_BADGES)) == _doc(
+        API_LEGEND,
+        {
+            "type": "bulletList",
+            "content": [
+                _item(
+                    _paragraph(
+                        _text("Err", *label_marks),
+                        _text(": 3 "),
+                        {"type": "status", "attrs": {"text": "api", "color": "blue"}},
+                    )
+                )
+            ],
+        },
     )
 
 

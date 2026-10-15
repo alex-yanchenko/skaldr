@@ -717,7 +717,7 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
         "- **Lead**: **Ana**\n<empty-block/>\n"
         "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
-        '- <span color="green">**Clean**</span>: 9 (90.0%) <span color="green">**▲ +1**</span> '
+        '- **Clean**: 9 (90.0%) <span color="green">**▲ +1**</span> '
         '<span color="blue">**api**</span>\n'
         '\tsince Monday {color="gray"}\n'
         "- **Lag**: 3 days → flat\n"

@@ -38,7 +38,7 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - **Method**: `full cycle count`
 - **Mode**: strict
 
-* 🟢 **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
+* **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
 * **Floor: fixable**: 1,100 (11.0%) 🟡 **Floor**
 
   Miscounts + mislabeled bins we can correct.

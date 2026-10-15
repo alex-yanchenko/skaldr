@@ -695,6 +695,30 @@ def test_a_card_dot_gives_way_to_a_badge_of_its_color(card: dict[str, Any], writ
     )
 
 
+@pytest.mark.parametrize(
+    ("card", "written"),
+    [
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "danger"}},
+            "- **Err**: 3 🔴 **up**\n",
+            id="a-tone-like-the-delta-chip-leaves-the-dot-to-the-chip",
+        ),
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "success"}},
+            "- 🔴 **Err**: 3 🟢 **up**\n",
+            id="a-tone-unlike-the-delta-chip-keeps-its-dot",
+        ),
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up"}},
+            "- 🔴 **Err**: 3 up\n",
+            id="a-delta-without-a-tone-leaves-the-dot-to-the-card",
+        ),
+    ],
+)
+def test_a_card_dot_gives_way_to_a_delta_chip_of_its_color(card: dict[str, Any], written: str) -> None:
+    assert markdown_of([{"type": "cards", "items": [card]}]) == written
+
+
 def test_a_muted_row_strikes_the_first_text_column() -> None:
     table = {
         "type": "table",
@@ -1771,7 +1795,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "* **Site**: West\n* **Owner**: ops\n\n"
         "- **Lead**: **Ana**\n\n"
         "* **Drift**: first\n\n  second\n* **Gap**\n\n"
-        "- 🟢 **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
+        "- **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
         "**Affects**: 🔵 **api** 🟢 **ops**\n\n"
         "- **Owners**: 🟣 **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
