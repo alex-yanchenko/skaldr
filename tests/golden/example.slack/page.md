@@ -18,11 +18,11 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 
 &nbsp;
 
-* **Matched cleanly**: 8,500 (85.0%) **▲ +3%**
-* **Floor: fixable**: 1,100 (11.0%) **Floor** Miscounts + mislabeled bins we can correct.
-* **Vendor: escalate**: 400 (4.0%) **▼ −90** **Vendor**
-* **Count status**: HEALTHY
-* **Total units**: 10,000
+* 🟢 **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
+* **Floor: fixable**: 1,100 (11.0%) 🟡 **Floor** Miscounts + mislabeled bins we can correct.
+* **Vendor: escalate**: 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor**
+* 🟣 **Count status**: HEALTHY
+* ⚪ **Total units**: 10,000
 
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
@@ -60,38 +60,38 @@ The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the
 
 **Legend: badges used on this page**
 
-* **Floor** Fixable on the floor before the next count.
-* **System** Defect in the scanning/labeling pipeline.
-* **Vendor** Depends on the vendor to resolve.
+* 🟡 **Floor** Fixable on the floor before the next count.
+* 🔵 **System** Defect in the scanning/labeling pipeline.
+* 🔴 **Vendor** Depends on the vendor to resolve.
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
 | **Floor: fixable (1,100)** |  |  |  |  |
-| Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340 | 🟡 | 600 (6.0% of total) | The same pallet is scanned twice when a picker re-enters an aisle within the count window. | De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan. |
-| Mislabeled bin codes **System** | 🟡 | 500 (5.0% of total) | Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup. | Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log. |
+| Double-counted units 🟡 **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340 | 🟡 | 600 (6.0% of total) | The same pallet is scanned twice when a picker re-enters an aisle within the count window. | De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan. |
+| Mislabeled bin codes 🔵 **System** | 🟡 | 500 (5.0% of total) | Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup. | Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log. |
 | **Vendor: escalation (400)** |  |  |  |  |
-| Short shipment **Vendor** | 🔴 | 400 (4.0% of total) | The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted. | Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives. |
+| 🔴 Short shipment 🔴 **Vendor** | 🔴 | 400 (4.0% of total) | The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted. | Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives. |
 | **Correctly counted: no action (0)** |  |  |  |  |
 | *none* |  |  |  |  |
 
-**Discrepancies by owner**: **Floor** 1 · **System** 1 · **Vendor** 1
+**Discrepancies by owner**: 🟡 **Floor** 1 · 🔵 **System** 1 · 🔴 **Vendor** 1
 
 Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 ## Count progress
 
-* **Zone A**: ██████████ 100.0%
-* **Zone B**: █████████░ 92.0%
-* **Zone C**: █████████░ 85.0%
-* **Overflow**: ░░░░░░░░░░ 4.0%
+* 🔵 **Zone A**: ██████████ 100.0%
+* 🟢 **Zone B**: █████████░ 92.0%
+* 🟡 **Zone C**: █████████░ 85.0%
+* 🔴 **Overflow**: ░░░░░░░░░░ 4.0%
 
 | Zone | Counted | Variance | Note |
 | --- | --- | --- | --- |
 | Zone A | 3,100 | 0 | Matched the system count. |
 | Zone B | 2,760 | 12 | Two mislabeled bins, re-scanned. |
-| Overflow | 120 | 260 | Skipped by the `bin > 12` rule. |
+| 🔴 Overflow | 120 | 260 | Skipped by the `bin > 12` rule. |
 
-**Affects**: **inventory** **scan-app** **DC-West**
+**Affects**: 🟢 **inventory** 🔵 **scan-app** 🟣 **DC-West**
 
 ## Verification
 
@@ -198,11 +198,11 @@ The cards on the left summarise; the panels below break down count progress and 
 
 ::: {.layout}
 ::: {.column}
-* **Matched cleanly**: 8,500 (85.0%)
-* **Needs work**: 1,500 (15.0%)
+* 🟢 **Matched cleanly**: 8,500 (85.0%)
+* 🟡 **Needs work**: 1,500 (15.0%)
 :::
 ::: {.column}
-* **Zone C**: █████████░ 88.0%
+* 🟡 **Zone C**: █████████░ 88.0%
 :::
 ::: {.column}
 * ✅ Reconciliation gate passes.
@@ -269,23 +269,23 @@ One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reaso
 
 |  | ★ Full cycle | Sampling | Continuous |
 | --- | --- | --- | --- |
-| **Catches every bin** | ✓ | ✗ | ✓ |
-| **Effort** | high | low | medium |
-| **Reconciles exactly** | ✓ | ✗ | ✗ |
-| **Disrupts picking** | ✓ | ✗ | ✓ |
+| **Catches every bin** | 🟢 ✓ | 🔴 ✗ | 🟢 ✓ |
+| **Effort** | 🔴 high | 🟢 low | 🟡 medium |
+| **Reconciles exactly** | 🟢 ✓ | 🔴 ✗ | 🔴 ✗ |
+| **Disrupts picking** | 🟢 ✓ | 🔴 ✗ | 🟢 ✓ |
 
 ## Readiness by zone
 
-* **Floor**: 7 (43.8%)
-* **System**: 2 (12.5%)
-* **Vendor**: 2 (12.5%) Awaiting the vendor's corrected ASN.
+* 🟡 **Floor**: 7 (43.8%)
+* 🔵 **System**: 2 (12.5%)
+* 🔴 **Vendor**: 2 (12.5%) Awaiting the vendor's corrected ASN.
 
 |  | Scanned | Reconciled | Re-labeled | Signed off |
 | --- | --- | --- | --- | --- |
-| **Zone A** | Floor | Floor | Floor | Floor |
-| **Zone B** | Floor | Floor | System |  |
-| **Zone C** | Floor | System | n/a |  |
-| **Overflow** | Vendor | Vendor |  |  |
+| **Zone A** | 🟡 Floor | 🟡 Floor | 🟡 Floor | 🟡 Floor |
+| **Zone B** | 🟡 Floor | 🟡 Floor | 🔵 System |  |
+| **Zone C** | 🟡 Floor | 🔵 System | ⚪ n/a |  |
+| **Overflow** | 🔴 Vendor | 🔴 Vendor |  |  |
 
 **⚠️ Floor**
 
@@ -306,11 +306,11 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 
 ## How to run the recount
 
-1. **Freeze the aisle and pull the expected list** *before any scanning* Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
+1. 🔵 **Freeze the aisle and pull the expected list** *before any scanning* Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
    * One row per bin, with the expected quantity.
    * Flag overflow bins (`bin > 12`): they take the manual path.
-2. **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
-3. **Escalate anything that still won't balance** A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
+2. 🟣 **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
+3. 🟡 **Escalate anything that still won't balance** A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 
 `reconcile`
 

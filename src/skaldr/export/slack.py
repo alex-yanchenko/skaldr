@@ -349,7 +349,7 @@ class _CanvasWriter:
                 f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
                 "the export check should have refused it"
             )
-        return pipe_table_lines(table, self.table_cell_runs.write)
+        return pipe_table_lines(table, self.table_cell_runs)
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)

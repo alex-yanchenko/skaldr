@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from markdown_it import MarkdownIt
@@ -51,7 +51,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import ToneLiteral, load_report, parse_report
+from skaldr.models import BadgeColorLiteral, ToneLiteral, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -235,14 +235,16 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
         pytest.param(AnchorLink((Plain("method"),), "method"), "[method](#how-we-count)", id="anchor-link"),
         pytest.param(AnchorLink((Plain("gone"),), "nowhere"), "gone", id="anchor-link-to-no-heading"),
         pytest.param(SectionLink((Plain("method"),), "method"), "[method](#how-we-count)", id="section-link"),
-        pytest.param(TonedLabel("danger", (Plain("Scan"),)), "Scan", id="toned-label-is-its-text"),
+        pytest.param(
+            TonedLabel("danger", (Plain("Scan"),)), "🔴 Scan", id="toned-label-is-led-by-its-tone-dot"
+        ),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
         pytest.param(SwimlaneMark("deferred"), "⏸️", id="swimlane-mark"),
         pytest.param(IndicatorMark("warning"), "🟡", id="indicator-mark"),
         pytest.param(CheckMark(checked=False), "✗", id="check-mark"),
         pytest.param(Break(), "<br>", id="line-break"),
         pytest.param(Gauge(10, 10), "██████████", id="full-gauge"),
-        pytest.param(Chip("a*b_c", "blue"), r"**a\*b\_c**", id="chip-label-is-escaped"),
+        pytest.param(Chip("a*b_c", "blue"), r"🔵 **a\*b\_c**", id="chip-label-is-escaped"),
     ],
 )
 def test_an_inline_run_becomes_markdown(run: ExportRun, written: str) -> None:
@@ -485,7 +487,7 @@ def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
     )
 
 
-def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
+def test_a_table_pads_short_rows_and_leads_a_toned_row_and_cell_with_their_dots() -> None:
     table = TableNode(
         (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
         (
@@ -495,7 +497,158 @@ def test_a_table_pads_short_rows_and_drops_tones_markdown_cannot_show() -> None:
         header_column=True,
     )
 
-    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **x** | y |\n"
+    assert render_markdown([table]) == "| A | B |\n| --- | --- |\n| **group** |  |\n| **🔵 🔴 x** | y |\n"
+
+
+def _number_and_title(title: ExportRich, title_tone: ToneName | None = None) -> tuple[TableCell, ...]:
+    return (TableCell((Plain("1"),)), TableCell(title, title_tone))
+
+
+@pytest.mark.parametrize(
+    ("row", "written"),
+    [
+        pytest.param(
+            TableRow(_number_and_title((Plain("(old)"),)), "muted"),
+            "| 1 | ~~(old)~~ |",
+            id="a-muted-row-strikes-its-title",
+        ),
+        pytest.param(
+            TableRow(_number_and_title(parse_rich("a ~~b~~ **c**")), "muted"),
+            "| 1 | ~~a b **c**~~ |",
+            id="a-strike-inside-a-struck-title-is-written-once",
+        ),
+        pytest.param(TableRow(_number_and_title(()), "muted"), "| 1 |  |", id="an-empty-struck-title"),
+        pytest.param(
+            TableRow(_number_and_title((Plain("fire"),)), "danger"), "| 1 | 🔴 fire |", id="a-danger-row"
+        ),
+        pytest.param(
+            TableRow(_number_and_title(()), "danger"), "| 1 | 🔴 |", id="a-danger-row-with-an-empty-title"
+        ),
+        pytest.param(
+            TableRow(_number_and_title((Plain("fire"),), "warning"), "danger"),
+            "| 1 | 🔴 🟡 fire |",
+            id="the-row-dot-before-the-title-cell-dot",
+        ),
+        pytest.param(
+            TableRow(_number_and_title((Plain("fire"),)), "danger", tone_only_tints=True),
+            "| 1 | fire |",
+            id="a-tone-that-only-tints-is-dropped",
+        ),
+        pytest.param(
+            TableRow((TableCell((Plain("1"),), "muted"), TableCell((Plain("x"),)))),
+            "| ~~1~~ | x |",
+            id="a-muted-cell-is-struck",
+        ),
+        pytest.param(
+            TableRow((TableCell((IndicatorMark("warning"),), "warning"), TableCell((Plain("x"),)))),
+            "| 🟡 | x |",
+            id="an-indicator-on-its-own-tone-is-the-dot-alone",
+        ),
+        pytest.param(
+            TableRow((TableCell((CheckMark(checked=True),), "danger"), TableCell(()))),
+            "| 🔴 ✓ |  |",
+            id="a-check-mark-on-a-tone",
+        ),
+    ],
+)
+def test_a_row_tone_marks_the_title_cell_and_a_cell_tone_its_own_cell(row: TableRow, written: str) -> None:
+    table = TableNode((TableCell((Plain("N"),)), TableCell((Plain("Item"),))), (row,), title_column=1)
+
+    assert render_markdown([table]) == f"| N | Item |\n| --- | --- |\n{written}\n"
+
+
+@pytest.mark.parametrize(
+    ("color", "dot"),
+    [
+        pytest.param("slate", "⚪", id="slate"),
+        pytest.param("blue", "🔵", id="blue"),
+        pytest.param("green", "🟢", id="green"),
+        pytest.param("amber", "🟡", id="amber"),
+        pytest.param("red", "🔴", id="red"),
+        pytest.param("violet", "🟣", id="violet"),
+        pytest.param("teal", "🟢", id="teal"),
+        pytest.param("sky", "🔵", id="sky"),
+    ],
+)
+def test_a_chip_is_the_dot_of_its_colour_before_its_bold_label(color: BadgeColorLiteral, dot: str) -> None:
+    assert render_markdown([Paragraph((Chip("High", color),))]) == f"{dot} **High**\n"
+
+
+def test_a_comparison_leads_each_verdict_with_the_dot_its_polarity_gives_and_a_toned_cell_too() -> None:
+    comparison = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "polarity": ["positive", "negative"],
+        "rows": [
+            {"feature": "Logs", "values": [True, True]},
+            {"feature": "Cost", "values": [False, {"value": "high", "tone": "warning"}]},
+        ],
+    }
+
+    assert markdown_of([comparison]) == (
+        "|  | A | B |\n| --- | --- | --- |\n| **Logs** | 🟢 ✓ | 🔴 ✓ |\n| **Cost** | 🔴 ✗ | 🟡 high |\n"
+    )
+
+
+def test_a_matrix_cell_fill_is_its_dot_before_its_label_or_the_dot_alone() -> None:
+    matrix = {
+        "type": "matrix",
+        "rows": ["Build"],
+        "columns": ["Plain", "Fill", "Both"],
+        "cells": [
+            {"row": "Build", "col": "Plain", "label": "x"},
+            {"row": "Build", "col": "Fill", "tone": "red"},
+            {"row": "Build", "col": "Both", "tone": "green", "label": "ok"},
+        ],
+    }
+
+    assert markdown_of([matrix]) == (
+        "|  | Plain | Fill | Both |\n| --- | --- | --- | --- |\n| **Build** | x | 🔴 | 🟢 ok |\n"
+    )
+
+
+def test_a_table_strikes_a_muted_title_dots_a_danger_title_and_leaves_a_tint_to_its_badge() -> None:
+    badges = {**API_BADGES, "RISK": {"label": "risk", "tone": "red", "legend": False}}
+    table = {
+        "type": "table",
+        "columns": [
+            {"key": "n", "label": "N", "kind": "number"},
+            {"key": "a", "label": "Item"},
+            {"key": "risk", "label": "Risk", "kind": "indicator"},
+            {"key": "tag", "label": "Tag", "kind": "badge"},
+        ],
+        "tint_by": "tag",
+        "rows": [
+            {"n": 1, "a": "old (x)", "risk": "warning", "tag": "API", "tone": "muted"},
+            {"n": 2, "a": "fire", "risk": "danger", "tag": "", "tone": "danger"},
+            {"n": 3, "a": "tinted", "risk": "", "tag": "RISK"},
+        ],
+    }
+
+    assert markdown_of([table], badges=badges) == (
+        "**Legend: badges used on this page**\n\n"
+        "- 🔵 **api** the API\n\n"
+        "| N | Item | Risk | Tag |\n"
+        "| --- | --- | --- | --- |\n"
+        "| 1 | ~~old (x)~~ | 🟡 | 🔵 **api** |\n"
+        "| 2 | 🔴 fire | 🔴 |  |\n"
+        "| 3 | tinted |  | 🔴 **risk** |\n"
+    )
+
+
+TEXT_X: Final = {"type": "text", "body": "x"}
+
+
+def test_a_toned_meter_card_and_walkthrough_step_lead_their_labels_with_their_dots() -> None:
+    blocks = [
+        {"type": "meter", "items": [{"label": "Disk", "value": 3, "max": 4, "tone": "warning"}]},
+        {"type": "cards", "items": [{"label": "Errors", "value": "3", "tone": "danger"}]},
+        {"type": "walkthrough", "steps": [{"label": "Stop", "tone": "danger", "detail": [TEXT_X]}]},
+    ]
+
+    assert markdown_of(blocks) == (
+        "- 🟡 **Disk**: ████████░░ 75.0%\n\n* 🔴 **Errors**: 3\n\n1. 🔴 **Stop**\n\n   x\n"
+    )
 
 
 def test_a_table_drops_column_tones_and_widths_markdown_cannot_show() -> None:
@@ -519,7 +672,7 @@ def test_a_comparison_bolds_its_feature_column_and_leaves_the_header_to_the_pipe
         "rows": [{"feature": "Risky", "values": [True, False]}],
     }
 
-    assert markdown_of([comparison]) == "|  | A | ★ B |\n| --- | --- | --- |\n| **Risky** | ✓ | ✗ |\n"
+    assert markdown_of([comparison]) == "|  | A | ★ B |\n| --- | --- | --- |\n| **Risky** | 🟢 ✓ | 🔴 ✗ |\n"
 
 
 def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the_pipe_table() -> None:
@@ -888,36 +1041,42 @@ def _github_html(markdown: str) -> str:
     return MarkdownIt("commonmark").enable("strikethrough").render(markdown)
 
 
-def _toned(text: str) -> TonedLabel:
-    return TonedLabel("info", parse_rich(text))
+def _spliced(*texts: str) -> ExportRich:
+    return tuple(run for text in texts for run in parse_rich(text))
 
 
 @pytest.mark.parametrize(
     ("runs", "markdown", "html"),
     [
         pytest.param(
-            (*parse_rich("**(bold)**"), _toned("t")),
+            _spliced("**(bold)**", "t"),
             "<strong>(bold)</strong>t\n",
             "<p><strong>(bold)</strong>t</p>\n",
-            id="bold-before-a-toned-label",
+            id="bold-before-a-letter",
         ),
         pytest.param(
-            (*parse_rich("*(it)*"), _toned("u")),
+            _spliced("*(it)*", "u"),
             "<em>(it)</em>u\n",
             "<p><em>(it)</em>u</p>\n",
-            id="italic-before-a-toned-label",
+            id="italic-before-a-letter",
         ),
         pytest.param(
-            (*parse_rich("~~(b)~~"), _toned("c")),
+            _spliced("~~(b)~~", "c"),
             "<del>(b)</del>c\n",
             "<p><del>(b)</del>c</p>\n",
-            id="strike-before-a-toned-label",
+            id="strike-before-a-letter",
         ),
         pytest.param(
-            (_toned("a"), *parse_rich("**(x)** y")),
+            _spliced("a", "**(x)** y"),
             "a<strong>(x)</strong> y\n",
             "<p>a<strong>(x)</strong> y</p>\n",
-            id="bold-after-a-toned-label",
+            id="bold-after-a-letter",
+        ),
+        pytest.param(
+            (*parse_rich("**(bold)**"), TonedLabel("info", parse_rich("t"))),
+            "<strong>(bold)</strong>🔵 t\n",
+            "<p><strong>(bold)</strong>🔵 t</p>\n",
+            id="bold-before-the-dot-of-a-toned-label",
         ),
         pytest.param(
             parse_rich("**(x)** y and **`api`**."),
@@ -926,10 +1085,10 @@ def _toned(text: str) -> TonedLabel:
             id="markers-stay-when-the-neighbours-allow-them",
         ),
         pytest.param(
-            (*parse_rich("**a** "), _toned("b")),
+            _spliced("**a** ", "b"),
             "**a** b\n",
             "<p><strong>a</strong> b</p>\n",
-            id="a-toned-label-after-a-space-changes-nothing",
+            id="a-letter-after-a-space-changes-nothing",
         ),
         pytest.param(
             parse_rich("*a **(x)**[t](date:2026-10-01)* z"),
@@ -957,37 +1116,37 @@ def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
     ("runs", "markdown", "html"),
     [
         pytest.param(
-            (*parse_rich("*(a)*"), _toned("**b**")),
+            _spliced("*(a)*", "**b**"),
             "*(a)*<strong>b</strong>\n",
             "<p><em>(a)</em><strong>b</strong></p>\n",
             id="italic-then-bold",
         ),
         pytest.param(
-            (*parse_rich("**(a)**"), _toned("*b*")),
+            _spliced("**(a)**", "*b*"),
             "**(a)**<em>b</em>\n",
             "<p><strong>(a)</strong><em>b</em></p>\n",
             id="bold-then-italic",
         ),
         pytest.param(
-            (*parse_rich("**(a)**"), _toned("**b**")),
+            _spliced("**(a)**", "**b**"),
             "**(a)**<strong>b</strong>\n",
             "<p><strong>(a)</strong><strong>b</strong></p>\n",
             id="bold-then-bold",
         ),
         pytest.param(
-            (*parse_rich("~~(a)~~"), _toned("~~b~~")),
+            _spliced("~~(a)~~", "~~b~~"),
             "~~(a)~~<del>b</del>\n",
             "<p><s>(a)</s><del>b</del></p>\n",
             id="strike-then-strike",
         ),
         pytest.param(
-            (*parse_rich("**(a)**"), _toned("~~b~~")),
+            _spliced("**(a)**", "~~b~~"),
             "**(a)**~~b~~\n",
             "<p><strong>(a)</strong><s>b</s></p>\n",
             id="different-marker-characters-do-not-merge",
         ),
         pytest.param(
-            (*parse_rich("**(a)** "), _toned("**b**")),
+            _spliced("**(a)** ", "**b**"),
             "**(a)** **b**\n",
             "<p><strong>(a)</strong> <strong>b</strong></p>\n",
             id="a-space-keeps-the-markers-apart",
@@ -1210,8 +1369,8 @@ def test_markers_flank_only_when_the_neighbours_let_github_open_and_close_them(
 @pytest.mark.parametrize(
     ("following", "written"),
     [
-        pytest.param(".", "**(x)**.\n", id="before-punctuation"),
-        pytest.param("y", "<strong>(x)</strong>y\n", id="before-a-letter"),
+        pytest.param(".", "🔵 **(x)**.\n", id="before-punctuation"),
+        pytest.param("y", "🔵 <strong>(x)</strong>y\n", id="before-a-letter"),
     ],
 )
 def test_a_bold_chip_directly_before_text_is_written_as_the_neighbour_allows(
@@ -1497,29 +1656,29 @@ def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
 
     assert (
         markdown_of([row], badges=API_BADGES)
-        == "**Legend: badges used on this page**\n\n- **api** the API\n\n**api**\n"
+        == "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n🔵 **api**\n"
     )
 
 
 def test_every_badge_and_state_block_becomes_github_markdown() -> None:
     assert markdown_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
-        "**Legend: badges used on this page**\n\n- **api** the API\n\n"
+        "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n"
         "* **Site**: West\n* **Owner**: ops\n\n"
         "- **Lead**: **Ana**\n\n"
         "* **Drift**: first\n\n  second\n* **Gap**\n\n"
-        "- **Clean**: 9 (90.0%) **▲ +1** **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
-        "**Affects**: **api** **ops**\n\n"
-        "- **Owners**: **web**\n\n"
+        "- **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
+        "**Affects**: 🔵 **api** 🟢 **ops**\n\n"
+        "- **Owners**: 🟣 **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
-        "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
-        "* **Zone**: ████░░░░░░ 42.9%\n"
+        "- 🔵 **Mon**: Start 🔵 **api**\n\n  kick-off\n- Later\n\n"
+        "* 🟡 **Zone**: ████░░░░░░ 42.9%\n"
     )
 
 
-def test_a_badge_is_a_bold_label_and_a_label_colon_is_not_doubled() -> None:
+def test_a_badge_is_its_dot_and_bold_label_and_a_label_colon_is_not_doubled() -> None:
     row = {"type": "badge_row", "label": "Affects:", "items": [{"label": "api", "tone": "blue"}]}
 
-    assert markdown_of([row]) == "**Affects**: **api**\n"
+    assert markdown_of([row]) == "**Affects**: 🔵 **api**\n"
 
 
 @pytest.mark.parametrize(

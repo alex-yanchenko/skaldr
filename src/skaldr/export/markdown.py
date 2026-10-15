@@ -189,7 +189,7 @@ class _MarkdownWriter:
         return heading_line(level, self.inline(runs))
 
     def table_lines(self, table: TableNode) -> list[str]:
-        return pipe_table_lines(table, self.inline)
+        return pipe_table_lines(table, self.runs)
 
     def list_lines(self, node: ListNode, use_alternate_markers: bool) -> list[str]:
         dash = _dash(use_alternate_markers)

@@ -288,7 +288,7 @@ def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
                 TableNode(
                     _cells("Slice", "Value", "Share"),
                     (
-                        TableRow(_cells("A", "3", "67%"), "success"),
+                        TableRow(_cells("A", "3", "67%"), "success", tone_only_tints=True),
                         TableRow(_cells("B", "1.5", "33%")),
                         TableRow(_cells("Total", "4.5", ""), emphasis="total"),
                     ),
@@ -355,7 +355,12 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
         Paragraph(bold("Open")),
         Diagram(
             XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False),
-            (TableNode(_cells("Series", "Q1", "Q2"), (TableRow(_cells("x", "1", "2"), "danger"),)),),
+            (
+                TableNode(
+                    _cells("Series", "Q1", "Q2"),
+                    (TableRow(_cells("x", "1", "2"), "danger", tone_only_tints=True),),
+                ),
+            ),
         ),
     )
 
@@ -1912,6 +1917,7 @@ def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -
                 TableRow(_cells("5", "Total"), emphasis="total"),
             ),
             columns=(TableColumn(share=0.1), TableColumn()),
+            title_column=1,
         ),
     )
 
@@ -1997,7 +2003,30 @@ def test_a_tinted_table_row_takes_the_tone_of_its_badge_key(
 
     assert lowered([table], badges=badges) == (
         API_LEGEND,
-        TableNode(_cells("A", ""), (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone),)),
+        TableNode(
+            _cells("A", ""),
+            (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone, tone_only_tints=True),),
+        ),
+    )
+
+
+def test_a_table_names_its_title_column_among_the_cells_it_writes() -> None:
+    table = make_table(
+        [
+            {"key": "n", "label": "N", "kind": "number"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "a", "label": "Item"},
+        ],
+        rows=[{"n": 1, "tag": "", "a": "x", "tone": "danger"}],
+    )
+
+    assert lowered([table]) == (
+        TableNode(
+            _cells("N", "Item"),
+            (TableRow(_cells("1", "x"), "danger"),),
+            columns=(TableColumn(share=0.1), TableColumn()),
+            title_column=1,
+        ),
     )
 
 
