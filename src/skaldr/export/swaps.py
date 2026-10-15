@@ -43,8 +43,8 @@ def web_address_of(media: Media, target: ExportTarget) -> str:
     return media.url
 
 
-def writes_its_data_table(figure: Figure, target: ExportTarget) -> bool:
-    return swaps(figure_feature(figure), target)
+def mermaid_cannot_draw(figure: Figure) -> bool:
+    return isinstance(figure, XYChart) and len(figure.series) > 1
 
 
 def data_table_swapped_in(node: Diagram, target: ExportTarget) -> tuple[Node, ...]:

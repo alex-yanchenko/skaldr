@@ -2,6 +2,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -142,6 +143,7 @@ TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 
 
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_TARGETS_WITH_MERMAID_DIAGRAMS: Final[tuple[ExportTarget, ...]] = ("markdown", "notion")
 _HOST_THE_IMAGE: Final = "host the image and give its https address"
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
@@ -216,11 +218,13 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list"
         )
     ),
-    RICH_STEP_NOTE: _refused_by(
-        EXPORT_TARGETS,
-        "show a link, citation, math, subscript or superscript in a flow or fan step's note, "
-        "since a diagram label holds plain text only",
-        "write the note as plain text and put the rest in a text block after the diagram",
+    RICH_STEP_NOTE: _kept_except(
+        _refused_by(
+            _TARGETS_WITH_MERMAID_DIAGRAMS,
+            "show a link, citation, math, or a subscript or superscript with no Unicode form "
+            "in a flow or fan step's note, since a diagram label holds plain text only",
+            "write the note as plain text and put the rest in a text block after the diagram",
+        )
     ),
     "chart": _kept_except(dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
     "chart with several series": dict.fromkeys(EXPORT_TARGETS, _CHART_AS_ITS_TABLE),
@@ -260,3 +264,13 @@ def swaps(feature: Feature, target: ExportTarget) -> bool:
 def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:
     forms = UNICODE_SCRIPT_FORMS[position]
     return next((character for character in text if ord(character) not in forms), None)
+
+
+def in_unicode_script_form(position: ScriptPosition, text: str, subject: str) -> str:
+    without_a_form = character_without_a_unicode_form(position, text)
+    if without_a_form is not None:
+        raise ExportInvariantError(
+            f"{subject} has no {position} form for '{without_a_form}' in '{text}'; "
+            "the export check should have refused it"
+        )
+    return text.translate(UNICODE_SCRIPT_FORMS[position])

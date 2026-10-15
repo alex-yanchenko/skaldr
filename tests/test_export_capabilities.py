@@ -8,7 +8,7 @@ import pytest
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap
-from skaldr.export.check import reject_what_the_target_cannot_show
+from skaldr.export.check import feature_hits, reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
@@ -26,6 +26,7 @@ from tests.factories import (
 )
 from tests.factories.capability_factory import (
     ADF_CASES,
+    ALL_REFUSALS,
     CLEAN_BLOCKS,
     SEEDED_CASES,
     SEEDED_REFUSALS,
@@ -39,6 +40,7 @@ from tests.factories.capability_factory import (
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
 Verdict = Literal["keep", "reject", "swap"]
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
@@ -59,19 +61,20 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "range": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
     "flow diagram": {"adf": "reject", "slack": "reject"},
     "fan diagram": {"adf": "reject", "slack": "reject"},
-    "link, citation or math in a flow or fan step's note": {
-        "markdown": "reject",
-        "notion": "reject",
-        "adf": "reject",
-        "slack": "reject",
-    },
+    "link, citation or math in a flow or fan step's note": {"markdown": "reject", "notion": "reject"},
     "chart": {"adf": "swap", "slack": "swap"},
     "math block": {"adf": "swap", "slack": "swap"},
     "inline math": {"adf": "swap", "slack": "swap"},
     "image from a data: URI": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
     "chart with several series": {"markdown": "swap", "notion": "swap", "adf": "swap", "slack": "swap"},
 }
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {**SEEDED_VERDICTS, **DIAGRAM_VERDICTS}
+REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
+    (feature, target)
+    for feature, cells in CAPABILITIES.items()
+    for target, capability in cells.items()
+    if isinstance(capability, Rejection)
+}
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
     "markdown": ["range", "image"],
     "notion": ["range", "image"],
@@ -102,9 +105,22 @@ REJECTIONS = [
 
 
 def _verdict(capability: Capability) -> Verdict:
-    if isinstance(capability, Rejection):
-        return "reject"
-    return "swap" if isinstance(capability, Swap) else capability
+    match capability:
+        case Rejection():
+            return "reject"
+        case Swap():
+            return "swap"
+        case _:
+            return capability
+
+
+def _first_refused_feature(case: RefusedCase) -> Feature:
+    report = parse_report(make_report(blocks=case.blocks))
+    return next(
+        hit.details.feature
+        for hit in feature_hits(report, lower_report(report))
+        if isinstance(CAPABILITIES[hit.details.feature][case.target], Rejection)
+    )
 
 
 def _template_fields(template: str) -> set[str]:
@@ -131,8 +147,14 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
 
     assert verdicts == {
         feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
-        for feature, seeded in {**SEEDED_VERDICTS, **DIAGRAM_VERDICTS}.items()
+        for feature, seeded in VERDICTS.items()
     }
+
+
+def test_every_rejection_cell_has_a_seeded_case_the_check_refuses_for_it() -> None:
+    seeded = {(_first_refused_feature(case), case.target) for case in ALL_REFUSALS.values()}
+
+    assert sorted(REJECTION_CELLS - seeded) == []
 
 
 def test_each_feature_is_carried_by_exactly_one_kind_of_details() -> None:

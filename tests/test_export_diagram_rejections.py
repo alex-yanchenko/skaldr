@@ -9,7 +9,7 @@ from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import check as check_module
 from skaldr.export.adf import render_adf
-from skaldr.export.capabilities import CAPABILITIES, TARGET_SUBJECTS, Feature, Rejection, Swap
+from skaldr.export.capabilities import CAPABILITIES, TARGET_SUBJECTS, Feature, Rejection, Swap, swaps
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
@@ -39,10 +39,79 @@ EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 EXAMPLE_RANGE_PATH = "blocks.4.range"
 
 
-MERMAID_SEVERAL_SERIES_ERROR = (
-    "a Mermaid xy chart cannot tell several series apart; the export should have written its data table"
-)
-TWO_SERIES_TABLE = "| Series | Mon | Tue |\n| --- | --- | --- |\n| Zone 1 | 4 | 6 |\n| Zone 2 | 1 | 2 |\n"
+PAGE_NAMES: dict[ExportTarget, str] = {
+    "markdown": "page.md",
+    "notion": "page.md",
+    "adf": "page.adf.json",
+    "slack": "page.md",
+}
+ONE_SERIES_TABLE = "| Series | Mon | Tue |\n| --- | --- | --- |\n| Zone 1 | 4 | 6 |\n"
+TWO_SERIES_TABLE = f"{ONE_SERIES_TABLE}| Zone 2 | 1 | 2 |\n"
+LATEX_FENCE = "```latex\nx^2 + 1\n```\n"
+INLINE_LATEX = "rate `x_i` now\n"
+
+
+def _notion_table(*rows: tuple[str, ...]) -> str:
+    lines = ["\t<tr>\n" + "".join(f"\t\t<td>{cell}</td>\n" for cell in row) + "\t</tr>\n" for row in rows]
+    return '<table fit-page-width="true" header-row="true">\n' + "".join(lines) + "</table>\n"
+
+
+def _adf_text(text: str, *marks: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "text", "text": text, **({"marks": list(marks)} if marks else {})}
+
+
+def _adf_cell(kind: str, text: str) -> dict[str, Any]:
+    return {"type": kind, "content": [{"type": "paragraph", "content": [_adf_text(text)]}]}
+
+
+def _adf_doc(*content: dict[str, Any]) -> dict[str, Any]:
+    return {"version": 1, "type": "doc", "content": list(content)}
+
+
+def _adf_series_table(*rows: tuple[str, str, str]) -> dict[str, Any]:
+    header = {
+        "type": "tableRow",
+        "content": [_adf_cell("tableHeader", text) for text in ("Series", "Mon", "Tue")],
+    }
+    body = [{"type": "tableRow", "content": [_adf_cell("tableCell", text) for text in row]} for row in rows]
+    attrs = {"isNumberColumnEnabled": False, "layout": "default"}
+    return _adf_doc({"type": "table", "attrs": attrs, "content": [header, *body]})
+
+
+SERIES_HEADER = ("**Series**", "**Mon**", "**Tue**")
+SWAPPED_FORMS: dict[Feature, dict[ExportTarget, Any]] = {
+    "chart": {
+        "markdown": ONE_SERIES_TABLE,
+        "notion": _notion_table(SERIES_HEADER, ("Zone 1", "4", "6")),
+        "adf": _adf_series_table(("Zone 1", "4", "6")),
+        "slack": ONE_SERIES_TABLE,
+    },
+    "chart with several series": {
+        "markdown": TWO_SERIES_TABLE,
+        "notion": _notion_table(SERIES_HEADER, ("Zone 1", "4", "6"), ("Zone 2", "1", "2")),
+        "adf": _adf_series_table(("Zone 1", "4", "6"), ("Zone 2", "1", "2")),
+        "slack": TWO_SERIES_TABLE,
+    },
+    "math block": {
+        "markdown": LATEX_FENCE,
+        "notion": LATEX_FENCE,
+        "adf": _adf_doc(
+            {"type": "codeBlock", "attrs": {"language": "latex"}, "content": [_adf_text("x^2 + 1")]}
+        ),
+        "slack": LATEX_FENCE,
+    },
+    "inline math": {
+        "markdown": INLINE_LATEX,
+        "notion": INLINE_LATEX,
+        "adf": _adf_doc(
+            {
+                "type": "paragraph",
+                "content": [_adf_text("rate "), _adf_text("x_i", {"type": "code"}), _adf_text(" now")],
+            }
+        ),
+        "slack": INLINE_LATEX,
+    },
+}
 STACKED_TABLE = f"{TWO_SERIES_TABLE}| **Total** | **5** | **8** |\n"
 ONE_BAR_MERMAID = '```mermaid\nxychart-beta\n    x-axis ["Mon", "Tue"]\n    bar [4, 6]\n```\n'
 SWAP_CELLS = [
@@ -82,13 +151,27 @@ def test_a_writer_swaps_a_feature_only_while_its_capability_cell_lists_the_swap(
     with pytest.raises(ExportInvariantError) as raised:
         _written_without_the_check(SWAPPED_BLOCKS[feature], target)
 
-    assert str(raised.value) == _what_a_writer_without_the_swap_raises(feature, target)
+    assert str(raised.value) == (
+        f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
+    )
 
 
-def _what_a_writer_without_the_swap_raises(feature: Feature, target: ExportTarget) -> str:
-    if target in ("markdown", "notion"):
-        return MERMAID_SEVERAL_SERIES_ERROR
-    return f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
+@pytest.mark.parametrize(
+    ("feature", "target"),
+    [
+        pytest.param(feature, target, id=f"{target}-{feature}")
+        for feature in SWAPPED_BLOCKS
+        for target in EXPORT_TARGETS
+    ],
+)
+def test_a_writer_writes_the_swapped_form_exactly_where_the_capability_table_lists_a_swap(
+    feature: Feature, target: ExportTarget
+) -> None:
+    written = _written_without_the_check(SWAPPED_BLOCKS[feature], target)
+    form = SWAPPED_FORMS[feature][target]
+    is_the_swapped_form = json.loads(written) == form if target == "adf" else written == form
+
+    assert is_the_swapped_form == swaps(feature, target)
 
 
 @pytest.mark.parametrize("target", ["adf", "slack"])
@@ -116,35 +199,6 @@ def test_every_writer_raises_an_internal_error_for_an_image_from_a_data_uri_hand
         f"{TARGET_SUBJECTS[target]} has no form for 'image from a data: URI'; "
         "the export check should have refused it"
     )
-
-
-@pytest.mark.parametrize(
-    ("target", "table"),
-    [
-        pytest.param(
-            "markdown",
-            "| Slice | Value | Share |\n| --- | --- | --- |\n"
-            "| Fixed | 9 | 75% |\n| Open | 3 | 25% |\n| **Total** | **12** |  |\n",
-            id="markdown",
-        ),
-        pytest.param(
-            "notion",
-            '<table fit-page-width="true" header-row="true">\n'
-            "\t<tr>\n\t\t<td>**Slice**</td>\n\t\t<td>**Value**</td>\n\t\t<td>**Share**</td>\n\t</tr>\n"
-            '\t<tr>\n\t\t<td color="green_bg">Fixed</td>\n\t\t<td>9</td>\n\t\t<td>75%</td>\n\t</tr>\n'
-            "\t<tr>\n\t\t<td>Open</td>\n\t\t<td>3</td>\n\t\t<td>25%</td>\n\t</tr>\n"
-            "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**12**</td>\n\t\t<td></td>\n\t</tr>\n"
-            "</table>\n",
-            id="notion",
-        ),
-    ],
-)
-def test_a_markdown_writer_writes_a_chart_as_its_data_table_alone_once_its_cell_lists_the_swap(
-    monkeypatch: pytest.MonkeyPatch, target: ExportTarget, table: str
-) -> None:
-    monkeypatch.setitem(CAPABILITIES["chart"], target, Swap("the chart's data table"))
-
-    assert _written_without_the_check([DONUT], target) == table
 
 
 @pytest.mark.parametrize("case", DIAGRAM_CASES)
@@ -177,9 +231,24 @@ def test_export_refuses_each_diagram_case_and_writes_nothing(
 
 @pytest.mark.parametrize("case", DIAGRAM_ACCEPTED_CASES)
 def test_a_target_that_shows_a_diagram_case_exports_it(tmp_path: Path, case: AcceptedCase) -> None:
-    data_path = write_report(tmp_path, make_report(blocks=case.blocks))
+    data_path = write_report(tmp_path, case.report())
+    export_dir = tmp_path / "exported"
 
-    assert main([str(data_path), "--export", case.target, "--export-dir", str(tmp_path / "exported")]) == 0
+    exit_code = main([str(data_path), "--export", case.target, "--export-dir", str(export_dir)])
+
+    page = (export_dir / PAGE_NAMES[case.target]).read_text(encoding="utf-8")
+    assert (exit_code, page if case.written is not None else None) == (0, case.written)
+
+
+@pytest.mark.parametrize("case", DIAGRAM_ACCEPTED_CASES)
+def test_check_for_a_target_passes_each_case_the_target_shows(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], case: AcceptedCase
+) -> None:
+    data_path = write_report(tmp_path, case.report())
+
+    exit_code = main(["--check", str(data_path), "--for", case.target])
+
+    assert (exit_code, capsys.readouterr().err) == (0, "")
 
 
 def test_a_slack_canvas_writes_each_chart_as_its_data_table_alone() -> None:

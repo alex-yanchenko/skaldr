@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -174,8 +174,8 @@ FAN: dict[str, Any] = {
 AS_A_NUMBERED_LIST = "write the steps as a numbered list"
 AS_A_LIST = "write the hub and its spokes as a list"
 RICH_NOTE_WHY = (
-    "{target} cannot show a link, citation, math, subscript or superscript in a flow or fan step's note, "
-    "since a diagram label holds plain text only"
+    "{subject} cannot show a link, citation, math, or a subscript or superscript with no Unicode form "
+    "in a flow or fan step's note, since a diagram label holds plain text only"
 )
 RICH_NOTE_INSTEAD = "write the note as plain text and put the rest in a text block after the diagram"
 REFERENCES: dict[str, Any] = {
@@ -189,7 +189,8 @@ RICH_NOTES: dict[str, str] = {
     "link-inside-bold": "**[doc](https://example.com/d)**",
     "citation-inside-a-color-span": "per [[^sop]]{tone=info}",
     "inline-math": "rate $`x_i`$",
-    "superscript": "about 10^3^",
+    "superscript-with-no-unicode-form": "about 10^q^",
+    "subscript-with-no-unicode-form": "zone C~b~",
     "issue-link": "see [WH-1](jira:WH-1)",
     "document-link": "see [the plan](doc:cold-room-plan)",
 }
@@ -232,7 +233,7 @@ MATH_BLOCKS: list[dict[str, Any]] = [
     {"type": "text", "body": "rate $`x_i`$ now"},
 ]
 SWAPPED_BLOCKS: dict[Feature, list[dict[str, Any]]] = {
-    "chart": [DONUT],
+    "chart": [xy_chart("line", [4, 6])],
     "chart with several series": [xy_chart("bar", [4, 6], [1, 2])],
     "math block": MATH_BLOCKS[:1],
     "inline math": MATH_BLOCKS[1:],
@@ -244,16 +245,50 @@ def flow_with_a_note(note: str) -> list[dict[str, Any]]:
     return [{"type": "heading", "text": "Count"}, flow, REFERENCES]
 
 
+def flow_with_a_note_on_its_last_step(note: str) -> list[dict[str, Any]]:
+    flow = {"type": "flow", "steps": [{"label": "Scan"}, {"label": "Fix"}, {"label": "Check", "note": note}]}
+    return [flow, REFERENCES]
+
+
+def fan_with_a_note_on_a_spoke(note: str) -> list[dict[str, Any]]:
+    return [{**FAN, "spokes": [{"label": "Scans"}, {"label": "Recounts", "note": note}]}, REFERENCES]
+
+
 def rich_note_refusal(
     target: ExportTarget, subject: str, blocks: list[dict[str, Any]], where: str
 ) -> RefusedCase:
-    return RefusedCase(target, blocks, RICH_NOTE_WHY.format(target=subject), RICH_NOTE_INSTEAD, where)
+    return RefusedCase(target, blocks, RICH_NOTE_WHY.format(subject=subject), RICH_NOTE_INSTEAD, where)
 
 
 @dataclass(frozen=True)
 class AcceptedCase:
     target: ExportTarget
     blocks: list[dict[str, Any]]
+    written: str | None = None
+    meta: dict[str, Any] = field(default_factory=lambda: {"title": "Plan"})
+
+    def report(self) -> dict[str, Any]:
+        return make_report(meta=self.meta, blocks=self.blocks)
+
+
+MERMAID_SUBJECTS: tuple[tuple[ExportTarget, str], ...] = (("markdown", "GitHub"), ("notion", "Notion"))
+PEOPLE_META: dict[str, Any] = {"title": "Plan", "people": {"ada": {}}}
+SCRIPTED_NOTE_FLOW: dict[str, Any] = {
+    "type": "flow",
+    "numbered": False,
+    "steps": [{"label": "Scan", "note": "about 10^3^ bins of H~2~O"}, {"label": "Fix"}],
+}
+SCRIPTED_NOTE_MERMAID = (
+    '```mermaid\nflowchart LR\n    s1["Scan<br>about 10³ bins of H₂O"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
+)
+MENTION_NOTE_FLOW: dict[str, Any] = {
+    "type": "flow",
+    "numbered": False,
+    "steps": [{"label": "Scan", "note": "[Ada](user:ada) by [1 Oct](date:2026-10-01)"}, {"label": "Fix"}],
+}
+MENTION_NOTE_MERMAID = (
+    '```mermaid\nflowchart LR\n    s1["Scan<br>Ada by 1 Oct"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
+)
 
 
 DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
@@ -313,6 +348,18 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         [{**FAN, "hub": {"label": "Count", "note": RICH_NOTES["inline-math"]}}],
         "at blocks.0.fan",
     ),
+    **{
+        f"{target}-flow-last-step-note-citation": rich_note_refusal(
+            target, subject, flow_with_a_note_on_its_last_step(RICH_NOTES["citation"]), "at blocks.0.flow"
+        )
+        for target, subject in MERMAID_SUBJECTS
+    },
+    **{
+        f"{target}-fan-spoke-note-web-link": rich_note_refusal(
+            target, subject, fan_with_a_note_on_a_spoke(RICH_NOTES["web-link"]), "at blocks.0.fan"
+        )
+        for target, subject in MERMAID_SUBJECTS
+    },
     "markdown-data-image": RefusedCase(
         "markdown",
         [DATA_IMAGE],
@@ -371,6 +418,18 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "notion-fan": AcceptedCase("notion", [FAN]),
     "markdown-flow-with-a-styled-note": AcceptedCase("markdown", flow_with_a_note("by **aisle** and `bin`")),
     "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
+    "markdown-flow-note-with-unicode-scripts": AcceptedCase(
+        "markdown", [SCRIPTED_NOTE_FLOW], f"# Plan\n\n{SCRIPTED_NOTE_MERMAID}"
+    ),
+    "notion-flow-note-with-unicode-scripts": AcceptedCase(
+        "notion", [SCRIPTED_NOTE_FLOW], SCRIPTED_NOTE_MERMAID
+    ),
+    "markdown-flow-note-with-a-mention-and-a-date": AcceptedCase(
+        "markdown", [MENTION_NOTE_FLOW], f"# Plan\n\n{MENTION_NOTE_MERMAID}", PEOPLE_META
+    ),
+    "notion-flow-note-with-a-mention-and-a-date": AcceptedCase(
+        "notion", [MENTION_NOTE_FLOW], MENTION_NOTE_MERMAID, PEOPLE_META
+    ),
     **{
         f"{target}-chart-{name}": AcceptedCase(target, [chart])
         for target in EXPORT_TARGETS
@@ -379,5 +438,6 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
     **{f"{target}-web-image": AcceptedCase(target, [WEB_IMAGE]) for target in EXPORT_TARGETS},
 }
+ALL_REFUSALS: dict[str, RefusedCase] = {**SEEDED_REFUSALS, **DIAGRAM_REFUSALS}
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
 DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

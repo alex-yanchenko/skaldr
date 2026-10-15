@@ -112,14 +112,13 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
 }
 
 
-_RUNS_A_PLAIN_LABEL_LOSES: Final = (
+_RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
     Link,
     AnchorLink,
     IssueLink,
     DocumentLink,
     Citation,
     InlineMath,
-    ScriptText,
 )
 
 DocumentPosition = tuple[tuple[int, int, str], ...]
@@ -255,14 +254,14 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             assert_never(node)
 
 
-def every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
+def _every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
     for run in runs:
         yield run
         match run:
             case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
-                yield from every_run_within(run.label)
+                yield from _every_run_within(run.label)
             case Styled() | Tinted():
-                yield from every_run_within(run.runs)
+                yield from _every_run_within(run.runs)
             case (
                 Plain()
                 | Code()
@@ -285,11 +284,17 @@ def every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
 
 
 def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
-    return (run for run in every_run_within(runs) if isinstance(run, ScriptText))
+    return (run for run in _every_run_within(runs) if isinstance(run, ScriptText))
 
 
-def _loses_meaning_in_a_plain_label(runs: ExportRich) -> bool:
-    return any(isinstance(run, _RUNS_A_PLAIN_LABEL_LOSES) for run in every_run_within(runs))
+def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
+    if isinstance(run, ScriptText):
+        return character_without_a_unicode_form(run.position, run.text) is not None
+    return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
+
+
+def _loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
+    return any(map(_a_diagram_label_cannot_hold, _every_run_within(runs)))
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -339,7 +344,7 @@ class _TreeWalk:
     def math_hits(self, node: Node) -> Iterator[FeatureHit]:
         if isinstance(node, DisplayMath):
             yield self.hit(Occurrence("math block"), node.authored_at)
-        own_runs = every_run_within(chain.from_iterable(_own_texts(node)))
+        own_runs = _every_run_within(chain.from_iterable(_own_texts(node)))
         if any(isinstance(run, InlineMath) for run in own_runs):
             yield self.hit(Occurrence("inline math"), node.authored_at)
 
@@ -381,7 +386,7 @@ class _TreeWalk:
         yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
         figure = node.figure
         if isinstance(figure, Graph) and any(
-            _loses_meaning_in_a_plain_label(step.note) for step in figure.nodes
+            _loses_meaning_in_a_diagram_label(step.note) for step in figure.nodes
         ):
             yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 
@@ -454,6 +459,10 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     return ", ".join(places) or None
 
 
+def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
+    return _TreeWalk(_model_hits(report, document)).document(document.body)
+
+
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
     for hit in hits:
         capability = CAPABILITIES[hit.details.feature][target]
@@ -470,5 +479,4 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    walk = _TreeWalk(_model_hits(report, document))
-    _raise_the_first_rejection(walk.document(document.body), target)
+    _raise_the_first_rejection(feature_hits(report, document), target)

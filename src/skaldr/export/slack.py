@@ -9,8 +9,8 @@ from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
-    UNICODE_SCRIPT_FORMS,
-    character_without_a_unicode_form,
+    TARGET_SUBJECTS,
+    in_unicode_script_form,
 )
 from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
@@ -80,16 +80,6 @@ def _slack_date(day: date) -> str:
     return f"![](slack_date:{day.isoformat()})"
 
 
-def _in_unicode_script_form(position: ScriptPosition, text: str) -> str:
-    without_a_form = character_without_a_unicode_form(position, text)
-    if without_a_form is not None:
-        raise ExportInvariantError(
-            f"a Slack canvas has no {position} form for '{without_a_form}' in '{text}'; "
-            "the export check should have refused it"
-        )
-    return text.translate(UNICODE_SCRIPT_FORMS[position])
-
-
 class _SlackRuns(CommonMarkRuns):
     def __init__(self, written_line_break: str) -> None:
         self.written_line_break = written_line_break
@@ -114,7 +104,7 @@ class _SlackRuns(CommonMarkRuns):
         return inner
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
-        return _in_unicode_script_form(position, text)
+        return in_unicode_script_form(position, text, TARGET_SUBJECTS["slack"])
 
 
 @dataclass(frozen=True)

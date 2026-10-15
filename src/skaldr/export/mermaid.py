@@ -5,9 +5,12 @@ from typing import Final, NamedTuple
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
+from skaldr.export.capabilities import in_unicode_script_form
 from skaldr.export.inline import one_line
-from skaldr.export.runs import export_visible_text
+from skaldr.export.runs import ExportVisibleText, write_export_runs
+from skaldr.export.swaps import mermaid_cannot_draw
 from skaldr.export.tree import Figure, Graph, GraphNode, PieChart, ToneName, XYChart
+from skaldr.richtext import ScriptPosition
 
 
 class NodeColors(NamedTuple):
@@ -55,8 +58,13 @@ def _mermaid_number(value: float) -> str:
     return format(Decimal(repr(_without_negative_zero(value))), "f")
 
 
+class _LabelText(ExportVisibleText):
+    def script(self, position: ScriptPosition, text: str, /) -> str:
+        return in_unicode_script_form(position, text, "a Mermaid label")
+
+
 def _node_line(node: GraphNode) -> str:
-    note = export_visible_text(node.note)
+    note = write_export_runs(node.note, _LabelText())
     label = _mermaid_text(node.label) + (f"<br>{_mermaid_text(note)}" if note else "")
     tone_class = f":::{node.tone}" if node.tone else ""
     return f'    {node.key}["{label}"]{tone_class}'
@@ -75,7 +83,7 @@ def _graph_lines(graph: Graph) -> list[str]:
 
 
 def _xy_lines(chart: XYChart) -> list[str]:
-    if len(chart.series) > 1:
+    if mermaid_cannot_draw(chart):
         raise ExportInvariantError(
             "a Mermaid xy chart cannot tell several series apart; "
             "the export should have written its data table"

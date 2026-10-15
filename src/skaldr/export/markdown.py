@@ -27,7 +27,7 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import web_address_of, writes_its_data_table
+from skaldr.export.swaps import data_table_swapped_in, mermaid_cannot_draw, web_address_of
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -297,8 +297,8 @@ class _MarkdownWriter:
                 return _Written.of(columns.lines, columns.tail)
             case Tabs():
                 return self.tabs_written(node, after)
-            case Diagram() if writes_its_data_table(node.figure, "markdown"):
-                table = self.blocks_after(node.supplement, after)
+            case Diagram() if mermaid_cannot_draw(node.figure):
+                table = self.blocks_after(data_table_swapped_in(node, "markdown"), after)
                 return _Written.of(table.lines, table.tail)
             case Diagram():
                 supplement = self.blocks_after(node.supplement, None)
