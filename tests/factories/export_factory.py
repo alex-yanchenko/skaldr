@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeVar, get_args
 
@@ -9,7 +10,8 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell
+from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument, Node, Paragraph, TableCell
+from skaldr.export_targets import ExportTarget
 from skaldr.models import AnyBlock, AuthoredBlock, parse_report
 from skaldr.richtext import Plain, Rich
 from tests.factories.report_factory import make_index_report, make_report
@@ -114,6 +116,12 @@ def notion_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
 
 def markdown_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:
     return render_markdown(lowered(blocks, **overrides))
+
+
+def check_nodes(nodes: Sequence[Node], target: ExportTarget) -> None:
+    report = parse_report(make_report())
+    page = LoweredDocument(report.meta.title, (BlockRegion(0, tuple(nodes)),))
+    reject_what_the_target_cannot_show(report, page, target)
 
 
 def slack_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:

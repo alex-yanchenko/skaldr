@@ -6,7 +6,7 @@ from typing import get_args
 
 import pytest
 
-from skaldr.errors import ExportRejectedError, ReportError
+from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
 from skaldr.export.adf import (
     IssueLinks,
     adf_json,
@@ -58,6 +58,7 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.richtext import Code, Plain, Styled
+from tests.factories import check_nodes
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -506,6 +507,18 @@ def test_an_empty_callout_holds_an_empty_paragraph() -> None:
     )
 
 
+@pytest.mark.parametrize("empty", [Quote((), ()), Tabs(())], ids=["empty-quote", "empty-tabs"])
+def test_a_callout_holding_a_block_that_writes_nothing_passes_the_check_as_an_empty_panel(
+    empty: Node,
+) -> None:
+    callout = Callout("info", (empty,))
+
+    check_nodes((callout,), "adf")
+    assert _rendered(callout) == _doc(
+        {"type": "panel", "attrs": {"panelType": "info"}, "content": [{"type": "paragraph"}]}
+    )
+
+
 def test_a_callout_cannot_hold_a_table() -> None:
     table = TableNode((TableCell(plain("h")),), ())
 
@@ -886,13 +899,24 @@ class FutureBlock:
     pass
 
 
-def test_a_lowered_node_with_no_adf_form_fails_naming_it(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_lowered_node_with_no_adf_form_is_an_internal_error_naming_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(blocks_module, "Divider", FutureBlock)
 
-    with pytest.raises(
-        AssertionError, match=_exactly("Expected code to be unreachable, but got: Divider(authored_at=None)")
-    ):
+    with pytest.raises(ExportInvariantError, match=_exactly("ADF has no form for the lowered node Divider")):
         render_adf((Divider(),))
+
+
+def test_a_block_the_check_would_refuse_is_an_internal_error_when_the_writer_is_called_alone() -> None:
+    with pytest.raises(
+        ExportInvariantError,
+        match=_exactly(
+            "ADF does not allow a table inside a panel, written from a TableNode; "
+            "the export check should have refused it"
+        ),
+    ):
+        render_adf((Callout("info", (TableNode((TableCell(plain("h")),), ()),)),))
 
 
 def test_the_rejection_error_is_a_report_error() -> None:

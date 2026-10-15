@@ -5,7 +5,7 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ExportRejectedError
+from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import FIRST_LIST_NUMBER
 from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
@@ -196,12 +196,15 @@ def _canvas_item(entry: ListEntry) -> _Item:
     nested: _List | None = None
     for child in entry.children:
         match child:
-            case Paragraph() if nested is None:
+            case Paragraph() if nested is None or not child.text:
                 text = _with_paragraph(text, child.text)
             case ListNode() if nested is None:
                 nested = _canvas_list(child)
             case _:
-                pass
+                raise ExportInvariantError(
+                    f"a Slack canvas list item has no place for a {type(child).__name__} here; "
+                    "the export check should have refused it"
+                )
     return _Item(text, entry.checked, nested)
 
 

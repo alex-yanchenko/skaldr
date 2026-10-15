@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from skaldr.cli import main
-from skaldr.errors import ExportRejectedError
+from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
 from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.runs import Break, Chip, ExportRun, StatusMark
@@ -513,6 +513,31 @@ def _rejected(nodes: Sequence[Node]) -> dict[str, Any]:
         reject_unshowable_nodes(nodes, "slack")
         render_slack(nodes)
     return vars(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("entry", "held"),
+    [
+        pytest.param(make_list_entry("a", CodeBlock("recount")), "CodeBlock", id="code-block"),
+        pytest.param(
+            make_list_entry("a", make_bullets("b"), make_bullets("c")), "ListNode", id="second-list"
+        ),
+        pytest.param(
+            make_list_entry("a", make_bullets("b"), make_paragraph("after")),
+            "Paragraph",
+            id="paragraph-after",
+        ),
+    ],
+)
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_list_item_the_check_refuses(
+    entry: ListEntry, held: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([make_bullets(entry)])
+
+    assert str(raised.value) == (
+        f"a Slack canvas list item has no place for a {held} here; the export check should have refused it"
+    )
 
 
 def test_a_table_over_300_cells_with_no_heading_above_it_is_rejected_naming_no_place() -> None:

@@ -15,6 +15,10 @@ class ExportRejectedError(ReportError):
         super().__init__(f"{located}; {instead}")
 
 
+class ExportInvariantError(RuntimeError):
+    pass
+
+
 class AuthError(Exception):
     pass
 

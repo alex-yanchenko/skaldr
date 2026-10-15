@@ -3,8 +3,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from itertools import count, takewhile
 from typing import Final, Literal
 
-from typing_extensions import assert_never
+from typing_extensions import Never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.adf.colors import BACKGROUND_COLOR, PANEL_TYPE
 from skaldr.export.adf.inline import AdfRuns, IssueLinks, text_color_mark, with_mark
 from skaldr.export.adf.nodes import (
@@ -75,12 +76,29 @@ from skaldr.richtext import Plain
 Container = Literal["doc", "panel", "expand", "nested_expand"]
 
 JIRA_DESCRIPTION_LIMIT: Final = 32_767
+_TEXT_BLOCKS: Final = frozenset({"paragraph", "heading", "bulletList", "orderedList", "taskList"})
+_FENCED_BLOCKS: Final = frozenset({"codeBlock", "rule", "panel", "blockquote"})
+_ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
+    "doc": _TEXT_BLOCKS | _FENCED_BLOCKS | {"table", "expand"},
+    "expand": _TEXT_BLOCKS | _FENCED_BLOCKS | {"table", "nestedExpand"},
+    "nested_expand": _TEXT_BLOCKS | _FENCED_BLOCKS,
+    "panel": _TEXT_BLOCKS | {"codeBlock", "rule"},
+}
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
 MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
 LOOP_BACK_NOTE: Final = " (loop back)"
 LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
+
+
+def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
+    for block in produced:
+        if block["type"] not in _ALLOWED_BLOCKS[container]:
+            raise ExportInvariantError(
+                f"ADF does not allow a {block['type']} inside a {container}, written from a "
+                f"{type(node).__name__}; the export check should have refused it"
+            )
 
 
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
@@ -127,7 +145,12 @@ class _AdfBlocks:
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()
 
     def blocks(self, nodes: Iterable[Node], container: Container) -> list[AdfBlock]:
-        return [block for node in nodes for block in self.node_blocks(node, container)]
+        written: list[AdfBlock] = []
+        for node in nodes:
+            produced = self.node_blocks(node, container)
+            _require_the_container_holds(node, produced, container)
+            written += produced
+        return written
 
     def node_blocks(self, node: Node, container: Container) -> list[AdfBlock]:
         match node:
@@ -168,7 +191,8 @@ class _AdfBlocks:
             case TableOfContents():
                 return []
             case _:
-                assert_never(node)
+                exhausted: Never = node
+                raise ExportInvariantError(f"ADF has no form for the lowered node {type(exhausted).__name__}")
 
     def paragraph_blocks(self, node: Paragraph) -> list[AdfBlock]:
         content = self.inline(node.text)
