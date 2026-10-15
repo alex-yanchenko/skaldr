@@ -628,7 +628,9 @@ The GitHub-flavored and Notion exports draw a donut, or a bar or line chart with
 Mermaid chart over its data table. A Mermaid chart has no legend, so they write a chart with several
 series as its data table alone. The ADF and Slack canvas exports write every chart as its data table.
 The table holds every value the chart draws, and for stacked bars with several series a `Total` row
-holds each category's stack.
+holds each category's stack. A row keeps the `tone` set on its series or slice, where the target shows a
+row's tone; the colour the page picks for a series or slice with no `tone` is not carried, since the
+label in the row's first cell tells it apart.
 
 ```yaml
 - type: chart
