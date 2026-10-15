@@ -2,7 +2,7 @@ import hashlib
 import html
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from typing import Final, NoReturn
+from typing import Final
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, placed_section
@@ -19,13 +19,13 @@ from skaldr.publish.slack.canvas_markdown import (
     ARCHIVED_TITLE_MARKER,
     KeyedCanvas,
     archived_line,
-    canvas_blocks,
+    body_with_content_swapped,
+    canvas_body,
     canvas_markdown_of,
     canvas_stamp_line,
     comparable_text,
-    html_sections,
-    is_a_list,
     keyed_canvas,
+    with_the_stamp_line,
 )
 from skaldr.publish.transport import (
     AddSection,
@@ -63,90 +63,6 @@ def _canvas_named(canvas_id: str) -> str:
 
 def _named_fields(request: FieldsWrite) -> list[str]:
     return list(dict.fromkeys([*request.changed_fields, *request.cleared_fields]))
-
-
-class _Edits:
-    def __init__(self, api: SlackApi, canvas_id: str, keyed: KeyedCanvas) -> None:
-        self._api = api
-        self._canvas_id = canvas_id
-        self._blocks = [block.raw for block in keyed.blocks]
-        self._sent = 0
-
-    def delete(self, position: int) -> None:
-        self._send({"operation": "delete", "section_id": self._section_id(position)})
-        del self._blocks[position]
-
-    def insert(self, position: int, markdown: str) -> None:
-        if not markdown:
-            return
-        content = markdown_content(markdown)
-        if position == 0:
-            self._send({"operation": "insert_at_start", "document_content": content})
-        else:
-            anchor = self._section_id(position - 1)
-            self._send({"operation": "insert_after", "section_id": anchor, "document_content": content})
-        self._blocks[position:position] = canvas_blocks(markdown)
-
-    def append(self, markdown: str) -> None:
-        self._send({"operation": "insert_at_end", "document_content": markdown_content(markdown)})
-        self._blocks += canvas_blocks(markdown)
-
-    def rename(self, title: str) -> None:
-        self._send(_rename(title))
-
-    def replace(self, position: int, markdown: str) -> None:
-        content = markdown_content(markdown)
-        self._send(
-            {"operation": "replace", "section_id": self._section_id(position), "document_content": content}
-        )
-        self._blocks[position : position + 1] = canvas_blocks(markdown)
-
-    def rewrite(self, keyed: KeyedCanvas, old: Sequence[int], at: int, markdown: str) -> None:
-        added = canvas_blocks(markdown)
-        if added and not _lists_would_meet(keyed, old, at, added):
-            self.insert(at, markdown)
-            for position in reversed(old):
-                self.delete(position + len(added) if position >= at else position)
-            return
-        for position in reversed(old):
-            self.delete(position)
-        self.insert(at - sum(position < at for position in old), markdown)
-
-    def _send(self, change: JsonFields) -> None:
-        try:
-            self._api.edit_canvas(self._canvas_id, change)
-        except ConnectorError as exc:
-            if self._sent == 0:
-                raise
-            raise ConnectorError(
-                f"Slack canvas {self._canvas_id} is partly written, so publish again to finish: {exc}"
-            ) from exc
-        self._sent += 1
-
-    def _section_id(self, position: int) -> str:
-        listed = html_sections(self._api.canvas_html(self._canvas_id))
-        ids = [section.section_id for section in listed if section.section_id is not None]
-        if not len(ids) == len(listed) == len(self._blocks):
-            self._refuse(
-                f"Slack lists {len(ids)} sections for canvas {self._canvas_id} but its Markdown holds "
-                f"{len(self._blocks)} blocks"
-            )
-        if not listed[position].shows(self._blocks[position]):
-            self._refuse(
-                f"Slack shows section {ids[position]} of canvas {self._canvas_id} with other text than block "
-                f"{position} of its Markdown"
-            )
-        return ids[position]
-
-    def _refuse(self, mismatch: str) -> NoReturn:
-        unclear = f"{mismatch}, so skaldr cannot tell which to change"
-        if self._sent == 0:
-            raise WriteRejectedError(f"{unclear}; nothing was written")
-        raise ConnectorError(f"{unclear}; the canvas is partly written, so publish again to finish")
-
-
-def _lists_would_meet(keyed: KeyedCanvas, old: Sequence[int], at: int, added: Sequence[str]) -> bool:
-    return at in old and is_a_list(keyed.blocks[at].raw) and is_a_list(added[-1])
 
 
 def warn_on_stderr(message: str) -> None:
@@ -200,21 +116,17 @@ class SlackTransport:
         old = keyed.positions_of(change.key) if change.key in current else []
         order = list(after)
         before = order[: order.index(change.key)] if change.key in after else []
-        edits = _Edits(self._api, item_id, keyed)
-        edits.rewrite(
-            keyed, old, keyed.position_after(before), "" if text is None else canvas_markdown_of([text])
-        )
-        if keyed.stamp is None:
-            edits.append(canvas_stamp_line(request.stamp))
+        markdown = "" if text is None else canvas_markdown_of([text])
+        body = body_with_content_swapped(keyed, old, keyed.position_after(before), markdown)
+        self._replace_body(item_id, with_the_stamp_line(keyed, body, request.stamp))
         return self._written_with(item_id, after)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed = self._unchanged_since_read(item_id, request.raw_sections)
-        edits = _Edits(self._api, item_id, keyed)
         old = range(keyed.content_start, keyed.content_end)
-        edits.rewrite(keyed, old, keyed.content_start, canvas_markdown_of(list(request.sections.values())))
-        if keyed.stamp is None:
-            edits.append(canvas_stamp_line(request.stamp))
+        markdown = canvas_markdown_of(list(request.sections.values()))
+        body = body_with_content_swapped(keyed, old, keyed.content_start, markdown)
+        self._replace_body(item_id, with_the_stamp_line(keyed, body, request.stamp))
         return self._written_with(item_id, request.sections)
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
@@ -228,11 +140,10 @@ class SlackTransport:
                 f"a Slack canvas has no fields, so skaldr cannot change {', '.join(named)} on canvas "
                 f"{item_id}"
             )
-        edits = _Edits(self._api, item_id, keyed)
-        if request.changes_the_title:
-            edits.rename(request.title)
         if keyed.stamp is None:
-            edits.append(canvas_stamp_line(request.stamp))
+            self._replace_body(item_id, with_the_stamp_line(keyed, keyed.body, request.stamp))
+        if request.changes_the_title:
+            self._api.edit_canvas(item_id, _rename(request.title))
         return self._remote(item_id, self._markdown(item_id), layout)
 
     def archive_item(self, item_id: str, /) -> None:
@@ -244,27 +155,35 @@ class SlackTransport:
         keyed = keyed_canvas(markdown, {} if read is None else read)
         if keyed.archived:
             return
-        edits = _Edits(self._api, item_id, keyed)
-        stamp_at = keyed.stamp_at
+        replaced = True
         if not keyed.opens_with_the_archived_line:
             if read is not None:
                 refuse_a_change_since_the_read(_canvas_named(item_id), read, keyed.raw_sections)
-            for position in reversed(range(keyed.content_start, keyed.content_end)):
-                edits.delete(position)
             doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
-            edits.insert(keyed.content_start, canvas_markdown_of([archived_line(doc_id)]))
-            stamp_at = None if stamp_at is None else keyed.content_start + 1
-        if stamp_at is not None:
-            edits.delete(stamp_at)
-        edits.rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}")
+            self._replace_body(item_id, [archived_line(doc_id), *keyed.below_the_stamp])
+        elif keyed.stamp_at is not None:
+            raws = [block.raw for block in keyed.content]
+            self._replace_body(item_id, [*raws, *keyed.below_the_stamp])
+        else:
+            replaced = False
+        try:
+            self._api.edit_canvas(item_id, _rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}"))
+        except ConnectorError as exc:
+            if not replaced:
+                raise
+            raise ConnectorError(
+                f"Slack canvas {item_id} holds the archived line but is not renamed yet, so publish again to "
+                f"finish: {exc}"
+            ) from exc
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         self._unchanged_since_read(item_id, request.raw_sections)
         keyed = keyed_canvas(self._markdown(item_id), self._read.published.get(item_id, request.raw_sections))
-        edits = _Edits(self._api, item_id, keyed)
-        for position, block in reversed(list(enumerate(keyed.blocks))):
-            if block.role in RELEASED_ROLES:
-                edits.delete(position)
+        kept = [
+            block.raw for block in keyed.blocks[keyed.content_start :] if block.role not in RELEASED_ROLES
+        ]
+        if len(kept) < len(keyed.body):
+            self._replace_body(item_id, kept)
         self._read.note_released(item_id)
 
     def parts_edited_after(
@@ -294,16 +213,24 @@ class SlackTransport:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
         if request.changes_nothing:
             return keyed.links
-        line = canvas_markdown_of([canvas_stamp_line(request.stamp, request.links)])
-        edits = _Edits(self._api, item_id, keyed)
+        line = canvas_stamp_line(request.stamp, request.links)
+        body = keyed.body
         if keyed.stamp_at is None:
-            edits.append(line)
+            body.append(line)
         else:
-            edits.replace(keyed.stamp_at, line)
+            body[keyed.stamp_at - keyed.content_start] = line
+        self._replace_body(item_id, body)
         return keyed_canvas(self._markdown(item_id), layout).links
 
     def close(self) -> None:
         self._api.close()
+
+    def _replace_body(self, item_id: str, raws: Sequence[str]) -> None:
+        replace: JsonFields = {
+            "operation": "replace",
+            "document_content": markdown_content(canvas_body(raws)),
+        }
+        self._api.edit_canvas(item_id, replace)
 
     def _share(self, canvas_id: str, title: str, conversation: str, *, posts_the_link: bool) -> None:
         created = f'skaldr created Slack canvas {canvas_id} for "{title}"'

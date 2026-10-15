@@ -10,7 +10,7 @@ from skaldr.export.notion import notion_block_count, render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
-from skaldr.publish.connector import ContentLimit, LeftByASplitWrite, WriteGranularity
+from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.notion.api import NotionApi, Sleep
 from skaldr.publish.notion.transport import SECTION_BLOCKS, SECTION_JSON_BYTES, NotionTransport
 from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
@@ -49,7 +49,6 @@ class NotionConnector:
     writes: WriteGranularity = "section"
     carries_look: bool = True
     export_target: ExportTarget = "notion"
-    left_by_a_split_write: LeftByASplitWrite | None = None
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)

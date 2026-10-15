@@ -10,9 +10,8 @@ from skaldr.export.slack import SLACK_CANVAS_CHARACTER_LIMIT, render_slack_regio
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
-from skaldr.publish.connector import ContentLimit, LeftByASplitWrite, WriteGranularity
+from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.slack.api import SlackApi, Sleep
-from skaldr.publish.slack.canvas_markdown import left_by_a_split_canvas_write
 from skaldr.publish.slack.transport import SlackTransport, Warn, warn_on_stderr
 from skaldr.publish_block import SlackTarget, TargetBase
 
@@ -34,7 +33,6 @@ class SlackConnector:
     writes: WriteGranularity = "section"
     carries_look: bool = False
     export_target: ExportTarget = "slack"
-    left_by_a_split_write: LeftByASplitWrite | None = left_by_a_split_canvas_write
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_slack_regions(page)

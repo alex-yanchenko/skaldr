@@ -14,7 +14,6 @@ from skaldr.services import Service
 SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 LimitScope = Literal["section", "item"]
 WriteGranularity = Literal["section", "content"]
-LeftByASplitWrite = Callable[[str | None, str | None, str | None], bool]
 
 
 @dataclass(frozen=True)
@@ -37,9 +36,6 @@ class Connector(Protocol):
 
     @property
     def carries_look(self) -> bool: ...
-
-    @property
-    def left_by_a_split_write(self) -> LeftByASplitWrite | None: ...
 
     @property
     def export_target(self) -> ExportTarget: ...

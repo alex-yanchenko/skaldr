@@ -229,19 +229,13 @@ class SlackApi:
         self._answer(SlackResponse, call, {"canvas_id": canvas_id, "changes": [change]})
 
     def canvas_markdown(self, canvas_id: str) -> str:
-        return self._content(canvas_id, "markdown", f"read canvas {canvas_id}")
-
-    def canvas_html(self, canvas_id: str) -> str:
-        return self._content(canvas_id, "html", f"read the sections of canvas {canvas_id}")
+        call = _Call("canvases.getContent", f"read canvas {canvas_id}", writes=False)
+        arguments: JsonFields = {"canvas_id": canvas_id, "content_type": "markdown"}
+        return self._answer(CanvasContent, call, arguments).content
 
     def post_message(self, channel: str, text: str) -> None:
         call = _Call("chat.postMessage", f"post the canvas link in {channel}", writes=True)
         self._answer(SlackResponse, call, {"channel": channel, "text": text})
-
-    def _content(self, canvas_id: str, content_type: str, to_do: str) -> str:
-        call = _Call("canvases.getContent", to_do, writes=False)
-        arguments: JsonFields = {"canvas_id": canvas_id, "content_type": content_type}
-        return self._answer(CanvasContent, call, arguments).content
 
     def _answer(self, shape: type[Answer], call: _Call, arguments: Mapping[str, JsonValue]) -> Answer:
         retrying = Retrying(

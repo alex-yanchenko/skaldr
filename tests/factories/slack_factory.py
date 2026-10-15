@@ -1,4 +1,3 @@
-import html
 import json
 import re
 from dataclasses import dataclass, field
@@ -72,58 +71,31 @@ def _stored_block(lines: list[str]) -> str:
     return "\n".join(stored)
 
 
+def _with_adjacent_lists_merged(blocks: list[str]) -> list[str]:
+    merged: list[str] = []
+    for block in blocks:
+        if merged and LIST_ITEM.match(merged[-1]) and LIST_ITEM.match(block):
+            merged[-1] = f"{merged[-1]}\n{block}"
+        else:
+            merged.append(block)
+    return merged
+
+
 def as_slack_stores(markdown: str) -> list[str]:
-    return [_stored_block(lines) for lines in _blocks_as_sent(markdown)]
+    return _with_adjacent_lists_merged([_stored_block(lines) for lines in _blocks_as_sent(markdown)])
 
 
 def _shown(block: str) -> str:
     return f"{block}\n" if block.startswith("|") else block
 
 
-def _list_html(section_id: str, block: str) -> str:
-    items = "".join(
-        f"<li id='{section_id}-{index}'>{html.escape(line[2:])}</li>"
-        for index, line in enumerate(block.split("\n"))
-    )
-    return f"<ul id='{section_id}'>{items}</ul>"
-
-
-def _table_html(section_id: str, block: str) -> str:
-    rows = [line.strip("|").split("|") for line in block.split("\n") if line and "---" not in line]
-    shown = "".join(
-        "<tr>" + "".join(f"<td>{html.escape(cell.strip())}</td>" for cell in row) + "</tr>" for row in rows
-    )
-    return f"<table id='{section_id}'><tbody>{shown}</tbody></table>"
-
-
-def _element(section_id: str, block: str) -> str:
-    if block == "---":
-        return f"<hr id='{section_id}'>"
-    if LIST_ITEM.match(block):
-        return _list_html(section_id, block)
-    if block.startswith("|"):
-        return _table_html(section_id, block)
-    return f"<p id='{section_id}'>{html.escape(block)}</p>"
-
-
 @dataclass
 class StoredCanvas:
     title: str
     blocks: list[str]
-    generation: int = 0
-
-    def ids(self, canvas_id: str) -> list[str]:
-        return [f"temp:C:{canvas_id}-{self.generation}-{index}" for index in range(len(self.blocks) + 1)]
 
     def markdown(self) -> str:
         return "\n\n".join([f"# {self.title}", *map(_shown, self.blocks)]) + "\n"
-
-    def html(self, canvas_id: str, *, omits_the_last: bool = False, out_of_order: bool = False) -> str:
-        title_id, *block_ids = self.ids(canvas_id)
-        blocks = list(reversed(self.blocks)) if out_of_order else self.blocks
-        elements = [_element(section_id, block) for section_id, block in zip(block_ids, blocks, strict=True)]
-        shown = elements[:-1] if omits_the_last else elements
-        return f"<h1 id='{title_id}'>{html.escape(self.title)}</h1>{''.join(shown)}"
 
 
 def form_fields(request: httpx2.Request) -> dict[str, Any]:
@@ -164,11 +136,8 @@ class InMemorySlack:
     requests: list[tuple[str, dict[str, Any]]] = field(default_factory=list[tuple[str, dict[str, Any]]])
     slept: list[float] = field(default_factory=list[float])
     failures: list[_Failure] = field(default_factory=list[_Failure])
-    html_lists_one_section_less_after: int | None = None
-    html_shows_blocks_out_of_order_after: int | None = None
     retry_after_next: str | None = None
     made: int = 0
-    html_reads: int = 0
 
     def api(self) -> SlackApi:
         return SlackApi(FakeToken(), transport=httpx2.MockTransport(self.handle), sleep=self.slept.append)
@@ -188,17 +157,12 @@ class InMemorySlack:
     def edit_by_hand(self, canvas_id: str, old: str, new: str) -> None:
         canvas = self.canvases[canvas_id]
         canvas.blocks = [new if block == old else block for block in canvas.blocks]
-        canvas.generation += 1
 
     def add_block_by_hand(self, canvas_id: str, at: int, text: str) -> None:
-        canvas = self.canvases[canvas_id]
-        canvas.blocks.insert(at, text)
-        canvas.generation += 1
+        self.canvases[canvas_id].blocks.insert(at, text)
 
     def delete_block_by_hand(self, canvas_id: str, text: str) -> None:
-        canvas = self.canvases[canvas_id]
-        canvas.blocks.remove(text)
-        canvas.generation += 1
+        self.canvases[canvas_id].blocks.remove(text)
 
     def rename_by_hand(self, canvas_id: str, title: str) -> None:
         self.canvases[canvas_id].title = title
@@ -267,47 +231,19 @@ class InMemorySlack:
             return _ok()
         if method == "canvases.getContent" and form["content_type"] == "markdown":
             return _ok(content=canvas.markdown())
-        if method == "canvases.getContent":
-            return _ok(content=self._html(form["canvas_id"], canvas))
         if method == "canvases.edit":
-            return self._edit(form["canvas_id"], canvas, form["changes"])
+            return self._edit(canvas, form["changes"])
         return _refused("unknown_method")
 
-    def _html(self, canvas_id: str, canvas: StoredCanvas) -> str:
-        omits = self.html_lists_one_section_less_after
-        reorders = self.html_shows_blocks_out_of_order_after
-        self.html_reads += 1
-        return canvas.html(
-            canvas_id,
-            omits_the_last=omits is not None and self.html_reads > omits,
-            out_of_order=reorders is not None and self.html_reads > reorders,
-        )
-
-    def _edit(self, canvas_id: str, canvas: StoredCanvas, changes: list[dict[str, Any]]) -> httpx2.Response:
+    def _edit(self, canvas: StoredCanvas, changes: list[dict[str, Any]]) -> httpx2.Response:
         if len(changes) != 1:
             return _refused("invalid_arguments")
         change = changes[0]
         operation = change["operation"]
-        added = as_slack_stores(change.get("document_content", {}).get("markdown", ""))
-        ids = canvas.ids(canvas_id)
-        if "section_id" in change and change["section_id"] not in ids:
-            return _refused("canvas_section_not_found")
-        at = ids.index(change["section_id"]) - 1 if "section_id" in change else None
-        if operation == "insert_at_start":
-            canvas.blocks = [*added, *canvas.blocks]
-        elif operation == "insert_at_end":
-            canvas.blocks = [*canvas.blocks, *added]
-        elif operation == "insert_after" and at is not None:
-            canvas.blocks[at + 1 : at + 1] = added
-        elif operation == "delete" and at is not None and at >= 0:
-            del canvas.blocks[at]
-        elif operation == "replace" and at is None:
-            canvas.blocks = added
-        elif operation == "replace" and at is not None and at >= 0:
-            canvas.blocks[at : at + 1] = added
+        if operation == "replace" and "section_id" not in change:
+            canvas.blocks = as_slack_stores(change["document_content"]["markdown"])
         elif operation == "rename":
             canvas.title = change["title_content"]["markdown"]
         else:
             return _refused("invalid_change")
-        canvas.generation += 1
         return _ok()
