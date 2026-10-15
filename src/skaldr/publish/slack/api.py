@@ -42,11 +42,20 @@ class TokenSource(Protocol):
     def access_token(self) -> str: ...
 
 
+CHANGE_MAY_HAVE_LANDED: Final = "the change may have landed, so read the canvas before publishing again"
+CONVERSATION_REFUSALS: Final = {
+    "channel_not_found": "Slack has no such conversation, or this sign-in cannot see it",
+    "not_in_channel": "you are not a member of the conversation; join it, or name another",
+    "is_archived": "the conversation is archived",
+}
+
+
 @dataclass(frozen=True)
 class _Call:
     method: str
     to_do: str
     writes: bool
+    if_unanswered: str = CHANGE_MAY_HAVE_LANDED
 
 
 def markdown_content(markdown: str) -> JsonFields:
@@ -142,6 +151,8 @@ def _slack_refusal(call: _Call, body: SlackResponse, attempts: int) -> Connector
             f"Slack could not {call.to_do}: the canvas would be larger than Slack allows ({code}); "
             f"{SPLIT_ADVICE}"
         )
+    if code in CONVERSATION_REFUSALS:
+        return WriteRejectedError(f"Slack could not {call.to_do}: {CONVERSATION_REFUSALS[code]} ({code})")
     if code == "free_teams_cannot_edit_standalone_canvases":
         return WriteRejectedError(
             f"Slack could not {call.to_do}: a workspace on Slack's free plan cannot edit a standalone canvas "
@@ -192,9 +203,19 @@ class SlackApi:
         return self._identity
 
     def create_canvas(self, title: str, markdown: str) -> str:
-        call = _Call("canvases.create", "create a canvas", writes=True)
+        landed = f'a canvas titled "{title}" may exist already, so look for it in Slack before publishing'
+        call = _Call("canvases.create", "create a canvas", writes=True, if_unanswered=f"{landed} again")
         arguments: JsonFields = {"title": title, "document_content": markdown_content(markdown)}
         return self._answer(CreatedCanvas, call, arguments).canvas_id
+
+    def let_read(self, canvas_id: str, conversation: str) -> None:
+        call = _Call("canvases.access.set", f"let {conversation} read canvas {canvas_id}", writes=True)
+        arguments: JsonFields = {
+            "canvas_id": canvas_id,
+            "access_level": "read",
+            "channel_ids": [conversation],
+        }
+        self._answer(SlackResponse, call, arguments)
 
     def edit_canvas(self, canvas_id: str, change: JsonFields) -> None:
         call = _Call("canvases.edit", f"change canvas {canvas_id}", writes=True)
@@ -228,8 +249,7 @@ class SlackApi:
         except httpx2.TransportError as exc:
             if call.writes:
                 raise ConnectorError(
-                    f"Slack could not {call.to_do}: no answer arrived ({exc}); the change may have landed, "
-                    "so read the canvas before publishing again"
+                    f"Slack could not {call.to_do}: no answer arrived ({exc}); {call.if_unanswered}"
                 ) from None
             raise ConnectorError(f"Slack could not {call.to_do}: could not reach Slack ({exc})") from None
         failure = _failure(call, response, retrying.statistics["attempt_number"])

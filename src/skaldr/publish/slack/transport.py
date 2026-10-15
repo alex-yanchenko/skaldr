@@ -1,8 +1,10 @@
 import hashlib
-from collections.abc import Mapping, Sequence
+import html
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from typing import Final
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, differing_parts, placed_section
 from skaldr.publish.keyed import (
     ReadLayouts,
@@ -42,6 +44,7 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import SlackTarget, slack_canvas_id
 from skaldr.publish_block.target import JsonFields
 
+Warn = Callable[[str], None]
 RELEASED_ROLES: Final = frozenset({"published", "blank", "stamp"})
 
 
@@ -141,9 +144,14 @@ def _lists_would_meet(keyed: KeyedCanvas, old: Sequence[int], at: int, added: Se
     return meets_the_block_before or meets_the_block_after
 
 
+def warn_on_stderr(message: str) -> None:
+    print(f"warning: {message}", file=sys.stderr, flush=True)
+
+
 class SlackTransport:
-    def __init__(self, api: SlackApi) -> None:
+    def __init__(self, api: SlackApi, *, warn: Warn = warn_on_stderr) -> None:
         self._api = api
+        self._warn = warn
         self._read = ReadLayouts()
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
@@ -162,14 +170,16 @@ class SlackTransport:
         canvas_id = refused_when_not_found(lambda: self._api.create_canvas(content.title, markdown))
         target = request.target
         conversation = target.where.conversation if isinstance(target, SlackTarget) else None
-
-        def finish() -> RemoteItem:
-            if conversation is not None:
-                link = self.item_link(canvas_id, content.title)
-                self._api.post_message(conversation, f"{content.title}: {link.url}")
+        if conversation is not None:
+            self._share(canvas_id, content.title, conversation)
+        try:
             return self._written_with(canvas_id, self.comparable_form(content).sections)
-
-        return finished_after_a_change(_canvas_named(canvas_id), content.title, finish)
+        except ConnectorError as exc:
+            raise CreatedButUnfinishedError(
+                f'skaldr created Slack canvas {canvas_id} for "{content.title}" but could not read it back: '
+                f"{exc}; the next publish records it",
+                canvas_id,
+            ) from exc
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
@@ -292,6 +302,30 @@ class SlackTransport:
 
     def close(self) -> None:
         self._api.close()
+
+    def _share(self, canvas_id: str, title: str, conversation: str) -> None:
+        created = f'skaldr created Slack canvas {canvas_id} for "{title}"'
+        try:
+            self._api.let_read(canvas_id, conversation)
+        except ConnectorError as exc:
+            self._warn(
+                f"{created} but could not let {conversation} read it: {exc}; share the canvas with "
+                f"{conversation} in Slack"
+            )
+        try:
+            link = self.item_link(canvas_id, title)
+        except ConnectorError as exc:
+            self._warn(
+                f"{created} but could not link it in {conversation}: {exc}; post its link there yourself"
+            )
+            return
+        try:
+            self._api.post_message(conversation, f"{html.escape(title, quote=False)}: {link.url}")
+        except ConnectorError as exc:
+            self._warn(
+                f"{created} but could not post its link in {conversation}: {exc}; post {link.url} there "
+                "yourself"
+            )
 
     def _markdown_of_any_canvas(self, item_id: str) -> str:
         if slack_canvas_id(item_id) != item_id:

@@ -230,7 +230,21 @@ def test_an_unreachable_slack_on_a_read_is_named_after_the_last_attempt() -> Non
     )
 
 
-def test_a_write_that_got_no_answer_may_have_landed() -> None:
+def test_an_edit_that_got_no_answer_may_have_landed() -> None:
+    slack = Scripted(httpx2.ReadTimeout("timed out"))
+
+    with pytest.raises(ConnectorError) as raised:
+        slack.api().edit_canvas(CANVAS, {"operation": "insert_at_end"})
+
+    assert (type(raised.value), str(raised.value), len(slack.requests)) == (
+        ConnectorError,
+        f"Slack could not change canvas {CANVAS}: no answer arrived (timed out); the change may have landed, "
+        "so read the canvas before publishing again",
+        1,
+    )
+
+
+def test_a_create_that_got_no_answer_may_have_made_a_canvas_with_that_title() -> None:
     slack = Scripted(httpx2.ReadTimeout("timed out"))
 
     with pytest.raises(ConnectorError) as raised:
@@ -238,10 +252,27 @@ def test_a_write_that_got_no_answer_may_have_landed() -> None:
 
     assert (type(raised.value), str(raised.value), len(slack.requests)) == (
         ConnectorError,
-        "Slack could not create a canvas: no answer arrived (timed out); the change may have landed, so read "
-        "the canvas before publishing again",
+        'Slack could not create a canvas: no answer arrived (timed out); a canvas titled "Garden handbook" '
+        "may exist already, so look for it in Slack before publishing again",
         1,
     )
+
+
+def test_a_conversation_is_given_read_access_to_a_canvas() -> None:
+    slack = Scripted(OK)
+
+    slack.api().let_read(CANVAS, "C0EXAMPLE1")
+
+    assert [(url, form) for _, url, _, form in slack.sent()] == [
+        (
+            "https://slack.com/api/canvases.access.set",
+            {"canvas_id": CANVAS, "access_level": "read", "channel_ids": ["C0EXAMPLE1"]},
+        )
+    ]
+
+
+def _post(api: SlackApi) -> None:
+    api.post_message("C0EXAMPLE1", "Garden handbook")
 
 
 def _change(api: SlackApi) -> None:
@@ -346,6 +377,29 @@ def _read(api: SlackApi) -> None:
             WriteRejectedError,
             f"Slack answered HTTP 404 when asked to change canvas {CANVAS}",
             id="http-error-on-a-write",
+        ),
+        pytest.param(
+            _post,
+            _refused("channel_not_found"),
+            WriteRejectedError,
+            "Slack could not post the canvas link in C0EXAMPLE1: Slack has no such conversation, or this "
+            "sign-in cannot see it (channel_not_found)",
+            id="no-such-conversation",
+        ),
+        pytest.param(
+            _post,
+            _refused("not_in_channel"),
+            WriteRejectedError,
+            "Slack could not post the canvas link in C0EXAMPLE1: you are not a member of the conversation; "
+            "join it, or name another (not_in_channel)",
+            id="not-a-member",
+        ),
+        pytest.param(
+            _post,
+            _refused("is_archived"),
+            WriteRejectedError,
+            "Slack could not post the canvas link in C0EXAMPLE1: the conversation is archived (is_archived)",
+            id="archived-conversation",
         ),
     ],
 )

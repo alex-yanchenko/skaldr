@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
@@ -41,6 +41,7 @@ INTO_LABEL = f"{TARGET_LABEL} (written into)"
 REFUSED_WRITE = "the service refused the write"
 DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
 LOST_WRITE = "the connection dropped before the service saw the write"
+UNFINISHED_CREATE = "the service created the item but the read back failed:"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
 SPAN_COLOR = re.compile(r'(<span[^>]*?) color="[^"]*"')
 FAKE_ITEM_ADDRESS = "https://items.example.com/"
@@ -184,7 +185,11 @@ class FakeTransport:
     _landing_one_section_of: int | None = None
     _landing_part_of_release: int | None = None
     _creating_into_without_a_stamp: bool = False
+    _leaving_unfinished: int | None = None
     _editing_during_write: tuple[str, str, str] | None = None
+
+    def leave_a_create_unfinished(self, count_from_now: int) -> None:
+        self._leaving_unfinished = self._writes + count_from_now
 
     def land_part_of_the_next_release(self, after_writes: int = 0) -> None:
         self._landing_part_of_release = self._writes + after_writes + 1
@@ -235,6 +240,7 @@ class FakeTransport:
         self._landing_one_section_of = None
         self._landing_part_of_release = None
         self._creating_into_without_a_stamp = False
+        self._leaving_unfinished = None
 
     def comment_on(self, item_id: str, key: str) -> None:
         item = self.items[item_id]
@@ -350,6 +356,8 @@ class FakeTransport:
             icon=content.icon,
             cover=content.cover,
         )
+        if self._writes == self._leaving_unfinished:
+            raise CreatedButUnfinishedError(f"{UNFINISHED_CREATE} {item_id}", item_id)
         return self._after_write(item_id)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:

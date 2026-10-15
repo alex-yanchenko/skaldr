@@ -12,7 +12,7 @@ from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.slack.api import SlackApi, Sleep
-from skaldr.publish.slack.transport import SlackTransport
+from skaldr.publish.slack.transport import SlackTransport, Warn, warn_on_stderr
 from skaldr.publish_block import SlackTarget, TargetBase
 
 CANVAS_LIMIT = ContentLimit("item", SLACK_CANVAS_CHARACTER_LIMIT, "characters of canvas Markdown")
@@ -27,6 +27,7 @@ class SlackConnector:
     sign_in: Callable[[str | None], SlackCredentials] = _stored_sign_in
     http: httpx2.BaseTransport | None = None
     sleep: Sleep = time.sleep
+    warn: Warn = warn_on_stderr
     target_type: type[TargetBase] = SlackTarget
     limits: tuple[ContentLimit, ...] = (CANVAS_LIMIT,)
     writes: WriteGranularity = "section"
@@ -46,4 +47,4 @@ class SlackConnector:
             credentials = self.sign_in(target.where.workspace)
         except AuthError as exc:
             raise ConnectorError(str(exc)) from exc
-        return SlackTransport(SlackApi(credentials, transport=self.http, sleep=self.sleep))
+        return SlackTransport(SlackApi(credentials, transport=self.http, sleep=self.sleep), warn=self.warn)

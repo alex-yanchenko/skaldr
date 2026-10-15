@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 
 from typing_extensions import assert_never
 
-from skaldr.errors import PublishError, WriteRejectedError
+from skaldr.errors import CreatedButUnfinishedError, PublishError, WriteRejectedError
 from skaldr.publish.content import (
     ItemContent,
     Part,
@@ -325,6 +325,10 @@ class Applier:
             )
         except WriteRejectedError:
             self._save(before)
+            raise
+        except CreatedButUnfinishedError as exc:
+            noted = pending.model_copy(update={"created_id": exc.item_id})
+            self._save(before.model_copy(update={"pending_creates": [*before.pending_creates, noted]}))
             raise
         remote = replace(remote, comparable=with_fields_named(remote.comparable, step.draft.content.fields))
         self.remote[step.item] = remote

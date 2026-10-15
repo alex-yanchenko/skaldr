@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import TITLE, ItemContent, section_part
 from skaldr.publish.slack.canvas_markdown import UNKEYED_SECTION, archived_line
 from skaldr.publish.transport import (
@@ -87,7 +87,7 @@ def test_a_new_canvas_holds_the_content_and_the_stamp_and_its_link_is_posted_onc
 
     created = slack.transport().create_item(NewItem(LINKED, STAMP, CONTENT))
 
-    assert (created, slack.requests[0], slack.messages, slack.markdown_of(CANVAS)) == (
+    assert (created, slack.requests[0], slack.readers, slack.messages, slack.markdown_of(CANVAS)) == (
         RemoteItem(
             CANVAS,
             ItemContent(title=TITLE_TEXT, sections=COMPARABLE_SECTIONS),
@@ -107,12 +107,13 @@ def test_a_new_canvas_holds_the_content_and_the_stamp_and_its_link_is_posted_onc
                 },
             },
         ),
+        [(CANVAS, "read", ["C0EXAMPLE1"])],
         [("C0EXAMPLE1", f"{TITLE_TEXT}: {CANVAS_LINK}")],
         STORED,
     )
 
 
-def test_a_canvas_with_no_conversation_is_posted_nowhere() -> None:
+def test_a_canvas_with_no_conversation_is_shared_with_none_and_posted_nowhere() -> None:
     slack = InMemorySlack()
 
     slack.transport().create_item(NewItem(UNLINKED, STAMP, CONTENT))
@@ -120,18 +121,72 @@ def test_a_canvas_with_no_conversation_is_posted_nowhere() -> None:
     assert (slack.messages, slack.calls()) == ([], ["canvases.create", "canvases.getContent markdown"])
 
 
-def test_a_canvas_whose_link_cannot_be_posted_is_named_so_the_next_run_can_find_it() -> None:
+def test_the_link_message_escapes_what_slack_would_read_as_markup_in_the_title() -> None:
     slack = InMemorySlack()
-    slack.fail_next("chat.postMessage", "channel_not_found")
+    content = CONTENT.model_copy(update={"title": "Beds & paths <!channel>"})
 
-    with pytest.raises(ConnectorError) as raised:
-        slack.transport().create_item(NewItem(LINKED, STAMP, CONTENT))
+    slack.transport().create_item(NewItem(LINKED, STAMP, content))
 
-    assert (type(raised.value), str(raised.value), list(slack.canvases)) == (
-        ConnectorError,
-        f'skaldr wrote Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not finish writing it: Slack '
-        "refused to post the canvas link in C0EXAMPLE1 (channel_not_found)",
-        [CANVAS],
+    assert slack.messages == [("C0EXAMPLE1", f"Beds &amp; paths &lt;!channel&gt;: {CANVAS_LINK}")]
+
+
+@pytest.mark.parametrize(
+    ("method", "error", "warning", "readers", "messages"),
+    [
+        pytest.param(
+            "chat.postMessage",
+            "not_in_channel",
+            f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not post its link in '
+            "C0EXAMPLE1: Slack could not post the canvas link in C0EXAMPLE1: you are not a member of the "
+            f"conversation; join it, or name another (not_in_channel); post {CANVAS_LINK} there yourself",
+            [(CANVAS, "read", ["C0EXAMPLE1"])],
+            [],
+            id="post",
+        ),
+        pytest.param(
+            "canvases.access.set",
+            "channel_not_found",
+            f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not let C0EXAMPLE1 read it: '
+            f"Slack could not let C0EXAMPLE1 read canvas {CANVAS}: Slack has no such conversation, or this "
+            "sign-in cannot see it (channel_not_found); share the canvas with C0EXAMPLE1 in Slack",
+            [],
+            [("C0EXAMPLE1", f"{TITLE_TEXT}: {CANVAS_LINK}")],
+            id="access",
+        ),
+    ],
+)
+def test_a_canvas_whose_sharing_fails_is_still_created_and_the_failure_is_a_warning(
+    method: str,
+    error: str,
+    warning: str,
+    readers: list[tuple[str, str, list[str]]],
+    messages: list[tuple[str, str]],
+) -> None:
+    slack = InMemorySlack()
+    slack.fail_next(method, error)
+
+    created = slack.transport().create_item(NewItem(LINKED, STAMP, CONTENT))
+
+    assert (created.item_id, slack.warnings, slack.readers, slack.messages) == (
+        CANVAS,
+        [warning],
+        readers,
+        messages,
+    )
+
+
+def test_a_canvas_that_cannot_be_read_back_is_named_so_the_next_publish_records_it() -> None:
+    slack = InMemorySlack()
+    slack.fail_next("canvases.getContent", "internal_error")
+
+    with pytest.raises(CreatedButUnfinishedError) as raised:
+        slack.transport().create_item(NewItem(UNLINKED, STAMP, CONTENT))
+
+    assert (str(raised.value), raised.value.item_id, slack.markdown_of(CANVAS)) == (
+        f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not read it back: Slack refused '
+        f"to read canvas {CANVAS} (internal_error); the next publish records it",
+        CANVAS,
+        STORED,
     )
 
 

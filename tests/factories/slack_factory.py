@@ -154,6 +154,8 @@ class _Failure:
 class InMemorySlack:
     canvases: dict[str, StoredCanvas] = field(default_factory=dict[str, StoredCanvas])
     messages: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    readers: list[tuple[str, str, list[str]]] = field(default_factory=list[tuple[str, str, list[str]]])
+    warnings: list[str] = field(default_factory=list[str])
     requests: list[tuple[str, dict[str, Any]]] = field(default_factory=list[tuple[str, dict[str, Any]]])
     slept: list[float] = field(default_factory=list[float])
     failures: list[_Failure] = field(default_factory=list[_Failure])
@@ -166,7 +168,7 @@ class InMemorySlack:
         return SlackApi(FakeToken(), transport=httpx2.MockTransport(self.handle), sleep=self.slept.append)
 
     def transport(self) -> SlackTransport:
-        return SlackTransport(self.api())
+        return SlackTransport(self.api(), warn=self.warnings.append)
 
     def mock(self) -> httpx2.MockTransport:
         return httpx2.MockTransport(self.handle)
@@ -203,7 +205,7 @@ class InMemorySlack:
         return [
             (method, str(form["changes"][0]["operation"]) if method == "canvases.edit" else "")
             for method, form in self.requests
-            if method in ("canvases.create", "canvases.edit", "chat.postMessage")
+            if method in ("canvases.create", "canvases.edit", "canvases.access.set", "chat.postMessage")
         ]
 
     def calls(self) -> list[str]:
@@ -247,6 +249,9 @@ class InMemorySlack:
         canvas = self.canvases.get(form["canvas_id"])
         if canvas is None:
             return _refused("canvas_not_found")
+        if method == "canvases.access.set":
+            self.readers.append((form["canvas_id"], form["access_level"], form["channel_ids"]))
+            return _ok()
         if method == "canvases.getContent" and form["content_type"] == "markdown":
             return _ok(content=canvas.markdown())
         if method == "canvases.getContent":

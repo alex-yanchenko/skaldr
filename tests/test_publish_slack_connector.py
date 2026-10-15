@@ -38,7 +38,7 @@ def _slack_publish(**target: Any) -> dict[str, Any]:
 
 def _published(tmp_path: Path, slack: InMemorySlack, **target: Any) -> Path:
     save_slack(make_slack_credentials())
-    path = write_garden_report(tmp_path, publish=_slack_publish(split=["tools"], **target))
+    path = write_garden_report(tmp_path, publish=_slack_publish(**{"split": ["tools"], **target}))
     assert main(["publish", str(path), "--apply"], registry=_registry(slack)) == 0
     return path
 
@@ -139,8 +139,10 @@ def test_publishing_creates_the_document_and_its_split_canvas_links_both_and_pub
         0,
         [
             ("canvases.create", ""),
+            ("canvases.access.set", ""),
             ("chat.postMessage", ""),
             ("canvases.create", ""),
+            ("canvases.access.set", ""),
             ("chat.postMessage", ""),
         ],
         [],
@@ -152,6 +154,28 @@ def test_publishing_creates_the_document_and_its_split_canvas_links_both_and_pub
         slack.markdown_of(TOOLS_CANVAS).splitlines()[-1],
         slack.canvases[TOOLS_CANVAS].title,
     ) == (DOCUMENT_STAMP, TOOLS_STAMP, "Tools")
+
+
+def test_a_link_slack_will_not_post_is_a_warning_and_the_canvas_is_kept(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    slack.fail_next("chat.postMessage", "is_archived")
+    path = _published(tmp_path, slack, split=[])
+    printed = capsys.readouterr()
+    slack.forget_requests()
+
+    again = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (printed.err, again, slack.writes(), list(slack.canvases)) == (
+        f'warning: skaldr created Slack canvas {DOCUMENT_CANVAS} for "Garden handbook" but could not post '
+        "its link in C0EXAMPLE1: Slack could not post the canvas link in C0EXAMPLE1: the conversation is "
+        "archived (is_archived); post https://example-garden.slack.com/docs/T0EXAMPLE1/F000000001 there "
+        "yourself\n",
+        0,
+        [],
+        [DOCUMENT_CANVAS],
+    )
 
 
 def _planting_rewritten(tmp_path: Path) -> None:

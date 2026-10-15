@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, PublishError, WriteRejectedError
 from skaldr.publish.connector import ConnectorRegistry, WriteGranularity
 from skaldr.publish.content import ItemContent, Part, section_part
 from skaldr.publish.drafts import draft_targets, load_authored
@@ -30,6 +30,7 @@ from tests.factories.publish_factory import (
     LOST_WRITE,
     REFUSED_WRITE,
     TARGET_LABEL,
+    UNFINISHED_CREATE,
     FakeConnector,
     FakeTransport,
     fake_registry,
@@ -90,6 +91,51 @@ def test_a_create_with_an_unknown_outcome_stops_the_next_run_naming_the_parent_a
     assert (transport.writes(), publish_status(prepare_publish(path, fake_registry(transport)))) == (
         [],
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, None, ("create interrupted",))),
+    )
+
+
+def _create_of_tools_left_unfinished(
+    path: Path, transport: FakeTransport
+) -> tuple[tuple[str | None, str | None], ...]:
+    transport.leave_a_create_unfinished(2)
+    with pytest.raises(CreatedButUnfinishedError, match=f"^{UNFINISHED_CREATE} page-2$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    transport.forget_calls()
+    return tuple(
+        (pending.section_id, pending.created_id)
+        for pending in load_state(state_path_for(path), DOC_ID).pending_creates
+    )
+
+
+def test_a_create_that_landed_but_did_not_finish_is_recorded_as_created_next_run(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    pending = _create_of_tools_left_unfinished(path, transport)
+
+    outcome = _publish(path, transport)
+    tools = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].sections["tools"]
+
+    assert (pending, outcome, transport.writes(), tools.item_id, tools.origin) == (
+        (("tools", "page-2"),),
+        Applied(()),
+        [],
+        "page-2",
+        "created",
+    )
+
+
+def test_an_unfinished_create_whose_item_is_gone_is_forgotten_and_made_again(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.delete_item_by_hand("page-2")
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes()) == (
+        Applied(('create   section tools "Tools"',)),
+        [("create", "Tools", "page-1", "")],
     )
 
 

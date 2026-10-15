@@ -21,7 +21,7 @@ from skaldr.publish.content import (
 from skaldr.publish.drafts import ItemDraft
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
-from skaldr.publish.state import PendingCreate, PublishedItem, PublishState
+from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import RemoteItem, Transport
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, Service
@@ -236,19 +236,22 @@ def _pending_target(prepared: Prepared, pending: PendingCreate) -> TargetBase:
     return target_type.model_validate(pending.target_as_written)
 
 
-def settle_interrupted_adoptions(prepared: Prepared, transports: Transports) -> PublishState:
+def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> PublishState:
     state = prepared.state
     for pending in prepared.state.pending_creates:
-        if pending.into_id is None:
+        item_id = pending.into_id or pending.created_id
+        if item_id is None:
             continue
         target = _pending_target(prepared, pending)
         transport = transports.for_target(pending.target, target)
-        remote = _read_or_none(transport, pending.into_id, NOT_YET_PUBLISHED)
+        remote = _read_or_none(transport, item_id, NOT_YET_PUBLISHED)
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
         if remote is not None and remote.doc_id == prepared.doc_id:
             ref = ItemRef(pending.target, pending.section_id)
-            state = with_item(state, ref, target, _adopted(remote, prepared.draft_of(ref), transport))
+            held = _adopted(remote, prepared.draft_of(ref), transport)
+            origin: ItemOrigin = "adopted" if pending.into_id is not None else "created"
+            state = with_item(state, ref, target, held.model_copy(update={"origin": origin}))
     return state
 
 
