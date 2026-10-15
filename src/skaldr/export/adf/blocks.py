@@ -42,6 +42,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
+from skaldr.export.capabilities import PANES_FEATURES, swaps
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import tabs_as_toggles
@@ -200,9 +201,7 @@ class _AdfBlocks:
                 _require_no_table_within_a_grid_cell(node)
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
-                return [
-                    block for toggle in tabs_as_toggles(node) for block in self.node_blocks(toggle, container)
-                ]
+                return self.tabs_blocks(node, container)
             case Diagram():
                 return self.diagram_blocks(node, container)
             case TableOfContents():
@@ -248,6 +247,13 @@ class _AdfBlocks:
             return AdfNestedExpand(type="nestedExpand", attrs=attrs, content=nested)
         content = self.blocks(children, "expand") or [_empty_paragraph()]
         return AdfExpand(type="expand", attrs=attrs, content=content)
+
+    def tabs_blocks(self, node: Tabs, container: Container) -> list[AdfBlock]:
+        if swaps(PANES_FEATURES[node.kind], "adf"):
+            return [
+                block for toggle in tabs_as_toggles(node) for block in self.node_blocks(toggle, container)
+            ]
+        return [self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs]
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
         supplement = self.blocks(node.supplement, container)

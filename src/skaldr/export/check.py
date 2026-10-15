@@ -13,6 +13,7 @@ from skaldr.export.capabilities import (
     CAPABILITIES,
     FIRST_LIST_NUMBER,
     GRID_CELL_FEATURES,
+    PANES_FEATURES,
     PLACEMENTS,
     CellCount,
     Container,
@@ -27,7 +28,6 @@ from skaldr.export.capabilities import (
     ListItemFeature,
     ListStart,
     Panes,
-    PanesFeature,
     Placement,
     Rejection,
     ScriptForm,
@@ -277,10 +277,6 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
                 assert_never(run)
 
 
-def _panes_feature(node: Tabs) -> PanesFeature:
-    return "set of tabs" if node.authored_as is None else "request with several cases"
-
-
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
     authored_on_its_own = child.authored_at != holder.authored_at
     return "block inside a walkthrough step" if authored_on_its_own else "block inside a list item"
@@ -354,7 +350,7 @@ class _TreeWalk:
                 yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
             case Tabs():
                 if node.tabs:
-                    yield self.hit(Panes(_panes_feature(node)), node.authored_at)
+                    yield self.hit(Panes(PANES_FEATURES[node.kind]), node.authored_at)
                 inside = place.in_a_toggle(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)

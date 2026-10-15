@@ -1,4 +1,4 @@
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from string import Formatter
 from typing import Any, Literal, get_args, get_type_hints
@@ -7,14 +7,18 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
+from skaldr.export.adf import render_adf
 from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
+from skaldr.export.notion import render_notion
+from skaldr.export.tree import Paragraph, Tab, Tabs
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
+from skaldr.richtext import Plain
 from tests.factories import make_jira_target, make_report, make_request, make_section, make_tabs, write_report
 from tests.factories.capability_factory import (
     ADF_CASES,
@@ -58,14 +62,27 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "set of tabs": {"notion": "swap", "adf": "swap"},
     "request with several cases": {"notion": "swap", "adf": "swap"},
 }
+REQUEST_WITH_TWO_CASES = make_request(
+    cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
+)
 SWAPPED_BLOCKS = [
     pytest.param(make_tabs(), id="tabs"),
-    pytest.param(
-        make_request(
-            cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
-        ),
-        id="request-with-two-cases",
-    ),
+    pytest.param(REQUEST_WITH_TWO_CASES, id="request-with-two-cases"),
+]
+SWAPPED_BLOCKS_OF_EACH_FEATURE = [
+    pytest.param("set of tabs", make_tabs(), id="tabs"),
+    pytest.param("request with several cases", REQUEST_WITH_TWO_CASES, id="request-with-two-cases"),
+]
+TWO_TABS = Tabs(
+    (
+        Tab((Plain("One"),), (Paragraph((Plain("a"),)),), "warning"),
+        Tab((Plain("Two"),), (Paragraph((Plain("b"),)),)),
+    )
+)
+REQUEST_CASES = replace(TWO_TABS, kind="request cases")
+PANES_OF_EACH_FEATURE = [
+    pytest.param("set of tabs", TWO_TABS, id="tabs"),
+    pytest.param("request with several cases", REQUEST_CASES, id="request-cases"),
 ]
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
@@ -94,6 +111,17 @@ def _verdict(capability: Capability) -> Verdict:
     if isinstance(capability, Rejection):
         return "reject"
     return "swap" if isinstance(capability, Swap) else capability
+
+
+def _adf_expands(*titles: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "expand",
+            "attrs": {"title": title},
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+        }
+        for title, text in zip(titles, "ab", strict=True)
+    ]
 
 
 def _template_fields(template: str) -> set[str]:
@@ -183,6 +211,63 @@ def test_a_block_a_target_swaps_for_another_form_passes_the_check(
     block: dict[str, Any], target: ExportTarget
 ) -> None:
     _check([block], target)
+
+
+@pytest.mark.parametrize(("feature", "node"), PANES_OF_EACH_FEATURE)
+def test_notion_writes_native_tabs_once_the_table_keeps_the_feature(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], "notion", "keep")
+
+    assert render_notion([node]) == (
+        '<tabs>\n\t<tab icon="⚠️">\n\t\tOne\n\t\ta\n\t</tab>\n\t<tab>\n\t\tTwo\n\t\tb\n\t</tab>\n</tabs>\n'
+    )
+
+
+@pytest.mark.parametrize(("feature", "node"), PANES_OF_EACH_FEATURE)
+def test_adf_writes_expands_titled_without_an_icon_once_the_table_keeps_the_feature(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], "adf", "keep")
+
+    assert render_adf([node])["content"] == _adf_expands("One", "Two")
+
+
+@pytest.mark.parametrize(
+    ("kept_feature", "swapped_node"),
+    [
+        pytest.param("set of tabs", REQUEST_CASES, id="tabs-kept-request-cases-swapped"),
+        pytest.param("request with several cases", TWO_TABS, id="request-cases-kept-tabs-swapped"),
+    ],
+)
+def test_a_writer_swaps_the_panes_whose_own_cell_says_swap(
+    monkeypatch: pytest.MonkeyPatch, kept_feature: Feature, swapped_node: Tabs
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[kept_feature], "notion", "keep")
+    monkeypatch.setitem(CAPABILITIES[kept_feature], "adf", "keep")
+
+    assert (render_notion([swapped_node]), render_adf([swapped_node])["content"]) == (
+        "<details>\n<summary>⚠️ One</summary>\n\ta\n</details>\n"
+        "<details>\n<summary>Two</summary>\n\tb\n</details>\n",
+        _adf_expands("⚠️ One", "Two"),
+    )
+
+
+@pytest.mark.parametrize(("feature", "block"), SWAPPED_BLOCKS_OF_EACH_FEATURE)
+def test_a_panes_cell_made_a_rejection_refuses_the_block(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, block: dict[str, Any]
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], "markdown", Rejection("Markdown cannot show it", "drop it"))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([block], "markdown")
+
+    assert vars(raised.value) == {
+        "target": "markdown",
+        "why": "Markdown cannot show it",
+        "instead": "drop it",
+        "where": f"at blocks.0.{block['type']}",
+    }
 
 
 def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() -> None:

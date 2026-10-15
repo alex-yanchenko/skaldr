@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
+from skaldr.export.tree import PanesKind
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -318,11 +319,19 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
     ("callout", "divider"): "divider inside a callout",
 }
+PANES_FEATURES: Final[Mapping[PanesKind, PanesFeature]] = {
+    "tabs": "set of tabs",
+    "request cases": "request with several cases",
+}
 GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "table": "table inside a grid cell",
     "callout": "callout inside a grid cell",
     "divider": "divider inside a grid cell",
 }
+
+
+def swaps(feature: Feature, target: ExportTarget) -> bool:
+    return isinstance(CAPABILITIES[feature][target], Swap)
 
 
 def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:

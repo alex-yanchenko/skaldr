@@ -84,7 +84,7 @@ def _cases(core: RequestLike, lowering: Lowering, authored_as: AuthoredName) -> 
         Tab(plain(case.label), _case_nodes(core, case, lowering, authored_as), compute.case_tone(case))
         for case in core.cases
     )
-    return [Tabs(tabs, authored_as=authored_as)]
+    return [Tabs(tabs, "request cases", authored_as=authored_as)]
 
 
 def _variable_entry(variable: RequestVariable) -> ListEntry:

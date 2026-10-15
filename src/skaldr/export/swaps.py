@@ -13,12 +13,5 @@ def _title_led_by_its_icon(tab: Tab) -> ExportRich:
 
 def tabs_as_toggles(node: Tabs) -> tuple[Toggle, ...]:
     return tuple(
-        Toggle(
-            _title_led_by_its_icon(tab),
-            None,
-            tab.children,
-            authored_as=node.authored_as,
-            authored_at=node.authored_at,
-        )
-        for tab in node.tabs
+        Toggle(_title_led_by_its_icon(tab), heading_level=None, children=tab.children) for tab in node.tabs
     )
