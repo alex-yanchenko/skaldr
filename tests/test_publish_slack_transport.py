@@ -799,6 +799,22 @@ def test_a_release_deletes_the_blocks_skaldr_published_and_its_stamp_and_keeps_w
     )
 
 
+def test_a_release_after_a_hand_edit_since_the_read_writes_nothing() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    transport = slack.transport()
+    read = transport.read_item(CANVAS, CONTENT)
+    slack.edit_by_hand(CANVAS, "Sow in spring.", "Sow in June.")
+
+    with pytest.raises(WriteRejectedError) as raised:
+        transport.release_item(CANVAS, Release(read.raw_sections, ()))
+
+    assert (str(raised.value), _edits(slack)) == (
+        f"Slack canvas {CANVAS} changed after skaldr read it, so nothing was written; publish again",
+        [],
+    )
+
+
 def test_hand_edits_show_in_the_read_and_asking_for_the_edited_parts_reads_nothing_again() -> None:
     slack = InMemorySlack()
     created = _created(slack)

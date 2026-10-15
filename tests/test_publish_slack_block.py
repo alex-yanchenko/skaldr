@@ -134,6 +134,7 @@ def test_a_conversation_id_comes_from_an_id_or_a_slack_link(
         pytest.param(f"{CANVAS_LINK}/", SLACK_CANVAS_ID, id="trailing-slash"),
         pytest.param(SLACK_CONVERSATION_ID, None, id="channel-id"),
         pytest.param(f"https://example.com/docs/{SLACK_TEAM_ID}/{SLACK_CANVAS_ID}", None, id="other-host"),
+        pytest.param(f"https://evilslack.com/docs/{SLACK_TEAM_ID}/{SLACK_CANVAS_ID}", None, id="lookalike"),
         pytest.param(
             f"https://example.slack.com/files/U0EXAMPLE1/{SLACK_CANVAS_ID}/notes.txt", None, id="file-link"
         ),
