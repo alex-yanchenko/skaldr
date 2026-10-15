@@ -15,6 +15,7 @@ from skaldr.export.tree import (
     Diagram,
     FactStrip,
     GenericNode,
+    Heading,
     KeyValueList,
     LabelledValue,
     LinkCard,
@@ -35,29 +36,38 @@ from tests.factories.export_factory import lowered
 FOLD_PATH = "blocks.0"
 RUNBOOK_URL = "https://example.com/runbook"
 UNDERLINED_OPS = (Styled("underline", (Plain("ops"),)),)
+_OPEN_TOGGLE_CHILDREN: tuple[GenericNode, ...] = (
+    Heading(2, plain("Inside")),
+    Paragraph(UNDERLINED_OPS),
+    ListNode("bullet", (ListEntry(plain("after")),)),
+)
 
-Wrap = Callable[[Node], tuple[Node, ...]]
+Wrap = Callable[[tuple[Node, ...]], tuple[Node, ...]]
 
 
 @dataclass(frozen=True)
 class FoldCase:
     named: Node
-    today: GenericNode
+    today: tuple[GenericNode, ...]
+
+
+def fold_case(named: Node, *today: GenericNode) -> FoldCase:
+    return FoldCase(named, today)
 
 
 FOLD_CASES: Mapping[str, FoldCase] = {
-    "fact strip": FoldCase(
+    "fact strip": fold_case(
         FactStrip((LabelledValue("Site:", plain("West")), LabelledValue(" ", UNDERLINED_OPS))),
         ListNode(
             "bullet",
             (ListEntry((*bold("Site"), Plain(": "), Plain("West"))), ListEntry(UNDERLINED_OPS)),
         ),
     ),
-    "key-value list": FoldCase(
+    "key-value list": fold_case(
         KeyValueList((LabelledValue("Owner", UNDERLINED_OPS),)),
         ListNode("bullet", (ListEntry((*bold("Owner"), Plain(": "), *UNDERLINED_OPS)),)),
     ),
-    "definition list": FoldCase(
+    "definition list": fold_case(
         DefinitionList(
             (
                 Definition("Fix", (Paragraph(plain("first")), Paragraph(UNDERLINED_OPS))),
@@ -74,7 +84,7 @@ FOLD_CASES: Mapping[str, FoldCase] = {
             ),
         ),
     ),
-    "cards": FoldCase(
+    "cards": fold_case(
         Cards(
             (
                 Card(
@@ -112,7 +122,7 @@ FOLD_CASES: Mapping[str, FoldCase] = {
             ),
         ),
     ),
-    "timeline": FoldCase(
+    "timeline": fold_case(
         Timeline(
             (
                 TimelineEvent(
@@ -140,7 +150,7 @@ FOLD_CASES: Mapping[str, FoldCase] = {
             ),
         ),
     ),
-    "link card": FoldCase(
+    "link card": fold_case(
         LinkCard("Runbook", RUNBOOK_URL, "card", domain="example.com", caption="Steps"),
         Quote(
             ((Styled("bold", (Link(plain("Runbook"), RUNBOOK_URL),)),),),
@@ -148,28 +158,62 @@ FOLD_CASES: Mapping[str, FoldCase] = {
             authored_as="link card",
         ),
     ),
-    "link embed": FoldCase(
+    "link embed": fold_case(
         LinkCard("example.com/runbook", RUNBOOK_URL, "embed"),
         Quote(
             ((Styled("bold", (Link(plain("example.com/runbook"), RUNBOOK_URL),)),),),
             authored_as="link embed",
         ),
     ),
+    "open toggle": fold_case(
+        Toggle(plain("More"), None, _OPEN_TOGGLE_CHILDREN, authored_as="toggle", open=True),
+        Paragraph(bold("More")),
+        *_OPEN_TOGGLE_CHILDREN,
+    ),
+    "roman list": fold_case(
+        ListNode(
+            "number",
+            (
+                ListEntry(UNDERLINED_OPS),
+                ListEntry(
+                    plain("b"), children=(ListNode("number", (ListEntry(plain("c")),), numbering="roman"),)
+                ),
+            ),
+            start=4,
+            numbering="roman",
+        ),
+        ListNode(
+            "bullet",
+            (
+                ListEntry((Plain("iv. "), *UNDERLINED_OPS)),
+                ListEntry(
+                    (Plain("v. "), Plain("b")),
+                    children=(ListNode("bullet", (ListEntry((Plain("i. "), Plain("c"))),)),),
+                ),
+            ),
+        ),
+    ),
+    "letter list": fold_case(
+        ListNode("number", (ListEntry(plain("y")), ListEntry(UNDERLINED_OPS)), start=26, numbering="letters"),
+        ListNode(
+            "bullet", (ListEntry((Plain("z. "), Plain("y"))), ListEntry((Plain("aa. "), *UNDERLINED_OPS)))
+        ),
+    ),
 }
 
 _BULLETS = ListNode("bullet", (ListEntry(plain("before")),))
 FOLD_CONTEXTS: Mapping[str, Wrap] = {
-    "alone": lambda node: (node,),
-    "after a bullet list": lambda node: (_BULLETS, node),
-    "before a bullet list": lambda node: (node, _BULLETS),
-    "in a numbered list item": lambda node: (ListNode("number", (ListEntry(plain("a"), children=(node,)),)),),
-    "after the text of a list item's nested list": lambda node: (
-        ListNode("bullet", (ListEntry(plain("a"), children=(_BULLETS, node)),)),
+    "alone": lambda nodes: nodes,
+    "after a bullet list": lambda nodes: (_BULLETS, *nodes),
+    "before a bullet list": lambda nodes: (*nodes, _BULLETS),
+    "in a numbered list item": lambda nodes: (ListNode("number", (ListEntry(plain("a"), children=nodes),)),),
+    "after a list item's nested list": lambda nodes: (
+        ListNode("bullet", (ListEntry(plain("a"), children=(_BULLETS, *nodes)),)),
     ),
-    "in a callout": lambda node: (Callout("info", (node,)),),
-    "in a toggle": lambda node: (Toggle(plain("More"), None, (node,)),),
-    "in a toggle in a toggle": lambda node: (
-        Toggle(plain("Outer"), None, (Toggle(plain("Inner"), None, (node,)),)),
+    "in a callout": lambda nodes: (Callout("info", nodes),),
+    "in a toggle": lambda nodes: (Toggle(plain("More"), None, nodes),),
+    "in a toggle in a toggle": lambda nodes: (
+        Toggle(plain("Outer"), None, (Toggle(plain("Inner"), None, nodes),)),
     ),
 }
 

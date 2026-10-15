@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
 
 from typing_extensions import assert_never
 
@@ -29,6 +28,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TextNumbering,
     Timeline,
     TimelineEvent,
     ToneName,
@@ -38,9 +38,6 @@ from skaldr.richtext import Code, Link, Plain
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
     return (mark, Plain(" "), *text)
-
-
-TextNumbering = Literal["letters", "roman"]
 
 
 @dataclass(frozen=True)
@@ -65,21 +62,17 @@ def lower_list(block: models.ListBlock, lowering: Lowering) -> list[Node]:
 
 
 def _list_kind(shape: _ListShape) -> ListKind:
-    if shape.style == "decision" or shape.text_numbering is not None:
-        return "bullet"
-    return shape.style
+    return "bullet" if shape.style == "decision" else shape.style
 
 
 def _list_node(
     items: Sequence[str | models.ListItem], shape: _ListShape, lowering: Lowering, start: int = 1
 ) -> ListNode:
-    entries = tuple(
-        _list_entry(item, shape, lowering, index) for index, item in enumerate(items, start=start)
-    )
-    return ListNode(_list_kind(shape), entries, start if shape.text_numbering is None else 1)
+    entries = tuple(_list_entry(item, shape, lowering) for item in items)
+    return ListNode(_list_kind(shape), entries, start, shape.text_numbering)
 
 
-def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Lowering, index: int) -> ListEntry:
+def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Lowering) -> ListEntry:
     if isinstance(item, str):
         source, decided, checked, nested = item, False, False, list[str | models.ListItem]()
     else:
@@ -87,8 +80,6 @@ def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Loweri
     text = lowering.rich(source)
     if shape.style == "decision":
         text = _marked(DecisionMark(decided), text)
-    elif shape.text_numbering is not None:
-        text = (Plain(f"{compute.list_label(index, shape.text_numbering)}. "), *text)
     children: tuple[Node, ...] = (_list_node(nested, shape, lowering),) if nested else ()
     return ListEntry(text, checked, children)
 

@@ -56,6 +56,7 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    TextNumbering,
     Timeline,
     TimelineEvent,
     TocEntry,
@@ -1221,6 +1222,34 @@ def test_a_decimal_list_keeps_its_start_and_its_nested_list_counts_from_one(opti
     )
 
 
+@pytest.mark.parametrize("numbering", ["roman", "letters"])
+def test_a_letter_or_roman_list_is_a_numbered_list_naming_its_numbering_at_every_level(
+    numbering: TextNumbering,
+) -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 4,
+        "numbering": numbering,
+        "items": ["a", {"text": "b", "items": ["c"]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "number",
+            (
+                ListEntry((Plain("a"),)),
+                ListEntry(
+                    (Plain("b"),),
+                    children=(ListNode("number", (ListEntry((Plain("c"),)),), numbering=numbering),),
+                ),
+            ),
+            start=4,
+            numbering=numbering,
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("numbering", "labels"),
     [
@@ -1228,7 +1257,7 @@ def test_a_decimal_list_keeps_its_start_and_its_nested_list_counts_from_one(opti
         pytest.param("letters", ("d. ", "e. ", "a. "), id="letters"),
     ],
 )
-def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_list_starts_over(
+def test_a_letter_or_roman_list_is_written_as_bullets_led_by_its_labels_and_a_nested_list_starts_over(
     numbering: str, labels: tuple[str, str, str]
 ) -> None:
     block = {
@@ -1240,7 +1269,7 @@ def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_
     }
     first, second, nested = labels
 
-    assert lowered([block]) == (
+    assert lowered_as_written_today([block]) == (
         ListNode(
             "bullet",
             (
@@ -1588,7 +1617,7 @@ def test_a_collapsed_toggle_is_a_plain_toggle_with_no_heading_or_anchor() -> Non
     assert lowered([toggle]) == (Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),)),)
 
 
-def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+def test_an_open_toggle_is_a_toggle_marked_open() -> None:
     toggle = {
         "type": "toggle",
         "title": "Raw counts",
@@ -1596,7 +1625,20 @@ def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
         "blocks": [{"type": "text", "body": "x"}],
     }
 
-    assert lowered([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
+    assert lowered([toggle]) == (
+        Toggle(plain("Raw counts"), None, (Paragraph((Plain("x"),)),), authored_as="toggle", open=True),
+    )
+
+
+def test_an_open_toggle_is_written_as_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "collapsed": False,
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+
+    assert lowered_as_written_today([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
 
 
 def test_a_heading_in_a_top_level_toggle_keeps_its_level_and_anchor() -> None:

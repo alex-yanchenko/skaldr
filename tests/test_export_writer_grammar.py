@@ -74,6 +74,8 @@ SAMPLES: Mapping[str, Node] = {
     "divider": Divider(),
     "image": Media("image", "https://example.com/aisle.png"),
     "toggle": _TOGGLE,
+    "open toggle": Toggle(plain("More"), None, (_PARAGRAPH,), open=True),
+    "roman list": ListNode("number", (ListEntry(plain("a")),), start=4, numbering="roman"),
     "heading toggle": Toggle(plain("Totals"), 2, (_PARAGRAPH,)),
     "grid": Columns((GridColumn(1, (_PARAGRAPH,)), GridColumn(1, (_PARAGRAPH,)))),
     "grid holding a table": Columns((GridColumn(1, (_TABLE,)), GridColumn(1, (_PARAGRAPH,)))),

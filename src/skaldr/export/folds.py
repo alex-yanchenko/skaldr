@@ -1,11 +1,14 @@
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from typing import Final
 
 from typing_extensions import assert_never
 
-from skaldr.export.inline import plain
+from skaldr import compute
+from skaldr.export.capabilities import FIRST_LIST_NUMBER
+from skaldr.export.inline import bold, plain
 from skaldr.export.lower.context import with_bold_label
-from skaldr.export.runs import Chip, ExportRich, StatusMark
+from skaldr.export.runs import Chip, ExportRich, StatusMark, export_visible_text
 from skaldr.export.tree import (
     AuthoredName,
     Callout,
@@ -34,6 +37,7 @@ from skaldr.export.tree import (
     TableNode,
     TableOfContents,
     Tabs,
+    TextNumbering,
     Timeline,
     TimelineEvent,
     Toggle,
@@ -95,8 +99,25 @@ def _link_card_quote(card: LinkCard) -> Quote:
     )
 
 
+def _bold_title_over_its_content(toggle: Toggle) -> tuple[GenericNode, ...]:
+    title = bold(export_visible_text(toggle.title))
+    return (Paragraph(title, authored_at=toggle.authored_at), *folded(toggle.children))
+
+
+def _bullets_led_by_their_labels(node: ListNode, numbering: TextNumbering) -> ListNode:
+    entries = tuple(
+        replace(entry, text=(Plain(f"{compute.list_label(index, numbering)}. "), *entry.text))
+        for index, entry in enumerate(node.entries, start=node.start)
+    )
+    return replace(node, kind="bullet", entries=entries, start=FIRST_LIST_NUMBER, numbering=None)
+
+
 def _as_written_today(node: Node) -> tuple[GenericNode, ...]:
     match node:
+        case Toggle() if node.open:
+            return _bold_title_over_its_content(node)
+        case ListNode() if node.numbering is not None:
+            return (_bullets_led_by_their_labels(node, node.numbering),)
         case FactStrip():
             return (_labelled_values(node.facts, node.authored_at),)
         case KeyValueList():

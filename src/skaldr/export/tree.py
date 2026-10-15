@@ -7,6 +7,7 @@ from skaldr.models import BadgeColor, MediaKind, TimelineState, ToneLiteral
 ToneName = Literal[ToneLiteral, "muted"]
 LinkCardDisplay = Literal["card", "embed"]
 ListKind = Literal["bullet", "number", "check"]
+TextNumbering = Literal["letters", "roman"]
 AuthoredName = Literal[
     "panel",
     "grid cell",
@@ -61,6 +62,7 @@ class ListNode:
     kind: ListKind
     entries: tuple[ListEntry, ...]
     start: int = 1
+    numbering: TextNumbering | None = None
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -150,6 +152,7 @@ class Toggle:
     heading_level: HeadingLevel | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
+    open: bool = False
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
