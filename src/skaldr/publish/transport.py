@@ -12,9 +12,9 @@ __all__ = [
     "ContentWrite",
     "FieldsWrite",
     "ItemLink",
+    "LinkedItem",
     "LinksWrite",
     "NewItem",
-    "PairedLink",
     "RawSections",
     "Release",
     "RemoteItem",
@@ -45,10 +45,18 @@ class Stamp:
         return f"doc_id '{self.doc_id}'{section}"
 
 
+LinkedItem = tuple[Service, str]
+
+
 class ShownLink(FrozenModel):
     service: Service
+    item_id: str
     url: str
     title: str
+
+    @property
+    def linked_item(self) -> LinkedItem:
+        return (self.service, self.item_id)
 
 
 @dataclass(frozen=True)
@@ -58,25 +66,24 @@ class ItemLink:
 
 
 @dataclass(frozen=True)
-class PairedLink:
-    service: Service
-    item_id: str
-    url: str
-    title: str
-
-    @property
-    def shown(self) -> ShownLink:
-        return ShownLink(service=self.service, url=self.url, title=self.title)
-
-
-@dataclass(frozen=True)
 class LinksWrite:
     stamp: Stamp
-    links: tuple[PairedLink, ...]
+    links: tuple[ShownLink, ...]
+    current: tuple[ShownLink, ...] = ()
 
     @property
-    def shown(self) -> tuple[ShownLink, ...]:
-        return tuple(link.shown for link in self.links)
+    def sent(self) -> tuple[ShownLink, ...]:
+        held = {link.linked_item: link for link in self.current}
+        return tuple(link for link in self.links if held.get(link.linked_item) != link)
+
+    @property
+    def dropped(self) -> tuple[ShownLink, ...]:
+        kept = {link.linked_item for link in self.links}
+        return tuple(link for link in self.current if link.linked_item not in kept)
+
+    @property
+    def changes_nothing(self) -> bool:
+        return not self.sent and not self.dropped
 
 
 @dataclass(frozen=True)

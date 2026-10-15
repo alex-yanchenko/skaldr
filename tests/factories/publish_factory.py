@@ -274,11 +274,11 @@ class FakeTransport:
         item = self.items[item_id]
         if item.stamp is not None and item.stamp != request.stamp:
             raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.named}")
-        if item.stamp == request.stamp and item.links == request.shown:
+        if request.changes_nothing:
             return item.links
         self._write(("write_links", item_id, *(link.title for link in request.links)))
         item.stamp = request.stamp
-        item.links = request.shown
+        item.links = request.links
         self._drop_the_connection_if_asked()
         return item.links
 

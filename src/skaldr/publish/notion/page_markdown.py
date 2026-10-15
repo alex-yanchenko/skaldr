@@ -18,6 +18,7 @@ from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish.transport import ShownLink, Stamp
 from skaldr.publish_block import notion_page_id
 from skaldr.services import SERVICE_NAMES, SERVICES_BY_NAME, Service
+from skaldr.typed_links import issue_key_in_url
 
 UNKEYED_SECTION: Final = "content skaldr did not publish"
 STAMP_WORDS: Final = "Published with skaldr from document"
@@ -72,6 +73,11 @@ def _parsed_stamp(line: str) -> Stamp | None:
     return None if found is None else Stamp(found.group(1), found.group(2))
 
 
+def _linked_item_id(service: Service, url: str) -> str:
+    found = notion_page_id(url) if service == "notion" else issue_key_in_url(url)
+    return url if found is None else found
+
+
 def _service_named_last(text: str) -> Service | None:
     named = text.rsplit(LINK_GROUP_SEPARATOR.strip(), 1)[-1].strip(LINK_SEPARATOR)
     return SERVICES_BY_NAME.get(named)
@@ -89,7 +95,9 @@ class _LinkReading:
             self.url, self.title = str(token.attrGet("href") or ""), []
         elif token.type == "link_close":
             if self.service is not None and self.url is not None:
-                self.links.append(ShownLink(service=self.service, url=self.url, title="".join(self.title)))
+                item_id = _linked_item_id(self.service, self.url)
+                title = "".join(self.title)
+                self.links.append(ShownLink(service=self.service, item_id=item_id, url=self.url, title=title))
             self.url = None
         elif self.url is not None:
             self.title.append(token.content)

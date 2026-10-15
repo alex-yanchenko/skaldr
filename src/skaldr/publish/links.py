@@ -9,7 +9,7 @@ from skaldr.publish.jira.transport import global_id_refusal
 from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState, save_state
-from skaldr.publish.transport import LinksWrite, PairedLink, RemoteItem, ShownLink, Stamp
+from skaldr.publish.transport import LinksWrite, RemoteItem, ShownLink, Stamp
 from skaldr.publish_block import TargetBase
 from skaldr.publish_block.notion import DASHLESS_PAGE_ID_LENGTH
 from skaldr.services import SERVICE_NAMES
@@ -29,16 +29,12 @@ class LinkStep:
 class ItemLinks:
     item: ItemRef
     held: PublishedItem | None
-    links: tuple[PairedLink, ...]
+    write: LinksWrite
     steps: tuple[LinkStep, ...]
 
     @property
-    def shown(self) -> tuple[ShownLink, ...]:
-        return tuple(link.shown for link in self.links)
-
-    @property
-    def held_matches_shown(self) -> bool:
-        return self.held is None or frozenset(self.held.links) == frozenset(self.shown)
+    def held_matches_planned(self) -> bool:
+        return self.held is None or frozenset(self.held.links) == frozenset(self.write.links)
 
 
 def paired_items(drafts: Sequence[TargetDraft]) -> dict[ItemRef, tuple[ItemRef, ...]]:
@@ -76,15 +72,17 @@ class _Linking:
     def stamp(self, ref: ItemRef) -> Stamp:
         return Stamp(self.prepared.doc_id, ref.section_id)
 
-    def paired_link(self, partner: ItemRef) -> PairedLink | None:
+    def paired_link(self, partner: ItemRef) -> ShownLink | None:
         held = self.held(partner)
         if held is None:
             return None
         title = self.drafted[partner].content.title
         shown = self.transports.for_target(partner.target).item_link(held.item_id, title)
-        service = self.targets[partner.target].target.service()
-        return PairedLink(
-            service, held.item_id, shown.url, shown.title if shown.title.strip() else held.item_id
+        return ShownLink(
+            service=self.targets[partner.target].target.service(),
+            item_id=held.item_id,
+            url=shown.url,
+            title=shown.title if shown.title.strip() else held.item_id,
         )
 
     def current_links(self, ref: ItemRef, held: PublishedItem) -> tuple[ShownLink, ...]:
@@ -98,15 +96,14 @@ class _Linking:
         held = self.held(ref)
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
         links = tuple(link for _, link in wanted if link is not None)
-        current = {} if held is None else {link.url: link for link in self.current_links(ref, held)}
-        kept = {link.url for link in links}
+        current = () if held is None else self.current_links(ref, held)
+        write = LinksWrite(self.stamp(ref), links, current)
+        sent = set(write.sent)
         linked = [
-            LinkStep(ref, "link", partner.label)
-            for partner, link in wanted
-            if link is None or current.get(link.url) != link.shown
+            LinkStep(ref, "link", partner.label) for partner, link in wanted if link is None or link in sent
         ]
-        unlinked = [LinkStep(ref, "unlink", _named(link)) for url, link in current.items() if url not in kept]
-        return ItemLinks(ref, held, links, (*linked, *unlinked))
+        unlinked = [LinkStep(ref, "unlink", _named(link)) for link in write.dropped]
+        return ItemLinks(ref, held, write, (*linked, *unlinked))
 
 
 def _named(link: ShownLink) -> str:
@@ -187,16 +184,15 @@ def apply_links(
     done: list[str] = []
     for planned in plan_links(prepared, state, transports, remote):
         held = planned.held
-        if held is None or (not planned.steps and planned.held_matches_shown):
+        if held is None or (not planned.steps and planned.held_matches_planned):
             continue
         ref = planned.item
         target = linking.targets[ref.target].target
-        written = planned.shown
+        written = planned.write.links
         if planned.steps:
-            sending = tuple(dict.fromkeys([*held.links, *planned.shown]))
+            sending = tuple(dict.fromkeys([*held.links, *planned.write.links]))
             noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": sending}))
-            transport = transports.for_target(ref.target)
-            written = transport.write_links(held.item_id, LinksWrite(linking.stamp(ref), planned.links))
+            written = transports.for_target(ref.target).write_links(held.item_id, planned.write)
         noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": written}))
         for step in planned.steps:
             described = describe_link_step(step)

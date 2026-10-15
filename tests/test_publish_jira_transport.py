@@ -15,11 +15,11 @@ from skaldr.publish.transport import (
     FieldsWrite,
     LinksWrite,
     NewItem,
-    PairedLink,
     Release,
     RemoteItem,
     RemoveSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import JiraTarget, NotionTarget
@@ -1599,13 +1599,17 @@ def test_the_comparable_form_normalises_each_section_and_drops_empty_ones() -> N
 
 HANDBOOK_PAGE_ID = "0123456789abcdef0123456789abcdef"
 ROTA_PAGE_ID = "fedcba9876543210fedcba9876543210"
-HANDBOOK_PAGE = PairedLink(
-    "notion", HANDBOOK_PAGE_ID, f"https://www.notion.so/{HANDBOOK_PAGE_ID}", "Garden handbook"
-)
-ROTA_PAGE = PairedLink("notion", ROTA_PAGE_ID, f"https://www.notion.so/{ROTA_PAGE_ID}", "Kitchen rota")
 
 
-def _remote_link(global_id: str | None, link: PairedLink, link_id: int) -> dict[str, JsonValue]:
+def _page_link(page_id: str, title: str) -> ShownLink:
+    return ShownLink(service="notion", item_id=page_id, url=f"https://www.notion.so/{page_id}", title=title)
+
+
+HANDBOOK_PAGE = _page_link(HANDBOOK_PAGE_ID, "Garden handbook")
+ROTA_PAGE = _page_link(ROTA_PAGE_ID, "Kitchen rota")
+
+
+def _remote_link(global_id: str | None, link: ShownLink, link_id: int) -> dict[str, JsonValue]:
     return {"id": link_id, "globalId": global_id, "object": {"url": link.url, "title": link.title}}
 
 
@@ -1629,10 +1633,9 @@ def test_a_link_is_a_remote_link_whose_global_id_names_the_document_the_item_and
     written = transport.write_links(created.item_id, LinksWrite(stamp, (HANDBOOK_PAGE,)))
 
     assert (written, [summarise(request) for request in jira.requests]) == (
-        (HANDBOOK_PAGE.shown,),
+        (HANDBOOK_PAGE,),
         [
             summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
-            summarised_request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
             summarised_request(
                 "POST",
                 "/rest/api/3/issue/DEMO-1/remotelink",
@@ -1652,17 +1655,32 @@ def test_a_retitled_page_updates_its_link_in_place_and_a_page_no_longer_paired_l
     jira = FakeJira()
     transport, created = _created(jira)
     transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE, ROTA_PAGE)))
-    retitled = PairedLink("notion", HANDBOOK_PAGE_ID, HANDBOOK_PAGE.url, "Garden guide")
+    retitled = HANDBOOK_PAGE.model_copy(update={"title": "Garden guide"})
     jira.forget_requests()
 
-    transport.write_links(created.item_id, LinksWrite(STAMP, (retitled,)))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (retitled,), (HANDBOOK_PAGE, ROTA_PAGE)))
 
-    assert (jira.issues["DEMO-1"].remote_links, [call for call in jira.calls() if call[0] != "GET"]) == (
+    assert (jira.issues["DEMO-1"].remote_links, jira.calls()) == (
         [_remote_link(f"skaldr:garden-handbook:document:notion:{HANDBOOK_PAGE_ID}", retitled, 10_001)],
         [
+            ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             ("DELETE", "/rest/api/3/issue/DEMO-1/remotelink"),
             ("POST", "/rest/api/3/issue/DEMO-1/remotelink"),
         ],
+    )
+
+
+def test_a_links_write_that_changes_nothing_sends_nothing() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE,)))
+    jira.forget_requests()
+
+    written = transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE,), (HANDBOOK_PAGE,)))
+
+    assert (written, jira.calls()) == (
+        (HANDBOOK_PAGE,),
+        [("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp")],
     )
 
 
@@ -1681,12 +1699,12 @@ def test_remote_links_skaldr_did_not_write_for_this_item_are_neither_read_nor_re
         jira.link_by_hand("DEMO-1", global_id, ROTA_PAGE.url, ROTA_PAGE.title)
 
     read = transport.read_links(created.item_id, STAMP)
-    transport.write_links(created.item_id, LinksWrite(STAMP, ()))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (), read))
 
     assert (read, jira.issues["DEMO-1"].remote_links, [call[0] for call in jira.calls()]) == (
         (),
         [_remote_link(global_id, ROTA_PAGE, 10_001 + index) for index, global_id in enumerate(global_ids)],
-        ["GET", "GET", "GET"],
+        ["GET", "GET"],
     )
 
 

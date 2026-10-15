@@ -15,7 +15,6 @@ from skaldr.publish.transport import (
     ItemLink,
     LinksWrite,
     NewItem,
-    PairedLink,
     Release,
     RemoteItem,
     RemoveSection,
@@ -85,14 +84,17 @@ COVER_URL = "https://example.com/garden.png"
 LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
 
 
-ISSUE_LINKS = (
-    PairedLink("jira", "DEMO-12", f"{SITE}/browse/DEMO-12", "DEMO-12"),
-    PairedLink("jira", "OPS-3", f"{SITE}/browse/OPS-3", "OPS-3"),
-)
-PAGE_LINKS = (
-    PairedLink("notion", NOTION_PAGE_ID, f"https://www.notion.so/{NOTION_PAGE_ID}", "Garden handbook"),
-    PairedLink("notion", OTHER_PAGE_ID, f"https://www.notion.so/{OTHER_PAGE_ID}", "Kitchen rota"),
-)
+def _issue_link(key: str) -> ShownLink:
+    return ShownLink(service="jira", item_id=key, url=f"{SITE}/browse/{key}", title=key)
+
+
+def _page_link(page_id: str, title: str) -> ShownLink:
+    return ShownLink(service="notion", item_id=page_id, url=f"https://www.notion.so/{page_id}", title=title)
+
+
+ISSUE_LINKS = (_issue_link("DEMO-12"), _issue_link("OPS-3"))
+PAGE_LINKS = (_page_link(NOTION_PAGE_ID, "Garden handbook"), _page_link(OTHER_PAGE_ID, "Kitchen rota"))
+MOVED_ADDRESS = "https://example.com/elsewhere"
 
 
 @dataclass(frozen=True)
@@ -125,7 +127,7 @@ class TransportUnderTest:
     carries_look: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
     form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
-    links: tuple[PairedLink, ...] = ISSUE_LINKS
+    links: tuple[ShownLink, ...] = ISSUE_LINKS
     expected_link: Callable[[str, str], ItemLink] = field(default=_fake_link)
     reads_links_with_the_item: bool = True
     stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
@@ -548,8 +550,8 @@ def test_the_comparable_form_of_a_comparable_form_is_itself(under_test: Transpor
     assert transport.comparable_form(once) == once
 
 
-def _shown(links: tuple[PairedLink, ...]) -> tuple[ShownLink, ...]:
-    return tuple(link.shown for link in links)
+def _by_item(link: ShownLink) -> str:
+    return link.item_id
 
 
 def test_a_link_to_an_item_names_it_by_the_address_the_service_gives_it(
@@ -567,17 +569,17 @@ def test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing
 ) -> None:
     instance, created = _created(under_test)
     transport = instance.transport
-    request = LinksWrite(STAMP, under_test.links)
+    links = frozenset(under_test.links)
 
-    written = transport.write_links(created.item_id, request)
+    written = transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
     read = transport.read_links(created.item_id, STAMP)
     writes_before = instance.count_writes()
-    again = transport.write_links(created.item_id, request)
+    again = transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links, read))
 
     assert (frozenset(written), frozenset(read), frozenset(again), instance.count_writes()) == (
-        frozenset(request.shown),
-        frozenset(request.shown),
-        frozenset(request.shown),
+        links,
+        links,
+        links,
         writes_before,
     )
 
@@ -592,7 +594,7 @@ def test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read(
     read = transport.read_item(created.item_id, _content(under_test))
 
     carried = None if read.links is None else frozenset(read.links)
-    assert carried == (frozenset(_shown(under_test.links)) if under_test.reads_links_with_the_item else None)
+    assert carried == (frozenset(under_test.links) if under_test.reads_links_with_the_item else None)
 
 
 def test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link(
@@ -603,11 +605,27 @@ def test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_l
     first, _ = under_test.links
 
     transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
-    transport.write_links(created.item_id, LinksWrite(STAMP, (first,)))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (first,), under_test.links))
     fewer = transport.read_links(created.item_id, STAMP)
-    transport.write_links(created.item_id, LinksWrite(STAMP, ()))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (), fewer))
 
-    assert (fewer, transport.read_links(created.item_id, STAMP)) == ((first.shown,), ())
+    assert (fewer, transport.read_links(created.item_id, STAMP)) == ((first,), ())
+
+
+def test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    first, second = under_test.links
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    moved = first.model_copy(update={"url": MOVED_ADDRESS})
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links, (moved, second)))
+
+    assert sorted(transport.read_links(created.item_id, STAMP), key=_by_item) == sorted(
+        under_test.links, key=_by_item
+    )
 
 
 def test_links_change_neither_the_content_nor_the_stamp_and_never_count_as_an_edit(
@@ -637,7 +655,7 @@ def test_a_section_write_after_links_keeps_them(under_test: TransportUnderTest) 
         SectionRequest(AddSection("tools", under_test.spell("Spade.\n"), "planting"), raw, STAMP),
     )
 
-    assert frozenset(transport.read_links(created.item_id, STAMP)) == frozenset(_shown(under_test.links))
+    assert frozenset(transport.read_links(created.item_id, STAMP)) == frozenset(under_test.links)
 
 
 def test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing(
@@ -672,7 +690,7 @@ def test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links(
 
     written = transport.write_links(item_id, LinksWrite(STAMP, under_test.links))
 
-    shown = frozenset(_shown(under_test.links))
+    shown = frozenset(under_test.links)
     assert (
         frozenset(written),
         frozenset(transport.read_links(item_id, STAMP)),
@@ -735,7 +753,15 @@ class NamesItemsByTitle(FakeTransport):
 
 class ForgetsLinks(FakeTransport):
     def write_links(self, _item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
-        return request.shown
+        return request.links
+
+
+class AddsEachSentLinkBesideTheOthers(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        item = self.items[item_id]
+        item.links = (*(link for link in item.links if link not in request.dropped), *request.sent)
+        item.stamp = request.stamp
+        return item.links
 
 
 class RewritesLinksEachTime(FakeTransport):
@@ -746,7 +772,7 @@ class RewritesLinksEachTime(FakeTransport):
 
 class KeepsOldLinks(FakeTransport):
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
-        kept = tuple(dict.fromkeys([*self.items[item_id].links, *request.shown]))
+        kept = tuple(dict.fromkeys([*self.items[item_id].links, *request.links]))
         self.items[item_id].links = kept
         return kept
 
@@ -759,7 +785,7 @@ class ReportsLinksAsEdits(FakeTransport):
 
 class LinksBeforeCheckingTheStamp(FakeTransport):
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
-        self.items[item_id].links = request.shown
+        self.items[item_id].links = request.links
         return super().write_links(item_id, request)
 
 
@@ -845,6 +871,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             ForgetsLinks,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
             id="forgets-links",
+        ),
+        pytest.param(
+            AddsEachSentLinkBesideTheOthers,
+            test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled,
+            id="doubles-a-moved-link",
         ),
         pytest.param(
             RewritesLinksEachTime,

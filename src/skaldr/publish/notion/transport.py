@@ -325,7 +325,8 @@ class NotionTransport:
 
     def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
         self._live_page(item_id)
-        keyed = keyed_page(self._api.page_markdown(item_id).markdown, {})
+        layout = self._layouts.get(_page_key(item_id), {})
+        keyed = keyed_page(self._api.page_markdown(item_id).markdown, layout)
         return keyed.links if keyed.stamp == stamp else ()
 
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
@@ -335,10 +336,12 @@ class NotionTransport:
         keyed = keyed_page(markdown, layout)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
+        if request.changes_nothing:
+            return keyed.links
         if keyed.stamp_line is None:
-            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp, request.shown)
-        elif frozenset(keyed.links) != frozenset(request.shown):
-            line = stamp_line(request.stamp, request.shown)
+            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp, request.links)
+        else:
+            line = stamp_line(request.stamp, request.links)
             written = line if keyed.stamp_line.endswith("\n") else line.removesuffix("\n")
             markdown = self._send(item_id, keyed.raw_sections, Replacement(keyed.stamp_line, written))
         return keyed_page(markdown, layout).links

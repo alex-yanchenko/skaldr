@@ -68,7 +68,9 @@ def test_a_state_file_saved_before_links_loads_with_no_links_and_one_with_links_
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "garden.skaldr-state.json"
-    issue = ShownLink(service="jira", url="https://example.atlassian.net/browse/DEMO-1", title="DEMO-1")
+    issue = ShownLink(
+        service="jira", item_id="DEMO-1", url="https://example.atlassian.net/browse/DEMO-1", title="DEMO-1"
+    )
     save_state(path, _state())
     saved = json.loads(path.read_text(encoding="utf-8"))
     del saved["targets"][TARGET_LABEL]["document"]["links"]

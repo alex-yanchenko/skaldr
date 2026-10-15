@@ -26,12 +26,12 @@ from skaldr.publish.transport import (
     FieldsWrite,
     LinksWrite,
     NewItem,
-    PairedLink,
     Release,
     RemoteItem,
     RemoveSection,
     ReplaceSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import JiraTarget, NotionTarget
@@ -880,7 +880,9 @@ def test_a_content_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back()
     )
 
 
-ISSUE_LINK = PairedLink("jira", "DEMO-12", "https://example.atlassian.net/browse/DEMO-12", "DEMO-12")
+ISSUE_LINK = ShownLink(
+    service="jira", item_id="DEMO-12", url="https://example.atlassian.net/browse/DEMO-12", title="DEMO-12"
+)
 LINKED_STAMP_LINE = (
     "Published with skaldr from document garden-handbook · Jira "
     '[DEMO-12](https://example.atlassian.net/browse/DEMO-12) {color="gray"}'
@@ -894,7 +896,7 @@ def test_links_rewrite_the_stamp_line_alone_in_one_request() -> None:
     written = transport.write_links(created.item_id, LinksWrite(STAMP, (ISSUE_LINK,)))
 
     assert (written, _patches(notion), notion.markdown_of(created.item_id)) == (
-        (ISSUE_LINK.shown,),
+        (ISSUE_LINK,),
         [_update(STAMP_LINE, LINKED_STAMP_LINE)],
         f"{WELCOME}{PLANTING}{LINKED_STAMP_LINE}",
     )

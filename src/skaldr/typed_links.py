@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Final
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
 from skaldr.errors import ReportError
 from skaldr.models import PERSON_KEY_PATTERN
@@ -76,6 +76,11 @@ def issue_key(target: str) -> str:
 
 def issue_url(site: str, key: str) -> str:
     return f"{site.rstrip('/')}{BROWSE_PATH}{quote(key, safe='')}"
+
+
+def issue_key_in_url(url: str) -> str | None:
+    _, browse, key = urlsplit(url).path.rpartition(BROWSE_PATH)
+    return unquote(key) if browse and key else None
 
 
 def person_key(target: str) -> str:

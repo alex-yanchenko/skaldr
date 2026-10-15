@@ -95,11 +95,11 @@ def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
 
 
 def _shown(item_id: str, title: str) -> ShownLink:
-    return ShownLink(service="jira", url=f"{FAKE_ITEM_ADDRESS}{item_id}", title=title)
+    return ShownLink(service="jira", item_id=item_id, url=f"{FAKE_ITEM_ADDRESS}{item_id}", title=title)
 
 
 def _page(item_id: str, title: str) -> ShownLink:
-    return ShownLink(service="notion", url=f"{FAKE_ITEM_ADDRESS}{item_id}", title=title)
+    return ShownLink(service="notion", item_id=item_id, url=f"{FAKE_ITEM_ADDRESS}{item_id}", title=title)
 
 
 def _links_of(transport: FakeTransport) -> dict[str, tuple[ShownLink, ...]]:
@@ -332,6 +332,25 @@ def test_a_link_deleted_by_hand_shows_in_the_dry_run_and_the_next_publish_writes
     path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
     _publish(path, transport)
     transport.link_by_hand("page-3", ())
+    transport.forget_calls()
+
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+    outcome = _publish(path, transport)
+
+    assert (dry_run.links, outcome, transport.writes(), transport.items["page-3"].links) == (
+        (LinkStep(JIRA_DOCUMENT, "link", f"{TARGET_LABEL}, document"),),
+        Applied((FIRST_LINKS[2],)),
+        [("write_links", "page-3", "Garden handbook")],
+        (_page("page-1", "Garden handbook"),),
+    )
+
+
+def test_a_link_whose_address_was_edited_by_hand_is_one_link_step_and_no_unlink(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
+    _publish(path, transport)
+    moved = _page("page-1", "Garden handbook").model_copy(update={"url": "https://example.com/elsewhere"})
+    transport.link_by_hand("page-3", (moved,))
     transport.forget_calls()
 
     dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
@@ -679,6 +698,45 @@ def test_publishing_to_notion_and_jira_links_each_page_and_issue_both_ways_and_a
         notion.writes()[notion_writes:],
         [call for call in jira.calls()[jira_writes:] if call[0] != "GET"],
     ) == (0, "Nothing to publish: every item matches the YAML.", [], [])
+
+
+def test_a_remote_link_whose_address_was_edited_in_jira_is_put_back_in_place_with_one_post(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, jira, registry = _services()
+    path = write_garden_report(tmp_path, publish=LINKED_BOTH_WAYS)
+    main(["publish", str(path), "--apply"], registry=registry)
+    edited = jira.issues["DEMO-1"].remote_links[0]
+    edited["object"] = {"url": "https://example.com/elsewhere", "title": "Garden handbook"}
+    jira.forget_requests()
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=registry)
+
+    assert (
+        exit_code,
+        capsys.readouterr().out.splitlines()[-2:],
+        [call for call in jira.calls() if call[1].endswith("/remotelink")],
+        jira.issues["DEMO-1"].remote_links,
+    ) == (
+        0,
+        [
+            f"{DEMO_LABEL}: link     document to {TARGET_LABEL}, document",
+            f"Published 1 step. The publish state is in {state_path_for(path)}.",
+        ],
+        [
+            ("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            ("GET", "/rest/api/3/issue/DEMO-2/remotelink"),
+            ("POST", "/rest/api/3/issue/DEMO-1/remotelink"),
+        ],
+        [
+            {
+                "id": edited["id"],
+                "globalId": f"skaldr:garden-handbook:document:notion:{DOCUMENT_PAGE}",
+                "object": {"url": f"https://www.notion.so/{DOCUMENT_PAGE}", "title": "Garden handbook"},
+            }
+        ],
+    )
 
 
 def _markdown_reads(notion: InMemoryNotion) -> list[str]:

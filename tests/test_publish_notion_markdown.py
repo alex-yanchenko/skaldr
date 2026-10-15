@@ -205,13 +205,20 @@ def test_the_stamp_names_the_section_an_item_holds() -> None:
     )
 
 
-DEMO_12 = ShownLink(service="jira", url="https://example.atlassian.net/browse/DEMO-12", title="DEMO-12")
-OPS_3 = ShownLink(service="jira", url="https://example.atlassian.net/browse/OPS-3", title="OPS-3")
-GARDEN_OPS_4 = ShownLink(
-    service="jira", url="https://example.atlassian.net/browse/GARDEN_OPS-4", title="GARDEN_OPS-4"
-)
+def _issue(key: str) -> ShownLink:
+    return ShownLink(
+        service="jira", item_id=key, url=f"https://example.atlassian.net/browse/{key}", title=key
+    )
+
+
+DEMO_12 = _issue("DEMO-12")
+OPS_3 = _issue("OPS-3")
+GARDEN_OPS_4 = _issue("GARDEN_OPS-4")
 HANDBOOK_PAGE = ShownLink(
-    service="notion", url="https://www.notion.so/0123456789abcdef0123456789abcdef", title="Handbook"
+    service="notion",
+    item_id="0123456789abcdef0123456789abcdef",
+    url="https://www.notion.so/0123456789abcdef0123456789abcdef",
+    title="Handbook",
 )
 
 
@@ -294,6 +301,24 @@ def test_text_after_the_service_name_that_holds_no_link_leaves_the_stamp_with_no
     keyed = keyed_page(_page(INTRO, line), {"intro": INTRO})
 
     assert (keyed.stamp, keyed.links, keyed.stamp_line) == (STAMP, (), line)
+
+
+def test_a_stamp_link_whose_address_names_no_item_is_known_by_its_address() -> None:
+    line = (
+        "Published with skaldr from document garden-handbook · Jira "
+        '[DEMO-12](https://example.com/elsewhere) {color="gray"}\n'
+    )
+
+    keyed = keyed_page(_page(INTRO, line), {"intro": INTRO})
+
+    assert keyed.links == (
+        ShownLink(
+            service="jira",
+            item_id="https://example.com/elsewhere",
+            url="https://example.com/elsewhere",
+            title="DEMO-12",
+        ),
+    )
 
 
 def test_stamp_text_inside_a_code_block_is_content_not_a_stamp() -> None:
