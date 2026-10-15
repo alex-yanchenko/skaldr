@@ -171,25 +171,25 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
             assert_never(target)
 
 
-def _written(out_dir: Path, rendered: RenderedExport) -> ExportResult:
+def _write_rendered(out_dir: Path, rendered: RenderedExport) -> ExportResult:
     return _export_pages(out_dir, rendered.title, rendered.pages, rendered.oversized_sections)
 
 
 def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
     if chunk is None:
-        return _written(out_dir, render_export(report, "notion"))
+        return _write_rendered(out_dir, render_export(report, "notion"))
     document = _checked_document(report, "notion")
     split = chunk_notion(document.body, character_budget(chunk), report.meta.notion_width)
     return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
 
 
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:
-    return _written(out_dir, render_export(report, "markdown"))
+    return _write_rendered(out_dir, render_export(report, "markdown"))
 
 
 def export_adf(report: Report, out_dir: Path) -> ExportResult:
-    return _written(out_dir, render_export(report, "adf"))
+    return _write_rendered(out_dir, render_export(report, "adf"))
 
 
 def export_slack(report: Report, out_dir: Path) -> ExportResult:
-    return _written(out_dir, render_export(report, "slack"))
+    return _write_rendered(out_dir, render_export(report, "slack"))
