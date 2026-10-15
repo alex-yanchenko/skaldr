@@ -871,108 +871,133 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
     )
 
 
+PLANTING_EDIT = "(Part(kind='section', key='planting'),)"
+BOTH_ISSUE_LINKS = f"({ISSUE_LINKS[0]!r}, {ISSUE_LINKS[1]!r})"
+LINKS_NOT_READ_BACK = "At index 1 diff: frozenset() != frozenset({"
+NO_LINKS_READ = "assert frozenset() == frozenset({"
+
+
 @pytest.mark.parametrize(
-    ("mutant", "check"),
+    ("mutant", "check", "failing"),
     [
         pytest.param(
             ReordersSections,
             test_a_created_item_reads_back_keyed_and_ordered_like_the_content_in_the_services_form,
+            "At index 0 diff: [('planting', 'Sow in spring.\\n'), ('intro', 'Welcome.\\n')]",
             id="reordered-sections",
         ),
         pytest.param(
             HidesHandEdits,
             test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            f"At index 0 diff: () != {PLANTING_EDIT}",
             id="hidden-hand-edits",
         ),
         pytest.param(
             ReadsWhatItLastWrote,
             test_a_hand_edit_after_a_marker_is_reported_or_shows_in_the_next_read,
+            f"At index 1 diff: () != {PLANTING_EDIT}",
             id="hand-edits-missing-from-the-read",
         ),
         pytest.param(
             DropsTheStampSection,
             test_the_stamp_carries_the_section_the_item_holds,
+            "section_id: None != 'tools'",
             id="stamp-without-section",
         ),
         pytest.param(
             LandsBeforeRejecting,
             test_a_content_write_sent_with_a_stale_layout_is_rejected_and_changes_nothing,
+            "Left contains one more item: ('tools', 'Spade.\\n')",
             id="lands-before-rejecting",
         ),
         pytest.param(
             KeepsClearedFields,
             test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_absent,
+            "At index 1 diff: 'Shed' != 'Orchard'",
             id="keeps-cleared-fields",
         ),
         pytest.param(
             KeepsTheCover,
             test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them,
+            f"At index 1 diff: ('{SUNFLOWER}', 'https://example.com/garden.png') != ('{SUNFLOWER}', None)",
             id="keeps-the-cover",
         ),
         pytest.param(
             ClosesEverySectionAgain,
             test_the_comparable_form_of_a_comparable_form_is_itself,
+            "assert ItemContent(",
             id="comparable-form-not-idempotent",
         ),
         pytest.param(
             NamesItemsByTitle,
             test_a_link_to_an_item_names_it_by_the_address_the_service_gives_it,
+            "url: 'https://items.example.com/Garden handbook' != 'https://items.example.com/page-2'",
             id="link-by-title",
         ),
         pytest.param(
             ForgetsLinks,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            LINKS_NOT_READ_BACK,
             id="forgets-links",
         ),
         pytest.param(
             AddsEachSentLinkBesideTheOthers,
             test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled,
+            f"Left contains one more item: {ISSUE_LINKS[1]!r}",
             id="doubles-a-moved-link",
         ),
         pytest.param(
             RewritesLinksEachTime,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            "At index 3 diff: 4 != 3",
             id="rewrites-unchanged-links",
         ),
         pytest.param(
             ReadsItemsWithoutTheirLinks,
             test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read,
+            NO_LINKS_READ,
             id="items-read-without-their-links",
         ),
         pytest.param(
             KeepsOldLinks,
             test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link,
+            f"At index 0 diff: {BOTH_ISSUE_LINKS} != ({ISSUE_LINKS[0]!r},)",
             id="keeps-old-links",
         ),
         pytest.param(
             ReportsLinksAsEdits,
             test_links_change_neither_the_content_nor_the_stamp_and_never_count_as_an_edit,
+            "At index 1 diff: (Part(kind='section', key='intro'),) != ()",
             id="links-reported-as-edits",
         ),
         pytest.param(
             DropsLinksOnSectionWrites,
             test_a_section_write_after_links_keeps_them,
+            NO_LINKS_READ,
             id="section-write-drops-links",
         ),
         pytest.param(
             LinksBeforeCheckingTheStamp,
             test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing,
+            f"At index 0 diff: {BOTH_ISSUE_LINKS} != ()",
             id="links-before-checking-the-stamp",
         ),
         pytest.param(
             ReadsLinksOfAnyStamp,
             test_links_are_read_only_for_the_stamp_the_item_carries,
+            f"Left contains 2 more items, first extra item: {ISSUE_LINKS[0]!r}",
             id="links-read-for-any-stamp",
         ),
         pytest.param(
             LinksWithoutStamping,
             test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links,
+            LINKS_NOT_READ_BACK,
             id="links-without-stamping",
         ),
     ],
 )
 def test_each_contract_check_fails_on_a_transport_that_breaks_it(
-    mutant: type[FakeTransport], check: Callable[[TransportUnderTest], None]
+    mutant: type[FakeTransport], check: Callable[[TransportUnderTest], None], failing: str
 ) -> None:
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=re.escape(failing)):
         check(_mutant(mutant))
