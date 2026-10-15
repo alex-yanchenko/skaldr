@@ -432,6 +432,56 @@ def test_a_blank_in_a_toned_step_title_is_written_on_notion_beside_the_step_colo
     }
 
 
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            (TonedLabel("danger", (Plain("run "), Code("</b>"), Plain(" first"))),),
+            '<span color="red">run </span>`</b>`<span color="red"> first</span>',
+            id="beside-the-text",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Styled("italic", (Code("</b>"),)),)),),
+            "*`</b>`*",
+            id="alone-in-italic",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("see "), Code("List<int>"))),),
+            '<span color="red">see `List<int>`</span>',
+            id="code-without-a-closing-tag-stays-inside",
+        ),
+    ],
+)
+def test_code_holding_a_closing_tag_in_a_toned_label_is_written_outside_the_generated_span(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+def test_code_holding_a_closing_tag_in_a_toned_step_title_is_written_outside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("run `</span>` first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">run </span>`</span>`'
+        '<span color="red"> first</span>*\n\tBoth aisles.\n'
+    }
+
+
+def test_code_holding_a_closing_tag_in_an_author_colour_in_a_toned_step_title_is_refused_for_notion() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("run [`</span>`]{tone=info} first")))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        render_export(report, "notion")
+
+    assert vars(raised.value) == {
+        "target": "notion",
+        "why": "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+        "as in '</span>'",
+        "instead": "write the code outside the coloured, highlighted or underlined text, or without '</'",
+        "where": "at blocks.0.walkthrough",
+    }
+
+
 def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colour() -> None:
     report = parse_report(make_report(blocks=toned_step_titled("the [cold room]{tone=info} first")))
 
@@ -469,10 +519,16 @@ def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colou
             id="closing-tag-in-code-inside-a-colour",
         ),
         pytest.param(
-            (TonedLabel("danger", (Styled("italic", (Code("</b>"),)),)),),
+            (TonedLabel("danger", (Styled("underline", (Code("</b>"),)),)),),
             "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
             "'</b>'; the export check should have refused it",
-            id="closing-tag-in-code-inside-a-toned-label",
+            id="closing-tag-in-code-inside-an-underline-inside-a-toned-label",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Tinted("info", None, (Code("</b>"),)),)),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</b>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-a-colour-inside-a-toned-label",
         ),
         pytest.param(
             (Styled("underline", (Plain("see "), Code("</span>"))),),

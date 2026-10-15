@@ -273,7 +273,7 @@ class _RunPlace:
                 return self
 
     def closes_at_a_closing_tag(self) -> bool:
-        return self.span is not None or self.underlined
+        return (self.span is not None and not self.span_is_generated) or self.underlined
 
 
 def _tint_features(run: Tinted, place: _RunPlace) -> Iterator[TextMarkFeature]:

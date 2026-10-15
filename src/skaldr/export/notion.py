@@ -220,6 +220,7 @@ class _Span:
     color: str | None = None
     kind: SpanKind | None = None
     underline: bool = False
+    colour_is_generated: bool = False
 
     def coloured(self, kind: SpanKind, color: str) -> "_Span":
         if self.kind is not None and self.kind != kind:
@@ -227,7 +228,18 @@ class _Span:
                 f"Notion holds no span inside a span, so it cannot show a {kind} inside a {self.kind}; "
                 "the export check should have refused it"
             )
-        return replace(self, color=color, kind=kind)
+        return replace(self, color=color, kind=kind, colour_is_generated=False)
+
+    def toned(self, tone: ToneLiteral) -> "_Span":
+        return replace(self.coloured("colour", BLOCK_COLOR[tone]), colour_is_generated=True)
+
+    def leaves_out(self, run: ExportRun) -> bool:
+        return (
+            self.colour_is_generated
+            and not self.underline
+            and isinstance(run, Code)
+            and CLOSING_TAG_OPENER in run.text
+        )
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None) -> "_Span":
         if tone and background:
@@ -278,21 +290,25 @@ def _is_a_span(run: ExportRun) -> bool:
             return False
 
 
-def _holds_a_span(run: ExportRun) -> bool:
-    return any(_is_a_span(inner) or _holds_a_span(inner) for inner in nested_runs(run))
+def _splits_the_span(span: _Span, run: ExportRun) -> bool:
+    return _is_a_span(run) or span.leaves_out(run)
+
+
+def _holds_a_split(span: _Span, run: ExportRun) -> bool:
+    return any(_splits_the_span(span, inner) or _holds_a_split(span, inner) for inner in nested_runs(run))
 
 
 def _written_in(span: _Span, runs: ExportRich, writer: "_NotionRuns") -> str:
     parts: list[str] = []
-    outside_any_inner_span: list[ExportRun] = []
+    inside_the_span: list[ExportRun] = []
     for run in runs:
-        if not _is_a_span(run) and not _holds_a_span(run):
-            outside_any_inner_span.append(run)
+        if not _splits_the_span(span, run) and not _holds_a_split(span, run):
+            inside_the_span.append(run)
             continue
-        parts.append(span.holding(tuple(outside_any_inner_span), writer))
-        outside_any_inner_span = []
+        parts.append(span.holding(tuple(inside_the_span), writer))
+        inside_the_span = []
         parts.append(_run_written_in(span, run, writer))
-    parts.append(span.holding(tuple(outside_any_inner_span), writer))
+    parts.append(span.holding(tuple(inside_the_span), writer))
     return writer.concat(parts)
 
 
@@ -301,7 +317,7 @@ def _run_written_in(span: _Span, run: ExportRun, writer: "_NotionRuns") -> str:
         case Tinted():
             return _written_in(span.tinted(run.tone, run.background), run.runs, writer)
         case TonedLabel():
-            return _written_in(span.tinted(run.tone, None), run.runs, writer)
+            return _written_in(span.toned(run.tone), run.runs, writer)
         case Styled() if run.style == "underline":
             return _written_in(span.underlined(), run.runs, writer)
         case Placeholder():

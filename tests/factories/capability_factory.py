@@ -342,6 +342,7 @@ class NestedSpans:
 HIGHLIGHT_IN_A_STEP_TITLE = toned_step_titled("the [cold room]{bg=sky} first")
 CODE_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Write [code `</span>` inside]{tone=danger}."}]
 CODE_IN_AN_UNDERLINE = [{"type": "text", "body": "Write ++code `</span>` inside++."}]
+UNDERLINED_CODE_IN_A_STEP_TITLE = toned_step_titled("run ++`</span>`++ first")
 PLACEHOLDER_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Ask [{{owner}} first]{tone=danger}."}]
 SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
     **NestedSpans("Zone [[x]{bg=sky}]{tone=danger}.", "x", "x", "x", outer_is_a_colour=True).refusals(
@@ -392,11 +393,18 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         WITHOUT_THE_COLOUR,
         AT_THE_TEXT,
     ),
-    "notion-inline-code-holding-a-closing-tag-in-a-toned-step-title": RefusedCase(
+    "notion-inline-code-holding-a-closing-tag-in-an-underline-in-a-toned-step-title": RefusedCase(
         "notion",
-        toned_step_titled("run `</span>` first"),
+        UNDERLINED_CODE_IN_A_STEP_TITLE,
         SPAN_CODE_WHY.format(code="</span>"),
         SPAN_CODE_INSTEAD,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-an-underline-in-a-toned-step-title": RefusedCase(
+        "slack",
+        UNDERLINED_CODE_IN_A_STEP_TITLE,
+        "a Slack canvas cannot underline text, so it cannot show the underline on '</span>'",
+        "write the text without the underline or export the document elsewhere",
         STEP_PATH_OF_THE_TITLE,
     ),
     "notion-inline-code-holding-a-closing-tag-in-an-underline": RefusedCase(
