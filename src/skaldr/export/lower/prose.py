@@ -152,10 +152,19 @@ def _card(card: models.Card, lowering: Lowering) -> ListEntry:
     if card.delta:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
-    tone = None if card.badges else card.tone
     return ListEntry(
-        with_bold_label(card.label, spaced([part for part in parts if part]), tone), children=_card_note(card)
+        with_bold_label(
+            card.label, spaced([part for part in parts if part]), _tone_unless_a_chip_shows_it(card, lowering)
+        ),
+        children=_card_note(card),
     )
+
+
+def _tone_unless_a_chip_shows_it(card: models.Card, lowering: Lowering) -> models.ToneLiteral | None:
+    chip_tones = {models.BADGE_COLOR_TONE[lowering.report.badges[key].tone] for key in card.badges}
+    if card.delta and card.delta.tone:
+        chip_tones.add(card.delta.tone)
+    return None if card.tone in chip_tones else card.tone
 
 
 def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:

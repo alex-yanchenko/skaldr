@@ -53,9 +53,7 @@ def _indicator_cell(tone: ToneLiteral | None) -> TableCell:
     return TableCell((IndicatorMark(tone),), tone) if tone else TableCell(())
 
 
-def _row_tone(block: models.Table, row: models.Row, lowering: Lowering) -> ToneName | None:
-    if row.tone:
-        return row.tone
+def _badge_tint(block: models.Table, row: models.Row, lowering: Lowering) -> ToneName | None:
     tint_key = block.row_tint_key(row)
     return models.BADGE_COLOR_TONE[lowering.report.badges[tint_key].tone] if tint_key else None
 
@@ -78,7 +76,9 @@ def _body_cell(block: models.Table, column: models.Column, row: models.Row, lowe
 
 def _table_row(block: models.Table, row: models.Row, lowering: Lowering) -> TableRow:
     row_cells = tuple(_body_cell(block, column, row, lowering) for column in block.cell_columns)
-    return TableRow(row_cells, _row_tone(block, row, lowering))
+    if row.tone:
+        return TableRow(row_cells, row.tone)
+    return TableRow(row_cells, tint=_badge_tint(block, row, lowering))
 
 
 def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:
@@ -134,7 +134,10 @@ def lower_table(block: models.Table, lowering: Lowering) -> list[Node]:
     if block.totals:
         rows.append(_totals_row(block, block.totals.column))
     header = plain_cells(*(column.label for column in block.cell_columns))
-    nodes: list[Node] = [TableNode(header, tuple(rows), columns=_table_columns(block))]
+    title_column = [column.key for column in block.cell_columns].index(block.title_key)
+    nodes: list[Node] = [
+        TableNode(header, tuple(rows), columns=_table_columns(block), title_column=title_column)
+    ]
     nodes += _rollup(block, lowering)
     if block.reconcile:
         nodes.append(Paragraph(plain(compute.reconcile_line(block)), "muted"))

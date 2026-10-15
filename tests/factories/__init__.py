@@ -1,7 +1,9 @@
 from tests.factories.export_factory import (
+    API_AND_RISK_BADGES,
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
     REFUSED_IN_THE_EXAMPLE,
+    TEXT_X_BLOCK,
     accepted_by,
     accepted_example,
     authored_block_types,
@@ -55,11 +57,13 @@ from tests.factories.report_factory import (
 )
 
 __all__ = [
+    "API_AND_RISK_BADGES",
     "API_BADGES",
     "BADGE_AND_STATE_BLOCKS",
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
     "REFUSED_IN_THE_EXAMPLE",
+    "TEXT_X_BLOCK",
     "accepted_by",
     "accepted_example",
     "authored_block_types",

@@ -310,7 +310,7 @@ class _AdfBlocks:
         return body
 
     def body_row(self, table: TableNode, row: TableRow, width: int) -> AdfTableRow:
-        band = (row.tone or GROUP_ROW_FALLBACK_TONE) if row.emphasis == "group" else row.tone
+        band = (row.fill or GROUP_ROW_FALLBACK_TONE) if row.emphasis == "group" else row.fill
         cells: list[AdfTableCell | AdfTableHeader] = []
         for index, cell in enumerate(_padded(row.cells, width)):
             column = table.columns[index].tone if index < len(table.columns) else None

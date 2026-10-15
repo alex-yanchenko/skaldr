@@ -74,6 +74,11 @@ class TableRow:
     cells: tuple[TableCell, ...]
     tone: ToneName | None = None
     emphasis: Literal["group", "total"] | None = None
+    tint: ToneName | None = None
+
+    @property
+    def fill(self) -> ToneName | None:
+        return self.tone or self.tint
 
 
 @dataclass(frozen=True)
@@ -88,6 +93,7 @@ class TableNode:
     rows: tuple[TableRow, ...]
     header_column: bool = False
     columns: tuple[TableColumn, ...] = ()
+    title_column: int = 0
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 

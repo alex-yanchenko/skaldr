@@ -57,7 +57,7 @@ from skaldr.export.tree import (
     capped_heading_level,
     heading_of,
 )
-from skaldr.models import SwimlaneStepState, parse_report
+from skaldr.models import SwimlaneStepState, ToneLiteral, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -288,7 +288,7 @@ def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
                 TableNode(
                     _cells("Slice", "Value", "Share"),
                     (
-                        TableRow(_cells("A", "3", "67%"), "success"),
+                        TableRow(_cells("A", "3", "67%"), tint="success"),
                         TableRow(_cells("B", "1.5", "33%")),
                         TableRow(_cells("Total", "4.5", ""), emphasis="total"),
                     ),
@@ -355,7 +355,12 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
         Paragraph(bold("Open")),
         Diagram(
             XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False),
-            (TableNode(_cells("Series", "Q1", "Q2"), (TableRow(_cells("x", "1", "2"), "danger"),)),),
+            (
+                TableNode(
+                    _cells("Series", "Q1", "Q2"),
+                    (TableRow(_cells("x", "1", "2"), tint="danger"),),
+                ),
+            ),
         ),
     )
 
@@ -850,7 +855,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             (
                 ListEntry(
                     (
-                        *bold("Clean"),
+                        TonedLabel("success", bold("Clean")),
                         Plain(": "),
                         Plain("9"),
                         Plain(" "),
@@ -906,14 +911,23 @@ def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRi
     assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
 
-def test_a_toned_card_that_shows_a_badge_leaves_the_colour_to_the_badge() -> None:
-    card = {"label": "Cost", "value": 5, "tone": "danger", "badges": ["API"]}
+@pytest.mark.parametrize(
+    ("tone", "label"),
+    [
+        pytest.param("info", bold("Cost"), id="a-badge-of-the-same-colour-carries-the-tone"),
+        pytest.param(
+            "danger", (TonedLabel("danger", bold("Cost")),), id="a-badge-of-another-colour-does-not"
+        ),
+    ],
+)
+def test_a_toned_card_leaves_its_colour_only_to_a_badge_of_the_same_colour(
+    tone: ToneLiteral, label: ExportRich
+) -> None:
+    card = {"label": "Cost", "value": 5, "tone": tone, "badges": ["API"]}
 
     assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
-        ListNode(
-            "bullet", (ListEntry((*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)
-        ),
+        ListNode("bullet", (ListEntry((*label, Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)),
     )
 
 
@@ -1912,6 +1926,7 @@ def test_a_totals_row_puts_its_label_in_the_first_cell_that_is_not_the_total() -
                 TableRow(_cells("5", "Total"), emphasis="total"),
             ),
             columns=(TableColumn(share=0.1), TableColumn()),
+            title_column=1,
         ),
     )
 
@@ -1997,7 +2012,30 @@ def test_a_tinted_table_row_takes_the_tone_of_its_badge_key(
 
     assert lowered([table], badges=badges) == (
         API_LEGEND,
-        TableNode(_cells("A", ""), (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone),)),
+        TableNode(
+            _cells("A", ""),
+            (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tint=tone),),
+        ),
+    )
+
+
+def test_a_table_names_its_title_column_among_the_cells_it_writes() -> None:
+    table = make_table(
+        [
+            {"key": "n", "label": "N", "kind": "number"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "a", "label": "Item"},
+        ],
+        rows=[{"n": 1, "tag": "", "a": "x", "tone": "danger"}],
+    )
+
+    assert lowered([table]) == (
+        TableNode(
+            _cells("N", "Item"),
+            (TableRow(_cells("1", "x"), "danger"),),
+            columns=(TableColumn(share=0.1), TableColumn()),
+            title_column=1,
+        ),
     )
 
 

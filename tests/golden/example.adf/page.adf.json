@@ -286,12 +286,6 @@
                   "marks": [
                     {
                       "type": "strong"
-                    },
-                    {
-                      "type": "textColor",
-                      "attrs": {
-                        "color": "#00875A"
-                      }
                     }
                   ]
                 },

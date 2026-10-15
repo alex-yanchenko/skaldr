@@ -29,6 +29,11 @@ REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
 BlockT = TypeVar("BlockT", bound=AnyBlock)
 
 API_BADGES: dict[str, Any] = {"API": {"label": "api", "tone": "blue", "legend": "the API"}}
+API_AND_RISK_BADGES: dict[str, Any] = {
+    **API_BADGES,
+    "RISK": {"label": "risk", "tone": "red", "legend": False},
+}
+TEXT_X_BLOCK: dict[str, Any] = {"type": "text", "body": "x"}
 BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
     {
         "type": "fact_strip",
