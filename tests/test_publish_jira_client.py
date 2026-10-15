@@ -43,7 +43,7 @@ def _request(method: str, path: str, body: JsonValue = None) -> dict[str, object
         "method": method,
         "url": f"{SITE}{path}",
         "authorization": AUTHORIZATION,
-        "content_type": None if body is None else "application/json",
+        "content_type": None if method == "GET" else "application/json",
         "body": body,
     }
 

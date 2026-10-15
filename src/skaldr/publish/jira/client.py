@@ -260,7 +260,8 @@ class JiraClient:
     ) -> httpx2.Response:
         def attempt() -> httpx2.Response:
             if isinstance(body, _NoBody):
-                return self._http.request(method, path, params=params)
+                headers = None if method in READ_METHODS else JSON_CONTENT_TYPE
+                return self._http.request(method, path, params=params, headers=headers)
             return self._http.request(
                 method, path, params=params, content=_json_bytes(body), headers=JSON_CONTENT_TYPE
             )

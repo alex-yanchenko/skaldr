@@ -41,6 +41,7 @@ _API = "/rest/api/3"
 _AS_STORED = frozenset({"description", "status"})
 DISPLAY_NAMES = {"customfield_10010": "Story Points"}
 REMOTE_LINK_FIELD = "RemoteIssueLink"
+JSON_MEDIA_TYPE = "application/json"
 History = dict[str, JsonValue]
 Author = dict[str, JsonValue] | None
 
@@ -205,6 +206,8 @@ class FakeJira:
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
+        if request.method != "GET" and request.headers.get("content-type") != JSON_MEDIA_TYPE:
+            return httpx2.Response(415)
         waiting = self.queued.get((request.method, unquote(request.url.path)))
         if waiting:
             queued = waiting.pop(0)
