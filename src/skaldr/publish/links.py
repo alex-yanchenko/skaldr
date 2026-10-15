@@ -8,6 +8,7 @@ from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState, save_state
 from skaldr.publish.transport import LinksWrite, PairedLink, RemoteItem, ShownLink, Stamp
+from skaldr.publish_block import TargetBase
 
 LinkAction = Literal["link", "unlink"]
 STEP_VERB_WIDTH = 9
@@ -32,7 +33,7 @@ class ItemLinks:
         return tuple(link.shown for link in self.links)
 
     @property
-    def recorded_as_planned(self) -> bool:
+    def held_matches_shown(self) -> bool:
         return self.held is None or tuple(self.held.links) == self.shown
 
 
@@ -138,6 +139,14 @@ def describe_links(steps: Sequence[LinkStep]) -> list[str]:
     ]
 
 
+def _noted(
+    prepared: Prepared, state: PublishState, ref: ItemRef, target: TargetBase, item: PublishedItem
+) -> PublishState:
+    noted = with_item(state, ref, target, item)
+    save_state(prepared.state_path, noted)
+    return noted
+
+
 def apply_links(
     prepared: Prepared,
     state: PublishState,
@@ -146,19 +155,21 @@ def apply_links(
     on_step: StepListener,
 ) -> tuple[str, ...]:
     linking = _linking(prepared, state, transports, remote)
+    noted = state
     done: list[str] = []
     for planned in plan_links(prepared, state, transports, remote):
         held = planned.held
-        if held is None or (not planned.steps and planned.recorded_as_planned):
+        if held is None or (not planned.steps and planned.held_matches_shown):
             continue
         ref = planned.item
+        target = linking.targets[ref.target].target
         written = planned.shown
         if planned.steps:
+            sending = list(dict.fromkeys([*held.links, *planned.shown]))
+            noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": sending}))
             transport = transports.for_target(ref.target)
             written = transport.write_links(held.item_id, LinksWrite(linking.stamp(ref), planned.links))
-        target = linking.targets[ref.target].target
-        state = with_item(state, ref, target, held.model_copy(update={"links": list(written)}))
-        save_state(prepared.state_path, state)
+        noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": list(written)}))
         for step in planned.steps:
             described = describe_link_step(step)
             done.append(described)

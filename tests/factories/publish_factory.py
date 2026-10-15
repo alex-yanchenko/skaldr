@@ -279,6 +279,7 @@ class FakeTransport:
         self._write(("write_links", item_id, *(link.title for link in request.links)))
         item.stamp = request.stamp
         item.links = request.shown
+        self._drop_the_connection_if_asked()
         return item.links
 
     def forget_calls(self) -> None:

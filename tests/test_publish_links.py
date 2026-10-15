@@ -1,9 +1,11 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from skaldr.errors import ConnectorError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
 from skaldr.publish.drafts import draft_targets
@@ -12,7 +14,7 @@ from skaldr.publish.jira import JiraConnector
 from skaldr.publish.links import LinkStep, describe_links, paired_items
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.plan import ItemRef
-from skaldr.publish.state import load_state, state_path_for
+from skaldr.publish.state import load_state, save_state, state_path_for
 from skaldr.publish.transport import ShownLink
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.auth_factory import make_jira_credentials, make_notion_credentials, seed_notion
@@ -20,6 +22,7 @@ from tests.factories.jira_factory import FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import (
     DOC_ID,
+    DROPPED_AFTER_WRITE,
     FAKE_ITEM_ADDRESS,
     TARGET_LABEL,
     FakeTransport,
@@ -214,6 +217,37 @@ def test_publishing_again_with_every_link_in_place_writes_nothing(tmp_path: Path
     assert (outcome, transport.writes()) == (Applied(()), [])
 
 
+def test_a_state_file_that_lost_the_links_in_place_is_corrected_without_writing_them(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
+    _publish(path, transport)
+    published = load_state(state_path_for(path), DOC_ID)
+    forgotten = {
+        label: target.model_copy(
+            update={
+                "document": None
+                if target.document is None
+                else target.document.model_copy(update={"links": []}),
+                "sections": {
+                    section: item.model_copy(update={"links": []})
+                    for section, item in target.sections.items()
+                },
+            }
+        )
+        for label, target in published.targets.items()
+    }
+    save_state(state_path_for(path), published.model_copy(update={"targets": forgotten}))
+    transport.forget_calls()
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.writes(), load_state(state_path_for(path), DOC_ID)) == (
+        Applied(()),
+        [],
+        published,
+    )
+
+
 def test_the_dry_run_of_a_first_publish_lists_the_links_it_would_write(tmp_path: Path) -> None:
     path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
 
@@ -320,6 +354,25 @@ def test_removing_the_jira_target_archives_its_issues_and_drops_them_from_each_n
         (),
     )
     assert [item.links for _, item in state.targets[TARGET_LABEL].held_items()] == [[], []]
+
+
+def test_a_link_sent_by_a_run_that_stopped_after_sending_it_is_removed_once_its_pair_ends(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=_publish_block(_notion(), _jira()))
+    transport.drop_the_connection_after_write(4)
+    with pytest.raises(ConnectorError, match=f"^{re.escape(DROPPED_AFTER_WRITE)}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+    write_garden_report(tmp_path, publish=_publish_block(_jira()))
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, _links_of(transport)) == (
+        Applied(("archive  document (page-1)", "unlink   document from Garden handbook")),
+        {"page-1": (_shown("page-2", "Garden handbook"),), "page-2": ()},
+    )
 
 
 def test_a_section_no_longer_split_in_jira_unlinks_only_that_section(tmp_path: Path) -> None:
