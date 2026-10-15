@@ -201,6 +201,50 @@ def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
     assert raised.value.where == "at blocks.0.text"
 
 
+def test_a_refusal_in_a_nested_list_is_reported_before_one_in_the_next_item() -> None:
+    blocks = [{"type": "text", "body": "- a\n  - ++u++\n- [c]{tone=danger}"}]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert vars(raised.value) == {
+        "target": "slack",
+        "why": "a Slack canvas cannot underline text, so it cannot show the underline on 'u'",
+        "instead": "write the text without the underline or export the document elsewhere",
+        "where": "at blocks.0.text",
+    }
+
+
+def test_a_refusal_in_a_walkthrough_step_is_reported_before_one_in_the_next_step_title() -> None:
+    steps = [
+        {"label": "Scan", "detail": [text_grid()]},
+        {
+            "label": "Count",
+            "sub": "the [cold room]{tone=danger}",
+            "detail": [{"type": "text", "body": "Ten."}],
+        },
+    ]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([{"type": "walkthrough", "steps": steps}], "slack")
+
+    assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
+
+
+def test_a_container_the_target_cannot_place_is_reported_before_the_text_it_holds() -> None:
+    blocks = in_a_panel({"type": "callout", "tone": "info", "body": "The [recount]{bg=warning} is due."})
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "adf")
+
+    assert vars(raised.value) == {
+        "target": "adf",
+        "why": "ADF cannot place a callout inside a panel",
+        "instead": "move the callout out of the panel",
+        "where": "at blocks.0.panel.blocks.0.callout",
+    }
+
+
 @pytest.mark.parametrize(
     ("target", "refused_at"),
     [

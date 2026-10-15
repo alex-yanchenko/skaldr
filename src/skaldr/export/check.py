@@ -231,8 +231,6 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
     match node:
         case Heading() | Paragraph():
             yield node.text
-        case ListNode():
-            yield from (entry.text for entry in node.entries)
         case TableNode():
             yield from (cell.text for cell in node.header)
             yield from (cell.text for row in node.rows for cell in row.cells)
@@ -244,7 +242,16 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             yield node.title
         case Tabs():
             yield from (tab.title for tab in node.tabs)
-        case Callout() | CodeBlock() | DisplayMath() | Divider() | Columns() | Diagram() | TableOfContents():
+        case (
+            ListNode()
+            | Callout()
+            | CodeBlock()
+            | DisplayMath()
+            | Divider()
+            | Columns()
+            | Diagram()
+            | TableOfContents()
+        ):
             return
         case _:
             assert_never(node)
@@ -413,14 +420,15 @@ class _TreeWalk:
         for node in nodes:
             yield from self.node(node, place)
 
-    def inline_hits(self, node: Node) -> Iterator[FeatureHit]:
+    def inline_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
         place = _RunPlace(in_a_table_cell=isinstance(node, TableNode))
-        for details in _inline_details_in(chain.from_iterable(_own_texts(node)), place):
+        for details in _inline_details_in(chain.from_iterable(texts), place):
             yield self.hit(details, node.authored_at)
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)
-        yield from self.inline_hits(node)
+        yield from self.placement_hits(node, place)
+        yield from self.inline_hits(node, _own_texts(node))
         match node:
             case Heading():
                 self.note_heading(node.text)
@@ -446,7 +454,6 @@ class _TreeWalk:
                 pass
             case _:
                 assert_never(node)
-        yield from self.placement_hits(node, place)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
@@ -465,6 +472,7 @@ class _TreeWalk:
             yield from self.entry_hits(entry, node, place)
 
     def entry_hits(self, entry: ListEntry, holder: ListNode, place: _Place) -> Iterator[FeatureHit]:
+        yield from self.inline_hits(holder, (entry.text,))
         holds_a_list = False
         for child in entry.children:
             yield from self.located_hits_before(child)
