@@ -1,6 +1,5 @@
 import json
 import os
-from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
@@ -61,7 +60,6 @@ from skaldr.richtext import (
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import (
-    check_nodes,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -70,6 +68,7 @@ from tests.factories import (
     make_rich_text,
     make_section,
     make_table_cell,
+    refusal_of,
     slack_of,
     write_report,
 )
@@ -92,6 +91,14 @@ CANVAS_LIMIT_WHY = (
     "over the 1,048,576 characters (1 MiB) a Slack canvas can hold"
 )
 CANVAS_LIMIT_INSTEAD = "split the document into several canvases or export it elsewhere"
+SCRIPT_WITHOUT_A_FORM: Final = ScriptText("superscript", "q")
+SCRIPT_WHY: Final = (
+    "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form"
+)
+SCRIPT_INSTEAD: Final = "write the text without the superscript or export the document elsewhere"
+SCRIPT_INVARIANT: Final = (
+    "a Slack canvas has no superscript form for 'q' in 'q'; the export check should have refused it"
+)
 
 
 def _key_value_table() -> TableNode:
@@ -392,7 +399,7 @@ def test_a_second_list_in_one_list_item_is_rejected() -> None:
         "a", make_bullets(make_list_entry("b")), ListNode("number", (make_list_entry("c"),))
     )
 
-    assert _rejected([make_bullets(entry, make_list_entry("d"))]) == _canvas_rejection(
+    assert vars(refusal_of([make_bullets(entry, make_list_entry("d"))], "slack")) == _canvas_rejection(
         _list_item_why("a second nested list"), OUT_OF_THE_LIST
     )
 
@@ -434,7 +441,7 @@ def test_a_block_a_list_item_cannot_hold_is_rejected_even_two_lists_deep(held: N
     nested = make_bullets(make_list_entry("c", held))
     nodes = [make_bullets(make_list_entry("a"), make_list_entry("b", nested)), make_paragraph("after")]
 
-    assert _rejected(nodes) == _canvas_rejection(_list_item_why(what), OUT_OF_THE_LIST)
+    assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(_list_item_why(what), OUT_OF_THE_LIST)
 
 
 def test_a_paragraph_before_a_nested_list_in_a_list_item_is_written_in_place() -> None:
@@ -465,7 +472,9 @@ def test_a_list_item_holding_a_divider_a_table_of_contents_or_a_paragraph_after_
     entry = make_list_entry("a", make_bullets(make_list_entry("n")), held)
     node = ListNode("bullet", (entry,), authored_at="blocks.0.list")
 
-    assert _rejected([node]) == _canvas_rejection(_list_item_why(what), OUT_OF_THE_LIST, "at blocks.0.list")
+    assert vars(refusal_of([node], "slack")) == _canvas_rejection(
+        _list_item_why(what), OUT_OF_THE_LIST, "at blocks.0.list"
+    )
 
 
 def test_an_empty_paragraph_after_a_nested_list_in_a_list_item_writes_nothing() -> None:
@@ -479,7 +488,7 @@ def test_a_block_authored_on_its_own_in_a_list_item_is_rejected_as_a_step_detail
     entry = make_list_entry("Scan", detail)
     node = ListNode("number", (entry,), authored_at="blocks.0.walkthrough")
 
-    assert _rejected([node]) == _canvas_rejection(
+    assert vars(refusal_of([node], "slack")) == _canvas_rejection(
         _list_item_why("a code block"), OUT_OF_THE_STEP, "at blocks.0.walkthrough.steps.0.detail.0.code"
     )
 
@@ -510,12 +519,6 @@ def test_a_table_of_up_to_300_cells_header_included_is_written(cells: int) -> No
     assert render_slack([_one_column_table(cells)]) == _one_column_table_text(cells)
 
 
-def _rejected(nodes: Sequence[Node]) -> dict[str, Any]:
-    with pytest.raises(ExportRejectedError) as raised:
-        check_nodes(nodes, "slack")
-    return vars(raised.value)
-
-
 @pytest.mark.parametrize(
     ("entry", "held"),
     [
@@ -541,14 +544,35 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_a_list_item_the_ch
     )
 
 
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_numbered_list_starting_past_1() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([ListNode("number", (make_list_entry("a"), make_list_entry("b")), start=3)])
+
+    assert str(raised.value) == (
+        "a Slack canvas numbers every list from 1, so it has no form for a list starting at 3; "
+        "the export check should have refused it"
+    )
+
+
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_table_over_300_cells() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([_one_column_table(301)])
+
+    assert str(raised.value) == (
+        "a Slack canvas table holds at most 300 cells, not 301; the export check should have refused it"
+    )
+
+
 def test_a_table_over_300_cells_with_no_heading_above_it_is_rejected_naming_no_place() -> None:
-    assert _rejected([_one_column_table(301)]) == _canvas_rejection(TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD)
+    assert vars(refusal_of([_one_column_table(301)], "slack")) == _canvas_rejection(
+        TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD
+    )
 
 
 def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> None:
     nodes = [Heading(2, make_rich_text("Counts")), Callout("info", (_one_column_table(301),))]
 
-    assert _rejected(nodes) == _canvas_rejection(
+    assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
         TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
     )
 
@@ -570,7 +594,7 @@ def test_a_table_over_300_cells_in_a_collapsed_section_is_rejected_naming_the_se
 def test_a_heading_without_text_leaves_the_heading_above_it_named_in_a_table_rejection() -> None:
     nodes = [Heading(2, make_rich_text("Counts")), Heading(3, ()), _one_column_table(301)]
 
-    assert _rejected(nodes) == _canvas_rejection(
+    assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
         TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
     )
 
@@ -581,7 +605,7 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
         tuple(TableRow((make_table_cell("v"),)) for _ in range(150)),
     )
 
-    assert _rejected([table]) == _canvas_rejection(
+    assert vars(refusal_of([table], "slack")) == _canvas_rejection(
         "a table has 302 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
     )
 
@@ -592,7 +616,7 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
         tuple(TableRow(tuple(make_table_cell("v") for _ in range(7))) for _ in range(142)),
     )
 
-    assert _rejected([table]) == _canvas_rejection(
+    assert vars(refusal_of([table], "slack")) == _canvas_rejection(
         "a table has 1,001 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
     )
 
@@ -714,7 +738,7 @@ def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_i
 def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
     node = Callout("info", (make_bullets(make_list_entry("a", _key_value_table())),))
 
-    assert _rejected([node]) == _canvas_rejection(_list_item_why("a table"), OUT_OF_THE_LIST)
+    assert vars(refusal_of([node], "slack")) == _canvas_rejection(_list_item_why("a table"), OUT_OF_THE_LIST)
 
 
 def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
@@ -952,14 +976,7 @@ def test_an_inline_run_becomes_canvas_markdown(run: ExportRun, written: str) -> 
 def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(
     run: ExportRun, why: str, instead: str
 ) -> None:
-    assert _rejected([Paragraph((run,))]) == _canvas_rejection(why, instead)
-
-
-SCRIPT_WITHOUT_A_FORM: Final = ScriptText("superscript", "q")
-SCRIPT_WHY: Final = (
-    "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form"
-)
-SCRIPT_INSTEAD: Final = "write the text without the superscript or export the document elsewhere"
+    assert vars(refusal_of([Paragraph((run,))], "slack")) == _canvas_rejection(why, instead)
 
 
 @pytest.mark.parametrize(
@@ -987,19 +1004,20 @@ SCRIPT_INSTEAD: Final = "write the text without the superscript or export the do
 def test_a_script_with_no_unicode_form_is_refused_by_the_check_wherever_the_canvas_writes_text(
     node: Node,
 ) -> None:
-    with pytest.raises(ExportInvariantError):
+    with pytest.raises(ExportInvariantError) as raised:
         render_slack([node])
 
-    assert _rejected([node]) == _canvas_rejection(SCRIPT_WHY, SCRIPT_INSTEAD)
+    assert (str(raised.value), vars(refusal_of([node], "slack"))) == (
+        SCRIPT_INVARIANT,
+        _canvas_rejection(SCRIPT_WHY, SCRIPT_INSTEAD),
+    )
 
 
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_script_with_no_unicode_form() -> None:
     with pytest.raises(ExportInvariantError) as raised:
         render_slack([Paragraph((SCRIPT_WITHOUT_A_FORM,))])
 
-    assert str(raised.value) == (
-        "a Slack canvas has no superscript form for 'q' in 'q'; the export check should have refused it"
-    )
+    assert str(raised.value) == SCRIPT_INVARIANT
 
 
 @pytest.mark.parametrize(

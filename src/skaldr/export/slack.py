@@ -7,6 +7,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
+    CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     UNICODE_SCRIPT_FORMS,
     character_without_a_unicode_form,
@@ -28,6 +29,7 @@ from skaldr.export.markup import (
     quoted,
     spaced,
     styled,
+    table_width,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import ExportRich
@@ -194,6 +196,11 @@ def _canvas_item(entry: ListEntry) -> _Item:
 
 
 def _canvas_list(node: ListNode) -> _List:
+    if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
+        raise ExportInvariantError(
+            "a Slack canvas numbers every list from 1, so it has no form for a list starting at "
+            f"{node.start}; the export check should have refused it"
+        )
     return _List(node.kind, tuple(_canvas_item(entry) for entry in node.entries))
 
 
@@ -318,6 +325,12 @@ class _CanvasWriter:
         return lines
 
     def table_lines(self, table: TableNode) -> list[str]:
+        cells = table_width(table) * (1 + len(table.rows))
+        if cells > CANVAS_TABLE_CELL_LIMIT:
+            raise ExportInvariantError(
+                f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
+                "the export check should have refused it"
+            )
         return pipe_table_lines(table, self.table_cell_runs.write)
 
     def title_lines(self, title: _Title) -> list[str]:

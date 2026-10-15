@@ -2,8 +2,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeVar, get_args
 
+import pytest
 import yaml
 
+from skaldr.errors import ExportRejectedError
 from skaldr.export.budget import RenderedBlock
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
@@ -122,6 +124,12 @@ def check_nodes(nodes: Sequence[Node], target: ExportTarget) -> None:
     report = parse_report(make_report())
     page = LoweredDocument(report.meta.title, (BlockRegion(0, tuple(nodes)),))
     reject_what_the_target_cannot_show(report, page, target)
+
+
+def refusal_of(nodes: Sequence[Node], target: ExportTarget) -> ExportRejectedError:
+    with pytest.raises(ExportRejectedError) as refused:
+        check_nodes(nodes, target)
+    return refused.value
 
 
 def slack_of(blocks: list[dict[str, Any]], **overrides: Any) -> str:

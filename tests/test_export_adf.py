@@ -57,7 +57,7 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.richtext import Code, Plain, Styled
-from tests.factories import check_nodes
+from tests.factories import check_nodes, refusal_of
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -93,12 +93,6 @@ def _rendered(*nodes: Node, links: IssueLinks | None = None) -> Json:
 
 def _exactly(message: str) -> str:
     return f"^{re.escape(message)}$"
-
-
-def _refused(*nodes: Node) -> str:
-    with pytest.raises(ExportRejectedError) as refused:
-        check_nodes(nodes, "adf")
-    return str(refused.value)
 
 
 STRONG: Json = {"type": "strong"}
@@ -237,7 +231,8 @@ def test_a_hoisted_block_the_container_cannot_hold_fails() -> None:
     node = Callout("info", (ListNode("bullet", (_text_entry("a", Callout("info", (_para("x"),))),)),))
 
     assert (
-        _refused(node) == "ADF cannot place a callout inside a callout; move the callout out of the callout"
+        str(refusal_of((node,), "adf"))
+        == "ADF cannot place a callout inside a callout; move the callout out of the callout"
     )
 
 
@@ -286,7 +281,7 @@ def test_a_list_hoisting_a_block_inside_a_panel_fails_naming_the_block_and_the_h
         Callout("info", (ListNode("bullet", (_text_entry("a", Toggle(plain("t"), None, (_para("x"),))),)),)),
     )
 
-    assert _refused(*refused) == (
+    assert str(refusal_of(refused, "adf")) == (
         "ADF cannot place a toggle inside a callout, under the heading 'Plan'; "
         "move the toggle out of the callout"
     )
@@ -438,7 +433,10 @@ def test_a_task_entry_holding_a_toggle_inside_a_panel_fails() -> None:
     detail = Toggle(plain("t"), None, (_para("x"),))
     node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
 
-    assert _refused(node) == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
+    assert (
+        str(refusal_of((node,), "adf"))
+        == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
+    )
 
 
 def test_rendering_the_same_tree_twice_is_byte_identical_and_local_ids_never_repeat() -> None:
@@ -521,7 +519,7 @@ def test_a_callout_holding_a_block_that_writes_nothing_passes_the_check_as_an_em
 def test_a_callout_cannot_hold_a_table() -> None:
     table = TableNode((TableCell(plain("h")),), ())
 
-    assert _refused(Callout("info", (table,))) == (
+    assert str(refusal_of((Callout("info", (table,)),), "adf")) == (
         "ADF cannot place a table inside a callout; move the table out of the callout"
     )
 
@@ -772,7 +770,7 @@ def test_a_toggle_inside_a_toggle_is_a_nested_expand() -> None:
 def test_a_toggle_two_levels_down_has_no_form() -> None:
     node = Toggle(plain("a"), None, (Toggle(plain("b"), None, (Toggle(plain("c"), None, (_para("x"),)),)),))
 
-    assert _refused(node) == (
+    assert str(refusal_of((node,), "adf")) == (
         "ADF cannot place a toggle inside a toggle that is itself inside a toggle; "
         "move the toggle out of the toggle"
     )
@@ -781,7 +779,10 @@ def test_a_toggle_two_levels_down_has_no_form() -> None:
 def test_a_toggle_in_a_panel_has_no_form() -> None:
     node = Callout("info", (Toggle(plain("a"), None, (_para("x"),)),))
 
-    assert _refused(node) == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
+    assert (
+        str(refusal_of((node,), "adf"))
+        == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
+    )
 
 
 def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
@@ -797,7 +798,7 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
             "content": [_table(_row(_table_cell("tableHeader", "A")))],
         }
     )
-    assert _refused(refused) == (
+    assert str(refusal_of((refused,), "adf")) == (
         "ADF cannot place a table inside a toggle that is itself inside a toggle; "
         "move the table out of the toggle"
     )

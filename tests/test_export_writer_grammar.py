@@ -30,6 +30,7 @@ from skaldr.export.tree import (
     TableCell,
     TableNode,
     TableOfContents,
+    TableRow,
     Tabs,
     Toggle,
 )
@@ -45,9 +46,13 @@ SAMPLES: Mapping[str, Node] = {
     "heading": Heading(2, plain("Plan")),
     "paragraph": _PARAGRAPH,
     "list": ListNode("bullet", (ListEntry(plain("a")),)),
+    "numbered list starting at 3": ListNode("number", (ListEntry(plain("a")),), start=3),
     "list holding a table": ListNode("bullet", (ListEntry(plain("a"), children=(_TABLE,)),)),
     "checklist holding a toggle": ListNode("check", (ListEntry(plain("a"), children=(_TOGGLE,)),)),
     "table": _TABLE,
+    "table over 300 cells": TableNode(
+        (TableCell(plain("Aisle")),), tuple(TableRow((TableCell(plain("v")),)) for _ in range(300))
+    ),
     "code block": CodeBlock("recount", "sh"),
     "math block": DisplayMath("x^2"),
     "callout": Callout("info", (_PARAGRAPH,)),
@@ -104,6 +109,18 @@ def _writer_refuses(write: Callable[[], object]) -> bool:
 
 def test_the_samples_hold_every_lowered_node_kind() -> None:
     assert {type(sample) for sample in SAMPLES.values()} == set(get_args(Node))
+
+
+def test_the_adf_check_and_writer_both_refuse_a_table_in_a_panel() -> None:
+    nodes = ADF_CONTAINERS["panel"](SAMPLES["table"])
+
+    assert (_check_refuses(nodes, "adf"), _writer_refuses(lambda: render_adf(nodes))) == (True, True)
+
+
+def test_the_slack_check_and_writer_both_refuse_a_code_block_in_a_list_item() -> None:
+    nodes = SLACK_CONTAINERS["list item"](SAMPLES["code block"])
+
+    assert (_check_refuses(nodes, "slack"), _writer_refuses(lambda: render_slack(nodes))) == (True, True)
 
 
 @pytest.mark.parametrize("container", ADF_CONTAINERS)
