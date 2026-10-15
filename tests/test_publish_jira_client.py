@@ -137,7 +137,7 @@ def test_the_changelog_is_read_page_by_page_to_the_end() -> None:
     )
 
 
-def test_an_empty_changelog_is_onesummarised_request() -> None:
+def test_an_empty_changelog_is_one_request() -> None:
     jira = _seeded()
 
     assert (jira.client().changelog("DEMO-1"), jira.calls()) == (
@@ -232,8 +232,8 @@ def test_a_remote_link_is_posted_by_its_global_id_listed_and_deleted_by_its_glob
     global_id = "skaldr:garden-handbook:document:notion:0123456789abcdef0123456789abcdef"
     page = "https://www.notion.so/0123456789abcdef0123456789abcdef"
 
-    client.put_remote_link("DEMO-1", global_id, page, "Garden handbook")
-    client.put_remote_link("DEMO-1", global_id, page, "Garden guide")
+    client.upsert_remote_link("DEMO-1", global_id, page, "Garden handbook")
+    client.upsert_remote_link("DEMO-1", global_id, page, "Garden guide")
     listed = client.remote_links("DEMO-1")
     client.delete_remote_link("DEMO-1", global_id)
 

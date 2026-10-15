@@ -249,7 +249,7 @@ class FakeJira:
             (rf"{issue}/comment", "POST", self._comment),
             (rf"{issue}/comment", "GET", self._comments),
             (rf"{issue}/remotelink", "GET", self._remote_links),
-            (rf"{issue}/remotelink", "POST", self._put_remote_link),
+            (rf"{issue}/remotelink", "POST", self._upsert_remote_link),
             (rf"{issue}/remotelink", "DELETE", self._delete_remote_link),
         ]
 
@@ -258,9 +258,9 @@ class FakeJira:
         self.issues[key].remote_links.append(
             {"id": self._remote_link_id, "globalId": global_id, "object": {"url": url, "title": title}}
         )
-        self._log_a_remote_link_change(key, title, EDITOR)
+        self._log_remote_link_change(key, title, EDITOR)
 
-    def _log_a_remote_link_change(self, key: str, title: JsonValue, author: Author = WRITER) -> None:
+    def _log_remote_link_change(self, key: str, title: JsonValue, author: Author = WRITER) -> None:
         self._log(key, author, [{"field": REMOTE_LINK_FIELD, "fieldtype": "jira", "toString": title}])
 
     def _remote_links(self, _request: httpx2.Request, key: str) -> httpx2.Response:
@@ -271,7 +271,7 @@ class FakeJira:
         links: list[JsonValue] = [{"self": f"{address}/{link['id']}", **link} for link in issue.remote_links]
         return httpx2.Response(200, json=links)
 
-    def _put_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
+    def _upsert_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
         issue = self._issue(key)
         if isinstance(issue, httpx2.Response):
             return issue
@@ -283,7 +283,7 @@ class FakeJira:
             return httpx2.Response(200, json={"id": found["id"]})
         self._remote_link_id += 1
         issue.remote_links.append({"id": self._remote_link_id, **sent})
-        self._log_a_remote_link_change(key, body.linked.get("title"))
+        self._log_remote_link_change(key, body.linked.get("title"))
         return httpx2.Response(201, json={"id": self._remote_link_id})
 
     def _delete_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
@@ -295,7 +295,7 @@ class FakeJira:
         if len(kept) == len(issue.remote_links):
             return httpx2.Response(404, json={"errorMessages": ["No remote link with that globalId."]})
         issue.remote_links = kept
-        self._log_a_remote_link_change(key, None)
+        self._log_remote_link_change(key, None)
         return httpx2.Response(204)
 
     def _myself(self, _request: httpx2.Request) -> httpx2.Response:

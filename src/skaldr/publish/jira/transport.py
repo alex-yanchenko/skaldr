@@ -60,7 +60,7 @@ from skaldr.publish_block.jira import (
     SUMMARY_FIELD,
 )
 from skaldr.publish_block.target import JsonFields
-from skaldr.services import SERVICE_NAMES, SERVICES_BY_ID, Service
+from skaldr.services import SERVICE_NAMES, Service, service_with_id
 from skaldr.typed_links import issue_url
 
 GLOBAL_ID_PREFIX = "skaldr"
@@ -168,7 +168,7 @@ def _linked_item(global_id: str, prefix: str) -> LinkedItem | None:
     if not global_id.startswith(prefix):
         return None
     named, separator, item_id = global_id.removeprefix(prefix).partition(GLOBAL_ID_SEPARATOR)
-    service = SERVICES_BY_ID.get(named)
+    service = service_with_id(named)
     if not separator or not item_id or service is None:
         return None
     return (service, item_id)
@@ -398,7 +398,7 @@ class JiraTransport:
             self._put_stamp(item_id, marked.model_copy(update={"linked": marked.linked or holds_links}))
         self._delete_links(item_id, request.stamp, request.dropped)
         for global_id, link in sent.items():
-            self._client.put_remote_link(item_id, global_id, link.url, link.title)
+            self._client.upsert_remote_link(item_id, global_id, link.url, link.title)
         if marked.linked and not holds_links:
             self._put_stamp(item_id, marked.model_copy(update={"linked": False}))
         return request.links

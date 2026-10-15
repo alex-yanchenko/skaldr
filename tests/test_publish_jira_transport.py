@@ -2,7 +2,7 @@ import re
 from collections.abc import Callable
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
@@ -112,9 +112,9 @@ def _transport(jira: FakeJira) -> JiraTransport:
     return JiraTransport(jira.client())
 
 
-def _transition_bodies(jira: FakeJira) -> list[object]:
+def _transition_bodies(jira: FakeJira) -> list[JsonValue]:
     return [
-        summarise(request)["body"]
+        TypeAdapter(JsonValue).validate_json(request.content)
         for request in jira.requests
         if request.method == "POST" and request.url.path.endswith("/transitions")
     ]

@@ -241,7 +241,7 @@ class JiraClient:
         response = self._send("GET", path, key=key)
         return list(self._parsed(RemoteLinks, response, path, "the issue's remote links").root)
 
-    def put_remote_link(self, key: str, global_id: str, url: str, title: str) -> None:
+    def upsert_remote_link(self, key: str, global_id: str, url: str, title: str) -> None:
         body: dict[str, JsonValue] = {"globalId": global_id, "object": {"url": url, "title": title}}
         self._send("POST", issue_path(key, "remotelink"), key=key, body=body)
 

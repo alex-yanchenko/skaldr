@@ -1,6 +1,9 @@
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+from typing_extensions import Self
 
 from skaldr.errors import PublishError
 from skaldr.publish.applier import StepListener
@@ -26,7 +29,7 @@ class LinkStep:
 
 
 @dataclass(frozen=True)
-class ItemLinks:
+class ItemLinkPlan:
     item: ItemRef
     held: PublishedItem | None
     write: LinksWrite
@@ -43,24 +46,55 @@ def paired_items(drafts: Sequence[TargetDraft]) -> dict[ItemRef, tuple[ItemRef, 
         for draft in drafts
         for item in draft.items
     ]
+    by_section: defaultdict[str | None, list[tuple[str, ItemRef]]] = defaultdict(list[tuple[str, ItemRef]])
+    for service, ref in drafted:
+        by_section[ref.section_id].append((service, ref))
     return {
-        ref: tuple(
-            other
-            for other_service, other in drafted
-            if other_service != service and other.section_id == ref.section_id
-        )
+        ref: tuple(other for other_service, other in by_section[ref.section_id] if other_service != service)
         for service, ref in drafted
     }
 
 
+def _service_and_title(link: ShownLink) -> str:
+    return f"{SERVICE_NAMES[link.service]} {link.title}"
+
+
 @dataclass(frozen=True)
-class _Linking:
+class _LinkPlanner:
     prepared: Prepared
     state: PublishState
     transports: Transports
     remote: Mapping[ItemRef, RemoteItem]
     targets: Mapping[str, TargetDraft]
     drafted: Mapping[ItemRef, ItemDraft]
+
+    @classmethod
+    def of(
+        cls,
+        prepared: Prepared,
+        state: PublishState,
+        transports: Transports,
+        remote: Mapping[ItemRef, RemoteItem],
+    ) -> Self:
+        return cls(
+            prepared,
+            state,
+            transports,
+            remote,
+            {draft.label: draft for draft in prepared.drafts},
+            {
+                ItemRef(draft.label, item.section_id): item
+                for draft in prepared.drafts
+                for item in draft.items
+            },
+        )
+
+    def plan(self) -> tuple[ItemLinkPlan, ...]:
+        return tuple(
+            self.item_links(ref, partners)
+            for ref, partners in paired_items(self.prepared.drafts).items()
+            if partners or self.holds_links(ref)
+        )
 
     def held(self, ref: ItemRef) -> PublishedItem | None:
         return published_item(self.state.targets.get(ref.target), ref.section_id)
@@ -92,7 +126,7 @@ class _Linking:
             return self.transports.for_target(ref.target).read_links(held.item_id, stamp)
         return remote.links if remote.stamp == stamp else ()
 
-    def item_links(self, ref: ItemRef, partners: Sequence[ItemRef]) -> ItemLinks:
+    def item_links(self, ref: ItemRef, partners: Sequence[ItemRef]) -> ItemLinkPlan:
         held = self.held(ref)
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
         links = tuple(link for _, link in wanted if link is not None)
@@ -102,36 +136,14 @@ class _Linking:
         linked = [
             LinkStep(ref, "link", partner.label) for partner, link in wanted if link is None or link in sent
         ]
-        unlinked = [LinkStep(ref, "unlink", _named(link)) for link in write.dropped]
-        return ItemLinks(ref, held, write, (*linked, *unlinked))
-
-
-def _named(link: ShownLink) -> str:
-    return f"{SERVICE_NAMES[link.service]} {link.title}"
-
-
-def _linking(
-    prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
-) -> _Linking:
-    return _Linking(
-        prepared,
-        state,
-        transports,
-        remote,
-        {draft.label: draft for draft in prepared.drafts},
-        {ItemRef(draft.label, item.section_id): item for draft in prepared.drafts for item in draft.items},
-    )
+        unlinked = [LinkStep(ref, "unlink", _service_and_title(link)) for link in write.dropped]
+        return ItemLinkPlan(ref, held, write, (*linked, *unlinked))
 
 
 def plan_links(
     prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
-) -> tuple[ItemLinks, ...]:
-    linking = _linking(prepared, state, transports, remote)
-    return tuple(
-        linking.item_links(ref, partners)
-        for ref, partners in paired_items(prepared.drafts).items()
-        if partners or linking.holds_links(ref)
-    )
+) -> tuple[ItemLinkPlan, ...]:
+    return _LinkPlanner.of(prepared, state, transports, remote).plan()
 
 
 def refuse_overlong_link_ids(prepared: Prepared) -> None:
@@ -145,7 +157,7 @@ def refuse_overlong_link_ids(prepared: Prepared) -> None:
             raise PublishError(f"{ref.label}: {refusal}")
 
 
-def link_steps(planned: Sequence[ItemLinks]) -> tuple[LinkStep, ...]:
+def link_steps(planned: Sequence[ItemLinkPlan]) -> tuple[LinkStep, ...]:
     return tuple(step for item in planned for step in item.steps)
 
 
@@ -179,15 +191,15 @@ def apply_links(
     remote: Mapping[ItemRef, RemoteItem],
     on_step: StepListener,
 ) -> tuple[str, ...]:
-    linking = _linking(prepared, state, transports, remote)
+    planner = _LinkPlanner.of(prepared, state, transports, remote)
     noted = state
     done: list[str] = []
-    for planned in plan_links(prepared, state, transports, remote):
+    for planned in planner.plan():
         held = planned.held
         if held is None or (not planned.steps and planned.held_matches_planned):
             continue
         ref = planned.item
-        target = linking.targets[ref.target].target
+        target = planner.targets[ref.target].target
         written = planned.write.links
         if planned.steps:
             sending = tuple(dict.fromkeys([*held.links, *planned.write.links]))
