@@ -550,6 +550,9 @@ SEEDED_REFUSALS: dict[str, RefusedCase] = {
     **BLOCK_IN_A_STEP_REFUSALS,
 }
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
+NOTION_CASES = [
+    pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "notion"
+]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]
 
 CLEAN_BLOCKS: list[dict[str, Any]] = [

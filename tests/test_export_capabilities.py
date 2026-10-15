@@ -7,6 +7,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
+from skaldr.export import render_export
 from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
@@ -15,12 +16,13 @@ from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.factories import make_jira_target, make_report, make_section, write_report
+from tests.factories import make_jira_target, make_notion_target, make_report, make_section, write_report
 from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
     COLOURED_TEXT,
     LETTERED_LIST,
+    NOTION_CASES,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
@@ -113,7 +115,7 @@ def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
     reject_what_the_target_cannot_show(report, lower_report(report), target)
 
 
-def _publish_with_a_fake_jira(data_path: Path, transport: FakeTransport) -> int:
+def _publish_with_fake_connectors(data_path: Path, transport: FakeTransport) -> int:
     registry = ConnectorRegistry(
         [FakeConnector(NotionTarget, transport), FakeConnector(JiraTarget, transport, export_target="adf")]
     )
@@ -157,7 +159,9 @@ def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCa
 
 @pytest.mark.parametrize(("case", "other"), KEPT_BY_THE_OTHER_TARGETS)
 def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, other: ExportTarget) -> None:
-    _check(case.blocks, other)
+    report = parse_report(make_report(blocks=case.blocks))
+
+    assert render_export(report, other).pages != {}
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
@@ -246,9 +250,30 @@ def test_publishing_to_jira_refuses_each_adf_case_before_any_transport_call(
     data_path = write_report(tmp_path, published_report(case.blocks, make_jira_target()))
     transport = FakeTransport()
 
-    exit_code = _publish_with_a_fake_jira(data_path, transport)
+    exit_code = _publish_with_fake_connectors(data_path, transport)
 
     assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
+
+
+@pytest.mark.parametrize("case", NOTION_CASES)
+def test_publishing_to_notion_refuses_each_notion_case_before_any_transport_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], case: RefusedCase
+) -> None:
+    data_path = write_report(tmp_path, published_report(case.blocks, make_notion_target()))
+    transport = FakeTransport()
+
+    exit_code = _publish_with_fake_connectors(data_path, transport)
+
+    assert (exit_code, capsys.readouterr().err, transport.calls) == (1, f"error: {case.message()}\n", [])
+
+
+def test_publishing_a_clean_document_to_notion_sends_it(tmp_path: Path) -> None:
+    data_path = write_report(tmp_path, published_report(CLEAN_BLOCKS, make_notion_target()))
+    transport = FakeTransport()
+
+    assert _publish_with_fake_connectors(data_path, transport) == 0
+
+    assert transport.writes() != []
 
 
 def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tmp_path: Path) -> None:
@@ -256,13 +281,13 @@ def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tm
     target = make_jira_target(**{"from": ["kept"]})
     data_path = write_report(tmp_path, published_report(blocks, target))
 
-    assert _publish_with_a_fake_jira(data_path, FakeTransport()) == 0
+    assert _publish_with_fake_connectors(data_path, FakeTransport()) == 0
 
 
 def test_publishing_a_clean_document_to_jira_sends_it(tmp_path: Path) -> None:
     data_path = write_report(tmp_path, published_report(CLEAN_BLOCKS, make_jira_target()))
     transport = FakeTransport()
 
-    assert _publish_with_a_fake_jira(data_path, transport) == 0
+    assert _publish_with_fake_connectors(data_path, transport) == 0
 
     assert transport.writes() != []
