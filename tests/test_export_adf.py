@@ -16,7 +16,6 @@ from skaldr.export.adf import (
 )
 from skaldr.export.adf import blocks as blocks_module
 from skaldr.export.adf.colors import PANEL_TYPE
-from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.inline import plain
 from skaldr.export.runs import Chip, ExportRich
 from skaldr.export.tree import (
@@ -98,7 +97,7 @@ def _exactly(message: str) -> str:
 
 def _refused(*nodes: Node) -> str:
     with pytest.raises(ExportRejectedError) as refused:
-        reject_unshowable_nodes(nodes, "adf")
+        check_nodes(nodes, "adf")
     return str(refused.value)
 
 
@@ -790,7 +789,7 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
     allowed = Toggle(plain("a"), None, (table,))
     refused = Toggle(plain("a"), None, (Toggle(plain("b"), None, (table,)),))
 
-    reject_unshowable_nodes((allowed,), "adf")
+    check_nodes((allowed,), "adf")
     assert _rendered(allowed) == _doc(
         {
             "type": "expand",

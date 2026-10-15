@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ExportRejectedError
-from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
 from skaldr.export.tree import (
@@ -23,6 +22,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import load_report
 from tests.factories import (
+    check_nodes,
     lowered,
     make_cell,
     make_grid,
@@ -34,6 +34,7 @@ from tests.factories import (
     make_toggle,
     write_index_document,
 )
+from tests.factories.capability_factory import TABLE
 
 LINK_URL = "https://example.com/runbook"
 COMPARISON = {
@@ -61,21 +62,12 @@ STACKED_BARS = {
     "categories": ["Q1"],
     "series": [{"label": "x", "values": [1]}, {"label": "y", "values": [2]}],
 }
-TABLE = {
-    "type": "table",
-    "columns": [{"key": "name", "label": "Name"}],
-    "rows": [{"name": "a"}],
-}
 
 
 def _refused(nodes: Sequence[Node]) -> str:
     with pytest.raises(ExportRejectedError) as refused:
-        reject_unshowable_nodes(nodes, "adf")
+        check_nodes(nodes, "adf")
     return str(refused.value)
-
-
-def _refusal(blocks: list[dict[str, Any]]) -> str:
-    return _refused(lowered(blocks))
 
 
 def _in_a_panel(block: dict[str, Any]) -> list[dict[str, Any]]:
@@ -114,7 +106,7 @@ def _in_a_panel(block: dict[str, Any]) -> list[dict[str, Any]]:
 def test_a_panel_refusing_a_block_names_the_block_the_author_wrote_and_its_path(
     block: dict[str, Any], named: str
 ) -> None:
-    assert _refusal(_in_a_panel(block)) == (
+    assert _refused(lowered(_in_a_panel(block))) == (
         f"ADF cannot place {named} inside a panel, at blocks.0.panel.blocks.0.{block['type']}; "
         f"move the {named.removeprefix('a ')} out of the panel"
     )
@@ -129,7 +121,7 @@ def test_a_request_flow_step_with_two_cases_is_named_a_request_step() -> None:
     }
     flow = {"type": "request_flow", "label": "Walk", "steps": [step, step]}
 
-    assert _refusal(_in_a_panel(flow)) == (
+    assert _refused(lowered(_in_a_panel(flow))) == (
         "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow.steps.0; "
         "move the request step out of the panel"
     )
@@ -147,7 +139,7 @@ def test_the_second_request_flow_step_is_named_by_its_own_index() -> None:
     }
     flow = {"type": "request_flow", "label": "Walk", "steps": [one_case, two_cases]}
 
-    assert _refusal(_in_a_panel(flow)) == (
+    assert _refused(lowered(_in_a_panel(flow))) == (
         "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow.steps.1; "
         "move the request step out of the panel"
     )
@@ -177,7 +169,7 @@ def test_a_toned_grid_cell_holding_another_toned_cell_names_both_a_grid_cell() -
     inner = make_grid([make_cell(6, [{"type": "text", "body": "x"}]) | {"tone": "info"}])
     outer = make_grid([make_cell(6, [inner]) | {"tone": "warning"}])
 
-    assert _refusal([outer]) == (
+    assert _refused(lowered([outer])) == (
         "ADF cannot place a grid cell inside a grid cell, at blocks.0.grid.cells.0.blocks.0.grid; "
         "move the grid cell out of the grid cell"
     )
@@ -186,7 +178,7 @@ def test_a_toned_grid_cell_holding_another_toned_cell_names_both_a_grid_cell() -
 def test_a_toggle_inside_a_toggle_inside_a_collapsed_section_names_the_section() -> None:
     section = make_section("plan", collapsed=True, blocks=[make_toggle(make_toggle())])
 
-    assert _refusal([section]) == (
+    assert _refused(lowered([section])) == (
         "ADF cannot place a toggle inside a toggle that is itself inside a section, "
         "at blocks.0.section.blocks.0.toggle.blocks.0.toggle, under the heading 'plan'; "
         "move the toggle out of the toggle"
@@ -236,7 +228,7 @@ def test_a_container_authored_as_a_note_is_named_a_note() -> None:
 def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
     blocks = [make_toggle(make_toggle(make_toggle(COMPARISON)))]
 
-    assert _refusal(blocks) == (
+    assert _refused(lowered(blocks)) == (
         "ADF cannot place a comparison inside a toggle that is itself inside a toggle, "
         "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.comparison; "
         "move the comparison out of the toggle"
@@ -249,7 +241,7 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
     )
     blocks = [make_toggle(make_toggle(make_toggle(request)))]
 
-    assert _refusal(blocks) == (
+    assert _refused(lowered(blocks)) == (
         "ADF cannot place a request inside a toggle that is itself inside a toggle, "
         "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.request; "
         "move the request out of the toggle"
@@ -259,7 +251,7 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
 def test_a_tab_inside_a_toggle_names_the_set_of_tabs_as_the_container() -> None:
     blocks = [make_toggle(make_tabs(make_tab("a", COMPARISON), make_tab("b")))]
 
-    assert _refusal(blocks) == (
+    assert _refused(lowered(blocks)) == (
         "ADF cannot place a comparison inside a set of tabs that is itself inside a toggle, "
         "at blocks.0.toggle.blocks.0.tabs.tabs.0.blocks.0.comparison; "
         "move the comparison out of the set of tabs"
@@ -269,7 +261,7 @@ def test_a_tab_inside_a_toggle_names_the_set_of_tabs_as_the_container() -> None:
 def test_a_toggle_inside_tabs_names_the_toggle_as_the_container_and_the_tabs_as_its_parent() -> None:
     blocks = [make_tabs(make_tab("a", make_toggle(COMPARISON)), make_tab("b"))]
 
-    assert _refusal(blocks) == (
+    assert _refused(lowered(blocks)) == (
         "ADF cannot place a comparison inside a toggle that is itself inside a set of tabs, "
         "at blocks.0.tabs.tabs.0.blocks.0.toggle.blocks.0.comparison; "
         "move the comparison out of the toggle"
@@ -289,7 +281,7 @@ def test_a_tab_group_authored_as_a_request_names_the_request_as_the_container() 
 def test_a_block_named_in_the_error_keeps_the_heading_above_it() -> None:
     blocks = [{"type": "heading", "text": "Plan"}, *_in_a_panel(COMPARISON)]
 
-    assert _refusal(blocks) == (
+    assert _refused(lowered(blocks)) == (
         "ADF cannot place a comparison inside a panel, at blocks.1.panel.blocks.0.comparison, "
         "under the heading 'Plan'; move the comparison out of the panel"
     )

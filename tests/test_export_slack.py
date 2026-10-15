@@ -11,7 +11,6 @@ import yaml
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
-from skaldr.export.check import reject_unshowable_nodes
 from skaldr.export.runs import Break, Chip, ExportRun, StatusMark
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
@@ -62,16 +61,19 @@ from skaldr.richtext import (
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    check_nodes,
     folder_texts,
     make_bullets,
     make_list_entry,
     make_paragraph,
     make_report,
     make_rich_text,
+    make_section,
     make_table_cell,
     slack_of,
     write_report,
 )
+from tests.factories.capability_factory import LONG_TABLE
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
@@ -510,8 +512,7 @@ def test_a_table_of_up_to_300_cells_header_included_is_written(cells: int) -> No
 
 def _rejected(nodes: Sequence[Node]) -> dict[str, Any]:
     with pytest.raises(ExportRejectedError) as raised:
-        reject_unshowable_nodes(nodes, "slack")
-        render_slack(nodes)
+        check_nodes(nodes, "slack")
     return vars(raised.value)
 
 
@@ -549,6 +550,20 @@ def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> Non
 
     assert _rejected(nodes) == _canvas_rejection(
         TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
+    )
+
+
+def test_a_table_over_300_cells_in_a_collapsed_section_is_rejected_naming_the_section_as_its_heading(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    section = make_section("counts", title="Counts", collapsed=True, blocks=[LONG_TABLE])
+    data_path = write_report(tmp_path, make_report(blocks=[section]))
+
+    assert main([str(data_path), "--export", "slack", "--export-dir", str(tmp_path / "exported")]) == 1
+
+    assert capsys.readouterr().err == (
+        f"error: {TABLE_LIMIT_WHY}, at blocks.0.section.blocks.0.table, under the heading 'Counts'; "
+        f"{TABLE_LIMIT_INSTEAD}\n"
     )
 
 

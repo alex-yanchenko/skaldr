@@ -52,6 +52,14 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
+KEPT_BY_THE_OTHER_TARGETS = [
+    pytest.param(case, other, id=f"{seeded.id}-kept-by-{other}")
+    for seeded in SEEDED_CASES
+    for case in seeded.values
+    if isinstance(case, RefusedCase)
+    for other in EXPORT_TARGETS
+    if other != case.target
+]
 REJECTIONS = [
     pytest.param(capability, FEATURE_DETAILS[feature], id=f"{target}-{feature}")
     for feature, cells in CAPABILITIES.items()
@@ -118,11 +126,9 @@ def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCa
     assert vars(raised.value) == case.rejection()
 
 
-@pytest.mark.parametrize("case", SEEDED_CASES)
-def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase) -> None:
-    for other in EXPORT_TARGETS:
-        if other != case.target:
-            _check(case.blocks, other)
+@pytest.mark.parametrize(("case", "other"), KEPT_BY_THE_OTHER_TARGETS)
+def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, other: ExportTarget) -> None:
+    _check(case.blocks, other)
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
@@ -140,13 +146,26 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
-@pytest.mark.parametrize("target", ["adf", "slack"])
-def test_the_check_of_a_page_built_from_some_regions_looks_only_at_their_blocks(target: ExportTarget) -> None:
+@pytest.mark.parametrize(
+    ("target", "refused_at"),
+    [
+        pytest.param("adf", "at blocks.1.panel.blocks.0.table", id="adf"),
+        pytest.param("slack", "at blocks.2.walkthrough.steps.0.detail.0.grid", id="slack"),
+    ],
+)
+def test_the_check_of_a_page_built_from_some_regions_looks_only_at_their_blocks(
+    target: ExportTarget, refused_at: str
+) -> None:
     blocks = [{"type": "text", "body": "Fine."}, *in_a_panel(TABLE), walkthrough_holding(text_grid())]
     report = parse_report(make_report(blocks=blocks))
     lowering = lowering_for(report)
+    regions = lower_regions(lowering)
 
-    reject_what_the_target_cannot_show(report, assemble_page(lower_regions(lowering)[:1], lowering), target)
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, assemble_page(regions, lowering), target)
+    reject_what_the_target_cannot_show(report, assemble_page(regions[:1], lowering), target)
+
+    assert raised.value.where == refused_at
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)

@@ -394,10 +394,6 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
             )
 
 
-def reject_unshowable_nodes(nodes: Sequence[Node], target: ExportTarget) -> None:
-    _raise_the_first_rejection(_tree_hits(nodes), target)
-
-
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:

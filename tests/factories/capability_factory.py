@@ -59,7 +59,7 @@ TABLE_IN_A_PANEL = RefusedCase(
     "at blocks.0.panel.blocks.0.table",
 )
 ADF_CASES = [
-    pytest.param(TABLE_IN_A_PANEL, id="adf-table-in-a-callout"),
+    pytest.param(TABLE_IN_A_PANEL, id="adf-table-in-a-panel"),
     pytest.param(
         RefusedCase(
             "adf",
@@ -68,7 +68,7 @@ ADF_CASES = [
             "move the callout out of the panel",
             "at blocks.0.panel.blocks.0.callout",
         ),
-        id="adf-callout-in-a-callout",
+        id="adf-callout-in-a-panel",
     ),
     pytest.param(
         RefusedCase(
@@ -78,7 +78,7 @@ ADF_CASES = [
             "move the quote out of the panel",
             "at blocks.0.panel.blocks.0.quote",
         ),
-        id="adf-quote-in-a-callout",
+        id="adf-quote-in-a-panel",
     ),
     pytest.param(
         RefusedCase(
@@ -88,7 +88,7 @@ ADF_CASES = [
             "move the toggle out of the panel",
             "at blocks.0.panel.blocks.0.toggle",
         ),
-        id="adf-toggle-in-a-callout",
+        id="adf-toggle-in-a-panel",
     ),
     pytest.param(
         RefusedCase(

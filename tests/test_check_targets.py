@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,10 @@ from tests.factories.capability_factory import (
 
 FOR_WITHOUT_CHECK = "--for only applies to --check (it names the export targets to check for)"
 CANVAS_OVER_THE_LIMIT_CODE_LENGTH = 1_048_568
+LIST_FROM_3_REFUSAL = (
+    "a Slack canvas numbers every list from 1, so it cannot show a numbered list that starts at 3, "
+    "at blocks.1.text; number the list from 1, or export it elsewhere"
+)
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)
@@ -46,14 +51,36 @@ def test_check_without_a_target_passes_what_only_a_target_refuses(
     assert capsys.readouterr().out == f"OK    {data_path}\n"
 
 
-def test_check_for_several_targets_takes_the_flag_once_per_target(
+@pytest.mark.parametrize(
+    ("first", "second", "refusal"),
+    [
+        pytest.param("adf", "slack", TABLE_IN_A_PANEL.message(), id="adf-then-slack"),
+        pytest.param("slack", "adf", LIST_FROM_3_REFUSAL, id="slack-then-adf"),
+    ],
+)
+def test_check_for_two_targets_that_refuse_differently_fails_with_the_first_one_named(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    first: ExportTarget,
+    second: ExportTarget,
+    refusal: str,
+) -> None:
+    blocks = [*TABLE_IN_A_PANEL.blocks, {"type": "text", "body": "3. a\n4. b"}]
+    data_path = write_report(tmp_path, make_report(blocks=blocks))
+
+    assert main(["--check", str(data_path), "--for", first, "--for", second]) == 1
+
+    assert capsys.readouterr().err == f"FAIL  {data_path}: {refusal}\n\n1 file failed\n"
+
+
+def test_check_for_the_same_target_twice_fails_once(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    data_path = write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "3. a\n4. b"}]))
+    data_path = write_report(tmp_path, make_report(blocks=TABLE_IN_A_PANEL.blocks))
 
-    assert main(["--check", str(data_path), "--for", "adf", "--for", "slack"]) == 1
+    assert main(["--check", str(data_path), "--for", "adf", "--for", "adf"]) == 1
 
-    assert capsys.readouterr().err.startswith(f"FAIL  {data_path}: a Slack canvas numbers every list from 1")
+    assert capsys.readouterr().err == f"FAIL  {data_path}: {TABLE_IN_A_PANEL.message()}\n\n1 file failed\n"
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
@@ -73,9 +100,9 @@ def test_for_without_check_is_a_usage_error(tmp_path: Path, capsys: pytest.Captu
     with pytest.raises(SystemExit) as exited:
         main([str(data_path), "--for", "adf"])
 
-    assert (exited.value.code, capsys.readouterr().err.splitlines()[-1].endswith(FOR_WITHOUT_CHECK)) == (
+    assert (exited.value.code, capsys.readouterr().err.splitlines()[-1]) == (
         2,
-        True,
+        f"{Path(sys.argv[0]).name}: error: {FOR_WITHOUT_CHECK}",
     )
 
 
@@ -110,7 +137,7 @@ def test_check_of_a_jira_target_looks_only_at_the_sections_it_is_built_from(
     assert capsys.readouterr().out == f"OK    {data_path}\n"
 
 
-def test_check_with_a_publish_block_also_checks_the_targets_for_names(
+def test_check_with_a_publish_block_also_checks_each_target_named_with_for(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data_path = write_report(tmp_path, published_report(in_a_panel(TABLE), make_notion_target()))
