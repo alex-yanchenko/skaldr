@@ -1,3 +1,4 @@
+from collections.abc import Callable, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
 from string import Formatter
@@ -6,13 +7,16 @@ from typing import Any, Literal, get_args, get_type_hints
 import pytest
 
 from skaldr.cli import main
-from skaldr.errors import ExportRejectedError
+from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.adf import render_adf
-from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap
+from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap, swaps
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
+from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
-from skaldr.export.tree import BlockRegion, LoweredDocument, Paragraph, Tab, Tabs
+from skaldr.export.slack import render_slack
+from skaldr.export.swaps import tabs_as_toggles
+from skaldr.export.tree import BlockRegion, LoweredDocument, Node, Paragraph, Tab, Tabs
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import load_report, parse_report
 from skaldr.publish import ConnectorRegistry
@@ -95,6 +99,26 @@ PANES_OF_EACH_FEATURE = [
     pytest.param("set of tabs", TWO_TABS, id="tabs"),
     pytest.param("request with several cases", REQUEST_CASES, id="request-cases"),
 ]
+NODE_OF_EACH_PANES_FEATURE: dict[Feature, Tabs] = {
+    "set of tabs": TWO_TABS,
+    "request with several cases": REQUEST_CASES,
+}
+PANES_A_WRITER_SWAPS = [
+    pytest.param(feature, node, target, id=f"{target}-{feature.replace(' ', '-')}")
+    for feature, node in NODE_OF_EACH_PANES_FEATURE.items()
+    for target in EXPORT_TARGETS
+    if swaps(feature, target)
+]
+RENDERERS: dict[ExportTarget, Callable[[Sequence[Node]], object]] = {
+    "markdown": render_markdown,
+    "notion": render_notion,
+    "adf": render_adf,
+    "slack": render_slack,
+}
+PANES_WRITTEN_AS_TITLES: dict[ExportTarget, object] = {
+    "markdown": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
+    "slack": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
+}
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
@@ -243,24 +267,30 @@ def test_a_block_a_target_swaps_for_another_form_passes_the_check(
     _check([block], target)
 
 
+@pytest.mark.parametrize("target", EXPORT_TARGETS)
 @pytest.mark.parametrize(("feature", "node"), PANES_OF_EACH_FEATURE)
-def test_notion_writes_native_tabs_once_the_table_keeps_the_feature(
-    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs
+def test_a_writer_writes_panes_as_toggles_exactly_where_the_table_swaps_them(
+    feature: Feature, node: Tabs, target: ExportTarget
 ) -> None:
-    monkeypatch.setitem(CAPABILITIES[feature], "notion", "keep")
+    render = RENDERERS[target]
+    expected = render(tabs_as_toggles(node)) if swaps(feature, target) else PANES_WRITTEN_AS_TITLES[target]
 
-    assert render_notion([node]) == (
-        '<tabs>\n\t<tab icon="⚠️">\n\t\tOne\n\t\ta\n\t</tab>\n\t<tab>\n\t\tTwo\n\t\tb\n\t</tab>\n</tabs>\n'
+    assert render([node]) == expected
+
+
+@pytest.mark.parametrize(("feature", "node", "target"), PANES_A_WRITER_SWAPS)
+def test_a_writer_that_swaps_panes_refuses_panes_whose_cell_is_not_a_swap(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs, target: ExportTarget
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], target, "keep")
+
+    with pytest.raises(ExportInvariantError) as raised:
+        RENDERERS[target]([node])
+
+    assert str(raised.value) == (
+        f"the capability table keeps a {feature} on {target}, "
+        "but its writer has no form for it other than toggles"
     )
-
-
-@pytest.mark.parametrize(("feature", "node"), PANES_OF_EACH_FEATURE)
-def test_adf_writes_expands_titled_without_an_icon_once_the_table_keeps_the_feature(
-    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs
-) -> None:
-    monkeypatch.setitem(CAPABILITIES[feature], "adf", "keep")
-
-    assert render_adf([node])["content"] == _adf_expands("One", "Two")
 
 
 @pytest.mark.parametrize(

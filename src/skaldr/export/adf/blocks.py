@@ -42,10 +42,9 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
-from skaldr.export.capabilities import PANES_FEATURES, swaps
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import tabs_as_toggles
+from skaldr.export.swaps import tabs_swapped_for_toggles
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -240,11 +239,11 @@ class _AdfBlocks:
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
     def tabs_blocks(self, node: Tabs, container: Container) -> list[AdfBlock]:
-        if swaps(PANES_FEATURES[node.kind], "adf"):
-            return [
-                block for toggle in tabs_as_toggles(node) for block in self.node_blocks(toggle, container)
-            ]
-        return [self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs]
+        return [
+            block
+            for toggle in tabs_swapped_for_toggles(node, "adf")
+            for block in self.node_blocks(toggle, container)
+        ]
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
         supplement = self.blocks(node.supplement, container)
