@@ -1688,6 +1688,18 @@ def test_remote_links_skaldr_did_not_write_for_this_item_are_neither_read_nor_re
     )
 
 
+def test_a_web_link_someone_adds_in_jira_is_logged_without_a_field_id_and_is_not_an_edit() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+
+    jira.link_by_hand("DEMO-1", None, ROTA_PAGE.url, ROTA_PAGE.title)
+
+    assert (
+        jira.histories["DEMO-1"][-1]["items"],
+        transport.parts_edited_after(created.item_id, created.marker, CONTENT),
+    ) == ([{"field": "RemoteWorkItemLink", "fieldtype": "jira", "toString": "Kitchen rota"}], ())
+
+
 def test_a_global_id_longer_than_jira_takes_is_refused_before_anything_is_sent() -> None:
     jira = FakeJira()
     transport = _transport(jira)

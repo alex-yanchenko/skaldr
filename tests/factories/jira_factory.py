@@ -40,7 +40,7 @@ NOT_FOUND: dict[str, JsonValue] = {
 _API = "/rest/api/3"
 _AS_STORED = frozenset({"description", "status"})
 DISPLAY_NAMES = {"customfield_10010": "Story Points"}
-REMOTE_LINK_FIELD = "RemoteIssueLink"
+REMOTE_LINK_FIELD = "RemoteWorkItemLink"
 JSON_MEDIA_TYPE = "application/json"
 History = dict[str, JsonValue]
 Author = dict[str, JsonValue] | None
@@ -247,9 +247,10 @@ class FakeJira:
         self.issues[key].remote_links.append(
             {"id": self._remote_link_id, "globalId": global_id, "object": {"url": url, "title": title}}
         )
+        self._log_a_remote_link_change(key, title, EDITOR)
 
-    def _log_a_remote_link(self, key: str, title: JsonValue) -> None:
-        self._log(key, WRITER, [{"field": REMOTE_LINK_FIELD, "fieldtype": "jira", "toString": title}])
+    def _log_a_remote_link_change(self, key: str, title: JsonValue, author: Author = WRITER) -> None:
+        self._log(key, author, [{"field": REMOTE_LINK_FIELD, "fieldtype": "jira", "toString": title}])
 
     def _remote_links(self, _request: httpx2.Request, key: str) -> httpx2.Response:
         issue = self._issue(key)
@@ -271,7 +272,7 @@ class FakeJira:
             return httpx2.Response(200, json={"id": found["id"]})
         self._remote_link_id += 1
         issue.remote_links.append({"id": self._remote_link_id, **sent})
-        self._log_a_remote_link(key, body.linked.get("title"))
+        self._log_a_remote_link_change(key, body.linked.get("title"))
         return httpx2.Response(201, json={"id": self._remote_link_id})
 
     def _delete_remote_link(self, request: httpx2.Request, key: str) -> httpx2.Response:
@@ -283,7 +284,7 @@ class FakeJira:
         if len(kept) == len(issue.remote_links):
             return httpx2.Response(404, json={"errorMessages": ["No remote link with that globalId."]})
         issue.remote_links = kept
-        self._log_a_remote_link(key, None)
+        self._log_a_remote_link_change(key, None)
         return httpx2.Response(204)
 
     def _myself(self, _request: httpx2.Request) -> httpx2.Response:
