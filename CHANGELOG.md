@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.1](https://github.com/alex-yanchenko/skaldr/compare/v4.0.0...v4.0.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **publish:** write a slack canvas with one whole-body replace and dates as text ([#220](https://github.com/alex-yanchenko/skaldr/issues/220)) ([5be2769](https://github.com/alex-yanchenko/skaldr/commit/5be27696d002f439b76694a4caa81779ecb4a2e8))
+
 ## [4.0.0](https://github.com/alex-yanchenko/skaldr/compare/v3.3.0...v4.0.0) (2026-10-15)
 
 
