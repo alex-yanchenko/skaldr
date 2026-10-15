@@ -44,7 +44,7 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import chart_as_its_data_table
+from skaldr.export.swaps import data_table_swapped_in, require_the_swap
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -148,6 +148,7 @@ class _AdfBlocks:
             case CodeBlock():
                 return [self.code_block(node.content, node.language)]
             case DisplayMath():
+                require_the_swap("math block", "adf")
                 return [self.code_block(node.expression, LATEX_LANGUAGE)]
             case Callout():
                 content = self.blocks(node.children, "panel") or [_empty_paragraph()]
@@ -214,7 +215,7 @@ class _AdfBlocks:
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
-        return self.blocks(chart_as_its_data_table(node, "ADF"), container)
+        return self.blocks(data_table_swapped_in(node, "adf"), container)
 
     def list_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
         if not node.entries:

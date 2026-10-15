@@ -12,6 +12,7 @@ from skaldr.export.capabilities import (
     CAPABILITIES,
     FIRST_LIST_NUMBER,
     PLACEMENTS,
+    RICH_STEP_NOTE,
     CellCount,
     Container,
     Details,
@@ -21,7 +22,6 @@ from skaldr.export.capabilities import (
     ListItemFeature,
     ListStart,
     Occurrence,
-    OccurrenceFeature,
     Placement,
     Rejection,
     ScriptForm,
@@ -41,6 +41,7 @@ from skaldr.export.runs import (
     SwimlaneMark,
     export_visible_text,
 )
+from skaldr.export.swaps import figure_feature
 from skaldr.export.tree import (
     AuthoredNode,
     BlockRegion,
@@ -51,7 +52,6 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     Graph,
-    GraphKind,
     Heading,
     ListEntry,
     ListNode,
@@ -59,13 +59,11 @@ from skaldr.export.tree import (
     Media,
     Node,
     Paragraph,
-    PieChart,
     Quote,
     TableNode,
     TableOfContents,
     Tabs,
     Toggle,
-    XYChart,
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
@@ -114,10 +112,6 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
 }
 
 
-_GRAPH_FEATURES: Final[Mapping[GraphKind, OccurrenceFeature]] = {
-    "flow": "flow diagram",
-    "fan": "fan diagram",
-}
 _RUNS_A_PLAIN_LABEL_LOSES: Final = (
     Link,
     AnchorLink,
@@ -384,20 +378,12 @@ class _TreeWalk:
         yield from self.placement_hits(node, place)
 
     def diagram_hits(self, node: Diagram) -> Iterator[FeatureHit]:
-        match node.figure:
-            case Graph():
-                yield self.hit(Occurrence(_GRAPH_FEATURES[node.figure.kind]), node.authored_at)
-                if any(_loses_meaning_in_a_plain_label(graph_node.note) for graph_node in node.figure.nodes):
-                    note_feature = "link, citation or math in a flow or fan step's note"
-                    yield self.hit(Occurrence(note_feature), node.authored_at)
-            case PieChart():
-                yield self.hit(Occurrence("chart"), node.authored_at)
-            case XYChart():
-                yield self.hit(Occurrence("chart"), node.authored_at)
-                if node.figure.stacked or len(node.figure.series) > 1:
-                    yield self.hit(Occurrence("chart with several series or stacked"), node.authored_at)
-            case _:
-                assert_never(node.figure)
+        yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
+        figure = node.figure
+        if isinstance(figure, Graph) and any(
+            _loses_meaning_in_a_plain_label(step.note) for step in figure.nodes
+        ):
+            yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)

@@ -32,7 +32,7 @@ from skaldr.export.markup import (
     table_width,
 )
 from skaldr.export.runs import ExportRich
-from skaldr.export.swaps import chart_as_its_data_table
+from skaldr.export.swaps import data_table_swapped_in, require_the_swap
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -107,6 +107,7 @@ class _SlackRuns(CommonMarkRuns):
         return f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)
 
     def math(self, expression: str, /) -> str:
+        require_the_swap("inline math", "slack")
         return code_span(expression)
 
     def underline(self, inner: str, /) -> str:
@@ -244,7 +245,7 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
         case Columns():
             return _canvas_columns(node, place)
         case Diagram():
-            return _canvas_blocks(chart_as_its_data_table(node, "a Slack canvas"), place)
+            return _canvas_blocks(data_table_swapped_in(node, "slack"), place)
         case TableOfContents():
             return []
         case _:
@@ -377,6 +378,7 @@ class _CanvasWriter:
             case CodeBlock():
                 return code_block_lines(block)
             case DisplayMath():
+                require_the_swap("math block", "slack")
                 return code_block_lines(CodeBlock(block.expression, MATH_LANGUAGE))
             case Media():
                 return self.media_lines(block)

@@ -38,6 +38,7 @@ Feature = Literal[
     ScriptFormFeature,
     OccurrenceFeature,
 ]
+RICH_STEP_NOTE: Final[OccurrenceFeature] = "link, citation or math in a flow or fan step's note"
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
 Held = Literal["table", "callout", "quote", "toggle"]
@@ -132,7 +133,7 @@ def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget,
     return {**kept, **cells}
 
 
-_TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
+TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
     "markdown": "GitHub",
     "notion": "Notion",
     "adf": "ADF",
@@ -140,15 +141,17 @@ _TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 }
 
 
-_NO_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a row per slice with its value and share and a total row for a donut, "
     "a row per series with a column per category for a bar or line chart"
 )
 
 
-def _refused_by(targets: Iterable[ExportTarget], cannot: str, instead: str) -> dict[ExportTarget, Capability]:
-    return {target: Rejection(f"{_TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
+def _refused_by(
+    targets: Iterable[ExportTarget], cannot: str, instead: str
+) -> Mapping[ExportTarget, Capability]:
+    return {target: Rejection(f"{TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
 
 
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
@@ -202,18 +205,22 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
     "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
     "flow diagram": _kept_except(
-        _refused_by(_NO_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list")
+        _refused_by(
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list"
+        )
     ),
     "fan diagram": _kept_except(
-        _refused_by(_NO_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list")
+        _refused_by(
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list"
+        )
     ),
-    "link, citation or math in a flow or fan step's note": _refused_by(
+    RICH_STEP_NOTE: _refused_by(
         EXPORT_TARGETS,
         "show a link, citation, math, subscript or superscript in a flow or fan step's note, "
         "since a diagram label holds plain text only",
         "write the note as plain text and put the rest in a text block after the diagram",
     ),
-    "chart": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
+    "chart": _kept_except(dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
     "chart with several series or stacked": {
         **_refused_by(
             ("markdown", "notion"),
@@ -221,10 +228,14 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "since its Mermaid chart has no legend and no stacking",
             "draw one chart per series, or write the values in a table",
         ),
-        **dict.fromkeys(_NO_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE),
+        **dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE),
     },
-    "math block": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("a code block in latex"))),
-    "inline math": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))),
+    "math block": _kept_except(
+        dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("a code block in latex"))
+    ),
+    "inline math": _kept_except(
+        dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))
+    ),
     "image from a data: URI": _kept_except(
         {
             "notion": Rejection(
@@ -251,6 +262,10 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
 }
+
+
+def swaps(feature: Feature, target: ExportTarget) -> bool:
+    return isinstance(CAPABILITIES[feature][target], Swap)
 
 
 def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:

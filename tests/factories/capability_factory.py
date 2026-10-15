@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from skaldr.export.capabilities import Feature
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from tests.factories.report_factory import in_a_grid_cell, make_report, make_section, make_toggle
 
@@ -233,6 +234,12 @@ MATH_BLOCKS: list[dict[str, Any]] = [
     {"type": "math", "expression": "x^2 + 1"},
     {"type": "text", "body": "rate $`x_i`$ now"},
 ]
+SWAPPED_BLOCKS: dict[Feature, list[dict[str, Any]]] = {
+    "chart": [DONUT],
+    "chart with several series or stacked": [xy_chart("bar", [4, 6], [1, 2])],
+    "math block": MATH_BLOCKS[:1],
+    "inline math": MATH_BLOCKS[1:],
+}
 
 
 def flow_with_a_note(note: str) -> list[dict[str, Any]]:

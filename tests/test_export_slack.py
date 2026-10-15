@@ -1,9 +1,8 @@
 import json
 import os
-from dataclasses import replace
 from datetime import date
 from pathlib import Path
-from typing import Any, Final, get_args
+from typing import Any, Final
 
 import pytest
 
@@ -20,7 +19,6 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     Graph,
-    GraphKind,
     GraphNode,
     GridColumn,
     Heading,
@@ -637,20 +635,6 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
 )
 def test_a_fenced_block_carries_its_language(node: Node, text: str) -> None:
     assert render_slack([node]) == text
-
-
-@pytest.mark.parametrize("kind", get_args(GraphKind))
-def test_a_flow_or_fan_diagram_the_check_refuses_is_an_internal_error_when_the_writer_is_called_alone(
-    kind: GraphKind,
-) -> None:
-    graph = replace(ONE_NODE_GRAPH, kind=kind)
-
-    with pytest.raises(ExportInvariantError) as raised:
-        render_slack([Diagram(graph)])
-
-    assert str(raised.value) == (
-        f"a Slack canvas has no form for a {kind} diagram; the export check should have refused it"
-    )
 
 
 @pytest.mark.parametrize(

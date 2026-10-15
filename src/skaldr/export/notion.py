@@ -23,6 +23,7 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
+from skaldr.export.swaps import writes_its_data_table
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
     Callout,
@@ -430,6 +431,8 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return _columns_lines(node, room)
         case Tabs():
             return _tabs_lines(node, room)
+        case Diagram() if writes_its_data_table(node.figure, "notion"):
+            return _notion_blocks(node.supplement, room)
         case Diagram():
             return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement, room)]
         case TableOfContents():

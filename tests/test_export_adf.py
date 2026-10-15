@@ -27,10 +27,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Graph,
-    GraphEdge,
-    GraphKind,
-    GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
@@ -819,19 +815,6 @@ def test_tabs_are_one_expand_per_tab() -> None:
         {"type": "expand", "attrs": {"title": "One"}, "content": [_words("a")]},
         {"type": "expand", "attrs": {"title": "Two"}, "content": [_words("b")]},
     )
-
-
-@pytest.mark.parametrize("kind", get_args(GraphKind))
-def test_a_flow_or_fan_diagram_the_check_refuses_is_an_internal_error_when_the_writer_is_called_alone(
-    kind: GraphKind,
-) -> None:
-    graph = Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A")), (GraphEdge("hub", "s1"),), kind)
-
-    with pytest.raises(
-        ExportInvariantError,
-        match=_exactly(f"ADF has no form for a {kind} diagram; the export check should have refused it"),
-    ):
-        render_adf((Diagram(graph),))
 
 
 def test_a_chart_is_its_data_table_alone() -> None:

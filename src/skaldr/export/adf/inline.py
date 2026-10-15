@@ -46,6 +46,7 @@ from skaldr.export.runs import (
     mark_name,
     write_export_runs,
 )
+from skaldr.export.swaps import require_the_swap
 from skaldr.export.tree import ToneName
 from skaldr.models import ALLOWED_URL_SCHEMES, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, ScriptPosition, StyleName
@@ -290,6 +291,7 @@ class AdfRuns:
         return inner if tone is None else with_mark(inner, text_color_mark(tone))
 
     def math(self, expression: str, /) -> AdfInlines:
+        require_the_swap("inline math", "adf")
         return self.code(expression)
 
     def chip(self, run: Chip, /) -> AdfInlines:

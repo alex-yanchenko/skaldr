@@ -1,15 +1,20 @@
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from typing_extensions import assert_never
 
 from skaldr.cli import main
-from skaldr.errors import ExportRejectedError
+from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import check as check_module
 from skaldr.export.adf import render_adf
-from skaldr.export.capabilities import CAPABILITIES, Feature, Rejection
+from skaldr.export.capabilities import CAPABILITIES, TARGET_SUBJECTS, Feature, Rejection, Swap
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
+from skaldr.export.markdown import render_markdown
+from skaldr.export.notion import render_notion
+from skaldr.export.slack import render_slack
 from skaldr.export.tree import Diagram, TableNode
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
@@ -20,11 +25,13 @@ from tests.factories.capability_factory import (
     DIAGRAM_CASES,
     DIAGRAM_REFUSALS,
     DONUT,
+    FAN,
     FLOW,
     MATH_BLOCKS,
     ONE_SERIES_CHARTS,
     RANGE,
     SEVERAL_SERIES_OR_STACKED,
+    SWAPPED_BLOCKS,
     AcceptedCase,
     RefusedCase,
     xy_chart,
@@ -34,9 +41,89 @@ EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 EXAMPLE_RANGE_PATH = "blocks.4.range"
 
 
+SWAP_CELLS = [
+    pytest.param(feature, target, id=f"{target}-{feature}")
+    for feature, cells in CAPABILITIES.items()
+    for target, capability in cells.items()
+    if isinstance(capability, Swap)
+]
+
+
 def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
     report = parse_report(make_report(blocks=blocks))
     reject_what_the_target_cannot_show(report, lower_report(report), target)
+
+
+def _written_without_the_check(blocks: list[dict[str, Any]], target: ExportTarget) -> str:
+    nodes = lowered(blocks)
+    match target:
+        case "markdown":
+            return render_markdown(nodes)
+        case "notion":
+            return render_notion(nodes)
+        case "adf":
+            return json.dumps(render_adf(nodes))
+        case "slack":
+            return render_slack(nodes)
+        case _:
+            assert_never(target)
+
+
+@pytest.mark.parametrize(("feature", "target"), SWAP_CELLS)
+def test_a_writer_swaps_a_feature_only_while_its_capability_cell_lists_the_swap(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, target: ExportTarget
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], target, "keep")
+
+    with pytest.raises(ExportInvariantError) as raised:
+        _written_without_the_check(SWAPPED_BLOCKS[feature], target)
+
+    assert str(raised.value) == (
+        f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
+    )
+
+
+@pytest.mark.parametrize("target", ["adf", "slack"])
+@pytest.mark.parametrize("blocks", [pytest.param([FLOW], id="flow"), pytest.param([FAN], id="fan")])
+def test_a_writer_that_cannot_draw_a_diagram_raises_an_internal_error_for_a_flow_or_fan_handed_to_it(
+    target: ExportTarget, blocks: list[dict[str, Any]]
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written_without_the_check(blocks, target)
+
+    assert str(raised.value) == (
+        f"{TARGET_SUBJECTS[target]} has no form for '{blocks[0]['type']} diagram'; "
+        "the export check should have refused it"
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "table"),
+    [
+        pytest.param(
+            "markdown",
+            "| Slice | Value | Share |\n| --- | --- | --- |\n"
+            "| Fixed | 9 | 75% |\n| Open | 3 | 25% |\n| **Total** | **12** |  |\n",
+            id="markdown",
+        ),
+        pytest.param(
+            "notion",
+            '<table fit-page-width="true" header-row="true">\n'
+            "\t<tr>\n\t\t<td>**Slice**</td>\n\t\t<td>**Value**</td>\n\t\t<td>**Share**</td>\n\t</tr>\n"
+            '\t<tr>\n\t\t<td color="green_bg">Fixed</td>\n\t\t<td>9</td>\n\t\t<td>75%</td>\n\t</tr>\n'
+            "\t<tr>\n\t\t<td>Open</td>\n\t\t<td>3</td>\n\t\t<td>25%</td>\n\t</tr>\n"
+            "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**12**</td>\n\t\t<td></td>\n\t</tr>\n"
+            "</table>\n",
+            id="notion",
+        ),
+    ],
+)
+def test_a_markdown_writer_writes_a_chart_as_its_data_table_alone_once_its_cell_lists_the_swap(
+    monkeypatch: pytest.MonkeyPatch, target: ExportTarget, table: str
+) -> None:
+    monkeypatch.setitem(CAPABILITIES["chart"], target, Swap("the chart's data table"))
+
+    assert _written_without_the_check([DONUT], target) == table
 
 
 @pytest.mark.parametrize("case", DIAGRAM_CASES)
