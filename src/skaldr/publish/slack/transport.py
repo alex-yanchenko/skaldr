@@ -1,9 +1,16 @@
 import hashlib
-from collections.abc import Callable, Mapping, Sequence
-from typing import Final, TypeVar
+from collections.abc import Mapping, Sequence
+from typing import Final
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, differing_parts, placed_section
+from skaldr.publish.keyed import (
+    ReadLayouts,
+    comparable_sections,
+    finished_after_a_change,
+    refuse_a_change_since_the_read,
+    refused_when_not_found,
+)
 from skaldr.publish.slack.api import SlackApi, markdown_content
 from skaldr.publish.slack.canvas_markdown import (
     KeyedCanvas,
@@ -33,7 +40,6 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import SlackTarget, slack_canvas_id
 from skaldr.publish_block.target import JsonFields
 
-Answer = TypeVar("Answer")
 ARCHIVED_TITLE_MARKER: Final = " (archived by skaldr)"
 RELEASED_ROLES: Final = frozenset({"published", "blank", "stamp"})
 
@@ -46,20 +52,8 @@ def _rename(title: str) -> JsonFields:
     return {"operation": "rename", "title_content": markdown_content(title)}
 
 
-def _finished_after_a_change(canvas_id: str, title: str, finish: Callable[[], Answer]) -> Answer:
-    try:
-        return finish()
-    except ConnectorError as exc:
-        raise ConnectorError(
-            f'skaldr created Slack canvas {canvas_id} for "{title}" but could not finish it: {exc}'
-        ) from exc
-
-
-def _refused_or_unknown(send: Callable[[], Answer]) -> Answer:
-    try:
-        return send()
-    except ItemNotFoundError as exc:
-        raise WriteRejectedError(str(exc)) from exc
+def _canvas_named(canvas_id: str) -> str:
+    return f"Slack canvas {canvas_id}"
 
 
 def _named_fields(request: FieldsWrite) -> list[str]:
@@ -125,26 +119,22 @@ def _insertion_position(keyed: KeyedCanvas, gone: Sequence[int], order: Sequence
 class SlackTransport:
     def __init__(self, api: SlackApi) -> None:
         self._api = api
-        self._layouts: dict[str, Mapping[str, str]] = {}
-        self._published: dict[str, Mapping[str, str]] = {}
-        self._written: set[str] = set()
+        self._read = ReadLayouts()
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
-        sections = {key: comparable_text(text) for key, text in content.sections.items()}
-        return content.model_copy(update={"sections": {key: text for key, text in sections.items() if text}})
+        return comparable_sections(content, comparable_text)
 
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         markdown = self._markdown(item_id)
-        if item_id not in self._written and keyed_like.sections:
-            self._published[item_id] = keyed_like.sections
-        return self._remote(item_id, markdown, self._layout_to_read(item_id, keyed_like))
+        self._read.note_the_read(item_id, keyed_like)
+        return self._remote(item_id, markdown, self._read.to_read(item_id, keyed_like))
 
     def create_item(self, request: NewItem, /) -> RemoteItem:
         content = request.content
         markdown = canvas_markdown_of([*content.sections.values(), canvas_stamp_line(request.stamp)])
         if request.into_id is not None:
             return self._create_into(request.into_id, request, markdown)
-        canvas_id = _refused_or_unknown(lambda: self._api.create_canvas(content.title, markdown))
+        canvas_id = refused_when_not_found(lambda: self._api.create_canvas(content.title, markdown))
         target = request.target
         conversation = target.where.conversation if isinstance(target, SlackTarget) else None
 
@@ -154,7 +144,7 @@ class SlackTransport:
                 self._api.post_message(conversation, f"{content.title}: {link.url}")
             return self._written_with(canvas_id, self.comparable_form(content).sections)
 
-        return _finished_after_a_change(canvas_id, content.title, finish)
+        return finished_after_a_change(_canvas_named(canvas_id), content.title, finish)
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
@@ -190,7 +180,7 @@ class SlackTransport:
         return self._written_with(item_id, request.sections)
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
-        layout = self._layouts.get(item_id, {})
+        layout = self._read.layouts.get(item_id, {})
         keyed = keyed_canvas(self._markdown(item_id), layout)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
@@ -219,14 +209,12 @@ class SlackTransport:
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         self._unchanged_since_read(item_id, request.raw_sections)
-        keyed = keyed_canvas(self._markdown(item_id), self._published.get(item_id, request.raw_sections))
+        keyed = keyed_canvas(self._markdown(item_id), self._read.published.get(item_id, request.raw_sections))
         edits = _Edits(self._api, item_id, len(keyed.blocks))
         for position, block in reversed(list(enumerate(keyed.blocks))):
             if block.role in RELEASED_ROLES:
                 edits.delete(position)
-        self._layouts[item_id] = {}
-        self._published[item_id] = {}
-        self._written.add(item_id)
+        self._read.note_released(item_id)
 
     def parts_edited_after(
         self, item_id: str, marker: str | None, keyed_like: ItemContent, /
@@ -234,7 +222,7 @@ class SlackTransport:
         markdown = self._markdown(item_id)
         if marker is not None and _digest(markdown) == marker:
             return ()
-        keyed = keyed_canvas(markdown, self._layout_to_read(item_id, keyed_like))
+        keyed = keyed_canvas(markdown, self._read.to_read(item_id, keyed_like))
         published = ItemContent(title=keyed_like.title, sections=self.comparable_form(keyed_like).sections)
         return differing_parts(published, ItemContent(title=keyed.title, sections=keyed.sections))
 
@@ -250,11 +238,11 @@ class SlackTransport:
         return ItemLink(f"{identity.url.rstrip('/')}/docs/{identity.team_id}/{item_id}", title)
 
     def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
-        keyed = keyed_canvas(self._markdown(item_id), self._layouts.get(item_id, {}))
+        keyed = keyed_canvas(self._markdown(item_id), self._read.layouts.get(item_id, {}))
         return keyed.links if keyed.stamp == stamp else ()
 
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
-        layout = self._layouts.get(item_id, {})
+        layout = self._read.layouts.get(item_id, {})
         keyed = keyed_canvas(self._markdown(item_id), layout)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
@@ -280,14 +268,9 @@ class SlackTransport:
             raise ItemNotFoundError(f"Slack canvas {item_id} was archived by skaldr")
         return markdown
 
-    def _layout_to_read(self, item_id: str, keyed_like: ItemContent) -> Mapping[str, str]:
-        if item_id in self._written:
-            return self._layouts[item_id]
-        return keyed_like.sections or self._layouts.get(item_id, {})
-
     def _remote(self, item_id: str, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
         keyed = keyed_canvas(markdown, layout)
-        self._layouts[item_id] = keyed.raw_sections
+        self._read.layouts[item_id] = keyed.raw_sections
         return RemoteItem(
             item_id,
             ItemContent(title=keyed.title, sections=keyed.sections),
@@ -298,27 +281,23 @@ class SlackTransport:
         )
 
     def _written_with(self, item_id: str, layout: Mapping[str, str]) -> RemoteItem:
-        self._written.add(item_id)
-        self._published[item_id] = layout
+        self._read.note_written(item_id, layout)
         return self._remote(item_id, self._markdown(item_id), layout)
 
     def _unchanged_since_read(self, item_id: str, raw_sections: RawSections) -> KeyedCanvas:
         keyed = keyed_canvas(self._markdown(item_id), raw_sections)
-        if list(keyed.raw_sections.items()) != list(raw_sections.items()):
-            raise WriteRejectedError(
-                f"Slack canvas {item_id} changed after skaldr read it, so nothing was written; publish again"
-            )
+        refuse_a_change_since_the_read(_canvas_named(item_id), raw_sections, keyed.raw_sections)
         return keyed
 
     def _create_into(self, item_id: str, request: NewItem, markdown: str) -> RemoteItem:
         title = request.content.title
-        keyed = _refused_or_unknown(lambda: self._unchanged_since_read(item_id, request.into_raw_sections))
+        keyed = refused_when_not_found(lambda: self._unchanged_since_read(item_id, request.into_raw_sections))
         replace: JsonFields = {"operation": "replace", "document_content": markdown_content(markdown)}
-        _refused_or_unknown(lambda: self._api.edit_canvas(item_id, replace))
+        refused_when_not_found(lambda: self._api.edit_canvas(item_id, replace))
 
         def finish() -> RemoteItem:
             if keyed.title != title:
                 self._api.edit_canvas(item_id, _rename(title))
             return self._written_with(item_id, self.comparable_form(request.content).sections)
 
-        return _finished_after_a_change(item_id, title, finish)
+        return finished_after_a_change(_canvas_named(item_id), title, finish)

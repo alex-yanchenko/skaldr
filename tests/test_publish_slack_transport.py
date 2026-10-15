@@ -129,8 +129,8 @@ def test_a_canvas_whose_link_cannot_be_posted_is_named_so_the_next_run_can_find_
 
     assert (type(raised.value), str(raised.value), list(slack.canvases)) == (
         ConnectorError,
-        f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not finish it: Slack refused '
-        "to post the canvas link in C0EXAMPLE1 (channel_not_found)",
+        f'skaldr wrote Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not finish writing it: Slack '
+        "refused to post the canvas link in C0EXAMPLE1 (channel_not_found)",
         [CANVAS],
     )
 

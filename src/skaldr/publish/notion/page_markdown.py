@@ -3,19 +3,17 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
 from itertools import groupby
 from typing import Final, Literal, NamedTuple
 
-from typing_extensions import Self
-
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import EMPTY_BLOCK, NOTION_ESCAPES, notion_fence_closer, starts_a_block
+from skaldr.publish.keyed import UNKEYED_SECTION as UNKEYED_SECTION
+from skaldr.publish.keyed import SectionLayout
 from skaldr.publish.stamp_text import parsed_stamp, parsed_stamp_links, stamp_pattern, stamp_text
 from skaldr.publish.transport import ShownLink, Stamp
 from skaldr.publish_block import notion_page_id
 
-UNKEYED_SECTION: Final = "content skaldr did not publish"
 STAMP_COLOR: Final = '{color="gray"}'
 STAMP_PATTERN: Final = stamp_pattern(STAMP_COLOR)
 CHILD_REFERENCE: Final = re.compile(r'<(page|database)\b[^>]*?\burl="([^"]*)"[^>]*>.*</\1>')
@@ -34,14 +32,6 @@ REMOVED_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"published", "bla
 
 def stamp_line(stamp: Stamp, links: Sequence[ShownLink] = ()) -> str:
     return f"{stamp_text(stamp, links, NOTION_ESCAPES)} {STAMP_COLOR}\n"
-
-
-def _parsed_stamp(line: str) -> Stamp | None:
-    return parsed_stamp(line, STAMP_PATTERN)
-
-
-def _parsed_stamp_links(line: str) -> tuple[ShownLink, ...]:
-    return parsed_stamp_links(line, STAMP_PATTERN)
 
 
 @dataclass
@@ -180,11 +170,13 @@ class _PageLine:
     def stamp(self) -> Stamp | None:
         if not self.at_top_level or self.normalised is None:
             return None
-        return _parsed_stamp(self.normalised)
+        return parsed_stamp(self.normalised, STAMP_PATTERN)
 
     @property
     def stamp_links(self) -> tuple[ShownLink, ...]:
-        return () if self.stamp is None or self.normalised is None else _parsed_stamp_links(self.normalised)
+        if self.stamp is None or self.normalised is None:
+            return ()
+        return parsed_stamp_links(self.normalised, STAMP_PATTERN)
 
     @property
     def aligns(self) -> bool:
@@ -214,43 +206,8 @@ def _last_stamp_at(lines: Sequence[_PageLine]) -> int | None:
     return next((index for index in reversed(range(len(lines))) if lines[index].stamp is not None), None)
 
 
-@dataclass(frozen=True)
-class _Layout:
-    keys: tuple[str, ...]
-    lines: tuple[str, ...]
-    fallback: str
-
-    @classmethod
-    def of(cls, layout: Mapping[str, str]) -> Self:
-        keys: list[str] = []
-        lines: list[str] = []
-        for key, text in layout.items():
-            expected = _lines_of(comparable_text(without_comment_markers(text)))
-            keys += [key] * len(expected)
-            lines += expected
-        return cls(tuple(keys), tuple(lines), next(iter(layout), UNKEYED_SECTION))
-
-    def key_of_inserted(self, position: int) -> str:
-        if not self.keys:
-            return self.fallback
-        opens_a_section = position < len(self.keys) and (
-            position == 0 or self.keys[position] != self.keys[position - 1]
-        )
-        return self.keys[position] if opens_a_section else self.keys[position - 1]
-
-    def placed(self, actual: Sequence[str]) -> list[tuple[str, LineRole]]:
-        placed: list[tuple[str, LineRole]] = [(self.fallback, "added")] * len(actual)
-        matcher = SequenceMatcher(None, self.lines, actual, autojunk=False)
-        for tag, start, end, actual_start, actual_end in matcher.get_opcodes():
-            for offset, index in enumerate(range(actual_start, actual_end)):
-                if tag == "equal":
-                    placed[index] = (self.keys[start + offset], "published")
-                elif tag == "replace":
-                    position = start + offset * (end - start) // (actual_end - actual_start)
-                    placed[index] = (self.keys[position], "added")
-                else:
-                    placed[index] = (self.key_of_inserted(start), "added")
-        return placed
+def _comparable_lines(text: str) -> list[str]:
+    return _lines_of(comparable_text(without_comment_markers(text)))
 
 
 @dataclass(frozen=True)
@@ -265,9 +222,9 @@ def _placed_lines(markdown: str, layout: Mapping[str, str]) -> list[_Placed]:
     lines = _page_lines(markdown)
     stamp_at = _last_stamp_at(lines)
     content_end = len(lines) if stamp_at is None else stamp_at
-    shape = _Layout.of(layout)
+    shape = SectionLayout.of(layout, _comparable_lines)
     aligned = [index for index in range(content_end) if lines[index].aligns]
-    found = dict(
+    found: dict[int, tuple[str, LineRole]] = dict(
         zip(aligned, shape.placed([lines[index].normalised or "" for index in aligned]), strict=True)
     )
     first_key = found[aligned[0]][0] if aligned else shape.fallback

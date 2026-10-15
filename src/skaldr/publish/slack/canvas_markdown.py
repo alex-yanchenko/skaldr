@@ -1,17 +1,17 @@
 import re
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from typing import Final, Literal
 
 from typing_extensions import override
 
 from skaldr.export.slack import CANVAS_ESCAPES, CANVAS_FENCE, LIST_SEPARATOR
+from skaldr.publish.keyed import UNKEYED_SECTION, SectionLayout
 from skaldr.publish.stamp_text import parsed_stamp, parsed_stamp_links, stamp_pattern, stamp_text
 from skaldr.publish.transport import ShownLink, Stamp
 
-UNKEYED_SECTION: Final = "content skaldr did not publish"
 TITLE_HEADING: Final = "# "
 STAMP_PATTERN: Final = stamp_pattern("")
 ARCHIVED_WORDS: Final = "skaldr archived this canvas:"
@@ -111,8 +111,9 @@ def comparable_block(block: str) -> str:
     for line in block.split("\n"):
         in_code = fences.closer is not None
         opens_or_closes_code = fences.read(line)
+        inside_the_code = in_code and fences.closer is not None
         if in_code or opens_or_closes_code:
-            lines.append(line if in_code and fences.closer is not None else line.rstrip())
+            lines.append(line if inside_the_code else line.rstrip())
             continue
         comparable = _comparable_line(line)
         if comparable.strip():
@@ -162,9 +163,9 @@ class KeyedCanvas:
 
     @property
     def raw_sections(self) -> dict[str, str]:
-        grouped: dict[str, list[str]] = {}
+        grouped: defaultdict[str, list[str]] = defaultdict(list[str])
         for block in self.content:
-            grouped.setdefault(block.key or UNKEYED_SECTION, []).append(block.raw)
+            grouped[block.key or UNKEYED_SECTION].append(block.raw)
         return {key: _blocks_text(raws) for key, raws in grouped.items()}
 
     @property
@@ -180,45 +181,6 @@ class KeyedCanvas:
         return [
             index for index in range(self.content_start, self.content_end) if self.blocks[index].key == key
         ]
-
-
-@dataclass(frozen=True)
-class _Layout:
-    keys: tuple[str, ...]
-    blocks: tuple[str, ...]
-    fallback: str
-
-    @classmethod
-    def of(cls, layout: Mapping[str, str]) -> "_Layout":
-        keys: list[str] = []
-        blocks: list[str] = []
-        for key, text in layout.items():
-            expected = _comparable_blocks(text)
-            keys += [key] * len(expected)
-            blocks += expected
-        return cls(tuple(keys), tuple(blocks), next(iter(layout), UNKEYED_SECTION))
-
-    def key_of_inserted(self, position: int) -> str:
-        if not self.keys:
-            return self.fallback
-        opens_a_section = position < len(self.keys) and (
-            position == 0 or self.keys[position] != self.keys[position - 1]
-        )
-        return self.keys[position] if opens_a_section else self.keys[position - 1]
-
-    def placed(self, actual: Sequence[str]) -> list[tuple[str, BlockRole]]:
-        placed: list[tuple[str, BlockRole]] = [(self.fallback, "added")] * len(actual)
-        matcher = SequenceMatcher(None, self.blocks, actual, autojunk=False)
-        for tag, start, end, actual_start, actual_end in matcher.get_opcodes():
-            for offset, index in enumerate(range(actual_start, actual_end)):
-                if tag == "equal":
-                    placed[index] = (self.keys[start + offset], "published")
-                elif tag == "replace":
-                    position = start + offset * (end - start) // (actual_end - actual_start)
-                    placed[index] = (self.keys[position], "added")
-                else:
-                    placed[index] = (self.key_of_inserted(start), "added")
-        return placed
 
 
 def _is_title(raw: str) -> bool:
@@ -238,13 +200,15 @@ def _last_stamp_at(raws: Sequence[str], start: int) -> int | None:
 
 @dataclass
 class _Keying:
-    layout: _Layout
+    layout: SectionLayout
     blocks: list[CanvasBlock] = field(default_factory=list[CanvasBlock])
 
     def content(self, raws: Sequence[str]) -> None:
         comparables = [comparable_block(raw) for raw in raws]
         aligned = [index for index, comparable in enumerate(comparables) if comparable]
-        found = dict(zip(aligned, self.layout.placed([comparables[index] for index in aligned]), strict=True))
+        found: dict[int, tuple[str, BlockRole]] = dict(
+            zip(aligned, self.layout.placed([comparables[index] for index in aligned]), strict=True)
+        )
         current = found[aligned[0]][0] if aligned else self.layout.fallback
         for index, raw in enumerate(raws):
             key, role = found.get(index, (current, "blank"))
@@ -258,7 +222,7 @@ def keyed_canvas(markdown: str, layout: Mapping[str, str]) -> KeyedCanvas:
     start = 1 if titled else 0
     stamp_at = _last_stamp_at(raws, start)
     end = len(raws) if stamp_at is None else stamp_at
-    keying = _Keying(_Layout.of(layout))
+    keying = _Keying(SectionLayout.of(layout, _comparable_blocks))
     if titled:
         keying.blocks.append(CanvasBlock(raws[0], None, "title"))
     keying.content(raws[start:end])
