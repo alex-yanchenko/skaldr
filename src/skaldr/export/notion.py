@@ -413,7 +413,9 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
 
 def _longest_text(table: TableNode, index: int) -> int:
     cells = [table.header, *(row.cells for row in table.rows)]
-    return max((len(export_visible_text(row[index].text)) for row in cells if index < len(row)), default=0)
+    return max(
+        (len(export_visible_text(cell_text(row[index]))) for row in cells if index < len(row)), default=0
+    )
 
 
 def _content_weight(table: TableNode, index: int) -> int:

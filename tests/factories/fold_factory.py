@@ -240,6 +240,49 @@ FOLD_CASES: Mapping[str, FoldCase] = {
             (TableRow((TableCell((Plain("Fix:"), Break(), Plain("• "), *UNDERLINED_OPS)),)),),
         ),
     ),
+    "long list cell beside a short cell": fold_case(
+        TableNode(
+            (TableCell(plain("Steps")), TableCell(plain("Owner"))),
+            (
+                TableRow(
+                    (
+                        TableCell(
+                            (),
+                            blocks=(
+                                ListNode(
+                                    "bullet",
+                                    (
+                                        ListEntry(plain("Recount every bin in the cold room by hand")),
+                                        ListEntry(plain("Post the variance to the shared sheet")),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        TableCell(plain("Ops")),
+                    )
+                ),
+            ),
+        ),
+        TableNode(
+            (TableCell(plain("Steps")), TableCell(plain("Owner"))),
+            (
+                TableRow(
+                    (
+                        TableCell(
+                            (
+                                Plain("• "),
+                                Plain("Recount every bin in the cold room by hand"),
+                                Break(),
+                                Plain("• "),
+                                Plain("Post the variance to the shared sheet"),
+                            )
+                        ),
+                        TableCell(plain("Ops")),
+                    )
+                ),
+            ),
+        ),
+    ),
     "letter list": fold_case(
         ListNode("number", (ListEntry(plain("y")), ListEntry(UNDERLINED_OPS)), start=26, numbering="letters"),
         ListNode(

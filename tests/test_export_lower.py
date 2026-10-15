@@ -963,7 +963,7 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_leaves_its_colour_to_th
             "bullet",
             (
                 ListEntry(
-                    (Chip("api", "blue"), Plain(": "), Plain("1 (50.0%)")),
+                    (Chip("api", "blue"), Plain(": 1 (50.0%)")),
                     children=(Paragraph((Plain("live"),), "muted"),),
                 ),
             ),
@@ -995,7 +995,7 @@ def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> 
     ]
 
     assert lowered_as_written_today(blocks, badges=API_BADGES) == (
-        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": "), Plain("1 (50.0%)"))),)),
+        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)"))),)),
         API_LEGEND,
         TableNode(
             _cells("A"),

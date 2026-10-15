@@ -104,7 +104,13 @@ def _card_text(card: Card) -> ExportRich:
     if card.badge is None:
         return with_bold_label(card.label, card.value, card.tone)
     chip = Chip.on_one_line(card.label or "", card.badge)
-    return (chip, Plain(": "), *card.value) if card.value else (chip,)
+    match card.value:
+        case ():
+            return (chip,)
+        case (Plain(text=value),):
+            return (chip, Plain(f": {value}"))
+        case _:
+            return (chip, Plain(": "), *card.value)
 
 
 def _card_entry(card: Card, path: str | None) -> ListEntry:

@@ -7,7 +7,7 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.adf import adf_json, render_adf
 from skaldr.export.budget import character_budget
 from skaldr.export.check import FeatureHit, feature_hits
-from skaldr.export.folds import cell_text, quote_lines
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import chunk_notion, render_notion, render_notion_regions
 from skaldr.export.slack import render_slack
@@ -35,6 +35,7 @@ def _notion_chunks(nodes: Sequence[Node]) -> str:
 WRITERS: Mapping[str, Write] = {
     "markdown": render_markdown,
     "notion": render_notion,
+    "notion full width": lambda nodes: render_notion(nodes, "full"),
     "notion regions": _notion_regions,
     "notion chunks": _notion_chunks,
     "adf": lambda nodes: adf_json(render_adf(nodes)),
@@ -63,6 +64,13 @@ def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block
     wrap, write, fold = FOLD_CONTEXTS[context], WRITERS[writer], FOLD_CASES[case]
 
     assert _outcome(write, wrap((fold.named,))) == _outcome(write, wrap(fold.today))
+
+
+@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline"])
+def test_a_named_list_block_folds_to_exactly_the_nodes_it_lowered_to_before(case: str) -> None:
+    fold = FOLD_CASES[case]
+
+    assert tuple(folded((fold.named,))) == fold.today
 
 
 @pytest.mark.parametrize("context", FOLD_CONTEXTS)
