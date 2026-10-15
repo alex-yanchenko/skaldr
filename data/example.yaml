@@ -15,7 +15,7 @@ meta:
   hero: true
   jira_site: "https://example.atlassian.net"
   people:
-    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g" }
+    ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g", slack: "U0EXAMPLE1" }
   icon: "📦"
   cover: "https://example.com/covers/warehouse.png"
 
