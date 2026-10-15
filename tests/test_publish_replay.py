@@ -21,6 +21,7 @@ from skaldr.publish.engine import (
 )
 from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import held_state_lock, load_state, state_path_for
+from skaldr.publish.transport import Stamp
 from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -28,6 +29,7 @@ from tests.factories.publish_factory import (
     INTO_LABEL,
     INTRO_KEY,
     LOST_WRITE,
+    OTHER_DOC_ID,
     REFUSED_WRITE,
     TARGET_LABEL,
     UNFINISHED_CREATE,
@@ -94,6 +96,13 @@ def test_a_create_with_an_unknown_outcome_stops_the_next_run_naming_the_parent_a
     )
 
 
+def _pending_creates(path: Path) -> tuple[tuple[str | None, str | None], ...]:
+    return tuple(
+        (pending.section_id, pending.created_id)
+        for pending in load_state(state_path_for(path), DOC_ID).pending_creates
+    )
+
+
 def _create_of_tools_left_unfinished(
     path: Path, transport: FakeTransport
 ) -> tuple[tuple[str | None, str | None], ...]:
@@ -102,10 +111,7 @@ def _create_of_tools_left_unfinished(
         _publish(path, transport)
     transport.stop_failing()
     transport.forget_calls()
-    return tuple(
-        (pending.section_id, pending.created_id)
-        for pending in load_state(state_path_for(path), DOC_ID).pending_creates
-    )
+    return _pending_creates(path)
 
 
 def test_a_create_that_landed_but_did_not_finish_is_recorded_as_created_next_run(tmp_path: Path) -> None:
@@ -137,6 +143,45 @@ def test_an_unfinished_create_whose_item_is_gone_is_forgotten_and_made_again(tmp
         Applied(('create   section tools "Tools"',)),
         [("create", "Tools", "page-1", "")],
     )
+
+
+def test_an_unfinished_create_whose_stamp_did_not_read_back_is_recorded_as_created_and_not_made_again(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.stamp_by_hand("page-2", None)
+
+    outcome = _publish(path, transport)
+    state = load_state(state_path_for(path), DOC_ID)
+    tools = state.targets[TARGET_LABEL].sections["tools"]
+
+    assert (outcome, transport.writes(), tools.item_id, tools.origin, state.pending_creates) == (
+        Applied(()),
+        [],
+        "page-2",
+        "created",
+        [],
+    )
+
+
+def test_an_unfinished_create_stamped_for_another_document_stops_the_run_and_stays_pending(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    pending = _create_of_tools_left_unfinished(path, transport)
+    transport.stamp_by_hand("page-2", Stamp(OTHER_DOC_ID, "tools"))
+    refusal = (
+        f"{TOOLS.label} (page-2) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs to that document and "
+        f"not to '{DOC_ID}'; skaldr writes only to items of the document it publishes"
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(refusal)}$"):
+        _publish(path, transport)
+
+    assert (transport.writes(), _pending_creates(path)) == ([], pending)
 
 
 NOT_SIGNED_IN = "not signed in to notion"

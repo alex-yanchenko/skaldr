@@ -258,6 +258,9 @@ class FakeTransport:
     def delete_item_by_hand(self, item_id: str) -> None:
         del self.items[item_id]
 
+    def stamp_by_hand(self, item_id: str, stamp: Stamp | None) -> None:
+        self.items[item_id].stamp = stamp
+
     def set_icon_by_hand(self, item_id: str, icon: str | None) -> None:
         self.items[item_id].icon = icon
         self.report_an_edit_without_changing_content(item_id, ICON)

@@ -245,12 +245,15 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Pu
         target = _pending_target(prepared, pending)
         transport = transports.for_target(pending.target, target)
         remote = _read_or_none(transport, item_id, NOT_YET_PUBLISHED)
+        ref = ItemRef(pending.target, pending.section_id)
+        created_by_skaldr = pending.into_id is None
+        if remote is not None and created_by_skaldr:
+            refuse_another_documents_item(ref, remote, prepared.doc_id)
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
-        if remote is not None and remote.doc_id == prepared.doc_id:
-            ref = ItemRef(pending.target, pending.section_id)
+        if remote is not None and (created_by_skaldr or remote.doc_id == prepared.doc_id):
             held = _adopted(remote, prepared.draft_of(ref), transport)
-            origin: ItemOrigin = "adopted" if pending.into_id is not None else "created"
+            origin: ItemOrigin = "created" if created_by_skaldr else "adopted"
             state = with_item(state, ref, target, held.model_copy(update={"origin": origin}))
     return state
 
