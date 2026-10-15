@@ -8,13 +8,13 @@ import yaml
 from skaldr.errors import ExportRejectedError
 from skaldr.export.budget import RenderedBlock
 from skaldr.export.check import reject_what_the_target_cannot_show
-from skaldr.export.lower import lower_report
+from skaldr.export.lower import assemble_item_page, lower_regions, lower_report, lowering_for
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument, Node, Paragraph, TableCell
 from skaldr.export_targets import ExportTarget
-from skaldr.models import AnyBlock, AuthoredBlock, parse_report
+from skaldr.models import AnyBlock, AuthoredBlock, Report, parse_report
 from skaldr.richtext import Plain, Rich
 from tests.factories.report_factory import make_index_report, make_report
 
@@ -124,6 +124,37 @@ def check_nodes(nodes: Sequence[Node], target: ExportTarget) -> None:
     report = parse_report(make_report())
     page = LoweredDocument(report.meta.title, (BlockRegion(0, tuple(nodes)),))
     reject_what_the_target_cannot_show(report, page, target)
+
+
+def _refuses(report: Report, page: LoweredDocument, target: ExportTarget) -> bool:
+    try:
+        reject_what_the_target_cannot_show(report, page, target)
+    except ExportRejectedError:
+        return True
+    return False
+
+
+def blocks_the_target_refuses(report: Report, target: ExportTarget) -> list[int]:
+    lowering = lowering_for(report)
+    return [
+        region.source_index
+        for region in lower_regions(lowering)
+        if _refuses(
+            report,
+            assemble_item_page(report.meta.title, [region], lowering, opens_the_document=False),
+            target,
+        )
+    ]
+
+
+def accepted_by(data: dict[str, Any], target: ExportTarget) -> dict[str, Any]:
+    refused = set(blocks_the_target_refuses(parse_report(data), target))
+    return {**data, "blocks": [block for index, block in enumerate(data["blocks"]) if index not in refused]}
+
+
+def read_yaml(path: Path) -> dict[str, Any]:
+    data: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data
 
 
 def refusal_of(nodes: Sequence[Node], target: ExportTarget) -> ExportRejectedError:

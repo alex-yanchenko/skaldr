@@ -8,9 +8,9 @@ from jsonschema import Draft4Validator, ValidationError
 from skaldr.export.adf import IssueLinks, render_adf, render_adf_document
 from skaldr.export.lower import lower_report
 from skaldr.export.tree import Node
-from skaldr.models import load_report, parse_report
+from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, make_report
+from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_by, make_report, read_yaml
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 
 ADF_SCHEMA_FILE = REPO_ROOT / "tests" / "schemas" / "adf-schema-57.7.4-full.json"
@@ -102,5 +102,7 @@ def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf_document(lowered)) == []
 
 
-def test_the_example_document_is_accepted_by_the_adf_schema() -> None:
-    assert _problems(render_adf_document(lower_report(load_report(EXAMPLE)), SITE)) == []
+def test_what_adf_accepts_of_the_example_document_is_accepted_by_the_adf_schema() -> None:
+    accepted = parse_report(accepted_by(read_yaml(EXAMPLE), "adf"))
+
+    assert _problems(render_adf_document(lower_report(accepted), SITE)) == []

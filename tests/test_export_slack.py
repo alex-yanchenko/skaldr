@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
@@ -60,6 +59,7 @@ from skaldr.richtext import (
 )
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    accepted_by,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -68,6 +68,7 @@ from tests.factories import (
     make_rich_text,
     make_section,
     make_table_cell,
+    read_yaml,
     refusal_of,
     slack_of,
     write_report,
@@ -120,7 +121,7 @@ def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]
 
 
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
-    data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    data = read_yaml(EXAMPLE)
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
         blocks.append(block)
@@ -162,7 +163,7 @@ def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_sla
 ) -> None:
     out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
 
-    export_slack(parse_report(_example_reworked_for_a_canvas()), out_dir)
+    export_slack(parse_report(accepted_by(_example_reworked_for_a_canvas(), "slack")), out_dir)
 
     assert folder_texts(out_dir) == folder_texts(SLACK_GOLDEN)
 

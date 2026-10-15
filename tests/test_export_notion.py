@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -67,6 +68,7 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    accepted_by,
     authored_block_types,
     folder_texts,
     heading_sections,
@@ -81,11 +83,13 @@ from tests.factories import (
     make_table,
     make_toggle,
     notion_of,
+    read_yaml,
     rendered_block_count,
 )
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
+WRITE_NOTION_GOLDEN = "SKALDR_WRITE_NOTION_GOLDEN"
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
@@ -607,10 +611,14 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_notion(load_report(EXAMPLE), tmp_path)
+def test_what_notion_accepts_of_the_example_exports_to_the_golden_skaldr_write_notion_golden_rewrites(
+    tmp_path: Path,
+) -> None:
+    out_dir = NOTION_GOLDEN if os.environ.get(WRITE_NOTION_GOLDEN) else tmp_path
 
-    assert folder_texts(tmp_path) == folder_texts(NOTION_GOLDEN)
+    export_notion(parse_report(accepted_by(read_yaml(EXAMPLE), "notion")), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(NOTION_GOLDEN)
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:

@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import load_report, parse_report
+from skaldr.models import parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -65,6 +66,7 @@ from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    accepted_by,
     folder_texts,
     in_a_grid_cell,
     in_an_open_section,
@@ -77,16 +79,22 @@ from tests.factories import (
     make_tabs,
     make_toggle,
     markdown_of,
+    read_yaml,
 )
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
+WRITE_MARKDOWN_GOLDEN = "SKALDR_WRITE_MARKDOWN_GOLDEN"
 
 
-def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_markdown(load_report(EXAMPLE), tmp_path)
+def test_what_github_accepts_of_the_example_exports_to_the_golden_skaldr_write_markdown_golden_rewrites(
+    tmp_path: Path,
+) -> None:
+    out_dir = MARKDOWN_GOLDEN if os.environ.get(WRITE_MARKDOWN_GOLDEN) else tmp_path
 
-    assert folder_texts(tmp_path) == folder_texts(MARKDOWN_GOLDEN)
+    export_markdown(parse_report(accepted_by(read_yaml(EXAMPLE), "markdown")), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(MARKDOWN_GOLDEN)
 
 
 def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:

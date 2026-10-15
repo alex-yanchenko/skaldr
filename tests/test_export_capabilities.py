@@ -15,7 +15,15 @@ from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.factories import make_jira_target, make_report, make_section, write_report
+from tests.conftest import REPO_ROOT
+from tests.factories import (
+    blocks_the_target_refuses,
+    make_jira_target,
+    make_report,
+    make_section,
+    read_yaml,
+    write_report,
+)
 from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
@@ -46,6 +54,13 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
+}
+EXAMPLE = REPO_ROOT / "data" / "example.yaml"
+REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
+    "markdown": [],
+    "notion": [],
+    "adf": [],
+    "slack": ["walkthrough"],
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
@@ -133,6 +148,17 @@ def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, oth
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
 def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> None:
     _check(CLEAN_BLOCKS, target)
+
+
+def test_each_target_refuses_these_top_level_blocks_of_the_example() -> None:
+    example = parse_report(read_yaml(EXAMPLE))
+
+    refused = {
+        target: [example.blocks[index].type for index in blocks_the_target_refuses(example, target)]
+        for target in EXPORT_TARGETS
+    }
+
+    assert refused == REFUSED_IN_THE_EXAMPLE
 
 
 def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() -> None:
