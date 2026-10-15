@@ -666,6 +666,47 @@ def test_a_toned_meter_card_and_walkthrough_step_lead_their_labels_with_their_do
     )
 
 
+@pytest.mark.parametrize(
+    ("card", "written"),
+    [
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]},
+            "* 🔴 **Err**: 3 🔵 **api**\n",
+            id="a-tone-unlike-the-badge-colour-keeps-its-dot",
+        ),
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "info", "badges": ["API"]},
+            "* **Err**: 3 🔵 **api**\n",
+            id="a-tone-like-the-badge-colour-leaves-the-dot-to-the-badge",
+        ),
+        pytest.param(
+            {"label": "Err", "value": "3", "tone": "info", "badges": ["RISK", "API"]},
+            "* **Err**: 3 🔴 **risk** 🔵 **api**\n",
+            id="a-tone-like-any-badge-colour-leaves-the-dot-to-that-badge",
+        ),
+        pytest.param(
+            {"label": "Err", "value": "3", "badges": ["API"]},
+            "* **Err**: 3 🔵 **api**\n",
+            id="a-badge-without-a-card-tone",
+        ),
+    ],
+)
+def test_a_toned_card_with_badges_shows_its_dot_unless_a_badge_shares_its_colour(
+    card: dict[str, Any], written: str
+) -> None:
+    badges = {**API_BADGES, "RISK": {"label": "risk", "tone": "red", "legend": False}}
+
+    assert markdown_of([{"type": "cards", "items": [card]}], badges=badges) == (
+        "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n" + written
+    )
+
+
+def test_a_toned_meter_item_without_a_label_shows_no_dot() -> None:
+    meter = {"type": "meter", "items": [{"label": "", "value": 3, "max": 4, "tone": "warning"}]}
+
+    assert markdown_of([meter]) == "- ████████░░ 75.0%\n"
+
+
 def test_a_table_drops_column_tones_and_widths_markdown_cannot_show() -> None:
     table = {
         "type": "table",
@@ -1681,7 +1722,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "* **Site**: West\n* **Owner**: ops\n\n"
         "- **Lead**: **Ana**\n\n"
         "* **Drift**: first\n\n  second\n* **Gap**\n\n"
-        "- **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
+        "- 🟢 **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
         "**Affects**: 🔵 **api** 🟢 **ops**\n\n"
         "- **Owners**: 🟣 **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"

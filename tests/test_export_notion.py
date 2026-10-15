@@ -717,7 +717,8 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
         "- **Lead**: **Ana**\n<empty-block/>\n"
         "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
-        '- **Clean**: 9 (90.0%) <span color="green">**▲ +1**</span> <span color="blue">**api**</span>\n'
+        '- <span color="green">**Clean**</span>: 9 (90.0%) <span color="green">**▲ +1**</span> '
+        '<span color="blue">**api**</span>\n'
         '\tsince Monday {color="gray"}\n'
         "- **Lag**: 3 days → flat\n"
         '**Affects**: <span color="blue">**api**</span> <span color="brown">**ops**</span>\n'
@@ -1398,6 +1399,15 @@ def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
         "\t<tr>\n\t\t<td>**Name**</td>\n\t</tr>\n"
         '\t<tr>\n\t\t<td>**x <span color="purple">New</span>**</td>\n\t</tr>\n'
         "</table>\n"
+    )
+
+
+def test_a_card_colours_its_label_when_its_badge_has_another_colour() -> None:
+    badges = {"API": {"label": "api", "tone": "blue", "legend": False}}
+    cards = {"type": "cards", "items": [{"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]}]}
+
+    assert notion_of([cards], badges=badges) == (
+        '- <span color="red">**Err**</span>: 3 <span color="blue">**api**</span>\n'
     )
 
 

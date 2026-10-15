@@ -57,7 +57,7 @@ from skaldr.export.tree import (
     capped_heading_level,
     heading_of,
 )
-from skaldr.models import SwimlaneStepState, parse_report
+from skaldr.models import SwimlaneStepState, ToneLiteral, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -855,7 +855,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
             (
                 ListEntry(
                     (
-                        *bold("Clean"),
+                        TonedLabel("success", bold("Clean")),
                         Plain(": "),
                         Plain("9"),
                         Plain(" "),
@@ -911,14 +911,23 @@ def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRi
     assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
 
 
-def test_a_toned_card_that_shows_a_badge_leaves_the_colour_to_the_badge() -> None:
-    card = {"label": "Cost", "value": 5, "tone": "danger", "badges": ["API"]}
+@pytest.mark.parametrize(
+    ("tone", "label"),
+    [
+        pytest.param("info", bold("Cost"), id="a-badge-of-the-same-colour-carries-the-tone"),
+        pytest.param(
+            "danger", (TonedLabel("danger", bold("Cost")),), id="a-badge-of-another-colour-does-not"
+        ),
+    ],
+)
+def test_a_toned_card_leaves_its_colour_only_to_a_badge_of_the_same_colour(
+    tone: ToneLiteral, label: ExportRich
+) -> None:
+    card = {"label": "Cost", "value": 5, "tone": tone, "badges": ["API"]}
 
     assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
-        ListNode(
-            "bullet", (ListEntry((*bold("Cost"), Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)
-        ),
+        ListNode("bullet", (ListEntry((*label, Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)),
     )
 
 
