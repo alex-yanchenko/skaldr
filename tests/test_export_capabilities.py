@@ -174,6 +174,21 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
+def test_a_refusal_in_the_source_line_of_the_footer_names_meta_source() -> None:
+    meta = {"title": "Counts", "source": "the [cold room]{tone=danger} log"}
+    report = parse_report(make_report(meta=meta))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, lower_report(report), "markdown")
+
+    assert vars(raised.value) == {
+        "target": "markdown",
+        "why": "GitHub Markdown cannot colour text, so it cannot show the colour of 'cold room'",
+        "instead": "write the text without the colour or export the document elsewhere",
+        "where": "at meta.source",
+    }
+
+
 def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
     with pytest.raises(ExportRejectedError) as raised:
         _check([*COLOURED_TEXT, *LETTERED_LIST], "slack")
