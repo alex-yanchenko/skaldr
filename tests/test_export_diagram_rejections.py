@@ -11,7 +11,13 @@ from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
 from tests.factories import make_report, write_report
-from tests.factories.capability_factory import DIAGRAM_CASES, DIAGRAM_REFUSALS, RefusedCase
+from tests.factories.capability_factory import (
+    DIAGRAM_ACCEPTED_CASES,
+    DIAGRAM_CASES,
+    DIAGRAM_REFUSALS,
+    AcceptedCase,
+    RefusedCase,
+)
 
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 EXAMPLE_RANGE_PATH = "blocks.4.range"
@@ -41,6 +47,13 @@ def test_export_refuses_each_diagram_case_and_writes_nothing(
 
     captured = capsys.readouterr()
     assert (captured.out, captured.err, export_dir.exists()) == ("", f"error: {case.message()}\n", False)
+
+
+@pytest.mark.parametrize("case", DIAGRAM_ACCEPTED_CASES)
+def test_a_target_that_shows_a_diagram_case_exports_it(tmp_path: Path, case: AcceptedCase) -> None:
+    data_path = write_report(tmp_path, make_report(blocks=case.blocks))
+
+    assert main([str(data_path), "--export", case.target, "--export-dir", str(tmp_path / "exported")]) == 0
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)

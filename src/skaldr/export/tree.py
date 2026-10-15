@@ -28,6 +28,7 @@ AuthoredName = Literal[
 MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
+GraphKind = Literal["flow", "fan"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 COLUMN_RATIO_TOTAL: Final = 100
 
@@ -192,6 +193,7 @@ class Graph:
     direction: Literal["TB", "LR"]
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
+    kind: GraphKind = "flow"
 
 
 @dataclass(frozen=True)

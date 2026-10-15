@@ -1,8 +1,9 @@
 import json
 import os
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, get_args
 
 import pytest
 
@@ -19,6 +20,7 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     Graph,
+    GraphKind,
     GraphNode,
     GridColumn,
     Heading,
@@ -80,7 +82,6 @@ SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
 WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
-MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
 TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
 TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
@@ -632,19 +633,24 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
         pytest.param(CodeBlock("x"), "```\nx\n```\n", id="code-without-language"),
         pytest.param(CodeBlock("a ``` b"), "````\na ``` b\n````\n", id="code-with-a-fence-inside"),
         pytest.param(DisplayMath("e = mc^2"), "```latex\ne = mc^2\n```\n", id="math"),
-        pytest.param(Diagram(ONE_NODE_GRAPH), f"{MERMAID_ONE_NODE}\n", id="diagram"),
-        pytest.param(
-            Diagram(
-                ONE_NODE_GRAPH,
-                (make_bullets(make_list_entry("A", make_bullets(make_list_entry("by aisle")))),),
-            ),
-            f"{MERMAID_ONE_NODE}\n\n* A\n  * by aisle\n",
-            id="diagram-with-its-supplement",
-        ),
     ],
 )
 def test_a_fenced_block_carries_its_language(node: Node, text: str) -> None:
     assert render_slack([node]) == text
+
+
+@pytest.mark.parametrize("kind", get_args(GraphKind))
+def test_a_flow_or_fan_diagram_the_check_refuses_is_an_internal_error_when_the_writer_is_called_alone(
+    kind: GraphKind,
+) -> None:
+    graph = replace(ONE_NODE_GRAPH, kind=kind)
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Diagram(graph)])
+
+    assert str(raised.value) == (
+        f"a Slack canvas has no form for a {kind} diagram; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(

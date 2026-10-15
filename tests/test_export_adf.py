@@ -29,6 +29,7 @@ from skaldr.export.tree import (
     Divider,
     Graph,
     GraphEdge,
+    GraphKind,
     GraphNode,
     GridColumn,
     Heading,
@@ -59,7 +60,6 @@ from skaldr.export.tree import (
 from skaldr.richtext import Code, Plain, Styled
 from tests.factories import check_nodes, refusal_of
 from tests.factories.adf_factory import cell as _cell
-from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
 from tests.factories.adf_factory import text_entry as _text_entry
@@ -821,39 +821,17 @@ def test_tabs_are_one_expand_per_tab() -> None:
     )
 
 
-def test_a_flow_diagram_is_a_bullet_list_of_its_steps_and_where_each_leads() -> None:
-    node = Diagram(_flow(), (ListNode("bullet", (_text_entry("detail"),)),))
+@pytest.mark.parametrize("kind", get_args(GraphKind))
+def test_a_flow_or_fan_diagram_the_check_refuses_is_an_internal_error_when_the_writer_is_called_alone(
+    kind: GraphKind,
+) -> None:
+    graph = Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A")), (GraphEdge("hub", "s1"),), kind)
 
-    assert _rendered(node) == _doc(
-        {
-            "type": "bulletList",
-            "content": [
-                _item(_paragraph(_text("1: Draft: write it → 2: Review"))),
-                _item(_paragraph(_text("2: Review → 3: Ship"))),
-                _item(_paragraph(_text("3: Ship → 1: Draft (loop back)"))),
-            ],
-        },
-        {"type": "bulletList", "content": [_item(_words("detail"))]},
-    )
-
-
-def test_a_fan_diagram_names_each_spoke_its_hub_leads_to() -> None:
-    graph = Graph(
-        "LR",
-        (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
-        (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
-    )
-
-    assert _rendered(Diagram(graph)) == _doc(
-        {
-            "type": "bulletList",
-            "content": [
-                _item(_paragraph(_text("Hub → A, B"))),
-                _item(_words("A")),
-                _item(_words("B")),
-            ],
-        }
-    )
+    with pytest.raises(
+        ExportInvariantError,
+        match=_exactly(f"ADF has no form for a {kind} diagram; the export check should have refused it"),
+    ):
+        render_adf((Diagram(graph),))
 
 
 def test_a_chart_is_its_data_table_alone() -> None:
@@ -944,7 +922,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Toggle: "expand",
     Columns: "paragraph",
     Tabs: "expand",
-    Diagram: "bulletList",
+    Diagram: "table",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

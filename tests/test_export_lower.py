@@ -238,6 +238,7 @@ def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
                 "LR",
                 (GraphNode("hub", "Hub"), GraphNode("s1", "A", "a^2"), GraphNode("s2", "B", "plain")),
                 (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+                "fan",
             ),
             (ListNode("bullet", (ListEntry((*bold("A"), Plain(": "), InlineMath("a^2"))),)),),
         ),
@@ -259,6 +260,7 @@ def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> Non
                 "LR",
                 (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
                 (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+                "fan",
             ),
             (
                 ListNode(
@@ -293,7 +295,7 @@ def test_a_fan_points_its_edges_the_way_it_says(direction: str, edges: tuple[Gra
 
     assert lowered([fan]) == (
         Diagram(
-            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges),
+            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges, "fan"),
             (
                 ListNode(
                     "bullet",

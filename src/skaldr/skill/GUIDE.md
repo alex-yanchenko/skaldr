@@ -520,6 +520,10 @@ than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (
 `neutral·info·success·warning·danger·accent`) accents a node's border + number; use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
 
+The GitHub-flavored and Notion exports draw a flow as a Mermaid diagram. The ADF and Slack canvas
+exports cannot draw one, so they refuse a document holding a `flow`; for those targets, write the
+steps as a numbered list.
+
 ## The `fan`
 
 A one-to-many shape: several nodes converging into one, or one branching out to several. Reach for
@@ -540,6 +544,10 @@ sit in a dashed well; a single arrow joins them to the `hub` (the one). `directi
 `hub` and `spokes` are flow nodes: each takes `label`, optional `tone`, `note` (rich, one line),
 `points` (detail bullets), and `badges`. Use `direction: out` for the reverse (one hub branching to
 the spokes).
+
+As with a `flow`, the GitHub-flavored and Notion exports draw a fan as a Mermaid diagram, and the
+ADF and Slack canvas exports refuse a document holding one; for those targets, write the hub and
+its spokes as a list.
 
 ## The `walkthrough`
 
@@ -1502,7 +1510,6 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
 | a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
 | `grid` | its cells one after another |
-| `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
 | `chart` | its data table |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
@@ -1517,6 +1524,8 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 The ADF export refuses:
 
 - a `range`, since ADF cannot draw a range bar; use a `meter` or a `table`.
+- a `flow`, since ADF cannot draw a diagram; write the steps as a numbered list.
+- a `fan`, for the same reason; write the hub and its spokes as a list.
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export, and a publish to Jira, before anything is written or sent, with an error naming the block in the document's own terms, what it was inside, its path in the YAML, the nearest heading above it, and what to do instead, for example `ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading 'Totals'; move the table out of the panel` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle, at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle; move the toggle out of the toggle`. The block, and the panel, grid cell, toggle, collapsed section or part, or set of tabs that refuses it, are named as you wrote them (`ADF cannot place a comparison inside a panel`, `ADF cannot place a toggle inside a toggle that is itself inside a section`), so a `link` card is a link card, a `comparison` is a comparison, and a `note` is a note, even though ADF would write each as a quote, a table or a panel. In a document built by an `index`, the path counts the parts as blocks of the index (`blocks.0.part.blocks.1.toggle`). Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
@@ -1531,7 +1540,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and one nested list; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text when it comes before the item's nested list. A list item holding anything else, such as a paragraph after its nested list, a code block, table, quote, callout, image, media, diagram, math block, heading, toggle, tabs, divider or a second nested list, fails the export with an error naming the YAML path of the block that holds it, since a canvas could only show it after the whole list, away from its item. A canvas joins two lists in a row into one, so a paragraph holding `&nbsp;`, which the canvas stores as a single no-break space, keeps them apart, such as a `fact_strip` right before a `cards` block. A canvas numbers every list from 1, so a numbered list that starts at another number fails the export with an error naming its YAML path |
 | `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`; a `panel` has no icon, as on the page, so its body starts with its bold title. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
 | `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
-| `flow`, `fan`, `chart` | the same Mermaid block as the GitHub-flavored export, which a canvas shows as a code block of the diagram's source, with the list of steps or the data table under it |
+| `chart` | the same Mermaid block as the GitHub-flavored export, which a canvas shows as a code block of the chart's source, with the data table under it |
 | `quote` | quoted lines, with the citation on its own line in italics |
 | `divider` | `---` at the top level; dropped inside a list item or a grid column |
 | a collapsed `section` | a heading at its level, then its content |
@@ -1554,6 +1563,8 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 The canvas export refuses:
 
 - a `range`, since a canvas cannot draw a range bar; use a `meter` or a `table`.
+- a `flow`, since a canvas cannot draw a diagram; write the steps as a numbered list.
+- a `fan`, for the same reason; write the hub and its spokes as a list.
 
 A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count, its path in the YAML and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters, and `skaldr --check --for slack` fails it too, since it writes the canvas in memory to measure it. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text`, `callout` or `def_list` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.def_list`); move the second list or the paragraph out of the list.
 

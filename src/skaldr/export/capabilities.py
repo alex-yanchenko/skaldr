@@ -18,7 +18,7 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
-OccurrenceFeature = Literal["range"]
+OccurrenceFeature = Literal["range", "flow diagram", "fan diagram"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -125,6 +125,9 @@ _TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 }
 
 
+_DRAWING_NO_DIAGRAM: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+
+
 def _refused_by(targets: Iterable[ExportTarget], cannot: str, instead: str) -> dict[ExportTarget, Capability]:
     return {target: Rejection(f"{_TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
 
@@ -179,6 +182,12 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         }
     ),
     "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
+    "flow diagram": _kept_except(
+        _refused_by(_DRAWING_NO_DIAGRAM, "draw a flow diagram", "write the steps as a numbered list")
+    ),
+    "fan diagram": _kept_except(
+        _refused_by(_DRAWING_NO_DIAGRAM, "draw a fan diagram", "write the hub and its spokes as a list")
+    ),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

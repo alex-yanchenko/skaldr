@@ -98,7 +98,7 @@ def lower_flow(block: Flow, lowering: Lowering) -> list[Node]:
     edges = [GraphEdge(source, target) for source, target in pairwise(keys)]
     if block.loop:
         edges.append(GraphEdge(keys[-1], keys[0], dashed=True))
-    graph = Graph("TB" if block.style == "steps" else "LR", nodes, tuple(edges))
+    graph = Graph("TB" if block.style == "steps" else "LR", nodes, tuple(edges), "flow")
     return [Diagram(graph, _supplement(block.steps, lowering))]
 
 
@@ -110,7 +110,7 @@ def lower_fan(block: Fan, lowering: Lowering) -> list[Node]:
         GraphEdge(spoke.key, "hub") if block.direction == "in" else GraphEdge("hub", spoke.key)
         for spoke in spokes
     )
-    graph = Graph("LR", (_graph_node("hub", block.hub, lowering), *spokes), edges)
+    graph = Graph("LR", (_graph_node("hub", block.hub, lowering), *spokes), edges, "fan")
     return [Diagram(graph, _supplement([block.hub, *block.spokes], lowering))]
 
 

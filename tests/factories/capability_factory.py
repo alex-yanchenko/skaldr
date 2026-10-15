@@ -159,6 +159,26 @@ RANGE: dict[str, Any] = {
     "segments": [{"label": "Counted", "span": 3}, {"label": "Left", "span": 1}],
 }
 USE_A_METER = "use a meter or a table"
+FLOW: dict[str, Any] = {
+    "type": "flow",
+    "loop": True,
+    "steps": [{"label": "Scan", "tone": "info"}, {"label": "Count", "points": ["twice"]}],
+}
+FAN: dict[str, Any] = {
+    "type": "fan",
+    "hub": {"label": "Count", "tone": "accent"},
+    "spokes": [{"label": "Scans"}, {"label": "Recounts", "note": "overflow only"}],
+}
+AS_A_NUMBERED_LIST = "write the steps as a numbered list"
+AS_A_LIST = "write the hub and its spokes as a list"
+
+
+@dataclass(frozen=True)
+class AcceptedCase:
+    target: ExportTarget
+    blocks: list[dict[str, Any]]
+
+
 DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     "markdown-range": RefusedCase(
         "markdown", [RANGE], "GitHub cannot draw a range bar", USE_A_METER, "at blocks.0.range"
@@ -184,5 +204,29 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         USE_A_METER,
         "at blocks.0.grid.cells.0.blocks.0.range",
     ),
+    "adf-flow": RefusedCase(
+        "adf", [FLOW], "ADF cannot draw a flow diagram", AS_A_NUMBERED_LIST, "at blocks.0.flow"
+    ),
+    "slack-flow": RefusedCase(
+        "slack", [FLOW], "a Slack canvas cannot draw a flow diagram", AS_A_NUMBERED_LIST, "at blocks.0.flow"
+    ),
+    "adf-fan": RefusedCase("adf", [FAN], "ADF cannot draw a fan diagram", AS_A_LIST, "at blocks.0.fan"),
+    "slack-fan": RefusedCase(
+        "slack", [FAN], "a Slack canvas cannot draw a fan diagram", AS_A_LIST, "at blocks.0.fan"
+    ),
+    "slack-flow-in-a-toggle": RefusedCase(
+        "slack",
+        [make_toggle(FLOW)],
+        "a Slack canvas cannot draw a flow diagram",
+        AS_A_NUMBERED_LIST,
+        "at blocks.0.toggle.blocks.0.flow",
+    ),
+}
+DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
+    "markdown-flow": AcceptedCase("markdown", [FLOW]),
+    "notion-flow": AcceptedCase("notion", [FLOW]),
+    "markdown-fan": AcceptedCase("markdown", [FAN]),
+    "notion-fan": AcceptedCase("notion", [FAN]),
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
+DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

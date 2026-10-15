@@ -36,26 +36,6 @@ The recount runs ![](slack_date:2026-07-10) to ![](slack_date:2026-07-14), is le
 
 ### Count pipeline
 
-```mermaid
-flowchart LR
-    s1["1: Scan"]:::info
-    s2["2: Reconcile"]:::accent
-    s3["3: Flag"]:::warning
-    s4["4: Fix"]:::success
-    s5["5: Recount"]
-    s1 --> s2
-    s2 --> s3
-    s3 --> s4
-    s4 --> s5
-    s5 -.-> s1
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
-```
-
-* **Flag** **System**
-
 ### Discrepancy resolution across teams
 
 | Lane | Detect<br>In-house | Investigate | Resolve | Escalate<br>Vendor claim |
@@ -338,20 +318,6 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 :::
 
 ## Where the count comes from
-
-```mermaid
-flowchart LR
-    hub["Reconciled count"]:::accent
-    s1["Handheld scans<br>per-aisle, live"]:::info
-    s2["Fixed-reader gates"]:::info
-    s3["Manual recount<br>overflow aisles only"]:::warning
-    s1 --> hub
-    s2 --> hub
-    s3 --> hub
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
-```
 
 ## How to run the recount
 

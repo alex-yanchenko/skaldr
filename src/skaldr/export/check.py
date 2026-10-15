@@ -20,6 +20,7 @@ from skaldr.export.capabilities import (
     ListItemFeature,
     ListStart,
     Occurrence,
+    OccurrenceFeature,
     Placement,
     Rejection,
     ScriptForm,
@@ -48,6 +49,8 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    Graph,
+    GraphKind,
     Heading,
     ListEntry,
     ListNode,
@@ -55,11 +58,13 @@ from skaldr.export.tree import (
     Media,
     Node,
     Paragraph,
+    PieChart,
     Quote,
     TableNode,
     TableOfContents,
     Tabs,
     Toggle,
+    XYChart,
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
@@ -96,6 +101,12 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Columns: "grid",
     Tabs: "set of tabs",
     Diagram: "diagram",
+}
+
+
+_GRAPH_FEATURES: Final[Mapping[GraphKind, OccurrenceFeature]] = {
+    "flow": "flow diagram",
+    "fan": "fan diagram",
 }
 
 
@@ -301,7 +312,10 @@ class _TreeWalk:
                 inside = place.in_a_toggle(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
-            case Columns() | Diagram():
+            case Diagram():
+                yield from self.diagram_hits(node)
+                yield from self.nodes(nested_nodes(node), place)
+            case Columns():
                 yield from self.nodes(nested_nodes(node), place)
             case (
                 Paragraph() | CodeBlock() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents()
@@ -310,6 +324,15 @@ class _TreeWalk:
             case _:
                 assert_never(node)
         yield from self.placement_hits(node, place)
+
+    def diagram_hits(self, node: Diagram) -> Iterator[FeatureHit]:
+        match node.figure:
+            case Graph():
+                yield self.hit(Occurrence(_GRAPH_FEATURES[node.figure.kind]), node.authored_at)
+            case PieChart() | XYChart():
+                return
+            case _:
+                assert_never(node.figure)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)

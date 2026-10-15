@@ -41,6 +41,7 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     Figure,
+    Graph,
     Heading,
     ListEntry,
     ListKind,
@@ -234,6 +235,15 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     ]
 
 
+def _canvas_diagram(node: Diagram, place: Place) -> list[_CanvasBlock]:
+    if isinstance(node.figure, Graph):
+        raise ExportInvariantError(
+            f"a Slack canvas has no form for a {node.figure.kind} diagram; "
+            "the export check should have refused it"
+        )
+    return [_Mermaid(node.figure), *_canvas_blocks(node.supplement, place)]
+
+
 def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
@@ -251,7 +261,7 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
         case Columns():
             return _canvas_columns(node, place)
         case Diagram():
-            return [_Mermaid(node.figure), *_canvas_blocks(node.supplement, place)]
+            return _canvas_diagram(node, place)
         case TableOfContents():
             return []
         case _:

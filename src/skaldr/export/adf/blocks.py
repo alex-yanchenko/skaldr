@@ -71,7 +71,6 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Plain
 
 Container = Literal["doc", "panel", "expand", "nested_expand"]
 
@@ -87,8 +86,6 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
 MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
-LOOP_BACK_NOTE: Final = " (loop back)"
-LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
@@ -111,22 +108,6 @@ def _empty_paragraph() -> AdfParagraph:
 
 def _padded(cells: Sequence[TableCell], width: int) -> list[TableCell]:
     return [*cells, *[TableCell(())] * (width - len(cells))]
-
-
-def _graph_entries(graph: Graph) -> tuple[ListEntry, ...]:
-    labels = {node.key: node.label for node in graph.nodes}
-    entries: list[ListEntry] = []
-    for node in graph.nodes:
-        text = node.label + (f": {node.note}" if node.note else "")
-        leads_to = [
-            labels[edge.target] + (LOOP_BACK_NOTE if edge.dashed else "")
-            for edge in graph.edges
-            if edge.source == node.key
-        ]
-        if leads_to:
-            text += LEADS_TO + ", ".join(leads_to)
-        entries.append(ListEntry((Plain(text),)))
-    return tuple(entries)
 
 
 class _AdfBlocks:
@@ -233,11 +214,11 @@ class _AdfBlocks:
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
-        supplement = self.blocks(node.supplement, container)
-        if not isinstance(node.figure, Graph):
-            return supplement
-        steps = self.list_blocks(ListNode("bullet", _graph_entries(node.figure)), container)
-        return [*steps, *supplement]
+        if isinstance(node.figure, Graph):
+            raise ExportInvariantError(
+                f"ADF has no form for a {node.figure.kind} diagram; the export check should have refused it"
+            )
+        return self.blocks(node.supplement, container)
 
     def list_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
         if not node.entries:

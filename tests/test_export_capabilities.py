@@ -57,13 +57,15 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
 }
 DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "range": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
+    "flow diagram": {"adf": "reject", "slack": "reject"},
+    "fan diagram": {"adf": "reject", "slack": "reject"},
 }
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
     "markdown": ["range"],
     "notion": ["range"],
-    "adf": ["range"],
-    "slack": ["range", "walkthrough"],
+    "adf": ["range", "flow", "fan"],
+    "slack": ["range", "flow", "fan", "walkthrough"],
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
