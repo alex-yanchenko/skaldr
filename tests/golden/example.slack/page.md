@@ -254,24 +254,11 @@ One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reaso
 
 **Open discrepancies over the count window**
 
-```mermaid
-xychart-beta
-    x-axis ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"]
-    line [1500, 1180, 760, 410, 150]
-```
-
 | Series | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 |
 | --- | --- | --- | --- | --- | --- |
 | Open | 1,500 | 1,180 | 760 | 410 | 150 |
 
 **How discrepancies resolved**
-
-```mermaid
-pie
-    "Fixed on floor" : 900
-    "System defect" : 760
-    "Vendor" : 400
-```
 
 | Slice | Value | Share |
 | --- | --- | --- |

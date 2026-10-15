@@ -193,6 +193,39 @@ RICH_NOTES: dict[str, str] = {
 }
 
 
+MERMAID_TARGETS: tuple[tuple[ExportTarget, str], ...] = (("markdown", "GitHub"), ("notion", "Notion"))
+TABLE_TARGETS: tuple[ExportTarget, ...] = ("adf", "slack")
+
+
+def xy_chart(variant: str, *series: list[float], stacked: bool = False) -> dict[str, Any]:
+    labelled = [{"label": f"Zone {index}", "values": values} for index, values in enumerate(series, start=1)]
+    return {
+        "type": "chart",
+        "variant": variant,
+        "stacked": stacked,
+        "categories": ["Mon", "Tue"],
+        "series": labelled,
+    }
+
+
+DONUT: dict[str, Any] = {
+    "type": "chart",
+    "variant": "donut",
+    "slices": [{"label": "Fixed", "value": 9, "tone": "success"}, {"label": "Open", "value": 3}],
+}
+ONE_SERIES_CHARTS: dict[str, dict[str, Any]] = {
+    "donut": DONUT,
+    "one-series-bar": xy_chart("bar", [4, 6]),
+    "one-series-line": xy_chart("line", [4, 6]),
+}
+SEVERAL_SERIES_OR_STACKED: dict[str, dict[str, Any]] = {
+    "two-series-bar": xy_chart("bar", [4, 6], [1, 2]),
+    "two-series-line": xy_chart("line", [4, 6], [1, 2]),
+    "stacked-bar": xy_chart("bar", [4, 6], [1, 2], stacked=True),
+    "stacked-single-bar": xy_chart("bar", [4, 6], stacked=True),
+}
+
+
 def flow_with_a_note(note: str) -> list[dict[str, Any]]:
     flow = {"type": "flow", "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
     return [{"type": "heading", "text": "Count"}, flow, REFERENCES]
@@ -267,6 +300,18 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         [{**FAN, "hub": {"label": "Count", "note": RICH_NOTES["inline-math"]}}],
         "at blocks.0.fan",
     ),
+    **{
+        f"{target}-chart-{name}": RefusedCase(
+            target,
+            [chart],
+            f"{subject} cannot draw a chart with several series or stacked bars, "
+            "since its Mermaid chart has no legend and no stacking",
+            "draw one chart per series, or write the values in a table",
+            "at blocks.0.chart",
+        )
+        for target, subject in MERMAID_TARGETS
+        for name, chart in SEVERAL_SERIES_OR_STACKED.items()
+    },
     "adf-flow-with-a-rich-note-is-refused-as-a-flow": RefusedCase(
         "adf",
         flow_with_a_note(RICH_NOTES["web-link"]),
@@ -282,6 +327,16 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "notion-fan": AcceptedCase("notion", [FAN]),
     "markdown-flow-with-a-styled-note": AcceptedCase("markdown", flow_with_a_note("by **aisle** and `bin`")),
     "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
+    **{
+        f"{target}-chart-{name}": AcceptedCase(target, [chart])
+        for target, _ in MERMAID_TARGETS
+        for name, chart in ONE_SERIES_CHARTS.items()
+    },
+    **{
+        f"{target}-chart-{name}": AcceptedCase(target, [chart])
+        for target in TABLE_TARGETS
+        for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_OR_STACKED}.items()
+    },
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
 DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

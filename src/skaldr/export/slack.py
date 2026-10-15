@@ -31,8 +31,8 @@ from skaldr.export.markup import (
     styled,
     table_width,
 )
-from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import ExportRich
+from skaldr.export.swaps import chart_as_its_data_table
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -40,8 +40,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Figure,
-    Graph,
     Heading,
     ListEntry,
     ListKind,
@@ -138,11 +136,6 @@ class _Title:
 
 
 @dataclass(frozen=True)
-class _Mermaid:
-    figure: Figure
-
-
-@dataclass(frozen=True)
 class _CanvasCallout:
     icon: str | None
     blocks: "tuple[_CanvasBlock, ...]"
@@ -164,7 +157,6 @@ _CanvasBlock = (
     | Media
     | Quote
     | Divider
-    | _Mermaid
     | _CanvasCallout
     | _Layout
 )
@@ -235,15 +227,6 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     ]
 
 
-def _canvas_diagram(node: Diagram, place: Place) -> list[_CanvasBlock]:
-    if isinstance(node.figure, Graph):
-        raise ExportInvariantError(
-            f"a Slack canvas has no form for a {node.figure.kind} diagram; "
-            "the export check should have refused it"
-        )
-    return [_Mermaid(node.figure), *_canvas_blocks(node.supplement, place)]
-
-
 def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
@@ -261,7 +244,7 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
         case Columns():
             return _canvas_columns(node, place)
         case Diagram():
-            return _canvas_diagram(node, place)
+            return _canvas_blocks(chart_as_its_data_table(node, "a Slack canvas"), place)
         case TableOfContents():
             return []
         case _:
@@ -401,8 +384,6 @@ class _CanvasWriter:
                 return self.quote_lines(block)
             case Divider():
                 return [DIVIDER_LINE]
-            case _Mermaid():
-                return mermaid_fence_lines(block.figure)
             case _CanvasCallout():
                 return self.callout_lines(block)
             case _Layout():

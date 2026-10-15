@@ -212,6 +212,7 @@ class XYChart:
     mark: XYChartMark
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
+    stacked: bool = False
 
 
 Figure = Graph | PieChart | XYChart

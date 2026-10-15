@@ -84,16 +84,12 @@ def _donut_table(block: Chart) -> TableNode:
     return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total), authored_as="chart")
 
 
-def _mermaid_cannot_label_its_series(block: Chart) -> bool:
-    return block.stacked or len(block.series) > 1
-
-
 def _donut(block: Chart) -> Diagram:
     pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
     return Diagram(pie, (_donut_table(block),))
 
 
-def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
+def _xy_chart(block: Chart, mark: XYChartMark) -> Diagram:
     table = TableNode(
         plain_cells(SERIES_COLUMN, *block.categories),
         tuple(
@@ -102,10 +98,8 @@ def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
         ),
         authored_as="chart",
     )
-    if _mermaid_cannot_label_its_series(block):
-        return table
-    chart = XYChart(mark, tuple(block.categories), tuple(tuple(series.values) for series in block.series))
-    return Diagram(chart, (table,))
+    series = tuple(tuple(series.values) for series in block.series)
+    return Diagram(XYChart(mark, tuple(block.categories), series, block.stacked), (table,))
 
 
 def lower_chart(block: Chart) -> list[Node]:

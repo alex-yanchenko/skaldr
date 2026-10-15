@@ -7,7 +7,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
-from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection
+from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
@@ -38,7 +38,7 @@ from tests.factories.capability_factory import (
 )
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
-Verdict = Literal["keep", "reject"]
+Verdict = Literal["keep", "reject", "swap"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
@@ -65,11 +65,18 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
         "adf": "reject",
         "slack": "reject",
     },
+    "chart": {"adf": "swap", "slack": "swap"},
+    "chart with several series or stacked": {
+        "markdown": "reject",
+        "notion": "reject",
+        "adf": "swap",
+        "slack": "swap",
+    },
 }
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
-    "markdown": ["range"],
-    "notion": ["range"],
+    "markdown": ["range", "chart"],
+    "notion": ["range", "chart"],
     "adf": ["range", "flow", "fan"],
     "slack": ["range", "flow", "fan", "walkthrough"],
 }
@@ -97,7 +104,9 @@ REJECTIONS = [
 
 
 def _verdict(capability: Capability) -> Verdict:
-    return "reject" if isinstance(capability, Rejection) else capability
+    if isinstance(capability, Rejection):
+        return "reject"
+    return "swap" if isinstance(capability, Swap) else capability
 
 
 def _template_fields(template: str) -> set[str]:

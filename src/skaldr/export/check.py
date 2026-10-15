@@ -349,8 +349,12 @@ class _TreeWalk:
                 if any(_loses_meaning_in_a_plain_label(graph_node.note) for graph_node in node.figure.nodes):
                     note_feature = "link, citation or math in a flow or fan step's note"
                     yield self.hit(Occurrence(note_feature), node.authored_at)
-            case PieChart() | XYChart():
-                return
+            case PieChart():
+                yield self.hit(Occurrence("chart"), node.authored_at)
+            case XYChart():
+                yield self.hit(Occurrence("chart"), node.authored_at)
+                if node.figure.stacked or len(node.figure.series) > 1:
+                    yield self.hit(Occurrence("chart with several series or stacked"), node.authored_at)
             case _:
                 assert_never(node.figure)
 

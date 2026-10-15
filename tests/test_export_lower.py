@@ -52,6 +52,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
     XYChart,
+    XYChartMark,
     capped_heading_level,
     heading_of,
 )
@@ -384,13 +385,16 @@ TWO_SERIES: list[dict[str, Any]] = [{"label": "x", "values": [1]}, {"label": "y"
         pytest.param("bar", True, TWO_SERIES[:1], [("x", "1")], id="stacked-single-bar"),
     ],
 )
-def test_a_chart_with_several_series_or_stacked_bars_is_its_table_alone(
-    variant: str, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
+def test_a_chart_with_several_series_or_stacked_bars_is_an_xy_chart_marked_stacked_over_its_table(
+    variant: XYChartMark, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
 ) -> None:
     chart = {"type": "chart", "variant": variant, "stacked": stacked, "categories": ["Q1"], "series": series}
 
     assert lowered([chart]) == (
-        TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),
+        Diagram(
+            XYChart(variant, ("Q1",), tuple((float(row[1]),) for row in rows), stacked),
+            (TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),),
+        ),
     )
 
 

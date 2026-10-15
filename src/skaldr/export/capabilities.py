@@ -23,6 +23,8 @@ OccurrenceFeature = Literal[
     "flow diagram",
     "fan diagram",
     "link, citation or math in a flow or fan step's note",
+    "chart",
+    "chart with several series or stacked",
 ]
 Feature = Literal[
     PlacementFeature,
@@ -105,7 +107,12 @@ class Rejection:
     names_the_heading: bool = False
 
 
-Capability = Literal["keep"] | Rejection
+@dataclass(frozen=True)
+class Swap:
+    writes: str
+
+
+Capability = Literal["keep"] | Rejection | Swap
 
 _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
@@ -131,6 +138,10 @@ _TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 
 
 _DRAWING_NO_DIAGRAM: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_CHART_AS_ITS_TABLE: Final = Swap(
+    "the chart's data table: a row per slice with its value and share and a total row for a donut, "
+    "a row per series with a column per category for a bar or line chart"
+)
 
 
 def _refused_by(targets: Iterable[ExportTarget], cannot: str, instead: str) -> dict[ExportTarget, Capability]:
@@ -199,6 +210,16 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         "since a diagram label holds plain text only",
         "write the note as plain text and put the rest in a text block after the diagram",
     ),
+    "chart": _kept_except(dict.fromkeys(_DRAWING_NO_DIAGRAM, _CHART_AS_ITS_TABLE)),
+    "chart with several series or stacked": {
+        **_refused_by(
+            ("markdown", "notion"),
+            "draw a chart with several series or stacked bars, "
+            "since its Mermaid chart has no legend and no stacking",
+            "draw one chart per series, or write the values in a table",
+        ),
+        **dict.fromkeys(_DRAWING_NO_DIAGRAM, _CHART_AS_ITS_TABLE),
+    },
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

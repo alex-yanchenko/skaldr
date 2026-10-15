@@ -44,6 +44,7 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.swaps import chart_as_its_data_table
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -51,7 +52,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Graph,
     Heading,
     ListEntry,
     ListNode,
@@ -214,11 +214,7 @@ class _AdfBlocks:
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
-        if isinstance(node.figure, Graph):
-            raise ExportInvariantError(
-                f"ADF has no form for a {node.figure.kind} diagram; the export check should have refused it"
-            )
-        return self.blocks(node.supplement, container)
+        return self.blocks(chart_as_its_data_table(node, "ADF"), container)
 
     def list_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
         if not node.entries:
