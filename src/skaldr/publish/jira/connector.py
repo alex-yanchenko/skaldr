@@ -10,7 +10,7 @@ from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, render_adf_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
-from skaldr.publish.connector import ContentLimit, LeftByASplitWrite, WriteGranularity
+from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import description_length, section_text, validated_blocks
 from skaldr.publish.jira.transport import JiraTransport, not_a_jira_target
@@ -67,10 +67,6 @@ class JiraConnector:
     @property
     def export_target(self) -> ExportTarget:
         return "adf"
-
-    @property
-    def left_by_a_split_write(self) -> LeftByASplitWrite | None:
-        return None
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return tuple(section_text(validated_blocks(blocks)) for blocks in render_adf_regions(page))

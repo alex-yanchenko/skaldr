@@ -3,16 +3,14 @@ import pytest
 from skaldr.publish.slack.canvas_markdown import (
     UNKEYED_SECTION,
     CanvasBlock,
-    HtmlSection,
     archived_line,
     canvas_blocks,
+    canvas_body,
     canvas_markdown_of,
     canvas_stamp_line,
     comparable_block,
     comparable_text,
-    html_sections,
     keyed_canvas,
-    left_by_a_split_canvas_write,
 )
 from skaldr.publish.transport import ShownLink, Stamp
 
@@ -329,95 +327,22 @@ def test_the_archived_line_names_the_document() -> None:
     )
 
 
-SOW_IN_SPRING = "## Planting\n\nSow in spring.\n"
-SOW_IN_MAY = "## Planting\n\nSow in May.\n"
-
-
 @pytest.mark.parametrize(
-    ("current", "expected", "left"),
+    ("raws", "body"),
     [
-        pytest.param(f"{SOW_IN_MAY}\n{SOW_IN_SPRING}", SOW_IN_MAY, True, id="inserted-before-any-delete"),
-        pytest.param(f"{SOW_IN_MAY}\n## Planting\n", SOW_IN_MAY, True, id="inserted-and-one-deleted"),
-        pytest.param("## Planting\n", SOW_IN_MAY, True, id="deleted-first-partly"),
-        pytest.param(None, SOW_IN_MAY, True, id="deleted-first-wholly"),
-        pytest.param("## Planting\n", None, True, id="removal-partly-done"),
+        pytest.param(["Sow.", "* Spade."], "Sow.\n\n* Spade.\n", id="blocks-are-blank-line-separated"),
+        pytest.param(["* One.", "* Two."], "* One.\n\n&nbsp;\n\n* Two.\n", id="two-lists-are-kept-apart"),
         pytest.param(
-            "Sow in May.\n\n## Planting\n\nSow in spring.\n", SOW_IN_MAY, False, id="a-new-block-gone"
+            ["1. One.", "- Two."], "1. One.\n\n&nbsp;\n\n- Two.\n", id="a-numbered-and-a-bullet-list"
         ),
-        pytest.param(f"## Planting\n\n{SOW_IN_SPRING}", SOW_IN_MAY, False, id="a-new-block-gone-later"),
-        pytest.param("Sow in spring.\n", SOW_IN_MAY, False, id="an-old-block-gone-from-the-front"),
-        pytest.param("Sow in spring.\n\n## Planting\n", SOW_IN_MAY, False, id="old-blocks-reordered"),
-        pytest.param(f"{SOW_IN_MAY}\nWater daily.\n", SOW_IN_MAY, False, id="a-block-nobody-published"),
-        pytest.param("Sow in spring.\n", None, False, id="removal-from-the-front"),
+        pytest.param(
+            ["* One.", " ", "* Two."], "* One.\n\n&nbsp;\n\n* Two.\n", id="a-stored-separator-is-sent-as-one"
+        ),
+        pytest.param(
+            ["* One.", "Sow.", "* Two."], "* One.\n\nSow.\n\n* Two.\n", id="a-paragraph-keeps-lists-apart"
+        ),
+        pytest.param([], "&nbsp;\n", id="no-blocks-is-one-blank-paragraph"),
     ],
 )
-def test_a_split_write_leaves_the_new_blocks_before_a_shrinking_head_of_the_old_or_that_head_alone(
-    current: str | None, expected: str | None, left: bool
-) -> None:
-    assert left_by_a_split_canvas_write(current, SOW_IN_SPRING, expected) is left
-
-
-@pytest.mark.parametrize(
-    ("html", "sections"),
-    [
-        pytest.param(
-            "<h1 id='temp:C:1'>Garden</h1><p id='temp:C:2'>Welcome <b>all</b>.</p><hr id='temp:C:3'>"
-            "<ul id='temp:C:4'><li id='temp:C:5'>Spade</li><li id='temp:C:6'>Rake &amp; hoe</li></ul>",
-            (
-                HtmlSection("temp:C:1", ("garden",)),
-                HtmlSection("temp:C:2", ("welcome", "all")),
-                HtmlSection("temp:C:3", ()),
-                HtmlSection("temp:C:4", ("spade", "rake", "hoe")),
-            ),
-            id="top-level-elements",
-        ),
-        pytest.param(
-            "<html><head><title>x</title><meta charset='utf-8'></head><body><p id='a'>Bed</p><br/>"
-            "<img id='b' src='x.png'/></body></html>",
-            (HtmlSection("a", ("bed",)), HtmlSection(None, ()), HtmlSection("b", ())),
-            id="document-wrapper-and-void-elements",
-        ),
-        pytest.param("", (), id="empty"),
-    ],
-)
-def test_each_top_level_element_of_the_html_gives_its_section_id_and_words(
-    html: str, sections: tuple[HtmlSection, ...]
-) -> None:
-    assert html_sections(html) == sections
-
-
-@pytest.mark.parametrize(
-    ("words", "block", "shown"),
-    [
-        pytest.param(("sow", "in", "spring"), "Sow in spring.", True, id="paragraph"),
-        pytest.param(("planting",), "## Planting", True, id="heading"),
-        pytest.param(("spade", "rake"), "* Spade.\n* Rake.", True, id="list-markers"),
-        pytest.param(("spade", "rake"), "1. Spade.\n2. Rake.", True, id="numbered-list"),
-        pytest.param(("spade", "rake"), "- [x] Spade.\n- [ ] Rake.", True, id="checklist-marks"),
-        pytest.param(("run", "again"), "```bash\nrun again\n```", True, id="fence-language"),
-        pytest.param(
-            ("bed", "crop", "north", "beans"),
-            "|Bed|Crop|\n|  ---  |  ---  |\n|North|Beans|",
-            True,
-            id="table",
-        ),
-        pytest.param(
-            ("see", "demo", "12"),
-            "See [DEMO-12](https://example.atlassian.net/browse/DEMO-12)",
-            True,
-            id="link-text",
-        ),
-        pytest.param(("ask", "rowan", "first"), "Ask <@U0EXAMPLE1> first", True, id="mention-shown-by-name"),
-        pytest.param(("ask", "first"), "Ask ![](@U0EXAMPLE1) first", True, id="mention-as-sent"),
-        pytest.param(("bring", "gloves"), "Bring gloves :gloves:", True, id="emoji-shown-as-a-picture"),
-        pytest.param((), "&nbsp;", True, id="list-separator"),
-        pytest.param(("note",), "::: {.callout}\nNote\n:::", True, id="callout"),
-        pytest.param(("planting",), "Sow in spring.", False, id="another-block"),
-        pytest.param(("sow", "in"), "Sow in spring.", False, id="words-missing"),
-        pytest.param(("spring", "in", "sow"), "Sow in spring.", False, id="words-out-of-order"),
-    ],
-)
-def test_an_html_section_shows_a_block_when_it_holds_the_blocks_words_in_order(
-    words: tuple[str, ...], block: str, shown: bool
-) -> None:
-    assert HtmlSection("temp:C:1", words).shows(block) is shown
+def test_a_canvas_body_is_its_blocks_with_two_lists_in_a_row_kept_apart(raws: list[str], body: str) -> None:
+    assert canvas_body(raws) == body

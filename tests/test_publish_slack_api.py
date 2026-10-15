@@ -84,26 +84,17 @@ def test_an_edit_sends_its_one_change() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("read", "content_type"),
-    [
-        pytest.param(SlackApi.canvas_markdown, "markdown", id="markdown"),
-        pytest.param(SlackApi.canvas_html, "html", id="html"),
-    ],
-)
-def test_reading_a_canvas_asks_for_its_content_in_one_form(
-    read: Callable[[SlackApi, str], str], content_type: str
-) -> None:
+def test_reading_a_canvas_asks_for_its_markdown() -> None:
     slack = Scripted((200, {"ok": True, "content": "# Garden handbook\n"}))
 
-    content = read(slack.api(), CANVAS)
+    content = slack.api().canvas_markdown(CANVAS)
 
     assert (content, [(url, form) for _, url, _, form in slack.sent()]) == (
         "# Garden handbook\n",
         [
             (
                 "https://slack.com/api/canvases.getContent",
-                {"canvas_id": CANVAS, "content_type": content_type},
+                {"canvas_id": CANVAS, "content_type": "markdown"},
             )
         ],
     )
