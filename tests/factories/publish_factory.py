@@ -11,6 +11,7 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
+from skaldr.publish.state import PublishState
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
@@ -100,6 +101,24 @@ def authored_garden(**overrides: Any) -> Authored:
 
 def write_garden_report(directory: Path, **overrides: Any) -> Path:
     return write_report(directory, make_garden_report(**overrides))
+
+
+def without_links(state: PublishState) -> PublishState:
+    targets = {
+        label: target.model_copy(
+            update={
+                "document": None
+                if target.document is None
+                else target.document.model_copy(update={"links": ()}),
+                "sections": {
+                    section: item.model_copy(update={"links": ()})
+                    for section, item in target.sections.items()
+                },
+            }
+        )
+        for label, target in state.targets.items()
+    }
+    return state.model_copy(update={"targets": targets})
 
 
 def _without_comment_markers(text: str) -> str:

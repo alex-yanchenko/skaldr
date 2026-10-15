@@ -9,10 +9,12 @@ from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
 from skaldr.publish.jira.description import layout_of, section_text
 from skaldr.publish.jira.transport import JiraTransport
+from skaldr.publish.notion.page_markdown import keyed_page, stamp_line
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
     LinksWrite,
     NewItem,
     Release,
@@ -1655,6 +1657,16 @@ def test_a_link_is_a_remote_link_whose_global_id_names_the_document_the_item_and
             ),
         ],
     )
+
+
+def test_a_link_to_an_issue_is_titled_with_its_key_so_the_notion_stamp_reads_it_back_unchanged() -> None:
+    transport = _transport(FakeJira())
+    item_link = transport.item_link("DEMO-1", "Seeds &amp; bulbs [north]")
+    link = ShownLink(service="jira", item_id="DEMO-1", url=item_link.url, title=item_link.title)
+
+    keyed = keyed_page(stamp_line(STAMP, (link,)), {})
+
+    assert (item_link, keyed.links) == (ItemLink(f"{SITE}/browse/DEMO-1", "DEMO-1"), (link,))
 
 
 def test_a_retitled_page_updates_its_link_in_place_and_a_page_no_longer_paired_loses_its_link() -> None:

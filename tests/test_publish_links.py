@@ -23,7 +23,7 @@ from skaldr.publish.links import LinkStep, describe_links, paired_items
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import load_state, save_state, state_path_for
-from skaldr.publish.transport import ShownLink
+from skaldr.publish.transport import ShownLink, Stamp
 from skaldr.publish_block import JiraTarget, NotionTarget
 from skaldr.publish_block.target import JsonFields
 from tests.factories.auth_factory import make_jira_credentials, make_notion_credentials, seed_notion
@@ -41,6 +41,7 @@ from tests.factories.publish_factory import (
     fake_registry,
     make_garden_blocks,
     make_garden_meta,
+    without_links,
     write_garden_report,
 )
 from tests.factories.report_factory import (
@@ -285,21 +286,7 @@ def test_a_state_file_that_lost_the_links_in_place_is_corrected_without_writing_
     path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
     _publish(path, transport)
     published = load_state(state_path_for(path), DOC_ID)
-    forgotten = {
-        label: target.model_copy(
-            update={
-                "document": None
-                if target.document is None
-                else target.document.model_copy(update={"links": ()}),
-                "sections": {
-                    section: item.model_copy(update={"links": ()})
-                    for section, item in target.sections.items()
-                },
-            }
-        )
-        for label, target in published.targets.items()
-    }
-    save_state(state_path_for(path), published.model_copy(update={"targets": forgotten}))
+    save_state(state_path_for(path), without_links(published))
     transport.forget_calls()
 
     outcome = _publish(path, transport)
@@ -361,6 +348,22 @@ def test_a_link_whose_address_was_edited_by_hand_is_one_link_step_and_no_unlink(
         Applied((FIRST_LINKS[2],)),
         [("write_links", "page-3", "Garden handbook")],
         (_page("page-1", "Garden handbook"),),
+    )
+
+
+def test_links_on_an_item_stamped_for_another_part_of_the_document_are_not_counted_as_its_own(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
+    _publish(path, transport)
+    transport.items["page-2"].stamp = Stamp(DOC_ID, None)
+
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+
+    assert (dry_run.refusal, dry_run.links) == (
+        None,
+        (LinkStep(NOTION_TOOLS, "link", f"{JIRA_LABEL}, section tools"),),
     )
 
 
