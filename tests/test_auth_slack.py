@@ -33,7 +33,8 @@ OTHER_GARDEN = make_slack_credentials(
 )
 NOT_A_USER_TOKEN = (
     "skaldr signs in to Slack with a user token, which starts with xoxp-; copy the User OAuth Token from "
-    "your Slack app's OAuth & Permissions page"
+    "your Slack app's OAuth & Permissions page. A rotating token (xoxe.xoxp-...) expires and skaldr does "
+    "not renew it, so it is not supported: use an app that does not rotate its tokens"
 )
 TOKEN_REJECTED = (
     "Slack rejected the user token ({code}). Copy the User OAuth Token again from your app at "
@@ -45,7 +46,7 @@ SIGN_IN_GUIDE = (
 )
 
 
-def _stored_slack() -> list[object]:
+def _stored_slack() -> list[SlackCredentials | None]:
     return [entry.credentials for entry in stored_slack_sign_ins()]
 
 
@@ -66,7 +67,9 @@ def test_a_user_token_is_checked_with_auth_test_and_named_by_its_workspace() -> 
 
 
 @pytest.mark.parametrize(
-    "token", ["xoxb-0000-bot-token", "", "  xoxp-0000"], ids=["bot", "empty", "leading-space"]
+    "token",
+    ["xoxb-0000-bot-token", "", "  xoxp-0000", "xoxe.xoxp-1-0000-rotating"],
+    ids=["bot", "empty", "leading-space", "rotating"],
 )
 def test_a_token_that_is_not_a_user_token_is_refused_before_slack_is_asked(token: str) -> None:
     seen: list[httpx2.Request] = []

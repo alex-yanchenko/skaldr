@@ -311,6 +311,15 @@ def _read(api: SlackApi) -> None:
             id="revoked-on-a-read",
         ),
         pytest.param(
+            _read,
+            _refused("token_expired"),
+            ConnectorError,
+            f"Slack rejected the sign-in when asked to read canvas {CANVAS} (token_expired); run "
+            "`skaldr auth slack` with a new user token. A rotating token (xoxe.xoxp-...) expires and skaldr "
+            "does not renew it, so it is not supported: use an app that does not rotate its tokens",
+            id="expired",
+        ),
+        pytest.param(
             _change,
             _refused("invalid_auth"),
             WriteRejectedError,

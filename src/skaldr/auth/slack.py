@@ -5,7 +5,7 @@ import httpx2
 from pydantic import BaseModel, ValidationError
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
-from skaldr.auth.store import SLACK_USER_TOKEN_PREFIX, SlackCredentials, slack_token_refusal
+from skaldr.auth.store import SlackCredentials, is_slack_user_token, slack_token_refusal
 from skaldr.errors import AuthError
 
 SLACK_API: Final = "https://slack.com/api"
@@ -41,11 +41,11 @@ def signed_in_identity(access_token: str, *, transport: httpx2.BaseTransport | N
         identity = SlackIdentity.model_validate_json(response.content)
         if identity.ok:
             return identity
-        raise AuthError(_refusal(identity.error))
+        raise AuthError(_refusal_message(identity.error))
     raise AuthError(f"Slack's {AUTH_TEST} answer is not a sign-in record")
 
 
-def _refusal(error: str | None) -> str:
+def _refusal_message(error: str | None) -> str:
     code = printable_only(error or "no error named")
     if code in REJECTED_SIGN_IN_ERRORS:
         return (
@@ -58,7 +58,7 @@ def _refusal(error: str | None) -> str:
 def verify_slack_token(
     access_token: str, *, transport: httpx2.BaseTransport | None = None
 ) -> SlackCredentials:
-    if not access_token.startswith(SLACK_USER_TOKEN_PREFIX):
+    if not is_slack_user_token(access_token):
         raise AuthError(slack_token_refusal())
     identity = signed_in_identity(access_token, transport=transport)
     return SlackCredentials(

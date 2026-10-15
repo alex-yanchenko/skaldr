@@ -528,8 +528,8 @@ def test_a_cancelled_prompt_ends_without_a_traceback(
 def test_status_with_nobody_signed_in(capsys: pytest.CaptureFixture[str]) -> None:
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
-        "notion  not signed in (run `skaldr auth notion`)\njira    not signed in (run `skaldr auth jira`)\n"
-        + SLACK_SIGNED_OUT
+        "notion  not signed in (run `skaldr auth notion`)\n"
+        f"jira    not signed in (run `skaldr auth jira`)\n{SLACK_SIGNED_OUT}"
     )
 
 
@@ -540,7 +540,7 @@ def test_status_names_who_is_signed_in_from_the_keychain(capsys: pytest.CaptureF
     assert auth_cli.main(["status"]) == 0
     assert capsys.readouterr().out == (
         f"notion  signed in to workspace (unnamed workspace) (id {WORKSPACE_ID}) (keychain)\n"
-        "jira    signed in to https://example.atlassian.net (keychain)\n" + SLACK_SIGNED_OUT
+        f"jira    signed in to https://example.atlassian.net (keychain)\n{SLACK_SIGNED_OUT}"
     )
 
 
@@ -552,7 +552,7 @@ def test_status_prints_only_the_printable_part_of_stored_names(capsys: pytest.Ca
     assert capsys.readouterr().out == (
         f"notion  signed in to workspace Example[2J Workspace (id {WORKSPACE_ID}) (keychain)\n"
         "jira    signed in to https://example.atlassian.net as Example]0;title Reader (keychain)\n"
-        + SLACK_SIGNED_OUT
+        f"{SLACK_SIGNED_OUT}"
     )
 
 
@@ -583,7 +583,8 @@ def test_status_reports_jira_even_when_notion_is_broken(
     assert capsys.readouterr().out == (
         "notion  error: The keychain entry for notion is unreadable; run `skaldr auth logout notion legacy` "
         "to remove it, then run `skaldr auth notion` again\n"
-        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n" + SLACK_SIGNED_OUT
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+        f"{SLACK_SIGNED_OUT}"
     )
 
 
@@ -634,7 +635,7 @@ def test_status_reports_notion_even_when_jira_is_broken(
     assert capsys.readouterr().out == (
         f"notion  signed in to workspace Example Workspace (id {WORKSPACE_ID}) (keychain)\n"
         "jira    error: JIRA_SITE, JIRA_EMAIL, JIRA_API_TOKEN go together; "
-        "missing JIRA_SITE, JIRA_API_TOKEN\n" + SLACK_SIGNED_OUT
+        f"missing JIRA_SITE, JIRA_API_TOKEN\n{SLACK_SIGNED_OUT}"
     )
 
 
@@ -833,7 +834,8 @@ def test_status_lists_every_stored_sign_in(capsys: pytest.CaptureFixture[str]) -
         f"notion  signed in to workspace Example Workspace (id {WORKSPACE_ID}) (keychain)\n"
         f"notion  signed in to workspace Other Workspace (id {OTHER_WORKSPACE_ID}) (keychain)\n"
         "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
-        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n" + SLACK_SIGNED_OUT
+        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n"
+        f"{SLACK_SIGNED_OUT}"
     )
 
 
@@ -849,7 +851,8 @@ def test_status_lists_the_environment_beside_the_stored_sign_ins(
     assert capsys.readouterr().out == (
         "notion  not signed in (run `skaldr auth notion`)\n"
         "jira    JIRA_EMAIL, JIRA_API_TOKEN for https://example.atlassian.net (environment)\n"
-        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n" + SLACK_SIGNED_OUT
+        "jira    signed in to https://other.atlassian.net as Other Reader (keychain)\n"
+        f"{SLACK_SIGNED_OUT}"
     )
 
 
@@ -867,7 +870,7 @@ def test_status_names_a_stored_entry_it_cannot_read_and_still_lists_the_others(
         "notion  not signed in (run `skaldr auth notion`)\n"
         "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
         "jira    error: The keychain entry for jira https://other.atlassian.net is unreadable; "
-        "run `skaldr auth jira` again\n" + SLACK_SIGNED_OUT
+        f"run `skaldr auth jira` again\n{SLACK_SIGNED_OUT}"
     )
 
 
@@ -881,7 +884,8 @@ def test_status_migrates_a_legacy_entry_and_lists_it(
     assert capsys.readouterr().out == (
         "notion  signed in to workspace Example Workspace (no workspace id; name it as unidentified) "
         "(keychain)\n"
-        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n" + SLACK_SIGNED_OUT
+        "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
+        f"{SLACK_SIGNED_OUT}"
     )
     assert sorted(keychain.entries) == [
         ("skaldr", "index"),
@@ -1202,7 +1206,7 @@ def test_a_jira_entry_for_a_site_skaldr_now_refuses_is_listed_with_its_logout_an
         "jira    error: The keychain entry for jira https://example.atlassian.net:8443 is unreadable; "
         "run `skaldr auth logout jira https://example.atlassian.net:8443` to remove it\n"
         "jira    signed in to https://example.atlassian.net as Example Reader (keychain)\n"
-        + SLACK_SIGNED_OUT,
+        f"{SLACK_SIGNED_OUT}",
         0,
         "Signed out of Jira: removed from the keychain. Revoke the API token itself at "
         "https://id.atlassian.com/manage-profile/security/api-tokens\n",
@@ -1300,8 +1304,8 @@ def test_logout_removes_a_legacy_notion_sign_in_without_a_workspace_id_by_its_na
 
 
 NOBODY_SIGNED_IN = (
-    "notion  not signed in (run `skaldr auth notion`)\njira    not signed in (run `skaldr auth jira`)\n"
-    + SLACK_SIGNED_OUT
+    "notion  not signed in (run `skaldr auth notion`)\n"
+    f"jira    not signed in (run `skaldr auth jira`)\n{SLACK_SIGNED_OUT}"
 )
 
 

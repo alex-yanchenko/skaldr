@@ -19,6 +19,7 @@ from tenacity import (
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable_only
 from skaldr.auth.slack import REJECTED_SIGN_IN_ERRORS, SLACK_API
+from skaldr.auth.store import SLACK_ROTATING_TOKENS
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.connector import SPLIT_ADVICE
 from skaldr.publish.slack.responses import CanvasContent, CreatedCanvas, Identity, SlackResponse
@@ -33,6 +34,7 @@ LONGEST_RETRY_AFTER_SECONDS: Final = 60.0
 EDITING_LOCKED: Final = "canvas_editing_locked"
 RATE_LIMITED: Final = "ratelimited"
 MISSING_SCOPE: Final = "missing_scope"
+TOKEN_EXPIRED: Final = "token_expired"
 MISSING_CANVAS_ERRORS: Final = frozenset({"canvas_not_found", "canvas_deleted"})
 _BACKOFF: Final = wait_exponential(multiplier=1, max=LONGEST_BACKOFF_SECONDS)
 
@@ -131,9 +133,10 @@ def _slack_refusal(call: _Call, body: SlackResponse, attempts: int) -> Connector
             f"Slack could not {call.to_do}: the canvas is gone or this sign-in cannot see it ({code})"
         )
     if code in REJECTED_SIGN_IN_ERRORS:
+        rotating = f". {SLACK_ROTATING_TOKENS}" if code == TOKEN_EXPIRED else ""
         return _refused(call)(
             f"Slack rejected the sign-in when asked to {call.to_do} ({code}); run `skaldr auth slack` with a "
-            "new user token"
+            f"new user token{rotating}"
         )
     if code == MISSING_SCOPE:
         scope = printable_only(body.needed or "")

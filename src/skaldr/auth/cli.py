@@ -154,7 +154,7 @@ def _sign_in_to_notion(
         client_id, client_secret, open_browser=announce_then_open, port=port, transport=transport
     )
     warnings = save_notion_replacing_the_old_sign_in(credentials, transport=transport)
-    workspace = _workspace_name(credentials) or _UNNAMED_WORKSPACE
+    workspace = _workspace_named(credentials.workspace_name)
     print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -187,10 +187,8 @@ def _sign_in_to_slack(transport: httpx2.BaseTransport | None) -> None:
     )
     credentials = verify_slack_token(access_token, transport=transport)
     save_slack(credentials)
-    workspace = _team_name(credentials) or _UNNAMED_WORKSPACE
-    user_name = printable_only(credentials.user_name or "")
-    as_user = f" as {user_name}" if user_name else ""
-    print(f"Signed in to Slack workspace {workspace}{as_user}. Saved to the keychain.")
+    signed_in = f"{_workspace_named(credentials.team_name)}{_as_user(credentials.user_name)}"
+    print(f"Signed in to Slack workspace {signed_in}. Saved to the keychain.")
 
 
 def _print_status() -> int:
@@ -359,20 +357,24 @@ def _slack_status_lines() -> list[_StatusLine]:
 def _describe_stored_slack(entry: StoredEntry[SlackCredentials]) -> _StatusLine:
     if entry.credentials is None:
         return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
-    workspace = _team_name(entry.credentials) or _UNNAMED_WORKSPACE
-    user_name = printable_only(entry.credentials.user_name or "")
-    as_user = f" as {user_name}" if user_name else ""
+    workspace = _workspace_named(entry.credentials.team_name)
+    as_user = _as_user(entry.credentials.user_name)
     return _StatusLine(f"signed in to workspace {workspace} (id {entry.identifier}){as_user} (keychain)")
 
 
-def _team_name(credentials: SlackCredentials) -> str | None:
-    return printable_only(credentials.team_name or "") or None
+def _workspace_named(name: str | None) -> str:
+    return printable_only(name or "") or _UNNAMED_WORKSPACE
+
+
+def _as_user(name: str | None) -> str:
+    shown = printable_only(name or "")
+    return f" as {shown}" if shown else ""
 
 
 def _describe_stored_notion(entry: StoredEntry[NotionCredentials]) -> _StatusLine:
     if entry.credentials is None:
         return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
-    workspace = _workspace_name(entry.credentials) or _UNNAMED_WORKSPACE
+    workspace = _workspace_named(entry.credentials.workspace_name)
     if entry.credentials.workspace_id is None:
         identified = f" (no workspace id; name it as {entry.identifier})"
     else:
@@ -387,10 +389,6 @@ def _describe_stored_jira(entry: StoredEntry[JiraCredentials]) -> _StatusLine:
     if display_name is None:
         return _StatusLine(f"signed in to {entry.credentials.site} (keychain)")
     return _StatusLine(f"signed in to {entry.credentials.site} as {display_name} (keychain)")
-
-
-def _workspace_name(credentials: NotionCredentials) -> str | None:
-    return printable_only(credentials.workspace_name or "") or None
 
 
 def _display_name(credentials: JiraCredentials) -> str | None:
