@@ -583,7 +583,11 @@ def test_a_fields_write_for_another_document_section_is_refused() -> None:
     )
 
 
-def test_archiving_renames_the_canvas_and_leaves_one_line_and_is_harmless_twice() -> None:
+ARCHIVED_TITLE = f"{TITLE_TEXT} (archived by skaldr)"
+ARCHIVED_CANVAS = f"# {ARCHIVED_TITLE}\n\n{archived_line('garden-handbook')}\n"
+
+
+def test_archiving_deletes_what_skaldr_published_leaves_one_line_renames_and_is_harmless_twice() -> None:
     slack = InMemorySlack()
     _created(slack)
     transport = slack.transport()
@@ -595,17 +599,60 @@ def test_archiving_renames_the_canvas_and_leaves_one_line_and_is_harmless_twice(
 
     assert (first, _edits(slack), slack.markdown_of(CANVAS)) == (
         [
+            *(
+                {"operation": "delete", "section_id": _section(CANVAS, generation, 5 - generation)}
+                for generation in range(5)
+            ),
+            {"operation": "delete", "section_id": _section(CANVAS, 5, 1)},
             {
-                "operation": "rename",
-                "title_content": {"type": "markdown", "markdown": f"{TITLE_TEXT} (archived by skaldr)"},
-            },
-            {
-                "operation": "replace",
+                "operation": "insert_after",
+                "section_id": _section(CANVAS, 6, 0),
                 "document_content": {"type": "markdown", "markdown": f"{archived_line('garden-handbook')}\n"},
             },
+            {"operation": "rename", "title_content": {"type": "markdown", "markdown": ARCHIVED_TITLE}},
         ],
         [],
-        f"# {TITLE_TEXT} (archived by skaldr)\n\n{archived_line('garden-handbook')}\n",
+        ARCHIVED_CANVAS,
+    )
+
+
+def test_archiving_keeps_what_people_wrote_below_the_stamp() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    slack.add_block_by_hand(CANVAS, 6, "Bring gloves.")
+    transport = slack.transport()
+    transport.read_item(CANVAS, CONTENT)
+
+    transport.archive_item(CANVAS)
+
+    assert slack.markdown_of(CANVAS) == f"{ARCHIVED_CANVAS}\nBring gloves.\n"
+
+
+def test_archiving_a_canvas_edited_after_the_read_writes_nothing() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    transport = slack.transport()
+    transport.read_item(CANVAS, CONTENT)
+    slack.edit_by_hand(CANVAS, "Sow in spring.", "Sow in June.")
+
+    with pytest.raises(WriteRejectedError) as raised:
+        transport.archive_item(CANVAS)
+
+    assert (str(raised.value), _edits(slack)) == (
+        f"Slack canvas {CANVAS} changed after skaldr read it, so nothing was written; publish again",
+        [],
+    )
+
+
+def test_archiving_a_canvas_whose_archived_line_landed_only_renames_it() -> None:
+    slack = InMemorySlack()
+    canvas_id = slack.add_canvas(TITLE_TEXT, f"{archived_line('garden-handbook')}\n")
+
+    slack.transport().archive_item(canvas_id)
+
+    assert (_edits(slack), slack.canvases[canvas_id].title) == (
+        [{"operation": "rename", "title_content": {"type": "markdown", "markdown": ARCHIVED_TITLE}}],
+        ARCHIVED_TITLE,
     )
 
 
@@ -619,14 +666,17 @@ def test_an_archived_canvas_reads_as_not_found() -> None:
         transport.read_item(CANVAS, CONTENT)
 
 
-def test_archiving_a_canvas_renamed_with_the_marker_keeps_one_marker() -> None:
+def test_a_canvas_renamed_with_the_marker_reads_as_archived_and_archiving_it_sends_nothing() -> None:
     slack = InMemorySlack()
     _created(slack)
-    slack.rename_by_hand(CANVAS, f"{TITLE_TEXT} (archived by skaldr)")
+    slack.rename_by_hand(CANVAS, ARCHIVED_TITLE)
+    transport = slack.transport()
 
-    slack.transport().archive_item(CANVAS)
+    transport.archive_item(CANVAS)
 
-    assert [edit["operation"] for edit in _edits(slack)] == ["replace"]
+    with pytest.raises(ItemNotFoundError, match=f"^Slack canvas {CANVAS} was archived by skaldr$"):
+        transport.read_item(CANVAS, CONTENT)
+    assert slack.writes() == []
 
 
 def test_archiving_a_canvas_that_is_gone_sends_nothing() -> None:

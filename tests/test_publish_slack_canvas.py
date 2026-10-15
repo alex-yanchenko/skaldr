@@ -283,11 +283,15 @@ def test_the_last_stamp_counts_and_an_earlier_one_is_content() -> None:
             id="archived",
         ),
         pytest.param(f"# Garden handbook\n\n{archived_line(None)}\n", True, id="archived-unstamped"),
-        pytest.param(f"# T\n\n{archived_line(None)}\n\nMore.\n", False, id="more-content"),
+        pytest.param(f"# T\n\n{archived_line(None)}\n\nA note kept below.\n", True, id="content-kept-below"),
+        pytest.param("# Garden handbook (archived by skaldr)\n\nWelcome.\n", True, id="title-marker"),
+        pytest.param(f"# T\n\nWelcome.\n\n{archived_line(None)}\n", False, id="archived-line-not-first"),
         pytest.param(STORED, False, id="published"),
     ],
 )
-def test_an_archived_canvas_holds_only_the_archived_line(markdown: str, archived: bool) -> None:
+def test_an_archived_canvas_opens_with_the_archived_line_or_carries_the_title_marker(
+    markdown: str, archived: bool
+) -> None:
     assert keyed_canvas(markdown, LAYOUT).archived is archived
 
 

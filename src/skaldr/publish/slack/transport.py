@@ -13,6 +13,7 @@ from skaldr.publish.keyed import (
 )
 from skaldr.publish.slack.api import SlackApi, markdown_content
 from skaldr.publish.slack.canvas_markdown import (
+    ARCHIVED_TITLE_MARKER,
     KeyedCanvas,
     archived_line,
     canvas_blocks,
@@ -41,7 +42,6 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import SlackTarget, slack_canvas_id
 from skaldr.publish_block.target import JsonFields
 
-ARCHIVED_TITLE_MARKER: Final = " (archived by skaldr)"
 RELEASED_ROLES: Final = frozenset({"published", "blank", "stamp"})
 
 
@@ -89,6 +89,9 @@ class _Edits:
     def append(self, markdown: str) -> None:
         self._send({"operation": "insert_at_end", "document_content": markdown_content(markdown)})
         self._blocks += len(canvas_blocks(markdown))
+
+    def rename(self, title: str) -> None:
+        self._send(_rename(title))
 
     def replace(self, position: int, markdown: str) -> None:
         ids = self._section_ids()
@@ -219,14 +222,24 @@ class SlackTransport:
 
     def archive_item(self, item_id: str, /) -> None:
         try:
-            keyed = keyed_canvas(self._markdown(item_id), {})
+            markdown = self._markdown_of_any_canvas(item_id)
         except ItemNotFoundError:
             return
-        if not keyed.title.endswith(ARCHIVED_TITLE_MARKER):
-            self._api.edit_canvas(item_id, _rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}"))
-        doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
-        content = markdown_content(canvas_markdown_of([archived_line(doc_id)]))
-        self._api.edit_canvas(item_id, {"operation": "replace", "document_content": content})
+        read = self._read.layouts.get(item_id)
+        keyed = keyed_canvas(markdown, {} if read is None else read)
+        if keyed.title.endswith(ARCHIVED_TITLE_MARKER):
+            return
+        edits = _Edits(self._api, item_id, len(keyed.blocks))
+        if not keyed.opens_with_the_archived_line:
+            if read is not None:
+                refuse_a_change_since_the_read(_canvas_named(item_id), read, keyed.raw_sections)
+            for position in reversed(range(keyed.content_start, keyed.content_end)):
+                edits.delete(position)
+            if keyed.stamp_at is not None:
+                edits.delete(keyed.content_start)
+            doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
+            edits.insert(keyed.content_start, canvas_markdown_of([archived_line(doc_id)]))
+        edits.rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}")
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         self._unchanged_since_read(item_id, request.raw_sections)
@@ -280,10 +293,13 @@ class SlackTransport:
     def close(self) -> None:
         self._api.close()
 
-    def _markdown(self, item_id: str) -> str:
+    def _markdown_of_any_canvas(self, item_id: str) -> str:
         if slack_canvas_id(item_id) != item_id:
             raise ItemNotFoundError(f"'{item_id}' is not a Slack canvas id")
-        markdown = self._api.canvas_markdown(item_id)
+        return self._api.canvas_markdown(item_id)
+
+    def _markdown(self, item_id: str) -> str:
+        markdown = self._markdown_of_any_canvas(item_id)
         if keyed_canvas(markdown, {}).archived:
             raise ItemNotFoundError(f"Slack canvas {item_id} was archived by skaldr")
         return markdown

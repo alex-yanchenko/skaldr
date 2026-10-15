@@ -14,6 +14,7 @@ from skaldr.publish.transport import ShownLink, Stamp
 
 TITLE_HEADING: Final = "# "
 STAMP_PATTERN: Final = stamp_pattern("")
+ARCHIVED_TITLE_MARKER: Final = " (archived by skaldr)"
 ARCHIVED_WORDS: Final = "skaldr archived this canvas:"
 ARCHIVED_PATTERN: Final = re.compile(
     rf"{re.escape(ARCHIVED_WORDS)} the document (?:\S+ )?no longer publishes here\."
@@ -179,8 +180,12 @@ class KeyedCanvas:
         return {key: text for key, text in texts.items() if text}
 
     @property
+    def opens_with_the_archived_line(self) -> bool:
+        return bool(self.content) and ARCHIVED_PATTERN.fullmatch(self.content[0].raw.strip()) is not None
+
+    @property
     def archived(self) -> bool:
-        return len(self.content) == 1 and ARCHIVED_PATTERN.fullmatch(self.content[0].raw.strip()) is not None
+        return self.title.endswith(ARCHIVED_TITLE_MARKER) or self.opens_with_the_archived_line
 
     def positions_of(self, key: str) -> list[int]:
         return [
