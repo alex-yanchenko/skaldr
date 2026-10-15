@@ -194,7 +194,11 @@ def _refuse_what_cannot_fit(
 
 def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> TargetDraft:
     target = context.target
-    chosen = [region for region in regions if target.builds_from(region.section_id)]
+    chosen = [
+        region
+        for region in regions
+        if target.from_sections is None or region.section_id in target.from_sections
+    ]
     on_the_document = [region for region in chosen if region.section_id not in target.split]
     document = _item_draft(
         context,

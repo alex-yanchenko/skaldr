@@ -1,14 +1,22 @@
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
 from skaldr.cli import main
-from skaldr.export import check as check_module
 from skaldr.export import lower as lower_module
-from skaldr.export.lower import Lowering
+from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT
+from skaldr.export.lower import Lowering, lower_report
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from skaldr.models import Report
+from skaldr.models import Report, parse_report
+from skaldr.publish import drafts as drafts_module
+from skaldr.publish.cli import installed_connectors
+from skaldr.publish.cli import main as publish_main
+from skaldr.publish.jira import JiraConnector
+from skaldr.publish.jira import connector as jira_connector_module
+from skaldr.publish.jira.description import description_length
+from skaldr.publish.notion import connector as notion_connector_module
 from tests.factories import make_jira_target, make_notion_target, make_report, make_section, write_report
 from tests.factories.capability_factory import (
     CLEAN_BLOCKS,
@@ -20,6 +28,7 @@ from tests.factories.capability_factory import (
     published_report,
 )
 
+JIRA_TARGET_LABEL = "jira project PLAN under no parent issue"
 FOR_WITHOUT_CHECK = "--for only applies to --check (it names the export targets to check for)"
 CANVAS_OVER_THE_LIMIT_CODE_LENGTH = 1_048_568
 LIST_FROM_3_REFUSAL = (
@@ -167,13 +176,90 @@ def test_check_for_slack_refuses_a_canvas_the_export_refuses_for_its_size_and_wr
     )
 
 
+def test_check_of_a_jira_target_over_the_description_limit_fails_with_the_publish_refusal(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = published_report([{"type": "text", "body": "x" * JIRA_DESCRIPTION_LIMIT}], make_jira_target())
+    data_path = write_report(tmp_path, data)
+    parsed = parse_report(data)
+    size = description_length("".join(JiraConnector().render_regions(parsed, lower_report(parsed))))
+    refusal = (
+        f"{JIRA_TARGET_LABEL}, document: the item has {size:,} characters of ADF, over the 32,767 a Jira "
+        "item can take; split the document further with `split`, or shorten it"
+    )
+
+    check_exit = main(["--check", str(data_path)])
+    check_err = capsys.readouterr().err
+    publish_exit = publish_main(["publish", str(data_path)], registry=installed_connectors())
+
+    assert (check_exit, check_err, publish_exit, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: {refusal}\n\n1 file failed\n",
+        1,
+        f"error: {refusal}\n",
+    )
+
+
+def test_check_of_a_split_jira_target_names_the_heading_publish_names_for_each_item(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "heading", "text": "Before"}, make_section("tools"), *in_a_panel(TABLE)]
+    data_path = write_report(tmp_path, published_report(blocks, make_jira_target(split=["tools"])))
+    refusal = (
+        "ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading "
+        "'Before'; move the table out of the panel"
+    )
+
+    check_exit = main(["--check", str(data_path)])
+    check_err = capsys.readouterr().err
+    publish_exit = publish_main(["publish", str(data_path)], registry=installed_connectors())
+
+    assert (check_exit, check_err, publish_exit, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: {refusal}\n\n1 file failed\n",
+        1,
+        f"error: {refusal}\n",
+    )
+
+
+def test_check_of_publish_targets_reads_no_sign_in(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_sign_in_is_read(*_args: object) -> NoReturn:
+        raise NotImplementedError
+
+    monkeypatch.setattr(jira_connector_module, "load_jira", no_sign_in_is_read)
+    monkeypatch.setattr(jira_connector_module, "require_jira", no_sign_in_is_read)
+    monkeypatch.setattr(notion_connector_module, "require_notion_for_a_target", no_sign_in_is_read)
+    data_path = write_report(
+        tmp_path, published_report(CLEAN_BLOCKS, make_jira_target(), make_notion_target())
+    )
+
+    assert main(["--check", str(data_path)]) == 0
+
+    assert capsys.readouterr().out == f"OK    {data_path}\n"
+
+
+def test_check_without_the_publish_extra_checks_the_publish_block_but_not_its_targets(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for module in [name for name in sys.modules if name.startswith("skaldr.publish.")]:
+        monkeypatch.delitem(sys.modules, module)
+    monkeypatch.setitem(sys.modules, "httpx2", None)
+    data_path = write_report(tmp_path, published_report(TABLE_IN_A_PANEL.blocks, make_jira_target()))
+
+    assert main(["--check", str(data_path)]) == 0
+
+    assert capsys.readouterr().out == f"OK    {data_path}\n"
+
+
 def test_check_without_a_publish_block_or_a_for_target_lowers_nothing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def lowering_nobody_asked_for(_report: Report) -> Lowering:
         raise NotImplementedError
 
-    monkeypatch.setattr(check_module, "lowering_for", lowering_nobody_asked_for)
+    monkeypatch.setattr(drafts_module, "lowering_for", lowering_nobody_asked_for)
     monkeypatch.setattr(lower_module, "lowering_for", lowering_nobody_asked_for)
     data_path = write_report(tmp_path, make_report(blocks=TABLE_IN_A_PANEL.blocks))
 

@@ -27,13 +27,15 @@ Text holding a lone surrogate, which only a YAML escape such as `"\ud800"` can p
 can hold, fails the same way with its path. A failed reconciliation is listed with the other block errors in the file. A page-wide check (an
 undeclared badge key, a repeated table, matrix, reference or heading id) runs once every block is
 valid and names each place involved after `at`. Run `skaldr --check <file>` to validate without
-rendering; read the path, fix, re-run. `--check` also refuses a block an export target cannot show,
-the same refusal `skaldr publish` makes, for each target the document's `publish` block names (a Jira
-target as `adf`, a Notion target as `notion`, each over the sections it is built from). For each
-target you name with `--for`, `--check` runs that whole export in memory and writes nothing, so it
-refuses exactly what `--export <target>` refuses, a limit only known once the export is written such
-as the Slack canvas size included: `skaldr --check --for slack --for adf plan.yaml` fails with the
-block's path, why the target cannot show it and what to write instead. Add an output flag and the check becomes a gate on that
+rendering; read the path, fix, re-run. When the document has a `publish` block and the publish extra
+is installed, `--check` also drafts each target the block names the way `skaldr publish` does, without
+signing in or sending anything, so it refuses what that publish would refuse: a block the target
+cannot show (a Jira target is drafted as `adf` and a Notion target as `notion`, each item over the
+sections it is built from) and an item over the service's size limit. For each target you name with
+`--for`, `--check` runs that whole export in memory and writes nothing, so it refuses exactly what
+`--export <target>` refuses, including a limit measured on the written export, such as the Slack
+canvas size: `skaldr --check --for slack --for adf plan.yaml` fails with the block's path, why the
+target cannot show it and what to write instead. Add an output flag and the check becomes a gate on that
 render: `skaldr --check --strict plan.yaml -o plan.html --if-stale` validates and writes in one
 invocation, and writes nothing at all if the check fails.
 
@@ -1279,7 +1281,7 @@ publish:
 - every `split` id sits inside `from` when `from` is given, and every `overrides` key is a `split` id;
 - a Notion page is a URL on notion.so, notion.site or notion.com, or a page id; a Jira project key is an uppercase letter followed by uppercase letters, digits or `_`, a `parent` is an issue key such as `PLAN-100`, and `issue_type` is not blank;
 - no two targets write to the same place: the same Notion page id, whether given as `parent_page` or `page` and however it is written, or the same Jira project and parent issue;
-- the sections a target is built from hold no block the target cannot show: a Jira target is checked as `--export adf` and a Notion target as `--export notion` (see *Exporting as ADF for Jira*), and `skaldr publish` makes the same check before it sends anything.
+- with the publish extra installed, each item a target would write holds no block the target cannot show and fits the service's size limit: `--check` drafts every target as `skaldr publish` does before it sends anything, a Jira target as `--export adf` and a Notion target as `--export notion` (see *Exporting as ADF for Jira*), so it refuses what that publish would refuse.
 
 A rendered page embeds its source **without** the `publish` block: the block, the comment and blank lines between it and the previous key's content, and every line up to the next top-level key are left out, so a shared page never shows where the document publishes. A comment anywhere else stays, so keep ids out of other comments. The render stops with an error rather than embed a block it cannot cut out exactly, such as one reached through a `<<` merge key or one whose YAML anchor another key uses. To keep the ids out of a public repo entirely, write `publish: !include publish.private.yaml`.
 

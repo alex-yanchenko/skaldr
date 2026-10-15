@@ -25,7 +25,6 @@ from skaldr.export.capabilities import (
     ScriptForm,
     character_without_a_unicode_form,
 )
-from skaldr.export.lower import assemble_page, lower_regions, lowering_for
 from skaldr.export.markup import table_width
 from skaldr.export.runs import (
     Break,
@@ -398,14 +397,3 @@ def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
     _raise_the_first_rejection(chain(_model_hits(report, document), _tree_hits(document.body)), target)
-
-
-def reject_what_the_publish_targets_cannot_show(report: Report) -> None:
-    if report.publish is None:
-        return
-    lowering = lowering_for(report)
-    regions = lower_regions(lowering)
-    for publish_target in report.publish.targets:
-        chosen = [region for region in regions if publish_target.builds_from(region.section_id)]
-        page = assemble_page(chosen, lowering)
-        reject_what_the_target_cannot_show(report, page, publish_target.export_target())

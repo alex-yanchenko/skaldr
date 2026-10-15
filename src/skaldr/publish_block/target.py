@@ -54,9 +54,6 @@ class TargetBase(FrozenModel):
     @abstractmethod
     def export_target(cls) -> ExportTarget: ...
 
-    def builds_from(self, section_id: str | None) -> bool:
-        return self.from_sections is None or section_id in self.from_sections
-
     @abstractmethod
     def where_fields(self) -> JsonFields: ...
 

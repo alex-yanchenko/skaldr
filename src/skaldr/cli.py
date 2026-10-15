@@ -15,7 +15,7 @@ from typing import Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import PageFetchError, ReportError, UnknownGuideTopicError
+from skaldr.errors import ConnectorError, PageFetchError, PublishError, ReportError, UnknownGuideTopicError
 from skaldr.export import (
     EXPORT_MANIFEST,
     EXPORT_TARGETS,
@@ -26,7 +26,6 @@ from skaldr.export import (
     export_slack,
     render_export,
 )
-from skaldr.export.check import reject_what_the_publish_targets_cannot_show
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
@@ -119,9 +118,14 @@ def _writes_an_html_page(args: argparse.Namespace) -> bool:
     return not args.check or args.embed
 
 
-def _missing_extra(command: str, exc: ModuleNotFoundError) -> int:
+def _missing_package(exc: ModuleNotFoundError) -> str | None:
     missing = (exc.name or "skaldr").partition(".")[0]
-    if missing == "skaldr":
+    return None if missing == "skaldr" else missing
+
+
+def _missing_extra(command: str, exc: ModuleNotFoundError) -> int:
+    missing = _missing_package(exc)
+    if missing is None:
         raise exc
     print(
         f"error: `skaldr {command}` needs the publish extra ({missing} is not installed). Reinstall with it: "
@@ -207,8 +211,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="validate the content file(s) against the schema, and against what each target that its "
-        "`publish` block names can show; exits non-zero if any file is invalid. "
+        help="validate the content file(s) against the schema and, with the publish extra installed, "
+        "draft each target its `publish` block names as `skaldr publish` would, sending nothing; exits "
+        "non-zero if any file is invalid. "
         "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
         "file to render it once it passes. A file that fails is never written.",
     )
@@ -220,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="TARGET",
         help="with --check: also run the whole --export to TARGET in memory, writing nothing, and fail "
         f"wherever that export would refuse the document ({', '.join(EXPORT_TARGETS)}); give it once per "
-        "target. --check always checks the targets the document's `publish` block names.",
+        "target. --check always drafts the targets the document's `publish` block names.",
     )
     parser.add_argument(
         "--strict",
@@ -704,6 +709,19 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
     return 0
 
 
+def _draft_the_publish_targets(path: Path, report: Report) -> None:
+    if report.publish is None:
+        return
+    try:
+        from skaldr.publish.cli import installed_connectors
+        from skaldr.publish.drafts import draft_targets, load_authored
+    except ModuleNotFoundError as exc:
+        if _missing_package(exc) is None:
+            raise
+        return
+    draft_targets(load_authored(path), installed_connectors())
+
+
 def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequence[ExportTarget] = ()) -> int:
     """Validate each content file and print one line per file, returning 1 if any file is invalid — it
     drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass (no HTML
@@ -717,10 +735,10 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             # Render (discarding output) to collect placeholders AND surface render-time errors (e.g. a
             # dangling anchor) as a clean FAIL — must stay inside the try so nothing escapes as a traceback.
             unfilled = find_placeholders(report)
-            reject_what_the_publish_targets_cannot_show(report)
+            _draft_the_publish_targets(path, report)
             for target in dict.fromkeys(targets):
                 render_export(report, target)
-        except ReportError as exc:
+        except (ReportError, PublishError, ConnectorError) as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
             continue
