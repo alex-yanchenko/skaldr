@@ -896,11 +896,11 @@ def test_tabs_are_bold_titles_led_by_the_tone_icon_then_their_children() -> None
 @pytest.mark.parametrize(
     ("tab", "text"),
     [
-        pytest.param(Tab((), (make_paragraph("a"),), "warning"), "⚠️\n\na\n", id="icon-without-a-title"),
+        pytest.param(Tab((), (make_paragraph("a"),), "warning"), "**⚠️**\n\na\n", id="icon-without-a-title"),
         pytest.param(Tab((), (make_paragraph("a"),)), "a\n", id="neither-icon-nor-title"),
     ],
 )
-def test_a_tab_without_a_title_writes_its_icon_alone_or_nothing_before_its_children(
+def test_a_tab_without_a_title_writes_its_bold_icon_alone_or_nothing_before_its_children(
     tab: Tab, text: str
 ) -> None:
     assert render_slack([Tabs((tab,))]) == text

@@ -13,7 +13,7 @@ from skaldr.export.capabilities import (
     UNICODE_SCRIPT_FORMS,
     character_without_a_unicode_form,
 )
-from skaldr.export.glyphs import callout_icon, tab_icon
+from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -132,7 +132,6 @@ class _List:
 @dataclass(frozen=True)
 class _Title:
     text: ExportRich
-    icon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -254,7 +253,7 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     return [
         block
         for tab in node.tabs
-        for block in (_Title(tab.title, tab_icon(tab.tone)), *_canvas_blocks(tab.children, place))
+        for block in (_Title(tab_title_led_by_its_icon(tab)), *_canvas_blocks(tab.children, place))
     ]
 
 
@@ -360,9 +359,7 @@ class _CanvasWriter:
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
-        if not text:
-            return [title.icon] if title.icon else []
-        return [styled("bold", f"{title.icon} {text}" if title.icon else text)]
+        return [styled("bold", text)] if text else []
 
     def media_lines(self, media: Media) -> list[str]:
         if media.kind == "image":
