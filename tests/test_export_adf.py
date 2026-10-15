@@ -308,45 +308,46 @@ def _task_list(local_id: int, *content: Json) -> Json:
     }
 
 
-def test_a_task_entry_with_detail_ends_the_task_list_and_the_detail_follows_it() -> None:
+def test_a_task_entry_keeps_its_nested_task_lists_inside_the_one_task_list() -> None:
     node = ListNode(
         "check",
         (
-            ListEntry(
-                plain("a"),
-                children=(ListNode("check", (ListEntry(plain("sub")),)), _para("detail")),
-            ),
+            ListEntry(plain("a"), children=(ListNode("check", (ListEntry(plain("sub")),)),)),
             ListEntry(plain("b"), checked=True),
         ),
     )
 
     assert _rendered(node) == _doc(
-        _task_list(1, _task_item(2, "TODO", "a"), _task_list(3, _task_item(4, "TODO", "sub"))),
-        _words("detail"),
-        _task_list(5, _task_item(6, "DONE", "b")),
+        _task_list(
+            1,
+            _task_item(2, "TODO", "a"),
+            _task_list(3, _task_item(4, "TODO", "sub")),
+            _task_item(5, "DONE", "b"),
+        )
     )
 
 
-def test_a_task_entry_whose_nested_task_list_cannot_fit_ends_the_lists_there() -> None:
-    nested = ListNode("check", (ListEntry(plain("x"), children=(_para("detail"),)), ListEntry(plain("y"))))
-    node = ListNode("check", (ListEntry(plain("a"), children=(nested,)),))
+@pytest.mark.parametrize(
+    ("detail", "written", "node_name"),
+    [
+        pytest.param(_para("detail"), "paragraph", "Paragraph", id="paragraph"),
+        pytest.param(CodeBlock("recount", "sh"), "codeBlock", "CodeBlock", id="code-block"),
+        pytest.param(
+            ListNode("bullet", (ListEntry(plain("x")),)), "bulletList", "ListNode", id="bullet-list"
+        ),
+    ],
+)
+def test_a_task_entry_holding_anything_but_a_nested_task_list_is_an_invariant_lowering_backs(
+    detail: Node, written: str, node_name: str
+) -> None:
+    node = ListNode("check", (ListEntry(plain("a"), children=(detail,)),))
 
-    assert _rendered(node) == _doc(
-        _task_list(1, _task_item(2, "TODO", "a"), _task_list(3, _task_item(4, "TODO", "x"))),
-        _words("detail"),
-        _task_list(5, _task_item(6, "TODO", "y")),
-    )
+    with pytest.raises(ExportInvariantError) as raised:
+        render_adf([node])
 
-
-def test_a_task_entry_with_detail_inside_a_panel_keeps_the_detail_in_the_panel() -> None:
-    node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(_para("detail"),)),)),))
-
-    assert _rendered(node) == _doc(
-        {
-            "type": "panel",
-            "attrs": {"panelType": "info"},
-            "content": [_task_list(1, _task_item(2, "TODO", "a")), _words("detail")],
-        }
+    assert str(raised.value) == (
+        f"ADF does not allow a {written} inside a task item, written from a {node_name}; "
+        "skaldr lowers a checklist entry's detail only as a nested checklist"
     )
 
 

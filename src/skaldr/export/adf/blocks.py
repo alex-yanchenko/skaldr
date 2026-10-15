@@ -268,22 +268,12 @@ class _AdfBlocks:
         return AdfListItem(type="listItem", content=content)
 
     def task_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
-        written: list[AdfBlock] = []
-        list_id: str | None = None
+        attrs = AdfTaskListAttrs(localId=self.local_id("task-list"))
         content: list[AdfTaskItem | AdfTaskList] = []
         for entry in node.entries:
-            list_id = list_id or self.local_id("task-list")
             content.append(self.task_item(entry))
-            nested, overflow = self.task_details(entry.children, container)
-            content += nested
-            if overflow:
-                attrs = AdfTaskListAttrs(localId=list_id)
-                written += [AdfTaskList(type="taskList", attrs=attrs, content=content), *overflow]
-                list_id, content = None, []
-        if list_id is not None:
-            attrs = AdfTaskListAttrs(localId=list_id)
-            written.append(AdfTaskList(type="taskList", attrs=attrs, content=content))
-        return written
+            content += self.nested_task_lists(entry.children, container)
+        return [AdfTaskList(type="taskList", attrs=attrs, content=content)]
 
     def task_item(self, entry: ListEntry) -> AdfTaskItem:
         state = "DONE" if entry.checked else "TODO"
@@ -295,22 +285,20 @@ class _AdfBlocks:
             item["content"] = text
         return item
 
-    def task_details(
-        self, children: Sequence[Node], container: Container
-    ) -> tuple[list[AdfTaskList], list[AdfBlock]]:
+    def nested_task_lists(self, children: Sequence[Node], container: Container) -> list[AdfTaskList]:
         nested: list[AdfTaskList] = []
-        overflow: list[AdfBlock] = []
         for child in children:
             produced = self.node_blocks(child, container)
             _require_a_list_item_holds(child, produced)
-            is_a_task_list = isinstance(child, ListNode) and child.kind == "check"
-            if produced and is_a_task_list and not overflow:
-                first = produced[0]
-                if first["type"] == "taskList":
-                    nested.append(first)
-                    produced = produced[1:]
-            overflow += produced
-        return nested, overflow
+            for block in produced:
+                if block["type"] != "taskList":
+                    raise ExportInvariantError(
+                        f"ADF does not allow a {block['type']} inside a task item, written from a "
+                        f"{type(child).__name__}; "
+                        "skaldr lowers a checklist entry's detail only as a nested checklist"
+                    )
+                nested.append(block)
+        return nested
 
     def cell_paragraph(self, cell: TableCell, bold: bool) -> AdfParagraph:
         content = self.inline(cell.text)

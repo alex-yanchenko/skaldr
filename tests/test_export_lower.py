@@ -1182,6 +1182,36 @@ def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_
     )
 
 
+def test_a_checklist_entry_holds_only_its_nested_checklist() -> None:
+    block = {
+        "type": "list",
+        "style": "check",
+        "items": [{"text": "a", "checked": True, "items": [{"text": "b", "items": ["c"]}]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "check",
+            (
+                ListEntry(
+                    (Plain("a"),),
+                    checked=True,
+                    children=(
+                        ListNode(
+                            "check",
+                            (
+                                ListEntry(
+                                    (Plain("b"),), children=(ListNode("check", (ListEntry((Plain("c"),)),)),)
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 def test_a_decision_list_is_a_bullet_list_led_by_a_decision_mark_at_every_level() -> None:
     block = {
         "type": "list",

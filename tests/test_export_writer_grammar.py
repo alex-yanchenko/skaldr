@@ -78,7 +78,6 @@ ADF_CONTAINERS: Mapping[str, Wrap] = {
     "nested_expand": lambda node: (Toggle(plain("Outer"), None, (Toggle(plain("Inner"), None, (node,)),)),),
     "list item": lambda node: (ListNode("bullet", (ListEntry(plain("a"), children=(node,)),)),),
     "numbered list item": lambda node: (ListNode("number", (ListEntry(plain("a"), children=(node,)),)),),
-    "task item": lambda node: (ListNode("check", (ListEntry(plain("a"), children=(node,)),)),),
 }
 SLACK_CONTAINERS: Mapping[str, Wrap] = {
     "document": lambda node: (node,),

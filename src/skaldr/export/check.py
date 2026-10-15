@@ -360,30 +360,17 @@ def _fenced_item_feature(child: Node, holder: ListNode) -> FencedInAListItemFeat
     return "table, callout, heading, quote, toggle or divider inside a list item"
 
 
-def _fenced_off_from_a_jira_list_item(child: Node) -> Iterator[Node]:
+def _nodes_adf_cannot_place_in_a_list_item(child: Node) -> Iterator[Node]:
     match child:
-        case Heading() | TableNode() | Callout() | Divider() | Toggle():
-            yield child
-        case Quote() if any(child.lines) or child.cite:
-            yield child
-        case Tabs() if child.tabs:
-            yield child
         case Columns() | Diagram():
             for nested in nested_nodes(child):
-                yield from _fenced_off_from_a_jira_list_item(nested)
-        case (
-            Paragraph()
-            | ListNode()
-            | CodeBlock()
-            | DisplayMath()
-            | Media()
-            | Quote()
-            | Tabs()
-            | TableOfContents()
-        ):
-            return
+                yield from _nodes_adf_cannot_place_in_a_list_item(nested)
+        case Heading() | Divider():
+            yield child
+        case _ if _held(child) is not None:
+            yield child
         case _:
-            assert_never(child)
+            return
 
 
 def _document_position(path: str) -> DocumentPosition:
@@ -477,10 +464,10 @@ class _TreeWalk:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
-            fenced = next(_fenced_off_from_a_jira_list_item(child), None)
-            if fenced is not None:
-                details = FencedInAListItem(_fenced_item_feature(child, holder), _term(fenced))
-                yield self.hit(details, fenced.authored_at)
+            unplaced = next(_nodes_adf_cannot_place_in_a_list_item(child), None)
+            if unplaced is not None:
+                details = FencedInAListItem(_fenced_item_feature(child, holder), _term(unplaced))
+                yield self.hit(details, unplaced.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
