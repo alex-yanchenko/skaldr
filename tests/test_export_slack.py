@@ -404,6 +404,21 @@ def test_lists_in_a_row_inside_a_callout_or_a_column_are_kept_apart() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("first", "second", "text"),
+    [
+        pytest.param("bullet", "check", f"* a\n\n{LIST_SEPARATOR}\n\n* [ ] b\n", id="bullets-then-checks"),
+        pytest.param("check", "bullet", f"* [ ] a\n\n{LIST_SEPARATOR}\n\n* b\n", id="checks-then-bullets"),
+    ],
+)
+def test_a_bullet_list_and_a_check_list_in_a_row_are_kept_apart(
+    first: ListKind, second: ListKind, text: str
+) -> None:
+    nodes = [ListNode(first, (make_list_entry("a"),)), ListNode(second, (make_list_entry("b"),))]
+
+    assert render_slack(nodes) == text
+
+
 def test_lists_with_a_paragraph_between_them_need_no_separator() -> None:
     assert (
         render_slack(
