@@ -4,14 +4,13 @@ from pathlib import Path
 import pytest
 
 from skaldr.cli import main
+from skaldr.errors import ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_adf
 from skaldr.export.adf import compact_adf_length
-from skaldr.models import load_report
-from tests.conftest import REPO_ROOT
+from skaldr.models import load_report, parse_report
 from tests.factories import folder_texts, make_report, make_toggle, write_report
+from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
-ADF_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.adf"
 HI_DOCUMENT = {
     "version": 1,
     "type": "doc",
@@ -24,10 +23,24 @@ def export_dir(tmp_path: Path) -> Path:
     return tmp_path / "exported"
 
 
-def test_the_example_exports_to_the_adf_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_adf(load_report(EXAMPLE), tmp_path)
+def test_the_example_is_refused_for_jira_for_its_roman_numbered_list(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_adf(load_report(EXAMPLE), tmp_path)
 
-    assert folder_texts(tmp_path) == folder_texts(ADF_GOLDEN)
+    assert str(raised.value) == (
+        "ADF numbers a list only with digits, so it cannot show a list numbered with roman numerals, "
+        "at blocks.31.list; number the list with digits, or export it elsewhere"
+    )
+
+
+def test_the_example_reworked_for_jira_exports_to_the_golden_which_skaldr_write_adf_golden_rewrites(
+    tmp_path: Path,
+) -> None:
+    out_dir = golden_or_scratch_folder("adf", tmp_path)
+
+    export_adf(parse_report(example_for("adf")), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(golden_of("adf"))
 
 
 def test_an_adf_export_writes_the_body_as_page_adf_json_without_the_title(tmp_path: Path) -> None:
@@ -150,7 +163,7 @@ def test_the_compact_length_counts_characters_of_the_json_a_description_field_re
 def test_an_adf_export_over_the_jira_limit_names_the_size_and_the_limit(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
 
-    result = export_adf(load_report(EXAMPLE), out_dir)
+    result = export_adf(parse_report(example_for("adf")), out_dir)
 
     written = json.loads((out_dir / "page.adf.json").read_text(encoding="utf-8"))
     assert result.oversized_sections == (_oversize_warning(compact_adf_length(written)),)
@@ -164,9 +177,11 @@ def test_an_adf_export_within_the_limit_has_no_warning(tmp_path: Path) -> None:
 
 
 def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(
-    export_dir: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main([str(EXAMPLE), "--export", "adf", "--export-dir", str(export_dir)]) == 0
+    data_path = write_report(tmp_path, example_for("adf"))
+
+    assert main([str(data_path), "--export", "adf", "--export-dir", str(export_dir)]) == 0
 
     written = json.loads((export_dir / "page.adf.json").read_text(encoding="utf-8"))
     captured = capsys.readouterr()

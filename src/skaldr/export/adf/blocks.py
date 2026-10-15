@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import count, takewhile
+from itertools import count
 from typing import Final, Literal
 
 from typing_extensions import Never
@@ -101,8 +101,13 @@ def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], conta
             )
 
 
-def _fits_in_a_list_item(block: AdfBlock) -> bool:
-    return block["type"] in _LIST_ITEM_BLOCKS
+def _require_a_list_item_holds(node: Node, produced: Iterable[AdfBlock]) -> None:
+    for block in produced:
+        if block["type"] not in _LIST_ITEM_BLOCKS:
+            raise ExportInvariantError(
+                f"ADF does not allow a {block['type']} inside a list item, written from a "
+                f"{type(node).__name__}; the export check should have refused it"
+            )
 
 
 def _empty_paragraph() -> AdfParagraph:
@@ -244,19 +249,8 @@ class _AdfBlocks:
             return []
         if node.kind == "check":
             return self.task_blocks(node, container)
-        written: list[AdfBlock] = []
-        items: list[AdfListItem] = []
-        first_number = node.start
-        for number, entry in enumerate(node.entries, start=node.start):
-            item, overflow = self.list_item(entry, container)
-            items.append(item)
-            if overflow:
-                written += [self.listed(node.kind, items, first_number), *overflow]
-                items = []
-                first_number = number + 1
-        if items:
-            written.append(self.listed(node.kind, items, first_number))
-        return written
+        items = [self.list_item(entry, container) for entry in node.entries]
+        return [self.listed(node.kind, items, node.start)]
 
     def listed(self, kind: Literal["bullet", "number"], items: list[AdfListItem], first: int) -> AdfBlock:
         if kind == "bullet":
@@ -265,15 +259,13 @@ class _AdfBlocks:
             return AdfOrderedList(type="orderedList", content=items)
         return AdfOrderedList(type="orderedList", attrs=AdfOrderedListAttrs(order=first), content=items)
 
-    def list_item(self, entry: ListEntry, container: Container) -> tuple[AdfListItem, list[AdfBlock]]:
+    def list_item(self, entry: ListEntry, container: Container) -> AdfListItem:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
-        overflow: list[AdfBlock] = []
         for child in entry.children:
             produced = self.node_blocks(child, container)
-            fitting = [] if overflow else list(takewhile(_fits_in_a_list_item, produced))
-            content += fitting
-            overflow += produced[len(fitting) :]
-        return AdfListItem(type="listItem", content=content), overflow
+            _require_a_list_item_holds(child, produced)
+            content += produced
+        return AdfListItem(type="listItem", content=content)
 
     def task_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
         written: list[AdfBlock] = []
@@ -310,6 +302,7 @@ class _AdfBlocks:
         overflow: list[AdfBlock] = []
         for child in children:
             produced = self.node_blocks(child, container)
+            _require_a_list_item_holds(child, produced)
             is_a_task_list = isinstance(child, ListNode) and child.kind == "check"
             if produced and is_a_task_list and not overflow:
                 first = produced[0]

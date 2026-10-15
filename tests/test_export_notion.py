@@ -1201,11 +1201,6 @@ def test_nested_list_children_are_indented_with_tabs() -> None:
 @pytest.mark.parametrize(
     ("options", "notion"),
     [
-        pytest.param(
-            {"start": 9},
-            "- 9\\. c\n- 10\\. d\n\t1. e\n",
-            id="a-start-past-one-is-bullets-led-by-the-escaped-number-and-a-nested-list-is-native",
-        ),
         pytest.param({"start": 1}, "1. c\n2. d\n\t1. e\n", id="a-start-of-one-is-native"),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n\t1. e\n", id="decimal-is-native"),
         pytest.param(
@@ -1224,20 +1219,13 @@ def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, ob
     assert notion_of([block]) == notion
 
 
-def test_a_numbered_list_past_nine_digits_keeps_every_number_as_text() -> None:
-    block = {"type": "list", "style": "number", "start": 999_999_999, "items": ["a", "b"]}
+def test_the_notion_writer_refuses_a_numbered_list_starting_past_1_as_an_invariant() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([ListNode("number", (ListEntry((Plain("three"),)),), start=3)])
 
-    assert notion_of([block]) == "- 999999999\\. a\n- 1000000000\\. b\n"
-
-
-def test_a_numbered_list_written_as_bullets_is_kept_apart_from_a_bullet_list_after_it() -> None:
-    blocks = [
-        {"type": "list", "style": "number", "start": 3, "items": ["three"]},
-        {"type": "list", "items": ["dot"]},
-        {"type": "list", "style": "number", "items": ["one"]},
-    ]
-
-    assert notion_of(blocks) == "- 3\\. three\n<empty-block/>\n- dot\n1. one\n"
+    assert str(raised.value) == (
+        "Notion numbers every list from 1, not from 3; the export check should have refused it"
+    )
 
 
 def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout() -> None:
@@ -1862,11 +1850,6 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
             {"type": "callout", "tone": "info", "body": "1. a\n2. b"},
             '<callout icon="💡" color="blue_bg">\n\t1. a\n\t2. b\n</callout>\n',
             id="a-numbered-list-from-one-is-native",
-        ),
-        pytest.param(
-            {"type": "text", "body": "3. a\n4. b"},
-            "- 3\\. a\n- 4\\. b\n",
-            id="a-numbered-list-from-three-keeps-its-numbers",
         ),
         pytest.param(
             {"type": "text", "body": "- a\n- b\n\nOutro\n\n- c\n- d\n* e\n* f"},

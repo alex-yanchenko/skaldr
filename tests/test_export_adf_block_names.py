@@ -152,8 +152,9 @@ def test_a_list_entry_child_refused_inside_a_callout_names_the_block_and_its_pat
     nodes: tuple[Node, ...] = (Callout("info", (ListNode(kind, (entry,)),)),)
 
     assert str(refusal_of(nodes, "adf")) == (
-        "ADF cannot place a comparison inside a callout, "
-        "at blocks.0.walkthrough.steps.0.detail.0.comparison; move the comparison out of the callout"
+        "ADF cannot place a comparison inside a walkthrough step, "
+        "at blocks.0.walkthrough.steps.0.detail.0.comparison; "
+        "move the comparison out of the step, after the walkthrough"
     )
 
 

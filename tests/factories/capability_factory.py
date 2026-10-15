@@ -268,7 +268,98 @@ TEXT_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.table",
     ),
 }
-SEEDED_REFUSALS: dict[str, RefusedCase] = {**ADF_REFUSALS, **SLACK_REFUSALS, **TEXT_REFUSALS}
+LIST_FROM_3 = [{"type": "text", "body": "3. a\n4. b"}]
+ROMAN_LIST = [{"type": "list", "style": "number", "numbering": "roman", "items": ["a", "b"]}]
+LETTERED_LIST = [{"type": "list", "style": "number", "numbering": "letters", "items": ["a", "b"]}]
+TABLE_IN_A_STEP = [walkthrough_holding(TABLE)]
+CALLOUT_IN_A_STEP = [walkthrough_holding({"type": "callout", "tone": "info", "body": "Lock it."})]
+LIST_IN_A_QUOTE = [{"type": "quote", "body": "Count:\n\n- aisles\n- bins"}]
+DIGITS_ONLY_INSTEAD = "number the list with digits, or export it elsewhere"
+ADF_DIGITS_ONLY_WHY = (
+    "ADF numbers a list only with digits, so it cannot show a list numbered with {numbering}"
+)
+CANVAS_DIGITS_ONLY_WHY = (
+    "a Slack canvas numbers a list only with digits, so it cannot show a list numbered with {numbering}"
+)
+STEP_PATH = "at blocks.0.walkthrough.steps.0.detail.0"
+LIST_REFUSALS: dict[str, RefusedCase] = {
+    "notion-numbered-list-starting-past-1": RefusedCase(
+        "notion",
+        LIST_FROM_3,
+        "Notion numbers every list from 1, so it cannot show a numbered list that starts at 3",
+        "number the list from 1, or export it elsewhere",
+        "at blocks.0.text",
+    ),
+    "adf-list-numbered-with-roman-numerals": RefusedCase(
+        "adf",
+        ROMAN_LIST,
+        ADF_DIGITS_ONLY_WHY.format(numbering="roman numerals"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "slack-list-numbered-with-roman-numerals": RefusedCase(
+        "slack",
+        ROMAN_LIST,
+        CANVAS_DIGITS_ONLY_WHY.format(numbering="roman numerals"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "adf-list-numbered-with-letters": RefusedCase(
+        "adf",
+        LETTERED_LIST,
+        ADF_DIGITS_ONLY_WHY.format(numbering="letters"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "slack-list-numbered-with-letters": RefusedCase(
+        "slack",
+        LETTERED_LIST,
+        CANVAS_DIGITS_ONLY_WHY.format(numbering="letters"),
+        DIGITS_ONLY_INSTEAD,
+        "at blocks.0.list",
+    ),
+    "adf-table-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        TABLE_IN_A_STEP,
+        "ADF cannot place a table inside a walkthrough step",
+        "move the table out of the step, after the walkthrough",
+        f"{STEP_PATH}.table",
+    ),
+    "slack-table-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        TABLE_IN_A_STEP,
+        LIST_ITEM_WHY.format(what="a table"),
+        OUT_OF_THE_STEP,
+        f"{STEP_PATH}.table",
+    ),
+    "adf-callout-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        CALLOUT_IN_A_STEP,
+        "ADF cannot place a callout inside a walkthrough step",
+        "move the callout out of the step, after the walkthrough",
+        f"{STEP_PATH}.callout",
+    ),
+    "slack-callout-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        CALLOUT_IN_A_STEP,
+        LIST_ITEM_WHY.format(what="a callout"),
+        OUT_OF_THE_STEP,
+        f"{STEP_PATH}.callout",
+    ),
+    "slack-list-inside-a-quote": RefusedCase(
+        "slack",
+        LIST_IN_A_QUOTE,
+        "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
+        "move the list out of the quote, after it",
+        "at blocks.0.quote",
+    ),
+}
+SEEDED_REFUSALS: dict[str, RefusedCase] = {
+    **ADF_REFUSALS,
+    **SLACK_REFUSALS,
+    **TEXT_REFUSALS,
+    **LIST_REFUSALS,
+}
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]
 

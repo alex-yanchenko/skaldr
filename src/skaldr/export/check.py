@@ -5,6 +5,7 @@ from typing import Final
 
 from typing_extensions import Self, assert_never
 
+from skaldr import models
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     BACKTICK,
@@ -16,10 +17,13 @@ from skaldr.export.capabilities import (
     CellCount,
     Container,
     Details,
+    FencedInAListItem,
+    FencedInAListItemFeature,
     GridInAStep,
     Held,
     HeldByAListItem,
     InlineCode,
+    ListInAQuote,
     ListItemFeature,
     ListStart,
     MarkedText,
@@ -29,6 +33,7 @@ from skaldr.export.capabilities import (
     SameDocumentLink,
     ScriptForm,
     TextMarkFeature,
+    TextNumbering,
     character_without_a_unicode_form,
 )
 from skaldr.export.inline import one_line
@@ -74,6 +79,7 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import ExportTarget
 from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.prose_blocks import ProseList, prose_blocks
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -297,9 +303,45 @@ def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
             assert_never(run)
 
 
+def _authored_on_its_own(child: Node, holder: ListNode) -> bool:
+    return child.authored_at != holder.authored_at
+
+
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
-    authored_on_its_own = child.authored_at != holder.authored_at
-    return "block inside a walkthrough step" if authored_on_its_own else "block inside a list item"
+    in_a_step = _authored_on_its_own(child, holder)
+    return "block inside a walkthrough step" if in_a_step else "block inside a list item"
+
+
+def _fenced_item_feature(child: Node, holder: ListNode) -> FencedInAListItemFeature:
+    if _authored_on_its_own(child, holder):
+        return "table, callout, heading, quote, toggle or divider inside a walkthrough step"
+    return "table, callout, heading, quote, toggle or divider inside a list item"
+
+
+def _fenced_off_from_a_jira_list_item(child: Node) -> Iterator[Node]:
+    match child:
+        case Heading() | TableNode() | Callout() | Divider() | Toggle():
+            yield child
+        case Quote() if any(child.lines) or child.cite:
+            yield child
+        case Tabs() if child.tabs:
+            yield child
+        case Columns() | Diagram():
+            for nested in nested_nodes(child):
+                yield from _fenced_off_from_a_jira_list_item(nested)
+        case (
+            Paragraph()
+            | ListNode()
+            | CodeBlock()
+            | DisplayMath()
+            | Media()
+            | Quote()
+            | Tabs()
+            | TableOfContents()
+        ):
+            return
+        case _:
+            assert_never(child)
 
 
 class _TreeWalk:
@@ -374,6 +416,10 @@ class _TreeWalk:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
+            fenced = next(_fenced_off_from_a_jira_list_item(child), None)
+            if fenced is not None:
+                details = FencedInAListItem(_fenced_item_feature(child, holder), _term(fenced))
+                yield self.hit(details, fenced.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
@@ -391,6 +437,22 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
                 yield FeatureHit(GridInAStep(), where)
 
 
+def _text_numbering_hits(path: str, block: models.ListBlock) -> Iterator[FeatureHit]:
+    match block.numbering:
+        case "letters":
+            yield FeatureHit(TextNumbering("letters"), path)
+        case "roman":
+            yield FeatureHit(TextNumbering("roman numerals"), path)
+        case "decimal" | None:
+            return
+        case _:
+            assert_never(block.numbering)
+
+
+def _holds_a_list(prose: str) -> bool:
+    return any(isinstance(part, ProseList) for part in prose_blocks(prose))
+
+
 def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
     located = (
         located_block
@@ -401,6 +463,10 @@ def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHi
     for path, block in located:
         if isinstance(block, Walkthrough):
             yield from _grids_in_walkthrough_steps(path, block)
+        if isinstance(block, models.ListBlock):
+            yield from _text_numbering_hits(path, block)
+        if isinstance(block, models.Quote) and _holds_a_list(block.body):
+            yield FeatureHit(ListInAQuote(), path)
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:

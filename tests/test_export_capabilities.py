@@ -42,7 +42,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "toggle inside a toggle inside a toggle": {"adf": "reject"},
     "block inside a list item": {"slack": "reject"},
     "block inside a walkthrough step": {"slack": "reject"},
-    "numbered list starting past 1": {"slack": "reject"},
+    "numbered list starting past 1": {"notion": "reject", "slack": "reject"},
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
@@ -56,6 +56,10 @@ TEXT_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "link to another skaldr document": {"notion": "reject", "slack": "reject"},
     "inline code holding a backtick": {"notion": "reject"},
     "inline code holding a closing tag in a table cell": {"notion": "reject"},
+    "list numbered with letters or roman numerals": {"adf": "reject", "slack": "reject"},
+    "table, callout, heading, quote, toggle or divider inside a list item": {"adf": "reject"},
+    "table, callout, heading, quote, toggle or divider inside a walkthrough step": {"adf": "reject"},
+    "list inside a quote": {"slack": "reject"},
 }
 
 

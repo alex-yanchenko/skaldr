@@ -126,14 +126,15 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def test_the_example_is_refused_for_slack_for_its_underline(tmp_path: Path) -> None:
+def test_the_example_is_refused_for_slack_for_its_roman_numbered_list(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(load_report(EXAMPLE), tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
-        "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit'",
-        "write the text without the underline or export the document elsewhere",
-        "at blocks.7.text",
+        "a Slack canvas numbers a list only with digits, "
+        "so it cannot show a list numbered with roman numerals",
+        "number the list with digits, or export it elsewhere",
+        "at blocks.31.list",
     )
 
 
@@ -256,25 +257,25 @@ def test_a_numbered_list_that_does_not_start_at_1_is_rejected_naming_its_path(
     )
 
 
-@pytest.mark.parametrize(
-    ("block", "text"),
-    [
-        pytest.param({"type": "quote", "body": "3. a\n4. b"}, "> 3\\. a\n>\n> 4\\. b\n", id="quote"),
-        pytest.param(
-            {
-                "type": "table",
-                "columns": [{"key": "n", "label": "N", "kind": "text"}],
-                "rows": [{"n": "3. a\n4. b"}],
-            },
-            "| N |\n| --- |\n| 3. a<br>4. b |\n",
-            id="table-cell",
-        ),
-    ],
-)
-def test_a_numbered_list_in_a_quote_or_a_table_cell_keeps_its_numbers_as_text(
-    block: dict[str, Any], text: str
-) -> None:
-    assert slack_of([block]) == text
+def test_a_numbered_list_in_a_table_cell_keeps_its_numbers_as_text() -> None:
+    block = {
+        "type": "table",
+        "columns": [{"key": "n", "label": "N", "kind": "text"}],
+        "rows": [{"n": "3. a\n4. b"}],
+    }
+
+    assert slack_of([block]) == "| N |\n| --- |\n| 3. a<br>4. b |\n"
+
+
+def test_a_numbered_list_in_a_quote_is_refused_since_a_canvas_quote_holds_only_text() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        slack_of([{"type": "quote", "body": "3. a\n4. b"}])
+
+    assert vars(raised.value) == _canvas_rejection(
+        "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
+        "move the list out of the quote, after it",
+        "at blocks.0.quote",
+    )
 
 
 @pytest.mark.parametrize(

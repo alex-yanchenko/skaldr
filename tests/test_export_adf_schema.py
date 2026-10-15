@@ -8,13 +8,13 @@ from jsonschema import Draft4Validator, ValidationError
 from skaldr.export.adf import IssueLinks, render_adf, render_adf_document
 from skaldr.export.lower import lower_report
 from skaldr.export.tree import Node
-from skaldr.models import load_report, parse_report
+from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
 from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, make_report
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
+from tests.factories.example_factory import example_for
 
 ADF_SCHEMA_FILE = REPO_ROOT / "tests" / "schemas" / "adf-schema-57.7.4-full.json"
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SITE = IssueLinks("https://example.atlassian.net", frozenset({"PLAN"}))
 
 
@@ -102,5 +102,5 @@ def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:
     assert _problems(render_adf_document(lowered)) == []
 
 
-def test_the_example_document_is_accepted_by_the_adf_schema() -> None:
-    assert _problems(render_adf_document(lower_report(load_report(EXAMPLE)), SITE)) == []
+def test_the_example_reworked_for_jira_is_accepted_by_the_adf_schema() -> None:
+    assert _problems(render_adf_document(lower_report(parse_report(example_for("adf"))), SITE)) == []

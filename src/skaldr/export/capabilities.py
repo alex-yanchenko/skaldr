@@ -24,6 +24,12 @@ OtherDocumentLinkFeature = Literal["link to another skaldr document"]
 InlineCodeFeature = Literal[
     "inline code holding a backtick", "inline code holding a closing tag in a table cell"
 ]
+TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
+FencedInAListItemFeature = Literal[
+    "table, callout, heading, quote, toggle or divider inside a list item",
+    "table, callout, heading, quote, toggle or divider inside a walkthrough step",
+]
+ListInAQuoteFeature = Literal["list inside a quote"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -35,6 +41,9 @@ Feature = Literal[
     SameDocumentLinkFeature,
     OtherDocumentLinkFeature,
     InlineCodeFeature,
+    TextNumberingFeature,
+    FencedInAListItemFeature,
+    ListInAQuoteFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
@@ -121,6 +130,23 @@ class InlineCode:
     code: str
 
 
+@dataclass(frozen=True)
+class TextNumbering:
+    numbering: str
+    feature: TextNumberingFeature = field(default="list numbered with letters or roman numerals", init=False)
+
+
+@dataclass(frozen=True)
+class FencedInAListItem:
+    feature: FencedInAListItemFeature
+    held: str
+
+
+@dataclass(frozen=True)
+class ListInAQuote:
+    feature: ListInAQuoteFeature = field(default="list inside a quote", init=False)
+
+
 Details = (
     Placement
     | HeldByAListItem
@@ -132,6 +158,9 @@ Details = (
     | SameDocumentLink
     | OtherDocumentLink
     | InlineCode
+    | TextNumbering
+    | FencedInAListItem
+    | ListInAQuote
 )
 
 
@@ -168,6 +197,10 @@ _OTHER_DOCUMENT_WHY: Final = (
     "since skaldr has no address for that document there"
 )
 _OTHER_DOCUMENT_INSTEAD: Final = "link to the document's https address, or export it elsewhere"
+_DIGITS_ONLY_WHY: Final = (
+    "{target} numbers a list only with digits, so it cannot show a list numbered with {{numbering}}"
+)
+_DIGITS_ONLY_INSTEAD: Final = "number the list with digits, or export it elsewhere"
 
 
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
@@ -190,11 +223,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
     "numbered list starting past 1": _kept_except(
         {
+            "notion": Rejection(
+                "Notion numbers every list from 1, so it cannot show a numbered list that starts at {start}",
+                "number the list from 1, or export it elsewhere",
+            ),
             "slack": Rejection(
                 "a Slack canvas numbers every list from 1, so it cannot show a numbered list "
                 "that starts at {start}",
                 "number the list from 1, or export it elsewhere",
-            )
+            ),
         }
     ),
     "table over 300 cells": _kept_except(
@@ -278,6 +315,38 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "notion": Rejection(
                 "Notion loses a table cell whose inline code holds '</', as in '{code}'",
                 "write the code outside the table, or without '</'",
+            )
+        }
+    ),
+    "list numbered with letters or roman numerals": _kept_except(
+        {
+            "adf": Rejection(_DIGITS_ONLY_WHY.format(target="ADF"), _DIGITS_ONLY_INSTEAD),
+            "slack": Rejection(_DIGITS_ONLY_WHY.format(target="a Slack canvas"), _DIGITS_ONLY_INSTEAD),
+        }
+    ),
+    "table, callout, heading, quote, toggle or divider inside a list item": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a {held} inside a list item",
+                "move the {held} out of the list, after the list",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "table, callout, heading, quote, toggle or divider inside a walkthrough step": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a {held} inside a walkthrough step",
+                "move the {held} out of the step, after the walkthrough",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "list inside a quote": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
+                "move the list out of the quote, after it",
             )
         }
     ),

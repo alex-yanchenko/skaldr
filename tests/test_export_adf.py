@@ -197,93 +197,35 @@ def test_a_list_entry_may_hold_a_paragraph_a_number_list_and_a_code_block() -> N
     )
 
 
-def test_a_bullet_entry_holding_a_panel_ends_the_list_and_the_panel_and_the_rest_follow_it() -> None:
-    node = ListNode(
-        "bullet",
-        (
-            _text_entry("a", _para("kept"), Callout("info", (_para("hoisted"),)), _para("after")),
-            _text_entry("b"),
-        ),
-    )
+def test_the_adf_writer_refuses_a_panel_in_a_list_entry_as_an_invariant() -> None:
+    node = ListNode("bullet", (_text_entry("a", _para("kept"), Callout("info", (_para("c"),))),))
 
-    assert _rendered(node) == _doc(
-        {"type": "bulletList", "content": [_item(_words("a"), _words("kept"))]},
-        {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("hoisted")]},
-        _words("after"),
-        {"type": "bulletList", "content": [_item(_words("b"))]},
+    with pytest.raises(ExportInvariantError) as raised:
+        render_adf([node])
+
+    assert str(raised.value) == (
+        "ADF does not allow a panel inside a list item, written from a Callout; "
+        "the export check should have refused it"
     )
 
 
-def test_a_numbered_list_continues_its_numbers_after_a_hoisted_block() -> None:
-    table = TableNode((_cell("h"),), ())
-    node = ListNode(
-        "number", (_text_entry("a"), _text_entry("b", table), _text_entry("c"), _text_entry("d")), start=1
-    )
-
-    assert _rendered(node) == _doc(
-        {"type": "orderedList", "content": [_item(_words("a")), _item(_words("b"))]},
-        _table(_row(_table_cell("tableHeader", "h"))),
-        {"type": "orderedList", "attrs": {"order": 3}, "content": [_item(_words("c")), _item(_words("d"))]},
-    )
-
-
-def test_a_hoisted_block_the_container_cannot_hold_fails() -> None:
+def test_a_list_entry_holding_a_callout_inside_a_callout_is_refused_for_the_list_item_first() -> None:
     node = Callout("info", (ListNode("bullet", (_text_entry("a", Callout("info", (_para("x"),))),)),))
 
-    assert (
-        str(refusal_of((node,), "adf"))
-        == "ADF cannot place a callout inside a callout; move the callout out of the callout"
+    assert str(refusal_of((node,), "adf")) == (
+        "ADF cannot place a callout inside a list item; move the callout out of the list, after the list"
     )
 
 
-def test_a_nested_list_that_cannot_fit_ends_only_its_own_list_and_the_rest_follows() -> None:
-    inner = ListNode(
-        "bullet",
-        (_text_entry("x"), _text_entry("y", Callout("info", (_para("c"),))), _text_entry("z")),
-    )
-    node = ListNode("bullet", (_text_entry("a", inner), _text_entry("b")))
-
-    assert _rendered(node) == _doc(
-        {
-            "type": "bulletList",
-            "content": [
-                _item(
-                    _words("a"),
-                    {"type": "bulletList", "content": [_item(_words("x")), _item(_words("y"))]},
-                )
-            ],
-        },
-        {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("c")]},
-        {"type": "bulletList", "content": [_item(_words("z"))]},
-        {"type": "bulletList", "content": [_item(_words("b"))]},
-    )
-
-
-def test_a_toggle_in_a_list_entry_inside_a_toggle_follows_the_list_as_a_nested_expand() -> None:
-    inner = Toggle(plain("deep"), None, (_para("d"),))
-    node = Toggle(plain("outer"), None, (ListNode("bullet", (_text_entry("a", inner),)),))
-
-    assert _rendered(node) == _doc(
-        {
-            "type": "expand",
-            "attrs": {"title": "outer"},
-            "content": [
-                {"type": "bulletList", "content": [_item(_words("a"))]},
-                {"type": "nestedExpand", "attrs": {"title": "deep"}, "content": [_words("d")]},
-            ],
-        }
-    )
-
-
-def test_a_list_hoisting_a_block_inside_a_panel_fails_naming_the_block_and_the_heading_above() -> None:
+def test_a_list_entry_holding_a_toggle_is_refused_naming_the_heading_above() -> None:
     refused = (
         Heading(2, plain("Plan")),
         Callout("info", (ListNode("bullet", (_text_entry("a", Toggle(plain("t"), None, (_para("x"),))),)),)),
     )
 
     assert str(refusal_of(refused, "adf")) == (
-        "ADF cannot place a toggle inside a callout, under the heading 'Plan'; "
-        "move the toggle out of the callout"
+        "ADF cannot place a toggle inside a list item, under the heading 'Plan'; "
+        "move the toggle out of the list, after the list"
     )
 
 
@@ -372,11 +314,7 @@ def test_a_task_entry_with_detail_ends_the_task_list_and_the_detail_follows_it()
         (
             ListEntry(
                 plain("a"),
-                children=(
-                    ListNode("check", (ListEntry(plain("sub")),)),
-                    _para("detail"),
-                    Callout("info", (_para("c"),)),
-                ),
+                children=(ListNode("check", (ListEntry(plain("sub")),)), _para("detail")),
             ),
             ListEntry(plain("b"), checked=True),
         ),
@@ -385,7 +323,6 @@ def test_a_task_entry_with_detail_ends_the_task_list_and_the_detail_follows_it()
     assert _rendered(node) == _doc(
         _task_list(1, _task_item(2, "TODO", "a"), _task_list(3, _task_item(4, "TODO", "sub"))),
         _words("detail"),
-        {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("c")]},
         _task_list(5, _task_item(6, "DONE", "b")),
     )
 
@@ -413,29 +350,12 @@ def test_a_task_entry_with_detail_inside_a_panel_keeps_the_detail_in_the_panel()
     )
 
 
-def test_a_task_entry_holding_a_toggle_inside_a_toggle_follows_the_list_as_a_nested_expand() -> None:
-    detail = Toggle(plain("deep"), None, (_para("d"),))
-    node = Toggle(plain("outer"), None, (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
-
-    assert _rendered(node) == _doc(
-        {
-            "type": "expand",
-            "attrs": {"title": "outer"},
-            "content": [
-                _task_list(1, _task_item(2, "TODO", "a")),
-                {"type": "nestedExpand", "attrs": {"title": "deep"}, "content": [_words("d")]},
-            ],
-        }
-    )
-
-
-def test_a_task_entry_holding_a_toggle_inside_a_panel_fails() -> None:
+def test_a_task_entry_holding_a_toggle_is_refused_like_any_list_item() -> None:
     detail = Toggle(plain("t"), None, (_para("x"),))
     node = Callout("info", (ListNode("check", (ListEntry(plain("a"), children=(detail,)),)),))
 
-    assert (
-        str(refusal_of((node,), "adf"))
-        == "ADF cannot place a toggle inside a callout; move the toggle out of the callout"
+    assert str(refusal_of((node,), "adf")) == (
+        "ADF cannot place a toggle inside a list item; move the toggle out of the list, after the list"
     )
 
 

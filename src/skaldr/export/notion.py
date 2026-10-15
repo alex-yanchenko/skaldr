@@ -9,7 +9,7 @@ from typing_extensions import assert_never
 from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
-from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER
+from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -60,7 +60,6 @@ SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
-NOTION_LIST_START: Final = 1
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
 EQUATION_FENCE: Final = "$$"
@@ -344,20 +343,12 @@ def _table_lines(table: TableNode, room: TableRoom) -> list[str]:
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
 
 
-def _numbers_as_bullets(node: ListNode) -> bool:
-    return node.kind == "number" and node.start != NOTION_LIST_START
-
-
-def _written_kind(node: ListNode) -> ListKind:
-    return "bullet" if _numbers_as_bullets(node) else node.kind
-
-
 def _list_marker(node: ListNode, index: int, checked: bool) -> str:
     match node.kind:
         case "bullet":
             return "-"
         case "number":
-            return f"- {index}\\." if _numbers_as_bullets(node) else f"{index}."
+            return f"{index}."
         case "check":
             return "- [x]" if checked else "- [ ]"
         case _:
@@ -365,6 +356,11 @@ def _list_marker(node: ListNode, index: int, checked: bool) -> str:
 
 
 def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
+    if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
+        raise ExportInvariantError(
+            f"Notion numbers every list from 1, not from {node.start}; "
+            "the export check should have refused it"
+        )
     lines: list[str] = []
     for index, entry in enumerate(node.entries, start=node.start):
         marker = _list_marker(node, index, entry.checked)
@@ -457,7 +453,7 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
 
 
 def _list_kind(node: Node) -> ListKind | None:
-    return _written_kind(node) if isinstance(node, ListNode) else None
+    return node.kind if isinstance(node, ListNode) else None
 
 
 def _notion_blocks(nodes: Sequence[Node], room: TableRoom) -> list[str]:
