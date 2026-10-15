@@ -56,6 +56,10 @@ def wrap_around_core(inner: str, opener: str, closer: str) -> str:
     return f"{lead}{opener}{core}{closer}{trail}"
 
 
+def label_then(label: str, written_date: str) -> str:
+    return f"{label} {written_date}" if label.strip() else written_date
+
+
 def styled(style: MarkerStyle, inner: str) -> str:
     marker = STYLE_MARKER[style]
     return wrap_around_core(inner, marker, marker)

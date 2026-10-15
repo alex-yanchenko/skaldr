@@ -2,6 +2,7 @@ import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Final, Literal, NoReturn
 
 from typing_extensions import assert_never
@@ -55,6 +56,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import SCRIPT_HTML_TAG, Link, MarkerStyle, ScriptPosition
+from skaldr.typed_links import date_target_text
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -113,6 +115,11 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
+
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
+        if end is None:
+            return f'<time datetime="{start.isoformat()}">{label}</time>'
+        return f'<span data-range="{date_target_text(start, end)}">{label}</span>'
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")

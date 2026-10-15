@@ -49,6 +49,10 @@ def _day(value: str, target: str) -> date:
         raise _bad_date(value, target) from error
 
 
+def date_target_text(start: date, end: date | None) -> str:
+    return f"{start.isoformat()}{_RANGE_SEPARATOR}{end.isoformat()}" if end else start.isoformat()
+
+
 def date_target(target: str) -> DateTarget:
     days = target.removeprefix(DATE_SCHEME).split(_RANGE_SEPARATOR)
     if len(days) > _DAYS_IN_A_RANGE:

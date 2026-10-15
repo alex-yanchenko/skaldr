@@ -295,10 +295,18 @@ def test_a_full_page_render_resolves_people_from_the_meta_map() -> None:
     assert '<a class="issue-link" href="https://example.atlassian.net/browse/ABC-123">ABC-123</a>' in html
 
 
-def test_github_markdown_keeps_the_label_and_links_issues_and_documents() -> None:
+def test_github_markdown_keeps_the_label_dates_it_and_links_issues_and_documents() -> None:
     assert markdown_of(_text_block(TYPED_BODY), meta=PEOPLE_META) == (
-        "Due 1 Oct or the week; Ada owns [ABC-123](https://example.atlassian.net/browse/ABC-123); "
+        'Due <time datetime="2026-10-01">1 Oct</time> or '
+        '<span data-range="2026-10-05/2026-10-09">the week</span>; '
+        "Ada owns [ABC-123](https://example.atlassian.net/browse/ABC-123); "
         "see [the plan](onboarding-plan.md).\n"
+    )
+
+
+def test_github_markdown_keeps_the_marks_and_escapes_of_a_date_label() -> None:
+    assert markdown_of(_text_block("[**1 Oct** a*b](date:2026-10-01)"), meta=PEOPLE_META) == (
+        '<time datetime="2026-10-01">**1 Oct** a\\*b</time>\n'
     )
 
 
@@ -316,9 +324,16 @@ def test_github_markdown_leaves_an_issue_key_as_text_without_a_site() -> None:
 
 def test_notion_markdown_writes_mentions_for_dates_and_people_and_links_for_issues() -> None:
     assert notion_of(_text_block(TYPED_BODY_WITHOUT_A_DOCUMENT_LINK), meta=PEOPLE_META) == (
-        'Due <mention-date start="2026-10-01"/> or <mention-date start="2026-10-05" end="2026-10-09"/>; '
+        'Due 1 Oct <mention-date start="2026-10-01"/> or '
+        'the week <mention-date start="2026-10-05" end="2026-10-09"/>; '
         '<mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> owns '
         "[ABC-123](https://example.atlassian.net/browse/ABC-123).\n"
+    )
+
+
+def test_notion_markdown_writes_a_blank_date_label_as_the_date_mention_alone() -> None:
+    assert notion_of(_text_block("on [ ](date:2026-10-01)"), meta=PEOPLE_META) == (
+        'on <mention-date start="2026-10-01"/>\n'
     )
 
 
@@ -423,7 +438,7 @@ def test_notion_writes_typed_links_in_a_table_cell_and_a_heading_caption() -> No
 
     assert notion_of([heading, table], meta=PEOPLE_META) == (
         "## Plan\n"
-        '*due <mention-date start="2026-10-01"/>* {color="gray"}\n'
+        '*due 1 Oct <mention-date start="2026-10-01"/>* {color="gray"}\n'
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n"
         "\t\t<td>**Who**</td>\n"
@@ -431,7 +446,7 @@ def test_notion_writes_typed_links_in_a_table_cell_and_a_heading_caption() -> No
         "\t</tr>\n"
         "\t<tr>\n"
         '\t\t<td><mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> '
-        'on <mention-date start="2026-10-01"/></td>\n'
+        'on 1 Oct <mention-date start="2026-10-01"/></td>\n'
         "\t\t<td>x</td>\n"
         "\t</tr>\n"
         "</table>\n"

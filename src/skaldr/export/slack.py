@@ -26,6 +26,7 @@ from skaldr.export.markup import (
     heading_line,
     indent_lines,
     joined,
+    label_then,
     pipe_table_lines,
     quoted,
     spaced,
@@ -57,6 +58,7 @@ from skaldr.export.tree import (
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
+from skaldr.typed_links import date_target_text
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
@@ -102,8 +104,11 @@ class _SlackRuns(CommonMarkRuns):
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
 
-    def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
-        return f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
+        canvas_date = f"{_slack_date(start)} to {_slack_date(end)}" if end else _slack_date(start)
+        if label == date_target_text(start, end):
+            return canvas_date
+        return label_then(label, canvas_date)
 
     def math(self, expression: str, /) -> str:
         require_the_swap("inline math", "slack")
