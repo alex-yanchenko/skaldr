@@ -12,16 +12,26 @@ from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Featur
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export.notion import render_notion
-from skaldr.export.tree import Paragraph, Tab, Tabs
+from skaldr.export.tree import BlockRegion, LoweredDocument, Paragraph, Tab, Tabs
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from skaldr.models import parse_report
+from skaldr.models import load_report, parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
 from skaldr.richtext import Plain
-from tests.factories import make_jira_target, make_report, make_request, make_section, make_tabs, write_report
+from tests.factories import (
+    make_jira_target,
+    make_report,
+    make_request,
+    make_section,
+    make_tabs,
+    make_toggle,
+    write_index_document,
+    write_report,
+)
 from tests.factories.capability_factory import (
     ADF_CASES,
+    CANVAS_CALLOUT_WHY,
     CLEAN_BLOCKS,
     SEEDED_CASES,
     SEEDED_REFUSALS,
@@ -318,6 +328,83 @@ def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
         _check(blocks, "slack")
 
     assert raised.value.where == "at blocks.0.panel.blocks.0.divider"
+
+
+def _filler(count: int) -> list[dict[str, Any]]:
+    return [{"type": "text", "body": f"Row {index}."} for index in range(count)]
+
+
+def _a_panel_refusal_at_9_then_a_model_refusal_at_10() -> list[dict[str, Any]]:
+    return [*_filler(9), *in_a_panel({"type": "divider"}), two_cell_grid(text_grid())]
+
+
+def test_a_refusal_at_block_9_is_reported_before_a_model_refusal_at_block_10() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(_a_panel_refusal_at_9_then_a_model_refusal_at_10(), "slack")
+
+    assert raised.value.where == "at blocks.9.panel.blocks.0.divider"
+
+
+def test_a_refusal_at_block_9_of_a_part_is_reported_before_a_model_refusal_at_its_block_10(
+    tmp_path: Path,
+) -> None:
+    index = write_index_document(
+        tmp_path, {"one.yaml": make_report(blocks=_a_panel_refusal_at_9_then_a_model_refusal_at_10())}
+    )
+    report = load_report(index)
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, lower_report(report), "slack")
+
+    assert raised.value.where == (
+        "at blocks.0.part.blocks.9.panel.blocks.0.divider, under the heading 'Test Report'"
+    )
+
+
+def test_a_refusal_found_on_the_model_is_reported_when_no_lowered_node_follows_it() -> None:
+    report = parse_report(make_report(blocks=[walkthrough_holding(text_grid())]))
+    page = LoweredDocument(report.meta.title, (BlockRegion(0, ()),))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, page, "slack")
+
+    assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
+
+
+@pytest.mark.parametrize(
+    ("blocks", "target", "refusal"),
+    [
+        pytest.param(
+            in_a_panel(make_toggle(make_toggle(TABLE))),
+            "adf",
+            {
+                "target": "adf",
+                "why": "ADF cannot place a toggle inside a panel",
+                "instead": "move the toggle out of the panel",
+                "where": "at blocks.0.panel.blocks.0.toggle",
+            },
+            id="adf-toggle-in-a-panel-before-a-table-in-its-inner-toggle",
+        ),
+        pytest.param(
+            in_a_panel(make_toggle({"type": "text", "body": "H~q~"})),
+            "slack",
+            {
+                "target": "slack",
+                "why": CANVAS_CALLOUT_WHY.format(held="toggle"),
+                "instead": "move the toggle out of the panel",
+                "where": "at blocks.0.panel.blocks.0.toggle",
+            },
+            id="slack-toggle-in-a-panel-before-a-subscript-inside-it",
+        ),
+    ],
+)
+def test_a_block_a_container_cannot_hold_is_reported_before_what_it_holds(
+    blocks: list[dict[str, Any]], target: ExportTarget, refusal: dict[str, str]
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, target)
+
+    assert vars(raised.value) == refusal
 
 
 def test_a_refusal_found_on_the_model_names_the_heading_above_it() -> None:

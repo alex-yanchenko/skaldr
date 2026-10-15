@@ -612,7 +612,10 @@ def test_a_table_over_300_cells_with_no_heading_above_it_is_rejected_naming_no_p
 
 
 def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> None:
-    nodes = [Heading(2, make_rich_text("Counts")), Callout("info", (_one_column_table(301),))]
+    nodes = [
+        Heading(2, make_rich_text("Counts")),
+        Toggle(make_rich_text("Rows"), None, (_one_column_table(301),)),
+    ]
 
     assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
         TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"

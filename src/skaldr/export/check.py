@@ -289,7 +289,7 @@ def _document_position(path: str) -> DocumentPosition:
 class _TreeWalk:
     def __init__(self, located: Iterable[LocatedDetails]) -> None:
         self.heading = ""
-        self.located = deque(sorted(located, key=lambda each: _document_position(each[0])))
+        self.located = deque(located)
 
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
@@ -326,6 +326,7 @@ class _TreeWalk:
         yield from self.script_hits(node)
         if place.in_a_column:
             yield from self.grid_cell_hits(node)
+        yield from self.placement_hits(node, place)
         match node:
             case Heading():
                 self.note_heading(node.text)
@@ -357,7 +358,6 @@ class _TreeWalk:
                 pass
             case _:
                 assert_never(node)
-        yield from self.placement_hits(node, place)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
