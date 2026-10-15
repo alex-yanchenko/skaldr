@@ -1113,56 +1113,27 @@ def test_a_table_of_contents_writes_nothing() -> None:
         ),
         pytest.param(
             DateMention(make_rich_text("1 Oct"), date(2026, 10, 1), None),
-            "1 Oct ![](slack_date:2026-10-01)",
-            id="date-is-its-label-then-the-canvas-date",
+            '<time datetime="2026-10-01">1 Oct</time>',
+            id="date-is-a-time-element-around-its-label",
         ),
         pytest.param(
             DateMention(make_rich_text("1 to 3 Oct"), date(2026, 10, 1), date(2026, 10, 3)),
-            "1 to 3 Oct ![](slack_date:2026-10-01) to ![](slack_date:2026-10-03)",
-            id="date-range-is-its-label-then-the-canvas-dates",
+            '<span data-range="2026-10-01/2026-10-03">1 to 3 Oct</span>',
+            id="date-range-is-a-span-around-its-label",
         ),
         pytest.param(
             DateMention(make_rich_text("2026-10-01"), date(2026, 10, 1), None),
-            "![](slack_date:2026-10-01)",
-            id="date-labelled-with-itself-is-the-canvas-date-alone",
-        ),
-        pytest.param(
-            DateMention(make_rich_text("2026-10-01/2026-10-03"), date(2026, 10, 1), date(2026, 10, 3)),
-            "![](slack_date:2026-10-01) to ![](slack_date:2026-10-03)",
-            id="date-range-labelled-with-itself-is-the-canvas-dates-alone",
-        ),
-        pytest.param(
-            DateMention(
-                (Styled("bold", make_rich_text("2026-10-05/2026-10-09")),),
-                date(2026, 10, 5),
-                date(2026, 10, 9),
-            ),
-            "![](slack_date:2026-10-05) to ![](slack_date:2026-10-09)",
-            id="bold-range-labelled-with-itself-is-the-canvas-dates-alone",
-        ),
-        pytest.param(
-            DateMention((Styled("bold", make_rich_text("2026-10-01")),), date(2026, 10, 1), None),
-            "![](slack_date:2026-10-01)",
-            id="bold-date-labelled-with-itself-is-the-canvas-date-alone",
-        ),
-        pytest.param(
-            DateMention(make_rich_text(" 2026-10-01 "), date(2026, 10, 1), None),
-            "![](slack_date:2026-10-01)",
-            id="padded-date-labelled-with-itself-is-the-canvas-date-alone",
-        ),
-        pytest.param(
-            DateMention(make_rich_text("2026-10-01"), date(2026, 10, 1), date(2026, 10, 3)),
-            "2026-10-01 ![](slack_date:2026-10-01) to ![](slack_date:2026-10-03)",
-            id="date-range-labelled-with-its-start-keeps-the-label",
+            '<time datetime="2026-10-01">2026-10-01</time>',
+            id="date-labelled-with-itself-is-written-like-any-other",
         ),
         pytest.param(
             DateMention(make_rich_text(" "), date(2026, 10, 1), None),
-            "![](slack_date:2026-10-01)",
-            id="date-with-a-blank-label-is-the-canvas-date-alone",
+            '<time datetime="2026-10-01"> </time>',
+            id="date-with-a-blank-label-is-written-like-any-other",
         ),
         pytest.param(
             DateMention(make_rich_text("1*Oct"), date(2026, 10, 1), None),
-            "1\\*Oct ![](slack_date:2026-10-01)",
+            '<time datetime="2026-10-01">1\\*Oct</time>',
             id="date-label-is-escaped",
         ),
         pytest.param(
