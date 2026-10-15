@@ -755,10 +755,6 @@ def test_a_panel_is_a_fenced_callout_with_no_icon_as_on_the_page() -> None:
     assert slack_of([panel]) == "::: {.callout}\n**Card**\n\ninside\n:::\n"
 
 
-def _two_paragraph_columns() -> Columns:
-    return Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (make_paragraph("right"),))))
-
-
 @pytest.mark.parametrize(
     ("held", "kind"),
     [
@@ -767,7 +763,6 @@ def _two_paragraph_columns() -> Columns:
         pytest.param(Toggle(make_rich_text("T"), None, (make_paragraph("x"),)), "Toggle", id="toggle"),
         pytest.param(Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)), "Tabs", id="tabs"),
         pytest.param(Divider(), "Divider", id="divider"),
-        pytest.param(_two_paragraph_columns(), "Columns", id="columns"),
     ],
 )
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_callout_cannot_hold(
@@ -869,7 +864,6 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_more_than_three_co
         pytest.param(_key_value_table(), "TableNode", id="table"),
         pytest.param(Callout("info", (make_paragraph("c"),)), "Callout", id="callout"),
         pytest.param(Divider(), "Divider", id="divider"),
-        pytest.param(_two_paragraph_columns(), "Columns", id="columns"),
         pytest.param(
             Toggle(make_rich_text("T"), None, (_key_value_table(),)), "TableNode", id="table-in-a-toggle"
         ),

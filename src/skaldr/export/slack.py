@@ -203,7 +203,7 @@ def _canvas_list(node: ListNode) -> _List:
 
 def _a_canvas_callout_cannot_hold(node: Node) -> bool:
     match node:
-        case TableNode() | Callout() | Toggle() | Divider() | Columns():
+        case TableNode() | Callout() | Toggle() | Divider():
             return True
         case Tabs():
             return bool(node.tabs)
@@ -216,7 +216,7 @@ def _the_place_cannot_hold(node: Node, place: Place) -> bool:
         case "callout":
             return _a_canvas_callout_cannot_hold(node)
         case "column":
-            return isinstance(node, TableNode | Callout | Divider | Columns)
+            return isinstance(node, TableNode | Callout | Divider)
         case "top":
             return False
         case _:

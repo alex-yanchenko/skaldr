@@ -16,8 +16,7 @@ from skaldr.export.capabilities import (
     CellCount,
     Container,
     Details,
-    DividerInAList,
-    DividerInAListFeature,
+    DividerInAStep,
     GridCells,
     GridInAGridCell,
     GridInAStep,
@@ -106,10 +105,6 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Tabs: "set of tabs",
     Diagram: "diagram",
 }
-_DIVIDER_FEATURES: Final[Mapping[ListItemFeature, DividerInAListFeature]] = {
-    "block inside a list item": "divider inside a list item",
-    "block inside a walkthrough step": "divider inside a walkthrough step",
-}
 _TONED_CELL: Final = "grid cell"
 
 
@@ -185,8 +180,6 @@ def _held(node: Node) -> Held | None:
             return "toggle"
         case Divider():
             return "divider"
-        case Columns():
-            return "grid"
         case _:
             return None
 
@@ -360,9 +353,6 @@ class _TreeWalk:
             yield self.hit(TonedCell(node.tone), node.authored_at)
             return
         held = _held(node)
-        if held == "grid":
-            yield self.hit(GridInAGridCell(), node.authored_at)
-            return
         feature = GRID_CELL_FEATURES.get(held) if held is not None else None
         if feature is not None:
             yield self.hit(HeldByAGridCell(feature, _term(node)), node.authored_at)
@@ -380,8 +370,7 @@ class _TreeWalk:
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
             if isinstance(child, Divider):
-                divider = DividerInAList(_DIVIDER_FEATURES[_item_feature(child, holder)])
-                yield self.hit(divider, child.authored_at)
+                yield self.hit(DividerInAStep(), child.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 

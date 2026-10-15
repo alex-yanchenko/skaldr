@@ -47,14 +47,12 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
     "divider inside a callout": {"slack": "reject"},
-    "grid inside a callout": {"slack": "reject"},
     "grid with more than three cells": {"slack": "reject"},
     "table inside a grid cell": {"adf": "reject", "slack": "reject"},
     "callout inside a grid cell": {"slack": "reject"},
     "divider inside a grid cell": {"slack": "reject"},
     "toned grid cell": {"slack": "reject"},
     "grid inside a grid cell": {"slack": "reject"},
-    "divider inside a list item": {"adf": "reject"},
     "divider inside a walkthrough step": {"adf": "reject"},
     "set of tabs": {"notion": "swap", "adf": "swap"},
     "request with several cases": {"notion": "swap", "adf": "swap"},
@@ -138,6 +136,26 @@ def test_every_rejection_names_only_details_its_feature_supplies(
     supplied = {detail.name for detail in fields(details)}
 
     assert _template_fields(rejection.why) | _template_fields(rejection.instead) <= supplied
+
+
+def test_every_rejection_in_the_table_has_a_seeded_case_and_every_seeded_case_names_a_rejection() -> None:
+    rejections = {
+        (feature, target)
+        for feature, cells in CAPABILITIES.items()
+        for target, capability in cells.items()
+        if isinstance(capability, Rejection)
+    }
+
+    assert {(case.feature, case.target) for case in SEEDED_REFUSALS.values()} == rejections
+
+
+@pytest.mark.parametrize("case", SEEDED_CASES)
+def test_each_seeded_case_passes_once_the_cell_it_names_keeps_the_feature(
+    monkeypatch: pytest.MonkeyPatch, case: RefusedCase
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[case.feature], case.target, "keep")
+
+    _check(case.blocks, case.target)
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)

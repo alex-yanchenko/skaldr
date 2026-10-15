@@ -18,7 +18,7 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
-CalloutPlacementFeature = Literal["divider inside a callout", "grid inside a callout"]
+CalloutPlacementFeature = Literal["divider inside a callout"]
 AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
 GridCellFeature = Literal[
     "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
@@ -26,7 +26,7 @@ GridCellFeature = Literal[
 GridCellsFeature = Literal["grid with more than three cells"]
 TonedCellFeature = Literal["toned grid cell"]
 GridInAGridCellFeature = Literal["grid inside a grid cell"]
-DividerInAListFeature = Literal["divider inside a list item", "divider inside a walkthrough step"]
+DividerInAStepFeature = Literal["divider inside a walkthrough step"]
 PanesFeature = Literal["set of tabs", "request with several cases"]
 Feature = Literal[
     PlacementFeature,
@@ -40,12 +40,12 @@ Feature = Literal[
     GridCellsFeature,
     TonedCellFeature,
     GridInAGridCellFeature,
-    DividerInAListFeature,
+    DividerInAStepFeature,
     PanesFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle", "divider", "grid"]
+Held = Literal["table", "callout", "quote", "toggle", "divider"]
 FIRST_LIST_NUMBER: Final = 1
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
@@ -126,8 +126,8 @@ class GridInAGridCell:
 
 
 @dataclass(frozen=True)
-class DividerInAList:
-    feature: DividerInAListFeature
+class DividerInAStep:
+    feature: DividerInAStepFeature = field(default="divider inside a walkthrough step", init=False)
 
 
 @dataclass(frozen=True)
@@ -146,7 +146,7 @@ Details = (
     | GridCells
     | TonedCell
     | GridInAGridCell
-    | DividerInAList
+    | DividerInAStep
     | Panes
 )
 
@@ -245,7 +245,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         }
     ),
     "divider inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
-    "grid inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "grid with more than three cells": _kept_except(
         {
             "slack": Rejection(
@@ -286,15 +285,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "divider inside a list item": _kept_except(
-        {
-            "adf": Rejection(
-                "ADF cannot place a divider inside a list item",
-                "move the divider out of the list, after the list",
-                names_the_heading=True,
-            )
-        }
-    ),
     "divider inside a walkthrough step": _kept_except(
         {
             "adf": Rejection(
@@ -327,7 +317,6 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
     ("callout", "divider"): "divider inside a callout",
-    ("callout", "grid"): "grid inside a callout",
 }
 GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "table": "table inside a grid cell",
