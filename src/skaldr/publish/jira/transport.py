@@ -59,7 +59,7 @@ from skaldr.publish_block.jira import (
     SUMMARY_FIELD,
 )
 from skaldr.publish_block.target import JsonFields
-from skaldr.services import SERVICES_BY_ID, Service
+from skaldr.services import SERVICE_NAMES, SERVICES_BY_ID, Service
 from skaldr.typed_links import issue_url
 
 GLOBAL_ID_PREFIX = "skaldr"
@@ -133,22 +133,29 @@ def _projected(remote: JsonValue, written: JsonValue) -> JsonValue:
 
 def _link_prefix(stamp: Stamp) -> str:
     item_part = [DOCUMENT_ITEM] if stamp.section_id is None else [SECTION_ITEM, stamp.section_id]
-    return GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item_part, ""])
+    return f"{GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item_part])}{GLOBAL_ID_SEPARATOR}"
 
 
 def remote_link_global_id(stamp: Stamp, service: Service, item_id: str) -> str:
     return f"{_link_prefix(stamp)}{service}{GLOBAL_ID_SEPARATOR}{item_id}"
 
 
+def global_id_refusal(stamp: Stamp, service: Service, item_id: str) -> str | None:
+    length = len(remote_link_global_id(stamp, service, item_id))
+    if length <= GLOBAL_ID_LIMIT:
+        return None
+    return (
+        f"the remote link to the paired {SERVICE_NAMES[service]} item needs a globalId of {length} "
+        f"characters, over the {GLOBAL_ID_LIMIT} Jira takes; shorten the document's doc_id or the "
+        "section's id"
+    )
+
+
 def _global_id(item_id: str, stamp: Stamp, link: PairedLink) -> str:
-    global_id = remote_link_global_id(stamp, link.service, link.item_id)
-    if len(global_id) > GLOBAL_ID_LIMIT:
-        raise WriteRejectedError(
-            f"the remote link from {item_id} to {link.service} item {link.item_id} needs a globalId of "
-            f"{len(global_id)} characters, over the {GLOBAL_ID_LIMIT} Jira takes; shorten the document's "
-            "doc_id or the section's id"
-        )
-    return global_id
+    refusal = global_id_refusal(stamp, link.service, link.item_id)
+    if refusal is not None:
+        raise WriteRejectedError(f"{item_id}: {refusal}")
+    return remote_link_global_id(stamp, link.service, link.item_id)
 
 
 def _linked_service(global_id: str, prefix: str) -> Service | None:

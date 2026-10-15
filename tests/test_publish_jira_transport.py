@@ -42,6 +42,7 @@ DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
 STAMP = Stamp(DOC_ID, None)
 SECTION_STAMP = Stamp(DOC_ID, "planting")
+LONGEST_LINKABLE_DOC_ID = "garden-" + "a" * 192
 TARGET = JiraTarget.model_validate(make_jira_target(where={"project": "DEMO", "issue_type": "Task"}))
 UNDER_A_PARENT = JiraTarget.model_validate(
     make_jira_target(where={"project": "DEMO", "issue_type": "Task", "parent": "DEMO-100"})
@@ -1701,19 +1702,32 @@ def test_a_web_link_someone_adds_in_jira_is_logged_without_a_field_id_and_is_not
     ) == ([{"field": "RemoteWorkItemLink", "fieldtype": "jira", "toString": "Kitchen rota"}], ())
 
 
+def test_a_global_id_of_exactly_the_length_jira_takes_is_sent() -> None:
+    jira = FakeJira()
+    transport = _transport(jira)
+    stamp = Stamp(LONGEST_LINKABLE_DOC_ID, None)
+    created = transport.create_item(NewItem(TARGET, stamp, CONTENT))
+
+    transport.write_links(created.item_id, LinksWrite(stamp, (HANDBOOK_PAGE,)))
+
+    assert [link["globalId"] for link in jira.issues["DEMO-1"].remote_links] == [
+        f"skaldr:{LONGEST_LINKABLE_DOC_ID}:document:notion:{HANDBOOK_PAGE_ID}"
+    ]
+
+
 def test_a_global_id_longer_than_jira_takes_is_refused_before_anything_is_sent() -> None:
     jira = FakeJira()
     transport = _transport(jira)
-    long_doc_id = "garden-" + "a" * 220
-    created = transport.create_item(NewItem(TARGET, Stamp(long_doc_id, None), CONTENT))
+    stamp = Stamp(f"{LONGEST_LINKABLE_DOC_ID}a", None)
+    created = transport.create_item(NewItem(TARGET, stamp, CONTENT))
     jira.forget_requests()
     expected = (
-        "the remote link from DEMO-1 to notion item 0123456789abcdef0123456789abcdef needs a globalId of 283 "
-        "characters, over the 255 Jira takes; shorten the document's doc_id or the section's id"
+        "DEMO-1: the remote link to the paired Notion item needs a globalId of 256 characters, over the 255 "
+        "Jira takes; shorten the document's doc_id or the section's id"
     )
 
     with pytest.raises(WriteRejectedError, match=_exactly(expected)):
-        transport.write_links(created.item_id, LinksWrite(Stamp(long_doc_id, None), (HANDBOOK_PAGE,)))
+        transport.write_links(created.item_id, LinksWrite(stamp, (HANDBOOK_PAGE,)))
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
 

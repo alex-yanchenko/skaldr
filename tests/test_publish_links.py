@@ -52,6 +52,7 @@ from tests.factories.report_factory import (
 
 JIRA_LABEL = "jira project PLAN under no parent issue"
 OPS_LABEL = "jira project OPS under no parent issue"
+DEMO_LABEL = "jira project DEMO under no parent issue"
 OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
 OTHER_LABEL = f"notion page {OTHER_PAGE_ID}"
 NOTION_DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -66,7 +67,7 @@ FIRST_LINKS = (
 )
 DOCUMENT_PAGE = numbered_id(1).replace("-", "")
 TOOLS_PAGE = numbered_id(2).replace("-", "")
-DEMO_LABEL = "jira project DEMO under no parent issue"
+LONGEST_LINKABLE_DOC_ID = "garden-" + "a" * 192
 
 
 def _notion(**target: JsonValue) -> JsonFields:
@@ -231,15 +232,44 @@ def test_publishing_again_with_every_link_in_place_writes_nothing(tmp_path: Path
     assert (outcome, transport.writes()) == (Applied(()), [])
 
 
-def test_a_remote_link_id_longer_than_jira_takes_refuses_the_dry_run_and_the_apply_before_any_write(
+def test_a_remote_link_global_id_of_exactly_the_length_jira_takes_is_planned_and_written(
     tmp_path: Path,
 ) -> None:
     transport = FakeTransport()
-    long_doc_id = "garden-" + "a" * 220
+    path = write_garden_report(
+        tmp_path, publish=_publish_block(_notion(), _jira(), doc_id=LONGEST_LINKABLE_DOC_ID)
+    )
+    prepared = prepare_publish(path, _registry(transport))
+
+    dry_run = dry_run_publish(prepared)
+    outcome = apply_publish(prepared)
+
+    assert (dry_run.refusal, dry_run.links, outcome) == (
+        None,
+        (
+            LinkStep(NOTION_DOCUMENT, "link", f"{JIRA_LABEL}, document"),
+            LinkStep(JIRA_DOCUMENT, "link", f"{TARGET_LABEL}, document"),
+        ),
+        Applied(
+            (
+                'create   document "Garden handbook"',
+                'create   document "Garden handbook"',
+                f"link     document to {JIRA_LABEL}, document",
+                f"link     document to {TARGET_LABEL}, document",
+            )
+        ),
+    )
+
+
+def test_a_remote_link_global_id_longer_than_jira_takes_refuses_the_dry_run_and_the_apply_before_any_write(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    long_doc_id = f"{LONGEST_LINKABLE_DOC_ID}a"
     path = write_garden_report(tmp_path, publish=_publish_block(_notion(), _jira(), doc_id=long_doc_id))
     prepared = prepare_publish(path, _registry(transport))
     refusal = (
-        f"{JIRA_LABEL}, document: the remote link to the paired Notion page needs a globalId of up to 287 "
+        f"{JIRA_LABEL}, document: the remote link to the paired Notion item needs a globalId of 256 "
         "characters, over the 255 Jira takes; shorten the document's doc_id or the section's id"
     )
 

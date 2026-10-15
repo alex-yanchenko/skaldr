@@ -8,10 +8,10 @@ from skaldr.publish_block.target import JsonFields, Location, TargetBase
 from skaldr.services import NotionService
 
 NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
-DASHLESS_PAGE_ID = re.compile(r"[0-9a-f]{32}")
+DASHLESS_PAGE_ID_LENGTH = 32
+DASHLESS_PAGE_ID = re.compile(rf"[0-9a-f]{{{DASHLESS_PAGE_ID_LENGTH}}}")
 DASHED_PAGE_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-TITLED_PAGE_ID = re.compile(r"[^/]+-([0-9a-f]{32})")
-LONGEST_PAGE_ID = len("01234567-89ab-cdef-0123-456789abcdef")
+TITLED_PAGE_ID = re.compile(rf"[^/]+-([0-9a-f]{{{DASHLESS_PAGE_ID_LENGTH}}})")
 
 
 def _is_notion_host(host: str) -> bool:
