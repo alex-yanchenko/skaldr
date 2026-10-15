@@ -279,7 +279,7 @@ def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
         case Styled() if run.style == "underline":
             return MarkedText("underline", _visible(run.runs))
         case AnchorLink():
-            return SameDocumentLink(_visible(run.label), run.anchor)
+            return SameDocumentLink(_visible(run.label), run.as_written())
         case DocumentLink():
             return OtherDocumentLink(_visible(run.label), run.doc_id)
         case (

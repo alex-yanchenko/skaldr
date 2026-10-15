@@ -743,18 +743,33 @@ def test_a_document_link_to_a_part_of_the_index_is_an_in_page_anchor(tmp_path: P
         pytest.param("slack", "a Slack canvas", id="slack"),
     ],
 )
-def test_a_document_link_to_a_part_of_the_index_is_refused_where_a_page_cannot_link_to_its_own_headings(
-    tmp_path: Path, target: ExportTarget, page: str
+@pytest.mark.parametrize(
+    "link",
+    [
+        pytest.param("doc:onboarding-plan#st2", id="to-a-section"),
+        pytest.param("doc:onboarding-plan", id="to-the-part"),
+    ],
+)
+def test_a_document_link_to_a_part_of_the_index_is_refused_naming_the_link_as_written(
+    tmp_path: Path, target: ExportTarget, page: str, link: str
 ) -> None:
-    report = load_report(_index_with_a_linked_part(tmp_path, "[the plan](doc:onboarding-plan#st2)"))
+    report = load_report(_index_with_a_linked_part(tmp_path, f"[the plan]({link})"))
 
     with pytest.raises(ExportRejectedError) as raised:
         render_export(report, target)
 
     assert str(raised.value) == (
-        f"{page} cannot link to its own headings, so it cannot show the link 'the plan' to '#st2', "
+        f"{page} cannot link to its own headings, so it cannot show the link 'the plan' to '{link}', "
         "at blocks.0.text; write the heading's name without the link, or export the document elsewhere"
     )
+
+
+def test_a_document_link_to_a_part_of_the_index_is_kept_as_an_in_page_link_on_github(tmp_path: Path) -> None:
+    report = load_report(_index_with_a_linked_part(tmp_path, "[the plan](doc:onboarding-plan#st2)"))
+
+    assert render_export(report, "markdown").pages == {
+        "page.md": "# Combined\n\n[the plan](#st2)\n\n# Test Report\n\nIntro.\n\n## st1\n\nx\n\n## st2\n\nx\n"
+    }
 
 
 def test_a_document_link_to_a_document_outside_the_index_stays_a_file_link(tmp_path: Path) -> None:

@@ -113,7 +113,7 @@ class MarkedText:
 @dataclass(frozen=True)
 class SameDocumentLink:
     text: str
-    anchor: str
+    link: str
     feature: SameDocumentLinkFeature = field(default="link to a heading of the same document", init=False)
 
 
@@ -189,7 +189,7 @@ _CANVAS_CANNOT_COLOUR: Final = Rejection(
     "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
 )
 _OWN_HEADING_WHY: Final = (
-    "{target} cannot link to its own headings, so it cannot show the link '{{text}}' to '#{{anchor}}'"
+    "{target} cannot link to its own headings, so it cannot show the link '{{text}}' to '{{link}}'"
 )
 _OWN_HEADING_INSTEAD: Final = "write the heading's name without the link, or export the document elsewhere"
 _OTHER_DOCUMENT_WHY: Final = (
