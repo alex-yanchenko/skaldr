@@ -41,6 +41,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import Person, Report, load_report, parse_report
 from skaldr.richtext import (
+    AnchorLink,
     Citation,
     Code,
     DateMention,
@@ -53,6 +54,7 @@ from skaldr.richtext import (
     Plain,
     ScriptText,
     Styled,
+    Tinted,
 )
 from tests.factories import (
     folder_texts,
@@ -534,6 +536,35 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_a_numbered_list_st
         "a Slack canvas numbers every list from 1, so it has no form for a list starting at 3; "
         "the export check should have refused it"
     )
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        pytest.param(
+            AnchorLink(make_rich_text("the counts"), "counts"),
+            "a Slack canvas cannot link to its own headings; the export check should have refused it",
+            id="link-to-a-heading-the-author-wrote",
+        ),
+        pytest.param(
+            Tinted("danger", None, make_rich_text("behind")),
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="colour-span",
+        ),
+        pytest.param(
+            Tinted(None, "warning", make_rich_text("due")),
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="highlight-span",
+        ),
+    ],
+)
+def test_the_canvas_writer_alone_raises_an_internal_error_for_an_authored_mark_the_check_refuses(
+    run: ExportRun, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Paragraph((run,))])
+
+    assert str(raised.value) == message
 
 
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_table_over_300_cells() -> None:

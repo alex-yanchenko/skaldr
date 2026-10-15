@@ -53,6 +53,7 @@ from skaldr.models import (
     walk_blocks,
 )
 from skaldr.richtext import (
+    AnchorLink,
     Citation,
     Code,
     DocumentLink,
@@ -287,6 +288,11 @@ def test_an_attribute_span_is_a_notion_color_span(text: str, notion: str) -> Non
             (DocumentLink((Plain("the plan"),), "cold-room-plan", None),),
             "this target cannot link to another skaldr document; the export check should have refused it",
             id="link-to-another-document",
+        ),
+        pytest.param(
+            (AnchorLink((Plain("the counts"),), "counts"),),
+            "a Notion page cannot link to its own headings; the export check should have refused it",
+            id="link-to-a-heading-the-author-wrote",
         ),
     ],
 )

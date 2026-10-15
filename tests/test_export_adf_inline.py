@@ -6,7 +6,7 @@ from typing import get_args
 
 import pytest
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, ExportInvariantError
 from skaldr.export.adf import IssueLinks, write_adf_runs
 from skaldr.export.adf.colors import BADGE_LOZENGE
 from skaldr.export.runs import (
@@ -20,9 +20,11 @@ from skaldr.export.runs import (
     SectionLink,
     StatusMark,
     SwimlaneMark,
+    TonedLabel,
 )
 from skaldr.models import BadgeColorLiteral, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import (
+    AnchorLink,
     Citation,
     Code,
     DateMention,
@@ -147,6 +149,21 @@ def test_a_script_becomes_a_subsup_mark(position: ScriptPosition, kind: str) -> 
 
 def test_a_section_link_keeps_only_its_label() -> None:
     assert _written((SectionLink((Plain("Jump"),), "target"),)) == [_text("Jump")]
+
+
+def test_a_toned_label_becomes_a_text_colour() -> None:
+    runs = (TonedLabel("danger", (Plain("Scan"),)),)
+
+    assert _written(runs) == [_text("Scan", {"type": "textColor", "attrs": {"color": "#DE350B"}})]
+
+
+def test_an_authored_link_to_a_heading_is_an_invariant_the_check_backs() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((AnchorLink((Plain("the counts"),), "counts"),))
+
+    assert str(raised.value) == (
+        "a Jira description cannot link to its own headings; the export check should have refused it"
+    )
 
 
 def test_a_citation_with_a_url_links_its_number() -> None:

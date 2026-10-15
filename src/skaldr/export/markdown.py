@@ -6,6 +6,7 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
@@ -51,7 +52,7 @@ from skaldr.export.tree import (
     heading_of,
     nested_nodes,
 )
-from skaldr.models import MEDIA_KIND_LABELS
+from skaldr.models import MEDIA_KIND_LABELS, ToneLiteral
 from skaldr.richtext import SCRIPT_HTML_TAG, Link, MarkerStyle, ScriptPosition
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
@@ -100,6 +101,17 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
         return styled_in_tags(style, inner)
+
+    def require_a_tint_it_can_drop(
+        self, tone: ToneLiteral | None, _background: ToneLiteral | None, /
+    ) -> None:
+        if tone is not None:
+            raise ExportInvariantError(
+                "GitHub Markdown cannot colour text; the export check should have refused it"
+            )
+
+    def require_links_to_its_own_headings(self) -> None:
+        return
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))

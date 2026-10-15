@@ -56,7 +56,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import SLACK_TARGET
-from skaldr.models import MEDIA_KIND_LABELS
+from skaldr.models import MEDIA_KIND_LABELS, ToneLiteral
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
@@ -100,6 +100,18 @@ class _SlackRuns(CommonMarkRuns):
 
     def unflanked_emphasis(self, _style: MarkerStyle, inner: str, /) -> str:
         return inner
+
+    def require_a_tint_it_can_drop(
+        self, _tone: ToneLiteral | None, _background: ToneLiteral | None, /
+    ) -> None:
+        raise ExportInvariantError(
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it"
+        )
+
+    def require_links_to_its_own_headings(self) -> None:
+        raise ExportInvariantError(
+            "a Slack canvas cannot link to its own headings; the export check should have refused it"
+        )
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))

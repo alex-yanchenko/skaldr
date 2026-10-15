@@ -122,6 +122,10 @@ class ChiplessExportRunWriter(RunWriter[Written], Protocol[Written]):
 
     def gauge(self, run: Gauge, /) -> Written: ...
 
+    def section_link(self, label: Written, anchor: str, /) -> Written: ...
+
+    def toned_label(self, tone: ToneLiteral, inner: Written, /) -> Written: ...
+
 
 class ExportRunWriter(ChiplessExportRunWriter[Written], Protocol[Written]):
     def chip(self, run: Chip, /) -> Written: ...
@@ -136,9 +140,9 @@ def write_chipless_export_run(run: ChiplessExportRun, writer: ChiplessExportRunW
         case Gauge():
             return writer.gauge(run)
         case SectionLink():
-            return writer.anchor_link(write_runs(run.label, writer), run.anchor)
+            return writer.section_link(write_runs(run.label, writer), run.anchor)
         case TonedLabel():
-            return writer.tinted(run.tone, None, write_runs(run.runs, writer))
+            return writer.toned_label(run.tone, write_runs(run.runs, writer))
         case _:
             return write_run(run, writer)
 
@@ -181,6 +185,12 @@ class _ExportVisibleText(VisibleText):
 
     def gauge(self, _run: Gauge, /) -> str:
         return ""
+
+    def section_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def toned_label(self, _tone: ToneLiteral, inner: str, /) -> str:
+        return inner
 
 
 def export_visible_text(runs: ExportRich) -> str:

@@ -154,8 +154,10 @@ class _NotionRuns(MarkupRuns):
             )
         return f"`{text}`"
 
-    def anchor_link(self, label: str, _anchor: str, /) -> str:
-        return label
+    def anchor_link(self, _label: str, _anchor: str, /) -> str:
+        raise ExportInvariantError(
+            "a Notion page cannot link to its own headings; the export check should have refused it"
+        )
 
     def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
         finish = f' end="{end.isoformat()}"' if end else ""
@@ -189,6 +191,9 @@ class _NotionRuns(MarkupRuns):
         if background:
             return _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner)
         return _colored_span(BLOCK_COLOR[tone], inner) if tone else inner
+
+    def toned_label(self, tone: ToneLiteral, inner: str, /) -> str:
+        return _colored_span(BLOCK_COLOR[tone], inner)
 
 
 def _colored_span(color: str, inner: str) -> str:

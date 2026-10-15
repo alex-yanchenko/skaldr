@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from markdown_it import MarkdownIt
 
-from skaldr.errors import ExportRejectedError, ReportError
+from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export import markdown as markdown_module
 from skaldr.export.flanking import markers_flank
@@ -20,8 +20,10 @@ from skaldr.export.runs import (
     ExportRun,
     Gauge,
     IndicatorMark,
+    SectionLink,
     StatusMark,
     SwimlaneMark,
+    TonedLabel,
     export_visible_text,
 )
 from skaldr.export.tree import (
@@ -59,6 +61,7 @@ from skaldr.richtext import (
     Run,
     ScriptText,
     Styled,
+    Tinted,
     parse_rich,
 )
 from tests.factories import (
@@ -225,6 +228,9 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
         ),
         pytest.param(AnchorLink((Plain("method"),), "method"), "[method](#how-we-count)", id="anchor-link"),
         pytest.param(AnchorLink((Plain("gone"),), "nowhere"), "gone", id="anchor-link-to-no-heading"),
+        pytest.param(SectionLink((Plain("method"),), "method"), "[method](#how-we-count)", id="section-link"),
+        pytest.param(Tinted(None, "warning", (Plain("due"),)), "due", id="highlight-is-its-text"),
+        pytest.param(TonedLabel("danger", (Plain("Scan"),)), "Scan", id="toned-label-is-its-text"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
         pytest.param(SwimlaneMark("deferred"), "⏸️", id="swimlane-mark"),
         pytest.param(IndicatorMark("warning"), "🟡", id="indicator-mark"),
@@ -254,6 +260,13 @@ def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_
     nodes = [Heading(2, (Plain("M"),), "method"), Paragraph((Plain("wow!"), target))]
 
     assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
+
+
+def test_the_github_writer_alone_raises_an_internal_error_for_a_colour_span_the_check_refuses() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_markdown([Paragraph((Tinted("danger", "sky", (Plain("behind"),)),))])
+
+    assert str(raised.value) == "GitHub Markdown cannot colour text; the export check should have refused it"
 
 
 def test_an_anchor_link_to_a_heading_whose_github_slug_is_empty_is_its_label() -> None:

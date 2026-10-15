@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, ExportInvariantError
 from skaldr.export.adf.colors import BADGE_LOZENGE, TEXT_COLOR
 from skaldr.export.adf.nodes import (
     AdfCode,
@@ -246,7 +246,12 @@ class AdfRuns:
         mark = AdfLink(type="link", attrs=AdfLinkAttrs(href=url))
         return with_mark(tuple(map(_as_text_in_a_link, label)), mark)
 
-    def anchor_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
+    def anchor_link(self, _label: AdfInlines, _anchor: str, /) -> AdfInlines:
+        raise ExportInvariantError(
+            "a Jira description cannot link to its own headings; the export check should have refused it"
+        )
+
+    def section_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
         return label
 
     def date_mention(self, _label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
@@ -288,6 +293,9 @@ class AdfRuns:
         self, tone: ToneLiteral | None, _background: ToneLiteral | None, inner: AdfInlines, /
     ) -> AdfInlines:
         return inner if tone is None else with_mark(inner, text_color_mark(tone))
+
+    def toned_label(self, tone: ToneLiteral, inner: AdfInlines, /) -> AdfInlines:
+        return with_mark(inner, text_color_mark(tone))
 
     def math(self, expression: str, /) -> AdfInlines:
         return self.code(expression)

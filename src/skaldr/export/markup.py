@@ -231,6 +231,12 @@ class MarkupRuns(TextRunWriter, ABC):
     def gauge(self, run: Gauge, /) -> str:
         return gauge_bar(run.value, run.maximum)
 
+    def section_link(self, label: str, _anchor: str, /) -> str:
+        return label
+
+    def toned_label(self, _tone: ToneLiteral, inner: str, /) -> str:
+        return inner
+
 
 @dataclass(frozen=True)
 class _Emphasis:
@@ -282,6 +288,14 @@ class CommonMarkRuns(MarkupRuns, ABC):
     @abstractmethod
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str: ...
 
+    @abstractmethod
+    def require_a_tint_it_can_drop(
+        self, tone: ToneLiteral | None, background: ToneLiteral | None, /
+    ) -> None: ...
+
+    @abstractmethod
+    def require_links_to_its_own_headings(self) -> None: ...
+
     def heading_slug(self, _anchor: str, /) -> str | None:
         return None
 
@@ -331,11 +345,17 @@ class CommonMarkRuns(MarkupRuns, ABC):
             match run:
                 case Styled():
                     pieces += self._styled_pieces(run, enclosing)
-                case Tinted() | TonedLabel():
+                case Tinted():
+                    self.require_a_tint_it_can_drop(run.tone, run.background)
+                    pieces += self._pieces(run.runs, enclosing)
+                case TonedLabel():
                     pieces += self._pieces(run.runs, enclosing)
                 case Link():
                     pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
-                case AnchorLink() | SectionLink():
+                case AnchorLink():
+                    self.require_links_to_its_own_headings()
+                    pieces += self._anchor_link_pieces(run, enclosing)
+                case SectionLink():
                     pieces += self._anchor_link_pieces(run, enclosing)
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))

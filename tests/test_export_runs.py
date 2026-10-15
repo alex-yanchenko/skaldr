@@ -104,6 +104,12 @@ class _MarkedNodeRuns:
     def gauge(self, run: Gauge, /) -> MarkedNodes:
         return _leaf("gauge", f"{run.value}/{run.maximum}")
 
+    def section_link(self, label: MarkedNodes, anchor: str, /) -> MarkedNodes:
+        return _with_mark(f"section={anchor}", label)
+
+    def toned_label(self, tone: ToneLiteral, inner: MarkedNodes, /) -> MarkedNodes:
+        return _with_mark(f"label tone={tone}", inner)
+
 
 def _structured_writer() -> ExportRunWriter[MarkedNodes]:
     return _MarkedNodeRuns()
@@ -153,15 +159,19 @@ def test_an_export_run_writer_builds_chips_breaks_marks_and_gauges_as_nodes_of_t
     )
 
 
-def test_a_section_link_and_a_toned_label_are_written_as_an_anchor_link_and_a_colour_tint() -> None:
+def test_a_section_link_and_a_toned_label_reach_their_own_writer_methods_apart_from_authored_ones() -> None:
     runs: ExportRich = (
         SectionLink((Plain("Totals"),), "totals"),
+        AnchorLink((Plain("Counts"),), "counts"),
         TonedLabel("info", (Styled("bold", (Plain("Scan"),)),)),
+        Tinted("info", None, (Plain("Seal"),)),
     )
 
     assert write_export_runs(runs, _structured_writer()) == (
-        ("text", "Totals", ("anchor=totals",)),
-        ("text", "Scan", ("bold", "tint=info/None")),
+        ("text", "Totals", ("section=totals",)),
+        ("text", "Counts", ("anchor=counts",)),
+        ("text", "Scan", ("bold", "label tone=info")),
+        ("text", "Seal", ("tint=info/None",)),
     )
 
 
