@@ -246,6 +246,7 @@ def html_environment() -> Environment:
         response_caption=compute.response_caption,
         derived_card_tally=compute.derived_card_tally,
         delta_glyphs=compute.DELTA_GLYPHS,
+        status_glyphs=compute.STATUS_GLYPHS,
         badge_legend_subject=compute.BADGE_LEGEND_SUBJECT,
         recorded_body=compute.recorded_body,
         chart_svg=chart_svg,

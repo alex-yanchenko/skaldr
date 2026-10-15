@@ -1587,7 +1587,7 @@ def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.Mon
         pytest.param(
             Callout("warning", (Paragraph((Plain("careful"),)),)), "> ⚠️ careful\n", id="callout-paragraph"
         ),
-        pytest.param(Quote(((Plain("said"),),)), "> said\n", id="quote"),
+        pytest.param(Quote((Paragraph((Plain("said"),)),)), "> said\n", id="quote"),
         pytest.param(
             Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
             "**Legend**\n\nx\n",

@@ -42,6 +42,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import (
@@ -57,6 +58,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Heading,
     ListEntry,
     ListNode,
@@ -137,13 +139,13 @@ class _AdfBlocks:
 
     def blocks(self, nodes: Iterable[Node], container: Container) -> list[AdfBlock]:
         written: list[AdfBlock] = []
-        for node in nodes:
+        for node in folded(nodes):
             produced = self.node_blocks(node, container)
             _require_the_container_holds(node, produced, container)
             written += produced
         return written
 
-    def node_blocks(self, node: Node, container: Container) -> list[AdfBlock]:
+    def node_blocks(self, node: GenericNode, container: Container) -> list[AdfBlock]:
         match node:
             case Heading():
                 content = self.inline(node.text)
@@ -209,7 +211,7 @@ class _AdfBlocks:
         return block
 
     def quote_blocks(self, node: Quote) -> list[AdfBlock]:
-        paragraphs = [self.paragraph(line) for line in node.lines if line]
+        paragraphs = [self.paragraph(line) for line in quote_lines(node) if line]
         cite = with_mark(tuple(self.inline(node.cite)), AdfEm(type="em"))
         if cite:
             paragraphs.append(AdfParagraph(type="paragraph", content=list(cite)))
@@ -250,7 +252,7 @@ class _AdfBlocks:
 
     def list_item(self, entry: ListEntry, container: Container) -> AdfListItem:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
-        for child in entry.children:
+        for child in folded(entry.children):
             produced = self.node_blocks(child, container)
             _require_a_list_item_holds(child, produced)
             content += produced
@@ -276,7 +278,7 @@ class _AdfBlocks:
 
     def nested_task_lists(self, children: Sequence[Node], container: Container) -> list[AdfTaskList]:
         nested: list[AdfTaskList] = []
-        for child in children:
+        for child in folded(children):
             produced = self.node_blocks(child, container)
             _require_a_list_item_holds(child, produced)
             for block in produced:
@@ -290,7 +292,7 @@ class _AdfBlocks:
         return nested
 
     def cell_paragraph(self, cell: TableCell, bold: bool) -> AdfParagraph:
-        content = self.inline(cell.text)
+        content = self.inline(cell_text(cell))
         if bold:
             content = list(with_mark(tuple(content), AdfStrong(type="strong")))
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()

@@ -1,45 +1,78 @@
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Final
 
 from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain
-from skaldr.export.lower.context import Lowering, plain_cells, spaced, with_bold_label
-from skaldr.export.runs import Break, CheckMark, ExportRich, ExportRun, IndicatorMark, SwimlaneMark
-from skaldr.export.tree import Node, Paragraph, TableCell, TableColumn, TableNode, TableRow, ToneName
+from skaldr.export.lower.context import Lowering, joined_by_breaks, plain_cells, spaced, with_bold_label
+from skaldr.export.runs import CheckMark, ExportRich, IndicatorMark, SwimlaneMark
+from skaldr.export.tree import (
+    ListNode,
+    Node,
+    Paragraph,
+    TableCell,
+    TableColumn,
+    TableNode,
+    TableRow,
+    ToneName,
+)
 from skaldr.models import ToneLiteral
 from skaldr.richtext import Link, Plain
 
 EMPTY_GROUP_LABEL: Final = "none"
 
 
-def _joined_by_breaks(lines: Iterable[ExportRich]) -> ExportRich:
-    runs: list[ExportRun] = []
-    for line in lines:
-        if line and runs:
-            runs.append(Break())
-        runs.extend(line)
-    return tuple(runs)
-
-
 def _blank_cells(count: int) -> tuple[TableCell, ...]:
     return tuple(TableCell(()) for _ in range(count))
 
 
-def _cell_text(value: str, lowering: Lowering) -> ExportRich:
-    if not value:
-        return ()
-    return _joined_by_breaks(lowering.prose_lines(value))
+def _holds_a_list(prose: Sequence[Node]) -> bool:
+    return any(isinstance(node, ListNode) for node in prose)
+
+
+def _paragraph_lines(prose: Sequence[Node]) -> ExportRich:
+    return joined_by_breaks(node.text for node in prose if isinstance(node, Paragraph))
+
+
+def _with_runs_after_its_last_line(node: Node, runs: ExportRich) -> Node:
+    match node:
+        case Paragraph():
+            return replace(node, text=(*node.text, Plain(" "), *runs))
+        case ListNode() if node.entries:
+            *earlier, last = node.entries
+            if last.children:
+                last = replace(last, children=_with_runs_after(last.children, runs))
+            else:
+                last = replace(last, text=(*last.text, Plain(" "), *runs))
+            return replace(node, entries=(*earlier, last))
+        case _:
+            return node
+
+
+def _with_runs_after(prose: tuple[Node, ...], runs: ExportRich) -> tuple[Node, ...]:
+    if not prose or not runs:
+        return prose
+    return (*prose[:-1], _with_runs_after_its_last_line(prose[-1], runs))
+
+
+def _text_cell(value: str, lowering: Lowering) -> TableCell:
+    prose = lowering.prose(value)
+    return TableCell((), blocks=prose) if _holds_a_list(prose) else TableCell(_paragraph_lines(prose))
 
 
 def _title_cell(block: models.Table, row: models.Row, lowering: Lowering) -> TableCell:
     chips = [
         lowering.chips(keys) for badge_column in block.title_badges if (keys := row.badges[badge_column.key])
     ]
-    title = spaced([part for part in (_cell_text(row.texts[block.title_key], lowering), *chips) if part])
     subrows = [lowering.rich(sub.label) + plain(f": {compute.fmt(sub.value)}") for sub in row.subrows]
-    return TableCell(_joined_by_breaks([title, *subrows]))
+    prose = lowering.prose(row.texts[block.title_key])
+    if _holds_a_list(prose):
+        blocks = (*_with_runs_after(prose, spaced(chips)), *(Paragraph(subrow) for subrow in subrows))
+        return TableCell((), blocks=blocks)
+    title = spaced([part for part in (_paragraph_lines(prose), *chips) if part])
+    return TableCell(joined_by_breaks([title, *subrows]))
 
 
 def _number_cell(block: models.Table, column: models.Column, value: float) -> TableCell:
@@ -69,7 +102,7 @@ def _body_cell(block: models.Table, column: models.Column, row: models.Row, lowe
         case "badge":
             return TableCell(lowering.chips(row.badges[column.key]))
         case "text" | "rich":
-            return TableCell(_cell_text(row.texts[column.key], lowering))
+            return _text_cell(row.texts[column.key], lowering)
         case _:
             assert_never(column.kind)
 
@@ -230,7 +263,7 @@ def _swimlane_header(block: models.Swimlane, totals: compute.SwimTotals | None) 
     for column in block.columns:
         names = [_with_total(plain(name), group_totals, name) for name in starting[column.key]]
         sub = italic(plain(column.sub)) if column.sub else ()
-        header.append(TableCell(_joined_by_breaks([plain(column.name), sub, spaced(names, ", ")])))
+        header.append(TableCell(joined_by_breaks([plain(column.name), sub, spaced(names, ", ")])))
     return tuple(header)
 
 
@@ -248,7 +281,7 @@ def _lane_cells(block: models.Swimlane, lane_key: str, split: set[str]) -> list[
             for step in block.steps_at(lane_key, sub_column, group)
         ]
         cells.append(
-            TableCell(_joined_by_breaks(_swim_step(block, step, column.key in split) for step in steps))
+            TableCell(joined_by_breaks(_swim_step(block, step, column.key in split) for step in steps))
         )
     return cells
 

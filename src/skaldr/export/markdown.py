@@ -8,6 +8,7 @@ from typing import Final, Literal, NoReturn
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
+from skaldr.export.folds import folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
@@ -37,6 +38,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Heading,
     HeadingLevel,
     ListEntry,
@@ -172,7 +174,7 @@ class _Written:
         return cls(tuple(lines), tail)
 
 
-def _marker_family(node: Node) -> MarkerFamily | None:
+def _marker_family(node: GenericNode) -> MarkerFamily | None:
     if isinstance(node, ListNode):
         return MARKER_FAMILY[node.kind]
     return "dash" if isinstance(node, TableOfContents) else None
@@ -219,10 +221,11 @@ class _MarkdownWriter:
         return lines
 
     def entry_children(self, entry: ListEntry, width: int, after_a_bare_marker: bool) -> list[str]:
-        children = self.blocks(entry.children)
+        nodes = folded(entry.children)
+        children = self.blocks(nodes)
         if not children:
             return []
-        gap = [] if after_a_bare_marker or isinstance(entry.children[0], ListNode) else [""]
+        gap = [] if after_a_bare_marker or isinstance(nodes[0], ListNode) else [""]
         return gap + indent_lines(children, " " * width)
 
     def titled(self, title: str, children: Sequence[Node], after: _ListTail | None) -> _Written:
@@ -253,7 +256,7 @@ class _MarkdownWriter:
         return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, url)}"]
 
     def quote_lines(self, node: Quote) -> list[str]:
-        parts = [self.block_text(line) for line in node.lines]
+        parts = [self.block_text(line) for line in quote_lines(node)]
         if node.cite:
             parts.append(styled("italic", self.inline(node.cite)))
         return quoted(joined([[part] for part in parts]))
@@ -276,7 +279,7 @@ class _MarkdownWriter:
         ]
         return [f"{dash} [{title}](#{slug})" if slug else f"{dash} {title}" for slug, title in entries]
 
-    def written(self, node: Node, after: _ListTail | None) -> _Written:
+    def written(self, node: GenericNode, after: _ListTail | None) -> _Written:
         alternate = _must_alternate_markers(_marker_family(node), after)
         match node:
             case Heading():
@@ -330,7 +333,7 @@ class _MarkdownWriter:
         rendered: list[Sequence[str]] = []
         tail = after
         opens_with_a_paragraph = False
-        for node in nodes:
+        for node in folded(nodes):
             written = self.written(node, tail)
             if written.lines:
                 opens_with_a_paragraph = opens_with_a_paragraph if rendered else isinstance(node, Paragraph)

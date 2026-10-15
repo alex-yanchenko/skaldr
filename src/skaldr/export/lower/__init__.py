@@ -308,9 +308,7 @@ def _section(block: models.Section, lowering: Lowering, depth: int) -> list[Node
 
 def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth: int) -> list[Node]:
     children = _lower_blocks(block.blocks, lowering, depth)
-    if block.collapsed:
-        return [Toggle(plain(block.title), None, tuple(children), authored_as="toggle")]
-    return [Paragraph(bold(block.title)), *children]
+    return [Toggle(plain(block.title), None, tuple(children), open=not block.collapsed, authored_as="toggle")]
 
 
 def _cell_nodes(

@@ -10,6 +10,7 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -52,6 +53,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Heading,
     HeadingLevel,
     ListKind,
@@ -361,7 +363,7 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
 
 
 def _table_cell_text(cell: TableCell, *, inside_bold: bool, on_fill: bool = False) -> str:
-    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
+    text = notion_inline(cell_text(cell), inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 
@@ -377,7 +379,7 @@ def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName 
 
 
 def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[TableCell, ...]:
-    filled = next((index for index, cell in enumerate(cells) if holds_a_chip(cell.text)), 0)
+    filled = next((index for index, cell in enumerate(cells) if holds_a_chip(cell_text(cell))), 0)
     return tuple(
         replace(cell, tone=cell.tone or tone) if index == filled else cell for index, cell in enumerate(cells)
     )
@@ -412,7 +414,9 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
 
 def _longest_text(table: TableNode, index: int) -> int:
     cells = [table.header, *(row.cells for row in table.rows)]
-    return max((len(export_visible_text(row[index].text)) for row in cells if index < len(row)), default=0)
+    return max(
+        (len(export_visible_text(cell_text(row[index]))) for row in cells if index < len(row)), default=0
+    )
 
 
 def _content_weight(table: TableNode, index: int) -> int:
@@ -516,7 +520,7 @@ def _media_line(node: Media) -> str:
 
 
 def _quote_line(node: Quote) -> str:
-    body = "<br>".join(_block_text(line) for line in node.lines)
+    body = "<br>".join(_block_text(line) for line in quote_lines(node))
     if node.cite:
         body += "<br>" + styled("italic", notion_inline(node.cite))
     return f"> {body}"
@@ -550,7 +554,7 @@ def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
     ]
 
 
-def _notion_lines(node: Node, room: TableRoom) -> list[str]:
+def _notion_lines(node: GenericNode, room: TableRoom) -> list[str]:
     match node:
         case Heading():
             return [f"{_heading_marks(node.level)} {notion_inline(node.text)}"]
@@ -594,7 +598,7 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             assert_never(node)
 
 
-def _list_kind(node: Node) -> ListKind | None:
+def _list_kind(node: GenericNode) -> ListKind | None:
     return node.kind if isinstance(node, ListNode) else None
 
 
@@ -640,7 +644,7 @@ class _CostedBlock:
 
 def _sections(nodes: Sequence[Node]) -> list[list[Node]]:
     sections: list[list[Node]] = [[]]
-    for node in nodes:
+    for node in folded(nodes):
         if _chunk_heading(node) is not None and sections[-1]:
             sections.append([])
         sections[-1].append(node)
@@ -671,7 +675,7 @@ def _rendered_blocks_by_position(
     nodes: Sequence[Node], room: TableRoom
 ) -> Iterator[tuple[int, RenderedBlock]]:
     previous_kind: ListKind | None = None
-    for position, node in enumerate(nodes):
+    for position, node in enumerate(folded(nodes)):
         node_lines = _notion_lines(node, room)
         if not node_lines:
             continue
@@ -712,7 +716,9 @@ def notion_block_count(text: str) -> int:
 
 
 def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:
-    region_of_node = [position for position, region in enumerate(document.regions) for _ in region.nodes]
+    region_of_node = [
+        position for position, region in enumerate(document.regions) for _ in folded(region.nodes)
+    ]
     lines_by_region: list[list[str]] = [[] for _ in document.regions]
     for node_position, block in _rendered_blocks_by_position(document.body, TableRoom.on_page(page_width)):
         lines_by_region[region_of_node[node_position]] += block.lines
