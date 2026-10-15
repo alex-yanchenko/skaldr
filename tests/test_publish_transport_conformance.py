@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
@@ -6,7 +7,7 @@ import pytest
 from skaldr.errors import ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, differing_parts, section_part
 from skaldr.publish.jira.description import description_doc, section_blocks, section_text
-from skaldr.publish.jira.transport import JiraTransport
+from skaldr.publish.jira.transport import STAMP_PROPERTY, JiraTransport
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
@@ -100,6 +101,7 @@ class Instance:
     empty_page_id: str | None
     edit_section_by_hand: Callable[[str, str, str], None]
     count_writes: Callable[[], int]
+    unstamped_item_id: Callable[[], str]
 
 
 def _as_written(text: str) -> str:
@@ -108,6 +110,10 @@ def _as_written(text: str) -> str:
 
 def _fake_link(item_id: str, title: str) -> ItemLink:
     return ItemLink(f"https://items.example.com/{item_id}", title)
+
+
+def _fake_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"{item_id} is not stamped with {stamp.named}"
 
 
 @dataclass(frozen=True)
@@ -122,11 +128,18 @@ class TransportUnderTest:
     links: tuple[PairedLink, ...] = ISSUE_LINKS
     expected_link: Callable[[str, str], ItemLink] = field(default=_fake_link)
     reads_links_with_the_item: bool = True
+    stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
     transport.seed("empty-page", "Blank page", None, fields={"Status": None})
-    return Instance(transport, "empty-page", transport.edit_section_by_hand, lambda: len(transport.writes()))
+    return Instance(
+        transport,
+        "empty-page",
+        transport.edit_section_by_hand,
+        lambda: len(transport.writes()),
+        lambda: "empty-page",
+    )
 
 
 def _fake() -> Instance:
@@ -141,11 +154,17 @@ def _notion() -> Instance:
     def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
         notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
 
-    return Instance(notion.transport(), empty_page, edit_section_by_hand, lambda: len(notion.writes()))
+    return Instance(
+        notion.transport(), empty_page, edit_section_by_hand, lambda: len(notion.writes()), lambda: empty_page
+    )
 
 
 def _notion_link(item_id: str, title: str) -> ItemLink:
     return ItemLink(f"https://www.notion.so/{item_id.replace('-', '')}", title)
+
+
+def _notion_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Notion page {item_id} is not stamped with {stamp.named}"
 
 
 def _as_adf(text: str) -> str:
@@ -165,11 +184,20 @@ def _jira() -> Instance:
     def count_writes() -> int:
         return len([call for call in jira.calls() if call[0] != "GET"])
 
-    return Instance(transport, None, edit_section_by_hand, count_writes)
+    def unstamped_item_id() -> str:
+        created = transport.create_item(NewItem(JIRA_TARGET, STAMP, ItemContent(title="Blank issue")))
+        del jira.issues[created.item_id].properties[STAMP_PROPERTY]
+        return created.item_id
+
+    return Instance(transport, None, edit_section_by_hand, count_writes, unstamped_item_id)
 
 
 def _jira_link(item_id: str, _title: str) -> ItemLink:
     return ItemLink(f"{SITE}/browse/{item_id}", item_id)
+
+
+def _jira_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Jira issue {item_id} is not stamped with {stamp.named}"
 
 
 TRANSPORTS = [
@@ -179,7 +207,12 @@ TRANSPORTS = [
     ),
     pytest.param(
         TransportUnderTest(
-            _notion, NOTION_TARGET, writes_into_pages=True, reports_edits=False, expected_link=_notion_link
+            _notion,
+            NOTION_TARGET,
+            writes_into_pages=True,
+            reports_edits=False,
+            expected_link=_notion_link,
+            stamp_refusal=_notion_stamp_refusal,
         ),
         id="notion",
     ),
@@ -195,6 +228,7 @@ TRANSPORTS = [
             links=PAGE_LINKS,
             expected_link=_jira_link,
             reads_links_with_the_item=False,
+            stamp_refusal=_jira_stamp_refusal,
         ),
         id="jira",
     ),
@@ -611,13 +645,39 @@ def test_a_links_write_for_another_section_of_the_document_is_rejected_and_chang
 ) -> None:
     instance, created = _created(under_test, SECTION_STAMP)
     transport = instance.transport
+    refusal = under_test.stamp_refusal(created.item_id, STAMP)
 
-    with pytest.raises(WriteRejectedError):
+    with pytest.raises(WriteRejectedError, match=f"^{re.escape(refusal)}$"):
         transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
     assert (
         transport.read_links(created.item_id, SECTION_STAMP),
         transport.read_item(created.item_id, _content(under_test)).stamp,
     ) == ((), SECTION_STAMP)
+
+
+def test_links_are_read_only_for_the_stamp_the_item_carries(under_test: TransportUnderTest) -> None:
+    instance, created = _created(under_test, SECTION_STAMP)
+    transport = instance.transport
+    transport.write_links(created.item_id, LinksWrite(SECTION_STAMP, under_test.links))
+
+    assert transport.read_links(created.item_id, STAMP) == ()
+
+
+def test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links(
+    under_test: TransportUnderTest,
+) -> None:
+    instance = under_test.make()
+    transport = instance.transport
+    item_id = instance.unstamped_item_id()
+
+    written = transport.write_links(item_id, LinksWrite(STAMP, under_test.links))
+
+    shown = frozenset(_shown(under_test.links))
+    assert (
+        frozenset(written),
+        frozenset(transport.read_links(item_id, STAMP)),
+        transport.read_item(item_id, ItemContent(title="")).stamp,
+    ) == (shown, shown, STAMP)
 
 
 class ReordersSections(FakeTransport):
@@ -669,7 +729,7 @@ class ClosesEverySectionAgain(FakeTransport):
 
 
 class NamesItemsByTitle(FakeTransport):
-    def item_link(self, item_id: str, title: str, /) -> ItemLink:  # noqa: ARG002
+    def item_link(self, _item_id: str, title: str, /) -> ItemLink:
         return ItemLink(f"https://items.example.com/{title}", title)
 
 
@@ -706,6 +766,19 @@ class LinksBeforeCheckingTheStamp(FakeTransport):
 class ReadsItemsWithoutTheirLinks(FakeTransport):
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         return replace(super().read_item(item_id, keyed_like), links=())
+
+
+class ReadsLinksOfAnyStamp(FakeTransport):
+    def read_links(self, item_id: str, _stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        return self.items[item_id].links
+
+
+class LinksWithoutStamping(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        stamp = self.items[item_id].stamp
+        written = super().write_links(item_id, request)
+        self.items[item_id].stamp = stamp
+        return written
 
 
 class DropsLinksOnSectionWrites(FakeTransport):
@@ -802,6 +875,16 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             LinksBeforeCheckingTheStamp,
             test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing,
             id="links-before-checking-the-stamp",
+        ),
+        pytest.param(
+            ReadsLinksOfAnyStamp,
+            test_links_are_read_only_for_the_stamp_the_item_carries,
+            id="links-read-for-any-stamp",
+        ),
+        pytest.param(
+            LinksWithoutStamping,
+            test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links,
+            id="links-without-stamping",
         ),
     ],
 )

@@ -1674,6 +1674,8 @@ def test_remote_links_skaldr_did_not_write_for_this_item_are_neither_read_nor_re
         f"skaldr:kitchen-rota:document:notion:{ROTA_PAGE_ID}",
         f"skaldr:garden-handbook:section:tools:notion:{ROTA_PAGE_ID}",
         f"skaldr:garden-handbook:document:slack:{ROTA_PAGE_ID}",
+        "skaldr:garden-handbook:document:notion:",
+        "skaldr:garden-handbook:document:notion",
     ]
     for global_id in global_ids:
         jira.link_by_hand("DEMO-1", global_id, ROTA_PAGE.url, ROTA_PAGE.title)

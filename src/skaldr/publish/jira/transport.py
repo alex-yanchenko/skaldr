@@ -368,6 +368,9 @@ class JiraTransport:
         if stamped is not None and stamped.stamp != request.stamp:
             raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
         wanted = {_global_id(item_id, request.stamp, link): link for link in request.links}
+        if stamped is None:
+            stamp = StampValue(doc_id=request.stamp.doc_id, section_id=request.stamp.section_id)
+            self._client.put_property(item_id, STAMP_PROPERTY, stamp.model_dump(mode="json"))
         current = self._links_of(item_id, request.stamp)
         for global_id in current:
             if global_id not in wanted:
