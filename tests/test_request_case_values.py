@@ -284,20 +284,18 @@ def test_the_notion_export_shows_each_cases_command_with_its_own_values() -> Non
 
     assert notion_of([_command_request()]) == (
         "**Tier mappings on the partner API**\n"
-        "<tabs>\n"
-        '\t<tab icon="⚠️">\n'
-        "\t\tSecond term\n"
-        f"\t\t```bash\n\t\t{second_term}\n\t\t```\n"
-        "\t\t**Recorded output**\n"
-        "\t\t```plain text\n\t\tsecond\n\t\t```\n"
-        "\t</tab>\n"
-        '\t<tab icon="✅">\n'
-        "\t\tControl\n"
-        f"\t\t```bash\n\t\t{control}\n\t\t```\n"
-        "\t\t**Recorded output**\n"
-        "\t\t```plain text\n\t\tfirst\n\t\t```\n"
-        "\t</tab>\n"
-        "</tabs>\n"
+        "<details>\n"
+        "<summary>⚠️ Second term</summary>\n"
+        f"\t```bash\n\t{second_term}\n\t```\n"
+        "\t**Recorded output**\n"
+        "\t```plain text\n\tsecond\n\t```\n"
+        "</details>\n"
+        "<details>\n"
+        "<summary>✅ Control</summary>\n"
+        f"\t```bash\n\t{control}\n\t```\n"
+        "\t**Recorded output**\n"
+        "\t```plain text\n\tfirst\n\t```\n"
+        "</details>\n"
     )
 
 

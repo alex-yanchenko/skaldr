@@ -23,8 +23,8 @@ AuthoredName = Literal[
     "swimlane",
     "request",
     "request step",
-    "request verdict",
 ]
+PanesKind = Literal["tabs", "request cases"]
 MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]
 XYChartMark = Literal["bar", "line"]
@@ -168,6 +168,7 @@ class Tab:
 @dataclass(frozen=True)
 class Tabs:
     tabs: tuple[Tab, ...]
+    kind: PanesKind = "tabs"
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 

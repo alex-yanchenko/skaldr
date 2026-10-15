@@ -445,7 +445,7 @@ def test_an_open_toggle_is_its_bold_title_over_its_content_rather_than_a_details
     assert notion_of([toggle]) == "**Raw counts**\nx\n"
 
 
-def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_case_does() -> None:
+def test_authored_tabs_are_one_toggle_per_tab_led_by_the_icon_of_the_tab_tone() -> None:
     block = {
         "type": "tabs",
         "tabs": [
@@ -456,9 +456,9 @@ def test_authored_tabs_are_notion_tabs_whose_icon_follows_the_tone_as_a_request_
     }
 
     assert notion_of([block]) == (
-        '<tabs>\n\t<tab icon="⚠️">\n\t\tFloor\n\t\ta\n\t</tab>\n'
-        "\t<tab>\n\t\tSystem\n\t\tb\n\t</tab>\n"
-        "\t<tab>\n\t\tVendor\n\t\t---\n\t</tab>\n</tabs>\n"
+        "<details>\n<summary>⚠️ Floor</summary>\n\ta\n</details>\n"
+        "<details>\n<summary>System</summary>\n\tb\n</details>\n"
+        "<details>\n<summary>Vendor</summary>\n\t---\n</details>\n"
     )
 
 
@@ -594,7 +594,7 @@ def test_block_nodes_become_notion_blocks() -> None:
         "> said\n"
         "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
         '## Shut {toggle="true"}\n\ty\n'
-        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
+        "<details>\n<summary>plain</summary>\n\tz\n</details>\n"
         '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
     )
 
@@ -631,7 +631,7 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
     )
 
 
-def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
+def test_a_request_with_several_cases_is_one_toggle_per_case_led_by_its_status_icon() -> None:
     cases = [
         {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
         {"label": "control", "tone": "info", "response": {"body": "none"}},
@@ -640,20 +640,18 @@ def test_a_request_with_several_cases_becomes_notion_tabs() -> None:
 
     assert notion_of([request]) == (
         "**Tier mappings on the partner API**\n"
-        "<tabs>\n"
-        '\t<tab icon="⚠️">\n'
-        "\t\tfinding\n"
-        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Recorded output**\n"
-        "\t\t```json\n\t\t[]\n\t\t```\n"
-        "\t</tab>\n"
-        '\t<tab icon="💡">\n'
-        "\t\tcontrol\n"
-        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
-        "\t\t**Recorded output**\n"
-        "\t\t```plain text\n\t\tnone\n\t\t```\n"
-        "\t</tab>\n"
-        "</tabs>\n"
+        "<details>\n"
+        "<summary>⚠️ finding</summary>\n"
+        "\t```bash\n\tlist-tiers\n\t```\n"
+        "\t**Recorded output**\n"
+        "\t```json\n\t[]\n\t```\n"
+        "</details>\n"
+        "<details>\n"
+        "<summary>💡 control</summary>\n"
+        "\t```bash\n\tlist-tiers\n\t```\n"
+        "\t**Recorded output**\n"
+        "\t```plain text\n\tnone\n\t```\n"
+        "</details>\n"
     )
 
 
@@ -671,33 +669,35 @@ def test_a_query_request_becomes_a_notion_code_block_in_its_language_labelled_wi
 
 
 @pytest.mark.parametrize(
-    ("title", "written"),
+    ("tone", "summary"),
     [
-        pytest.param("1. expired token", "1\\. expired token", id="ordinal-is-not-a-list"),
-        pytest.param("# 404 path", "\\# 404 path", id="hash-is-not-a-heading"),
+        pytest.param("success", "✅ t", id="success"),
+        pytest.param("info", "💡 t", id="info"),
+        pytest.param("warning", "⚠️ t", id="warning"),
+        pytest.param("danger", "🛑 t", id="danger"),
+        pytest.param("neutral", "t", id="neutral-has-no-icon"),
+        pytest.param(None, "t", id="no-tone"),
     ],
 )
-def test_a_tab_title_that_starts_like_a_block_stays_text(title: str, written: str) -> None:
-    tabs = Tabs((Tab((Plain(title),), (Paragraph((Plain("z"),)),)),))
+def test_a_tab_toggle_title_is_led_by_the_icon_of_its_tone(tone: ToneName | None, summary: str) -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))
 
-    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{written}\n\t\tz\n\t</tab>\n</tabs>\n"
+    assert render_notion([tabs]) == f"<details>\n<summary>{summary}</summary>\n\tz\n</details>\n"
 
 
 @pytest.mark.parametrize(
-    ("tone", "opening"),
+    ("tone", "summary"),
     [
-        pytest.param("success", '<tab icon="✅">', id="success"),
-        pytest.param("info", '<tab icon="💡">', id="info"),
-        pytest.param("warning", '<tab icon="⚠️">', id="warning"),
-        pytest.param("danger", '<tab icon="🛑">', id="danger"),
-        pytest.param("neutral", "<tab>", id="neutral-has-no-icon"),
-        pytest.param(None, "<tab>", id="no-tone"),
+        pytest.param("warning", "⚠️", id="icon-alone"),
+        pytest.param(None, "", id="nothing"),
     ],
 )
-def test_a_notion_tab_carries_the_icon_of_its_case_tone(tone: ToneName | None, opening: str) -> None:
-    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))
+def test_a_tab_toggle_without_a_title_is_titled_by_its_icon_alone_or_nothing(
+    tone: ToneName | None, summary: str
+) -> None:
+    tabs = Tabs((Tab((), (Paragraph((Plain("z"),)),), tone),))
 
-    assert render_notion([tabs]) == f"<tabs>\n\t{opening}\n\t\tt\n\t\tz\n\t</tab>\n</tabs>\n"
+    assert render_notion([tabs]) == f"<details>\n<summary>{summary}</summary>\n\tz\n</details>\n"
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:

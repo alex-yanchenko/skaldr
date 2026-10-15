@@ -527,7 +527,8 @@ def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
                     ),
                     "success",
                 ),
-            )
+            ),
+            "request cases",
         ),
     )
 
@@ -555,7 +556,8 @@ def test_a_request_with_several_cases_is_tabs() -> None:
                     (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("y", "")),
                     "success",
                 ),
-            )
+            ),
+            "request cases",
         ),
     )
 

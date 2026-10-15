@@ -57,7 +57,7 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.richtext import Code, Plain, Styled
-from tests.factories import check_nodes, refusal_of
+from tests.factories import check_nodes, lowered, make_command_request, refusal_of
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -812,12 +812,47 @@ def test_columns_are_written_one_after_another() -> None:
     assert _rendered(node) == _doc(_words("left"), _words("right"), {"type": "rule"})
 
 
-def test_tabs_are_one_expand_per_tab() -> None:
+def test_a_table_in_a_column_is_an_ordinary_table_after_the_columns_before_it() -> None:
+    table = TableNode((_cell("A"),), (TableRow((_cell("1"),)),))
+    node = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (table,))))
+
+    assert _rendered(node) == _doc(
+        _words("left"),
+        _table(_row(_table_cell("tableHeader", "A")), _row(_table_cell("tableCell", "1"))),
+    )
+
+
+def test_tabs_are_one_expand_per_tab_titled_with_the_icon_of_the_tab_tone() -> None:
     node = Tabs((Tab(plain("One"), (_para("a"),)), Tab(plain("Two"), (_para("b"),), tone="success")))
 
     assert _rendered(node) == _doc(
         {"type": "expand", "attrs": {"title": "One"}, "content": [_words("a")]},
-        {"type": "expand", "attrs": {"title": "Two"}, "content": [_words("b")]},
+        {"type": "expand", "attrs": {"title": "✅ Two"}, "content": [_words("b")]},
+    )
+
+
+def test_a_request_with_several_cases_is_one_expand_per_case_titled_with_its_status_icon() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "1"}},
+        {"label": "control", "tone": "success", "response": {"body": "2"}},
+    ]
+    strong = {"type": "strong"}
+
+    def case_expand(title: str, body: str) -> Json:
+        return {
+            "type": "expand",
+            "attrs": {"title": title},
+            "content": [
+                {"type": "codeBlock", "attrs": {"language": "bash"}, "content": [_text("list-tiers")]},
+                _paragraph(_text("Recorded output", strong)),
+                {"type": "codeBlock", "attrs": {"language": "json"}, "content": [_text(body)]},
+            ],
+        }
+
+    assert _rendered(*lowered([make_command_request(cases=cases, command="list-tiers")])) == _doc(
+        _paragraph(_text("Tier mappings on the partner API", strong)),
+        case_expand("⚠️ finding", "1"),
+        case_expand("✅ control", "2"),
     )
 
 

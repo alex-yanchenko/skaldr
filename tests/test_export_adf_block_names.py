@@ -90,8 +90,8 @@ def _in_a_panel(block: dict[str, Any]) -> list[dict[str, Any]]:
         ),
         pytest.param(
             make_request(cases=[{"label": "a", "verdict": "fine", "response": {"body": "1"}}]),
-            "a request verdict",
-            id="request-verdict",
+            "a request",
+            id="request-with-a-verdict",
         ),
     ],
 )
@@ -101,6 +101,21 @@ def test_a_panel_refusing_a_block_names_the_block_the_author_wrote_and_its_path(
     assert str(refusal_of(lowered(_in_a_panel(block)), "adf")) == (
         f"ADF cannot place {named} inside a panel, at blocks.0.panel.blocks.0.{block['type']}; "
         f"move the {named.removeprefix('a ')} out of the panel"
+    )
+
+
+def test_a_request_flow_step_with_a_verdict_is_named_a_request_step() -> None:
+    step = {
+        "label": "Read",
+        "method": "GET",
+        "url": "https://api.example.com/widgets",
+        "cases": [{"label": "a", "verdict": "fine", "response": {"body": "1"}}],
+    }
+    flow = {"type": "request_flow", "label": "Walk", "steps": [step, step]}
+
+    assert str(refusal_of(lowered(_in_a_panel(flow)), "adf")) == (
+        "ADF cannot place a request step inside a panel, at blocks.0.panel.blocks.0.request_flow.steps.0; "
+        "move the request step out of the panel"
     )
 
 
@@ -162,7 +177,7 @@ def test_a_toned_grid_cell_holding_another_toned_cell_names_both_a_grid_cell() -
     outer = make_grid([make_cell(6, [inner]) | {"tone": "warning"}])
 
     assert str(refusal_of(lowered([outer]), "adf")) == (
-        "ADF cannot place a grid cell inside a grid cell, at blocks.0.grid.cells.0.blocks.0.grid; "
+        "ADF cannot place a grid cell inside a grid cell, at blocks.0.grid.cells.0.blocks.0.grid.cells.0; "
         "move the grid cell out of the grid cell"
     )
 
@@ -221,12 +236,12 @@ def test_a_container_authored_as_a_note_is_named_a_note() -> None:
     )
 
 
-def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
-    blocks = [make_toggle(make_toggle(make_toggle(COMPARISON)))]
+def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
+    blocks = [make_toggle(make_toggle(COMPARISON))]
 
     assert str(refusal_of(lowered(blocks), "adf")) == (
         "ADF cannot place a comparison inside a toggle that is itself inside a toggle, "
-        "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.comparison; "
+        "at blocks.0.toggle.blocks.0.toggle.blocks.0.comparison; "
         "move the comparison out of the toggle"
     )
 
@@ -235,11 +250,11 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
     request = make_request(
         cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
     )
-    blocks = [make_toggle(make_toggle(make_toggle(request)))]
+    blocks = [make_toggle(make_toggle(request))]
 
     assert str(refusal_of(lowered(blocks), "adf")) == (
         "ADF cannot place a request inside a toggle that is itself inside a toggle, "
-        "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.request; "
+        "at blocks.0.toggle.blocks.0.toggle.blocks.0.request; "
         "move the request out of the toggle"
     )
 

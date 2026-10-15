@@ -1,4 +1,5 @@
-from dataclasses import fields
+from collections.abc import Callable, Sequence
+from dataclasses import fields, replace
 from pathlib import Path
 from string import Formatter
 from typing import Any, Literal, get_args, get_type_hints
@@ -6,38 +7,57 @@ from typing import Any, Literal, get_args, get_type_hints
 import pytest
 
 from skaldr.cli import main
-from skaldr.errors import ExportRejectedError
-from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection
+from skaldr.errors import ExportInvariantError, ExportRejectedError
+from skaldr.export.adf import render_adf
+from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap, swaps
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
+from skaldr.export.markdown import render_markdown
+from skaldr.export.notion import render_notion
+from skaldr.export.slack import render_slack
+from skaldr.export.swaps import tabs_as_toggles
+from skaldr.export.tree import BlockRegion, LoweredDocument, Node, Paragraph, Tab, Tabs
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from skaldr.models import parse_report
+from skaldr.models import load_report, parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.factories import make_jira_target, make_report, make_section, write_report
+from skaldr.richtext import Plain
+from tests.factories import (
+    make_jira_target,
+    make_report,
+    make_request,
+    make_section,
+    make_tabs,
+    make_toggle,
+    write_index_document,
+    write_report,
+)
 from tests.factories.capability_factory import (
     ADF_CASES,
+    CANVAS_CALLOUT_WHY,
     CLEAN_BLOCKS,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
     RefusedCase,
     in_a_panel,
+    one_cell_grid,
     published_report,
     text_grid,
+    two_cell_grid,
     walkthrough_holding,
 )
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
-Verdict = Literal["keep", "reject"]
+Verdict = Literal["keep", "reject", "swap"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
-    "table inside a callout": {"adf": "reject"},
-    "callout inside a callout": {"adf": "reject"},
+    "table inside a callout": {"adf": "reject", "slack": "reject"},
+    "callout inside a callout": {"adf": "reject", "slack": "reject"},
     "quote inside a callout": {"adf": "reject"},
-    "toggle inside a callout": {"adf": "reject"},
+    "toggle inside a callout": {"adf": "reject", "slack": "reject"},
     "table inside a toggle inside a toggle": {"adf": "reject"},
     "toggle inside a toggle inside a toggle": {"adf": "reject"},
     "block inside a list item": {"slack": "reject"},
@@ -46,12 +66,69 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
+    "divider inside a callout": {"slack": "reject"},
+    "grid with more than three cells": {"slack": "reject"},
+    "table inside a grid cell": {"slack": "reject"},
+    "callout inside a grid cell": {"slack": "reject"},
+    "divider inside a grid cell": {"slack": "reject"},
+    "toned grid cell": {"slack": "reject"},
+    "grid inside a grid cell": {"slack": "reject"},
+    "divider inside a walkthrough step": {"adf": "reject"},
+    "set of tabs": {"notion": "swap", "adf": "swap"},
+    "request with several cases": {"notion": "swap", "adf": "swap"},
+}
+REQUEST_WITH_TWO_CASES = make_request(
+    cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
+)
+SWAPPED_BLOCKS = [
+    pytest.param(make_tabs(), id="tabs"),
+    pytest.param(REQUEST_WITH_TWO_CASES, id="request-with-two-cases"),
+]
+SWAPPED_BLOCKS_OF_EACH_FEATURE = [
+    pytest.param("set of tabs", make_tabs(), id="tabs"),
+    pytest.param("request with several cases", REQUEST_WITH_TWO_CASES, id="request-with-two-cases"),
+]
+TWO_TABS = Tabs(
+    (
+        Tab((Plain("One"),), (Paragraph((Plain("a"),)),), "warning"),
+        Tab((Plain("Two"),), (Paragraph((Plain("b"),)),)),
+    )
+)
+REQUEST_CASES = replace(TWO_TABS, kind="request cases")
+PANES_OF_EACH_FEATURE = [
+    pytest.param("set of tabs", TWO_TABS, id="tabs"),
+    pytest.param("request with several cases", REQUEST_CASES, id="request-cases"),
+]
+NODE_OF_EACH_PANES_FEATURE: dict[Feature, Tabs] = {
+    "set of tabs": TWO_TABS,
+    "request with several cases": REQUEST_CASES,
+}
+PANES_A_WRITER_SWAPS = [
+    pytest.param(feature, node, target, id=f"{target}-{feature.replace(' ', '-')}")
+    for feature, node in NODE_OF_EACH_PANES_FEATURE.items()
+    for target in EXPORT_TARGETS
+    if swaps(feature, target)
+]
+RENDERERS: dict[ExportTarget, Callable[[Sequence[Node]], object]] = {
+    "markdown": render_markdown,
+    "notion": render_notion,
+    "adf": render_adf,
+    "slack": render_slack,
+}
+PANES_WRITTEN_AS_TITLES: dict[ExportTarget, object] = {
+    "markdown": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
+    "slack": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
     for other in EXPORT_TARGETS
-    if other != case.target
+    if other != case.target and other not in case.also_refused_by
+]
+ALSO_REFUSED_BY = [
+    pytest.param(case, other, id=f"{name}-also-refused-by-{other}")
+    for name, case in SEEDED_REFUSALS.items()
+    for other in case.also_refused_by
 ]
 
 
@@ -71,7 +148,24 @@ REJECTIONS = [
 
 
 def _verdict(capability: Capability) -> Verdict:
-    return "reject" if isinstance(capability, Rejection) else capability
+    match capability:
+        case Rejection():
+            return "reject"
+        case Swap():
+            return "swap"
+        case _:
+            return capability
+
+
+def _adf_expands(*titles: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "expand",
+            "attrs": {"title": title},
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+        }
+        for title, text in zip(titles, "ab", strict=True)
+    ]
 
 
 def _template_fields(template: str) -> set[str]:
@@ -117,6 +211,26 @@ def test_every_rejection_names_only_details_its_feature_supplies(
     assert _template_fields(rejection.why) | _template_fields(rejection.instead) <= supplied
 
 
+def test_every_rejection_in_the_table_has_a_seeded_case_and_every_seeded_case_names_a_rejection() -> None:
+    rejections = {
+        (feature, target)
+        for feature, cells in CAPABILITIES.items()
+        for target, capability in cells.items()
+        if isinstance(capability, Rejection)
+    }
+
+    assert {(case.feature, case.target) for case in SEEDED_REFUSALS.values()} == rejections
+
+
+@pytest.mark.parametrize("case", SEEDED_CASES)
+def test_each_seeded_case_passes_once_the_cell_it_names_keeps_the_feature(
+    monkeypatch: pytest.MonkeyPatch, case: RefusedCase
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[case.feature], case.target, "keep")
+
+    _check(case.blocks, case.target)
+
+
 @pytest.mark.parametrize("case", SEEDED_CASES)
 def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCase) -> None:
     with pytest.raises(ExportRejectedError) as raised:
@@ -130,9 +244,101 @@ def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, oth
     _check(case.blocks, other)
 
 
+@pytest.mark.parametrize(("case", "other"), ALSO_REFUSED_BY)
+def test_every_target_a_case_names_as_also_refusing_it_refuses_it(
+    case: RefusedCase, other: ExportTarget
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(case.blocks, other)
+
+    assert raised.value.target == other
+
+
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
 def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> None:
     _check(CLEAN_BLOCKS, target)
+
+
+@pytest.mark.parametrize("target", EXPORT_TARGETS)
+@pytest.mark.parametrize("block", SWAPPED_BLOCKS)
+def test_a_block_a_target_swaps_for_another_form_passes_the_check(
+    block: dict[str, Any], target: ExportTarget
+) -> None:
+    _check([block], target)
+
+
+@pytest.mark.parametrize("target", EXPORT_TARGETS)
+@pytest.mark.parametrize(("feature", "node"), PANES_OF_EACH_FEATURE)
+def test_a_writer_writes_panes_as_toggles_exactly_where_the_table_swaps_them(
+    feature: Feature, node: Tabs, target: ExportTarget
+) -> None:
+    render = RENDERERS[target]
+    expected = render(tabs_as_toggles(node)) if swaps(feature, target) else PANES_WRITTEN_AS_TITLES[target]
+
+    assert render([node]) == expected
+
+
+@pytest.mark.parametrize(("feature", "node", "target"), PANES_A_WRITER_SWAPS)
+def test_a_writer_that_swaps_panes_refuses_panes_whose_cell_is_not_a_swap(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, node: Tabs, target: ExportTarget
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], target, "keep")
+
+    with pytest.raises(ExportInvariantError) as raised:
+        RENDERERS[target]([node])
+
+    assert str(raised.value) == (
+        f"the capability table keeps a {feature} on {target}, "
+        "but its writer has no form for it other than toggles"
+    )
+
+
+@pytest.mark.parametrize(
+    ("kept_feature", "swapped_node"),
+    [
+        pytest.param("set of tabs", REQUEST_CASES, id="tabs-kept-request-cases-swapped"),
+        pytest.param("request with several cases", TWO_TABS, id="request-cases-kept-tabs-swapped"),
+    ],
+)
+def test_a_writer_swaps_the_panes_whose_own_cell_says_swap(
+    monkeypatch: pytest.MonkeyPatch, kept_feature: Feature, swapped_node: Tabs
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[kept_feature], "notion", "keep")
+    monkeypatch.setitem(CAPABILITIES[kept_feature], "adf", "keep")
+
+    assert (render_notion([swapped_node]), render_adf([swapped_node])["content"]) == (
+        "<details>\n<summary>⚠️ One</summary>\n\ta\n</details>\n"
+        "<details>\n<summary>Two</summary>\n\tb\n</details>\n",
+        _adf_expands("⚠️ One", "Two"),
+    )
+
+
+@pytest.mark.parametrize(("feature", "block"), SWAPPED_BLOCKS_OF_EACH_FEATURE)
+def test_a_panes_cell_made_a_rejection_refuses_the_block(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, block: dict[str, Any]
+) -> None:
+    monkeypatch.setitem(CAPABILITIES[feature], "markdown", Rejection("Markdown cannot show it", "drop it"))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([block], "markdown")
+
+    assert vars(raised.value) == {
+        "target": "markdown",
+        "why": "Markdown cannot show it",
+        "instead": "drop it",
+        "where": f"at blocks.0.{block['type']}",
+    }
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(two_cell_grid(one_cell_grid({"type": "text", "body": "Inner"})), id="in-a-grid-cell"),
+        pytest.param(walkthrough_holding(one_cell_grid({"type": "text", "body": "Inner"})), id="in-a-step"),
+    ],
+)
+def test_an_inner_grid_of_one_cell_shows_no_columns_so_a_canvas_keeps_it(block: dict[str, Any]) -> None:
+    _check([block], "slack")
 
 
 def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() -> None:
@@ -145,17 +351,112 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
+def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
+    blocks = [*in_a_panel({"type": "divider"}), two_cell_grid(text_grid())]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert raised.value.where == "at blocks.0.panel.blocks.0.divider"
+
+
+def _filler(count: int) -> list[dict[str, Any]]:
+    return [{"type": "text", "body": f"Row {index}."} for index in range(count)]
+
+
+def _a_panel_refusal_at_9_then_a_model_refusal_at_10() -> list[dict[str, Any]]:
+    return [*_filler(9), *in_a_panel({"type": "divider"}), two_cell_grid(text_grid())]
+
+
+def test_a_refusal_at_block_9_is_reported_before_a_model_refusal_at_block_10() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(_a_panel_refusal_at_9_then_a_model_refusal_at_10(), "slack")
+
+    assert raised.value.where == "at blocks.9.panel.blocks.0.divider"
+
+
+def test_a_refusal_at_block_9_of_a_part_is_reported_before_a_model_refusal_at_its_block_10(
+    tmp_path: Path,
+) -> None:
+    index = write_index_document(
+        tmp_path, {"one.yaml": make_report(blocks=_a_panel_refusal_at_9_then_a_model_refusal_at_10())}
+    )
+    report = load_report(index)
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, lower_report(report), "slack")
+
+    assert raised.value.where == (
+        "at blocks.0.part.blocks.9.panel.blocks.0.divider, under the heading 'Test Report'"
+    )
+
+
+def test_a_refusal_found_on_the_model_is_reported_when_no_lowered_node_follows_it() -> None:
+    report = parse_report(make_report(blocks=[walkthrough_holding(text_grid())]))
+    page = LoweredDocument(report.meta.title, (BlockRegion(0, ()),))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        reject_what_the_target_cannot_show(report, page, "slack")
+
+    assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
+
+
+@pytest.mark.parametrize(
+    ("blocks", "target", "refusal"),
+    [
+        pytest.param(
+            in_a_panel(make_toggle(make_toggle(TABLE))),
+            "adf",
+            {
+                "target": "adf",
+                "why": "ADF cannot place a toggle inside a panel",
+                "instead": "move the toggle out of the panel",
+                "where": "at blocks.0.panel.blocks.0.toggle",
+            },
+            id="adf-toggle-in-a-panel-before-a-table-in-its-inner-toggle",
+        ),
+        pytest.param(
+            in_a_panel(make_toggle({"type": "text", "body": "H~q~"})),
+            "slack",
+            {
+                "target": "slack",
+                "why": CANVAS_CALLOUT_WHY.format(held="toggle"),
+                "instead": "move the toggle out of the panel",
+                "where": "at blocks.0.panel.blocks.0.toggle",
+            },
+            id="slack-toggle-in-a-panel-before-a-subscript-inside-it",
+        ),
+    ],
+)
+def test_a_block_a_container_cannot_hold_is_reported_before_what_it_holds(
+    blocks: list[dict[str, Any]], target: ExportTarget, refusal: dict[str, str]
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, target)
+
+    assert vars(raised.value) == refusal
+
+
+def test_a_refusal_found_on_the_model_names_the_heading_above_it() -> None:
+    blocks = [{"type": "heading", "text": "Layout"}, two_cell_grid(text_grid())]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert raised.value.where == "at blocks.1.grid.cells.1.blocks.0.grid, under the heading 'Layout'"
+
+
 @pytest.mark.parametrize(
     ("target", "refused_at"),
     [
-        pytest.param("adf", "at blocks.1.panel.blocks.0.table", id="adf"),
-        pytest.param("slack", "at blocks.2.walkthrough.steps.0.detail.0.grid", id="slack"),
+        pytest.param("adf", "at blocks.2.panel.blocks.0.table", id="adf"),
+        pytest.param("slack", "at blocks.1.walkthrough.steps.0.detail.0.grid", id="slack"),
     ],
 )
 def test_the_check_of_a_page_built_from_some_regions_looks_only_at_their_blocks(
     target: ExportTarget, refused_at: str
 ) -> None:
-    blocks = [{"type": "text", "body": "Fine."}, *in_a_panel(TABLE), walkthrough_holding(text_grid())]
+    blocks = [{"type": "text", "body": "Fine."}, walkthrough_holding(text_grid()), *in_a_panel(TABLE)]
     report = parse_report(make_report(blocks=blocks))
     lowering = lowering_for(report)
     regions = lower_regions(lowering)
