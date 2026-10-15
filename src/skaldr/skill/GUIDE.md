@@ -1292,7 +1292,7 @@ publish:
       split: [st1, st2]              # one child issue per section
       overrides: { st2: { fields: { priority: { name: High } } } }
     - to: slack
-      where: { conversation: C0EXAMPLE1 }   # post each new canvas's link in this channel
+      where: { conversation: C0EXAMPLE1 }   # share each new canvas with this channel and post the document's link there
 ```
 
 | Key | Meaning |
@@ -1301,7 +1301,7 @@ publish:
 | `to` | `notion`, `jira` or `slack`. |
 | `where` (Notion) | Exactly one of `parent_page` (create the document under it) or `page` (write into it), each a Notion page URL or page id, plus `fields` for database properties when the page is a database row. |
 | `where` (Jira) | A `project` key, an `issue_type`, an optional `parent` issue key, and `fields` for labels, priority, components and custom fields. |
-| `where` (Slack) | Optional: at most one of `conversation` (a channel or DM where each new canvas's link is posted) or `canvas` (an existing canvas to write into), each an id or a Slack link, plus `workspace`. A canvas has no fields, so a Slack target takes no `fields`. |
+| `where` (Slack) | Optional: at most one of `conversation` (a channel or DM that can read each new canvas and where the document's canvas link is posted) or `canvas` (an existing canvas to write into), each an id or a Slack link, plus `workspace`. Only `canvas` is part of the target's place. A canvas has no fields, so a Slack target takes no `fields`. |
 | `from` | Top-level section ids the target is built from; the content keeps document order. Left out: the whole document. |
 | `split` | Top-level section ids that each become a child page or child issue; everything else stays on the document's own page or issue. Left out: one item for the whole document. |
 | `overrides` | Per-item `fields`, keyed by a split section id; each key it names replaces that key of `where.fields` whole. |
