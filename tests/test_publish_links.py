@@ -36,6 +36,7 @@ from tests.factories.publish_factory import (
     authored_garden,
     fake_registry,
     make_garden_blocks,
+    make_garden_meta,
     write_garden_report,
 )
 from tests.factories.report_factory import (
@@ -372,14 +373,28 @@ def test_removing_the_jira_target_archives_its_issues_and_drops_them_from_each_n
             (
                 "archive  section tools (page-4)",
                 "archive  document (page-3)",
-                "unlink   document from Garden handbook",
-                "unlink   section tools from Tools",
+                "unlink   document from Jira Garden handbook",
+                "unlink   section tools from Jira Tools",
             )
         ),
         (),
         (),
     )
     assert [item.links for _, item in state.targets[TARGET_LABEL].held_items()] == [[], []]
+
+
+def test_a_link_to_an_item_with_a_blank_title_is_titled_with_the_item_id(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(
+        tmp_path, publish=_publish_block(_notion(), _jira()), meta=make_garden_meta(title="  ")
+    )
+
+    _publish(path, transport)
+
+    assert _links_of(transport) == {
+        "page-1": (_shown("page-2", "page-2"),),
+        "page-2": (_page("page-1", "page-1"),),
+    }
 
 
 def test_a_link_sent_by_a_run_that_stopped_after_sending_it_is_removed_once_its_pair_ends(
@@ -396,7 +411,7 @@ def test_a_link_sent_by_a_run_that_stopped_after_sending_it_is_removed_once_its_
     outcome = _publish(path, transport)
 
     assert (outcome, _links_of(transport)) == (
-        Applied(("archive  document (page-1)", "unlink   document from Garden handbook")),
+        Applied(("archive  document (page-1)", "unlink   document from Notion Garden handbook")),
         {"page-1": (_shown("page-2", "Garden handbook"),), "page-2": ()},
     )
 
@@ -407,8 +422,15 @@ def test_a_section_no_longer_split_in_jira_unlinks_only_that_section(tmp_path: P
 
     outcome = _publish(path, transport)
 
-    assert (outcome.steps[-2:] if isinstance(outcome, Applied) else outcome, _links_of(transport)) == (
-        ("archive  section tools (page-4)", "unlink   section tools from Tools"),
+    assert (outcome, _links_of(transport)) == (
+        Applied(
+            (
+                "update   document: page legend (badges)",
+                "update   document: tools (blocks[1])",
+                "archive  section tools (page-4)",
+                "unlink   section tools from Jira Tools",
+            )
+        ),
         {
             "page-1": (_shown("page-3", "Garden handbook"),),
             "page-2": (),
@@ -432,7 +454,7 @@ def test_releasing_a_page_written_into_unlinks_its_issue_and_takes_the_links_off
     outcome = _publish(path, transport)
 
     assert (outcome, _links_of(transport)) == (
-        Applied((f"release  document ({NOTION_PAGE_ID})", "unlink   document from Garden handbook")),
+        Applied((f"release  document ({NOTION_PAGE_ID})", "unlink   document from Notion Garden handbook")),
         {NOTION_PAGE_ID: (), "page-2": ()},
     )
 
@@ -448,8 +470,8 @@ def test_removing_the_notion_target_unlinks_each_jira_issue(tmp_path: Path) -> N
             (
                 "archive  section tools (page-2)",
                 "archive  document (page-1)",
-                "unlink   document from Garden handbook",
-                "unlink   section tools from Tools",
+                "unlink   document from Notion Garden handbook",
+                "unlink   section tools from Notion Tools",
             )
         ),
         (),
@@ -465,12 +487,23 @@ def test_a_retitled_item_updates_the_link_to_it_in_place(tmp_path: Path) -> None
     write_garden_report(tmp_path, publish=BOTH_SPLIT, blocks=blocks)
     transport.forget_calls()
 
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
     outcome = _publish(path, transport)
 
-    assert (outcome.steps[-2:] if isinstance(outcome, Applied) else outcome, _links_of(transport)) == (
+    assert (dry_run.links, outcome, _links_of(transport)) == (
         (
-            "link     section tools to jira project PLAN under no parent issue, section tools",
-            f"link     section tools to {TARGET_LABEL}, section tools",
+            LinkStep(NOTION_TOOLS, "link", f"{JIRA_LABEL}, section tools"),
+            LinkStep(JIRA_TOOLS, "link", f"{TARGET_LABEL}, section tools"),
+        ),
+        Applied(
+            (
+                "update   section tools: title",
+                "update   section tools: tools (blocks[1])",
+                "update   section tools: title",
+                "update   section tools: tools (blocks[1])",
+                f"link     section tools to {JIRA_LABEL}, section tools",
+                f"link     section tools to {TARGET_LABEL}, section tools",
+            )
         ),
         {
             "page-1": (_shown("page-3", "Garden handbook"),),

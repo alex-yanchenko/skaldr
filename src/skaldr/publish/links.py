@@ -4,7 +4,7 @@ from typing import Literal
 
 from skaldr.errors import PublishError
 from skaldr.publish.applier import StepListener
-from skaldr.publish.drafts import TargetDraft, item_label
+from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label
 from skaldr.publish.jira.transport import GLOBAL_ID_LIMIT, remote_link_global_id
 from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
@@ -12,6 +12,7 @@ from skaldr.publish.state import PublishedItem, PublishState, save_state
 from skaldr.publish.transport import LinksWrite, PairedLink, RemoteItem, ShownLink, Stamp
 from skaldr.publish_block import TargetBase
 from skaldr.publish_block.notion import LONGEST_PAGE_ID
+from skaldr.services import SERVICE_NAMES
 
 LinkAction = Literal["link", "unlink"]
 STEP_VERB_WIDTH = 9
@@ -63,21 +64,28 @@ class _Linking:
     transports: Transports
     remote: Mapping[ItemRef, RemoteItem]
     targets: Mapping[str, TargetDraft]
+    drafted: Mapping[ItemRef, ItemDraft]
 
     def held(self, ref: ItemRef) -> PublishedItem | None:
         return published_item(self.state.targets.get(ref.target), ref.section_id)
+
+    def holds_links(self, ref: ItemRef) -> bool:
+        held = self.held(ref)
+        return held is not None and bool(held.links)
 
     def stamp(self, ref: ItemRef) -> Stamp:
         return Stamp(self.prepared.doc_id, ref.section_id)
 
     def paired_link(self, partner: ItemRef) -> PairedLink | None:
         held = self.held(partner)
-        draft = self.prepared.draft_of(partner)
-        if held is None or draft is None:
+        if held is None:
             return None
-        shown = self.transports.for_target(partner.target).item_link(held.item_id, draft.content.title)
+        title = self.drafted[partner].content.title
+        shown = self.transports.for_target(partner.target).item_link(held.item_id, title)
         service = self.targets[partner.target].target.service()
-        return PairedLink(service, held.item_id, shown.url, shown.title)
+        return PairedLink(
+            service, held.item_id, shown.url, shown.title if shown.title.strip() else held.item_id
+        )
 
     def current_links(self, ref: ItemRef, held: PublishedItem) -> tuple[ShownLink, ...]:
         stamp = self.stamp(ref)
@@ -90,37 +98,43 @@ class _Linking:
         held = self.held(ref)
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
         links = tuple(link for _, link in wanted if link is not None)
-        if held is None:
-            return ItemLinks(
-                ref, None, links, tuple(LinkStep(ref, "link", partner.label) for partner in partners)
-            )
-        current = self.current_links(ref, held)
-        addresses = {link.url for link in links}
+        current = {} if held is None else {link.url: link for link in self.current_links(ref, held)}
+        kept = {link.url for link in links}
         linked = [
             LinkStep(ref, "link", partner.label)
             for partner, link in wanted
-            if link is None or link.shown not in current
+            if link is None or current.get(link.url) != link.shown
         ]
-        unlinked = [LinkStep(ref, "unlink", link.title) for link in current if link.url not in addresses]
+        unlinked = [LinkStep(ref, "unlink", _named(link)) for url, link in current.items() if url not in kept]
         return ItemLinks(ref, held, links, (*linked, *unlinked))
+
+
+def _named(link: ShownLink) -> str:
+    return f"{SERVICE_NAMES[link.service]} {link.title}"
 
 
 def _linking(
     prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
 ) -> _Linking:
-    return _Linking(prepared, state, transports, remote, {draft.label: draft for draft in prepared.drafts})
+    return _Linking(
+        prepared,
+        state,
+        transports,
+        remote,
+        {draft.label: draft for draft in prepared.drafts},
+        {ItemRef(draft.label, item.section_id): item for draft in prepared.drafts for item in draft.items},
+    )
 
 
 def plan_links(
     prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
 ) -> tuple[ItemLinks, ...]:
     linking = _linking(prepared, state, transports, remote)
-    planned: list[ItemLinks] = []
-    for ref, partners in paired_items(prepared.drafts).items():
-        held = linking.held(ref)
-        if partners or (held is not None and held.links):
-            planned.append(linking.item_links(ref, partners))
-    return tuple(planned)
+    return tuple(
+        linking.item_links(ref, partners)
+        for ref, partners in paired_items(prepared.drafts).items()
+        if partners or linking.holds_links(ref)
+    )
 
 
 def refuse_remote_links_jira_cannot_take(prepared: Prepared) -> None:
