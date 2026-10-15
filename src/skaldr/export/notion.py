@@ -21,6 +21,7 @@ from skaldr.export.markup import (
     escape_block_start,
     indent_lines,
     is_emphasised_body_cell,
+    label_then,
     styled,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
@@ -178,9 +179,9 @@ class _NotionRuns(MarkupRuns):
             "a Notion page cannot link to its own headings; the export check should have refused it"
         )
 
-    def date_mention(self, _label: str, start: date, end: date | None, /) -> str:
+    def date_mention(self, label: str, start: date, end: date | None, /) -> str:
         finish = f' end="{end.isoformat()}"' if end else ""
-        return f'<mention-date start="{start.isoformat()}"{finish}/>'
+        return label_then(label, f'<mention-date start="{start.isoformat()}"{finish}/>')
 
     def person_mention(self, label: str, _key: str, person: Person, /) -> str:
         if person.notion is None:
