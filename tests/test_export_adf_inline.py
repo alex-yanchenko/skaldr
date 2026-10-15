@@ -17,12 +17,12 @@ from skaldr.export.runs import (
     ExportRich,
     Gauge,
     IndicatorMark,
+    SectionLink,
     StatusMark,
     SwimlaneMark,
 )
 from skaldr.models import BadgeColorLiteral, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import (
-    AnchorLink,
     Citation,
     Code,
     DateMention,
@@ -145,8 +145,8 @@ def test_a_script_becomes_a_subsup_mark(position: ScriptPosition, kind: str) -> 
     assert _written((ScriptText(position, "2"),)) == [_text("2", {"type": "subsup", "attrs": {"type": kind}})]
 
 
-def test_an_anchor_link_keeps_only_its_label() -> None:
-    assert _written((AnchorLink((Plain("Jump"),), "target"),)) == [_text("Jump")]
+def test_a_section_link_keeps_only_its_label() -> None:
+    assert _written((SectionLink((Plain("Jump"),), "target"),)) == [_text("Jump")]
 
 
 def test_a_citation_with_a_url_links_its_number() -> None:

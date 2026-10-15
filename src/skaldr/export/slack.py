@@ -110,8 +110,8 @@ class _SlackRuns(CommonMarkRuns):
     def math(self, expression: str, /) -> str:
         return code_span(expression)
 
-    def underline(self, inner: str, /) -> str:
-        return inner
+    def underline(self, _inner: str, /) -> str:
+        raise ExportInvariantError("a Slack canvas has no underline; the export check should have refused it")
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
         return _in_unicode_script_form(position, text)

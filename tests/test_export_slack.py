@@ -1,16 +1,14 @@
 import json
-import os
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
-from skaldr.export.runs import Break, Chip, ExportRun, StatusMark
+from skaldr.export.runs import Break, Chip, ExportRun, SectionLink, StatusMark, TonedLabel
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
     Callout,
@@ -41,9 +39,8 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Person, Report, Walkthrough, load_report, parse_report
+from skaldr.models import Person, Report, load_report, parse_report
 from skaldr.richtext import (
-    AnchorLink,
     Citation,
     Code,
     DateMention,
@@ -56,9 +53,7 @@ from skaldr.richtext import (
     Plain,
     ScriptText,
     Styled,
-    Tinted,
 )
-from tests.conftest import REPO_ROOT
 from tests.factories import (
     folder_texts,
     make_bullets,
@@ -73,10 +68,8 @@ from tests.factories import (
     write_report,
 )
 from tests.factories.capability_factory import LONG_TABLE
+from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
-SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
-WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
@@ -120,7 +113,7 @@ def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]
 
 
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
-    data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    data = example_for("slack")
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
         blocks.append(block)
@@ -133,38 +126,25 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
-    return next(
-        f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-        for path, block in report.located_blocks
-        if isinstance(block, Walkthrough)
-        for step_index, step in enumerate(block.steps)
-        for index, detail in enumerate(step.detail)
-        if detail.type not in CANVAS_STEP_DETAIL_TYPES
-    )
-
-
-def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
-    example = load_report(EXAMPLE)
-
+def test_the_example_is_refused_for_slack_for_its_underline(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
-        export_slack(example, tmp_path / "out")
+        export_slack(load_report(EXAMPLE), tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
-        _list_item_why("a code block"),
-        OUT_OF_THE_STEP,
-        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(example)}",
+        "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit'",
+        "write the text without the underline or export the document elsewhere",
+        "at blocks.7.text",
     )
 
 
 def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_slack_golden_rewrites(
     tmp_path: Path,
 ) -> None:
-    out_dir = SLACK_GOLDEN if os.environ.get(WRITE_SLACK_GOLDEN) else tmp_path
+    out_dir = golden_or_scratch_folder("slack", tmp_path)
 
     export_slack(parse_report(_example_reworked_for_a_canvas()), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(SLACK_GOLDEN)
+    assert folder_texts(out_dir) == folder_texts(golden_of("slack"))
 
 
 @pytest.mark.parametrize(
@@ -869,8 +849,7 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Styled("bold", make_rich_text("b")), "**b**", id="bold"),
         pytest.param(Styled("italic", make_rich_text("i")), "*i*", id="italic"),
         pytest.param(Styled("strike", make_rich_text("s")), "~~s~~", id="strike"),
-        pytest.param(Styled("underline", make_rich_text("u")), "u", id="underline-is-plain"),
-        pytest.param(Tinted("danger", "warning", make_rich_text("t")), "t", id="tint-is-plain"),
+        pytest.param(TonedLabel("danger", make_rich_text("t")), "t", id="toned-label-is-plain"),
         pytest.param(ScriptText("subscript", "2"), "\N{SUBSCRIPT TWO}", id="subscript-digit"),
         pytest.param(
             ScriptText("subscript", "i=0"),
@@ -901,7 +880,9 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Code("a`b"), "``a`b``", id="code-outgrows-its-backticks"),
         pytest.param(Chip("a*b", "blue"), "**a\\*b**", id="chip-is-bold"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
-        pytest.param(AnchorLink(make_rich_text("method"), "method"), "method", id="anchor-link-is-its-label"),
+        pytest.param(
+            SectionLink(make_rich_text("method"), "method"), "method", id="section-link-is-its-label"
+        ),
         pytest.param(
             DateMention(make_rich_text("1 Oct"), date(2026, 10, 1), None),
             "![](slack_date:2026-10-01)",
@@ -923,11 +904,6 @@ def test_a_table_of_contents_writes_nothing() -> None:
             Link(make_rich_text("x"), "mailto:ops@example.com"), "[x](mailto:ops@example.com)", id="mailto"
         ),
         pytest.param(InlineMath("x_i"), "`x_i`", id="inline-math-is-code"),
-        pytest.param(
-            DocumentLink(make_rich_text("the plan"), "plan", None),
-            "the plan",
-            id="document-link-is-its-label",
-        ),
         pytest.param(
             IssueLink(make_rich_text("ABC-1"), "ABC-1", "https://example.atlassian.net/browse/ABC-1"),
             "[ABC-1](https://example.atlassian.net/browse/ABC-1)",
@@ -1075,12 +1051,34 @@ COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "co
         pytest.param(
             "*[_a_](https://x.io)*", "*[a](https://x.io)*", id="italic-in-a-link-label-in-an-italic"
         ),
-        pytest.param("**[*a*](#counts)**", "**a**", id="anchor-link-label-read-with-the-bold-around-it"),
-        pytest.param("**++*a*++**", "**a**", id="italic-inside-an-underline-at-the-edge-of-a-bold"),
     ],
 )
-def test_emphasis_inside_a_label_or_an_underline_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
+def test_emphasis_inside_a_link_label_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
     assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"## Counts\n\n{written}\n"
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        pytest.param(
+            Styled("underline", make_rich_text("u")),
+            "a Slack canvas has no underline; the export check should have refused it",
+            id="underline",
+        ),
+        pytest.param(
+            DocumentLink(make_rich_text("the plan"), "plan", None),
+            "this target cannot link to another skaldr document; the export check should have refused it",
+            id="link-to-another-document",
+        ),
+    ],
+)
+def test_the_canvas_writer_refuses_what_the_export_check_refuses_as_an_invariant(
+    run: ExportRun, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Paragraph((run,))])
+
+    assert str(raised.value) == message
 
 
 @pytest.mark.parametrize(

@@ -19,11 +19,16 @@ from skaldr.export.capabilities import (
     HeldByAListItem,
     ListItemFeature,
     ListStart,
+    MarkedText,
+    OtherDocumentLink,
     Placement,
     Rejection,
+    SameDocumentLink,
     ScriptForm,
+    TextMarkFeature,
     character_without_a_unicode_form,
 )
+from skaldr.export.inline import one_line
 from skaldr.export.markup import table_width
 from skaldr.export.runs import (
     Break,
@@ -34,8 +39,11 @@ from skaldr.export.runs import (
     ExportRun,
     Gauge,
     IndicatorMark,
+    SectionLink,
     StatusMark,
     SwimlaneMark,
+    TonedLabel,
+    every_run,
     export_visible_text,
 )
 from skaldr.export.tree import (
@@ -227,33 +235,54 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             assert_never(node)
 
 
-def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
-    for run in runs:
-        match run:
-            case ScriptText():
-                yield run
-            case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
-                yield from _scripts(run.label)
-            case Styled() | Tinted():
-                yield from _scripts(run.runs)
-            case (
-                Plain()
-                | Code()
-                | Citation()
-                | Placeholder()
-                | InlineMath()
-                | Break()
-                | StatusMark()
-                | SwimlaneMark()
-                | IndicatorMark()
-                | CheckMark()
-                | DecisionMark()
-                | Gauge()
-                | Chip()
-            ):
-                pass
-            case _:
-                assert_never(run)
+def _visible(runs: ExportRich) -> str:
+    return one_line(export_visible_text(runs))
+
+
+def _tint_feature(run: Tinted) -> TextMarkFeature:
+    if run.tone is not None and run.background is not None:
+        return "colour and highlight span"
+    return "colour span" if run.tone is not None else "highlight span"
+
+
+def _inline_details(run: ExportRun) -> Details | None:
+    match run:
+        case ScriptText():
+            character = character_without_a_unicode_form(run.position, run.text)
+            return None if character is None else ScriptForm(run.position, run.text, character)
+        case Tinted():
+            return MarkedText(_tint_feature(run), _visible(run.runs))
+        case Styled() if run.style == "underline":
+            return MarkedText("underline", _visible(run.runs))
+        case AnchorLink():
+            return SameDocumentLink(_visible(run.label), run.anchor)
+        case DocumentLink():
+            return OtherDocumentLink(_visible(run.label), run.doc_id)
+        case (
+            Plain()
+            | Code()
+            | Link()
+            | DateMention()
+            | PersonMention()
+            | IssueLink()
+            | Citation()
+            | Placeholder()
+            | Styled()
+            | InlineMath()
+            | Break()
+            | StatusMark()
+            | SwimlaneMark()
+            | IndicatorMark()
+            | CheckMark()
+            | DecisionMark()
+            | Gauge()
+            | SectionLink()
+            | TonedLabel()
+            | Chip()
+        ):
+            return None
+        case _:
+            assert_never(run)
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -275,14 +304,14 @@ class _TreeWalk:
         for node in nodes:
             yield from self.node(node, place)
 
-    def script_hits(self, node: Node) -> Iterator[FeatureHit]:
-        for script in chain.from_iterable(map(_scripts, _own_texts(node))):
-            character = character_without_a_unicode_form(script.position, script.text)
-            if character is not None:
-                yield self.hit(ScriptForm(script.position, script.text, character), node.authored_at)
+    def inline_hits(self, node: Node) -> Iterator[FeatureHit]:
+        for run in every_run(chain.from_iterable(_own_texts(node))):
+            details = _inline_details(run)
+            if details is not None:
+                yield self.hit(details, node.authored_at)
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
-        yield from self.script_hits(node)
+        yield from self.inline_hits(node)
         match node:
             case Heading():
                 self.note_heading(node.text)

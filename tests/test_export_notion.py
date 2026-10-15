@@ -6,7 +6,7 @@ from typing import Any, get_args
 
 import pytest
 
-from skaldr.errors import ReportError
+from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
@@ -18,7 +18,7 @@ from skaldr.export.notion import (
     notion_inline,
     render_notion,
 )
-from skaldr.export.runs import Break, Chip, ExportRich, Gauge, StatusMark
+from skaldr.export.runs import Break, Chip, ExportRich, Gauge, SectionLink, StatusMark, TonedLabel
 from skaldr.export.tree import (
     Callout,
     Columns,
@@ -53,9 +53,9 @@ from skaldr.models import (
     walk_blocks,
 )
 from skaldr.richtext import (
-    AnchorLink,
     Citation,
     Code,
+    DocumentLink,
     Placeholder,
     Plain,
     ScriptText,
@@ -63,7 +63,6 @@ from skaldr.richtext import (
     Tinted,
     parse_rich,
 )
-from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
@@ -83,9 +82,8 @@ from tests.factories import (
     notion_of,
     rendered_block_count,
 )
+from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
 
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
-NOTION_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.notion"
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
@@ -211,7 +209,7 @@ def test_inline_runs_become_notion_spans() -> None:
         Plain(" "),
         Chip("api", "amber"),
         Plain(" "),
-        AnchorLink((Plain("method"),), "method"),
+        SectionLink((Plain("method"),), "method"),
         Break(),
         StatusMark("blocked"),
         Gauge(3, 10),
@@ -257,11 +255,6 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
         pytest.param("[late]{tone=danger}", '<span color="red">late</span>', id="color"),
         pytest.param("[due]{bg=amber}", '<span color="yellow_bg">due</span>', id="highlight"),
         pytest.param(
-            "[**now** a|b]{tone=accent bg=sky}",
-            '<span color="purple"><span color="pink_bg">**now** a\\|b</span></span>',
-            id="color-around-highlight",
-        ),
-        pytest.param(
             "[x]{y} [z] {tone=info}", "\\[x\\]\\{y\\} \\[z\\] \\{tone\\=info\\}", id="no-span-stays-prose"
         ),
         pytest.param(
@@ -273,6 +266,29 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
 )
 def test_an_attribute_span_is_a_notion_color_span(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("runs", "message"),
+    [
+        pytest.param(
+            (Tinted("accent", "sky", (Plain("lots"),)),),
+            "a Notion text run takes a colour or a highlight, not both; "
+            "the export check should have refused it",
+            id="colour-and-highlight",
+        ),
+        pytest.param(
+            (DocumentLink((Plain("the plan"),), "cold-room-plan", None),),
+            "this target cannot link to another skaldr document; the export check should have refused it",
+            id="link-to-another-document",
+        ),
+    ],
+)
+def test_the_notion_writer_refuses_what_the_export_check_refuses_as_an_invariant(
+    runs: ExportRich, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError, match=f"^{re.escape(message)}$"):
+        notion_inline(runs)
 
 
 def test_emphasis_beside_a_notion_color_span_keeps_its_markers_because_the_span_tag_closes_it() -> None:
@@ -394,7 +410,7 @@ def test_a_chip_label_that_names_a_file_is_inline_code_so_notion_does_not_link_i
 
 
 def test_a_toned_title_is_coloured_text_and_the_rest_of_the_line_stays_plain() -> None:
-    entry = ListEntry((Tinted("info", None, (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
+    entry = ListEntry((TonedLabel("info", (Styled("bold", (Plain("Go"),)),)), Plain(": now")))
 
     assert render_notion([ListNode("number", (entry,))]) == '1. <span color="blue">**Go**</span>: now\n'
 
@@ -607,10 +623,24 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_the_example_exports_to_the_notion_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_notion(load_report(EXAMPLE), tmp_path)
+def test_the_example_is_refused_for_notion_for_its_span_with_a_colour_and_a_highlight(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_notion(load_report(EXAMPLE), tmp_path)
 
-    assert folder_texts(tmp_path) == folder_texts(NOTION_GOLDEN)
+    assert str(raised.value) == (
+        "a Notion text run takes a colour or a highlight, not both, so it cannot show both on 'vendor lots', "
+        "at blocks.8.text; keep either the colour or the highlight on the text"
+    )
+
+
+def test_the_example_reworked_for_notion_exports_to_the_golden_which_skaldr_write_notion_golden_rewrites(
+    tmp_path: Path,
+) -> None:
+    out_dir = golden_or_scratch_folder("notion", tmp_path)
+
+    export_notion(parse_report(example_for("notion")), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(golden_of("notion"))
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:

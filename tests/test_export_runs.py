@@ -8,7 +8,10 @@ from skaldr.export.runs import (
     ExportRunWriter,
     Gauge,
     Mark,
+    SectionLink,
     StatusMark,
+    TonedLabel,
+    every_run,
     mark_name,
     write_export_runs,
 )
@@ -148,3 +151,37 @@ def test_an_export_run_writer_builds_chips_breaks_marks_and_gauges_as_nodes_of_t
         ("status", "done", ()),
         ("gauge", "3/4", ()),
     )
+
+
+def test_a_section_link_and_a_toned_label_are_written_as_an_anchor_link_and_a_colour_tint() -> None:
+    runs: ExportRich = (
+        SectionLink((Plain("Totals"),), "totals"),
+        TonedLabel("info", (Styled("bold", (Plain("Scan"),)),)),
+    )
+
+    assert write_export_runs(runs, _structured_writer()) == (
+        ("text", "Totals", ("anchor=totals",)),
+        ("text", "Scan", ("bold", "tint=info/None")),
+    )
+
+
+def test_every_run_yields_each_run_before_the_runs_inside_it_in_document_order() -> None:
+    italic = Styled("italic", (Plain("hot"),))
+    tinted = Tinted("danger", None, (italic,))
+    link = Link((tinted,), "https://example.com")
+    section = SectionLink((Plain("Totals"),), "totals")
+    label = TonedLabel("info", (Code("x"),))
+    runs: ExportRich = (Plain("a "), link, section, label, Chip("api", "blue"))
+
+    assert list(every_run(runs)) == [
+        Plain("a "),
+        link,
+        tinted,
+        italic,
+        Plain("hot"),
+        section,
+        Plain("Totals"),
+        label,
+        Code("x"),
+        Chip("api", "blue"),
+    ]

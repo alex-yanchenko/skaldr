@@ -47,11 +47,25 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
+TEXT_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+    "colour span": {"markdown": "reject", "slack": "reject"},
+    "highlight span": {"slack": "reject"},
+    "colour and highlight span": {"markdown": "reject", "notion": "reject", "slack": "reject"},
+    "underline": {"slack": "reject"},
+    "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
+    "link to another skaldr document": {"notion": "reject", "slack": "reject"},
+}
+
+
+def _targets_refusing(blocks: list[dict[str, Any]]) -> set[ExportTarget]:
+    return {case.target for case in SEEDED_REFUSALS.values() if case.blocks == blocks}
+
+
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
     for other in EXPORT_TARGETS
-    if other != case.target
+    if other not in _targets_refusing(case.blocks)
 ]
 
 
@@ -98,7 +112,7 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
 
     assert verdicts == {
         feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
-        for feature, seeded in SEEDED_VERDICTS.items()
+        for feature, seeded in {**SEEDED_VERDICTS, **TEXT_VERDICTS}.items()
     }
 
 

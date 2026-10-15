@@ -6,6 +6,7 @@ from typing import Final
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
@@ -170,10 +171,14 @@ class _NotionRuns(MarkupRuns):
         return self.math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
-        highlighted = (
-            _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner) if background else inner
-        )
-        return _colored_span(BLOCK_COLOR[tone], highlighted) if tone else highlighted
+        if tone and background:
+            raise ExportInvariantError(
+                "a Notion text run takes a colour or a highlight, not both; "
+                "the export check should have refused it"
+            )
+        if background:
+            return _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner)
+        return _colored_span(BLOCK_COLOR[tone], inner) if tone else inner
 
 
 def _colored_span(color: str, inner: str) -> str:

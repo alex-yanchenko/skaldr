@@ -35,6 +35,9 @@ TYPED_BODY = (
     "Due [1 Oct](date:2026-10-01) or [the week](date:2026-10-05/2026-10-09); "
     "[Ada](user:ada) owns [ABC-123](jira:ABC-123); see [the plan](doc:onboarding-plan#st2)."
 )
+TYPED_BODY_WITHOUT_A_DOCUMENT_LINK = (
+    TYPED_BODY.removesuffix("; see [the plan](doc:onboarding-plan#st2).") + "."
+)
 
 
 def _text_block(body: str) -> list[dict[str, Any]]:
@@ -313,10 +316,10 @@ def test_github_markdown_leaves_an_issue_key_as_text_without_a_site() -> None:
 
 
 def test_notion_markdown_writes_mentions_for_dates_and_people_and_links_for_issues() -> None:
-    assert notion_of(_text_block(TYPED_BODY), meta=PEOPLE_META) == (
+    assert notion_of(_text_block(TYPED_BODY_WITHOUT_A_DOCUMENT_LINK), meta=PEOPLE_META) == (
         'Due <mention-date start="2026-10-01"/> or <mention-date start="2026-10-05" end="2026-10-09"/>; '
         '<mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> owns '
-        "[ABC-123](https://example.atlassian.net/browse/ABC-123); see the plan.\n"
+        "[ABC-123](https://example.atlassian.net/browse/ABC-123).\n"
     )
 
 

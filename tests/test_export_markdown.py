@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from markdown_it import MarkdownIt
 
-from skaldr.errors import ReportError
+from skaldr.errors import ExportRejectedError, ReportError
 from skaldr.export import ExportResult, export_markdown
 from skaldr.export import markdown as markdown_module
 from skaldr.export.flanking import markers_flank
@@ -61,7 +61,6 @@ from skaldr.richtext import (
     Styled,
     parse_rich,
 )
-from tests.conftest import REPO_ROOT
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
@@ -78,15 +77,27 @@ from tests.factories import (
     make_toggle,
     markdown_of,
 )
-
-EXAMPLE = REPO_ROOT / "data" / "example.yaml"
-MARKDOWN_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.markdown"
+from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
 
 
-def test_the_example_exports_to_the_markdown_golden_regenerated_by_the_export_command(tmp_path: Path) -> None:
-    export_markdown(load_report(EXAMPLE), tmp_path)
+def test_the_example_is_refused_for_github_for_its_colour_span(tmp_path: Path) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        export_markdown(load_report(EXAMPLE), tmp_path)
 
-    assert folder_texts(tmp_path) == folder_texts(MARKDOWN_GOLDEN)
+    assert str(raised.value) == (
+        "GitHub Markdown cannot colour text, so it cannot show the colour of 'behind schedule', "
+        "at blocks.8.text; write the text without the colour or export the document elsewhere"
+    )
+
+
+def test_the_example_reworked_for_github_exports_to_the_golden_which_skaldr_write_markdown_golden_rewrites(
+    tmp_path: Path,
+) -> None:
+    out_dir = golden_or_scratch_folder("markdown", tmp_path)
+
+    export_markdown(parse_report(example_for("markdown")), out_dir)
+
+    assert folder_texts(out_dir) == folder_texts(golden_of("markdown"))
 
 
 def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
@@ -322,8 +333,8 @@ def test_a_math_block_holding_a_backtick_fence_line_gets_a_longer_fence() -> Non
     assert markdown_of([{"type": "math", "expression": "a\n```\nb"}]) == "````math\na\n```\nb\n````\n"
 
 
-def test_an_attribute_span_keeps_only_its_text_because_github_has_no_color() -> None:
-    body = "[**late** a_b]{tone=danger bg=warning} [x]{y} [[docs]{tone=info}](https://x.io)"
+def test_a_highlight_span_keeps_only_its_text_because_github_has_no_highlight() -> None:
+    body = "[**late** a_b]{bg=warning} [x]{y} [[docs]{bg=info}](https://x.io)"
 
     assert markdown_of([{"type": "text", "body": body}]) == (
         "**late** a\\_b \\[x\\]{y} [docs](https://x.io)\n"
@@ -849,13 +860,13 @@ def _github_html(markdown: str) -> str:
     ("body", "markdown", "html"),
     [
         pytest.param(
-            "**(bold)**[t]{tone=danger}",
+            "**(bold)**[t]{bg=danger}",
             "<strong>(bold)</strong>t\n",
             "<p><strong>(bold)</strong>t</p>\n",
             id="bold-before-a-tinted-span",
         ),
         pytest.param(
-            "*(it)*[u]{tone=info}",
+            "*(it)*[u]{bg=info}",
             "<em>(it)</em>u\n",
             "<p><em>(it)</em>u</p>\n",
             id="italic-before-a-tinted-span",
@@ -867,7 +878,7 @@ def _github_html(markdown: str) -> str:
             id="strike-before-a-tinted-span",
         ),
         pytest.param(
-            "[a]{tone=info}**(x)** y",
+            "[a]{bg=info}**(x)** y",
             "a<strong>(x)</strong> y\n",
             "<p>a<strong>(x)</strong> y</p>\n",
             id="bold-after-a-tinted-span",
@@ -879,19 +890,19 @@ def _github_html(markdown: str) -> str:
             id="markers-stay-when-the-neighbours-allow-them",
         ),
         pytest.param(
-            "**a** [b]{tone=info}",
+            "**a** [b]{bg=info}",
             "**a** b\n",
             "<p><strong>a</strong> b</p>\n",
             id="a-tinted-span-after-a-space-changes-nothing",
         ),
         pytest.param(
-            "*a **(x)**[t]{tone=info}* z",
+            "*a **(x)**[t]{bg=info}* z",
             "*a <strong>(x)</strong>t* z\n",
             "<p><em>a <strong>(x)</strong>t</em> z</p>\n",
             id="nested-emphasis-falls-back-on-its-own",
         ),
         pytest.param(
-            "[**(x)**[t]{tone=info}](https://x.io)",
+            "[**(x)**[t]{bg=info}](https://x.io)",
             "[<strong>(x)</strong>t](https://x.io)\n",
             '<p><a href="https://x.io"><strong>(x)</strong>t</a></p>\n',
             id="inside-a-link-label",
@@ -910,37 +921,37 @@ def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
     ("body", "markdown", "html"),
     [
         pytest.param(
-            "*(a)*[**b**]{tone=info}",
+            "*(a)*[**b**]{bg=info}",
             "*(a)*<strong>b</strong>\n",
             "<p><em>(a)</em><strong>b</strong></p>\n",
             id="italic-then-bold",
         ),
         pytest.param(
-            "**(a)**[*b*]{tone=info}",
+            "**(a)**[*b*]{bg=info}",
             "**(a)**<em>b</em>\n",
             "<p><strong>(a)</strong><em>b</em></p>\n",
             id="bold-then-italic",
         ),
         pytest.param(
-            "**(a)**[**b**]{tone=info}",
+            "**(a)**[**b**]{bg=info}",
             "**(a)**<strong>b</strong>\n",
             "<p><strong>(a)</strong><strong>b</strong></p>\n",
             id="bold-then-bold",
         ),
         pytest.param(
-            "~~(a)~~[~~b~~]{tone=info}",
+            "~~(a)~~[~~b~~]{bg=info}",
             "~~(a)~~<del>b</del>\n",
             "<p><s>(a)</s><del>b</del></p>\n",
             id="strike-then-strike",
         ),
         pytest.param(
-            "**(a)**[~~b~~]{tone=info}",
+            "**(a)**[~~b~~]{bg=info}",
             "**(a)**~~b~~\n",
             "<p><strong>(a)</strong><s>b</s></p>\n",
             id="different-marker-characters-do-not-merge",
         ),
         pytest.param(
-            "**(a)** [**b**]{tone=info}",
+            "**(a)** [**b**]{bg=info}",
             "**(a)** **b**\n",
             "<p><strong>(a)</strong> <strong>b</strong></p>\n",
             id="a-space-keeps-the-markers-apart",

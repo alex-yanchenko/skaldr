@@ -7,12 +7,15 @@ import pytest
 
 from skaldr import compute
 from skaldr.errors import ReportError
+from skaldr.export import render_export
 from skaldr.export.inline import bold, plain
 from skaldr.export.lower import lower_report
+from skaldr.export.runs import SectionLink
 from skaldr.export.tree import Heading, ListEntry, ListNode, Paragraph, Toggle
+from skaldr.export_targets import ExportTarget
 from skaldr.models import Part, Report, Section, SectionFields, load_report, parse_report
 from skaldr.render import render_html
-from skaldr.richtext import AnchorLink, Plain
+from skaldr.richtext import Plain
 from tests.factories import make_report, make_section, markdown_of, notion_of, write_index_document
 
 FULL_FIELDS: dict[str, Any] = {
@@ -214,7 +217,7 @@ def test_the_lowered_section_opens_with_a_bulleted_fact_list() -> None:
                 (
                     *bold("Blocks"),
                     Plain(": "),
-                    AnchorLink(plain("Relabel the aisles"), "st3"),
+                    SectionLink(plain("Relabel the aisles"), "st3"),
                 )
             ),
         ),
@@ -267,6 +270,40 @@ def test_the_notion_markdown_lists_the_facts_under_the_section_heading() -> None
     assert notion_of(blocks) == (
         "## Widen the bin code\n- **Status**: In Progress\n- **Estimate**: 2.5\nx\n## Relabel the aisles\nx\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("target", "page"),
+    [
+        pytest.param(
+            "notion",
+            "## Widen the bin code\n- **Blocks**: Relabel the aisles\nx\n## Relabel the aisles\nx\n",
+            id="notion",
+        ),
+        pytest.param(
+            "slack",
+            "## Widen the bin code\n\n* **Blocks**: Relabel the aisles\n\nx\n\n## Relabel the aisles\n\nx\n",
+            id="slack",
+        ),
+    ],
+)
+def test_a_generated_section_link_is_the_section_title_where_a_target_cannot_link_to_a_heading(
+    target: ExportTarget, page: str
+) -> None:
+    report = parse_report(fielded_report({"links": {"blocks": ["st3"]}}))
+
+    assert render_export(report, target).pages == {"page.md": page}
+
+
+def test_a_generated_section_link_is_the_section_title_in_a_jira_description() -> None:
+    report = parse_report(fielded_report({"links": {"blocks": ["st3"]}}))
+
+    adf = json.loads(render_export(report, "adf").pages["page.adf.json"])
+
+    assert adf["content"][1]["content"][0]["content"][0]["content"] == [
+        {"type": "text", "text": "Blocks", "marks": [{"type": "strong"}]},
+        {"type": "text", "text": ": Relabel the aisles"},
+    ]
 
 
 def test_emit_json_carries_the_fields_with_the_date_as_text() -> None:

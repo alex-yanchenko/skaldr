@@ -18,6 +18,9 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
+TextMarkFeature = Literal["colour span", "highlight span", "colour and highlight span", "underline"]
+SameDocumentLinkFeature = Literal["link to a heading of the same document"]
+OtherDocumentLinkFeature = Literal["link to another skaldr document"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -25,6 +28,9 @@ Feature = Literal[
     CellCountFeature,
     GridInAStepFeature,
     ScriptFormFeature,
+    TextMarkFeature,
+    SameDocumentLinkFeature,
+    OtherDocumentLinkFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
@@ -83,7 +89,37 @@ class ScriptForm:
     feature: ScriptFormFeature = field(default="subscript or superscript with no Unicode form", init=False)
 
 
-Details = Placement | HeldByAListItem | ListStart | CellCount | GridInAStep | ScriptForm
+@dataclass(frozen=True)
+class MarkedText:
+    feature: TextMarkFeature
+    text: str
+
+
+@dataclass(frozen=True)
+class SameDocumentLink:
+    text: str
+    anchor: str
+    feature: SameDocumentLinkFeature = field(default="link to a heading of the same document", init=False)
+
+
+@dataclass(frozen=True)
+class OtherDocumentLink:
+    text: str
+    doc_id: str
+    feature: OtherDocumentLinkFeature = field(default="link to another skaldr document", init=False)
+
+
+Details = (
+    Placement
+    | HeldByAListItem
+    | ListStart
+    | CellCount
+    | GridInAStep
+    | ScriptForm
+    | MarkedText
+    | SameDocumentLink
+    | OtherDocumentLink
+)
 
 
 @dataclass(frozen=True)
@@ -103,6 +139,22 @@ _ADF_CANNOT_PLACE: Final = Rejection(
 _CANVAS_LIST_ITEM_WHY: Final = (
     "a Slack canvas list item holds only text and one nested list, so it cannot show {held}"
 )
+_WITHOUT_THE_COLOUR: Final = "write the text without the colour or export the document elsewhere"
+_GITHUB_CANNOT_COLOUR: Final = Rejection(
+    "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
+)
+_CANVAS_CANNOT_COLOUR: Final = Rejection(
+    "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
+)
+_OWN_HEADING_WHY: Final = (
+    "{target} cannot link to its own headings, so it cannot show the link '{{text}}' to '#{{anchor}}'"
+)
+_OWN_HEADING_INSTEAD: Final = "write the heading's name without the link, or export the document elsewhere"
+_OTHER_DOCUMENT_WHY: Final = (
+    "{target} cannot link '{{text}}' to the document '{{doc_id}}', "
+    "since skaldr has no address for that document there"
+)
+_OTHER_DOCUMENT_INSTEAD: Final = "link to the document's https address, or export it elsewhere"
 
 
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
@@ -157,6 +209,47 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "since '{character}' has no Unicode {position} form",
                 "write the text without the {position} or export the document elsewhere",
             )
+        }
+    ),
+    "colour span": _kept_except({"markdown": _GITHUB_CANNOT_COLOUR, "slack": _CANVAS_CANNOT_COLOUR}),
+    "highlight span": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
+                "write the text without the highlight or export the document elsewhere",
+            )
+        }
+    ),
+    "colour and highlight span": _kept_except(
+        {
+            "markdown": _GITHUB_CANNOT_COLOUR,
+            "notion": Rejection(
+                "a Notion text run takes a colour or a highlight, not both, "
+                "so it cannot show both on '{text}'",
+                "keep either the colour or the highlight on the text",
+            ),
+            "slack": _CANVAS_CANNOT_COLOUR,
+        }
+    ),
+    "underline": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas cannot underline text, so it cannot show the underline on '{text}'",
+                "write the text without the underline or export the document elsewhere",
+            )
+        }
+    ),
+    "link to a heading of the same document": _kept_except(
+        {
+            "notion": Rejection(_OWN_HEADING_WHY.format(target="a Notion page"), _OWN_HEADING_INSTEAD),
+            "adf": Rejection(_OWN_HEADING_WHY.format(target="a Jira description"), _OWN_HEADING_INSTEAD),
+            "slack": Rejection(_OWN_HEADING_WHY.format(target="a Slack canvas"), _OWN_HEADING_INSTEAD),
+        }
+    ),
+    "link to another skaldr document": _kept_except(
+        {
+            "notion": Rejection(_OTHER_DOCUMENT_WHY.format(target="Notion"), _OTHER_DOCUMENT_INSTEAD),
+            "slack": Rejection(_OTHER_DOCUMENT_WHY.format(target="a Slack canvas"), _OTHER_DOCUMENT_INSTEAD),
         }
     ),
 }

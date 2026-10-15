@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -5,7 +6,23 @@ from typing_extensions import assert_never
 
 from skaldr.export.inline import one_line
 from skaldr.models import BadgeColor, StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Run, RunWriter, VisibleText, Written, write_run
+from skaldr.richtext import (
+    AnchorLink,
+    DateMention,
+    DocumentLink,
+    IssueLink,
+    Link,
+    PersonMention,
+    Rich,
+    Run,
+    RunWriter,
+    Styled,
+    Tinted,
+    VisibleText,
+    Written,
+    write_run,
+    write_runs,
+)
 
 
 @dataclass(frozen=True)
@@ -57,9 +74,41 @@ class Gauge:
     maximum: float
 
 
-ChiplessExportRun = Run | Break | Mark | Gauge
+@dataclass(frozen=True)
+class SectionLink:
+    label: Rich
+    anchor: str
+
+
+@dataclass(frozen=True)
+class TonedLabel:
+    tone: ToneLiteral
+    runs: Rich
+
+
+ChiplessExportRun = Run | Break | Mark | Gauge | SectionLink | TonedLabel
 ExportRun = ChiplessExportRun | Chip
 ExportRich = tuple[ExportRun, ...]
+
+
+def every_run(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
+    for run in runs:
+        yield run
+        match run:
+            case (
+                Link()
+                | AnchorLink()
+                | DateMention()
+                | PersonMention()
+                | IssueLink()
+                | DocumentLink()
+                | SectionLink()
+            ):
+                yield from every_run(run.label)
+            case Styled() | Tinted() | TonedLabel():
+                yield from every_run(run.runs)
+            case _:
+                pass
 
 
 def holds_a_chip(runs: ExportRich) -> bool:
@@ -86,6 +135,10 @@ def write_chipless_export_run(run: ChiplessExportRun, writer: ChiplessExportRunW
             return writer.mark(run)
         case Gauge():
             return writer.gauge(run)
+        case SectionLink():
+            return writer.anchor_link(write_runs(run.label, writer), run.anchor)
+        case TonedLabel():
+            return writer.tinted(run.tone, None, write_runs(run.runs, writer))
         case _:
             return write_run(run, writer)
 
