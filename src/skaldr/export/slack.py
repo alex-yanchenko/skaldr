@@ -222,7 +222,7 @@ def _the_place_cannot_hold(node: Node, place: Place) -> bool:
             assert_never(place)
 
 
-def _require_the_place_holds(node: Node, place: Place) -> None:
+def _require_the_place_can_hold(node: Node, place: Place) -> None:
     if _the_place_cannot_hold(node, place):
         raise ExportInvariantError(
             f"a Slack canvas {place} has no place for a {type(node).__name__}; "
@@ -258,7 +258,7 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
 
 
 def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
-    _require_the_place_holds(node, place)
+    _require_the_place_can_hold(node, place)
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
             return [node]

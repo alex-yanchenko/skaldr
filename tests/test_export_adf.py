@@ -826,13 +826,24 @@ def test_a_request_with_several_cases_is_one_expand_per_case_titled_with_its_sta
         {"label": "finding", "tone": "warning", "response": {"body": "1"}},
         {"label": "control", "tone": "success", "response": {"body": "2"}},
     ]
-    content = render_adf(lowered([make_command_request(cases=cases, command="list-tiers")]))["content"]
+    strong = {"type": "strong"}
 
-    assert [(block["type"], block.get("attrs")) for block in content] == [
-        ("paragraph", None),
-        ("expand", {"title": "⚠️ finding"}),
-        ("expand", {"title": "✅ control"}),
-    ]
+    def case_expand(title: str, body: str) -> Json:
+        return {
+            "type": "expand",
+            "attrs": {"title": title},
+            "content": [
+                {"type": "codeBlock", "attrs": {"language": "bash"}, "content": [_text("list-tiers")]},
+                _paragraph(_text("Recorded output", strong)),
+                {"type": "codeBlock", "attrs": {"language": "json"}, "content": [_text(body)]},
+            ],
+        }
+
+    assert _rendered(*lowered([make_command_request(cases=cases, command="list-tiers")])) == _doc(
+        _paragraph(_text("Tier mappings on the partner API", strong)),
+        case_expand("⚠️ finding", "1"),
+        case_expand("✅ control", "2"),
+    )
 
 
 def test_a_flow_diagram_is_a_bullet_list_of_its_steps_and_where_each_leads() -> None:

@@ -79,7 +79,7 @@ SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
 WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_COLUMN_REFUSED_TYPES = ("callout", "note", "table", "divider")
-SIXTHS = 6
+FULL_GRID_SPAN = 6
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
@@ -126,9 +126,9 @@ def _cells_reworked_for_a_canvas(cell: dict[str, Any]) -> list[dict[str, Any]]:
     inner_cells = [
         inner_cell for inner in cell["blocks"] if inner["type"] == "grid" for inner_cell in inner["cells"]
     ]
-    return [
-        {"blocks": blocks} for blocks in ([kept] if kept else []) + [each["blocks"] for each in inner_cells]
-    ]
+    kept_cells = [kept] if kept else []
+    inner_cell_blocks = [inner_cell["blocks"] for inner_cell in inner_cells]
+    return [{"blocks": blocks} for blocks in kept_cells + inner_cell_blocks]
 
 
 def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
@@ -139,7 +139,7 @@ def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
         if inner["type"] in CANVAS_COLUMN_REFUSED_TYPES
     ]
     cells = [reworked for cell in grid["cells"] for reworked in _cells_reworked_for_a_canvas(cell)]
-    span = SIXTHS // len(cells)
+    span = FULL_GRID_SPAN // len(cells)
     return [*moved_out, {"type": "grid", "cells": [cell | {"span": span} for cell in cells]}]
 
 

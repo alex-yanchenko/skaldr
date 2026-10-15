@@ -106,7 +106,7 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Tabs: "set of tabs",
     Diagram: "diagram",
 }
-_TONED_CELL: Final = "grid cell"
+_GRID_CELL_AUTHORED_AS: Final = "grid cell"
 
 
 DocumentPosition = tuple[tuple[int, int, str], ...]
@@ -379,7 +379,7 @@ class _TreeWalk:
             yield self.hit(details, node.authored_at)
 
     def grid_cell_hits(self, node: Node) -> Iterator[FeatureHit]:
-        if isinstance(node, Callout) and node.authored_as == _TONED_CELL:
+        if isinstance(node, Callout) and node.authored_as == _GRID_CELL_AUTHORED_AS:
             yield self.hit(TonedCell(node.tone), node.authored_at)
             return
         held = _held(node)

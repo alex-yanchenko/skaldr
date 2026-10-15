@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.export.capabilities import Feature
+from skaldr.export.tree import ToneName
 from skaldr.export_targets import ExportTarget
 from tests.factories.report_factory import make_report, make_request, make_tabs, make_toggle
 
@@ -177,12 +178,12 @@ BAR_CHART = {
 }
 
 
-def two_cell_grid(*second_cell: dict[str, Any]) -> dict[str, Any]:
+def two_cell_grid(*second_cell_blocks: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "grid",
         "cells": [
             {"span": 3, "blocks": [{"type": "text", "body": "Left"}]},
-            {"span": 3, "blocks": list(second_cell)},
+            {"span": 3, "blocks": list(second_cell_blocks)},
         ],
     }
 
@@ -191,7 +192,7 @@ def one_cell_grid(*blocks: dict[str, Any]) -> dict[str, Any]:
     return {"type": "grid", "cells": [{"span": 6, "blocks": list(blocks)}]}
 
 
-def toned_two_cell_grid(tone: str) -> dict[str, Any]:
+def toned_two_cell_grid(tone: ToneName) -> dict[str, Any]:
     grid = two_cell_grid({"type": "text", "body": "Right"})
     grid["cells"][1]["tone"] = tone
     return grid

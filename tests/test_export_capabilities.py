@@ -90,6 +90,11 @@ KEPT_BY_THE_OTHER_TARGETS = [
     for other in EXPORT_TARGETS
     if other != case.target and other not in case.also_refused_by
 ]
+ALSO_REFUSED_BY = [
+    pytest.param(case, other, id=f"{name}-also-refused-by-{other}")
+    for name, case in SEEDED_REFUSALS.items()
+    for other in case.also_refused_by
+]
 
 
 def _features_carried_by(details: type[Details]) -> tuple[Feature, ...]:
@@ -108,9 +113,13 @@ REJECTIONS = [
 
 
 def _verdict(capability: Capability) -> Verdict:
-    if isinstance(capability, Rejection):
-        return "reject"
-    return "swap" if isinstance(capability, Swap) else capability
+    match capability:
+        case Rejection():
+            return "reject"
+        case Swap():
+            return "swap"
+        case _:
+            return capability
 
 
 def _adf_expands(*titles: str) -> list[dict[str, Any]]:
@@ -198,6 +207,16 @@ def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCa
 @pytest.mark.parametrize(("case", "other"), KEPT_BY_THE_OTHER_TARGETS)
 def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, other: ExportTarget) -> None:
     _check(case.blocks, other)
+
+
+@pytest.mark.parametrize(("case", "other"), ALSO_REFUSED_BY)
+def test_every_target_a_case_names_as_also_refusing_it_refuses_it(
+    case: RefusedCase, other: ExportTarget
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(case.blocks, other)
+
+    assert raised.value.target == other
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)

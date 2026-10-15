@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
-from skaldr.export.tree import PanesKind
+from skaldr.export.tree import PanesKind, ToneName
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -117,7 +117,7 @@ class GridCells:
 
 @dataclass(frozen=True)
 class TonedCell:
-    tone: str
+    tone: ToneName
     feature: TonedCellFeature = field(default="toned grid cell", init=False)
 
 
