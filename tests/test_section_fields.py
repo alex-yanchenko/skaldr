@@ -11,12 +11,19 @@ from skaldr.export import render_export
 from skaldr.export.inline import bold, plain
 from skaldr.export.lower import lower_report
 from skaldr.export.runs import SectionLink
-from skaldr.export.tree import Heading, ListEntry, ListNode, Paragraph, Toggle
+from skaldr.export.tree import FactStrip, Heading, LabelledValue, ListEntry, ListNode, Paragraph, Toggle
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Part, Report, Section, SectionFields, load_report, parse_report
 from skaldr.render import render_html
 from skaldr.richtext import Plain
-from tests.factories import make_report, make_section, markdown_of, notion_of, write_index_document
+from tests.factories import (
+    make_report,
+    make_section,
+    markdown_of,
+    notion_of,
+    write_index_document,
+    written_today,
+)
 
 FULL_FIELDS: dict[str, Any] = {
     "status": "In Progress",
@@ -196,14 +203,28 @@ def test_a_section_without_fields_renders_no_fact_strip() -> None:
     assert "sfields" not in html.split("</style>")[-1]
 
 
-def test_the_lowered_section_opens_with_a_bulleted_fact_list() -> None:
+def test_the_lowered_section_opens_with_a_fact_strip_of_its_fields() -> None:
     lowered = lower_report(parse_report(fielded_report(FULL_FIELDS))).body
 
-    assert lowered[0] == Heading(
-        2,
-        (Plain("Widen the bin code"),),
-        "st2",
+    assert lowered[:2] == (
+        Heading(2, (Plain("Widen the bin code"),), "st2"),
+        FactStrip(
+            (
+                LabelledValue("Status", plain("In Progress")),
+                LabelledValue("Priority", plain("High")),
+                LabelledValue("Assignee", plain("ada")),
+                LabelledValue("Due", plain("2026-10-15")),
+                LabelledValue("Labels", plain("onboarding, bins")),
+                LabelledValue("Estimate", plain("3")),
+                LabelledValue("Blocks", (SectionLink(plain("Relabel the aisles"), "st3"),)),
+            )
+        ),
     )
+
+
+def test_the_section_facts_are_written_as_a_bulleted_fact_list() -> None:
+    lowered = written_today(lower_report(parse_report(fielded_report(FULL_FIELDS))).body)
+
     assert lowered[1] == ListNode(
         "bullet",
         (
@@ -229,7 +250,7 @@ def test_a_collapsed_section_keeps_the_fact_list_inside_its_toggle() -> None:
         blocks=[make_section("st2", title="Widen", fields={"status": "Done"}, collapsed=True)]
     )
 
-    assert lower_report(parse_report(report)).body == (
+    assert written_today(lower_report(parse_report(report)).body) == (
         Toggle(
             (Plain("Widen"),),
             2,

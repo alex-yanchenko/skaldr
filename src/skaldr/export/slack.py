@@ -13,6 +13,7 @@ from skaldr.export.capabilities import (
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
+from skaldr.export.folds import folded
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -41,6 +42,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Heading,
     ListEntry,
     ListKind,
@@ -176,7 +178,7 @@ def _with_paragraph(text: ExportRich, paragraph: ExportRich) -> ExportRich:
 def _canvas_item(entry: ListEntry) -> _Item:
     text = entry.text
     nested: _List | None = None
-    for child in entry.children:
+    for child in folded(entry.children):
         match child:
             case Paragraph() if nested is None or not child.text:
                 text = _with_paragraph(text, child.text)
@@ -199,7 +201,7 @@ def _canvas_list(node: ListNode) -> _List:
     return _List(node.kind, tuple(_canvas_item(entry) for entry in node.entries))
 
 
-def _a_canvas_callout_cannot_hold(node: Node) -> bool:
+def _a_canvas_callout_cannot_hold(node: GenericNode) -> bool:
     match node:
         case TableNode() | Callout() | Toggle() | Divider():
             return True
@@ -209,7 +211,7 @@ def _a_canvas_callout_cannot_hold(node: Node) -> bool:
             return False
 
 
-def _the_place_cannot_hold(node: Node, place: Place) -> bool:
+def _the_place_cannot_hold(node: GenericNode, place: Place) -> bool:
     match place:
         case "callout":
             return _a_canvas_callout_cannot_hold(node)
@@ -221,7 +223,7 @@ def _the_place_cannot_hold(node: Node, place: Place) -> bool:
             assert_never(place)
 
 
-def _require_the_place_can_hold(node: Node, place: Place) -> None:
+def _require_the_place_can_hold(node: GenericNode, place: Place) -> None:
     if _the_place_cannot_hold(node, place):
         raise ExportInvariantError(
             f"a Slack canvas {place} has no place for a {type(node).__name__}; "
@@ -256,7 +258,7 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     ]
 
 
-def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
+def _canvas_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
     _require_the_place_can_hold(node, place)
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
@@ -282,7 +284,7 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
 
 
 def _canvas_blocks(nodes: Sequence[Node], place: Place) -> list[_CanvasBlock]:
-    return [block for node in nodes for block in _canvas_block(node, place)]
+    return [block for node in folded(nodes) for block in _canvas_block(node, place)]
 
 
 def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:

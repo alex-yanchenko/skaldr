@@ -1,6 +1,6 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Literal
 
 from typing_extensions import assert_never
 
@@ -12,8 +12,16 @@ from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, Sect
 from skaldr.export.tree import (
     AuthoredName,
     Callout,
+    Card,
+    Cards,
     CodeBlock,
+    Definition,
+    DefinitionList,
     DisplayMath,
+    FactStrip,
+    KeyValueList,
+    LabelledValue,
+    LinkCard,
     ListEntry,
     ListKind,
     ListNode,
@@ -21,9 +29,11 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Timeline,
+    TimelineEvent,
     ToneName,
 )
-from skaldr.richtext import Code, Link, Plain, Styled
+from skaldr.richtext import Code, Link, Plain
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -84,16 +94,14 @@ def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Loweri
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:
-    return [bullets(ListEntry(with_bold_label(fact.label, plain(fact.value))) for fact in block.facts)]
+    return [FactStrip(tuple(LabelledValue(fact.label, plain(fact.value)) for fact in block.facts))]
 
 
 def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> list[Node]:
     facts = compute.section_facts(fields, lowering.section_titles)
-    return (
-        [bullets(ListEntry(with_bold_label(fact.label, _fact_values(fact))) for fact in facts)]
-        if facts
-        else []
-    )
+    if not facts:
+        return []
+    return [FactStrip(tuple(LabelledValue(fact.label, _fact_values(fact)) for fact in facts))]
 
 
 def _fact_values(fact: compute.SectionFact) -> ExportRich:
@@ -103,34 +111,23 @@ def _fact_values(fact: compute.SectionFact) -> ExportRich:
 
 
 def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:
-    return [
-        bullets(ListEntry(with_bold_label(pair.label, lowering.rich(pair.value))) for pair in block.pairs)
-    ]
+    return [KeyValueList(tuple(LabelledValue(pair.label, lowering.rich(pair.value)) for pair in block.pairs))]
 
 
 def lower_def_list(block: models.DefList, lowering: Lowering) -> list[Node]:
-    return [bullets(_definition(item.term, item.body, lowering) for item in block.items)]
-
-
-def _definition(term: str, body: str, lowering: Lowering) -> ListEntry:
-    nodes = lowering.prose(body)
-    if nodes and isinstance(nodes[0], Paragraph):
-        return ListEntry(with_bold_label(term, nodes[0].text), children=nodes[1:])
-    return ListEntry(with_bold_label(term, ()), children=nodes)
+    return [DefinitionList(tuple(Definition(item.term, lowering.prose(item.body)) for item in block.items))]
 
 
 def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
-    return [bullets(_card(card, lowering) for card in block.items)]
+    return [Cards(tuple(_card(card, lowering) for card in block.items))]
 
 
-def _derived_card(card: models.Card, badge_key: str, badge: models.Badge, lowering: Lowering) -> ExportRich:
+def _derived_card(card: models.Card, badge_key: str, badge: models.Badge, lowering: Lowering) -> Card:
     count, total = compute.derived_card_tally(
         card, badge_key, lowering.matrix_tallies, lowering.table_tallies
     )
-    return (
-        Chip.on_one_line(card.label or badge.label, badge.tone),
-        *plain(f": {compute.fmt(count)} ({compute.pct(count, total)})"),
-    )
+    share = plain(f"{compute.fmt(count)} ({compute.pct(count, total)})")
+    return Card(card.label or badge.label, share, note=card.note or "", badge=badge.tone)
 
 
 def _delta(delta: models.CardDelta) -> ExportRich:
@@ -138,25 +135,20 @@ def _delta(delta: models.CardDelta) -> ExportRich:
     return (Chip.on_one_line(text, models.badge_color_of(delta.tone)),) if delta.tone else plain(text)
 
 
-def _card_note(card: models.Card) -> tuple[Node, ...]:
-    return (Paragraph(plain(card.note), "muted"),) if card.note else ()
-
-
-def _card(card: models.Card, lowering: Lowering) -> ListEntry:
+def _card(card: models.Card, lowering: Lowering) -> Card:
     if card.derived and card.badge is not None:
-        badge = lowering.report.badges[card.badge]
-        return ListEntry(_derived_card(card, card.badge, badge, lowering), children=_card_note(card))
+        return _derived_card(card, card.badge, lowering.report.badges[card.badge], lowering)
     parts: list[ExportRich] = [plain(compute.fmt(card.value))]
     if card.of and isinstance(card.value, int | float):
         parts.append(plain(f"({compute.pct(card.value, card.of)})"))
     if card.delta:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
-    return ListEntry(
-        with_bold_label(
-            card.label, spaced([part for part in parts if part]), _tone_unless_a_chip_shows_it(card, lowering)
-        ),
-        children=_card_note(card),
+    return Card(
+        card.label,
+        spaced([part for part in parts if part]),
+        note=card.note or "",
+        tone=_tone_unless_a_chip_shows_it(card, lowering),
     )
 
 
@@ -231,33 +223,25 @@ def lower_media(block: models.Media) -> list[Node]:
     return [Media(block.kind, block.src, caption=plain(block.caption or ""))]
 
 
-_LINK_NAME: Final[Mapping[Literal["card", "embed"], AuthoredName]] = {
-    "card": "link card",
-    "embed": "link embed",
-}
-
-
 def lower_link(block: models.Link) -> list[Node]:
     card = compute.link_card(block)
-    link = Link(plain(card.title), card.url)
     if block.display == "inline":
-        return [Paragraph((link,))]
-    detail = " · ".join(part for part in (card.domain, card.caption) if part)
-    return [Quote(((Styled("bold", (link,)),),), plain(detail), authored_as=_LINK_NAME[block.display])]
+        return [Paragraph((Link(plain(card.title), card.url),))]
+    return [LinkCard(card.title, card.url, block.display, card.domain, card.caption)]
 
 
-def _timeline_entry(item: models.TimelineItem, lowering: Lowering) -> ListEntry:
-    text = with_bold_label(item.time, plain(item.title))
-    if item.state:
-        text = _marked(StatusMark(item.state), text)
-    if item.badges:
-        text += (Plain(" "), *lowering.chips(item.badges))
-    children: tuple[Node, ...] = (Paragraph(lowering.rich(item.body)),) if item.body else ()
-    return ListEntry(text, children=children)
+def _timeline_event(item: models.TimelineItem, lowering: Lowering) -> TimelineEvent:
+    return TimelineEvent(
+        item.title,
+        item.time,
+        item.state,
+        lowering.chips(item.badges),
+        lowering.rich(item.body) if item.body else None,
+    )
 
 
 def lower_timeline(block: models.Timeline, lowering: Lowering) -> list[Node]:
-    return [bullets(_timeline_entry(item, lowering) for item in block.items)]
+    return [Timeline(tuple(_timeline_event(item, lowering) for item in block.items))]
 
 
 def _reference_entry(item: models.ReferenceItem, lowering: Lowering) -> ListEntry:

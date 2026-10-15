@@ -5,12 +5,12 @@ import pytest
 
 from skaldr.errors import ReportError
 from skaldr.export.runs import export_visible_text
-from skaldr.export.tree import Paragraph, Quote
+from skaldr.export.tree import LinkCard, Paragraph, Quote
 from skaldr.models import Link, parse_report
 from skaldr.render import render_html
 from skaldr.richtext import Link as LinkRun
 from skaldr.richtext import Plain, Styled
-from tests.factories import lowered, make_report, markdown_of, notion_of
+from tests.factories import lowered, lowered_as_written_today, make_report, markdown_of, notion_of
 
 RUNBOOK = "https://example.com/runbook"
 
@@ -163,11 +163,32 @@ def test_an_inline_link_lowers_to_a_paragraph_with_a_link_run() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("block", "card"),
+    [
+        pytest.param(
+            link_block(title="Runbook", caption="rev. 7"),
+            LinkCard("Runbook", RUNBOOK, "card", domain="example.com", caption="rev. 7"),
+            id="titled-card",
+        ),
+        pytest.param(
+            link_block(display="embed"),
+            LinkCard("example.com/runbook", RUNBOOK, "embed"),
+            id="untitled-embed",
+        ),
+    ],
+)
+def test_a_card_or_an_embed_lowers_to_a_link_card_naming_its_display(
+    block: dict[str, Any], card: LinkCard
+) -> None:
+    assert lowered([block]) == (card,)
+
+
 @pytest.mark.parametrize("display", ["card", "embed"])
-def test_a_card_and_an_embed_lower_to_the_same_quote(display: str) -> None:
+def test_a_card_and_an_embed_are_written_as_the_same_quote(display: str) -> None:
     block = link_block(display=display, title="Runbook", caption="rev. 7")
 
-    assert lowered([block]) == (
+    assert lowered_as_written_today([block]) == (
         Quote(
             (((Styled("bold", (LinkRun((Plain("Runbook"),), RUNBOOK),)),)),),
             (Plain("example.com · rev. 7"),),
@@ -175,14 +196,14 @@ def test_a_card_and_an_embed_lower_to_the_same_quote(display: str) -> None:
     )
 
 
-def test_an_untitled_card_lowers_to_a_quote_led_by_the_bare_url() -> None:
-    assert lowered([link_block()]) == (
+def test_an_untitled_card_is_written_as_a_quote_led_by_the_bare_url() -> None:
+    assert lowered_as_written_today([link_block()]) == (
         Quote((((Styled("bold", (LinkRun((Plain("example.com/runbook"),), RUNBOOK),)),)),), ()),
     )
 
 
 def test_the_export_text_of_a_card_names_the_title_and_the_domain() -> None:
-    (quote,) = lowered([link_block(title="Runbook")])
+    (quote,) = lowered_as_written_today([link_block(title="Runbook")])
     assert isinstance(quote, Quote)
 
     assert [export_visible_text(line) for line in quote.lines] == ["Runbook"]

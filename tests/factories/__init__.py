@@ -29,6 +29,13 @@ from tests.factories.export_factory import (
     write_index_document,
     write_report,
 )
+from tests.factories.fold_factory import (
+    FOLD_CASES,
+    FOLD_CONTEXTS,
+    authored,
+    lowered_as_written_today,
+    written_today,
+)
 from tests.factories.report_factory import (
     NOTION_PAGE_ID,
     NOTION_PAGE_URL,
@@ -60,12 +67,15 @@ __all__ = [
     "API_AND_RISK_BADGES",
     "API_BADGES",
     "BADGE_AND_STATE_BLOCKS",
+    "FOLD_CASES",
+    "FOLD_CONTEXTS",
     "NOTION_PAGE_ID",
     "NOTION_PAGE_URL",
     "REFUSED_IN_THE_EXAMPLE",
     "TEXT_X_BLOCK",
     "accepted_by",
     "accepted_example",
+    "authored",
     "authored_block_types",
     "blocks_the_target_refuses",
     "check_nodes",
@@ -75,6 +85,7 @@ __all__ = [
     "in_a_grid_cell",
     "in_an_open_section",
     "lowered",
+    "lowered_as_written_today",
     "make_bullets",
     "make_cell",
     "make_command_request",
@@ -110,4 +121,5 @@ __all__ = [
     "slack_of",
     "write_index_document",
     "write_report",
+    "written_today",
 ]

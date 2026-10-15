@@ -21,17 +21,24 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     BlockRegion,
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     Graph,
     GraphEdge,
     GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
+    KeyValueList,
+    LabelledValue,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -49,6 +56,8 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    Timeline,
+    TimelineEvent,
     TocEntry,
     Toggle,
     ToneName,
@@ -73,6 +82,7 @@ from skaldr.richtext import (
 from tests.factories import (
     API_BADGES,
     lowered,
+    lowered_as_written_today,
     make_cell,
     make_command_request,
     make_grid,
@@ -848,7 +858,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         "note": "since Monday",
     }
 
-    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
         ListNode(
             "bullet",
@@ -908,7 +918,9 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
     ],
 )
 def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
-    assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}]) == (
+        ListNode("bullet", (ListEntry(text),)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -925,7 +937,7 @@ def test_a_toned_card_leaves_its_colour_only_to_a_badge_of_the_same_colour(
 ) -> None:
     card = {"label": "Cost", "value": 5, "tone": tone, "badges": ["API"]}
 
-    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
         ListNode("bullet", (ListEntry((*label, Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)),
     )
@@ -943,13 +955,13 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_leaves_its_colour_to_th
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
         API_LEGEND,
         ListNode(
             "bullet",
             (
                 ListEntry(
-                    (Chip("api", "blue"), Plain(": 1 (50.0%)")),
+                    (Chip("api", "blue"), Plain(": "), Plain("1 (50.0%)")),
                     children=(Paragraph((Plain("live"),), "muted"),),
                 ),
             ),
@@ -980,8 +992,8 @@ def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> 
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
-        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)"))),)),
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
+        ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": "), Plain("1 (50.0%)"))),)),
         API_LEGEND,
         TableNode(
             _cells("A"),
@@ -994,7 +1006,7 @@ def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> 
     )
 
 
-def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
+def test_a_fact_strip_and_a_key_value_block_lower_to_their_labelled_values() -> None:
     blocks = [
         {
             "type": "fact_strip",
@@ -1004,6 +1016,111 @@ def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
     ]
 
     assert lowered(blocks) == (
+        FactStrip((LabelledValue("Site:", (Plain("West wing"),)), LabelledValue(" ", (Plain("x"),)))),
+        KeyValueList((LabelledValue("Owner", (Styled("bold", (Plain("ops"),)),)),)),
+    )
+
+
+def test_a_definition_list_lowers_to_each_term_over_the_prose_of_its_body() -> None:
+    block = {
+        "type": "def_list",
+        "items": [{"term": "Fix", "body": "first\n\n- one\n- two"}, {"term": "Gap", "body": " "}],
+    }
+
+    assert lowered([block]) == (
+        DefinitionList(
+            (
+                Definition(
+                    "Fix",
+                    (
+                        Paragraph((Plain("first"),)),
+                        ListNode("bullet", (ListEntry((Plain("one"),)), ListEntry((Plain("two"),)))),
+                    ),
+                ),
+                Definition("Gap", ()),
+            )
+        ),
+    )
+
+
+def test_cards_lower_to_a_card_per_item_with_a_derived_card_led_by_its_badge_colour() -> None:
+    blocks = [
+        {
+            "type": "cards",
+            "items": [
+                {
+                    "label": "Clean",
+                    "value": 9,
+                    "of": 10,
+                    "tone": "success",
+                    "delta": {"label": "+1", "direction": "up"},
+                    "badges": ["API"],
+                    "note": "since Monday",
+                },
+                {"label": "Cost", "value": 5, "tone": "info", "badges": ["API"]},
+                {"badge": "API", "of_matrix": "m", "note": "live"},
+            ],
+        },
+        {
+            "type": "matrix",
+            "id": "m",
+            "rows": ["r1", "r2"],
+            "columns": ["c"],
+            "cells": [{"row": "r1", "col": "c", "badge": "API"}],
+        },
+    ]
+
+    assert lowered(blocks, badges=API_BADGES)[1] == Cards(
+        (
+            Card(
+                "Clean",
+                (
+                    Plain("9"),
+                    Plain(" "),
+                    Plain("(90.0%)"),
+                    Plain(" "),
+                    Plain("▲ +1"),
+                    Plain(" "),
+                    Chip("api", "blue"),
+                ),
+                note="since Monday",
+                tone="success",
+            ),
+            Card("Cost", (Plain("5"), Plain(" "), Chip("api", "blue"))),
+            Card("api", (Plain("1 (50.0%)"),), note="live", badge="blue"),
+        )
+    )
+
+
+def test_a_timeline_lowers_to_its_events_with_their_state_chips_and_body() -> None:
+    block = {
+        "type": "timeline",
+        "items": [
+            {"time": "Mon", "title": "Start", "state": "done", "badges": ["API"], "body": "kick-off"},
+            {"title": "Later"},
+        ],
+    }
+
+    assert lowered([block], badges=API_BADGES)[1] == Timeline(
+        (
+            TimelineEvent(
+                "Start", time="Mon", state="done", chips=(Chip("api", "blue"),), body=(Plain("kick-off"),)
+            ),
+            TimelineEvent("Later"),
+        )
+    )
+
+
+def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
+    blocks = [
+        {
+            "type": "fact_strip",
+            "facts": [{"label": "Site:", "value": "West  wing"}, {"label": " ", "value": "x"}],
+        },
+        {"type": "key_value", "pairs": [{"label": "Owner", "value": "**ops**"}]},
+    ]
+
+    assert lowered_as_written_today(blocks) == (
         ListNode(
             "bullet",
             (ListEntry((*bold("Site"), Plain(": "), Plain("West wing"))), ListEntry((Plain("x"),))),
@@ -1058,7 +1175,7 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
         API_LEGEND,
         ListNode("bullet", (ListEntry((StatusMark("blocked"), Plain(" "), Plain("Vendor"))),)),
         ListNode(
@@ -1198,7 +1315,7 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
         "items": [{"term": "Fix", "body": "first\n\nsecond"}, {"term": "Gap", "body": " "}],
     }
 
-    assert lowered([block]) == (
+    assert lowered_as_written_today([block]) == (
         ListNode(
             "bullet",
             (

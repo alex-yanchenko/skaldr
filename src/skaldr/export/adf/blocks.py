@@ -42,6 +42,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
+from skaldr.export.folds import folded
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import (
@@ -57,6 +58,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Heading,
     ListEntry,
     ListNode,
@@ -137,13 +139,13 @@ class _AdfBlocks:
 
     def blocks(self, nodes: Iterable[Node], container: Container) -> list[AdfBlock]:
         written: list[AdfBlock] = []
-        for node in nodes:
+        for node in folded(nodes):
             produced = self.node_blocks(node, container)
             _require_the_container_holds(node, produced, container)
             written += produced
         return written
 
-    def node_blocks(self, node: Node, container: Container) -> list[AdfBlock]:
+    def node_blocks(self, node: GenericNode, container: Container) -> list[AdfBlock]:
         match node:
             case Heading():
                 content = self.inline(node.text)
@@ -250,7 +252,7 @@ class _AdfBlocks:
 
     def list_item(self, entry: ListEntry, container: Container) -> AdfListItem:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
-        for child in entry.children:
+        for child in folded(entry.children):
             produced = self.node_blocks(child, container)
             _require_a_list_item_holds(child, produced)
             content += produced
@@ -276,7 +278,7 @@ class _AdfBlocks:
 
     def nested_task_lists(self, children: Sequence[Node], container: Container) -> list[AdfTaskList]:
         nested: list[AdfTaskList] = []
-        for child in children:
+        for child in folded(children):
             produced = self.node_blocks(child, container)
             _require_a_list_item_holds(child, produced)
             for block in produced:

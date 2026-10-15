@@ -9,15 +9,23 @@ from skaldr.export.inline import plain
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     Graph,
     GraphNode,
     GridColumn,
     Heading,
+    KeyValueList,
+    LabelledValue,
+    LinkCard,
     ListEntry,
     ListNode,
     Media,
@@ -32,6 +40,8 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    Timeline,
+    TimelineEvent,
     Toggle,
 )
 from skaldr.export_targets import ExportTarget
@@ -72,6 +82,12 @@ SAMPLES: Mapping[str, Node] = {
     "flow diagram": Diagram(Graph("LR", (GraphNode("s1", "Scan"),), (), "flow")),
     "chart beside its table": Diagram(PieChart((PieSlice("Done", 3),)), (_TABLE,)),
     "table of contents": TableOfContents(()),
+    "fact strip": FactStrip((LabelledValue("Site", plain("West")),)),
+    "key-value list": KeyValueList((LabelledValue("Owner", plain("ops")),)),
+    "definition list": DefinitionList((Definition("Fix", (_PARAGRAPH,)),)),
+    "cards": Cards((Card("Clean", plain("9"), note="since Monday"),)),
+    "timeline": Timeline((TimelineEvent("Start", body=plain("kick-off")),)),
+    "link card": LinkCard("Runbook", "https://example.com/runbook", "card"),
 }
 ADF_CONTAINERS: Mapping[str, Wrap] = {
     "doc": lambda node: (node,),

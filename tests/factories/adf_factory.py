@@ -5,13 +5,21 @@ from skaldr.export.inline import plain
 from skaldr.export.runs import Break, CheckMark, Chip, StatusMark, SwimlaneMark
 from skaldr.export.tree import (
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     GridColumn,
     Heading,
+    KeyValueList,
+    LabelledValue,
+    LinkCard,
     ListEntry,
     ListNode,
     Media,
@@ -27,6 +35,8 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    Timeline,
+    TimelineEvent,
     TocEntry,
     Toggle,
     ToneName,
@@ -79,6 +89,12 @@ def minimal_nodes() -> Mapping[type, Node]:
         Tabs: Tabs((Tab(plain("t"), (para("c"),)),)),
         Diagram: pie_over_its_table(),
         TableOfContents: TableOfContents((TocEntry("a", plain("t")),)),
+        FactStrip: FactStrip((LabelledValue("Site", plain("West")),)),
+        KeyValueList: KeyValueList((LabelledValue("Owner", plain("ops")),)),
+        DefinitionList: DefinitionList((Definition("Fix", (para("d"),)),)),
+        Cards: Cards((Card("Clean", plain("9")),)),
+        Timeline: Timeline((TimelineEvent("Start"),)),
+        LinkCard: LinkCard("Runbook", "https://example.com/runbook", "card"),
     }
 
 
