@@ -72,7 +72,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Grid, InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.models import AnyBlock, Grid, InnerGrid, Report, Walkthrough, walk_located_block
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -125,7 +125,7 @@ class _Place:
     container: Container = "document"
     callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
-    in_a_grid_cell: bool = False
+    in_a_column: bool = False
 
     def holder(self) -> str:
         match self.container:
@@ -162,8 +162,8 @@ class _Place:
             toggle_names=(*self.toggle_names, name),
         )
 
-    def in_a_cell(self) -> Self:
-        return replace(self, in_a_grid_cell=True)
+    def in_a_column_of_the_tree(self) -> Self:
+        return replace(self, in_a_column=True)
 
 
 def _term(node: Node) -> str:
@@ -290,10 +290,19 @@ def _document_position(path: str) -> DocumentPosition:
     return tuple((0, int(part), "") if part.isdigit() else (1, 0, part) for part in path.split("."))
 
 
+def _within(path: str, outer: str) -> bool:
+    return path == outer or path.startswith(f"{outer}.")
+
+
 class _TreeWalk:
-    def __init__(self, located: Iterable[LocatedDetails]) -> None:
+    def __init__(self, located: Iterable[LocatedDetails], cells_of_grids_with_columns: Iterable[str]) -> None:
         self.heading = ""
         self.located = deque(sorted(located, key=lambda each: _document_position(each[0])))
+        self.cells_of_grids_with_columns = tuple(cells_of_grids_with_columns)
+
+    def in_a_cell_of_a_grid_with_columns(self, node: Node) -> bool:
+        path = node.authored_at
+        return path is not None and any(_within(path, cell) for cell in self.cells_of_grids_with_columns)
 
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
@@ -328,7 +337,7 @@ class _TreeWalk:
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)
         yield from self.script_hits(node)
-        if place.in_a_grid_cell:
+        if place.in_a_column or self.in_a_cell_of_a_grid_with_columns(node):
             yield from self.grid_cell_hits(node)
         match node:
             case Heading():
@@ -352,7 +361,7 @@ class _TreeWalk:
             case Columns():
                 if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
                     yield self.hit(GridCells(len(node.columns)), node.authored_at)
-                yield from self.nodes(nested_nodes(node), place.in_a_cell())
+                yield from self.nodes(nested_nodes(node), place.in_a_column_of_the_tree())
             case Diagram():
                 yield from self.nodes(nested_nodes(node), place)
             case (
@@ -420,18 +429,27 @@ def _grids_in_grid_cells(path: str, grid: Grid) -> Iterator[LocatedDetails]:
                 yield f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}", GridInAGridCell()
 
 
-def _model_hits(report: Report, document: LoweredDocument) -> Iterator[LocatedDetails]:
-    located = (
+def _located_blocks(report: Report, document: LoweredDocument) -> list[tuple[str, AnyBlock]]:
+    return [
         located_block
         for region in document.regions
         if isinstance(region, BlockRegion)
         for located_block in walk_located_block(region.source_index, report.blocks[region.source_index])
-    )
+    ]
+
+
+def _model_hits(located: Iterable[tuple[str, AnyBlock]]) -> Iterator[LocatedDetails]:
     for path, block in located:
         if isinstance(block, Walkthrough):
             yield from _grids_in_walkthrough_steps(path, block)
         if isinstance(block, Grid):
             yield from _grids_in_grid_cells(path, block)
+
+
+def _cells_of_grids_with_columns(located: Iterable[tuple[str, AnyBlock]]) -> Iterator[str]:
+    for path, block in located:
+        if isinstance(block, Grid | InnerGrid) and len(block.cells) > 1:
+            yield from (f"{path}.cells.{index}" for index in range(len(block.cells)))
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -457,5 +475,6 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    walk = _TreeWalk(_model_hits(report, document))
+    located = _located_blocks(report, document)
+    walk = _TreeWalk(_model_hits(located), _cells_of_grids_with_columns(located))
     _raise_the_first_rejection(walk.document(document.body), target)
