@@ -271,7 +271,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "grid inside a grid cell": _kept_except(
         {
             "slack": Rejection(
-                "a Slack canvas column layout cannot nest, so it cannot show a grid inside a grid cell",
+                "a Slack canvas cannot show a grid's columns inside a grid cell",
                 "write the inner grid's cells as cells of the outer grid",
                 names_the_heading=True,
             )

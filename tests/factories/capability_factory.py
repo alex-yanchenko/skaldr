@@ -169,6 +169,8 @@ CANVAS_COLUMN_WHY = (
     "a Slack canvas column holds no table, callout or divider, so it cannot show the {held} "
     "inside a grid cell"
 )
+INNER_GRID_WHY = "a Slack canvas cannot show a grid's columns inside a grid cell"
+INNER_GRID_INSTEAD = "write the inner grid's cells as cells of the outer grid"
 IMAGE = {"type": "image", "src": "https://example.com/shelf.png", "alt": "Shelf"}
 BAR_CHART = {
     "type": "chart",
@@ -304,9 +306,33 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         "slack",
         "grid inside a grid cell",
         [two_cell_grid(text_grid())],
-        "a Slack canvas column layout cannot nest, so it cannot show a grid inside a grid cell",
-        "write the inner grid's cells as cells of the outer grid",
+        INNER_GRID_WHY,
+        INNER_GRID_INSTEAD,
         "at blocks.0.grid.cells.1.blocks.0.grid",
+    ),
+    "slack-grid-in-the-cell-of-a-one-cell-grid": RefusedCase(
+        "slack",
+        "grid inside a grid cell",
+        [one_cell_grid(text_grid())],
+        INNER_GRID_WHY,
+        INNER_GRID_INSTEAD,
+        "at blocks.0.grid.cells.0.blocks.0.grid",
+    ),
+    "slack-table-in-a-one-cell-grid-in-a-grid-cell": RefusedCase(
+        "slack",
+        "table inside a grid cell",
+        [two_cell_grid(one_cell_grid(TABLE))],
+        CANVAS_COLUMN_WHY.format(held="table"),
+        "move the table out of the grid",
+        "at blocks.0.grid.cells.1.blocks.0.grid.cells.0.blocks.0.table",
+    ),
+    "slack-code-in-a-one-cell-grid-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "block inside a walkthrough step",
+        [walkthrough_holding(one_cell_grid({"type": "code", "content": "recount"}))],
+        LIST_ITEM_WHY.format(what="a code block"),
+        OUT_OF_THE_STEP,
+        "at blocks.0.walkthrough.steps.0.detail.0.grid.cells.0.blocks.0.code",
     ),
 }
 SEEDED_REFUSALS: dict[str, RefusedCase] = {
@@ -332,6 +358,8 @@ CLEAN_BLOCKS: list[dict[str, Any]] = [
         ],
     },
     one_cell_grid(TABLE),
+    two_cell_grid(one_cell_grid({"type": "text", "body": "Inner"})),
+    walkthrough_holding(one_cell_grid({"type": "text", "body": "Inner"})),
     make_toggle(TABLE),
     make_toggle(make_toggle()),
     walkthrough_holding({"type": "text", "body": "Lock the aisle."}),

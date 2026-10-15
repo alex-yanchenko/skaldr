@@ -28,6 +28,7 @@ from tests.factories.capability_factory import (
     TABLE,
     RefusedCase,
     in_a_panel,
+    one_cell_grid,
     published_report,
     text_grid,
     two_cell_grid,
@@ -287,6 +288,17 @@ def test_a_panes_cell_made_a_rejection_refuses_the_block(
         "instead": "drop it",
         "where": f"at blocks.0.{block['type']}",
     }
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(two_cell_grid(one_cell_grid({"type": "text", "body": "Inner"})), id="in-a-grid-cell"),
+        pytest.param(walkthrough_holding(one_cell_grid({"type": "text", "body": "Inner"})), id="in-a-step"),
+    ],
+)
+def test_an_inner_grid_of_one_cell_shows_no_columns_so_a_canvas_keeps_it(block: dict[str, Any]) -> None:
+    _check([block], "slack")
 
 
 def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() -> None:

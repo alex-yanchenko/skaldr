@@ -402,17 +402,21 @@ class _TreeWalk:
             yield self.hit(CellCount(cells), node.authored_at)
 
 
+def _shows_columns(block: AnyBlock) -> bool:
+    return isinstance(block, InnerGrid) and len(block.cells) > 1
+
+
 def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[LocatedDetails]:
     for step_index, step in enumerate(walkthrough.steps):
         for index, detail in enumerate(step.detail):
-            if isinstance(detail, InnerGrid):
+            if _shows_columns(detail):
                 yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}", GridInAStep()
 
 
 def _grids_in_grid_cells(path: str, grid: Grid) -> Iterator[LocatedDetails]:
     for cell_index, cell in enumerate(grid.cells):
         for index, inner in enumerate(cell.blocks):
-            if isinstance(inner, InnerGrid):
+            if _shows_columns(inner):
                 yield f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}", GridInAGridCell()
 
 
