@@ -5,9 +5,10 @@ from typing import Any
 
 import pytest
 
-from skaldr.errors import ConnectorError, PublishError
+from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
+from skaldr.publish.content import section_part
 from skaldr.publish.drafts import draft_targets
 from skaldr.publish.engine import (
     Applied,
@@ -31,6 +32,8 @@ from tests.factories.publish_factory import (
     DOC_ID,
     DROPPED_AFTER_WRITE,
     FAKE_ITEM_ADDRESS,
+    INTRO_KEY,
+    REFUSED_WRITE,
     TARGET_LABEL,
     FakeTransport,
     authored_garden,
@@ -306,6 +309,53 @@ def test_a_link_deleted_by_hand_shows_in_the_dry_run_and_the_next_publish_writes
         Applied((FIRST_LINKS[2],)),
         [("write_links", "page-3", "Garden handbook")],
         (_page("page-1", "Garden handbook"),),
+    )
+
+
+def test_a_dry_run_that_finds_a_remote_edit_plans_no_links(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
+    _publish(path, transport)
+    transport.link_by_hand("page-3", ())
+    transport.edit_section_by_hand("page-1", INTRO_KEY, "Welcome, gardeners.\n")
+
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+
+    assert (dry_run.links, [(edit.item, edit.part) for edit in dry_run.edits]) == (
+        (),
+        [(NOTION_DOCUMENT, section_part(INTRO_KEY))],
+    )
+
+
+def test_a_page_whose_issue_was_not_created_plans_its_link_and_links_once_the_issue_exists(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, publish=_publish_block(_notion(), _jira()))
+    transport.fail_on_write(2)
+    with pytest.raises(WriteRejectedError, match=f"^{re.escape(REFUSED_WRITE)}$"):
+        _publish(path, transport)
+    transport.stop_failing()
+
+    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+    outcome = _publish(path, transport)
+
+    assert (dry_run.links, outcome, _links_of(transport)) == (
+        (
+            LinkStep(NOTION_DOCUMENT, "link", f"{JIRA_LABEL}, document"),
+            LinkStep(JIRA_DOCUMENT, "link", f"{TARGET_LABEL}, document"),
+        ),
+        Applied(
+            (
+                'create   document "Garden handbook"',
+                f"link     document to {JIRA_LABEL}, document",
+                f"link     document to {TARGET_LABEL}, document",
+            )
+        ),
+        {
+            "page-1": (_shown("page-2", "Garden handbook"),),
+            "page-2": (_page("page-1", "Garden handbook"),),
+        },
     )
 
 
