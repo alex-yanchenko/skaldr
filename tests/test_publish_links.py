@@ -26,7 +26,7 @@ from skaldr.publish.plan import ItemRef
 from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.state import load_state, save_state, state_path_for
 from skaldr.publish.transport import ShownLink, Stamp
-from skaldr.publish_block import JiraTarget, NotionTarget
+from skaldr.publish_block import JiraTarget, NotionTarget, SlackTarget
 from skaldr.publish_block.target import JsonFields
 from tests.factories.auth_factory import (
     make_jira_credentials,
@@ -70,6 +70,8 @@ OTHER_LABEL = f"notion page {OTHER_PAGE_ID}"
 NOTION_DOCUMENT = ItemRef(TARGET_LABEL, None)
 NOTION_TOOLS = ItemRef(TARGET_LABEL, "tools")
 JIRA_DOCUMENT = ItemRef(JIRA_LABEL, None)
+SLACK_DOCUMENT = ItemRef("slack canvases", None)
+SLACK_TOOLS = ItemRef("slack canvases", "tools")
 JIRA_TOOLS = ItemRef(JIRA_LABEL, "tools")
 FIRST_LINKS = (
     "link     document to jira project PLAN under no parent issue, document",
@@ -99,7 +101,7 @@ LINKED_BOTH_WAYS = _publish_block(_notion(split=["tools"]), _jira("DEMO", split=
 
 
 def _registry(transport: FakeTransport) -> ConnectorRegistry:
-    return fake_registry(transport, target_types=(NotionTarget, JiraTarget))
+    return fake_registry(transport, target_types=(NotionTarget, JiraTarget, SlackTarget))
 
 
 def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
@@ -168,6 +170,15 @@ def _links_of(transport: FakeTransport) -> dict[str, tuple[ShownLink, ...]]:
             ),
             {NOTION_DOCUMENT: (), NOTION_TOOLS: (), ItemRef(OTHER_LABEL, None): ()},
             id="one-service-only",
+        ),
+        pytest.param(
+            _publish_block(_notion(), make_slack_target(where={}, split=["tools"])),
+            {
+                NOTION_DOCUMENT: (SLACK_DOCUMENT,),
+                SLACK_DOCUMENT: (NOTION_DOCUMENT, SLACK_TOOLS),
+                SLACK_TOOLS: (),
+            },
+            id="a-document-canvas-links-its-section-canvases",
         ),
     ],
 )

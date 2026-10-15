@@ -171,7 +171,8 @@ class SlackTransport:
         target = request.target
         conversation = target.where.conversation if isinstance(target, SlackTarget) else None
         if conversation is not None:
-            self._share(canvas_id, content.title, conversation)
+            opens_the_document = request.stamp.section_id is None
+            self._share(canvas_id, content.title, conversation, posts_the_link=opens_the_document)
         try:
             return self._written_with(canvas_id, self.comparable_form(content).sections)
         except ConnectorError as exc:
@@ -303,7 +304,7 @@ class SlackTransport:
     def close(self) -> None:
         self._api.close()
 
-    def _share(self, canvas_id: str, title: str, conversation: str) -> None:
+    def _share(self, canvas_id: str, title: str, conversation: str, *, posts_the_link: bool) -> None:
         created = f'skaldr created Slack canvas {canvas_id} for "{title}"'
         try:
             self._api.let_read(canvas_id, conversation)
@@ -312,6 +313,8 @@ class SlackTransport:
                 f"{created} but could not let {conversation} read it: {exc}; share the canvas with "
                 f"{conversation} in Slack"
             )
+        if not posts_the_link:
+            return
         try:
             link = self.item_link(canvas_id, title)
         except ConnectorError as exc:

@@ -12,16 +12,19 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.cli import installed_connectors, main
 from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.slack.transport import SlackTransport
+from skaldr.publish.state import state_path_for
 from skaldr.publish_block import JiraTarget, SlackTarget
 from tests.factories import SLACK_CANVAS_ID, make_jira_target, make_slack_target
 from tests.factories.auth_factory import make_slack_credentials
 from tests.factories.publish_factory import make_garden_blocks, make_garden_report, write_garden_report
-from tests.factories.slack_factory import InMemorySlack
+from tests.factories.slack_factory import TEAM_ID, WORKSPACE_URL, InMemorySlack
 
 DOCUMENT_CANVAS = "F000000001"
 TOOLS_CANVAS = "F000000002"
 DOCUMENT_STAMP = "Published with skaldr from document garden-handbook"
 TOOLS_STAMP = "Published with skaldr from document garden-handbook, section tools"
+TOOLS_LINK = f"{WORKSPACE_URL}docs/{TEAM_ID}/{TOOLS_CANVAS}"
+DOCUMENT_STAMP_LINKING_TOOLS = f"{DOCUMENT_STAMP} · Slack [Tools]({TOOLS_LINK})"
 
 
 def _connector(slack: InMemorySlack) -> SlackConnector:
@@ -126,16 +129,17 @@ def test_a_target_of_another_service_is_refused() -> None:
         SlackConnector(sign_in=lambda _: make_slack_credentials()).open_transport(target)
 
 
-def test_publishing_creates_the_document_and_its_split_canvas_links_both_and_publishing_again_sends_nothing(
+def test_publishing_shares_both_canvases_posts_the_document_once_and_links_its_section_from_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     slack = InMemorySlack()
     path = _published(tmp_path, slack)
     created = slack.writes()
+    printed = capsys.readouterr().out
 
     again = main(["publish", str(path), "--apply"], registry=_registry(slack))
 
-    assert (again, created, slack.writes()[len(created) :], [channel for channel, _ in slack.messages]) == (
+    assert (again, created, slack.writes()[len(created) :], slack.readers, slack.messages) == (
         0,
         [
             ("canvases.create", ""),
@@ -143,17 +147,29 @@ def test_publishing_creates_the_document_and_its_split_canvas_links_both_and_pub
             ("chat.postMessage", ""),
             ("canvases.create", ""),
             ("canvases.access.set", ""),
-            ("chat.postMessage", ""),
+            ("canvases.edit", "replace"),
         ],
         [],
-        ["C0EXAMPLE1", "C0EXAMPLE1"],
+        [(DOCUMENT_CANVAS, "read", ["C0EXAMPLE1"]), (TOOLS_CANVAS, "read", ["C0EXAMPLE1"])],
+        [("C0EXAMPLE1", f"Garden handbook: {WORKSPACE_URL}docs/{TEAM_ID}/{DOCUMENT_CANVAS}")],
     )
     assert capsys.readouterr().out.splitlines()[-1] == "Nothing to publish: every item matches the YAML."
     assert (
         slack.markdown_of(DOCUMENT_CANVAS).splitlines()[-1],
         slack.markdown_of(TOOLS_CANVAS).splitlines()[-1],
         slack.canvases[TOOLS_CANVAS].title,
-    ) == (DOCUMENT_STAMP, TOOLS_STAMP, "Tools")
+        printed.splitlines(),
+    ) == (
+        DOCUMENT_STAMP_LINKING_TOOLS,
+        TOOLS_STAMP,
+        "Tools",
+        [
+            'slack canvases: create   document "Garden handbook"',
+            'slack canvases: create   section tools "Tools"',
+            "slack canvases: link     document to slack canvases, section tools",
+            f"Published 3 steps. The publish state is in {state_path_for(path)}.",
+        ],
+    )
 
 
 def test_a_link_slack_will_not_post_is_a_warning_and_the_canvas_is_kept(
@@ -220,7 +236,7 @@ def test_a_section_write_that_stopped_halfway_is_finished_by_the_next_publish(
         0,
         2,
         "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n## Planting\n\n"
-        f"Sow in late spring.\n\n{DOCUMENT_STAMP}\n",
+        f"Sow in late spring.\n\n{DOCUMENT_STAMP_LINKING_TOOLS}\n",
     )
     assert error.startswith(f"error: Slack canvas {DOCUMENT_CANVAS} is partly written, so publish again")
 

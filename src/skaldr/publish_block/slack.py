@@ -41,9 +41,10 @@ def slack_canvas_id(reference: str) -> str | None:
 class SlackWhere(FrozenModel):
     conversation: str | None = Field(
         default=None,
-        description="A Slack channel or DM id (C..., G... or D...), or a link to one, where skaldr posts the "
-        "link to each canvas it creates, once, when it creates it. Left out: the canvases are linked "
-        "nowhere. Not part of the target's place, so changing it moves no canvas.",
+        description="A Slack channel or DM id (C..., G... or D...), or a link to one, that skaldr lets read "
+        "each canvas it creates and where it posts the link to the document's canvas, once, when it creates "
+        "it; the document's canvas links each section canvas in its stamp. Left out: the canvases are shared "
+        "with no one. Not part of the target's place, so changing it moves no canvas.",
     )
     canvas: str | None = Field(
         default=None,
@@ -89,8 +90,8 @@ class SlackTarget(TargetBase):
     to: SlackService = Field(description="Publish to Slack canvases: `slack`.")
     where: SlackWhere = Field(
         default_factory=SlackWhere,
-        description="The conversation each new canvas is linked in, or the canvas the document is written "
-        "into. Left out: canvases linked nowhere.",
+        description="The conversation each new canvas is shared with, or the canvas the document is written "
+        "into. Left out: canvases shared with no one.",
     )
 
     @model_validator(mode="after")
@@ -105,6 +106,10 @@ class SlackTarget(TargetBase):
 
     def where_fields(self) -> JsonFields:
         return {}
+
+    @classmethod
+    def links_its_sections_from_the_document(cls) -> bool:
+        return True
 
     def location_label(self) -> str:
         written_into = " (written into)" if self.where.canvas is not None else ""
