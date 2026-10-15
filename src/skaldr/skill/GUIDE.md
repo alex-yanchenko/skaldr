@@ -604,8 +604,8 @@ line; an optional `axis` labels the extent's ends.
 Reach for it when the **relative size of spans** is the message. For a single ratio use `meter`; for a
 trend or distribution use `chart`; for an ordered set of stages use `flow`.
 
-No export can draw a range bar, so every `--export` target, `skaldr publish` and
-`skaldr --check --for <target>` refuse a document holding a `range`. In a document you export, use a
+No export can draw a range bar. Every `--export` target, `skaldr publish` and
+`skaldr --check --for <target>` refuse a document holding a `range`; in a document you export, use a
 `meter` or a `table` instead.
 
 ## The `chart`

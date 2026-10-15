@@ -1,6 +1,7 @@
 # Example report: fictional, self-contained. Run:
 #   uv run skaldr data/example.yaml
 # Then open out/example.html in a browser. This file exercises every block type.
+# It is a page showcase: every --export refuses it, starting with its range.
 version: 1
 meta:
   title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"
