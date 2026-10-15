@@ -8,7 +8,7 @@ from typing_extensions import assert_never
 
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
-from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
+from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.markup import (
     DIVIDER_LINE,
     MarkupRuns,
@@ -23,7 +23,13 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
-from skaldr.export.swaps import data_table_swapped_in, figure_mermaid_draws, swaps_the_figure, web_address_of
+from skaldr.export.swaps import (
+    data_table_swapped_in,
+    figure_mermaid_draws,
+    swaps_the_figure,
+    tabs_swapped_for_toggles,
+    web_address_of,
+)
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
     Callout,
@@ -393,12 +399,9 @@ def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
 
 
 def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
-    lines: list[str] = []
-    for tab in node.tabs:
-        icon = tab_icon(tab.tone)
-        lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
-        lines += [*_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
-    return ["<tabs>", *_indent(lines), "</tabs>"]
+    return [
+        line for toggle in tabs_swapped_for_toggles(node, "notion") for line in _toggle_lines(toggle, room)
+    ]
 
 
 def _notion_lines(node: Node, room: TableRoom) -> list[str]:

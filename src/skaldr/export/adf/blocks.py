@@ -44,7 +44,12 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
+from skaldr.export.swaps import (
+    data_table_swapped_in,
+    require_the_swap,
+    tabs_swapped_for_toggles,
+    web_address_of,
+)
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -96,6 +101,13 @@ def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], conta
                 f"ADF does not allow a {block['type']} inside a {container}, written from a "
                 f"{type(node).__name__}; the export check should have refused it"
             )
+
+
+def _require_no_divider_in_a_list_item(child: Node) -> None:
+    if isinstance(child, Divider):
+        raise ExportInvariantError(
+            "ADF does not allow a rule inside a list item; the export check should have refused it"
+        )
 
 
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
@@ -165,9 +177,7 @@ class _AdfBlocks:
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
-                return [
-                    self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs
-                ]
+                return self.tabs_blocks(node, container)
             case Diagram():
                 return self.diagram_blocks(node, container)
             case TableOfContents():
@@ -215,6 +225,13 @@ class _AdfBlocks:
         content = self.blocks(children, "expand") or [_empty_paragraph()]
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
+    def tabs_blocks(self, node: Tabs, container: Container) -> list[AdfBlock]:
+        return [
+            block
+            for toggle in tabs_swapped_for_toggles(node, "adf")
+            for block in self.node_blocks(toggle, container)
+        ]
+
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
         return self.blocks(data_table_swapped_in(node, "adf"), container)
 
@@ -248,6 +265,7 @@ class _AdfBlocks:
         content: list[AdfBlock] = [self.paragraph(entry.text)]
         overflow: list[AdfBlock] = []
         for child in entry.children:
+            _require_no_divider_in_a_list_item(child)
             produced = self.node_blocks(child, container)
             fitting = [] if overflow else list(takewhile(_fits_in_a_list_item, produced))
             content += fitting
@@ -288,6 +306,7 @@ class _AdfBlocks:
         nested: list[AdfTaskList] = []
         overflow: list[AdfBlock] = []
         for child in children:
+            _require_no_divider_in_a_list_item(child)
             produced = self.node_blocks(child, container)
             is_a_task_list = isinstance(child, ListNode) and child.kind == "check"
             if produced and is_a_task_list and not overflow:

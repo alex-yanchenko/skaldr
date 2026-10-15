@@ -3,10 +3,17 @@ from typing import Any
 
 import pytest
 
-from skaldr.export.capabilities import Feature
-from skaldr.export.tree import XYChartMark
+from skaldr.export.capabilities import RICH_STEP_NOTE, Feature
+from skaldr.export.tree import ToneName, XYChartMark
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from tests.factories.report_factory import in_a_grid_cell, make_report, make_section, make_toggle
+from tests.factories.report_factory import (
+    in_a_grid_cell,
+    make_report,
+    make_request,
+    make_section,
+    make_tabs,
+    make_toggle,
+)
 
 TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "a"}]}
 LONG_TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "v"}] * 300}
@@ -19,10 +26,12 @@ PUBLISHED_DOC_ID = "capability-check"
 @dataclass(frozen=True)
 class RefusedCase:
     target: ExportTarget
+    feature: Feature
     blocks: list[dict[str, Any]]
     why: str
     instead: str
     where: str
+    also_refused_by: tuple[ExportTarget, ...] = ()
 
     def rejection(self) -> dict[str, str]:
         return {"target": self.target, "why": self.why, "instead": self.instead, "where": self.where}
@@ -55,36 +64,45 @@ def published_report(blocks: list[dict[str, Any]], *targets: dict[str, Any]) -> 
 
 TABLE_IN_A_PANEL = RefusedCase(
     "adf",
+    "table inside a callout",
     in_a_panel(TABLE),
     "ADF cannot place a table inside a panel",
     "move the table out of the panel",
     "at blocks.0.panel.blocks.0.table",
+    also_refused_by=("slack",),
+)
+QUOTE_IN_A_PANEL = RefusedCase(
+    "adf",
+    "quote inside a callout",
+    in_a_panel({"type": "quote", "body": "Count twice."}),
+    "ADF cannot place a quote inside a panel",
+    "move the quote out of the panel",
+    "at blocks.0.panel.blocks.0.quote",
 )
 ADF_REFUSALS: dict[str, RefusedCase] = {
     "adf-table-in-a-panel": TABLE_IN_A_PANEL,
     "adf-callout-in-a-panel": RefusedCase(
         "adf",
+        "callout inside a callout",
         in_a_panel({"type": "callout", "tone": "info", "body": "x"}),
         "ADF cannot place a callout inside a panel",
         "move the callout out of the panel",
         "at blocks.0.panel.blocks.0.callout",
+        also_refused_by=("slack",),
     ),
-    "adf-quote-in-a-panel": RefusedCase(
-        "adf",
-        in_a_panel({"type": "quote", "body": "Count twice."}),
-        "ADF cannot place a quote inside a panel",
-        "move the quote out of the panel",
-        "at blocks.0.panel.blocks.0.quote",
-    ),
+    "adf-quote-in-a-panel": QUOTE_IN_A_PANEL,
     "adf-toggle-in-a-panel": RefusedCase(
         "adf",
+        "toggle inside a callout",
         in_a_panel(make_toggle()),
         "ADF cannot place a toggle inside a panel",
         "move the toggle out of the panel",
         "at blocks.0.panel.blocks.0.toggle",
+        also_refused_by=("slack",),
     ),
     "adf-table-in-a-toggle-in-a-toggle": RefusedCase(
         "adf",
+        "table inside a toggle inside a toggle",
         [make_toggle(make_toggle(TABLE))],
         "ADF cannot place a table inside a toggle that is itself inside a toggle",
         "move the table out of the toggle",
@@ -92,6 +110,7 @@ ADF_REFUSALS: dict[str, RefusedCase] = {
     ),
     "adf-toggle-in-a-toggle-in-a-toggle": RefusedCase(
         "adf",
+        "toggle inside a toggle inside a toggle",
         [make_toggle(make_toggle(make_toggle()))],
         "ADF cannot place a toggle inside a toggle that is itself inside a toggle",
         "move the toggle out of the toggle",
@@ -101,6 +120,7 @@ ADF_REFUSALS: dict[str, RefusedCase] = {
 SLACK_REFUSALS: dict[str, RefusedCase] = {
     "slack-block-in-a-list-item": RefusedCase(
         "slack",
+        "block inside a list item",
         [{"type": "text", "body": "- a\n  - b\n  - c\n\n  1. d\n  2. e\n- f"}],
         LIST_ITEM_WHY.format(what="a second nested list"),
         OUT_OF_THE_LIST,
@@ -108,6 +128,7 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-block-in-a-walkthrough-step": RefusedCase(
         "slack",
+        "block inside a walkthrough step",
         [walkthrough_holding({"type": "code", "content": "recount"})],
         LIST_ITEM_WHY.format(what="a code block"),
         OUT_OF_THE_STEP,
@@ -115,6 +136,7 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-numbered-list-starting-past-1": RefusedCase(
         "slack",
+        "numbered list starting past 1",
         [{"type": "text", "body": "3. a\n4. b"}],
         "a Slack canvas numbers every list from 1, so it cannot show a numbered list that starts at 3",
         "number the list from 1, or export it elsewhere",
@@ -122,6 +144,7 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-table-over-300-cells": RefusedCase(
         "slack",
+        "table over 300 cells",
         [{"type": "heading", "text": "Counts"}, LONG_TABLE],
         "the table takes 301 cells as a Slack canvas table, over the 300 such a table can hold",
         "split the table in two or export it elsewhere",
@@ -129,6 +152,7 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-grid-in-a-walkthrough-step": RefusedCase(
         "slack",
+        "grid inside a walkthrough step",
         [walkthrough_holding(text_grid())],
         "a Slack canvas cannot show a grid inside a walkthrough step, "
         "since a canvas list item holds only text",
@@ -137,20 +161,239 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-script-with-no-unicode-form": RefusedCase(
         "slack",
+        "subscript or superscript with no Unicode form",
         [{"type": "text", "body": "x^q^"}],
         "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form",
         "write the text without the superscript or export the document elsewhere",
         "at blocks.0.text",
     ),
 }
-SEEDED_REFUSALS: dict[str, RefusedCase] = {**ADF_REFUSALS, **SLACK_REFUSALS}
-ADF_CASES = [pytest.param(case, id=name) for name, case in ADF_REFUSALS.items()]
+CANVAS_CALLOUT_WHY = (
+    "a Slack canvas callout holds only text, headings, lists, quotes, code blocks and images, "
+    "so it cannot show the {held} inside a panel"
+)
+CANVAS_COLUMN_WHY = (
+    "a Slack canvas column holds no table, callout or divider, so it cannot show the {held} "
+    "inside a grid cell"
+)
+INNER_GRID_WHY = "a Slack canvas cannot show a grid's columns inside a grid cell"
+INNER_GRID_INSTEAD = "write the inner grid's cells as cells of the outer grid"
+IMAGE = {"type": "image", "src": "https://example.com/shelf.png", "alt": "Shelf"}
+BAR_CHART = {
+    "type": "chart",
+    "variant": "bar",
+    "categories": ["Q1", "Q2"],
+    "series": [{"label": "Bins", "values": [3, 5]}],
+}
+
+
+def two_cell_grid(*second_cell_blocks: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "grid",
+        "cells": [
+            {"span": 3, "blocks": [{"type": "text", "body": "Left"}]},
+            {"span": 3, "blocks": list(second_cell_blocks)},
+        ],
+    }
+
+
+def one_cell_grid(*blocks: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "grid", "cells": [{"span": 6, "blocks": list(blocks)}]}
+
+
+def request_flow_of_two(*cases: dict[str, Any]) -> dict[str, Any]:
+    step = {"label": "Read", "method": "GET", "url": "https://api.example.com/widgets", "cases": list(cases)}
+    return {"type": "request_flow", "label": "Walk", "steps": [step, step]}
+
+
+def toned_two_cell_grid(tone: ToneName) -> dict[str, Any]:
+    grid = two_cell_grid({"type": "text", "body": "Right"})
+    grid["cells"][1]["tone"] = tone
+    return grid
+
+
+def _in_a_panel_refused_by_a_canvas(
+    feature: Feature, block: dict[str, Any], held: str, *others: ExportTarget
+) -> RefusedCase:
+    return RefusedCase(
+        "slack",
+        feature,
+        in_a_panel(block),
+        CANVAS_CALLOUT_WHY.format(held=held),
+        f"move the {held} out of the panel",
+        f"at blocks.0.panel.blocks.0.{block['type']}",
+        also_refused_by=others,
+    )
+
+
+def _in_a_grid_cell_refused_by_a_canvas(
+    feature: Feature, block: dict[str, Any], held: str, *others: ExportTarget
+) -> RefusedCase:
+    return RefusedCase(
+        "slack",
+        feature,
+        [two_cell_grid(block)],
+        CANVAS_COLUMN_WHY.format(held=held),
+        f"move the {held} out of the grid",
+        f"at blocks.0.grid.cells.1.blocks.0.{block['type']}",
+        also_refused_by=others,
+    )
+
+
+CONTAINER_ADF_REFUSALS: dict[str, RefusedCase] = {
+    "adf-divider-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        "divider inside a walkthrough step",
+        [walkthrough_holding({"type": "divider"})],
+        "ADF cannot place a divider inside a walkthrough step, since Jira writes a step as a list item",
+        "move the divider out of the step, after the walkthrough",
+        "at blocks.0.walkthrough.steps.0.detail.0.divider",
+        also_refused_by=("slack",),
+    ),
+}
+CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
+    "slack-table-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "table inside a callout", TABLE, "table", "adf"
+    ),
+    "slack-note-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "callout inside a callout", {"type": "note", "body": "x"}, "note", "adf"
+    ),
+    "slack-toggle-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "toggle inside a callout", make_toggle(), "toggle", "adf"
+    ),
+    "slack-tabs-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "toggle inside a callout", make_tabs(), "set of tabs", "adf"
+    ),
+    "slack-chart-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "table inside a callout", BAR_CHART, "chart", "adf"
+    ),
+    "slack-chart-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
+        "table inside a grid cell", BAR_CHART, "chart"
+    ),
+    "slack-request-with-a-verdict-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "callout inside a callout",
+        make_request(cases=[{"label": "a", "verdict": "fine", "response": {"body": "1"}}]),
+        "request",
+        "adf",
+    ),
+    "slack-request-step-with-a-verdict-in-a-panel": RefusedCase(
+        "slack",
+        "callout inside a callout",
+        in_a_panel(request_flow_of_two({"label": "a", "verdict": "fine", "response": {"body": "1"}})),
+        CANVAS_CALLOUT_WHY.format(held="request step"),
+        "move the request step out of the panel",
+        "at blocks.0.panel.blocks.0.request_flow.steps.0",
+        also_refused_by=("adf",),
+    ),
+    "slack-request-step-with-two-cases-in-a-panel": RefusedCase(
+        "slack",
+        "toggle inside a callout",
+        in_a_panel(
+            request_flow_of_two(
+                {"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}
+            )
+        ),
+        CANVAS_CALLOUT_WHY.format(held="request step"),
+        "move the request step out of the panel",
+        "at blocks.0.panel.blocks.0.request_flow.steps.0",
+        also_refused_by=("adf",),
+    ),
+    "slack-divider-in-a-panel-under-a-heading": RefusedCase(
+        "slack",
+        "divider inside a callout",
+        [{"type": "heading", "text": "Shelf"}, *in_a_panel({"type": "divider"})],
+        CANVAS_CALLOUT_WHY.format(held="divider"),
+        "move the divider out of the panel",
+        "at blocks.1.panel.blocks.0.divider, under the heading 'Shelf'",
+    ),
+    "slack-grid-of-four-cells": RefusedCase(
+        "slack",
+        "grid with more than three cells",
+        [
+            {
+                "type": "grid",
+                "cells": [{"span": 1, "blocks": [{"type": "text", "body": name}]} for name in "abcd"],
+            }
+        ],
+        "a Slack canvas column layout holds at most 3 columns, so it cannot show a grid of 4 cells",
+        "split the grid into grids of at most 3 cells",
+        "at blocks.0.grid",
+    ),
+    "slack-table-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
+        "table inside a grid cell", TABLE, "table"
+    ),
+    "slack-callout-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
+        "callout inside a grid cell", {"type": "callout", "tone": "info", "body": "x"}, "callout"
+    ),
+    "slack-divider-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
+        "divider inside a grid cell", {"type": "divider"}, "divider"
+    ),
+    "slack-toned-grid-cell": RefusedCase(
+        "slack",
+        "toned grid cell",
+        [toned_two_cell_grid("warning")],
+        "a Slack canvas column has no tone, so it cannot show a grid cell with the tone 'warning'",
+        "drop the tone from the grid cell",
+        "at blocks.0.grid.cells.1",
+    ),
+    "slack-grid-in-a-grid-cell": RefusedCase(
+        "slack",
+        "grid inside a grid cell",
+        [two_cell_grid(text_grid())],
+        INNER_GRID_WHY,
+        INNER_GRID_INSTEAD,
+        "at blocks.0.grid.cells.1.blocks.0.grid",
+    ),
+    "slack-grid-in-the-cell-of-a-one-cell-grid": RefusedCase(
+        "slack",
+        "grid inside a grid cell",
+        [one_cell_grid(text_grid())],
+        INNER_GRID_WHY,
+        INNER_GRID_INSTEAD,
+        "at blocks.0.grid.cells.0.blocks.0.grid",
+    ),
+    "slack-table-in-a-one-cell-grid-in-a-grid-cell": RefusedCase(
+        "slack",
+        "table inside a grid cell",
+        [two_cell_grid(one_cell_grid(TABLE))],
+        CANVAS_COLUMN_WHY.format(held="table"),
+        "move the table out of the grid",
+        "at blocks.0.grid.cells.1.blocks.0.grid.cells.0.blocks.0.table",
+    ),
+    "slack-code-in-a-one-cell-grid-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        "block inside a walkthrough step",
+        [walkthrough_holding(one_cell_grid({"type": "code", "content": "recount"}))],
+        LIST_ITEM_WHY.format(what="a code block"),
+        OUT_OF_THE_STEP,
+        "at blocks.0.walkthrough.steps.0.detail.0.grid.cells.0.blocks.0.code",
+    ),
+}
+SEEDED_REFUSALS: dict[str, RefusedCase] = {
+    **ADF_REFUSALS,
+    **SLACK_REFUSALS,
+    **CONTAINER_ADF_REFUSALS,
+    **CONTAINER_SLACK_REFUSALS,
+}
+ADF_CASES = [pytest.param(case, id=name) for name, case in {**ADF_REFUSALS, **CONTAINER_ADF_REFUSALS}.items()]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]
 
 CLEAN_BLOCKS: list[dict[str, Any]] = [
     {"type": "heading", "text": "Plan"},
     {"type": "text", "body": "1. a\n2. b"},
     {"type": "panel", "title": "Plan", "blocks": [{"type": "text", "body": "Inside."}]},
+    {
+        "type": "panel",
+        "title": "Shelf",
+        "blocks": [
+            {"type": "heading", "text": "Shelf photos"},
+            IMAGE,
+            {"type": "media", "kind": "video", "src": "https://example.com/shelf.mp4"},
+        ],
+    },
+    one_cell_grid(TABLE),
+    two_cell_grid(one_cell_grid({"type": "text", "body": "Inner"})),
+    walkthrough_holding(one_cell_grid({"type": "text", "body": "Inner"})),
     make_toggle(TABLE),
     make_toggle(make_toggle()),
     walkthrough_holding({"type": "text", "body": "Lock the aisle."}),
@@ -268,7 +511,9 @@ def fan_with_a_note_on_a_spoke(note: str) -> list[dict[str, Any]]:
 def rich_note_refusal(
     target: ExportTarget, subject: str, blocks: list[dict[str, Any]], where: str
 ) -> RefusedCase:
-    return RefusedCase(target, blocks, RICH_NOTE_WHY.format(subject=subject), RICH_NOTE_INSTEAD, where)
+    return RefusedCase(
+        target, RICH_STEP_NOTE, blocks, RICH_NOTE_WHY.format(subject=subject), RICH_NOTE_INSTEAD, where
+    )
 
 
 @dataclass(frozen=True)
@@ -312,17 +557,20 @@ MENTION_NOTE_MERMAID = (
 
 DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     "markdown-range": RefusedCase(
-        "markdown", [RANGE], "GitHub cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+        "markdown", "range", [RANGE], "GitHub cannot draw a range bar", USE_A_METER, "at blocks.0.range"
     ),
     "notion-range": RefusedCase(
-        "notion", [RANGE], "Notion cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+        "notion", "range", [RANGE], "Notion cannot draw a range bar", USE_A_METER, "at blocks.0.range"
     ),
-    "adf-range": RefusedCase("adf", [RANGE], "ADF cannot draw a range bar", USE_A_METER, "at blocks.0.range"),
+    "adf-range": RefusedCase(
+        "adf", "range", [RANGE], "ADF cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+    ),
     "slack-range": RefusedCase(
-        "slack", [RANGE], "a Slack canvas cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+        "slack", "range", [RANGE], "a Slack canvas cannot draw a range bar", USE_A_METER, "at blocks.0.range"
     ),
     "adf-range-in-a-panel-in-a-section": RefusedCase(
         "adf",
+        "range",
         [make_section("counts", blocks=in_a_panel(RANGE))],
         "ADF cannot draw a range bar",
         USE_A_METER,
@@ -330,23 +578,42 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "notion-range-in-a-grid-cell": RefusedCase(
         "notion",
+        "range",
         [in_a_grid_cell([RANGE])],
         "Notion cannot draw a range bar",
         USE_A_METER,
         "at blocks.0.grid.cells.0.blocks.0.range",
     ),
     "adf-flow": RefusedCase(
-        "adf", [FLOW], "ADF cannot draw a flow diagram", AS_A_NUMBERED_LIST, "at blocks.0.flow"
+        "adf",
+        "flow diagram",
+        [FLOW],
+        "ADF cannot draw a flow diagram",
+        AS_A_NUMBERED_LIST,
+        "at blocks.0.flow",
     ),
     "slack-flow": RefusedCase(
-        "slack", [FLOW], "a Slack canvas cannot draw a flow diagram", AS_A_NUMBERED_LIST, "at blocks.0.flow"
+        "slack",
+        "flow diagram",
+        [FLOW],
+        "a Slack canvas cannot draw a flow diagram",
+        AS_A_NUMBERED_LIST,
+        "at blocks.0.flow",
     ),
-    "adf-fan": RefusedCase("adf", [FAN], "ADF cannot draw a fan diagram", AS_A_LIST, "at blocks.0.fan"),
+    "adf-fan": RefusedCase(
+        "adf", "fan diagram", [FAN], "ADF cannot draw a fan diagram", AS_A_LIST, "at blocks.0.fan"
+    ),
     "slack-fan": RefusedCase(
-        "slack", [FAN], "a Slack canvas cannot draw a fan diagram", AS_A_LIST, "at blocks.0.fan"
+        "slack",
+        "fan diagram",
+        [FAN],
+        "a Slack canvas cannot draw a fan diagram",
+        AS_A_LIST,
+        "at blocks.0.fan",
     ),
     "slack-flow-in-a-toggle": RefusedCase(
         "slack",
+        "flow diagram",
         [make_toggle(FLOW)],
         "a Slack canvas cannot draw a flow diagram",
         AS_A_NUMBERED_LIST,
@@ -384,6 +651,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     },
     "markdown-data-image": RefusedCase(
         "markdown",
+        "image from a data: URI",
         [DATA_IMAGE],
         "GitHub cannot show an image from a data: URI",
         HOST_THE_IMAGE,
@@ -391,6 +659,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "notion-data-image": RefusedCase(
         "notion",
+        "image from a data: URI",
         [DATA_IMAGE],
         "Notion cannot show an image from a data: URI",
         HOST_THE_IMAGE,
@@ -398,6 +667,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "adf-data-image": RefusedCase(
         "adf",
+        "image from a data: URI",
         [DATA_IMAGE],
         "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
         HOST_THE_IMAGE,
@@ -405,6 +675,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-data-image": RefusedCase(
         "slack",
+        "image from a data: URI",
         [DATA_IMAGE],
         "a Slack canvas cannot show an image from a data: URI",
         "upload the image to Slack and give its permalink",
@@ -412,6 +683,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "notion-data-image-in-a-tab": RefusedCase(
         "notion",
+        "image from a data: URI",
         [
             {
                 "type": "tabs",
@@ -427,6 +699,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-chart-whose-data-table-is-over-300-cells": RefusedCase(
         "slack",
+        "table over 300 cells",
         [{"type": "heading", "text": "Counts"}, LONG_CHART],
         "the chart takes 322 cells as a Slack canvas table, over the 300 such a table can hold",
         "split the chart in two or export it elsewhere",
@@ -434,6 +707,7 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     ),
     "adf-flow-with-a-rich-note-is-refused-as-a-flow": RefusedCase(
         "adf",
+        "flow diagram",
         flow_with_a_note(RICH_NOTES["web-link"]),
         "ADF cannot draw a flow diagram",
         AS_A_NUMBERED_LIST,

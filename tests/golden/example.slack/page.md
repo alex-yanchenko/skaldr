@@ -191,24 +191,24 @@ function pickWinner(a, b) {
 ## At a glance
 
 ::: {.callout}
-📌
-
-* **Matched cleanly**: 8,500 (85.0%)
-* **Needs work**: 1,500 (15.0%)
-:::
-
-::: {.callout}
 💡 **Reading this section**
 
 The cards on the left summarise; the panels below break down count progress and checks side by side.
 :::
 
+::: {.layout}
+::: {.column}
+* **Matched cleanly**: 8,500 (85.0%)
+* **Needs work**: 1,500 (15.0%)
+:::
+::: {.column}
 * **Zone C**: █████████░ 88.0%
-
-&nbsp;
-
+:::
+::: {.column}
 * ✅ Reconciliation gate passes.
 * ⏸️ Awaiting `OPS-1234`.
+:::
+:::
 
 ## Recount Zone C
 

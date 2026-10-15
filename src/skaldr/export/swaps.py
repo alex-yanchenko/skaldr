@@ -4,8 +4,9 @@ from typing import Final
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.capabilities import TARGET_SUBJECTS, Feature, OccurrenceFeature, swaps
-from skaldr.export.tree import Diagram, Figure, Graph, GraphKind, Media, Node, PieChart, XYChart
+from skaldr.export.capabilities import PANES_FEATURES, TARGET_SUBJECTS, Feature, OccurrenceFeature, swaps
+from skaldr.export.glyphs import tab_title_led_by_its_icon
+from skaldr.export.tree import Diagram, Figure, Graph, GraphKind, Media, Node, PieChart, Tabs, Toggle, XYChart
 from skaldr.export_targets import ExportTarget
 from skaldr.models import is_data_uri
 
@@ -60,3 +61,14 @@ def figure_mermaid_draws(node: Diagram, target: ExportTarget) -> Figure:
 def data_table_swapped_in(node: Diagram, target: ExportTarget) -> tuple[Node, ...]:
     require_the_swap(figure_feature(node.figure), target)
     return node.supplement
+
+
+def tabs_as_toggles(node: Tabs) -> tuple[Toggle, ...]:
+    return tuple(
+        Toggle(tab_title_led_by_its_icon(tab), heading_level=None, children=tab.children) for tab in node.tabs
+    )
+
+
+def tabs_swapped_for_toggles(node: Tabs, target: ExportTarget) -> tuple[Toggle, ...]:
+    require_the_swap(PANES_FEATURES[node.kind], target)
+    return tabs_as_toggles(node)

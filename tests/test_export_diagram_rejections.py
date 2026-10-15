@@ -9,7 +9,15 @@ from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export import check as check_module
 from skaldr.export.adf import render_adf
-from skaldr.export.capabilities import CAPABILITIES, TARGET_SUBJECTS, Feature, Rejection, Swap, swaps
+from skaldr.export.capabilities import (
+    CAPABILITIES,
+    PANES_FEATURES,
+    TARGET_SUBJECTS,
+    Feature,
+    Rejection,
+    Swap,
+    swaps,
+)
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
@@ -127,7 +135,7 @@ SWAP_CELLS = [
     pytest.param(feature, target, id=f"{target}-{feature}")
     for feature, cells in CAPABILITIES.items()
     for target, capability in cells.items()
-    if isinstance(capability, Swap)
+    if isinstance(capability, Swap) and feature not in PANES_FEATURES.values()
 ]
 
 

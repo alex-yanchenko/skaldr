@@ -23,7 +23,7 @@ REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
     "markdown": ["range", "image"],
     "notion": ["range", "image"],
     "adf": ["range", "flow", "image", "fan"],
-    "slack": ["range", "flow", "image", "fan", "walkthrough"],
+    "slack": ["range", "flow", "image", "grid", "fan", "walkthrough"],
 }
 
 BlockT = TypeVar("BlockT", bound=AnyBlock)

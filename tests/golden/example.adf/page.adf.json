@@ -5720,7 +5720,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "Floor"
+        "title": "⚠️ Floor"
       },
       "content": [
         {
@@ -5761,7 +5761,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "System"
+        "title": "💡 System"
       },
       "content": [
         {
@@ -5778,7 +5778,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "Vendor"
+        "title": "🛑 Vendor"
       },
       "content": [
         {
@@ -6174,7 +6174,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "a bin that balances"
+        "title": "✅ a bin that balances"
       },
       "content": [
         {
@@ -6250,7 +6250,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "an overflow bin"
+        "title": "✅ an overflow bin"
       },
       "content": [
         {
@@ -6339,7 +6339,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "a bin the token cannot read"
+        "title": "⚠️ a bin the token cannot read"
       },
       "content": [
         {
@@ -6438,7 +6438,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "NW-04, the finding"
+        "title": "⚠️ NW-04, the finding"
       },
       "content": [
         {
@@ -6554,7 +6554,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "NW-02, the control"
+        "title": "✅ NW-02, the control"
       },
       "content": [
         {
@@ -6906,7 +6906,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "with the token"
+        "title": "✅ with the token"
       },
       "content": [
         {
@@ -6982,7 +6982,7 @@
     {
       "type": "expand",
       "attrs": {
-        "title": "once the token has expired"
+        "title": "⚠️ once the token has expired"
       },
       "content": [
         {

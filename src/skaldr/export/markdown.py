@@ -6,7 +6,7 @@ from typing import Final, Literal
 
 from typing_extensions import assert_never
 
-from skaldr.export.glyphs import callout_icon, tab_icon
+from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -246,9 +246,8 @@ class _MarkdownWriter:
         sections: list[Sequence[str]] = []
         tail = after
         for tab in node.tabs:
-            icon = tab_icon(tab.tone)
-            title = self.inline(tab.title)
-            section = self.titled(styled("bold", f"{icon} {title}" if icon else title), tab.children, tail)
+            title = self.inline(tab_title_led_by_its_icon(tab))
+            section = self.titled(styled("bold", title), tab.children, tail)
             if section.lines:
                 sections.append(section.lines)
                 tail = section.tail
