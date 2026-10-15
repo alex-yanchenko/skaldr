@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
+from typing_extensions import Self
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
@@ -84,6 +85,11 @@ class StampValue(BaseModel):
     section_id: str | None = None
     commented: bool = False
     archived: bool = False
+    linked: bool = False
+
+    @classmethod
+    def of(cls, stamp: Stamp) -> Self:
+        return cls(doc_id=stamp.doc_id, section_id=stamp.section_id)
 
     @property
     def stamp(self) -> Stamp | None:
@@ -276,7 +282,7 @@ class JiraTransport:
         parent = request.parent_id or target.where.parent
         if parent is not None:
             fields[PARENT_FIELD] = {"key": parent}
-        stamp = StampValue(doc_id=request.stamp.doc_id, section_id=request.stamp.section_id)
+        stamp = StampValue.of(request.stamp)
         layout = layout_of(sections)
         created = self._client.create_issue(
             fields, [_property(STAMP_PROPERTY, stamp), _property(LAYOUT_PROPERTY, layout)]
@@ -323,7 +329,7 @@ class JiraTransport:
         current = self._stamp(item_id) or StampValue(doc_id=None)
         if current.archived:
             return
-        if current.stamp is not None:
+        if current.linked and current.stamp is not None:
             self._delete_links(item_id, current.stamp, self.read_links(item_id, current.stamp))
         status = _status(self._client.get_issue(item_id, [STATUS_FIELD]))
         if not status.is_done:
@@ -331,10 +337,9 @@ class JiraTransport:
             if not current.commented:
                 self._comment_once(item_id, _archive_comment(current))
                 current = current.model_copy(update={"commented": True})
-                self._client.put_property(item_id, STAMP_PROPERTY, current.model_dump(mode="json"))
+                self._put_stamp(item_id, current)
             self._client.transition(item_id, done.id)
-        archived = current.model_copy(update={"archived": True})
-        self._client.put_property(item_id, STAMP_PROPERTY, archived.model_dump(mode="json"))
+        self._put_stamp(item_id, current.model_copy(update={"archived": True}))
 
     def release_item(self, _item_id: str, _request: Release, /) -> None:
         raise ConnectorError(
@@ -387,16 +392,22 @@ class JiraTransport:
         if stamped is not None and stamped.stamp != request.stamp:
             raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
         sent = {_global_id(item_id, request.stamp, link): link for link in request.sent}
-        if stamped is None:
-            stamp = StampValue(doc_id=request.stamp.doc_id, section_id=request.stamp.section_id)
-            self._client.put_property(item_id, STAMP_PROPERTY, stamp.model_dump(mode="json"))
+        holds_links = bool(request.links)
+        marked = stamped or StampValue.of(request.stamp)
+        if stamped is None or (holds_links and not marked.linked):
+            self._put_stamp(item_id, marked.model_copy(update={"linked": marked.linked or holds_links}))
         self._delete_links(item_id, request.stamp, request.dropped)
         for global_id, link in sent.items():
             self._client.put_remote_link(item_id, global_id, link.url, link.title)
+        if marked.linked and not holds_links:
+            self._put_stamp(item_id, marked.model_copy(update={"linked": False}))
         return request.links
 
     def close(self) -> None:
         self._client.close()
+
+    def _put_stamp(self, item_id: str, stamp: StampValue) -> None:
+        self._client.put_property(item_id, STAMP_PROPERTY, stamp.model_dump(mode="json"))
 
     def _delete_links(self, item_id: str, stamp: Stamp, links: Iterable[ShownLink]) -> None:
         for link in links:

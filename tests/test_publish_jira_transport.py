@@ -92,12 +92,15 @@ RAW_AFTER_CREATE = {
 }
 
 
-def _stamp_value(stamp: Stamp, *, commented: bool = False, archived: bool = False) -> JsonValue:
+def _stamp_value(
+    stamp: Stamp, *, commented: bool = False, archived: bool = False, linked: bool = False
+) -> JsonValue:
     return {
         "doc_id": stamp.doc_id,
         "section_id": stamp.section_id,
         "commented": commented,
         "archived": archived,
+        "linked": linked,
     }
 
 
@@ -979,7 +982,6 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
     assert (jira.calls(), issue.fields["status"], issue.comments, issue.properties["skaldr.stamp"]) == (
         [
             ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
-            ("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
             ("GET", "/rest/api/3/issue/DEMO-1"),
             ("GET", "/rest/api/3/issue/DEMO-1/transitions"),
             ("GET", "/rest/api/3/issue/DEMO-1/comment"),
@@ -1071,6 +1073,7 @@ def test_archiving_an_issue_without_a_stamp_comments_without_a_doc_id_and_stamps
                 "section_id": None,
                 "commented": True,
                 "archived": True,
+                "linked": False,
             }
         },
     )
@@ -1637,6 +1640,9 @@ def test_a_link_is_a_remote_link_whose_global_id_names_the_document_the_item_and
         [
             summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
             summarised_request(
+                "PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp", _stamp_value(stamp, linked=True)
+            ),
+            summarised_request(
                 "POST",
                 "/rest/api/3/issue/DEMO-1/remotelink",
                 {
@@ -1758,6 +1764,41 @@ def test_a_links_write_to_an_issue_of_another_document_is_refused_naming_the_sta
     ):
         transport.write_links(created.item_id, LinksWrite(Stamp("kitchen-rota", None), (HANDBOOK_PAGE,)))
     assert jira.issues["DEMO-1"].remote_links == []
+
+
+def test_removing_the_last_link_clears_the_mark_so_archiving_reads_no_remote_links() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE,)))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (), (HANDBOOK_PAGE,)))
+    marked = jira.issues["DEMO-1"].properties["skaldr.stamp"]
+    jira.forget_requests()
+
+    transport.archive_item(created.item_id)
+
+    assert (marked, [call for call in jira.calls() if call[1].endswith("/remotelink")]) == (
+        _stamp_value(STAMP),
+        [],
+    )
+
+
+def test_a_remote_link_already_gone_when_archiving_deletes_it_does_not_stop_the_archive() -> None:
+    jira = FakeJira()
+    transport, created = _created(jira)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE,)))
+    jira.answer_next(
+        "DELETE",
+        "/rest/api/3/issue/DEMO-1/remotelink",
+        Reply(404, {"errorMessages": ["No remote link with that globalId."]}),
+    )
+
+    transport.archive_item(created.item_id)
+
+    issue = jira.issues["DEMO-1"]
+    assert (issue.fields["status"], issue.properties["skaldr.stamp"]) == (
+        DONE,
+        _stamp_value(STAMP, commented=True, archived=True, linked=True),
+    )
 
 
 def test_archiving_removes_the_links_skaldr_wrote_for_the_item_and_keeps_the_others() -> None:

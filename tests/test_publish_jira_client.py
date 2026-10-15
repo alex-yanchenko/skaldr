@@ -217,6 +217,15 @@ def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:
     )
 
 
+def test_deleting_a_remote_link_jira_no_longer_has_is_not_an_error() -> None:
+    jira = _seeded()
+    global_id = "skaldr:garden-handbook:document:notion:0123456789abcdef0123456789abcdef"
+
+    jira.client().delete_remote_link("DEMO-1", global_id)
+
+    assert jira.calls() == [("DELETE", "/rest/api/3/issue/DEMO-1/remotelink")]
+
+
 def test_a_remote_link_is_posted_by_its_global_id_listed_and_deleted_by_its_global_id() -> None:
     jira = _seeded()
     client = jira.client()

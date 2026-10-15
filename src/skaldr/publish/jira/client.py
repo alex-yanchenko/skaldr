@@ -246,7 +246,13 @@ class JiraClient:
         self._send("POST", issue_path(key, "remotelink"), key=key, body=body)
 
     def delete_remote_link(self, key: str, global_id: str) -> None:
-        self._send("DELETE", issue_path(key, "remotelink"), key=key, params={"globalId": global_id})
+        self._send(
+            "DELETE",
+            issue_path(key, "remotelink"),
+            key=key,
+            params={"globalId": global_id},
+            missing_is_an_answer=True,
+        )
 
     def _send(
         self,
