@@ -17,6 +17,7 @@ DASH_BULLET = re.compile(r"^(\s*)- ")
 MENTION = re.compile(r"!\[\]\(([@#][A-Z0-9]+)\)")
 FENCE = re.compile(r"`{3,}")
 SEPARATOR_CELL = re.compile(r":?-{3,}:?")
+LIST_ITEM = re.compile(r"(?:\*|\d+\.) ")
 
 
 class FakeToken:
@@ -79,6 +80,32 @@ def _shown(block: str) -> str:
     return f"{block}\n" if block.startswith("|") else block
 
 
+def _list_html(section_id: str, block: str) -> str:
+    items = "".join(
+        f"<li id='{section_id}-{index}'>{html.escape(line[2:])}</li>"
+        for index, line in enumerate(block.split("\n"))
+    )
+    return f"<ul id='{section_id}'>{items}</ul>"
+
+
+def _table_html(section_id: str, block: str) -> str:
+    rows = [line.strip("|").split("|") for line in block.split("\n") if line and "---" not in line]
+    shown = "".join(
+        "<tr>" + "".join(f"<td>{html.escape(cell.strip())}</td>" for cell in row) + "</tr>" for row in rows
+    )
+    return f"<table id='{section_id}'><tbody>{shown}</tbody></table>"
+
+
+def _element(section_id: str, block: str) -> str:
+    if block == "---":
+        return f"<hr id='{section_id}'>"
+    if LIST_ITEM.match(block):
+        return _list_html(section_id, block)
+    if block.startswith("|"):
+        return _table_html(section_id, block)
+    return f"<p id='{section_id}'>{html.escape(block)}</p>"
+
+
 @dataclass
 class StoredCanvas:
     title: str
@@ -94,16 +121,17 @@ class StoredCanvas:
     def html(self, canvas_id: str, *, omits_the_last: bool = False) -> str:
         title_id, *block_ids = self.ids(canvas_id)
         elements = [
-            f"<hr id='{section_id}'>" if block == "---" else f"<p id='{section_id}'>{html.escape(block)}</p>"
-            for section_id, block in zip(block_ids, self.blocks, strict=True)
+            _element(section_id, block) for section_id, block in zip(block_ids, self.blocks, strict=True)
         ]
         shown = elements[:-1] if omits_the_last else elements
         return f"<h1 id='{title_id}'>{html.escape(self.title)}</h1>{''.join(shown)}"
 
 
-def _form(request: httpx2.Request) -> dict[str, Any]:
+def form_fields(request: httpx2.Request) -> dict[str, Any]:
     fields = {name: values[0] for name, values in parse_qs(request.content.decode()).items()}
-    return {name: json.loads(value) if value[:1] in "[{" else value for name, value in fields.items()}
+    return {
+        name: json.loads(value) if value.startswith(("[", "{")) else value for name, value in fields.items()
+    }
 
 
 def _ok(**fields: Any) -> httpx2.Response:
@@ -115,13 +143,22 @@ def _refused(error: str) -> httpx2.Response:
 
 
 @dataclass
+class _Failure:
+    method: str
+    error: str
+    times: int
+    passed_first: int
+
+
+@dataclass
 class InMemorySlack:
     canvases: dict[str, StoredCanvas] = field(default_factory=dict[str, StoredCanvas])
     messages: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     requests: list[tuple[str, dict[str, Any]]] = field(default_factory=list[tuple[str, dict[str, Any]]])
     slept: list[float] = field(default_factory=list[float])
-    failures: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    failures: list[_Failure] = field(default_factory=list[_Failure])
     html_lists_one_section_less_after: int | None = None
+    retry_after_next: str | None = None
     made: int = 0
     html_reads: int = 0
 
@@ -156,8 +193,11 @@ class InMemorySlack:
     def markdown_of(self, canvas_id: str) -> str:
         return self.canvases[canvas_id].markdown()
 
-    def fail_next(self, method: str, error: str) -> None:
-        self.failures.append((method, error))
+    def fail_next(self, method: str, error: str, *, times: int = 1, after: int = 0) -> None:
+        self.failures.append(_Failure(method, error, times, after))
+
+    def answer_too_many_requests_next(self, *, retry_after: str) -> None:
+        self.retry_after_next = retry_after
 
     def writes(self) -> list[tuple[str, str]]:
         return [
@@ -177,14 +217,23 @@ class InMemorySlack:
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         method = request.url.path.removeprefix("/api/")
-        form = _form(request)
+        form = form_fields(request)
         self.requests.append((method, form))
         if request.headers.get("authorization") != f"Bearer {SLACK_USER_TOKEN}":
             return _refused("invalid_auth")
-        failure = next((failure for failure in self.failures if failure[0] == method), None)
-        if failure is not None:
-            self.failures.remove(failure)
-            return _refused(failure[1])
+        if self.retry_after_next is not None:
+            retry_after, self.retry_after_next = self.retry_after_next, None
+            return httpx2.Response(
+                429, json={"ok": False, "error": "ratelimited"}, headers={"Retry-After": retry_after}
+            )
+        failure = next((failure for failure in self.failures if failure.method == method), None)
+        if failure is not None and failure.passed_first > 0:
+            failure.passed_first -= 1
+        elif failure is not None:
+            failure.times -= 1
+            if failure.times == 0:
+                self.failures.remove(failure)
+            return _refused(failure.error)
         return self._route(method, form)
 
     def _route(self, method: str, form: dict[str, Any]) -> httpx2.Response:
@@ -231,6 +280,8 @@ class InMemorySlack:
             del canvas.blocks[at]
         elif operation == "replace" and at is None:
             canvas.blocks = added
+        elif operation == "replace" and at is not None and at >= 0:
+            canvas.blocks[at : at + 1] = added
         elif operation == "rename":
             canvas.title = change["title_content"]["markdown"]
         else:

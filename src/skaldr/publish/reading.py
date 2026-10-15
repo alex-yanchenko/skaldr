@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
@@ -96,19 +97,45 @@ def _has_content(remote: RemoteItem) -> bool:
     )
 
 
+def _lines_held(text: str | None) -> Counter[str]:
+    return Counter(line for line in (text or "").split("\n") if line.strip())
+
+
+def _holds_only_what_skaldr_wrote(current: str | None, published: str | None, expected: str | None) -> bool:
+    return not _lines_held(current) - (_lines_held(published) + _lines_held(expected))
+
+
+def _left_by_the_interrupted_write(
+    item: PublishedItem, remote: RemoteItem, parts: Sequence[Part], transport: Transport
+) -> list[Part]:
+    if item.writing is None:
+        return []
+    saved = transport.comparable_form(item.remote)
+    expected = transport.comparable_form(item.writing.rendered)
+    return [
+        part
+        for part in parts
+        if _holds_only_what_skaldr_wrote(
+            part_text(remote.comparable, part), part_text(saved, part), part_text(expected, part)
+        )
+    ]
+
+
 def _settled(
     item: PublishedItem, remote: RemoteItem, edited: tuple[Part, ...], transport: Transport
 ) -> tuple[PublishedItem, tuple[Part, ...]]:
     if item.writing is None:
         return item, edited
     expected = transport.comparable_form(item.writing.rendered)
-    landed = [
-        part.part
-        for part in item.writing.parts
-        if part.part in edited and part_text(remote.comparable, part.part) == part_text(expected, part.part)
-    ]
-    rest = tuple(part for part in edited if part not in landed)
-    rendered = with_parts(item.rendered, item.writing.rendered, landed)
+    written = [part.part for part in item.writing.parts if part.part in edited]
+    landed = [part for part in written if part_text(remote.comparable, part) == part_text(expected, part)]
+    half_written = _left_by_the_interrupted_write(
+        item, remote, [part for part in written if part not in landed], transport
+    )
+    rest = tuple(part for part in edited if part not in landed and part not in half_written)
+    rendered = with_parts(
+        with_parts(item.rendered, item.writing.rendered, landed), remote.comparable, half_written
+    )
     if not rest:
         settled = item.model_copy(
             update={
@@ -125,7 +152,7 @@ def _settled(
     settled = item.model_copy(
         update={
             "rendered": rendered,
-            "remote": with_parts(item.remote, remote.comparable, landed),
+            "remote": with_parts(item.remote, remote.comparable, [*landed, *half_written]),
             "writing": still_writing if landed else item.writing,
         }
     )

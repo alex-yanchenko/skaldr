@@ -291,6 +291,21 @@ def test_an_archived_canvas_holds_only_the_archived_line(markdown: str, archived
     assert keyed_canvas(markdown, LAYOUT).archived is archived
 
 
+@pytest.mark.parametrize(
+    ("keys", "position"),
+    [
+        pytest.param(["intro", "tools"], 4, id="after-the-last-block-of-the-key-before"),
+        pytest.param(["intro", "tools", "harvest"], 4, id="a-key-the-canvas-does-not-hold-is-passed-over"),
+        pytest.param(["harvest", "pruning"], 1, id="no-key-held-goes-after-the-title"),
+        pytest.param([], 1, id="first-goes-after-the-title"),
+    ],
+)
+def test_a_section_goes_after_the_last_block_of_the_nearest_key_before_it_that_the_canvas_holds(
+    keys: list[str], position: int
+) -> None:
+    assert keyed_canvas(STORED, LAYOUT).position_after(keys) == position
+
+
 def test_the_archived_line_names_the_document() -> None:
     assert (archived_line("garden-handbook"), archived_line(None)) == (
         "skaldr archived this canvas: the document garden-handbook no longer publishes here.",

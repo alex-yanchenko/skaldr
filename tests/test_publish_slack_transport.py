@@ -182,7 +182,7 @@ def test_a_canvas_slack_does_not_have_is_not_found(item_id: str, message: str) -
         InMemorySlack().transport().read_item(item_id, CONTENT)
 
 
-def test_a_section_is_replaced_by_deleting_its_blocks_and_inserting_its_new_text_with_fresh_ids() -> None:
+def test_a_section_is_replaced_by_inserting_its_new_text_and_then_deleting_its_old_blocks() -> None:
     slack = InMemorySlack()
     created = _created(slack)
     raw = dict(created.raw_sections)
@@ -202,17 +202,191 @@ def test_a_section_is_replaced_by_deleting_its_blocks_and_inserting_its_new_text
             "canvases.getContent markdown",
         ],
         [
-            {"operation": "delete", "section_id": _section(CANVAS, 0, 5)},
-            {"operation": "delete", "section_id": _section(CANVAS, 1, 4)},
             {
                 "operation": "insert_after",
-                "section_id": _section(CANVAS, 2, 3),
+                "section_id": _section(CANVAS, 0, 3),
                 "document_content": {"type": "markdown", "markdown": "## Planting\n\nSow in May.\n"},
             },
+            {"operation": "delete", "section_id": _section(CANVAS, 1, 7)},
+            {"operation": "delete", "section_id": _section(CANVAS, 2, 6)},
         ],
         STORED.replace("Sow in spring.", "Sow in May."),
         {**COMPARABLE_SECTIONS, "planting": "## Planting\n\nSow in May.\n"},
     )
+
+
+LISTS = ItemContent(title=TITLE_TEXT, sections={"intro": "Welcome.\n", "tools": "- Spade.\n- Rake.\n"})
+TABLES = ItemContent(
+    title=TITLE_TEXT,
+    sections={"intro": "Welcome.\n", "beds": "| Bed | Crop |\n| --- | --- |\n| North | Beans |\n"},
+)
+
+
+@pytest.mark.parametrize(
+    ("content", "key", "text", "operations", "stored"),
+    [
+        pytest.param(
+            LISTS,
+            "tools",
+            "- Spade.\n- Hoe.\n",
+            ["delete", "insert_after"],
+            f"# {TITLE_TEXT}\n\nWelcome.\n\n* Spade.\n* Hoe.\n\n{STAMP_LINE}\n",
+            id="a-list-beside-its-old-list-goes-in-after-the-delete",
+        ),
+        pytest.param(
+            TABLES,
+            "beds",
+            "| Bed | Crop |\n| --- | --- |\n| South | Peas |\n",
+            ["insert_after", "delete"],
+            f"# {TITLE_TEXT}\n\nWelcome.\n\n|Bed|Crop|\n|  ---  |  ---  |\n|South|Peas|\n\n\n{STAMP_LINE}\n",
+            id="a-table-goes-in-before-the-delete",
+        ),
+    ],
+)
+def test_a_list_or_table_section_is_replaced_through_the_section_list(
+    content: ItemContent, key: str, text: str, operations: list[str], stored: str
+) -> None:
+    slack = InMemorySlack()
+    created = slack.transport().create_item(NewItem(UNLINKED, STAMP, content))
+    slack.forget_requests()
+    raw = dict(created.raw_sections)
+
+    slack.transport().write_section(
+        CANVAS, SectionRequest(ReplaceSection(key, raw[key], text, "intro"), raw, STAMP)
+    )
+
+    assert ([edit["operation"] for edit in _edits(slack)], slack.markdown_of(CANVAS)) == (operations, stored)
+
+
+def test_an_edit_slack_turns_away_while_someone_edits_is_sent_again() -> None:
+    slack = InMemorySlack()
+    created = _created(slack)
+    raw = dict(created.raw_sections)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=2)
+
+    slack.transport().write_section(CANVAS, _removing_tools(raw))
+
+    assert (slack.slept, slack.markdown_of(CANVAS)) == (
+        [1.0, 2.0],
+        f"# {TITLE_TEXT}\n\nWelcome to the garden.\n\n## Planting\n\nSow in spring.\n\n{STAMP_LINE}\n",
+    )
+
+
+def test_a_canvas_slack_rate_limits_is_read_again_after_the_wait_slack_asks_for() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    slack.answer_too_many_requests_next(retry_after="3")
+
+    read = slack.transport().read_item(CANVAS, CONTENT)
+
+    assert (slack.slept, read.stamp) == ([3.0], STAMP)
+
+
+PARTLY_WRITTEN_WHILE_LOCKED = (
+    f"Slack canvas {CANVAS} is partly written, so publish again to finish: Slack could not change canvas "
+    f"{CANVAS}: someone is editing it (canvas_editing_locked) after 5 attempts; publish again in a moment"
+)
+
+
+def test_a_failure_after_the_first_edit_of_a_section_write_says_the_canvas_is_partly_written() -> None:
+    slack = InMemorySlack()
+    created = _created(slack)
+    raw = dict(created.raw_sections)
+    change = ReplaceSection("planting", raw["planting"], "## Planting\n\nSow in May.\n", "tools")
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, after=1)
+
+    with pytest.raises(ConnectorError) as raised:
+        slack.transport().write_section(CANVAS, SectionRequest(change, raw, STAMP))
+
+    assert (type(raised.value), str(raised.value), slack.markdown_of(CANVAS)) == (
+        ConnectorError,
+        PARTLY_WRITTEN_WHILE_LOCKED,
+        STORED.replace("## Planting", "## Planting\n\nSow in May.\n\n## Planting"),
+    )
+
+
+def test_a_failure_after_the_first_edit_of_a_content_write_says_the_canvas_is_partly_written() -> None:
+    slack = InMemorySlack()
+    created = _created(slack)
+    slack.fail_next("canvases.edit", "canvas_too_large", after=1)
+
+    with pytest.raises(ConnectorError) as raised:
+        slack.transport().write_content(
+            CANVAS, ContentWrite({"tools": "Spade.\n", "planting": "Sow.\n"}, created.raw_sections, STAMP)
+        )
+
+    assert (type(raised.value), str(raised.value), slack.markdown_of(CANVAS)) == (
+        ConnectorError,
+        f"Slack canvas {CANVAS} is partly written, so publish again to finish: Slack could not change canvas "
+        f"{CANVAS}: the canvas would be larger than Slack allows (canvas_too_large); split the document "
+        "further with `split`, or shorten it",
+        STORED.replace("Welcome", "Spade.\n\nSow.\n\nWelcome"),
+    )
+
+
+def test_a_failure_after_the_first_delete_of_a_release_says_the_canvas_is_partly_written() -> None:
+    slack = InMemorySlack()
+    created = _created(slack)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, after=1)
+    transport = slack.transport()
+    read = transport.read_item(CANVAS, CONTENT)
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.release_item(CANVAS, Release(read.raw_sections, ()))
+
+    assert (type(raised.value), str(raised.value), slack.markdown_of(CANVAS), created.stamp) == (
+        ConnectorError,
+        PARTLY_WRITTEN_WHILE_LOCKED,
+        STORED.replace(f"\n\n{STAMP_LINE}", ""),
+        STAMP,
+    )
+
+
+def test_a_failure_on_the_first_edit_writes_nothing_and_says_so() -> None:
+    slack = InMemorySlack()
+    created = _created(slack)
+    raw = dict(created.raw_sections)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5)
+
+    with pytest.raises(WriteRejectedError) as raised:
+        slack.transport().write_section(CANVAS, _removing_tools(raw))
+
+    assert (str(raised.value), slack.markdown_of(CANVAS)) == (
+        f"Slack could not change canvas {CANVAS}: someone is editing it (canvas_editing_locked) after 5 "
+        "attempts; publish again in a moment",
+        STORED,
+    )
+
+
+def test_a_rename_that_fails_after_writing_into_a_canvas_says_the_write_is_unfinished() -> None:
+    slack = InMemorySlack()
+    canvas_id = slack.add_canvas("Blank canvas")
+    transport = slack.transport()
+    read = transport.read_item(canvas_id, ItemContent(title=""))
+    slack.fail_next("canvases.edit", "invalid_title", after=1)
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.create_item(
+            NewItem(UNLINKED, STAMP, CONTENT, into_id=canvas_id, into_raw_sections=read.raw_sections)
+        )
+
+    assert (type(raised.value), str(raised.value), slack.markdown_of(canvas_id)) == (
+        ConnectorError,
+        f'skaldr wrote Slack canvas {canvas_id} for "{TITLE_TEXT}" but could not finish writing it: Slack '
+        f"refused to change canvas {canvas_id} (invalid_title)",
+        STORED.replace(TITLE_TEXT, "Blank canvas", 1),
+    )
+
+
+def test_a_stamp_slack_refuses_to_replace_is_left_as_it_was() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5)
+
+    with pytest.raises(WriteRejectedError):
+        slack.transport().write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,)))
+
+    assert slack.markdown_of(CANVAS) == STORED
 
 
 def test_a_section_added_first_goes_after_the_title() -> None:
@@ -355,7 +529,7 @@ def test_a_content_write_replaces_every_block_between_the_title_and_the_stamp() 
     )
 
     assert ([edit["operation"] for edit in _edits(slack)], slack.markdown_of(CANVAS)) == (
-        ["delete"] * 5 + ["insert_after"],
+        ["insert_after"] + ["delete"] * 5,
         f"# {TITLE_TEXT}\n\nSpade.\n\nSow.\n\n{STAMP_LINE}\n",
     )
 
@@ -513,15 +687,19 @@ def test_a_canvas_is_linked_at_its_workspace_address_and_the_workspace_is_asked_
     )
 
 
-def test_links_rewrite_the_stamp_block_in_place() -> None:
+def test_links_rewrite_the_stamp_block_in_place_with_one_replace() -> None:
     slack = InMemorySlack()
     _created(slack)
 
     written = slack.transport().write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,)))
 
-    assert (written, [edit["operation"] for edit in _edits(slack)], slack.markdown_of(CANVAS)) == (
+    assert (
+        written,
+        [(edit["operation"], edit["section_id"]) for edit in _edits(slack)],
+        slack.markdown_of(CANVAS),
+    ) == (
         (DEMO_12,),
-        ["delete", "insert_after"],
+        [("replace", _section(CANVAS, 0, 6))],
         STORED.replace(
             STAMP_LINE, f"{STAMP_LINE} · Jira [DEMO-12](https://example.atlassian.net/browse/DEMO-12)"
         ),

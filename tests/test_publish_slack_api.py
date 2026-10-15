@@ -1,7 +1,5 @@
-import json
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import parse_qs
 
 import httpx2
 import pytest
@@ -10,20 +8,10 @@ from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.slack.api import SlackApi
 from skaldr.publish_block.target import JsonFields
 from tests.factories.auth_factory import SLACK_USER_TOKEN
+from tests.factories.slack_factory import FakeToken, form_fields
 
 CANVAS = "F0EXAMPLE1"
 Answer = tuple[int, Any] | tuple[int, Any, dict[str, str]] | Exception
-
-
-class StaticToken:
-    @property
-    def access_token(self) -> str:
-        return SLACK_USER_TOKEN
-
-
-def _form(request: httpx2.Request) -> dict[str, Any]:
-    fields = {name: values[0] for name, values in parse_qs(request.content.decode()).items()}
-    return {name: json.loads(value) if value[:1] in "[{" else value for name, value in fields.items()}
 
 
 class Scripted:
@@ -43,11 +31,11 @@ class Scripted:
         return httpx2.Response(status, json=body, headers=headers[0] if headers else None)
 
     def api(self) -> SlackApi:
-        return SlackApi(StaticToken(), transport=httpx2.MockTransport(self.handle), sleep=self.slept.append)
+        return SlackApi(FakeToken(), transport=httpx2.MockTransport(self.handle), sleep=self.slept.append)
 
     def sent(self) -> list[tuple[str, str, str | None, dict[str, Any]]]:
         return [
-            (request.method, str(request.url), request.headers.get("authorization"), _form(request))
+            (request.method, str(request.url), request.headers.get("authorization"), form_fields(request))
             for request in self.requests
         ]
 

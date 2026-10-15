@@ -21,6 +21,7 @@ ARCHIVED_PATTERN: Final = re.compile(
 FENCE_OPENING: Final = re.compile(r"(`{3,}|~{3,})")
 CONTAINER_OPENING: Final = re.compile(rf"{CANVAS_FENCE}\s*\{{")
 BULLET: Final = re.compile(r"^(\s*)[-+] ")
+LIST_ITEM: Final = re.compile(r"\s*(?:[-+*]|\d+[.)]) ")
 HARD_BREAK: Final = re.compile(r"(?<!\\)\\$")
 MENTION: Final = re.compile(r"!\[\]\(([@#][A-Z0-9]+)\)")
 UNESCAPED_PIPE: Final = re.compile(r"(?<!\\)\|")
@@ -35,6 +36,10 @@ DOCUMENT_ELEMENTS: Final = frozenset({"html", "body"})
 HEAD_ELEMENT: Final = "head"
 
 BlockRole = Literal["title", "published", "added", "blank", "stamp", "below"]
+
+
+def is_a_list(block: str) -> bool:
+    return LIST_ITEM.match(block) is not None
 
 
 def archived_line(doc_id: str | None) -> str:
@@ -181,6 +186,13 @@ class KeyedCanvas:
         return [
             index for index in range(self.content_start, self.content_end) if self.blocks[index].key == key
         ]
+
+    def position_after(self, keys: Sequence[str]) -> int:
+        for key in reversed(keys):
+            held = self.positions_of(key)
+            if held:
+                return held[-1] + 1
+        return self.content_start
 
 
 def _is_title(raw: str) -> bool:

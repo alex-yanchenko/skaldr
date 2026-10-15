@@ -154,23 +154,51 @@ def test_publishing_creates_the_document_and_its_split_canvas_links_both_and_pub
     ) == (DOCUMENT_STAMP, TOOLS_STAMP, "Tools")
 
 
-def test_a_changed_section_is_deleted_and_inserted_again(tmp_path: Path) -> None:
-    slack = InMemorySlack()
-    path = _published(tmp_path, slack)
+def _planting_rewritten(tmp_path: Path) -> None:
     write_garden_report(
         tmp_path,
         publish=_slack_publish(split=["tools"]),
         blocks=make_garden_blocks(planting="Sow in late spring."),
     )
+
+
+def test_a_changed_section_is_inserted_again_and_its_old_blocks_deleted(tmp_path: Path) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    _planting_rewritten(tmp_path)
     slack.forget_requests()
 
     exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
 
     assert (exit_code, slack.writes(), "Sow in late spring." in slack.markdown_of(DOCUMENT_CANVAS)) == (
         0,
-        [("canvases.edit", "delete"), ("canvases.edit", "delete"), ("canvases.edit", "insert_after")],
+        [("canvases.edit", "insert_after"), ("canvases.edit", "delete"), ("canvases.edit", "delete")],
         True,
     )
+
+
+def test_a_section_write_that_stopped_halfway_is_finished_by_the_next_publish(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    _planting_rewritten(tmp_path)
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, after=1)
+    capsys.readouterr()
+
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    halfway = slack.markdown_of(DOCUMENT_CANVAS)
+    error = capsys.readouterr().err
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (stopped, finished, halfway.count("## Planting"), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        0,
+        2,
+        "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n## Planting\n\n"
+        f"Sow in late spring.\n\n{DOCUMENT_STAMP}\n",
+    )
+    assert error.startswith(f"error: Slack canvas {DOCUMENT_CANVAS} is partly written, so publish again")
 
 
 def test_an_edit_made_in_slack_stops_the_publish_until_it_is_overwritten(

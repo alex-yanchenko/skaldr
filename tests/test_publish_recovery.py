@@ -207,3 +207,60 @@ def test_an_adoption_that_wrote_the_content_but_not_the_stamp_is_written_again(t
         [("create", "Garden handbook", "", NOTION_PAGE_ID)],
         Stamp(DOC_ID, None),
     )
+
+
+def _write_of_planting_interrupted(tmp_path: Path, transport: FakeTransport) -> Path:
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    _publish(path, transport)
+    write_garden_report(
+        tmp_path, publish=make_notion_publish(), blocks=make_garden_blocks(planting="Sow in May.")
+    )
+    transport.lose_the_next_write()
+    _interrupted(path, transport, LOST_WRITE)
+    return path
+
+
+@pytest.mark.parametrize(
+    "left_behind",
+    [
+        pytest.param("## Planting\nSow in May.\n## Planting\n", id="new-text-and-part-of-the-old"),
+        pytest.param("## Planting\n", id="part-of-the-old"),
+        pytest.param("", id="nothing"),
+    ],
+)
+def test_a_section_an_interrupted_write_left_holding_only_text_skaldr_wrote_is_written_again(
+    tmp_path: Path, left_behind: str
+) -> None:
+    transport = FakeTransport()
+    path = _write_of_planting_interrupted(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", left_behind)
+
+    outcome = _publish(path, transport)
+
+    assert (outcome, transport.items["page-1"].raw_sections["planting"]) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        "## Planting\nSow in May.\n",
+    )
+
+
+def test_a_line_nobody_published_in_a_section_an_interrupted_write_left_is_an_edit(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _write_of_planting_interrupted(tmp_path, transport)
+    transport.edit_section_by_hand("page-1", "planting", "## Planting\nSow in May.\nWater daily.\n")
+
+    outcome = _publish(path, transport)
+
+    assert outcome == Refused(
+        (
+            RemoteEdit(
+                DOCUMENT,
+                section_part("planting"),
+                "blocks[2]",
+                "## Planting\nSow in spring.\n",
+                "## Planting\nSow in May.\nWater daily.\n",
+                None,
+                None,
+            ),
+        ),
+        "edited",
+    )

@@ -19,6 +19,7 @@ from skaldr.publish.slack.canvas_markdown import (
     canvas_markdown_of,
     canvas_stamp_line,
     comparable_text,
+    is_a_list,
     keyed_canvas,
     section_ids,
 )
@@ -89,8 +90,32 @@ class _Edits:
         self._send({"operation": "insert_at_end", "document_content": markdown_content(markdown)})
         self._blocks += len(canvas_blocks(markdown))
 
+    def replace(self, position: int, markdown: str) -> None:
+        ids = self._section_ids()
+        content = markdown_content(markdown)
+        self._send({"operation": "replace", "section_id": ids[position], "document_content": content})
+        self._blocks += len(canvas_blocks(markdown)) - 1
+
+    def rewrite(self, keyed: KeyedCanvas, old: Sequence[int], at: int, markdown: str) -> None:
+        added = canvas_blocks(markdown)
+        if added and not _lists_would_meet(keyed, old, at, added):
+            self.insert(at, markdown)
+            for position in reversed(old):
+                self.delete(position + len(added) if position >= at else position)
+            return
+        for position in reversed(old):
+            self.delete(position)
+        self.insert(at - sum(position < at for position in old), markdown)
+
     def _send(self, change: JsonFields) -> None:
-        self._api.edit_canvas(self._canvas_id, change)
+        try:
+            self._api.edit_canvas(self._canvas_id, change)
+        except ConnectorError as exc:
+            if self._sent == 0:
+                raise
+            raise ConnectorError(
+                f"Slack canvas {self._canvas_id} is partly written, so publish again to finish: {exc}"
+            ) from exc
         self._sent += 1
 
     def _section_ids(self) -> list[str]:
@@ -107,13 +132,10 @@ class _Edits:
         raise ConnectorError(f"{mismatch}; the canvas is partly written, so publish again to finish")
 
 
-def _insertion_position(keyed: KeyedCanvas, gone: Sequence[int], order: Sequence[str], key: str) -> int:
-    remaining = [block for index, block in enumerate(keyed.blocks) if index not in gone]
-    at = order.index(key)
-    if at == 0:
-        return keyed.content_start
-    held = [index for index, block in enumerate(remaining) if block.key == order[at - 1]]
-    return held[-1] + 1 if held else keyed.content_start
+def _lists_would_meet(keyed: KeyedCanvas, old: Sequence[int], at: int, added: Sequence[str]) -> bool:
+    meets_the_block_before = at - 1 in old and is_a_list(keyed.blocks[at - 1].raw) and is_a_list(added[0])
+    meets_the_block_after = at in old and is_a_list(keyed.blocks[at].raw) and is_a_list(added[-1])
+    return meets_the_block_before or meets_the_block_after
 
 
 class SlackTransport:
@@ -158,13 +180,13 @@ class SlackTransport:
         text = None if isinstance(change, RemoveSection) else change.text
         follows = None if isinstance(change, RemoveSection) else change.follows
         after = placed_section(current, change.key, text, follows)
+        old = keyed.positions_of(change.key) if change.key in current else []
+        order = list(after)
+        before = order[: order.index(change.key)] if change.key in after else []
         edits = _Edits(self._api, item_id, len(keyed.blocks))
-        gone = keyed.positions_of(change.key) if change.key in current else []
-        for position in reversed(gone):
-            edits.delete(position)
-        if text is not None:
-            position = _insertion_position(keyed, gone, list(after), change.key)
-            edits.insert(position, canvas_markdown_of([text]))
+        edits.rewrite(
+            keyed, old, keyed.position_after(before), "" if text is None else canvas_markdown_of([text])
+        )
         if keyed.stamp is None:
             edits.append(canvas_stamp_line(request.stamp))
         return self._written_with(item_id, after)
@@ -172,9 +194,8 @@ class SlackTransport:
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed = self._unchanged_since_read(item_id, request.raw_sections)
         edits = _Edits(self._api, item_id, len(keyed.blocks))
-        for position in reversed(range(keyed.content_start, keyed.content_end)):
-            edits.delete(position)
-        edits.insert(keyed.content_start, canvas_markdown_of(list(request.sections.values())))
+        old = range(keyed.content_start, keyed.content_end)
+        edits.rewrite(keyed, old, keyed.content_start, canvas_markdown_of(list(request.sections.values())))
         if keyed.stamp is None:
             edits.append(canvas_stamp_line(request.stamp))
         return self._written_with(item_id, request.sections)
@@ -253,8 +274,7 @@ class SlackTransport:
         if keyed.stamp_at is None:
             edits.append(line)
         else:
-            edits.delete(keyed.stamp_at)
-            edits.insert(keyed.stamp_at, line)
+            edits.replace(keyed.stamp_at, line)
         return keyed_canvas(self._markdown(item_id), layout).links
 
     def close(self) -> None:
