@@ -301,6 +301,30 @@ Zone C holds most of the mislabeled bins, so it is recounted first.
 		- A pallet scanned in two aisles counts once, under its first aisle.
 	</details>
 ## Counts at a glance
+**Clean vs discrepant units by zone**
+<table fit-page-width="true" header-row="true">
+	<tr>
+		<td>**Series**</td>
+		<td>**Zone A**</td>
+		<td>**Zone B**</td>
+		<td>**Zone C**</td>
+		<td>**Zone D**</td>
+	</tr>
+	<tr>
+		<td color="green_bg">Clean</td>
+		<td>2,100</td>
+		<td>1,850</td>
+		<td>2,320</td>
+		<td>2,230</td>
+	</tr>
+	<tr>
+		<td color="red_bg">Discrepant</td>
+		<td>180</td>
+		<td>340</td>
+		<td>90</td>
+		<td>210</td>
+	</tr>
+</table>
 **Open discrepancies over the count window**
 ```mermaid
 xychart-beta

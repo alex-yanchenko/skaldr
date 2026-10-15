@@ -281,6 +281,13 @@ One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reaso
 
 ## Counts at a glance
 
+**Clean vs discrepant units by zone**
+
+| Series | Zone A | Zone B | Zone C | Zone D |
+| --- | --- | --- | --- | --- |
+| Clean | 2,100 | 1,850 | 2,320 | 2,230 |
+| Discrepant | 180 | 340 | 90 | 210 |
+
 **Open discrepancies over the count window**
 
 ```mermaid

@@ -89,17 +89,23 @@ def _donut(block: Chart) -> Diagram:
     return Diagram(pie, (_donut_table(block),))
 
 
+def _stack_totals(block: Chart) -> tuple[TableRow, ...]:
+    if not block.stacked or len(block.series) < 2:
+        return ()
+    stacks = (sum(values) for values in zip(*(series.values for series in block.series), strict=True))
+    return (TableRow(plain_cells(TOTAL_LABEL, *map(compute.fmt, stacks)), emphasis="total"),)
+
+
 def _xy_chart(block: Chart, mark: XYChartMark) -> Diagram:
-    table = TableNode(
-        plain_cells(SERIES_COLUMN, *block.categories),
-        tuple(
-            TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
-            for series in block.series
-        ),
-        authored_as="chart",
+    rows = tuple(
+        TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), series.tone)
+        for series in block.series
     )
-    series = tuple(tuple(series.values) for series in block.series)
-    return Diagram(XYChart(mark, tuple(block.categories), series, block.stacked), (table,))
+    table = TableNode(
+        plain_cells(SERIES_COLUMN, *block.categories), (*rows, *_stack_totals(block)), authored_as="chart"
+    )
+    values = tuple(tuple(series.values) for series in block.series)
+    return Diagram(XYChart(mark, tuple(block.categories), values, block.stacked), (table,))
 
 
 def lower_chart(block: Chart) -> list[Node]:

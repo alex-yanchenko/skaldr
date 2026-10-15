@@ -2,6 +2,7 @@ from typing import get_args
 
 import pytest
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
 from skaldr.richtext import Plain, Styled
@@ -95,16 +96,41 @@ def test_a_pie_quotes_its_labels_and_writes_values_without_an_exponent() -> None
 
 
 def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> None:
-    chart = XYChart("line", ('Q "1"', "Q2"), ((1, 2.5), (1e16, 4)), stacked=False)
+    chart = XYChart("line", ('Q "1"', "Q2"), ((1e16, 2.5),), stacked=False)
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
         "xychart-beta",
         '    x-axis ["Q #quot;1#quot;", "Q2"]',
-        "    line [1, 2.5]",
-        "    line [10000000000000000, 4]",
+        "    line [10000000000000000, 2.5]",
         "```",
     ]
+
+
+def test_a_stacked_xy_chart_with_one_series_is_drawn_as_an_unstacked_one() -> None:
+    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=True)
+
+    assert mermaid_fence_lines(chart) == [
+        "```mermaid",
+        "xychart-beta",
+        '    x-axis ["Q1", "Q2"]',
+        "    bar [1, 2]",
+        "```",
+    ]
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_an_xy_chart_with_several_series_is_an_internal_error_since_the_export_swaps_it(
+    stacked: bool,
+) -> None:
+    chart = XYChart("bar", ("Q1",), ((1,), (2,)), stacked=stacked)
+
+    with pytest.raises(ExportInvariantError) as raised:
+        mermaid_fence_lines(chart)
+
+    assert str(raised.value) == (
+        "a Mermaid xy chart cannot tell several series apart; the export should have written its data table"
+    )
 
 
 def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:

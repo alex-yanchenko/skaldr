@@ -621,9 +621,10 @@ per category); `donut` takes `slices` (each `{label, value, tone?}`). `tone` is 
 colours any unset series/slice from the palette so they stay distinct.
 
 The GitHub-flavored and Notion exports draw a donut, or a bar or line chart with one series, as a
-Mermaid chart over its data table, and refuse a chart with several series or stacked bars, since a
-Mermaid chart has no legend and no stacking. The ADF and Slack canvas exports write every chart as
-its data table, which holds every value the chart draws.
+Mermaid chart over its data table. A Mermaid chart has no legend, so they write a chart with several
+series as its data table alone. The ADF and Slack canvas exports write every chart as its data table.
+The table holds every value the chart draws, and for stacked bars with several series a `Total` row
+holds each category's stack.
 
 ```yaml
 - type: chart
@@ -1458,8 +1459,8 @@ case, where the page is shared as a URL an agent later has to read back.
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it can't show | the same |
-| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table | the same |
+| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it cannot show | the same |
+| `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series, stacked or not, is a Mermaid xy chart over its data table; a chart with several series is its data table alone, with a `Total` row of each category's stack for stacked bars | the same |
 | `callout`, `note`, a toned `grid` cell | a quote led by an icon | a native callout |
 | `panel` | a quote led by its bold title and no icon, as on the page | a native callout |
 | a list inside a set-apart body | a Markdown list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number | a native list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number, since a Notion cell or quote holds only text; a list in a muted `text` body keeps the normal text colour |
@@ -1500,7 +1501,6 @@ The GitHub-flavored and Notion exports refuse:
 
 - a `range`, since neither can draw a range bar; use a `meter` or a `table`.
 - a `flow` or `fan` step whose `note` holds a link, citation, inline math, subscript or superscript, since a Mermaid label holds plain text only; write the note as plain text and put the rest in a text block after the diagram.
-- a bar or line `chart` with several series, or a `stacked` bar chart, since a Mermaid chart has no legend and no stacking; draw one chart per series, or write the values in a `table`.
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then a `Cover image` link when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
@@ -1520,7 +1520,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
 | a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
 | `grid` | its cells one after another |
-| `chart` | its data table in place of the chart, since ADF cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, stacked or not |
+| `chart` | its data table in place of the chart, since ADF cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, and for stacked bars with several series a bold `Total` row of each category's stack |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
 | a table of contents | nothing, because a Jira heading has no anchor for an entry to link to |
@@ -1551,7 +1551,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and one nested list; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text when it comes before the item's nested list. A list item holding anything else, such as a paragraph after its nested list, a code block, table, quote, callout, image, media, diagram, math block, heading, toggle, tabs, divider or a second nested list, fails the export with an error naming the YAML path of the block that holds it, since a canvas could only show it after the whole list, away from its item. A canvas joins two lists in a row into one, so a paragraph holding `&nbsp;`, which the canvas stores as a single no-break space, keeps them apart, such as a `fact_strip` right before a `cards` block. A canvas numbers every list from 1, so a numbered list that starts at another number fails the export with an error naming its YAML path |
 | `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`; a `panel` has no icon, as on the page, so its body starts with its bold title. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
 | `code` | a fenced block with its language; a `math` block is a fenced block in `latex`, since a canvas has no math |
-| `chart` | its data table in place of the chart, since a canvas cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, stacked or not |
+| `chart` | its data table in place of the chart, since a canvas cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, and for stacked bars with several series a bold `Total` row of each category's stack |
 | `quote` | quoted lines, with the citation on its own line in italics |
 | `divider` | `---` at the top level; dropped inside a list item or a grid column |
 | a collapsed `section` | a heading at its level, then its content |

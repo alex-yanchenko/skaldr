@@ -379,27 +379,25 @@ TWO_SERIES: list[dict[str, Any]] = [{"label": "x", "values": [1]}, {"label": "y"
 
 
 @pytest.mark.parametrize(
-    ("variant", "stacked", "series", "rows"),
+    ("variant", "stacked", "series", "total"),
     [
-        pytest.param("bar", True, TWO_SERIES, [("x", "1"), ("y", "2")], id="stacked-bars"),
-        pytest.param(
-            "bar", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="grouped-bars-would-overlap-in-mermaid"
-        ),
-        pytest.param(
-            "line", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="lines-would-have-no-legend-in-mermaid"
-        ),
-        pytest.param("bar", True, TWO_SERIES[:1], [("x", "1")], id="stacked-single-bar"),
+        pytest.param("bar", True, TWO_SERIES, ("Total", "3"), id="stacked-bars-with-a-total-row"),
+        pytest.param("bar", False, TWO_SERIES, None, id="bars"),
+        pytest.param("line", False, TWO_SERIES, None, id="lines"),
+        pytest.param("bar", True, TWO_SERIES[:1], None, id="one-stacked-bar-without-a-total-row"),
     ],
 )
-def test_a_chart_with_several_series_or_stacked_bars_is_an_xy_chart_marked_stacked_over_its_table(
-    variant: XYChartMark, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
+def test_an_xy_chart_keeps_its_stacking_over_a_table_of_its_series(
+    variant: XYChartMark, stacked: bool, series: list[dict[str, Any]], total: tuple[str, str] | None
 ) -> None:
     chart = {"type": "chart", "variant": variant, "stacked": stacked, "categories": ["Q1"], "series": series}
+    values = tuple((float(item["values"][0]),) for item in series)
+    rows = tuple(TableRow(_cells(item["label"], str(item["values"][0]))) for item in series)
+    totals = () if total is None else (TableRow(_cells(*total), emphasis="total"),)
 
     assert lowered([chart]) == (
         Diagram(
-            XYChart(variant, ("Q1",), tuple((float(row[1]),) for row in rows), stacked),
-            (TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),),
+            XYChart(variant, ("Q1",), values, stacked), (TableNode(_cells("Series", "Q1"), (*rows, *totals)),)
         ),
     )
 

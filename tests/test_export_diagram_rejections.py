@@ -15,11 +15,10 @@ from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import Diagram, TableNode
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import lowered, make_report, make_toggle, slack_of, write_report
+from tests.factories import lowered, make_report, make_toggle, markdown_of, slack_of, write_report
 from tests.factories.capability_factory import (
     DIAGRAM_ACCEPTED_CASES,
     DIAGRAM_CASES,
@@ -28,9 +27,7 @@ from tests.factories.capability_factory import (
     FAN,
     FLOW,
     MATH_BLOCKS,
-    ONE_SERIES_CHARTS,
     RANGE,
-    SEVERAL_SERIES_OR_STACKED,
     SWAPPED_BLOCKS,
     AcceptedCase,
     RefusedCase,
@@ -41,6 +38,12 @@ EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 EXAMPLE_RANGE_PATH = "blocks.4.range"
 
 
+MERMAID_SEVERAL_SERIES_ERROR = (
+    "a Mermaid xy chart cannot tell several series apart; the export should have written its data table"
+)
+TWO_SERIES_TABLE = "| Series | Mon | Tue |\n| --- | --- | --- |\n| Zone 1 | 4 | 6 |\n| Zone 2 | 1 | 2 |\n"
+STACKED_TABLE = f"{TWO_SERIES_TABLE}| **Total** | **5** | **8** |\n"
+ONE_BAR_MERMAID = '```mermaid\nxychart-beta\n    x-axis ["Mon", "Tue"]\n    bar [4, 6]\n```\n'
 SWAP_CELLS = [
     pytest.param(feature, target, id=f"{target}-{feature}")
     for feature, cells in CAPABILITIES.items()
@@ -78,9 +81,13 @@ def test_a_writer_swaps_a_feature_only_while_its_capability_cell_lists_the_swap(
     with pytest.raises(ExportInvariantError) as raised:
         _written_without_the_check(SWAPPED_BLOCKS[feature], target)
 
-    assert str(raised.value) == (
-        f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
-    )
+    assert str(raised.value) == _what_a_writer_without_the_swap_raises(feature, target)
+
+
+def _what_a_writer_without_the_swap_raises(feature: Feature, target: ExportTarget) -> str:
+    if target in ("markdown", "notion"):
+        return MERMAID_SEVERAL_SERIES_ERROR
+    return f"{TARGET_SUBJECTS[target]} has no form for '{feature}'; the export check should have refused it"
 
 
 @pytest.mark.parametrize("target", ["adf", "slack"])
@@ -168,17 +175,45 @@ def test_a_slack_canvas_writes_each_chart_as_its_data_table_alone() -> None:
         "**Mix**\n\n"
         "| Slice | Value | Share |\n| --- | --- | --- |\n"
         "| Fixed | 9 | 75% |\n| Open | 3 | 25% |\n| **Total** | **12** |  |\n\n"
-        "| Series | Mon | Tue |\n| --- | --- | --- |\n| Zone 1 | 4 | 6 |\n| Zone 2 | 1 | 2 |\n"
+        f"{STACKED_TABLE}"
     )
 
 
-@pytest.mark.parametrize("chart", [*ONE_SERIES_CHARTS.values(), *SEVERAL_SERIES_OR_STACKED.values()])
-def test_adf_writes_each_chart_as_exactly_its_data_table(chart: dict[str, Any]) -> None:
-    (diagram,) = lowered([chart])
-    assert isinstance(diagram, Diagram)
+@pytest.mark.parametrize(
+    ("target", "written"),
+    [
+        pytest.param("markdown", TWO_SERIES_TABLE, id="markdown"),
+        pytest.param(
+            "notion",
+            '<table fit-page-width="true" header-row="true">\n'
+            "\t<tr>\n\t\t<td>**Series**</td>\n\t\t<td>**Mon**</td>\n\t\t<td>**Tue**</td>\n\t</tr>\n"
+            "\t<tr>\n\t\t<td>Zone 1</td>\n\t\t<td>4</td>\n\t\t<td>6</td>\n\t</tr>\n"
+            "\t<tr>\n\t\t<td>Zone 2</td>\n\t\t<td>1</td>\n\t\t<td>2</td>\n\t</tr>\n"
+            "</table>\n",
+            id="notion",
+        ),
+    ],
+)
+def test_github_and_notion_write_a_chart_with_several_series_as_its_data_table_alone(
+    target: ExportTarget, written: str
+) -> None:
+    assert _written_without_the_check([xy_chart("line", [4, 6], [1, 2])], target) == written
 
-    assert render_adf((diagram,)) == render_adf(diagram.supplement)
-    assert [type(node) for node in diagram.supplement] == [TableNode]
+
+def test_a_stacked_chart_with_several_series_adds_a_total_row_holding_each_category_s_stack() -> None:
+    assert markdown_of([xy_chart("bar", [4, 6], [1, 2], stacked=True)]) == STACKED_TABLE
+
+
+@pytest.mark.parametrize("target", ["markdown", "notion"])
+def test_a_stacked_bar_chart_with_one_series_is_drawn_as_the_same_mermaid_chart_as_an_unstacked_one(
+    target: ExportTarget,
+) -> None:
+    stacked = _written_without_the_check([xy_chart("bar", [4, 6], stacked=True)], target)
+
+    assert (stacked, stacked.startswith(ONE_BAR_MERMAID)) == (
+        _written_without_the_check([xy_chart("bar", [4, 6])], target),
+        True,
+    )
 
 
 @pytest.mark.parametrize(

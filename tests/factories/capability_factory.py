@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.export.capabilities import Feature
+from skaldr.export.tree import XYChartMark
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from tests.factories.report_factory import in_a_grid_cell, make_report, make_section, make_toggle
 
@@ -194,11 +195,7 @@ RICH_NOTES: dict[str, str] = {
 }
 
 
-MERMAID_TARGETS: tuple[tuple[ExportTarget, str], ...] = (("markdown", "GitHub"), ("notion", "Notion"))
-TABLE_TARGETS: tuple[ExportTarget, ...] = ("adf", "slack")
-
-
-def xy_chart(variant: str, *series: list[float], stacked: bool = False) -> dict[str, Any]:
+def xy_chart(variant: XYChartMark, *series: list[float], stacked: bool = False) -> dict[str, Any]:
     labelled = [{"label": f"Zone {index}", "values": values} for index, values in enumerate(series, start=1)]
     return {
         "type": "chart",
@@ -218,12 +215,12 @@ ONE_SERIES_CHARTS: dict[str, dict[str, Any]] = {
     "donut": DONUT,
     "one-series-bar": xy_chart("bar", [4, 6]),
     "one-series-line": xy_chart("line", [4, 6]),
+    "one-series-stacked-bar": xy_chart("bar", [4, 6], stacked=True),
 }
-SEVERAL_SERIES_OR_STACKED: dict[str, dict[str, Any]] = {
+SEVERAL_SERIES_CHARTS: dict[str, dict[str, Any]] = {
     "two-series-bar": xy_chart("bar", [4, 6], [1, 2]),
     "two-series-line": xy_chart("line", [4, 6], [1, 2]),
-    "stacked-bar": xy_chart("bar", [4, 6], [1, 2], stacked=True),
-    "stacked-single-bar": xy_chart("bar", [4, 6], stacked=True),
+    "two-series-stacked-bar": xy_chart("bar", [4, 6], [1, 2], stacked=True),
 }
 
 
@@ -236,7 +233,7 @@ MATH_BLOCKS: list[dict[str, Any]] = [
 ]
 SWAPPED_BLOCKS: dict[Feature, list[dict[str, Any]]] = {
     "chart": [DONUT],
-    "chart with several series or stacked": [xy_chart("bar", [4, 6], [1, 2])],
+    "chart with several series": [xy_chart("bar", [4, 6], [1, 2])],
     "math block": MATH_BLOCKS[:1],
     "inline math": MATH_BLOCKS[1:],
 }
@@ -316,18 +313,6 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         [{**FAN, "hub": {"label": "Count", "note": RICH_NOTES["inline-math"]}}],
         "at blocks.0.fan",
     ),
-    **{
-        f"{target}-chart-{name}": RefusedCase(
-            target,
-            [chart],
-            f"{subject} cannot draw a chart with several series or stacked bars, "
-            "since its Mermaid chart has no legend and no stacking",
-            "draw one chart per series, or write the values in a table",
-            "at blocks.0.chart",
-        )
-        for target, subject in MERMAID_TARGETS
-        for name, chart in SEVERAL_SERIES_OR_STACKED.items()
-    },
     "notion-data-image": RefusedCase(
         "notion",
         [DATA_IMAGE],
@@ -381,13 +366,8 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
     **{
         f"{target}-chart-{name}": AcceptedCase(target, [chart])
-        for target, _ in MERMAID_TARGETS
-        for name, chart in ONE_SERIES_CHARTS.items()
-    },
-    **{
-        f"{target}-chart-{name}": AcceptedCase(target, [chart])
-        for target in TABLE_TARGETS
-        for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_OR_STACKED}.items()
+        for target in EXPORT_TARGETS
+        for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_CHARTS}.items()
     },
     **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
     "markdown-data-image": AcceptedCase("markdown", [DATA_IMAGE]),

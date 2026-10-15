@@ -4,6 +4,7 @@ from typing import Final, NamedTuple
 
 from typing_extensions import assert_never
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.inline import one_line
 from skaldr.export.runs import export_visible_text
 from skaldr.export.tree import Figure, Graph, GraphNode, PieChart, ToneName, XYChart
@@ -74,6 +75,11 @@ def _graph_lines(graph: Graph) -> list[str]:
 
 
 def _xy_lines(chart: XYChart) -> list[str]:
+    if len(chart.series) > 1:
+        raise ExportInvariantError(
+            "a Mermaid xy chart cannot tell several series apart; "
+            "the export should have written its data table"
+        )
     axis = "    x-axis [" + ", ".join(_quoted_string(category) for category in chart.categories) + "]"
     marks = [f"    {chart.mark} [" + ", ".join(map(_mermaid_number, values)) + "]" for values in chart.series]
     return ["xychart-beta", axis, *marks]

@@ -24,7 +24,7 @@ OccurrenceFeature = Literal[
     "fan diagram",
     "link, citation or math in a flow or fan step's note",
     "chart",
-    "chart with several series or stacked",
+    "chart with several series",
     "math block",
     "inline math",
     "image from a data: URI",
@@ -143,8 +143,9 @@ TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _CHART_AS_ITS_TABLE: Final = Swap(
-    "the chart's data table: a row per slice with its value and share and a total row for a donut, "
-    "a row per series with a column per category for a bar or line chart"
+    "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
+    "a bar or line chart's series, a row each with its value in each category, "
+    "then for stacked bars with several series a total row holding each category's stack"
 )
 
 
@@ -221,15 +222,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         "write the note as plain text and put the rest in a text block after the diagram",
     ),
     "chart": _kept_except(dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
-    "chart with several series or stacked": {
-        **_refused_by(
-            ("markdown", "notion"),
-            "draw a chart with several series or stacked bars, "
-            "since its Mermaid chart has no legend and no stacking",
-            "draw one chart per series, or write the values in a table",
-        ),
-        **dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE),
-    },
+    "chart with several series": dict.fromkeys(EXPORT_TARGETS, _CHART_AS_ITS_TABLE),
     "math block": _kept_except(
         dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("a code block in latex"))
     ),

@@ -21,11 +21,7 @@ def figure_feature(figure: Figure) -> OccurrenceFeature:
         case PieChart():
             return "chart"
         case XYChart():
-            return (
-                "chart with several series or stacked"
-                if figure.stacked or len(figure.series) > 1
-                else "chart"
-            )
+            return "chart with several series" if len(figure.series) > 1 else "chart"
         case _:
             assert_never(figure)
 
