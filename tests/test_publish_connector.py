@@ -7,6 +7,7 @@ import pytest
 from skaldr.errors import ConnectorError
 from skaldr.export import ExportTarget
 from skaldr.publish import ConnectorRegistry
+from skaldr.publish.cli import installed_connectors
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, JiraTarget, NotionTarget, TargetBase
 from skaldr.services import SERVICES
 from tests.factories import make_jira_target, make_notion_target
@@ -51,10 +52,13 @@ def test_a_target_whose_to_names_no_single_service_is_refused(target_type: type[
         target_type.service()
 
 
-def test_each_publish_target_names_the_export_its_connector_renders() -> None:
-    exports = {target_type.service(): target_type.export_target() for target_type in PUBLISH_TARGET_TYPES}
+def test_each_installed_connector_names_the_export_it_renders() -> None:
+    registry = installed_connectors()
 
-    assert exports == {"notion": "notion", "jira": "adf"}
+    assert {service: registry.for_service(service).export_target for service in SERVICES} == {
+        "notion": "notion",
+        "jira": "adf",
+    }
 
 
 def test_the_export_flavors_are_notion_markdown_adf_and_slack() -> None:

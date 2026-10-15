@@ -3,7 +3,6 @@ from typing import get_args
 
 from pydantic import ConfigDict, Field, JsonValue
 
-from skaldr.export_targets import ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.services import SERVICES, Service
 
@@ -49,10 +48,6 @@ class TargetBase(FrozenModel):
                 f"{', '.join(SERVICES)}"
             )
         return names[0]
-
-    @classmethod
-    @abstractmethod
-    def export_target(cls) -> ExportTarget: ...
 
     @abstractmethod
     def where_fields(self) -> JsonFields: ...

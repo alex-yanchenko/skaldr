@@ -20,6 +20,7 @@ from skaldr.export.check import FeatureHit, reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
+from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import make_jira_target, make_report, write_report
@@ -34,7 +35,7 @@ from tests.factories.capability_factory import (
     text_grid,
     walkthrough_holding,
 )
-from tests.factories.publish_factory import FakeTransport, fake_registry
+from tests.factories.publish_factory import FakeConnector, FakeTransport
 
 Verdict = Literal["keep", "upgrade", "swap", "reject"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
@@ -82,7 +83,9 @@ def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
 
 
 def _publish_with_a_fake_jira(data_path: Path, transport: FakeTransport) -> int:
-    registry = fake_registry(transport, target_types=(NotionTarget, JiraTarget))
+    registry = ConnectorRegistry(
+        [FakeConnector(NotionTarget, transport), FakeConnector(JiraTarget, transport, export_target="adf")]
+    )
     return publish_main(["publish", str(data_path), "--apply"], registry=registry)
 
 

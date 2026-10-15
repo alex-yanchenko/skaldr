@@ -147,7 +147,7 @@ def _look_paths(section_id: str | None) -> dict[Part, str]:
 def _item_draft(
     context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
 ) -> ItemDraft:
-    reject_what_the_target_cannot_show(context.report, page, context.target.export_target())
+    reject_what_the_target_cannot_show(context.report, page, context.connector.export_target)
     texts = context.connector.render_regions(context.report, page)
     keys = region_keys(context.authored_blocks, page.regions)
     carries_look = context.connector.carries_look

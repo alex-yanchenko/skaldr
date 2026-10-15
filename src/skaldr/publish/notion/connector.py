@@ -8,6 +8,7 @@ from skaldr.auth.store import require_notion_for_a_target
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count, render_notion_regions
 from skaldr.export.tree import LoweredDocument
+from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.notion.api import NotionApi, Sleep
@@ -47,6 +48,7 @@ class NotionConnector:
     limits: tuple[ContentLimit, ...] = NOTION_LIMITS
     writes: WriteGranularity = "section"
     carries_look: bool = True
+    export_target: ExportTarget = "notion"
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)

@@ -3,7 +3,6 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 
-from skaldr.export_targets import ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields, Location, TargetBase
 from skaldr.services import NotionService
@@ -92,10 +91,6 @@ class NotionWhere(FrozenModel):
 class NotionTarget(TargetBase):
     to: NotionService = Field(description="Publish to Notion: `notion`.")
     where: NotionWhere = Field(description="The Notion page the document goes under or into.")
-
-    @classmethod
-    def export_target(cls) -> ExportTarget:
-        return "notion"
 
     def where_fields(self) -> JsonFields:
         return self.where.fields
