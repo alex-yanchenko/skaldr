@@ -79,7 +79,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.models import InnerGrid, ListBlock, Report, Walkthrough, walk_located_block
 from skaldr.prose_blocks import ProseList, prose_blocks
 from skaldr.richtext import (
     AnchorLink,
@@ -249,7 +249,7 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             assert_never(node)
 
 
-def _visible(runs: ExportRich) -> str:
+def _visible_text(runs: ExportRich) -> str:
     return one_line(export_visible_text(runs))
 
 
@@ -275,13 +275,13 @@ def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
             character = character_without_a_unicode_form(run.position, run.text)
             return None if character is None else ScriptForm(run.position, run.text, character)
         case Tinted():
-            return MarkedText(_tint_feature(run), _visible(run.runs))
+            return MarkedText(_tint_feature(run), _visible_text(run.runs))
         case Styled() if run.style == "underline":
-            return MarkedText("underline", _visible(run.runs))
+            return MarkedText("underline", _visible_text(run.runs))
         case AnchorLink():
-            return SameDocumentLink(_visible(run.label), run.as_written())
+            return SameDocumentLink(_visible_text(run.label), run.as_written())
         case DocumentLink():
-            return OtherDocumentLink(_visible(run.label), run.doc_id)
+            return OtherDocumentLink(_visible_text(run.label), run.doc_id)
         case (
             Plain()
             | Link()
@@ -462,7 +462,7 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
                 yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}", GridInAStep()
 
 
-def _text_numbering_hits(path: str, block: models.ListBlock) -> Iterator[LocatedDetails]:
+def _text_numbering_hits(path: str, block: ListBlock) -> Iterator[LocatedDetails]:
     match block.numbering:
         case "letters":
             yield path, TextNumbering("letters")
@@ -488,7 +488,7 @@ def _model_hits(report: Report, document: LoweredDocument) -> Iterator[LocatedDe
     for path, block in located:
         if isinstance(block, Walkthrough):
             yield from _grids_in_walkthrough_steps(path, block)
-        if isinstance(block, models.ListBlock):
+        if isinstance(block, ListBlock):
             yield from _text_numbering_hits(path, block)
         if isinstance(block, models.Quote) and _holds_a_list(block.body):
             yield path, ListInAQuote()

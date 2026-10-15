@@ -339,7 +339,7 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
     )
 
 
-def test_a_code_label_holding_a_backtick_is_refused_since_notion_has_no_longer_code_fence() -> None:
+def test_a_code_label_holding_a_backtick_is_refused_for_notion() -> None:
     report = parse_report(make_report(blocks=[{"type": "code", "label": "a`b", "content": "x"}]))
 
     with pytest.raises(ExportRejectedError) as raised:

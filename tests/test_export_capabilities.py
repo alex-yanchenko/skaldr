@@ -49,7 +49,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
-TEXT_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "colour span": {"markdown": "reject", "slack": "reject"},
     "highlight span": {"slack": "reject"},
     "colour and highlight span": {"markdown": "reject", "notion": "reject", "slack": "reject"},
@@ -120,7 +120,7 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
 
     assert verdicts == {
         feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
-        for feature, seeded in {**SEEDED_VERDICTS, **TEXT_VERDICTS}.items()
+        for feature, seeded in {**SEEDED_VERDICTS, **TEXT_AND_LIST_VERDICTS}.items()
     }
 
 

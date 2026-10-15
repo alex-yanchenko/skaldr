@@ -209,7 +209,7 @@ def test_the_adf_writer_refuses_a_panel_in_a_list_entry_as_an_invariant() -> Non
     )
 
 
-def test_a_list_entry_holding_a_callout_inside_a_callout_is_refused_for_the_list_item_first() -> None:
+def test_a_callout_in_a_list_entry_inside_a_callout_is_refused_as_a_block_inside_a_list_item() -> None:
     node = Callout("info", (ListNode("bullet", (_text_entry("a", Callout("info", (_para("x"),))),)),))
 
     assert str(refusal_of((node,), "adf")) == (

@@ -162,7 +162,7 @@ OTHER_DOCUMENT_WHY = (
     "{target} cannot link 'the plan' to the document 'cold-room-plan', "
     "since skaldr has no address for that document there"
 )
-TEXT_REFUSALS: dict[str, RefusedCase] = {
+INLINE_REFUSALS: dict[str, RefusedCase] = {
     "markdown-colour-span": RefusedCase(
         "markdown",
         COLOURED_TEXT,
@@ -282,7 +282,7 @@ CANVAS_DIGITS_ONLY_WHY = (
     "a Slack canvas numbers a list only with digits, so it cannot show a list numbered with {numbering}"
 )
 STEP_PATH = "at blocks.0.walkthrough.steps.0.detail.0"
-LIST_REFUSALS: dict[str, RefusedCase] = {
+LIST_STEP_AND_QUOTE_REFUSALS: dict[str, RefusedCase] = {
     "notion-numbered-list-starting-past-1": RefusedCase(
         "notion",
         LIST_FROM_3,
@@ -357,8 +357,8 @@ LIST_REFUSALS: dict[str, RefusedCase] = {
 SEEDED_REFUSALS: dict[str, RefusedCase] = {
     **ADF_REFUSALS,
     **SLACK_REFUSALS,
-    **TEXT_REFUSALS,
-    **LIST_REFUSALS,
+    **INLINE_REFUSALS,
+    **LIST_STEP_AND_QUOTE_REFUSALS,
 }
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]

@@ -132,7 +132,7 @@ class InlineCode:
 
 @dataclass(frozen=True)
 class TextNumbering:
-    numbering: str
+    numbering: Literal["letters", "roman numerals"]
     feature: TextNumberingFeature = field(default="list numbered with letters or roman numerals", init=False)
 
 
@@ -181,13 +181,18 @@ _ADF_CANNOT_PLACE: Final = Rejection(
 _CANVAS_LIST_ITEM_WHY: Final = (
     "a Slack canvas list item holds only text and one nested list, so it cannot show {held}"
 )
-_WITHOUT_THE_COLOUR: Final = "write the text without the colour or export the document elsewhere"
+_WITHOUT_THE_MARK: Final = "write the text without the {mark} or export the document elsewhere"
+_WITHOUT_THE_COLOUR: Final = _WITHOUT_THE_MARK.format(mark="colour")
 _GITHUB_CANNOT_COLOUR: Final = Rejection(
     "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
 )
 _CANVAS_CANNOT_COLOUR: Final = Rejection(
     "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
 )
+_FROM_ONE_WHY: Final = (
+    "{target} numbers every list from 1, so it cannot show a numbered list that starts at {{start}}"
+)
+_FROM_ONE_INSTEAD: Final = "number the list from 1, or export it elsewhere"
 _OWN_HEADING_WHY: Final = (
     "{target} cannot link to its own headings, so it cannot show the link '{{text}}' to '{{link}}'"
 )
@@ -223,15 +228,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
     "numbered list starting past 1": _kept_except(
         {
-            "notion": Rejection(
-                "Notion numbers every list from 1, so it cannot show a numbered list that starts at {start}",
-                "number the list from 1, or export it elsewhere",
-            ),
-            "slack": Rejection(
-                "a Slack canvas numbers every list from 1, so it cannot show a numbered list "
-                "that starts at {start}",
-                "number the list from 1, or export it elsewhere",
-            ),
+            "notion": Rejection(_FROM_ONE_WHY.format(target="Notion"), _FROM_ONE_INSTEAD),
+            "slack": Rejection(_FROM_ONE_WHY.format(target="a Slack canvas"), _FROM_ONE_INSTEAD),
         }
     ),
     "table over 300 cells": _kept_except(
@@ -257,7 +255,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(
                 "a Slack canvas cannot show the {position} '{text}', "
                 "since '{character}' has no Unicode {position} form",
-                "write the text without the {position} or export the document elsewhere",
+                _WITHOUT_THE_MARK.format(mark="{position}"),
             )
         }
     ),
@@ -266,7 +264,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         {
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
-                "write the text without the highlight or export the document elsewhere",
+                _WITHOUT_THE_MARK.format(mark="highlight"),
             )
         }
     ),
@@ -285,7 +283,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         {
             "slack": Rejection(
                 "a Slack canvas cannot underline text, so it cannot show the underline on '{text}'",
-                "write the text without the underline or export the document elsewhere",
+                _WITHOUT_THE_MARK.format(mark="underline"),
             )
         }
     ),

@@ -31,13 +31,12 @@ PEOPLE_META: dict[str, Any] = {
         "bo": {},
     },
 }
-TYPED_BODY = (
+TYPED_BODY_OPENING = (
     "Due [1 Oct](date:2026-10-01) or [the week](date:2026-10-05/2026-10-09); "
-    "[Ada](user:ada) owns [ABC-123](jira:ABC-123); see [the plan](doc:onboarding-plan#st2)."
+    "[Ada](user:ada) owns [ABC-123](jira:ABC-123)"
 )
-TYPED_BODY_WITHOUT_A_DOCUMENT_LINK = (
-    TYPED_BODY.removesuffix("; see [the plan](doc:onboarding-plan#st2).") + "."
-)
+TYPED_BODY = TYPED_BODY_OPENING + "; see [the plan](doc:onboarding-plan#st2)."
+TYPED_BODY_WITHOUT_A_DOCUMENT_LINK = TYPED_BODY_OPENING + "."
 
 
 def _text_block(body: str) -> list[dict[str, Any]]:
