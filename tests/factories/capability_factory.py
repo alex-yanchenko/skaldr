@@ -194,6 +194,11 @@ def one_cell_grid(*blocks: dict[str, Any]) -> dict[str, Any]:
     return {"type": "grid", "cells": [{"span": 6, "blocks": list(blocks)}]}
 
 
+def request_flow_of_two(*cases: dict[str, Any]) -> dict[str, Any]:
+    step = {"label": "Read", "method": "GET", "url": "https://api.example.com/widgets", "cases": list(cases)}
+    return {"type": "request_flow", "label": "Walk", "steps": [step, step]}
+
+
 def toned_two_cell_grid(tone: ToneName) -> dict[str, Any]:
     grid = two_cell_grid({"type": "text", "body": "Right"})
     grid["cells"][1]["tone"] = tone
@@ -263,6 +268,28 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         make_request(cases=[{"label": "a", "verdict": "fine", "response": {"body": "1"}}]),
         "request",
         "adf",
+    ),
+    "slack-request-step-with-a-verdict-in-a-panel": RefusedCase(
+        "slack",
+        "callout inside a callout",
+        in_a_panel(request_flow_of_two({"label": "a", "verdict": "fine", "response": {"body": "1"}})),
+        CANVAS_CALLOUT_WHY.format(held="request step"),
+        "move the request step out of the panel",
+        "at blocks.0.panel.blocks.0.request_flow.steps.0",
+        also_refused_by=("adf",),
+    ),
+    "slack-request-step-with-two-cases-in-a-panel": RefusedCase(
+        "slack",
+        "toggle inside a callout",
+        in_a_panel(
+            request_flow_of_two(
+                {"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}
+            )
+        ),
+        CANVAS_CALLOUT_WHY.format(held="request step"),
+        "move the request step out of the panel",
+        "at blocks.0.panel.blocks.0.request_flow.steps.0",
+        also_refused_by=("adf",),
     ),
     "slack-divider-in-a-panel-under-a-heading": RefusedCase(
         "slack",
