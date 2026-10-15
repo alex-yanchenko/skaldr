@@ -139,9 +139,7 @@ class _Edits:
 
 
 def _lists_would_meet(keyed: KeyedCanvas, old: Sequence[int], at: int, added: Sequence[str]) -> bool:
-    meets_the_block_before = at - 1 in old and is_a_list(keyed.blocks[at - 1].raw) and is_a_list(added[0])
-    meets_the_block_after = at in old and is_a_list(keyed.blocks[at].raw) and is_a_list(added[-1])
-    return meets_the_block_before or meets_the_block_after
+    return at in old and is_a_list(keyed.blocks[at].raw) and is_a_list(added[-1])
 
 
 def warn_on_stderr(message: str) -> None:
