@@ -54,6 +54,8 @@ TEXT_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "underline": {"slack": "reject"},
     "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "link to another skaldr document": {"notion": "reject", "slack": "reject"},
+    "inline code holding a backtick": {"notion": "reject"},
+    "inline code holding a closing tag in a table cell": {"notion": "reject"},
 }
 
 

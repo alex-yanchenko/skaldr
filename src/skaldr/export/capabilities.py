@@ -21,6 +21,9 @@ ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
 TextMarkFeature = Literal["colour span", "highlight span", "colour and highlight span", "underline"]
 SameDocumentLinkFeature = Literal["link to a heading of the same document"]
 OtherDocumentLinkFeature = Literal["link to another skaldr document"]
+InlineCodeFeature = Literal[
+    "inline code holding a backtick", "inline code holding a closing tag in a table cell"
+]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -31,11 +34,14 @@ Feature = Literal[
     TextMarkFeature,
     SameDocumentLinkFeature,
     OtherDocumentLinkFeature,
+    InlineCodeFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
 Held = Literal["table", "callout", "quote", "toggle"]
 FIRST_LIST_NUMBER: Final = 1
+BACKTICK: Final = "`"
+CLOSING_TAG_OPENER: Final = "</"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
@@ -109,6 +115,12 @@ class OtherDocumentLink:
     feature: OtherDocumentLinkFeature = field(default="link to another skaldr document", init=False)
 
 
+@dataclass(frozen=True)
+class InlineCode:
+    feature: InlineCodeFeature
+    code: str
+
+
 Details = (
     Placement
     | HeldByAListItem
@@ -119,6 +131,7 @@ Details = (
     | MarkedText
     | SameDocumentLink
     | OtherDocumentLink
+    | InlineCode
 )
 
 
@@ -250,6 +263,22 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         {
             "notion": Rejection(_OTHER_DOCUMENT_WHY.format(target="Notion"), _OTHER_DOCUMENT_INSTEAD),
             "slack": Rejection(_OTHER_DOCUMENT_WHY.format(target="a Slack canvas"), _OTHER_DOCUMENT_INSTEAD),
+        }
+    ),
+    "inline code holding a backtick": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion cannot show inline code holding a backtick, as in '{code}'",
+                "write the code in a code block, or without the backtick",
+            )
+        }
+    ),
+    "inline code holding a closing tag in a table cell": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion loses a table cell whose inline code holds '</', as in '{code}'",
+                "write the code outside the table, or without '</'",
+            )
         }
     ),
 }

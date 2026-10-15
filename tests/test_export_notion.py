@@ -7,7 +7,7 @@ from typing import Any, get_args
 import pytest
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion
+from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion, render_export
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
@@ -327,8 +327,16 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
     )
 
 
-def test_code_with_a_backtick_becomes_escaped_text_because_notion_has_no_longer_code_fence() -> None:
-    assert notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "a\\`b\n```plain text\nx\n```\n"
+def test_a_code_label_holding_a_backtick_is_refused_since_notion_has_no_longer_code_fence() -> None:
+    report = parse_report(make_report(blocks=[{"type": "code", "label": "a`b", "content": "x"}]))
+
+    with pytest.raises(ExportRejectedError) as raised:
+        render_export(report, "notion")
+
+    assert str(raised.value) == (
+        "Notion cannot show inline code holding a backtick, as in 'a`b', at blocks.0.code; "
+        "write the code in a code block, or without the backtick"
+    )
 
 
 def test_a_code_block_containing_a_fence_gets_a_longer_one() -> None:
@@ -847,26 +855,13 @@ def test_column_tones_and_widths_become_a_notion_colgroup(
     )
 
 
-@pytest.mark.parametrize(
-    ("cell", "written"),
-    [
-        pytest.param(
-            "close with `</td></tr>` here",
-            "close with \\</td\\>\\</tr\\> here",
-            id="a-closing-tag-is-escaped-text",
-        ),
-        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
-    ],
-)
-def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_stays_whole(
-    cell: str, written: str
-) -> None:
-    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": cell}])
+def test_code_holding_an_angle_bracket_in_a_table_cell_stays_code() -> None:
+    table = make_table([{"key": "a", "label": "A"}], rows=[{"a": "a `List<int>` type"}])
 
     assert notion_of([table]) == (
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n\t\t<td>**A**</td>\n\t</tr>\n"
-        f"\t<tr>\n\t\t<td>{written}</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>a `List<int>` type</td>\n\t</tr>\n"
         "</table>\n"
     )
 
@@ -876,21 +871,40 @@ def test_code_holding_a_closing_tag_in_a_table_cell_is_escaped_text_so_the_cell_
     [
         pytest.param(
             "[see `</span>` here]{tone=danger}",
-            '<span color="red">see \\</span\\> here</span>',
+            '<span color="red">see `</span>` here</span>',
             id="a-closing-tag-inside-a-colour-span",
         ),
-        pytest.param("inline `</callout>` code", "inline \\</callout\\> code", id="a-closing-tag"),
-        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket-stays-code"),
-        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag-stays-code"),
-        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket-stays-code"),
+        pytest.param("inline `</callout>` code", "inline `</callout>` code", id="a-closing-tag"),
+        pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket"),
+        pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag"),
+        pytest.param("a `x > 1` test", "a `x > 1` test", id="a-closing-angle-bracket"),
     ],
 )
-def test_code_holding_a_closing_tag_is_escaped_text_anywhere(text: str, notion: str) -> None:
+def test_code_holding_an_angle_bracket_or_a_closing_tag_outside_a_table_stays_code(
+    text: str, notion: str
+) -> None:
     assert notion_inline(parse_rich(text)) == notion
 
 
-def test_code_holding_a_backtick_is_escaped_text() -> None:
-    assert notion_inline((Code("a`b<i>"),)) == "a\\`b\\<i\\>"
+def test_the_notion_writer_refuses_code_holding_a_backtick_as_an_invariant() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        notion_inline((Code("a`b"),))
+
+    assert str(raised.value) == (
+        "Notion cannot show inline code holding a backtick, 'a`b'; the export check should have refused it"
+    )
+
+
+def test_the_notion_writer_refuses_code_holding_a_closing_tag_in_a_table_cell_as_an_invariant() -> None:
+    table = TableNode((TableCell((Code("</td>"),)),), ())
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([table])
+
+    assert str(raised.value) == (
+        "Notion loses a table cell whose inline code holds '</', '</td>'; "
+        "the export check should have refused it"
+    )
 
 
 def test_a_single_weighted_column_takes_the_whole_page_width() -> None:

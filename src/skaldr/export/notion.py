@@ -9,6 +9,7 @@ from typing_extensions import assert_never
 from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
+from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -57,7 +58,6 @@ NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
-CLOSING_TAG_OPENER: Final = "</"
 CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
 NOTION_LIST_START: Final = 1
@@ -127,6 +127,7 @@ def latex_text(text: str) -> str:
 class _NotionRuns(MarkupRuns):
     inside_bold: bool = False
     on_fill: bool = False
+    in_a_table_cell: bool = False
 
     def escape(self, text: str, /) -> str:
         return text.translate(NOTION_ESCAPES)
@@ -142,7 +143,17 @@ class _NotionRuns(MarkupRuns):
         return self.code(piece) if is_file_name else self.escape(piece)
 
     def code(self, text: str, /) -> str:
-        return self.escape(text) if "`" in text or CLOSING_TAG_OPENER in text else f"`{text}`"
+        if BACKTICK in text:
+            raise ExportInvariantError(
+                f"Notion cannot show inline code holding a backtick, '{text}'; "
+                "the export check should have refused it"
+            )
+        if self.in_a_table_cell and CLOSING_TAG_OPENER in text:
+            raise ExportInvariantError(
+                f"Notion loses a table cell whose inline code holds '</', '{text}'; "
+                "the export check should have refused it"
+            )
+        return f"`{text}`"
 
     def anchor_link(self, label: str, _anchor: str, /) -> str:
         return label
@@ -185,8 +196,10 @@ def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 
-def notion_inline(runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False) -> str:
-    return write_export_runs(runs, _NotionRuns(inside_bold, on_fill))
+def notion_inline(
+    runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False, in_a_table_cell: bool = False
+) -> str:
+    return write_export_runs(runs, _NotionRuns(inside_bold, on_fill, in_a_table_cell))
 
 
 def _block_text(runs: ExportRich) -> str:
@@ -210,7 +223,7 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
 
 
 def _table_cell_text(cell: TableCell, *, inside_bold: bool, on_fill: bool = False) -> str:
-    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill)
+    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 

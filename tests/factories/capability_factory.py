@@ -247,6 +247,26 @@ TEXT_REFUSALS: dict[str, RefusedCase] = {
         OTHER_DOCUMENT_INSTEAD,
         "at blocks.0.text",
     ),
+    "notion-inline-code-holding-a-backtick": RefusedCase(
+        "notion",
+        [{"type": "text", "body": "Split on `` a`b `` first."}],
+        "Notion cannot show inline code holding a backtick, as in 'a`b'",
+        "write the code in a code block, or without the backtick",
+        "at blocks.0.text",
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-a-table-cell": RefusedCase(
+        "notion",
+        [
+            {
+                "type": "table",
+                "columns": [{"key": "tag", "label": "Tag"}],
+                "rows": [{"tag": "Ends with `</td>`."}],
+            }
+        ],
+        "Notion loses a table cell whose inline code holds '</', as in '</td>'",
+        "write the code outside the table, or without '</'",
+        "at blocks.0.table",
+    ),
 }
 SEEDED_REFUSALS: dict[str, RefusedCase] = {**ADF_REFUSALS, **SLACK_REFUSALS, **TEXT_REFUSALS}
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]

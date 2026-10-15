@@ -7,8 +7,10 @@ from typing_extensions import Self, assert_never
 
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
+    BACKTICK,
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
+    CLOSING_TAG_OPENER,
     FIRST_LIST_NUMBER,
     PLACEMENTS,
     CellCount,
@@ -17,6 +19,7 @@ from skaldr.export.capabilities import (
     GridInAStep,
     Held,
     HeldByAListItem,
+    InlineCode,
     ListItemFeature,
     ListStart,
     MarkedText,
@@ -245,8 +248,18 @@ def _tint_feature(run: Tinted) -> TextMarkFeature:
     return "colour span" if run.tone is not None else "highlight span"
 
 
-def _inline_details(run: ExportRun) -> Details | None:
+def _code_details(code: Code, in_a_table_cell: bool) -> InlineCode | None:
+    if BACKTICK in code.text:
+        return InlineCode("inline code holding a backtick", code.text)
+    if in_a_table_cell and CLOSING_TAG_OPENER in code.text:
+        return InlineCode("inline code holding a closing tag in a table cell", code.text)
+    return None
+
+
+def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
     match run:
+        case Code():
+            return _code_details(run, in_a_table_cell)
         case ScriptText():
             character = character_without_a_unicode_form(run.position, run.text)
             return None if character is None else ScriptForm(run.position, run.text, character)
@@ -260,7 +273,6 @@ def _inline_details(run: ExportRun) -> Details | None:
             return OtherDocumentLink(_visible(run.label), run.doc_id)
         case (
             Plain()
-            | Code()
             | Link()
             | DateMention()
             | PersonMention()
@@ -305,8 +317,9 @@ class _TreeWalk:
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node) -> Iterator[FeatureHit]:
+        in_a_table_cell = isinstance(node, TableNode)
         for run in every_run(chain.from_iterable(_own_texts(node))):
-            details = _inline_details(run)
+            details = _inline_details(run, in_a_table_cell)
             if details is not None:
                 yield self.hit(details, node.authored_at)
 
