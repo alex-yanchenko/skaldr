@@ -485,6 +485,7 @@ class FakeTransport:
             str(item.revision),
             child_ids=item.children,
             set_properties=item.set_properties,
+            links=item.links,
         )
 
 

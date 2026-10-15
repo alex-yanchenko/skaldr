@@ -90,6 +90,7 @@ class RemoteItem:
     edited_at: str | None = None
     child_ids: tuple[str, ...] = ()
     set_properties: tuple[str, ...] = ()
+    links: tuple[ShownLink, ...] | None = None
 
     @property
     def doc_id(self) -> str | None:

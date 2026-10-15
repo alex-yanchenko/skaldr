@@ -233,7 +233,7 @@ def _applied_with(
     remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
     applier = Applier(prepared, transports, remote, on_step, prepared.state)
     applied = applier.run(plan)
-    linked = apply_links(prepared, applier.state, transports, on_step)
+    linked = apply_links(prepared, applier.state, transports, applier.remote, on_step)
     return Applied((*applied.steps, *linked))
 
 
@@ -251,7 +251,8 @@ def dry_run_publish(prepared: Prepared) -> DryRun:
             preflight = _preflight(prepared, transports)
             _refuse_missing_items(preflight)
             settled = preflight.prepared
-            planned = () if preflight.edited else plan_links(settled, settled.state, transports)
+            remote = {reading.item: reading.remote for reading in preflight.readings}
+            planned = () if preflight.edited else plan_links(settled, settled.state, transports, remote)
     except PublishError as exc:
         return DryRun(prepared.plan, (), str(exc))
     if preflight.edited:

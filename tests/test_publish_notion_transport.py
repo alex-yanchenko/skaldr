@@ -145,6 +145,7 @@ def test_a_page_under_a_page_is_created_with_its_sections_and_the_stamp_in_one_r
         marker="2026-10-09T12:03:00+00:00",
         edited_by=BOT_ID,
         edited_at="2026-10-09T12:03:00+00:00",
+        links=(),
     )
 
 

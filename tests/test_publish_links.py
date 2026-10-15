@@ -492,6 +492,25 @@ def test_publishing_to_notion_and_jira_links_each_page_and_issue_both_ways_and_a
     ) == (0, "Nothing to publish: every item matches the YAML.", [], [])
 
 
+def _markdown_reads(notion: InMemoryNotion) -> list[str]:
+    return [request.url.path for request in notion.requests if request.url.path.endswith("/markdown")]
+
+
+def test_planning_the_links_reads_no_notion_page_again_in_a_dry_run_or_an_apply(tmp_path: Path) -> None:
+    notion, _, registry = _services()
+    path = write_garden_report(tmp_path, publish=LINKED_BOTH_WAYS)
+    main(["publish", str(path), "--apply"], registry=registry)
+    notion.requests.clear()
+
+    main(["publish", str(path)], registry=registry)
+    dry_run_reads = _markdown_reads(notion)
+    notion.requests.clear()
+    main(["publish", str(path), "--apply"], registry=registry)
+
+    each_page_once = [f"/v1/pages/{DOCUMENT_PAGE}/markdown", f"/v1/pages/{TOOLS_PAGE}/markdown"]
+    assert (dry_run_reads, _markdown_reads(notion)) == (each_page_once, each_page_once)
+
+
 def test_removing_the_jira_target_deletes_its_remote_links_and_drops_the_issues_from_the_stamps(
     tmp_path: Path,
 ) -> None:

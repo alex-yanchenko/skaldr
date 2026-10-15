@@ -389,6 +389,7 @@ class NotionTransport:
             edited_at=edited_at,
             child_ids=keyed.child_ids,
             set_properties=set_property_names(page),
+            links=keyed.links,
         )
 
     def _send(self, item_id: str, sections: Mapping[str, str], replacement: Replacement) -> str:

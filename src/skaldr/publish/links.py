@@ -7,7 +7,7 @@ from skaldr.publish.drafts import TargetDraft, item_label
 from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState, save_state
-from skaldr.publish.transport import LinksWrite, PairedLink, ShownLink, Stamp
+from skaldr.publish.transport import LinksWrite, PairedLink, RemoteItem, ShownLink, Stamp
 
 LinkAction = Literal["link", "unlink"]
 STEP_VERB_WIDTH = 9
@@ -57,6 +57,7 @@ class _Linking:
     prepared: Prepared
     state: PublishState
     transports: Transports
+    remote: Mapping[ItemRef, RemoteItem]
     targets: Mapping[str, TargetDraft]
 
     def held(self, ref: ItemRef) -> PublishedItem | None:
@@ -74,6 +75,13 @@ class _Linking:
         service = self.targets[partner.target].target.service()
         return PairedLink(service, held.item_id, shown.url, shown.title)
 
+    def current_links(self, ref: ItemRef, held: PublishedItem) -> tuple[ShownLink, ...]:
+        stamp = self.stamp(ref)
+        remote = self.remote.get(ref)
+        if remote is None or remote.links is None:
+            return self.transports.for_target(ref.target).read_links(held.item_id, stamp)
+        return remote.links if remote.stamp == stamp else ()
+
     def item_links(self, ref: ItemRef, partners: Sequence[ItemRef]) -> ItemLinks:
         held = self.held(ref)
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
@@ -82,7 +90,7 @@ class _Linking:
             return ItemLinks(
                 ref, None, links, tuple(LinkStep(ref, "link", partner.label) for partner in partners)
             )
-        current = self.transports.for_target(ref.target).read_links(held.item_id, self.stamp(ref))
+        current = self.current_links(ref, held)
         addresses = {link.url for link in links}
         linked = [
             LinkStep(ref, "link", partner.label)
@@ -93,12 +101,16 @@ class _Linking:
         return ItemLinks(ref, held, links, (*linked, *unlinked))
 
 
-def _linking(prepared: Prepared, state: PublishState, transports: Transports) -> _Linking:
-    return _Linking(prepared, state, transports, {draft.label: draft for draft in prepared.drafts})
+def _linking(
+    prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
+) -> _Linking:
+    return _Linking(prepared, state, transports, remote, {draft.label: draft for draft in prepared.drafts})
 
 
-def plan_links(prepared: Prepared, state: PublishState, transports: Transports) -> tuple[ItemLinks, ...]:
-    linking = _linking(prepared, state, transports)
+def plan_links(
+    prepared: Prepared, state: PublishState, transports: Transports, remote: Mapping[ItemRef, RemoteItem]
+) -> tuple[ItemLinks, ...]:
+    linking = _linking(prepared, state, transports, remote)
     planned: list[ItemLinks] = []
     for ref, partners in paired_items(prepared.drafts).items():
         held = linking.held(ref)
@@ -127,11 +139,15 @@ def describe_links(steps: Sequence[LinkStep]) -> list[str]:
 
 
 def apply_links(
-    prepared: Prepared, state: PublishState, transports: Transports, on_step: StepListener
+    prepared: Prepared,
+    state: PublishState,
+    transports: Transports,
+    remote: Mapping[ItemRef, RemoteItem],
+    on_step: StepListener,
 ) -> tuple[str, ...]:
-    linking = _linking(prepared, state, transports)
+    linking = _linking(prepared, state, transports, remote)
     done: list[str] = []
-    for planned in plan_links(prepared, state, transports):
+    for planned in plan_links(prepared, state, transports, remote):
         held = planned.held
         if held is None or (not planned.steps and planned.recorded_as_planned):
             continue

@@ -121,6 +121,7 @@ class TransportUnderTest:
     form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
     links: tuple[PairedLink, ...] = ISSUE_LINKS
     expected_link: Callable[[str, str], ItemLink] = field(default=_fake_link)
+    reads_links_with_the_item: bool = True
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
@@ -193,6 +194,7 @@ TRANSPORTS = [
             form_fixture=JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
             links=PAGE_LINKS,
             expected_link=_jira_link,
+            reads_links_with_the_item=False,
         ),
         id="jira",
     ),
@@ -546,6 +548,19 @@ def test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing
     )
 
 
+def test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+
+    read = transport.read_item(created.item_id, _content(under_test))
+
+    carried = None if read.links is None else frozenset(read.links)
+    assert carried == (frozenset(_shown(under_test.links)) if under_test.reads_links_with_the_item else None)
+
+
 def test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link(
     under_test: TransportUnderTest,
 ) -> None:
@@ -688,6 +703,11 @@ class LinksBeforeCheckingTheStamp(FakeTransport):
         return super().write_links(item_id, request)
 
 
+class ReadsItemsWithoutTheirLinks(FakeTransport):
+    def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
+        return replace(super().read_item(item_id, keyed_like), links=())
+
+
 class DropsLinksOnSectionWrites(FakeTransport):
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         self.items[item_id].links = ()
@@ -757,6 +777,11 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             RewritesLinksEachTime,
             test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
             id="rewrites-unchanged-links",
+        ),
+        pytest.param(
+            ReadsItemsWithoutTheirLinks,
+            test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read,
+            id="items-read-without-their-links",
         ),
         pytest.param(
             KeepsOldLinks,
