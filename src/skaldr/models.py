@@ -3132,6 +3132,10 @@ def walk_located_blocks(blocks: Sequence[AnyBlock]) -> Iterator[tuple[str, AnyBl
     yield from _walk_placed((f"blocks.{index}", block) for index, block in enumerate(blocks))
 
 
+def walk_located_block(index: int, block: AnyBlock) -> Iterator[tuple[str, AnyBlock]]:
+    yield from _walk_placed([(f"blocks.{index}", block)])
+
+
 def iter_requests(blocks: Sequence[AnyBlock]) -> Iterator[Request | RequestFlow]:
     """Every `request` and `request_flow` on the page, including ones nested in a section or a panel."""
     for block in walk_blocks(blocks):

@@ -5,10 +5,6 @@ class ReportError(Exception):
     """A report failed validation or reconciliation — surfaced to the operator, not swallowed."""
 
 
-class AdfUnsupportedError(ReportError):
-    pass
-
-
 class ExportRejectedError(ReportError):
     def __init__(self, target: ExportTarget, why: str, instead: str, where: str | None = None) -> None:
         self.target = target
@@ -17,6 +13,10 @@ class ExportRejectedError(ReportError):
         self.where = where
         located = f"{why}, {where}" if where else why
         super().__init__(f"{located}; {instead}")
+
+
+class ExportInvariantError(RuntimeError):
+    pass
 
 
 class AuthError(Exception):

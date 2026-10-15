@@ -6,6 +6,7 @@ from typing import Any
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
+from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import WriteGranularity
@@ -465,6 +466,7 @@ class FakeConnector:
     limits: tuple[ContentLimit, ...] = ()
     writes: WriteGranularity = "section"
     carries_look: bool = True
+    export_target: ExportTarget = "notion"
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)

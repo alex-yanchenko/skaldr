@@ -5,7 +5,7 @@ from typing import Final, Literal
 
 from typing_extensions import Never
 
-from skaldr.errors import AdfUnsupportedError
+from skaldr.errors import ExportInvariantError
 from skaldr.export.adf.colors import BACKGROUND_COLOR, PANEL_TYPE
 from skaldr.export.adf.inline import AdfRuns, IssueLinks, text_color_mark, with_mark
 from skaldr.export.adf.nodes import (
@@ -45,7 +45,6 @@ from skaldr.export.adf.nodes import (
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.tree import (
-    AuthoredNode,
     Callout,
     CodeBlock,
     Columns,
@@ -86,22 +85,6 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
     "panel": _TEXT_BLOCKS | {"codeBlock", "rule"},
 }
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
-_NODE_TERM: Final[Mapping[type, str]] = {
-    Heading: "heading",
-    Paragraph: "text",
-    ListNode: "list",
-    TableNode: "table",
-    CodeBlock: "code block",
-    DisplayMath: "math block",
-    Callout: "callout",
-    Quote: "quote",
-    Divider: "divider",
-    Media: "media block",
-    Toggle: "toggle",
-    Columns: "grid",
-    Tabs: "set of tabs",
-    Diagram: "diagram",
-}
 MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
 LOOP_BACK_NOTE: Final = " (loop back)"
@@ -109,13 +92,13 @@ LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
-def _authored_term(node: Node) -> str:
-    named = node.authored_as if isinstance(node, AuthoredNode) else None
-    return named or _NODE_TERM[type(node)]
-
-
-def _authored_path(node: Node) -> str | None:
-    return node.authored_at if isinstance(node, AuthoredNode) else None
+def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
+    for block in produced:
+        if block["type"] not in _ALLOWED_BLOCKS[container]:
+            raise ExportInvariantError(
+                f"ADF does not allow a {block['type']} inside a {container}, written from a "
+                f"{type(node).__name__}; the export check should have refused it"
+            )
 
 
 def _fits_in_a_list_item(block: AdfBlock) -> bool:
@@ -150,9 +133,6 @@ class _AdfBlocks:
     def __init__(self, issue_links: IssueLinks | None) -> None:
         self.runs = AdfRuns(issue_links)
         self.local_ids = count(1)
-        self.heading = ""
-        self.panel_name = _NODE_TERM[Callout]
-        self.expand_names: list[str] = []
 
     def local_id(self, kind: str) -> str:
         return f"skaldr-{kind}-{next(self.local_ids)}"
@@ -164,33 +144,11 @@ class _AdfBlocks:
         content = self.inline(runs)
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()
 
-    def container_term(self, container: Container) -> str:
-        match container:
-            case "panel":
-                return f"a {self.panel_name}"
-            case "expand":
-                return f"a {self.expand_names[-1]}"
-            case "nested_expand":
-                return f"a {self.expand_names[-1]} that is itself inside a {self.expand_names[-2]}"
-            case "doc":
-                return "the document"
-
-    def require_places(self, node: Node, produced: Iterable[AdfBlock], container: Container) -> None:
-        for block in produced:
-            if block["type"] not in _ALLOWED_BLOCKS[container]:
-                message = f"ADF cannot place a {_authored_term(node)} inside {self.container_term(container)}"
-                path = _authored_path(node)
-                if path:
-                    message += f", at {path}"
-                if self.heading:
-                    message += f", under the heading '{self.heading}'"
-                raise AdfUnsupportedError(message)
-
     def blocks(self, nodes: Iterable[Node], container: Container) -> list[AdfBlock]:
         written: list[AdfBlock] = []
         for node in nodes:
             produced = self.node_blocks(node, container)
-            self.require_places(node, produced, container)
+            _require_the_container_holds(node, produced, container)
             written += produced
         return written
 
@@ -198,7 +156,6 @@ class _AdfBlocks:
         match node:
             case Heading():
                 content = self.inline(node.text)
-                self.heading = export_visible_text(node.text).strip() or self.heading
                 level = AdfHeadingAttrs(level=node.level)
                 return [AdfHeading(type="heading", attrs=level, content=content)] if content else []
             case Paragraph():
@@ -212,12 +169,7 @@ class _AdfBlocks:
             case DisplayMath():
                 return [self.code_block(node.expression, LATEX_LANGUAGE)]
             case Callout():
-                enclosing_name = self.panel_name
-                self.panel_name = node.authored_as or _NODE_TERM[Callout]
-                try:
-                    content = self.blocks(node.children, "panel") or [_empty_paragraph()]
-                finally:
-                    self.panel_name = enclosing_name
+                content = self.blocks(node.children, "panel") or [_empty_paragraph()]
                 panel = AdfPanelAttrs(panelType=PANEL_TYPE[node.tone])
                 return [AdfPanel(type="panel", attrs=panel, content=content)]
             case Quote():
@@ -227,17 +179,12 @@ class _AdfBlocks:
             case Media():
                 return [self.media_paragraph(node)]
             case Toggle():
-                title = export_visible_text(node.title)
-                if node.heading_level is not None:
-                    self.heading = title.strip() or self.heading
-                return [self.expand(container, node.authored_as or _NODE_TERM[Toggle], title, node.children)]
+                return [self.expand(container, export_visible_text(node.title), node.children)]
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
-                name = node.authored_as or _NODE_TERM[Tabs]
                 return [
-                    self.expand(container, name, export_visible_text(tab.title), tab.children)
-                    for tab in node.tabs
+                    self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs
                 ]
             case Diagram():
                 return self.diagram_blocks(node, container)
@@ -245,7 +192,7 @@ class _AdfBlocks:
                 return []
             case _:
                 exhausted: Never = node
-                raise AdfUnsupportedError(f"ADF has no form for the lowered node {type(exhausted).__name__}")
+                raise ExportInvariantError(f"ADF has no form for the lowered node {type(exhausted).__name__}")
 
     def paragraph_blocks(self, node: Paragraph) -> list[AdfBlock]:
         content = self.inline(node.text)
@@ -277,17 +224,13 @@ class _AdfBlocks:
             paragraphs.append(AdfParagraph(type="paragraph", content=list(cite)))
         return [AdfBlockquote(type="blockquote", content=paragraphs)] if paragraphs else []
 
-    def expand(self, container: Container, name: str, title: str, children: Sequence[Node]) -> AdfBlock:
+    def expand(self, container: Container, title: str, children: Sequence[Node]) -> AdfBlock:
         attrs = AdfExpandAttrs(title=title)
-        self.expand_names.append(name)
-        try:
-            if container in ("expand", "nested_expand"):
-                nested = self.blocks(children, "nested_expand") or [_empty_paragraph()]
-                return AdfNestedExpand(type="nestedExpand", attrs=attrs, content=nested)
-            content = self.blocks(children, "expand") or [_empty_paragraph()]
-            return AdfExpand(type="expand", attrs=attrs, content=content)
-        finally:
-            self.expand_names.pop()
+        if container in ("expand", "nested_expand"):
+            nested = self.blocks(children, "nested_expand") or [_empty_paragraph()]
+            return AdfNestedExpand(type="nestedExpand", attrs=attrs, content=nested)
+        content = self.blocks(children, "expand") or [_empty_paragraph()]
+        return AdfExpand(type="expand", attrs=attrs, content=content)
 
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
         supplement = self.blocks(node.supplement, container)
@@ -329,9 +272,7 @@ class _AdfBlocks:
             produced = self.node_blocks(child, container)
             fitting = [] if overflow else list(takewhile(_fits_in_a_list_item, produced))
             content += fitting
-            beyond = produced[len(fitting) :]
-            self.require_places(child, beyond, container)
-            overflow += beyond
+            overflow += produced[len(fitting) :]
         return AdfListItem(type="listItem", content=content), overflow
 
     def task_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
@@ -375,7 +316,6 @@ class _AdfBlocks:
                 if first["type"] == "taskList":
                     nested.append(first)
                     produced = produced[1:]
-            self.require_places(child, produced, container)
             overflow += produced
         return nested, overflow
 

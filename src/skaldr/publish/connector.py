@@ -5,6 +5,7 @@ from typing import Literal, Protocol
 
 from skaldr.errors import ConnectorError
 from skaldr.export.tree import LoweredDocument
+from skaldr.export_targets import ExportTarget
 from skaldr.models import Report
 from skaldr.publish.transport import Transport
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
@@ -35,6 +36,9 @@ class Connector(Protocol):
 
     @property
     def carries_look(self) -> bool: ...
+
+    @property
+    def export_target(self) -> ExportTarget: ...
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
 
