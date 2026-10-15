@@ -1447,8 +1447,8 @@ case, where the page is shared as a URL an agent later has to read back.
 | a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a bullet list whose items start with their number as text (`4.`, `5.`, `6.`), since Notion numbers every numbered list from 1; a list that starts at 1 is a native numbered list |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
-| a multi-case `request` | each case under a bold title | native tabs |
-| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | native tabs, with the same icon on a tab whose tone has one |
+| a multi-case `request` | each case under a bold title | one toggle per case, its title led by the icon of the case's status |
+| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | one toggle per tab, its title led by the same icon |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `toggle` | its bold title with its content below | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |
@@ -1492,7 +1492,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `quote` | a block quote, the citation in italics |
 | `divider` | a rule |
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
-| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand |
+| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand; a tab's title is led by an icon when its tone is info, success, warning or danger, and a request case's by the icon of its status |
 | `grid` | its cells one after another; a table inside a grid cell fails the export, since ADF cannot place it there; move the table out of the grid |
 | `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
 | `chart` | its data table |

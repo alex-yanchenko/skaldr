@@ -57,7 +57,7 @@ from skaldr.export.tree import (
     XYChart,
 )
 from skaldr.richtext import Code, Plain, Styled
-from tests.factories import check_nodes, refusal_of
+from tests.factories import check_nodes, lowered, make_command_request, refusal_of
 from tests.factories.adf_factory import cell as _cell
 from tests.factories.adf_factory import flow_graph as _flow
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -812,13 +812,27 @@ def test_columns_are_written_one_after_another() -> None:
     assert _rendered(node) == _doc(_words("left"), _words("right"), {"type": "rule"})
 
 
-def test_tabs_are_one_expand_per_tab() -> None:
+def test_tabs_are_one_expand_per_tab_titled_with_the_icon_of_the_tab_tone() -> None:
     node = Tabs((Tab(plain("One"), (_para("a"),)), Tab(plain("Two"), (_para("b"),), tone="success")))
 
     assert _rendered(node) == _doc(
         {"type": "expand", "attrs": {"title": "One"}, "content": [_words("a")]},
-        {"type": "expand", "attrs": {"title": "Two"}, "content": [_words("b")]},
+        {"type": "expand", "attrs": {"title": "✅ Two"}, "content": [_words("b")]},
     )
+
+
+def test_a_request_with_several_cases_is_one_expand_per_case_titled_with_its_status_icon() -> None:
+    cases = [
+        {"label": "finding", "tone": "warning", "response": {"body": "1"}},
+        {"label": "control", "tone": "success", "response": {"body": "2"}},
+    ]
+    content = render_adf(lowered([make_command_request(cases=cases, command="list-tiers")]))["content"]
+
+    assert [(block["type"], block.get("attrs")) for block in content] == [
+        ("paragraph", None),
+        ("expand", {"title": "⚠️ finding"}),
+        ("expand", {"title": "✅ control"}),
+    ]
 
 
 def test_a_flow_diagram_is_a_bullet_list_of_its_steps_and_where_each_leads() -> None:

@@ -29,6 +29,7 @@ GridCellsFeature = Literal["grid with more than three cells"]
 TonedCellFeature = Literal["toned grid cell"]
 GridInAGridCellFeature = Literal["grid inside a grid cell"]
 DividerInAListFeature = Literal["divider inside a list item", "divider inside a walkthrough step"]
+PanesFeature = Literal["set of tabs", "request with several cases"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -42,6 +43,7 @@ Feature = Literal[
     TonedCellFeature,
     GridInAGridCellFeature,
     DividerInAListFeature,
+    PanesFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
@@ -130,6 +132,11 @@ class DividerInAList:
     feature: DividerInAListFeature
 
 
+@dataclass(frozen=True)
+class Panes:
+    feature: PanesFeature
+
+
 Details = (
     Placement
     | HeldByAListItem
@@ -142,6 +149,7 @@ Details = (
     | TonedCell
     | GridInAGridCell
     | DividerInAList
+    | Panes
 )
 
 
@@ -152,7 +160,12 @@ class Rejection:
     names_the_heading: bool = False
 
 
-Capability = Literal["keep"] | Rejection
+@dataclass(frozen=True)
+class Swap:
+    writes: str
+
+
+Capability = Literal["keep"] | Rejection | Swap
 
 _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
@@ -293,6 +306,18 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "move the divider out of the step, after the walkthrough",
                 names_the_heading=True,
             )
+        }
+    ),
+    "set of tabs": _kept_except(
+        {
+            "notion": Swap("one toggle per tab, its title led by the icon of the tab's tone"),
+            "adf": Swap("one expand per tab, its title led by the icon of the tab's tone"),
+        }
+    ),
+    "request with several cases": _kept_except(
+        {
+            "notion": Swap("one toggle per case, its title led by the icon of the case's status"),
+            "adf": Swap("one expand per case, its title led by the icon of the case's status"),
         }
     ),
 }

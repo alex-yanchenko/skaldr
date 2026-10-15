@@ -26,6 +26,8 @@ from skaldr.export.capabilities import (
     HeldByAListItem,
     ListItemFeature,
     ListStart,
+    Panes,
+    PanesFeature,
     Placement,
     Rejection,
     ScriptForm,
@@ -160,7 +162,7 @@ class _Place:
             toggle_names=(*self.toggle_names, name),
         )
 
-    def in_a_column(self) -> Self:
+    def in_a_cell(self) -> Self:
         return replace(self, in_a_grid_cell=True)
 
 
@@ -285,6 +287,10 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
                 assert_never(run)
 
 
+def _panes_feature(node: Tabs) -> PanesFeature:
+    return "set of tabs" if node.authored_as is None else "request with several cases"
+
+
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
     authored_on_its_own = child.authored_at != holder.authored_at
     return "block inside a walkthrough step" if authored_on_its_own else "block inside a list item"
@@ -328,13 +334,15 @@ class _TreeWalk:
                     self.note_heading(node.title)
                 yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
             case Tabs():
+                if node.tabs:
+                    yield self.hit(Panes(_panes_feature(node)), node.authored_at)
                 inside = place.in_a_toggle(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
             case Columns():
                 if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
                     yield self.hit(GridCells(len(node.columns)), node.authored_at)
-                yield from self.nodes(nested_nodes(node), place.in_a_column())
+                yield from self.nodes(nested_nodes(node), place.in_a_cell())
             case Diagram():
                 yield from self.nodes(nested_nodes(node), place)
             case (
@@ -360,10 +368,11 @@ class _TreeWalk:
             yield self.hit(TonedCell(node.tone), node.authored_at)
             return
         held = _held(node)
-        feature = GRID_CELL_FEATURES.get(held) if held is not None else None
         if held == "grid":
             yield self.hit(GridInAGridCell(), node.authored_at)
-        elif feature is not None:
+            return
+        feature = GRID_CELL_FEATURES.get(held) if held is not None else None
+        if feature is not None:
             yield self.hit(HeldByAGridCell(feature, _term(node)), node.authored_at)
 
     def list_hits(self, node: ListNode, place: _Place) -> Iterator[FeatureHit]:

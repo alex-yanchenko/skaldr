@@ -7,7 +7,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
-from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection
+from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection, Swap
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
@@ -15,7 +15,7 @@ from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.factories import make_jira_target, make_report, make_section, write_report
+from tests.factories import make_jira_target, make_report, make_request, make_section, make_tabs, write_report
 from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
@@ -30,7 +30,7 @@ from tests.factories.capability_factory import (
 )
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
-Verdict = Literal["keep", "reject"]
+Verdict = Literal["keep", "reject", "swap"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
@@ -57,7 +57,18 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a grid cell": {"slack": "reject"},
     "divider inside a list item": {"adf": "reject"},
     "divider inside a walkthrough step": {"adf": "reject"},
+    "set of tabs": {"notion": "swap", "adf": "swap"},
+    "request with several cases": {"notion": "swap", "adf": "swap"},
 }
+SWAPPED_BLOCKS = [
+    pytest.param(make_tabs(), id="tabs"),
+    pytest.param(
+        make_request(
+            cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
+        ),
+        id="request-with-two-cases",
+    ),
+]
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
@@ -82,7 +93,9 @@ REJECTIONS = [
 
 
 def _verdict(capability: Capability) -> Verdict:
-    return "reject" if isinstance(capability, Rejection) else capability
+    if isinstance(capability, Rejection):
+        return "reject"
+    return "swap" if isinstance(capability, Swap) else capability
 
 
 def _template_fields(template: str) -> set[str]:
@@ -144,6 +157,14 @@ def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, oth
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
 def test_a_document_no_target_refuses_passes_the_check(target: ExportTarget) -> None:
     _check(CLEAN_BLOCKS, target)
+
+
+@pytest.mark.parametrize("target", EXPORT_TARGETS)
+@pytest.mark.parametrize("block", SWAPPED_BLOCKS)
+def test_a_block_a_target_swaps_for_another_form_passes_the_check(
+    block: dict[str, Any], target: ExportTarget
+) -> None:
+    _check([block], target)
 
 
 def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() -> None:

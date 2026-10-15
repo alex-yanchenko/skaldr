@@ -44,6 +44,7 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.swaps import tabs_as_toggles
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -200,7 +201,7 @@ class _AdfBlocks:
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
                 return [
-                    self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs
+                    block for toggle in tabs_as_toggles(node) for block in self.node_blocks(toggle, container)
                 ]
             case Diagram():
                 return self.diagram_blocks(node, container)
