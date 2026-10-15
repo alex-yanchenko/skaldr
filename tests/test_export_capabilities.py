@@ -46,7 +46,6 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
-    "image inside a callout": {"slack": "reject"},
     "divider inside a callout": {"slack": "reject"},
     "grid inside a callout": {"slack": "reject"},
     "grid with more than three cells": {"slack": "reject"},

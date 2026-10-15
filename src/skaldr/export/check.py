@@ -166,13 +166,7 @@ class _Place:
         return replace(self, in_a_grid_cell=True)
 
 
-def _is_an_image(node: Node) -> bool:
-    return isinstance(node, Media) and node.kind == "image"
-
-
 def _term(node: Node) -> str:
-    if _is_an_image(node):
-        return "image"
     named = node.authored_as if isinstance(node, AuthoredNode) else None
     return named or _NODE_TERMS[type(node)]
 
@@ -189,8 +183,6 @@ def _held(node: Node) -> Held | None:
             return "toggle"
         case Tabs() if node.tabs:
             return "toggle"
-        case Media() if _is_an_image(node):
-            return "image"
         case Divider():
             return "divider"
         case Columns():

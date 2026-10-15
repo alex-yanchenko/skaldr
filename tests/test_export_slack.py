@@ -768,7 +768,6 @@ def _two_paragraph_columns() -> Columns:
         pytest.param(Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)), "Tabs", id="tabs"),
         pytest.param(Divider(), "Divider", id="divider"),
         pytest.param(_two_paragraph_columns(), "Columns", id="columns"),
-        pytest.param(Media("image", "https://example.com/a.png"), "Media", id="image"),
     ],
 )
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_callout_cannot_hold(
@@ -786,6 +785,12 @@ def test_a_video_inside_a_callout_is_its_link() -> None:
     node = Callout("info", (Media("video", "https://example.com/v.mp4"),))
 
     assert render_slack([node]) == "::: {.callout}\n💡\n\n[Video](https://example.com/v.mp4)\n:::\n"
+
+
+def test_an_image_inside_a_callout_stays_inside_it_as_an_image_at_the_top_level_does() -> None:
+    node = Callout("info", (make_paragraph("lead"), Media("image", "https://example.com/a.png")))
+
+    assert render_slack([node]) == "::: {.callout}\n💡 lead\n\n![](https://example.com/a.png)\n:::\n"
 
 
 def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:

@@ -207,8 +207,6 @@ def _a_canvas_callout_cannot_hold(node: Node) -> bool:
             return True
         case Tabs():
             return bool(node.tabs)
-        case Media():
-            return node.kind == "image"
         case _:
             return False
 

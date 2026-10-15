@@ -18,9 +18,7 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
-CalloutPlacementFeature = Literal[
-    "image inside a callout", "divider inside a callout", "grid inside a callout"
-]
+CalloutPlacementFeature = Literal["divider inside a callout", "grid inside a callout"]
 AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
 GridCellFeature = Literal[
     "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
@@ -47,7 +45,7 @@ Feature = Literal[
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle", "image", "divider", "grid"]
+Held = Literal["table", "callout", "quote", "toggle", "divider", "grid"]
 FIRST_LIST_NUMBER: Final = 1
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
@@ -183,7 +181,7 @@ def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget,
 
 
 _CANVAS_CALLOUT_CANNOT_HOLD: Final = Rejection(
-    "a Slack canvas callout holds only text, lists, quotes and code blocks, "
+    "a Slack canvas callout holds only text, headings, lists, quotes, code blocks and images, "
     "so it cannot show the {held} inside {holder}",
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
@@ -246,7 +244,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "image inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "divider inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "grid inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "grid with more than three cells": _kept_except(
@@ -329,7 +326,6 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("callout", "toggle"): "toggle inside a callout",
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
-    ("callout", "image"): "image inside a callout",
     ("callout", "divider"): "divider inside a callout",
     ("callout", "grid"): "grid inside a callout",
 }

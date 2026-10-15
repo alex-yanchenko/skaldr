@@ -147,8 +147,8 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
 }
 CANVAS_CALLOUT_WHY = (
-    "a Slack canvas callout holds only text, lists, quotes and code blocks, so it cannot show the {held} "
-    "inside a panel"
+    "a Slack canvas callout holds only text, headings, lists, quotes, code blocks and images, "
+    "so it cannot show the {held} inside a panel"
 )
 CANVAS_COLUMN_WHY = (
     "a Slack canvas column holds no table, callout or divider, so it cannot show the {held} "
@@ -220,13 +220,12 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
     "slack-note-in-a-panel": _in_a_panel_refused_by_a_canvas({"type": "note", "body": "x"}, "note", "adf"),
     "slack-toggle-in-a-panel": _in_a_panel_refused_by_a_canvas(make_toggle(), "toggle", "adf"),
     "slack-tabs-in-a-panel": _in_a_panel_refused_by_a_canvas(make_tabs(), "set of tabs", "adf"),
-    "slack-divider-in-a-panel": _in_a_panel_refused_by_a_canvas({"type": "divider"}, "divider"),
-    "slack-image-in-a-panel-under-a-heading": RefusedCase(
+    "slack-divider-in-a-panel-under-a-heading": RefusedCase(
         "slack",
-        [{"type": "heading", "text": "Shelf"}, *in_a_panel(IMAGE)],
-        CANVAS_CALLOUT_WHY.format(held="image"),
-        "move the image out of the panel",
-        "at blocks.1.panel.blocks.0.image, under the heading 'Shelf'",
+        [{"type": "heading", "text": "Shelf"}, *in_a_panel({"type": "divider"})],
+        CANVAS_CALLOUT_WHY.format(held="divider"),
+        "move the divider out of the panel",
+        "at blocks.1.panel.blocks.0.divider, under the heading 'Shelf'",
     ),
     "slack-grid-of-four-cells": RefusedCase(
         "slack",
@@ -273,6 +272,15 @@ CLEAN_BLOCKS: list[dict[str, Any]] = [
     {"type": "heading", "text": "Plan"},
     {"type": "text", "body": "1. a\n2. b"},
     {"type": "panel", "title": "Plan", "blocks": [{"type": "text", "body": "Inside."}]},
+    {
+        "type": "panel",
+        "title": "Shelf",
+        "blocks": [
+            {"type": "heading", "text": "Shelf photos"},
+            IMAGE,
+            {"type": "media", "kind": "video", "src": "https://example.com/shelf.mp4"},
+        ],
+    },
     make_toggle(TABLE),
     make_toggle(make_toggle()),
     walkthrough_holding({"type": "text", "body": "Lock the aisle."}),
