@@ -1,9 +1,9 @@
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 import pytest
+from pydantic import JsonValue
 
 from skaldr.errors import ConnectorError, PublishError, WriteRejectedError
 from skaldr.publish import ConnectorRegistry
@@ -25,6 +25,7 @@ from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import load_state, save_state, state_path_for
 from skaldr.publish.transport import ShownLink
 from skaldr.publish_block import JiraTarget, NotionTarget
+from skaldr.publish_block.target import JsonFields
 from tests.factories.auth_factory import make_jira_credentials, make_notion_credentials, seed_notion
 from tests.factories.jira_factory import FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
@@ -57,24 +58,34 @@ NOTION_DOCUMENT = ItemRef(TARGET_LABEL, None)
 NOTION_TOOLS = ItemRef(TARGET_LABEL, "tools")
 JIRA_DOCUMENT = ItemRef(JIRA_LABEL, None)
 JIRA_TOOLS = ItemRef(JIRA_LABEL, "tools")
+FIRST_LINKS = (
+    "link     document to jira project PLAN under no parent issue, document",
+    "link     section tools to jira project PLAN under no parent issue, section tools",
+    f"link     document to {TARGET_LABEL}, document",
+    f"link     section tools to {TARGET_LABEL}, section tools",
+)
+DOCUMENT_PAGE = numbered_id(1).replace("-", "")
+TOOLS_PAGE = numbered_id(2).replace("-", "")
+DEMO_LABEL = "jira project DEMO under no parent issue"
 
 
-def _notion(**target: Any) -> dict[str, Any]:
+def _notion(**target: JsonValue) -> JsonFields:
     return make_notion_target(where={"parent_page": NOTION_PAGE_URL}, **target)
 
 
-def _jira(project: str = "PLAN", **target: Any) -> dict[str, Any]:
+def _jira(project: str = "PLAN", **target: JsonValue) -> JsonFields:
     return make_jira_target(where={"project": project, "issue_type": "Task"}, **target)
 
 
-def _publish_block(*targets: dict[str, Any], doc_id: str = DOC_ID) -> dict[str, Any]:
-    return {"doc_id": doc_id, "targets": list(targets)}
+def _publish_block(*targets: JsonFields, doc_id: str = DOC_ID) -> JsonFields:
+    return {"doc_id": doc_id, "targets": [*targets]}
 
 
 BOTH_SPLIT = _publish_block(_notion(split=["tools"]), _jira(split=["tools"]))
+LINKED_BOTH_WAYS = _publish_block(_notion(split=["tools"]), _jira("DEMO", split=["tools"]))
 
 
-def _registry(transport: FakeTransport) -> Any:
+def _registry(transport: FakeTransport) -> ConnectorRegistry:
     return fake_registry(transport, target_types=(NotionTarget, JiraTarget))
 
 
@@ -148,19 +159,11 @@ def _links_of(transport: FakeTransport) -> dict[str, tuple[ShownLink, ...]]:
     ],
 )
 def test_items_pair_across_services_by_the_part_of_the_document_they_hold(
-    publish: dict[str, Any], pairs: dict[ItemRef, tuple[ItemRef, ...]]
+    publish: JsonFields, pairs: dict[ItemRef, tuple[ItemRef, ...]]
 ) -> None:
     drafts = draft_targets(authored_garden(publish=publish), _registry(FakeTransport()))
 
     assert paired_items(drafts) == pairs
-
-
-FIRST_LINKS = (
-    "link     document to jira project PLAN under no parent issue, document",
-    "link     section tools to jira project PLAN under no parent issue, section tools",
-    f"link     document to {TARGET_LABEL}, document",
-    f"link     section tools to {TARGET_LABEL}, section tools",
-)
 
 
 def test_a_first_publish_links_each_notion_page_and_jira_issue_after_both_exist(tmp_path: Path) -> None:
@@ -207,12 +210,12 @@ def test_a_first_publish_links_each_notion_page_and_jira_issue_after_both_exist(
         for label, target in state.targets.items()
     } == {
         TARGET_LABEL: {
-            None: [_shown("page-3", "Garden handbook")],
-            "tools": [_shown("page-4", "Tools")],
+            None: (_shown("page-3", "Garden handbook"),),
+            "tools": (_shown("page-4", "Tools"),),
         },
         JIRA_LABEL: {
-            None: [_page("page-1", "Garden handbook")],
-            "tools": [_page("page-2", "Tools")],
+            None: (_page("page-1", "Garden handbook"),),
+            "tools": (_page("page-2", "Tools"),),
         },
     }
 
@@ -257,9 +260,9 @@ def test_a_state_file_that_lost_the_links_in_place_is_corrected_without_writing_
             update={
                 "document": None
                 if target.document is None
-                else target.document.model_copy(update={"links": []}),
+                else target.document.model_copy(update={"links": ()}),
                 "sections": {
-                    section: item.model_copy(update={"links": []})
+                    section: item.model_copy(update={"links": ()})
                     for section, item in target.sections.items()
                 },
             }
@@ -372,7 +375,7 @@ def test_a_dry_run_writes_no_link_and_leaves_the_state_file_alone(tmp_path: Path
     assert (transport.writes(), state_path_for(path).read_bytes()) == ([], state_before)
 
 
-def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, publish: dict[str, Any]) -> Path:
+def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, publish: JsonFields) -> Path:
     path = write_garden_report(tmp_path, publish=BOTH_SPLIT)
     _publish(path, transport)
     write_garden_report(tmp_path, publish=publish)
@@ -430,7 +433,7 @@ def test_removing_the_jira_target_archives_its_issues_and_drops_them_from_each_n
         (),
         (),
     )
-    assert [item.links for _, item in state.targets[TARGET_LABEL].held_items()] == [[], []]
+    assert [item.links for _, item in state.targets[TARGET_LABEL].held_items()] == [(), ()]
 
 
 def test_a_link_to_an_item_with_a_blank_title_is_titled_with_the_item_id(tmp_path: Path) -> None:
@@ -564,12 +567,6 @@ def test_a_retitled_item_updates_the_link_to_it_in_place(tmp_path: Path) -> None
     )
 
 
-DOCUMENT_PAGE = numbered_id(1).replace("-", "")
-TOOLS_PAGE = numbered_id(2).replace("-", "")
-DEMO_LABEL = "jira project DEMO under no parent issue"
-LINKED_BOTH_WAYS = _publish_block(_notion(split=["tools"]), _jira("DEMO", split=["tools"]))
-
-
 def _services() -> tuple[InMemoryNotion, FakeJira, ConnectorRegistry]:
     seed_notion(make_notion_credentials())
     notion = InMemoryNotion()
@@ -595,7 +592,7 @@ def _stamps(notion: InMemoryNotion) -> list[str]:
     ]
 
 
-def _remote_link_bodies(jira: FakeJira) -> list[tuple[str, Any]]:
+def _remote_link_bodies(jira: FakeJira) -> list[tuple[str, JsonValue]]:
     return [
         (request.url.path, json.loads(request.content))
         for request in jira.requests

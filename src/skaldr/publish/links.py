@@ -38,7 +38,7 @@ class ItemLinks:
 
     @property
     def held_matches_shown(self) -> bool:
-        return self.held is None or tuple(self.held.links) == self.shown
+        return self.held is None or frozenset(self.held.links) == frozenset(self.shown)
 
 
 def paired_items(drafts: Sequence[TargetDraft]) -> dict[ItemRef, tuple[ItemRef, ...]]:
@@ -197,11 +197,11 @@ def apply_links(
         target = linking.targets[ref.target].target
         written = planned.shown
         if planned.steps:
-            sending = list(dict.fromkeys([*held.links, *planned.shown]))
+            sending = tuple(dict.fromkeys([*held.links, *planned.shown]))
             noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": sending}))
             transport = transports.for_target(ref.target)
             written = transport.write_links(held.item_id, LinksWrite(linking.stamp(ref), planned.links))
-        noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": list(written)}))
+        noted = _noted(prepared, noted, ref, target, held.model_copy(update={"links": written}))
         for step in planned.steps:
             described = describe_link_step(step)
             done.append(described)

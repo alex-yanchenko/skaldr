@@ -23,7 +23,6 @@ from skaldr.publish.notion.page_markdown import (
     SectionPairs,
     carried_into,
     comparable_text,
-    grouped_links,
     holds_an_unknown_block,
     joined,
     keyed_page,
@@ -336,11 +335,10 @@ class NotionTransport:
         keyed = keyed_page(markdown, layout)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
-        wanted = grouped_links(request.shown)
         if keyed.stamp_line is None:
-            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp, wanted)
-        elif keyed.links != wanted:
-            line = stamp_line(request.stamp, wanted)
+            markdown = self._stamp_put_back(item_id, markdown, layout, request.stamp, request.shown)
+        elif frozenset(keyed.links) != frozenset(request.shown):
+            line = stamp_line(request.stamp, request.shown)
             written = line if keyed.stamp_line.endswith("\n") else line.removesuffix("\n")
             markdown = self._send(item_id, keyed.raw_sections, Replacement(keyed.stamp_line, written))
         return keyed_page(markdown, layout).links

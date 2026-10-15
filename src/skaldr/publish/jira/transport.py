@@ -59,7 +59,7 @@ from skaldr.publish_block.jira import (
     SUMMARY_FIELD,
 )
 from skaldr.publish_block.target import JsonFields
-from skaldr.services import SERVICES, Service
+from skaldr.services import SERVICES_BY_ID, Service
 from skaldr.typed_links import issue_url
 
 GLOBAL_ID_PREFIX = "skaldr"
@@ -157,7 +157,7 @@ def _linked_service(global_id: str, prefix: str) -> Service | None:
     named, separator, item_id = global_id.removeprefix(prefix).partition(GLOBAL_ID_SEPARATOR)
     if not separator or not item_id:
         return None
-    return next((service for service in SERVICES if service == named), None)
+    return SERVICES_BY_ID.get(named)
 
 
 def _archive_comment(stamp: StampValue) -> JsonValue:

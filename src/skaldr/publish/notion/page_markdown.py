@@ -1,6 +1,6 @@
 import os
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -17,14 +17,13 @@ from skaldr.export.notion import EMPTY_BLOCK, NOTION_ESCAPES, notion_fence_close
 from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish.transport import ShownLink, Stamp
 from skaldr.publish_block import notion_page_id
-from skaldr.services import SERVICE_NAMES, Service
+from skaldr.services import SERVICE_NAMES, SERVICES_BY_NAME, Service
 
 UNKEYED_SECTION: Final = "content skaldr did not publish"
 STAMP_WORDS: Final = "Published with skaldr from document"
 STAMP_COLOR: Final = '{color="gray"}'
 LINK_GROUP_SEPARATOR: Final = " · "
 LINK_SEPARATOR: Final = ", "
-SERVICES_BY_NAME: Final[dict[str, Service]] = {name: service for service, name in SERVICE_NAMES.items()}
 STAMP_PATTERN: Final = re.compile(
     rf"{STAMP_WORDS} ({SLUG_PATTERN})(?:, section ({SLUG_PATTERN}))?"
     rf"(?:{LINK_GROUP_SEPARATOR}((?:{'|'.join(SERVICES_BY_NAME)}) .*?))?"
@@ -46,14 +45,10 @@ REMOVED_WHEN_RELEASED: Final[frozenset[LineRole]] = frozenset({"published", "bla
 
 
 def _by_service(links: Sequence[ShownLink]) -> dict[Service, list[ShownLink]]:
-    grouped: dict[Service, list[ShownLink]] = {}
+    grouped: defaultdict[Service, list[ShownLink]] = defaultdict(list[ShownLink])
     for link in links:
-        grouped.setdefault(link.service, []).append(link)
+        grouped[link.service].append(link)
     return grouped
-
-
-def grouped_links(links: Sequence[ShownLink]) -> tuple[ShownLink, ...]:
-    return tuple(link for group in _by_service(links).values() for link in group)
 
 
 def _link_text(link: ShownLink) -> str:
@@ -89,7 +84,7 @@ class _LinkReading:
     title: list[str] = field(default_factory=list[str])
     links: list[ShownLink] = field(default_factory=list[ShownLink])
 
-    def token(self, token: Token) -> None:
+    def read_token(self, token: Token) -> None:
         if token.type == "link_open":
             self.url, self.title = str(token.attrGet("href") or ""), []
         elif token.type == "link_close":
@@ -109,7 +104,7 @@ def _parsed_stamp_links(line: str) -> tuple[ShownLink, ...]:
     reading = _LinkReading()
     for inline in STAMP_LINKS_PARSER.parseInline(found.group(3)):
         for token in inline.children or []:
-            reading.token(token)
+            reading.read_token(token)
     return tuple(reading.links)
 
 

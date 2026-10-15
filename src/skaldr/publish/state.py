@@ -46,7 +46,7 @@ class PublishedItem(FrozenModel):
     shown_remote: str | None = None
     writing: InFlightWrite | None = None
     retiring: Retirement | None = None
-    links: list[ShownLink] = Field(default_factory=list[ShownLink])
+    links: tuple[ShownLink, ...] = ()
 
 
 class PublishedTarget(FrozenModel):
