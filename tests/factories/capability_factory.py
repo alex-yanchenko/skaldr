@@ -298,10 +298,6 @@ SPAN_CODE_WHY = (
     "as in '{code}'"
 )
 SPAN_CODE_INSTEAD = "write the code outside the coloured, highlighted or underlined text, or without '</'"
-PLACEHOLDER_IN_A_COLOUR_WHY = (
-    "Notion cannot show a highlight inside coloured text, so it cannot show the placeholder '{{owner}}'"
-)
-PLACEHOLDER_IN_A_COLOUR_INSTEAD = "move the blank out of the coloured text"
 ONE_OWNER_UNFILLED = "  (1 unfilled placeholder: owner)"
 STEP_PATH_OF_THE_TITLE = "at blocks.0.walkthrough"
 
@@ -413,14 +409,6 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         "write the text without the underline or export the document elsewhere",
         AT_THE_TEXT,
     ),
-    "notion-placeholder-inside-a-colour-span": RefusedCase(
-        "notion",
-        PLACEHOLDER_IN_A_COLOUR_SPAN,
-        PLACEHOLDER_IN_A_COLOUR_WHY,
-        PLACEHOLDER_IN_A_COLOUR_INSTEAD,
-        AT_THE_TEXT,
-        ONE_OWNER_UNFILLED,
-    ),
     "markdown-placeholder-inside-a-colour-span": RefusedCase(
         "markdown",
         PLACEHOLDER_IN_A_COLOUR_SPAN,
@@ -435,14 +423,6 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         CANVAS_COLOUR_WHY.format(text="owner first"),
         WITHOUT_THE_COLOUR,
         AT_THE_TEXT,
-        ONE_OWNER_UNFILLED,
-    ),
-    "notion-placeholder-inside-a-toned-step-title": RefusedCase(
-        "notion",
-        toned_step_titled("ask {{owner}} first"),
-        PLACEHOLDER_IN_A_COLOUR_WHY,
-        PLACEHOLDER_IN_A_COLOUR_INSTEAD,
-        STEP_PATH_OF_THE_TITLE,
         ONE_OWNER_UNFILLED,
     ),
 }

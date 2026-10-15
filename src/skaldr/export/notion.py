@@ -242,6 +242,9 @@ class _Span:
     def underlined(self) -> "_Span":
         return replace(self, underline=True)
 
+    def for_a_blank(self) -> "_Span":
+        return replace(self, color=PLACEHOLDER_HIGHLIGHT, kind="highlight")
+
     def _attributes(self) -> str:
         color = f' color="{self.color}"' if self.color else ""
         return color + (' underline="true"' if self.underline else "")
@@ -262,7 +265,7 @@ class _Span:
 
 
 def _placeholder_written_in(span: _Span, name: str, writer: "_NotionRuns") -> str:
-    return span.coloured("highlight", PLACEHOLDER_HIGHLIGHT).around(writer.blank(name))
+    return span.for_a_blank().around(writer.blank(name))
 
 
 def _is_a_span(run: ExportRun) -> bool:

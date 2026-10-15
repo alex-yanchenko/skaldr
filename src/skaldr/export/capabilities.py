@@ -24,7 +24,6 @@ TextMarkFeature = Literal[
     "colour and highlight span",
     "underline",
     "highlight span inside a toned walkthrough step title",
-    "placeholder inside coloured text",
 ]
 SameDocumentLinkFeature = Literal["link to a heading of the same document"]
 OtherDocumentLinkFeature = Literal["link to another skaldr document"]
@@ -322,15 +321,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
                 "so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
-            )
-        }
-    ),
-    "placeholder inside coloured text": _kept_except(
-        {
-            "notion": Rejection(
-                "Notion cannot show a highlight inside coloured text, "
-                "so it cannot show the placeholder '{text}'",
-                "move the blank out of the coloured text",
             )
         }
     ),

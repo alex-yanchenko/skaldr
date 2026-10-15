@@ -367,6 +367,24 @@ def test_a_span_inside_a_span_of_the_same_kind_is_written_beside_it_as_notion_sh
             id="placeholder-inside-a-highlight",
         ),
         pytest.param(
+            parse_rich("[ask {{owner}} first]{tone=danger}"),
+            '<span color="red">ask </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>'
+            '<span color="red"> first</span>',
+            id="placeholder-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("[++ask {{owner}}++ first]{tone=danger}"),
+            '<span color="red" underline="true">ask </span>'
+            '<span color="yellow_bg" underline="true">\\{\\{owner\\}\\}</span>'
+            '<span color="red"> first</span>',
+            id="placeholder-inside-an-underline-inside-a-colour",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("ask "), Placeholder("owner"))),),
+            '<span color="red">ask </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>',
+            id="placeholder-inside-a-toned-label",
+        ),
+        pytest.param(
             (TonedLabel("danger", (Plain("Scan "), Styled("underline", (Plain("now"),)))),),
             '<span color="red">Scan </span><span color="red" underline="true">now</span>',
             id="underline-inside-a-toned-label",
@@ -393,6 +411,24 @@ def test_a_colour_inside_a_colour_passes_the_notion_check_and_is_written_beside_
 
     assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
         "page.md": 'Zone <span color="red">a </span><span color="blue">x</span><span color="red"> b</span>.\n'
+    }
+
+
+def test_a_blank_in_a_colour_span_passes_the_notion_check_and_is_written_as_a_highlight_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Ask [the {{owner}} first]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Ask <span color="red">the </span><span color="yellow_bg">\\{\\{owner\\}\\}</span>'
+        '<span color="red"> first</span>.\n'
+    }
+
+
+def test_a_blank_in_a_toned_step_title_is_written_on_notion_beside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("ask {{owner}} first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">ask </span>'
+        '<span color="yellow_bg">\\{\\{owner\\}\\}</span><span color="red"> first</span>*\n\tBoth aisles.\n'
     }
 
 
@@ -425,18 +461,6 @@ def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colou
             "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
             "the export check should have refused it",
             id="highlight-inside-a-toned-label",
-        ),
-        pytest.param(
-            (Tinted("danger", None, (Plain("ask "), Placeholder("owner"))),),
-            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
-            "the export check should have refused it",
-            id="placeholder-inside-a-colour",
-        ),
-        pytest.param(
-            (TonedLabel("danger", (Placeholder("owner"),)),),
-            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
-            "the export check should have refused it",
-            id="placeholder-inside-a-toned-label",
         ),
         pytest.param(
             (Tinted("danger", None, (Plain("see "), Code("</span>"))),),

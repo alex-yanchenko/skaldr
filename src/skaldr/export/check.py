@@ -316,8 +316,6 @@ def _inline_details(run: ExportRun, place: _RunPlace) -> Iterator[Details]:
             yield from (MarkedText(feature, text) for feature in _tint_features(run, place))
         case Styled() if run.style == "underline":
             yield MarkedText("underline", _visible_text(run.runs))
-        case Placeholder() if place.span == "colour":
-            yield MarkedText("placeholder inside coloured text", "{{" + run.name + "}}")
         case AnchorLink():
             yield SameDocumentLink(_visible_text(run.label), run.as_written())
         case DocumentLink():
