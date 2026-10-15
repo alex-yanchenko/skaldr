@@ -20,6 +20,7 @@ from skaldr.publish.notion import connector as notion_connector_module
 from tests.factories import make_jira_target, make_notion_target, make_report, make_section, write_report
 from tests.factories.capability_factory import (
     CLEAN_BLOCKS,
+    QUOTE_IN_A_PANEL,
     SEEDED_CASES,
     TABLE,
     TABLE_IN_A_PANEL,
@@ -63,7 +64,7 @@ def test_check_without_a_target_passes_what_only_a_target_refuses(
 @pytest.mark.parametrize(
     ("first", "second", "refusal"),
     [
-        pytest.param("adf", "slack", TABLE_IN_A_PANEL.message(), id="adf-then-slack"),
+        pytest.param("adf", "slack", QUOTE_IN_A_PANEL.message(), id="adf-then-slack"),
         pytest.param("slack", "adf", LIST_FROM_3_REFUSAL, id="slack-then-adf"),
     ],
 )
@@ -74,7 +75,7 @@ def test_check_for_two_targets_that_refuse_differently_fails_with_the_first_one_
     second: ExportTarget,
     refusal: str,
 ) -> None:
-    blocks = [*TABLE_IN_A_PANEL.blocks, {"type": "text", "body": "3. a\n4. b"}]
+    blocks = [*QUOTE_IN_A_PANEL.blocks, {"type": "text", "body": "3. a\n4. b"}]
     data_path = write_report(tmp_path, make_report(blocks=blocks))
 
     assert main(["--check", str(data_path), "--for", first, "--for", second]) == 1

@@ -10,7 +10,7 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
-from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
+from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.markup import (
     DIVIDER_LINE,
     MarkupRuns,
@@ -35,6 +35,13 @@ from skaldr.export.runs import (
     nested_runs,
     write_export_run_around,
     write_export_runs,
+)
+from skaldr.export.swaps import (
+    data_table_swapped_in,
+    figure_mermaid_draws,
+    swaps_the_figure,
+    tabs_swapped_for_toggles,
+    web_address_of,
 )
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
@@ -501,9 +508,10 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
 
 
 def _media_line(node: Media) -> str:
+    url = encode_url(web_address_of(node, "notion"))
     if node.kind == "image":
-        return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
-    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+        return f"![{notion_inline(node.caption or node.description)}]({url})"
+    return f'<{node.kind} src="{url}">{notion_inline(node.caption)}</{node.kind}>'
 
 
 def _quote_line(node: Quote) -> str:
@@ -536,12 +544,9 @@ def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
 
 
 def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
-    lines: list[str] = []
-    for tab in node.tabs:
-        icon = tab_icon(tab.tone)
-        lines.append(f'<tab icon="{icon}">' if icon else "<tab>")
-        lines += [*_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
-    return ["<tabs>", *_indent(lines), "</tabs>"]
+    return [
+        line for toggle in tabs_swapped_for_toggles(node, "notion") for line in _toggle_lines(toggle, room)
+    ]
 
 
 def _notion_lines(node: Node, room: TableRoom) -> list[str]:
@@ -575,8 +580,13 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return _columns_lines(node, room)
         case Tabs():
             return _tabs_lines(node, room)
+        case Diagram() if swaps_the_figure(node, "notion"):
+            return _notion_blocks(data_table_swapped_in(node, "notion"), room)
         case Diagram():
-            return [*mermaid_fence_lines(node.figure), *_notion_blocks(node.supplement, room)]
+            return [
+                *mermaid_fence_lines(figure_mermaid_draws(node, "notion")),
+                *_notion_blocks(node.supplement, room),
+            ]
         case TableOfContents():
             return ["<table_of_contents/>"]
         case _:

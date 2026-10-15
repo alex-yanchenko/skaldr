@@ -53,6 +53,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
     XYChart,
+    XYChartMark,
     capped_heading_level,
     heading_of,
 )
@@ -108,7 +109,9 @@ def test_a_flow_step_label_with_a_line_break_stays_one_mermaid_label() -> None:
 
     assert lowered([flow]) == (
         Diagram(
-            Graph("LR", (GraphNode("s1", "one three"), GraphNode("s2", "two")), (GraphEdge("s1", "s2"),))
+            Graph(
+                "LR", (GraphNode("s1", "one three"), GraphNode("s2", "two")), (GraphEdge("s1", "s2"),), "flow"
+            )
         ),
     )
 
@@ -125,8 +128,12 @@ def test_a_numbered_looping_flow_is_a_top_to_bottom_graph_with_a_dashed_return()
         Diagram(
             Graph(
                 "TB",
-                (GraphNode("s1", "1: Scan", "by aisle", "info"), GraphNode("s2", "2: Fix")),
+                (
+                    GraphNode("s1", "1: Scan", (Plain("by "), Styled("bold", (Plain("aisle"),))), "info"),
+                    GraphNode("s2", "2: Fix"),
+                ),
                 (GraphEdge("s1", "s2"), GraphEdge("s2", "s1", dashed=True)),
+                "flow",
             )
         ),
     )
@@ -145,7 +152,12 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
     assert lowered([flow], badges=API_BADGES) == (
         API_LEGEND,
         Diagram(
-            Graph("LR", (GraphNode("s1", "Scan", "first"), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
+            Graph(
+                "LR",
+                (GraphNode("s1", "Scan", (Plain("first"),)), GraphNode("s2", "Fix")),
+                (GraphEdge("s1", "s2"),),
+                "flow",
+            ),
             (
                 ListNode(
                     "bullet",
@@ -162,51 +174,28 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
 
 
 @pytest.mark.parametrize(
-    ("note", "visible", "runs"),
+    ("note", "runs"),
     [
         pytest.param(
             "see [doc](https://e.com/d)",
-            "see doc",
             (Plain("see "), Link((Plain("doc"),), "https://e.com/d")),
             id="web-link",
         ),
         pytest.param(
-            "see [count](#count)",
-            "see count",
-            (Plain("see "), AnchorLink((Plain("count"),), "count")),
-            id="anchor",
+            "see [count](#count)", (Plain("see "), AnchorLink((Plain("count"),), "count")), id="anchor"
         ),
-        pytest.param(
-            "per [^sop]", "per [1]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"
-        ),
-        pytest.param(
-            "**[doc](https://e.com/d)**",
-            "doc",
-            (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
-            id="link-inside-bold",
-        ),
+        pytest.param("per [^sop]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"),
         pytest.param(
             "per [[^sop]]{tone=info}",
-            "per [1]",
             (Plain("per "), Tinted("info", None, (Citation("sop", 1, "https://e.com/sop"),))),
             id="citation-inside-a-color-span",
         ),
-        pytest.param(
-            "rate $`x_i`$",
-            "rate x_i",
-            (Plain("rate "), InlineMath("x_i")),
-            id="inline-math",
-        ),
-        pytest.param(
-            "about 10^3^",
-            "about 103",
-            (Plain("about 10"), ScriptText("superscript", "3")),
-            id="superscript",
-        ),
+        pytest.param("rate $`x_i`$", (Plain("rate "), InlineMath("x_i")), id="inline-math"),
+        pytest.param("about 10^3^", (Plain("about 10"), ScriptText("superscript", "3")), id="superscript"),
     ],
 )
-def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
-    note: str, visible: str, runs: Rich
+def test_a_graph_node_keeps_the_runs_of_its_note_and_a_note_alone_adds_no_step_list(
+    note: str, runs: Rich
 ) -> None:
     flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
     references = {"type": "references", "items": [{"key": "sop", "text": "SOP", "url": "https://e.com/sop"}]}
@@ -217,32 +206,11 @@ def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
         if isinstance(node, Diagram)
     ]
 
-    assert diagrams == [
-        Diagram(
-            Graph("LR", (GraphNode("s1", "Scan", visible), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
-            (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
-        )
-    ]
-
-
-def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
-    fan = {
-        "type": "fan",
-        "direction": "out",
-        "hub": {"label": "Hub"},
-        "spokes": [{"label": "A", "note": "$`a^2`$"}, {"label": "B", "note": "plain"}],
-    }
-
-    assert lowered([fan]) == (
-        Diagram(
-            Graph(
-                "LR",
-                (GraphNode("hub", "Hub"), GraphNode("s1", "A", "a^2"), GraphNode("s2", "B", "plain")),
-                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
-            ),
-            (ListNode("bullet", (ListEntry((*bold("A"), Plain(": "), InlineMath("a^2"))),)),),
-        ),
+    graph = Graph(
+        "LR", (GraphNode("s1", "Scan", runs), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),), "flow"
     )
+
+    assert diagrams == [Diagram(graph)]
 
 
 def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> None:
@@ -260,6 +228,7 @@ def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> Non
                 "LR",
                 (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
                 (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
+                "fan",
             ),
             (
                 ListNode(
@@ -294,7 +263,7 @@ def test_a_fan_points_its_edges_the_way_it_says(direction: str, edges: tuple[Gra
 
     assert lowered([fan]) == (
         Diagram(
-            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges),
+            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges, "fan"),
             (
                 ListNode(
                     "bullet",
@@ -385,7 +354,7 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
     assert lowered([line]) == (
         Paragraph(bold("Open")),
         Diagram(
-            XYChart("line", ("Q1", "Q2"), ((1, 2),)),
+            XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False),
             (TableNode(_cells("Series", "Q1", "Q2"), (TableRow(_cells("x", "1", "2"), "danger"),)),),
         ),
     )
@@ -401,7 +370,7 @@ def test_an_untitled_single_series_bar_chart_is_a_bar_diagram_over_its_table() -
 
     assert lowered([chart]) == (
         Diagram(
-            XYChart("bar", ("Q1",), ((4,),)),
+            XYChart("bar", ("Q1",), ((4,),), stacked=False),
             (TableNode(_cells("Series", "Q1"), (TableRow(_cells("x", "4")),)),),
         ),
     )
@@ -411,25 +380,26 @@ TWO_SERIES: list[dict[str, Any]] = [{"label": "x", "values": [1]}, {"label": "y"
 
 
 @pytest.mark.parametrize(
-    ("variant", "stacked", "series", "rows"),
+    ("variant", "stacked", "series", "total"),
     [
-        pytest.param("bar", True, TWO_SERIES, [("x", "1"), ("y", "2")], id="stacked-bars"),
-        pytest.param(
-            "bar", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="grouped-bars-would-overlap-in-mermaid"
-        ),
-        pytest.param(
-            "line", False, TWO_SERIES, [("x", "1"), ("y", "2")], id="lines-would-have-no-legend-in-mermaid"
-        ),
-        pytest.param("bar", True, TWO_SERIES[:1], [("x", "1")], id="stacked-single-bar"),
+        pytest.param("bar", True, TWO_SERIES, ("Total", "3"), id="stacked-bars-with-a-total-row"),
+        pytest.param("bar", False, TWO_SERIES, None, id="bars"),
+        pytest.param("line", False, TWO_SERIES, None, id="lines"),
+        pytest.param("bar", True, TWO_SERIES[:1], None, id="one-stacked-bar-without-a-total-row"),
     ],
 )
-def test_a_chart_with_several_series_or_stacked_bars_is_its_table_alone(
-    variant: str, stacked: bool, series: list[dict[str, Any]], rows: list[tuple[str, str]]
+def test_an_xy_chart_keeps_its_stacking_over_a_table_of_its_series(
+    variant: XYChartMark, stacked: bool, series: list[dict[str, Any]], total: tuple[str, str] | None
 ) -> None:
     chart = {"type": "chart", "variant": variant, "stacked": stacked, "categories": ["Q1"], "series": series}
+    values = tuple((float(item["values"][0]),) for item in series)
+    rows = tuple(TableRow(_cells(item["label"], str(item["values"][0]))) for item in series)
+    totals = () if total is None else (TableRow(_cells(*total), emphasis="total"),)
 
     assert lowered([chart]) == (
-        TableNode(_cells("Series", "Q1"), tuple(TableRow(_cells(*row)) for row in rows)),
+        Diagram(
+            XYChart(variant, ("Q1",), values, stacked), (TableNode(_cells("Series", "Q1"), (*rows, *totals)),)
+        ),
     )
 
 
@@ -528,7 +498,8 @@ def test_a_verdict_on_one_case_of_several_sits_in_that_case_tab() -> None:
                     ),
                     "success",
                 ),
-            )
+            ),
+            "request cases",
         ),
     )
 
@@ -556,7 +527,8 @@ def test_a_request_with_several_cases_is_tabs() -> None:
                     (CodeBlock("list", "bash"), Paragraph(bold("Recorded output")), CodeBlock("y", "")),
                     "success",
                 ),
-            )
+            ),
+            "request cases",
         ),
     )
 
@@ -1047,48 +1019,17 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("axis", "note"),
-    [
-        pytest.param({"min": "Jan"}, (Paragraph((Plain("From Jan"),), "muted"),), id="start-only"),
-        pytest.param({"max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="end-only"),
-        pytest.param({"min": "Jan", "max": "Dec"}, (Paragraph((Plain("Jan to Dec"),), "muted"),), id="both"),
-        pytest.param(
-            {"min": "  ", "max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="blank-start"
-        ),
-        pytest.param(None, (), id="no-axis"),
-    ],
-)
-def test_a_range_shows_the_axis_ends_it_has_and_each_segment_share(
-    axis: dict[str, str] | None, note: tuple[Node, ...]
-) -> None:
+def test_a_range_lowers_to_no_node() -> None:
     block = {
         "type": "range",
+        "axis": {"min": "Jan", "max": "Dec"},
         "segments": [
             {"label": "Seg", "span": 1, "tone": "danger", "sub": "one"},
             {"label": "Rest", "span": 3},
         ],
-        **({"axis": axis} if axis else {}),
     }
 
-    assert lowered([block]) == (
-        *note,
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (
-                        TonedLabel("danger", bold("Seg")),
-                        Plain(": "),
-                        Plain("25.0%"),
-                        Plain(", "),
-                        Plain("one"),
-                    )
-                ),
-                ListEntry((*bold("Rest"), Plain(": "), Plain("75.0%"))),
-            ),
-        ),
-    )
+    assert lowered([{"type": "text", "body": "Before."}, block]) == (Paragraph((Plain("Before."),)),)
 
 
 def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
@@ -1312,21 +1253,6 @@ def test_a_badge_label_or_legend_with_a_line_break_stays_on_one_line() -> None:
 
 
 @pytest.mark.parametrize(
-    ("image", "caption"),
-    [
-        pytest.param(
-            {"caption": "Fig **1** [^x]"}, "Fig **1** [^x]", id="caption-stays-literal-like-the-html"
-        ),
-        pytest.param({}, "chart", id="no-caption-falls-back-to-alt"),
-    ],
-)
-def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: str) -> None:
-    block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
-
-    assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
-
-
-@pytest.mark.parametrize(
     ("image", "node"),
     [
         pytest.param(
@@ -1335,9 +1261,14 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
             id="with-a-caption",
         ),
         pytest.param({}, Media("image", "https://example.com/aisle.png", plain("Aisle 12")), id="alt-only"),
+        pytest.param(
+            {"src": "data:image/png;base64,AA=="},
+            Media("image", "data:image/png;base64,AA==", plain("Aisle 12")),
+            id="data-uri-left-for-the-writers-to-refuse",
+        ),
     ],
 )
-def test_a_web_image_keeps_its_url_alt_and_caption(image: dict[str, Any], node: Media) -> None:
+def test_an_image_keeps_its_source_alt_and_caption(image: dict[str, Any], node: Media) -> None:
     block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
 
     assert lowered([block]) == (node,)

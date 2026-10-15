@@ -2,19 +2,32 @@ from typing import get_args
 
 import pytest
 
+from skaldr.errors import ExportInvariantError
 from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    DocumentLink,
+    InlineMath,
+    IssueLink,
+    Link,
+    Plain,
+    Run,
+    Styled,
+)
 
 
 def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
     graph = Graph(
         "TB",
         (
-            GraphNode("s1", 'Say "hi"', "then\nstop", "warning"),
+            GraphNode("s1", 'Say "hi"', (Plain("then\n"), Styled("bold", (Plain("stop"),))), "warning"),
             GraphNode("s2", "Fix", tone="info"),
             GraphNode("s3", "Plain"),
         ),
         (GraphEdge("s1", "s2"), GraphEdge("s3", "s1", dashed=True)),
+        "flow",
     )
 
     assert mermaid_fence_lines(graph) == [
@@ -46,7 +59,7 @@ def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
     ],
 )
 def test_every_tone_has_a_node_class(tone: ToneName, colors: str) -> None:
-    graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), ())
+    graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), (), "flow")
 
     assert mermaid_fence_lines(graph) == [
         "```mermaid",
@@ -73,7 +86,7 @@ def test_every_tone_has_a_mermaid_fill() -> None:
     ],
 )
 def test_a_node_label_keeps_characters_mermaid_would_read_as_syntax(label: str, written: str) -> None:
-    graph = Graph("LR", (GraphNode("s1", label),), ())
+    graph = Graph("LR", (GraphNode("s1", label),), (), "flow")
 
     assert mermaid_fence_lines(graph) == ["```mermaid", "flowchart LR", f'    s1["{written}"]', "```"]
 
@@ -93,20 +106,70 @@ def test_a_pie_quotes_its_labels_and_writes_values_without_an_exponent() -> None
 
 
 def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> None:
-    chart = XYChart("line", ('Q "1"', "Q2"), ((1, 2.5), (1e16, 4)))
+    chart = XYChart("line", ('Q "1"', "Q2"), ((1e16, 2.5),), stacked=False)
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
         "xychart-beta",
         '    x-axis ["Q #quot;1#quot;", "Q2"]',
-        "    line [1, 2.5]",
-        "    line [10000000000000000, 4]",
+        "    line [10000000000000000, 2.5]",
         "```",
     ]
 
 
+def test_a_stacked_xy_chart_with_one_series_is_drawn_as_an_unstacked_one() -> None:
+    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=True)
+
+    assert mermaid_fence_lines(chart) == [
+        "```mermaid",
+        "xychart-beta",
+        '    x-axis ["Q1", "Q2"]',
+        "    bar [1, 2]",
+        "```",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("run", "what"),
+    [
+        pytest.param(Link((Plain("docs"),), "https://example.com/docs"), "a link", id="link"),
+        pytest.param(AnchorLink((Plain("above"),), "plan"), "a link to a heading", id="anchor-link"),
+        pytest.param(IssueLink((Plain("SHOP-12"),), "SHOP-12", None), "an issue link", id="issue-link"),
+        pytest.param(DocumentLink((Plain("plan"),), "plan", None), "a document link", id="document-link"),
+        pytest.param(Citation("audit", 1), "a citation", id="citation"),
+        pytest.param(InlineMath("x^2"), "math", id="math"),
+        pytest.param(Styled("strike", (Plain("40"),)), "struck-through text", id="strike"),
+    ],
+)
+def test_a_note_holding_a_run_the_check_refuses_in_a_mermaid_label_is_an_internal_error(
+    run: Run, what: str
+) -> None:
+    graph = Graph("TB", (GraphNode("s1", "Scan", (Plain("see "), run)),), (), "flow")
+
+    with pytest.raises(ExportInvariantError) as raised:
+        mermaid_fence_lines(graph)
+
+    assert str(raised.value) == (
+        f"a Mermaid label has no form for {what}; the export check should have refused it"
+    )
+
+
+@pytest.mark.parametrize("stacked", [False, True])
+def test_an_xy_chart_with_several_series_is_an_internal_error_since_the_export_swaps_it(
+    stacked: bool,
+) -> None:
+    chart = XYChart("bar", ("Q1",), ((1,), (2,)), stacked=stacked)
+
+    with pytest.raises(ExportInvariantError) as raised:
+        mermaid_fence_lines(chart)
+
+    assert str(raised.value) == (
+        "a Mermaid xy chart cannot tell several series apart; the export should have written its data table"
+    )
+
+
 def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:
-    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),))
+    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),), stacked=False)
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",

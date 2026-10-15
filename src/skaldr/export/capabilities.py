@@ -1,7 +1,9 @@
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
+from skaldr.errors import ExportInvariantError
+from skaldr.export.tree import PanesKind, ToneName
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -37,6 +39,27 @@ FencedInAListItemFeature = Literal[
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
 ]
 ListInAQuoteFeature = Literal["list inside a quote"]
+CalloutPlacementFeature = Literal["divider inside a callout"]
+AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
+GridCellFeature = Literal[
+    "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
+]
+GridCellsFeature = Literal["grid with more than three cells"]
+TonedCellFeature = Literal["toned grid cell"]
+GridInAGridCellFeature = Literal["grid inside a grid cell"]
+DividerInAStepFeature = Literal["divider inside a walkthrough step"]
+PanesFeature = Literal["set of tabs", "request with several cases"]
+OccurrenceFeature = Literal[
+    "range",
+    "flow diagram",
+    "fan diagram",
+    "link, citation, math or strikethrough in a flow or fan step's note",
+    "chart",
+    "chart with several series",
+    "math block",
+    "inline math",
+    "image from a data: URI",
+]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -51,14 +74,26 @@ Feature = Literal[
     TextNumberingFeature,
     FencedInAListItemFeature,
     ListInAQuoteFeature,
+    CalloutPlacementFeature,
+    GridCellFeature,
+    GridCellsFeature,
+    TonedCellFeature,
+    GridInAGridCellFeature,
+    DividerInAStepFeature,
+    PanesFeature,
+    OccurrenceFeature,
 ]
+RICH_STEP_NOTE: Final[OccurrenceFeature] = (
+    "link, citation, math or strikethrough in a flow or fan step's note"
+)
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle"]
+Held = Literal["table", "callout", "quote", "toggle", "divider"]
 FIRST_LIST_NUMBER: Final = 1
 BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
+CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -73,7 +108,7 @@ UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
 
 @dataclass(frozen=True)
 class Placement:
-    feature: PlacementFeature
+    feature: AnyPlacementFeature
     held: str
     holder: str
     holder_name: str
@@ -94,6 +129,7 @@ class ListStart:
 @dataclass(frozen=True)
 class CellCount:
     cells: int
+    held: str
     limit: int = CANVAS_TABLE_CELL_LIMIT
     feature: CellCountFeature = field(default="table over 300 cells", init=False)
 
@@ -168,6 +204,45 @@ class ListInAQuote:
     feature: ListInAQuoteFeature = field(default="list inside a quote", init=False)
 
 
+@dataclass(frozen=True)
+class HeldByAGridCell:
+    feature: GridCellFeature
+    held: str
+
+
+@dataclass(frozen=True)
+class GridCells:
+    cells: int
+    limit: int = CANVAS_LAYOUT_COLUMN_LIMIT
+    feature: GridCellsFeature = field(default="grid with more than three cells", init=False)
+
+
+@dataclass(frozen=True)
+class TonedCell:
+    tone: ToneName
+    feature: TonedCellFeature = field(default="toned grid cell", init=False)
+
+
+@dataclass(frozen=True)
+class GridInAGridCell:
+    feature: GridInAGridCellFeature = field(default="grid inside a grid cell", init=False)
+
+
+@dataclass(frozen=True)
+class DividerInAStep:
+    feature: DividerInAStepFeature = field(default="divider inside a walkthrough step", init=False)
+
+
+@dataclass(frozen=True)
+class Panes:
+    feature: PanesFeature
+
+
+@dataclass(frozen=True)
+class Occurrence:
+    feature: OccurrenceFeature
+
+
 Details = (
     Placement
     | HeldByAListItem
@@ -182,6 +257,13 @@ Details = (
     | TextNumbering
     | FencedInAListItem
     | ListInAQuote
+    | HeldByAGridCell
+    | GridCells
+    | TonedCell
+    | GridInAGridCell
+    | DividerInAStep
+    | Panes
+    | Occurrence
 )
 
 
@@ -192,7 +274,12 @@ class Rejection:
     names_the_heading: bool = False
 
 
-Capability = Literal["keep"] | Rejection
+@dataclass(frozen=True)
+class Swap:
+    writes: str
+
+
+Capability = Literal["keep"] | Rejection | Swap
 
 _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
@@ -239,11 +326,49 @@ def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget,
     return {**kept, **cells}
 
 
+_CANVAS_CALLOUT_CANNOT_HOLD: Final = Rejection(
+    "a Slack canvas callout holds only text, headings, lists, quotes, code blocks and images, "
+    "so it cannot show the {held} inside {holder}",
+    "move the {held} out of the {holder_name}",
+    names_the_heading=True,
+)
+_CANVAS_COLUMN_CANNOT_HOLD: Final = Rejection(
+    "a Slack canvas column holds no table, callout or divider, "
+    "so it cannot show the {held} inside a grid cell",
+    "move the {held} out of the grid",
+    names_the_heading=True,
+)
+TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
+    "markdown": "GitHub",
+    "notion": "Notion",
+    "adf": "ADF",
+    "slack": "a Slack canvas",
+}
+
+
+_TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_TARGETS_WITH_MERMAID_DIAGRAMS: Final[tuple[ExportTarget, ...]] = ("markdown", "notion")
+_HOST_THE_IMAGE: Final = "host the image and give its https address"
+_CHART_AS_ITS_TABLE: Final = Swap(
+    "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
+    "a bar or line chart's series, a row each with its value in each category, "
+    "then for stacked bars with several series a total row holding each category's stack"
+)
+
+
+def _refused_by(
+    targets: Iterable[ExportTarget], cannot: str, instead: str
+) -> Mapping[ExportTarget, Capability]:
+    return {target: Rejection(f"{TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
+
+
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
-    "table inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
-    "callout inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "table inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "callout inside a callout": _kept_except(
+        {"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}
+    ),
     "quote inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
-    "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "table inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "toggle inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "block inside a list item": _kept_except(
@@ -261,8 +386,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "table over 300 cells": _kept_except(
         {
             "slack": Rejection(
-                "a table has {cells:,} cells, over the {limit} a Slack canvas table can hold",
-                "split it into two tables or export it elsewhere",
+                "the {held} takes {cells:,} cells as a Slack canvas table, "
+                "over the {limit} such a table can hold",
+                "split the {held} in two or export it elsewhere",
                 names_the_heading=True,
             )
         }
@@ -392,18 +518,134 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "divider inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "grid with more than three cells": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas column layout holds at most {limit} columns, so it cannot show a grid of "
+                "{cells} cells",
+                "split the grid into grids of at most {limit} cells",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "table inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "callout inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "divider inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "toned grid cell": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
+                "drop the tone from the grid cell",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "grid inside a grid cell": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas cannot show a grid's columns inside a grid cell",
+                "write the inner grid's cells as cells of the outer grid",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "divider inside a walkthrough step": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a divider inside a walkthrough step, "
+                "since Jira writes a step as a list item",
+                "move the divider out of the step, after the walkthrough",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "set of tabs": _kept_except(
+        {
+            "notion": Swap("one toggle per tab, its title led by the icon of the tab's tone"),
+            "adf": Swap("one expand per tab, its title led by the icon of the tab's tone"),
+        }
+    ),
+    "request with several cases": _kept_except(
+        {
+            "notion": Swap("one toggle per case, its title led by the icon of the case's status"),
+            "adf": Swap("one expand per case, its title led by the icon of the case's status"),
+        }
+    ),
+    "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
+    "flow diagram": _kept_except(
+        _refused_by(
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list"
+        )
+    ),
+    "fan diagram": _kept_except(
+        _refused_by(
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list"
+        )
+    ),
+    RICH_STEP_NOTE: _kept_except(
+        _refused_by(
+            _TARGETS_WITH_MERMAID_DIAGRAMS,
+            "show a link, citation, math, struck-through text, or a subscript or superscript "
+            "with no Unicode form in a flow or fan step's note, since a diagram label holds plain text only",
+            "write the note as plain text and put the rest in a text block after the diagram",
+        )
+    ),
+    "chart": _kept_except(dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
+    "chart with several series": dict.fromkeys(EXPORT_TARGETS, _CHART_AS_ITS_TABLE),
+    "math block": _kept_except(
+        dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("a code block in latex"))
+    ),
+    "inline math": _kept_except(
+        dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))
+    ),
+    "image from a data: URI": {
+        **_refused_by(("markdown", "notion"), "show an image from a data: URI", _HOST_THE_IMAGE),
+        "adf": Rejection(
+            "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
+            _HOST_THE_IMAGE,
+        ),
+        "slack": Rejection(
+            "a Slack canvas cannot show an image from a data: URI",
+            "upload the image to Slack and give its permalink",
+        ),
+    },
 }
 
-PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {
+PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("callout", "table"): "table inside a callout",
     ("callout", "callout"): "callout inside a callout",
     ("callout", "quote"): "quote inside a callout",
     ("callout", "toggle"): "toggle inside a callout",
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
+    ("callout", "divider"): "divider inside a callout",
 }
+PANES_FEATURES: Final[Mapping[PanesKind, PanesFeature]] = {
+    "tabs": "set of tabs",
+    "request cases": "request with several cases",
+}
+GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
+    "table": "table inside a grid cell",
+    "callout": "callout inside a grid cell",
+    "divider": "divider inside a grid cell",
+}
+
+
+def swaps(feature: Feature, target: ExportTarget) -> bool:
+    return isinstance(CAPABILITIES[feature][target], Swap)
 
 
 def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:
     forms = UNICODE_SCRIPT_FORMS[position]
     return next((character for character in text if ord(character) not in forms), None)
+
+
+def in_unicode_script_form(position: ScriptPosition, text: str, subject: str) -> str:
+    without_a_form = character_without_a_unicode_form(position, text)
+    if without_a_form is not None:
+        raise ExportInvariantError(
+            f"{subject} has no {position} form for '{without_a_form}' in '{text}'; "
+            "the export check should have refused it"
+        )
+    return text.translate(UNICODE_SCRIPT_FORMS[position])

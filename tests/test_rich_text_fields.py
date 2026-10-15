@@ -221,8 +221,15 @@ def _report(source: str) -> models.Report:
     return models.load_report(REPO_ROOT / source)
 
 
+RANGE_SEGMENT_SUB_FIELD = ("segments", "sub")
+
+
+def _is_a_range_segment_sub(path: tuple[str, ...]) -> bool:
+    return len(path) >= 3 and (path[-3], path[-1]) == RANGE_SEGMENT_SUB_FIELD
+
+
 @pytest.mark.parametrize("source", ["data/example.yaml", "examples/sales-pipeline.yaml", "multi-paragraph"])
-def test_render_and_export_parse_exactly_the_validated_strings(
+def test_export_parses_every_string_the_page_parses_except_the_sub_text_of_a_range_segment(
     monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
     report = _report(source)
@@ -235,7 +242,10 @@ def test_render_and_export_parse_exactly_the_validated_strings(
     lower_report(report)
 
     validated = {text for _, text in rich_text_strings(report) if text}
-    assert (rendered - {""}, exported - {""}) == (validated, validated)
+    outside_a_range = {
+        text for path, text in rich_text_strings(report) if text and not _is_a_range_segment_sub(path)
+    }
+    assert (rendered - {""}, exported - {""}) == (validated, outside_a_range)
 
 
 def test_the_validated_strings_follow_each_fields_paragraph_policy() -> None:

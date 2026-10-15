@@ -6,10 +6,10 @@ from typing import Any, Final
 import yaml
 
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from tests.conftest import REPO_ROOT
 
-EXAMPLE: Final = REPO_ROOT / "data" / "example.yaml"
-GOLDEN_FOLDER: Final = REPO_ROOT / "tests" / "golden"
+_REPO_ROOT: Final = Path(__file__).resolve().parents[2]
+EXAMPLE: Final = _REPO_ROOT / "data" / "example.yaml"
+GOLDEN_FOLDER: Final = _REPO_ROOT / "tests" / "golden"
 GOLDEN_REWRITE_VARIABLE_FOR: Final[Mapping[ExportTarget, str]] = {
     target: f"SKALDR_WRITE_{target.upper()}_GOLDEN" for target in EXPORT_TARGETS
 }
@@ -50,22 +50,10 @@ EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
     ),
 }
 FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE: Final[Mapping[ExportTarget, str]] = {
-    "markdown": (
-        "GitHub Markdown cannot colour text, so it cannot show the colour of 'behind schedule', "
-        "at blocks.8.text; write the text without the colour or export the document elsewhere"
-    ),
-    "notion": (
-        "a Notion text run takes a colour or a highlight, not both, so it cannot show both on 'vendor lots', "
-        "at blocks.8.text; keep either the colour or the highlight on the text"
-    ),
-    "adf": (
-        "a Jira description does not show a text highlight, so it cannot show the highlight on 'due Friday', "
-        "at blocks.8.text; write the text without the highlight or export the document elsewhere"
-    ),
-    "slack": (
-        "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit', "
-        "at blocks.7.text; write the text without the underline or export the document elsewhere"
-    ),
+    "markdown": "GitHub cannot draw a range bar, at blocks.4.range; use a meter or a table",
+    "notion": "Notion cannot draw a range bar, at blocks.4.range; use a meter or a table",
+    "adf": "ADF cannot draw a range bar, at blocks.4.range; use a meter or a table",
+    "slack": "a Slack canvas cannot draw a range bar, at blocks.4.range; use a meter or a table",
 }
 
 

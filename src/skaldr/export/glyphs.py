@@ -4,9 +4,18 @@ from typing import Final
 
 from typing_extensions import assert_never
 
-from skaldr.export.runs import CheckMark, DecisionMark, IndicatorMark, Mark, StatusMark, SwimlaneMark
-from skaldr.export.tree import Callout, ToneName
+from skaldr.export.runs import (
+    CheckMark,
+    DecisionMark,
+    ExportRich,
+    IndicatorMark,
+    Mark,
+    StatusMark,
+    SwimlaneMark,
+)
+from skaldr.export.tree import Callout, Tab, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
+from skaldr.richtext import Plain
 
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
@@ -34,6 +43,13 @@ def callout_icon(callout: Callout) -> str | None:
 
 def tab_icon(tone: ToneName | None) -> str | None:
     return CALLOUT_ICON[tone] if tone in TAB_TONES else None
+
+
+def tab_title_led_by_its_icon(tab: Tab) -> ExportRich:
+    icon = tab_icon(tab.tone)
+    if icon is None:
+        return tab.title
+    return (Plain(f"{icon} "), *tab.title) if tab.title else (Plain(icon),)
 
 
 def status_glyph(state: StatusState) -> str:

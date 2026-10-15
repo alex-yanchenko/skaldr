@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
@@ -39,7 +40,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Person, Report, load_report, parse_report
+from skaldr.models import Grid, Person, Report, Walkthrough, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -57,6 +58,7 @@ from skaldr.richtext import (
     Tinted,
 )
 from tests.factories import (
+    accepted_example,
     folder_texts,
     make_bullets,
     make_list_entry,
@@ -66,6 +68,7 @@ from tests.factories import (
     make_section,
     make_table_cell,
     refusal_of,
+    refused_block_types,
     slack_of,
     write_report,
 )
@@ -78,12 +81,14 @@ from tests.factories.example_factory import (
     golden_or_scratch_folder,
 )
 
+REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
+CANVAS_COLUMN_REFUSED_TYPES = ("callout", "note", "table", "divider")
+FULL_GRID_SPAN = 6
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
-MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
-ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
-TABLE_LIMIT_WHY = "a table has 301 cells, over the 300 a Slack canvas table can hold"
-TABLE_LIMIT_INSTEAD = "split it into two tables or export it elsewhere"
+ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), (), "flow")
+TABLE_LIMIT_WHY = "the table takes 301 cells as a Slack canvas table, over the 300 such a table can hold"
+TABLE_LIMIT_INSTEAD = "split the table in two or export it elsewhere"
 LIST_SEPARATOR = "&nbsp;"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
@@ -120,10 +125,35 @@ def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]
     return {"type": "text", "body": detail["body"]} if detail["type"] == "callout" else detail
 
 
+def _cells_reworked_for_a_canvas(cell: dict[str, Any]) -> list[dict[str, Any]]:
+    kept = [inner for inner in cell["blocks"] if inner["type"] not in (*CANVAS_COLUMN_REFUSED_TYPES, "grid")]
+    inner_cells = [
+        inner_cell for inner in cell["blocks"] if inner["type"] == "grid" for inner_cell in inner["cells"]
+    ]
+    kept_cells = [kept] if kept else []
+    inner_cell_blocks = [inner_cell["blocks"] for inner_cell in inner_cells]
+    return [{"blocks": blocks} for blocks in kept_cells + inner_cell_blocks]
+
+
+def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
+    moved_out = [
+        inner
+        for cell in grid["cells"]
+        for inner in cell["blocks"]
+        if inner["type"] in CANVAS_COLUMN_REFUSED_TYPES
+    ]
+    cells = [reworked for cell in grid["cells"] for reworked in _cells_reworked_for_a_canvas(cell)]
+    span = FULL_GRID_SPAN // len(cells)
+    return [*moved_out, {"type": "grid", "cells": [cell | {"span": span} for cell in cells]}]
+
+
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
     data = example_for("slack")
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
+        if block["type"] == "grid":
+            blocks += _grid_reworked_for_a_canvas(block)
+            continue
         blocks.append(block)
         if block["type"] != "walkthrough":
             continue
@@ -141,14 +171,72 @@ def test_the_example_is_refused_for_slack_at_its_first_refusal_in_document_order
     assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["slack"]
 
 
-def test_the_example_reworked_for_a_canvas_exports_to_the_slack_golden(
+def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
+    return next(
+        f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
+        for path, block in report.located_blocks
+        if isinstance(block, Walkthrough)
+        for step_index, step in enumerate(block.steps)
+        for index, detail in enumerate(step.detail)
+        if detail.type not in CANVAS_STEP_DETAIL_TYPES
+    )
+
+
+def _first_toned_cell_of_a_column_layout(report: Report) -> tuple[str, str]:
+    return next(
+        (f"{path}.cells.{cell_index}", cell.tone)
+        for path, block in report.located_blocks
+        if isinstance(block, Grid) and len(block.cells) > 1
+        for cell_index, cell in enumerate(block.cells)
+        if cell.tone
+    )
+
+
+def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path: Path) -> None:
+    data = example_for("slack")
+    walkthrough = parse_report(
+        {**data, "blocks": [block for block in data["blocks"] if block["type"] == "walkthrough"]}
+    )
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(walkthrough, tmp_path / "out")
+
+    assert vars(raised.value) == _canvas_rejection(
+        _list_item_why("a code block"),
+        OUT_OF_THE_STEP,
+        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(walkthrough)}",
+    )
+
+
+def test_the_grid_of_the_example_is_rejected_for_its_first_toned_cell(tmp_path: Path) -> None:
+    data = example_for("slack")
+    grids = parse_report(
+        {**data, "blocks": [block for block in data["blocks"] if block["type"] in ("heading", "grid")]}
+    )
+    path, tone = _first_toned_cell_of_a_column_layout(grids)
+
+    with pytest.raises(ExportRejectedError) as raised:
+        export_slack(grids, tmp_path / "out")
+
+    assert vars(raised.value) == _canvas_rejection(
+        f"a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
+        "drop the tone from the grid cell",
+        f"at {path}, under the heading 'At a glance'",
+    )
+
+
+def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = golden_or_scratch_folder("slack", tmp_path)
+    reworked = _example_reworked_for_a_canvas()
 
-    export_slack(parse_report(_example_reworked_for_a_canvas()), out_dir)
+    export_slack(accepted_example("slack", reworked), out_dir)
 
-    assert folder_texts(out_dir) == folder_texts(golden_of("slack"))
+    assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
+        REFUSED_IN_THE_REWORKED_EXAMPLE,
+        folder_texts(golden_of("slack")),
+    )
 
 
 @pytest.mark.parametrize(
@@ -359,6 +447,21 @@ def test_lists_in_a_row_inside_a_callout_or_a_column_are_kept_apart() -> None:
         f"::: {{.layout}}\n::: {{.column}}\n* a\n\n{LIST_SEPARATOR}\n\n* b\n:::\n"
         "::: {.column}\nc\n:::\n:::\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "text"),
+    [
+        pytest.param("bullet", "check", f"* a\n\n{LIST_SEPARATOR}\n\n* [ ] b\n", id="bullets-then-checks"),
+        pytest.param("check", "bullet", f"* [ ] a\n\n{LIST_SEPARATOR}\n\n* b\n", id="checks-then-bullets"),
+    ],
+)
+def test_a_bullet_list_and_a_check_list_in_a_row_are_kept_apart(
+    first: ListKind, second: ListKind, text: str
+) -> None:
+    nodes = [ListNode(first, (make_list_entry("a"),)), ListNode(second, (make_list_entry("b"),))]
+
+    assert render_slack(nodes) == text
 
 
 def test_lists_with_a_paragraph_between_them_need_no_separator() -> None:
@@ -583,7 +686,10 @@ def test_a_table_over_300_cells_with_no_heading_above_it_is_rejected_naming_no_p
 
 
 def test_a_table_over_300_cells_is_rejected_naming_the_heading_above_it() -> None:
-    nodes = [Heading(2, make_rich_text("Counts")), Callout("info", (_one_column_table(301),))]
+    nodes = [
+        Heading(2, make_rich_text("Counts")),
+        Toggle(make_rich_text("Rows"), None, (_one_column_table(301),)),
+    ]
 
     assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
         TABLE_LIMIT_WHY, TABLE_LIMIT_INSTEAD, "under the heading 'Counts'"
@@ -619,7 +725,8 @@ def test_padding_counts_toward_the_cells_of_a_table() -> None:
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 302 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 302 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
     )
 
 
@@ -630,7 +737,17 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
     )
 
     assert vars(refusal_of([table], "slack")) == _canvas_rejection(
-        "a table has 1,001 cells, over the 300 a Slack canvas table can hold", TABLE_LIMIT_INSTEAD
+        "the table takes 1,001 cells as a Slack canvas table, over the 300 such a table can hold",
+        TABLE_LIMIT_INSTEAD,
+    )
+
+
+def test_a_table_kind_block_over_300_cells_is_named_by_its_own_block_type() -> None:
+    table = replace(_one_column_table(301), authored_as="matrix")
+
+    assert vars(refusal_of([table], "slack")) == _canvas_rejection(
+        "the matrix takes 301 cells as a Slack canvas table, over the 300 such a table can hold",
+        "split the matrix in two or export it elsewhere",
     )
 
 
@@ -641,15 +758,6 @@ def test_a_cell_count_in_the_thousands_is_written_with_a_thousands_separator() -
         pytest.param(CodeBlock("x"), "```\nx\n```\n", id="code-without-language"),
         pytest.param(CodeBlock("a ``` b"), "````\na ``` b\n````\n", id="code-with-a-fence-inside"),
         pytest.param(DisplayMath("e = mc^2"), "```latex\ne = mc^2\n```\n", id="math"),
-        pytest.param(Diagram(ONE_NODE_GRAPH), f"{MERMAID_ONE_NODE}\n", id="diagram"),
-        pytest.param(
-            Diagram(
-                ONE_NODE_GRAPH,
-                (make_bullets(make_list_entry("A", make_bullets(make_list_entry("by aisle")))),),
-            ),
-            f"{MERMAID_ONE_NODE}\n\n* A\n  * by aisle\n",
-            id="diagram-with-its-supplement",
-        ),
     ],
 )
 def test_a_fenced_block_carries_its_language(node: Node, text: str) -> None:
@@ -708,14 +816,9 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
         ),
         pytest.param(Callout("info", ()), "::: {.callout}\n💡\n:::\n", id="empty"),
         pytest.param(
-            Callout("info", (Toggle(make_rich_text("T"), None, (make_paragraph("x"),)),)),
-            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
-            id="led-by-a-toggle-title",
-        ),
-        pytest.param(
-            Callout("info", (Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)),)),
-            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
-            id="led-by-a-tab-title",
+            Callout("info", (Quote((make_rich_text("said"),)), CodeBlock("x", "sh"))),
+            "::: {.callout}\n💡\n\n> said\n\n```sh\nx\n```\n:::\n",
+            id="led-by-a-quote-then-code",
         ),
     ],
 )
@@ -731,36 +834,43 @@ def test_a_panel_is_a_fenced_callout_with_no_icon_as_on_the_page() -> None:
     assert slack_of([panel]) == "::: {.callout}\n**Card**\n\ninside\n:::\n"
 
 
-def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_it() -> None:
-    columns = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (make_paragraph("right"),))))
-    inner = Callout("danger", (make_paragraph("inner"),))
-    node = Callout(
-        "info",
-        (make_paragraph("lead"), _key_value_table(), inner, Divider(), columns, make_paragraph("tail")),
+@pytest.mark.parametrize(
+    ("held", "kind"),
+    [
+        pytest.param(_key_value_table(), "TableNode", id="table"),
+        pytest.param(Callout("danger", (make_paragraph("inner"),)), "Callout", id="callout"),
+        pytest.param(Toggle(make_rich_text("T"), None, (make_paragraph("x"),)), "Toggle", id="toggle"),
+        pytest.param(Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)), "Tabs", id="tabs"),
+        pytest.param(Divider(), "Divider", id="divider"),
+    ],
+)
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_callout_cannot_hold(
+    held: Node, kind: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Callout("info", (make_paragraph("lead"), held))])
+
+    assert str(raised.value) == (
+        f"a Slack canvas callout has no place for a {kind}; the export check should have refused it"
     )
 
-    assert render_slack([node]) == (
-        "::: {.callout}\n💡 lead\n\ntail\n:::\n\n"
-        "| k |\n| --- |\n| v |\n\n"
-        "::: {.callout}\n🛑 inner\n:::\n\n"
-        "---\n\n"
-        "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nright\n:::\n:::\n"
-    )
+
+def test_a_video_inside_a_callout_is_its_link() -> None:
+    node = Callout("info", (Media("video", "https://example.com/v.mp4"),))
+
+    assert render_slack([node]) == "::: {.callout}\n💡\n\n[Video](https://example.com/v.mp4)\n:::\n"
+
+
+def test_an_image_inside_a_callout_stays_inside_it_as_an_image_at_the_top_level_does() -> None:
+    node = Callout("info", (make_paragraph("lead"), Media("image", "https://example.com/a.png")))
+
+    assert render_slack([node]) == "::: {.callout}\n💡 lead\n\n![](https://example.com/a.png)\n:::\n"
 
 
 def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
     node = Callout("info", (make_bullets(make_list_entry("a", _key_value_table())),))
 
     assert vars(refusal_of([node], "slack")) == _canvas_rejection(_list_item_why("a table"), OUT_OF_THE_LIST)
-
-
-def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
-    innermost = Callout("danger", (make_paragraph("c"),))
-    middle = Callout("warning", (make_paragraph("b"), innermost))
-
-    assert render_slack([Callout("info", (make_paragraph("a"), middle))]) == (
-        "::: {.callout}\n💡 a\n:::\n\n::: {.callout}\n⚠️ b\n:::\n\n::: {.callout}\n🛑 c\n:::\n"
-    )
 
 
 def test_a_quote_is_quoted_lines_with_the_cite_on_its_own_italic_line() -> None:
@@ -798,10 +908,10 @@ def test_a_toggle_is_its_heading_or_bold_title_then_its_children(node: Toggle, t
     assert render_slack([node]) == text
 
 
-def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
+def test_up_to_three_columns_are_a_column_layout() -> None:
     node = Columns(
         (
-            GridColumn(40, (make_paragraph("left"), Divider())),
+            GridColumn(40, (Heading(3, make_rich_text("Left")), make_paragraph("left"))),
             GridColumn(30, (make_bullets(make_list_entry("a")),)),
             GridColumn(30, (Toggle(make_rich_text("T"), None, (make_paragraph("x"),)),)),
         )
@@ -809,40 +919,60 @@ def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
 
     assert render_slack([node]) == (
         "::: {.layout}\n"
-        "::: {.column}\nleft\n:::\n"
+        "::: {.column}\n### Left\n\nleft\n:::\n"
         "::: {.column}\n* a\n:::\n"
         "::: {.column}\n**T**\n\nx\n:::\n"
         ":::\n"
     )
 
 
-def test_more_than_three_columns_are_their_children_one_after_another() -> None:
-    node = Columns(tuple(GridColumn(25, (make_paragraph(name), Divider())) for name in "abcd"))
+def test_the_canvas_writer_alone_raises_an_internal_error_for_more_than_three_columns() -> None:
+    node = Columns(tuple(GridColumn(25, (make_paragraph(name),)) for name in "abcd"))
 
-    assert render_slack([node]) == "a\n\n---\n\nb\n\n---\n\nc\n\n---\n\nd\n\n---\n"
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([node])
+
+    assert str(raised.value) == (
+        "a Slack canvas layout holds at most 3 columns, not 4; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(
-    ("held", "text"),
+    ("held", "kind"),
     [
-        pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
-        pytest.param(Callout("info", (make_paragraph("c"),)), "::: {.callout}\n💡 c\n:::", id="callout"),
+        pytest.param(_key_value_table(), "TableNode", id="table"),
+        pytest.param(Callout("info", (make_paragraph("c"),)), "Callout", id="callout"),
+        pytest.param(Divider(), "Divider", id="divider"),
+        pytest.param(
+            Toggle(make_rich_text("T"), None, (_key_value_table(),)), "TableNode", id="table-in-a-toggle"
+        ),
+        pytest.param(
+            Columns((GridColumn(50, (make_paragraph("a"),)), GridColumn(50, (make_paragraph("b"),)))),
+            "Columns",
+            id="column-layout",
+        ),
     ],
 )
-def test_columns_holding_a_table_or_callout_are_their_children_one_after_another(
-    held: Node, text: str
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_column_cannot_hold(
+    held: Node, kind: str
 ) -> None:
-    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (held, Divider()))))
+    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (held,))))
 
-    assert render_slack([node]) == f"left\n\n{text}\n\n---\n"
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([node])
+
+    assert str(raised.value) == (
+        f"a Slack canvas column has no place for a {kind}; the export check should have refused it"
+    )
 
 
-def test_columns_inside_a_column_are_their_children_one_after_another_inside_the_layout() -> None:
-    inner = Columns((GridColumn(50, (make_paragraph("x"),)), GridColumn(50, (make_paragraph("y"),))))
+def test_the_check_refuses_a_column_layout_in_a_column_of_a_tree_built_by_hand() -> None:
+    inner = Columns((GridColumn(50, (make_paragraph("a"),)), GridColumn(50, (make_paragraph("b"),))))
     node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (inner,))))
 
-    assert render_slack([node]) == (
-        "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nx\n\ny\n:::\n:::\n"
+    assert vars(refusal_of([node], "slack")) == _canvas_rejection(
+        "a Slack canvas cannot show a grid's columns inside a grid cell",
+        "write the inner grid's cells as cells of the outer grid",
     )
 
 
@@ -860,11 +990,11 @@ def test_tabs_are_bold_titles_led_by_the_tone_icon_then_their_children() -> None
 @pytest.mark.parametrize(
     ("tab", "text"),
     [
-        pytest.param(Tab((), (make_paragraph("a"),), "warning"), "⚠️\n\na\n", id="icon-without-a-title"),
+        pytest.param(Tab((), (make_paragraph("a"),), "warning"), "**⚠️**\n\na\n", id="icon-without-a-title"),
         pytest.param(Tab((), (make_paragraph("a"),)), "a\n", id="neither-icon-nor-title"),
     ],
 )
-def test_a_tab_without_a_title_writes_its_icon_alone_or_nothing_before_its_children(
+def test_a_tab_without_a_title_writes_its_bold_icon_alone_or_nothing_before_its_children(
     tab: Tab, text: str
 ) -> None:
     assert render_slack([Tabs((tab,))]) == text

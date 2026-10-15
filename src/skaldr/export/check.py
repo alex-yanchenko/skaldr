@@ -10,30 +10,41 @@ from skaldr import models
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     BACKTICK,
+    CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
     CLOSING_TAG_OPENER,
     FIRST_LIST_NUMBER,
+    GRID_CELL_FEATURES,
+    PANES_FEATURES,
     PLACEMENTS,
+    RICH_STEP_NOTE,
     CellCount,
     Container,
     Details,
+    DividerInAStep,
     FencedInAListItem,
+    GridCells,
+    GridInAGridCell,
     GridInAStep,
     Held,
+    HeldByAGridCell,
     HeldByAListItem,
     InlineCode,
     ListInAQuote,
     ListItemFeature,
     ListStart,
     MarkedText,
+    Occurrence,
     OtherDocumentLink,
+    Panes,
     Placement,
     Rejection,
     SameDocumentLink,
     ScriptForm,
     TextMarkFeature,
     TextNumbering,
+    TonedCell,
     character_without_a_unicode_form,
 )
 from skaldr.export.inline import one_line
@@ -56,6 +67,7 @@ from skaldr.export.runs import (
     nested_runs,
     tint_kind,
 )
+from skaldr.export.swaps import figure_feature
 from skaldr.export.tree import (
     AuthoredNode,
     BlockRegion,
@@ -65,6 +77,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    Graph,
     Heading,
     ListEntry,
     ListNode,
@@ -80,7 +93,18 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import InnerGrid, ListBlock, Report, Walkthrough, walk_located_block
+from skaldr.models import (
+    AnyBlock,
+    Grid,
+    Image,
+    InnerGrid,
+    ListBlock,
+    Range,
+    Report,
+    Walkthrough,
+    is_data_uri,
+    walk_located_block,
+)
 from skaldr.prose_blocks import ProseList, prose_blocks
 from skaldr.richtext import (
     AnchorLink,
@@ -115,6 +139,17 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Tabs: "set of tabs",
     Diagram: "diagram",
 }
+_GRID_CELL_AUTHORED_AS: Final = "grid cell"
+
+
+_RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
+    Link,
+    AnchorLink,
+    IssueLink,
+    DocumentLink,
+    Citation,
+    InlineMath,
+)
 
 
 DocumentPosition = tuple[tuple[int, int, str], ...]
@@ -133,6 +168,7 @@ class _Place:
     container: Container = "document"
     callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
+    in_a_column: bool = False
 
     def holder(self) -> str:
         match self.container:
@@ -169,6 +205,9 @@ class _Place:
             toggle_names=(*self.toggle_names, name),
         )
 
+    def in_a_column_of_the_tree(self) -> Self:
+        return replace(self, in_a_column=True)
+
 
 def _term(node: Node) -> str:
     named = node.authored_as if isinstance(node, AuthoredNode) else None
@@ -187,6 +226,8 @@ def _held(node: Node) -> Held | None:
             return "toggle"
         case Tabs() if node.tabs:
             return "toggle"
+        case Divider():
+            return "divider"
         case _:
             return None
 
@@ -359,8 +400,28 @@ def _inline_details_in(runs: Iterable[ExportRun], place: _RunPlace) -> Iterator[
         yield from _inline_details_in(nested_runs(run), place.around(run))
 
 
+def _every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
+    for run in runs:
+        yield run
+        yield from _every_run_within(nested_runs(run))
+
+
 def _authored_on_its_own(child: Node, holder: ListNode) -> bool:
     return child.authored_at != holder.authored_at
+
+
+def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
+    match run:
+        case ScriptText():
+            return character_without_a_unicode_form(run.position, run.text) is not None
+        case Styled():
+            return run.style == "strike"
+        case _:
+            return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
+
+
+def _loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
+    return any(map(_a_diagram_label_cannot_hold, _every_run_within(runs)))
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -394,7 +455,7 @@ def _document_position(path: str) -> DocumentPosition:
 class _TreeWalk:
     def __init__(self, located: Iterable[LocatedDetails]) -> None:
         self.heading = ""
-        self.located = deque(sorted(located, key=lambda each: _document_position(each[0])))
+        self.located = deque(located)
 
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
@@ -425,8 +486,18 @@ class _TreeWalk:
         for details in _inline_details_in(chain.from_iterable(texts), place):
             yield self.hit(details, node.authored_at)
 
+    def math_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
+        if isinstance(node, DisplayMath):
+            yield self.hit(Occurrence("math block"), node.authored_at)
+        runs = _every_run_within(chain.from_iterable(texts))
+        if any(isinstance(run, InlineMath) for run in runs):
+            yield self.hit(Occurrence("inline math"), node.authored_at)
+
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)
+        yield from self.math_hits(node, _own_texts(node))
+        if place.in_a_column:
+            yield from self.grid_cell_hits(node)
         yield from self.placement_hits(node, place)
         yield from self.inline_hits(node, _own_texts(node))
         match node:
@@ -443,10 +514,17 @@ class _TreeWalk:
                     self.note_heading(node.title)
                 yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
             case Tabs():
+                if node.tabs:
+                    yield self.hit(Panes(PANES_FEATURES[node.kind]), node.authored_at)
                 inside = place.in_a_toggle(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
-            case Columns() | Diagram():
+            case Columns():
+                if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
+                    yield self.hit(GridCells(len(node.columns)), node.authored_at)
+                yield from self.nodes(nested_nodes(node), place.in_a_column_of_the_tree())
+            case Diagram():
+                yield from self.diagram_hits(node)
                 yield from self.nodes(nested_nodes(node), place)
             case (
                 Paragraph() | CodeBlock() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents()
@@ -454,6 +532,14 @@ class _TreeWalk:
                 pass
             case _:
                 assert_never(node)
+
+    def diagram_hits(self, node: Diagram) -> Iterator[FeatureHit]:
+        yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
+        figure = node.figure
+        if isinstance(figure, Graph) and any(
+            _loses_meaning_in_a_diagram_label(step.note) for step in figure.nodes
+        ):
+            yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
@@ -465,6 +551,18 @@ class _TreeWalk:
             details = Placement(feature, _term(node), place.holder(), place.holder_name())
             yield self.hit(details, node.authored_at)
 
+    def grid_cell_hits(self, node: Node) -> Iterator[FeatureHit]:
+        if isinstance(node, Callout) and node.authored_as == _GRID_CELL_AUTHORED_AS:
+            yield self.hit(TonedCell(node.tone), node.authored_at)
+            return
+        if isinstance(node, Columns):
+            yield self.hit(GridInAGridCell(), node.authored_at)
+            return
+        held = _held(node)
+        feature = GRID_CELL_FEATURES.get(held) if held is not None else None
+        if feature is not None:
+            yield self.hit(HeldByAGridCell(feature, _term(node)), node.authored_at)
+
     def list_hits(self, node: ListNode, place: _Place) -> Iterator[FeatureHit]:
         if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
             yield self.hit(ListStart(node.start), node.authored_at)
@@ -472,6 +570,7 @@ class _TreeWalk:
             yield from self.entry_hits(entry, node, place)
 
     def entry_hits(self, entry: ListEntry, holder: ListNode, place: _Place) -> Iterator[FeatureHit]:
+        yield from self.math_hits(holder, (entry.text,))
         yield from self.inline_hits(holder, (entry.text,))
         holds_a_list = False
         for child in entry.children:
@@ -479,24 +578,23 @@ class _TreeWalk:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
-            unplaced = next(_nodes_adf_cannot_place_in_a_list_item(child), None)
-            if unplaced is not None:
-                details = _unplaced_in_a_list_item(child, holder, _term(unplaced))
-                yield self.hit(details, unplaced.authored_at)
+            yield from self.unplaced_hits(child, holder)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
+
+    def unplaced_hits(self, child: Node, holder: ListNode) -> Iterator[FeatureHit]:
+        if isinstance(child, Divider):
+            yield self.hit(DividerInAStep(), child.authored_at)
+            return
+        unplaced = next(_nodes_adf_cannot_place_in_a_list_item(child), None)
+        if unplaced is not None:
+            details = _unplaced_in_a_list_item(child, holder, _term(unplaced))
+            yield self.hit(details, unplaced.authored_at)
 
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
         cells = table_width(node) * (1 + len(node.rows))
         if cells > CANVAS_TABLE_CELL_LIMIT:
-            yield self.hit(CellCount(cells), node.authored_at)
-
-
-def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[LocatedDetails]:
-    for step_index, step in enumerate(walkthrough.steps):
-        for index, detail in enumerate(step.detail):
-            if isinstance(detail, InnerGrid):
-                yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}", GridInAStep()
+            yield self.hit(CellCount(cells, _term(node)), node.authored_at)
 
 
 def _text_numbering_hits(path: str, block: ListBlock) -> Iterator[LocatedDetails]:
@@ -515,20 +613,55 @@ def _holds_a_list(prose: str) -> bool:
     return any(isinstance(part, ProseList) for part in prose_blocks(prose))
 
 
-def _model_hits(report: Report, document: LoweredDocument) -> Iterator[LocatedDetails]:
-    located = (
+def _shows_columns(block: AnyBlock) -> bool:
+    return isinstance(block, InnerGrid) and len(block.cells) > 1
+
+
+def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[LocatedDetails]:
+    for step_index, step in enumerate(walkthrough.steps):
+        for index, detail in enumerate(step.detail):
+            if _shows_columns(detail):
+                yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}", GridInAStep()
+
+
+def _grids_in_grid_cells(path: str, grid: Grid) -> Iterator[LocatedDetails]:
+    for cell_index, cell in enumerate(grid.cells):
+        for index, inner in enumerate(cell.blocks):
+            if _shows_columns(inner):
+                yield f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}", GridInAGridCell()
+
+
+def _located_blocks(report: Report, document: LoweredDocument) -> list[tuple[str, AnyBlock]]:
+    return [
         located_block
         for region in document.regions
         if isinstance(region, BlockRegion)
         for located_block in walk_located_block(region.source_index, report.blocks[region.source_index])
-    )
-    for path, block in located:
-        if isinstance(block, Walkthrough):
+    ]
+
+
+def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
+    match block:
+        case Walkthrough():
             yield from _grids_in_walkthrough_steps(path, block)
-        if isinstance(block, ListBlock):
+        case ListBlock():
             yield from _text_numbering_hits(path, block)
-        if isinstance(block, models.Quote) and _holds_a_list(block.body):
+        case models.Quote() if _holds_a_list(block.body):
             yield path, ListInAQuote()
+        case Grid():
+            yield from _grids_in_grid_cells(path, block)
+        case Range():
+            yield path, Occurrence("range")
+        case Image() if is_data_uri(block.src):
+            yield path, Occurrence("image from a data: URI")
+        case _:
+            return
+
+
+def _model_hits_in_document_order(report: Report, document: LoweredDocument) -> list[LocatedDetails]:
+    located = _located_blocks(report, document)
+    hits = (hit for path, block in located for hit in _block_hits(path, block))
+    return sorted(hits, key=lambda each: _document_position(each[0]))
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -536,6 +669,10 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     if rejection.names_the_heading and hit.heading:
         places.append(f"under the heading '{hit.heading}'")
     return ", ".join(places) or None
+
+
+def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
+    return _TreeWalk(_model_hits_in_document_order(report, document)).document(document.body)
 
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
@@ -554,5 +691,4 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    walk = _TreeWalk(_model_hits(report, document))
-    _raise_the_first_rejection(walk.document(document.body), target)
+    _raise_the_first_rejection(feature_hits(report, document), target)

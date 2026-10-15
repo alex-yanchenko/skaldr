@@ -49,6 +49,8 @@ SAMPLES: Mapping[str, Node] = {
     "numbered list starting at 3": ListNode("number", (ListEntry(plain("a")),), start=3),
     "list holding a table": ListNode("bullet", (ListEntry(plain("a"), children=(_TABLE,)),)),
     "checklist holding a toggle": ListNode("check", (ListEntry(plain("a"), children=(_TOGGLE,)),)),
+    "list holding a divider": ListNode("number", (ListEntry(plain("a"), children=(Divider(),)),)),
+    "checklist holding a divider": ListNode("check", (ListEntry(plain("a"), children=(Divider(),)),)),
     "table": _TABLE,
     "table over 300 cells": TableNode(
         (TableCell(plain("Aisle")),), tuple(TableRow((TableCell(plain("v")),)) for _ in range(300))
@@ -67,7 +69,7 @@ SAMPLES: Mapping[str, Node] = {
     "grid holding a table": Columns((GridColumn(1, (_TABLE,)), GridColumn(1, (_PARAGRAPH,)))),
     "tabs": Tabs((Tab(plain("One"), (_PARAGRAPH,)),)),
     "empty tabs": Tabs(()),
-    "flow diagram": Diagram(Graph("LR", (GraphNode("s1", "Scan"),), ())),
+    "flow diagram": Diagram(Graph("LR", (GraphNode("s1", "Scan"),), (), "flow")),
     "chart beside its table": Diagram(PieChart((PieSlice("Done", 3),)), (_TABLE,)),
     "table of contents": TableOfContents(()),
 }

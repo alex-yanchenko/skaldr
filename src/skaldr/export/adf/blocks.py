@@ -44,6 +44,12 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.swaps import (
+    data_table_swapped_in,
+    require_the_swap,
+    tabs_swapped_for_toggles,
+    web_address_of,
+)
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -51,7 +57,6 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
-    Graph,
     Heading,
     ListEntry,
     ListNode,
@@ -71,7 +76,6 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Plain
 
 Container = Literal["doc", "panel", "expand", "nested_expand"]
 
@@ -87,8 +91,6 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
 _LIST_ITEM_BLOCKS: Final = frozenset({"paragraph", "bulletList", "orderedList", "taskList", "codeBlock"})
 MEDIA_NODE_LABELS: Final[Mapping[MediaNodeKind, str]] = {"image": "Image", **MEDIA_KIND_LABELS}
 LATEX_LANGUAGE: Final = "latex"
-LOOP_BACK_NOTE: Final = " (loop back)"
-LEADS_TO: Final = " \N{RIGHTWARDS ARROW} "
 GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 
 
@@ -116,22 +118,6 @@ def _empty_paragraph() -> AdfParagraph:
 
 def _padded(cells: Sequence[TableCell], width: int) -> list[TableCell]:
     return [*cells, *[TableCell(())] * (width - len(cells))]
-
-
-def _graph_entries(graph: Graph) -> tuple[ListEntry, ...]:
-    labels = {node.key: node.label for node in graph.nodes}
-    entries: list[ListEntry] = []
-    for node in graph.nodes:
-        text = node.label + (f": {node.note}" if node.note else "")
-        leads_to = [
-            labels[edge.target] + (LOOP_BACK_NOTE if edge.dashed else "")
-            for edge in graph.edges
-            if edge.source == node.key
-        ]
-        if leads_to:
-            text += LEADS_TO + ", ".join(leads_to)
-        entries.append(ListEntry((Plain(text),)))
-    return tuple(entries)
 
 
 class _AdfBlocks:
@@ -172,6 +158,7 @@ class _AdfBlocks:
             case CodeBlock():
                 return [self.code_block(node.content, node.language)]
             case DisplayMath():
+                require_the_swap("math block", "adf")
                 return [self.code_block(node.expression, LATEX_LANGUAGE)]
             case Callout():
                 content = self.blocks(node.children, "panel") or [_empty_paragraph()]
@@ -188,9 +175,7 @@ class _AdfBlocks:
             case Columns():
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
-                return [
-                    self.expand(container, export_visible_text(tab.title), tab.children) for tab in node.tabs
-                ]
+                return self.tabs_blocks(node, container)
             case Diagram():
                 return self.diagram_blocks(node, container)
             case TableOfContents():
@@ -208,10 +193,11 @@ class _AdfBlocks:
         return [AdfParagraph(type="paragraph", content=content)]
 
     def media_paragraph(self, node: Media) -> AdfParagraph:
-        name = self.runs.write(node.caption or node.description or plain(node.url))
+        url = web_address_of(node, "adf")
+        name = self.runs.write(node.caption or node.description or plain(url))
         label = (AdfText(type="text", text=f"{MEDIA_NODE_LABELS[node.kind]}: "),)
         return AdfParagraph(
-            type="paragraph", content=list(self.runs.concat([label, self.runs.link(name, node.url)]))
+            type="paragraph", content=list(self.runs.concat([label, self.runs.link(name, url)]))
         )
 
     def code_block(self, content: str, language: str) -> AdfCodeBlock:
@@ -237,12 +223,15 @@ class _AdfBlocks:
         content = self.blocks(children, "expand") or [_empty_paragraph()]
         return AdfExpand(type="expand", attrs=attrs, content=content)
 
+    def tabs_blocks(self, node: Tabs, container: Container) -> list[AdfBlock]:
+        return [
+            block
+            for toggle in tabs_swapped_for_toggles(node, "adf")
+            for block in self.node_blocks(toggle, container)
+        ]
+
     def diagram_blocks(self, node: Diagram, container: Container) -> list[AdfBlock]:
-        supplement = self.blocks(node.supplement, container)
-        if not isinstance(node.figure, Graph):
-            return supplement
-        steps = self.list_blocks(ListNode("bullet", _graph_entries(node.figure)), container)
-        return [*steps, *supplement]
+        return self.blocks(data_table_swapped_in(node, "adf"), container)
 
     def list_blocks(self, node: ListNode, container: Container) -> list[AdfBlock]:
         if not node.entries:

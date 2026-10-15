@@ -241,7 +241,7 @@ def mark_name(mark: Mark) -> str:
             assert_never(mark)
 
 
-class _ExportVisibleText(VisibleText):
+class ExportVisibleText(VisibleText):
     def chip(self, run: Chip, /) -> str:
         return run.label
 
@@ -262,4 +262,4 @@ class _ExportVisibleText(VisibleText):
 
 
 def export_visible_text(runs: ExportRich) -> str:
-    return write_export_runs(runs, _ExportVisibleText())
+    return write_export_runs(runs, ExportVisibleText())
