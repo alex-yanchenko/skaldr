@@ -151,6 +151,10 @@ LINK_TO_A_SECTION = [
 ]
 LINK_TO_ANOTHER_DOCUMENT = [{"type": "text", "body": "It follows [the plan](doc:cold-room-plan#recount)."}]
 WITHOUT_THE_COLOUR = "write the text without the colour or export the document elsewhere"
+WITHOUT_THE_HIGHLIGHT = "write the text without the highlight or export the document elsewhere"
+JIRA_HIGHLIGHT_WHY = (
+    "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'"
+)
 GITHUB_COLOUR_WHY = "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'"
 CANVAS_COLOUR_WHY = "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'"
 OWN_HEADING_INSTEAD = "write the heading's name without the link, or export the document elsewhere"
@@ -181,7 +185,21 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         "slack",
         HIGHLIGHTED_TEXT,
         "a Slack canvas cannot highlight text, so it cannot show the highlight on 'due Friday'",
-        "write the text without the highlight or export the document elsewhere",
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "adf-highlight-span": RefusedCase(
+        "adf",
+        HIGHLIGHTED_TEXT,
+        JIRA_HIGHLIGHT_WHY.format(text="due Friday"),
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "adf-colour-and-highlight-span": RefusedCase(
+        "adf",
+        COLOURED_AND_HIGHLIGHTED_TEXT,
+        JIRA_HIGHLIGHT_WHY.format(text="vendor lots"),
+        WITHOUT_THE_HIGHLIGHT,
         "at blocks.0.text",
     ),
     "markdown-colour-and-highlight-span": RefusedCase(

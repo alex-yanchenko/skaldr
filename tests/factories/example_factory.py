@@ -33,6 +33,8 @@ EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
         (DOCUMENT_LINK, "the cold room plan"),
     ),
     "adf": (
+        (HIGHLIGHTED_SPAN, "due Friday"),
+        (COLOURED_AND_HIGHLIGHTED_SPAN, "[vendor lots]{tone=accent}"),
         (ROMAN_LIST_FROM_4, "    start: 4\n"),
         (EXAMPLE_CALLOUT_IN_A_STEP, EXAMPLE_TEXT_IN_A_STEP),
     ),
@@ -55,8 +57,8 @@ FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE: Final[Mapping[ExportTarget, str]
         "at blocks.8.text; keep either the colour or the highlight on the text"
     ),
     "adf": (
-        "ADF numbers a list only with digits, so it cannot show a list numbered with roman numerals, "
-        "at blocks.31.list; number the list with digits, or export it elsewhere"
+        "a Jira description does not show a text highlight, so it cannot show the highlight on 'due Friday', "
+        "at blocks.8.text; write the text without the highlight or export the document elsewhere"
     ),
     "slack": (
         "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit', "

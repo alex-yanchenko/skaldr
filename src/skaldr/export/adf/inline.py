@@ -290,8 +290,12 @@ class AdfRuns:
         return with_mark((_plain_text(text),), AdfSubsup(type="subsup", attrs=kind))
 
     def tinted(
-        self, tone: ToneLiteral | None, _background: ToneLiteral | None, inner: AdfInlines, /
+        self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlines, /
     ) -> AdfInlines:
+        if background is not None:
+            raise ExportInvariantError(
+                "a Jira description does not show a text highlight; the export check should have refused it"
+            )
         return inner if tone is None else with_mark(inner, text_color_mark(tone))
 
     def toned_label(self, tone: ToneLiteral, inner: AdfInlines, /) -> AdfInlines:

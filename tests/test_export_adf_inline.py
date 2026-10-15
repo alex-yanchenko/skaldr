@@ -133,13 +133,21 @@ def test_code_drops_a_text_colour() -> None:
 
 
 def test_a_tinted_run_becomes_a_text_colour() -> None:
-    runs = (Tinted("danger", "warning", (Plain("x"),)),)
+    runs = (Tinted("danger", None, (Plain("x"),)),)
 
     assert _written(runs) == [_text("x", {"type": "textColor", "attrs": {"color": "#DE350B"}})]
 
 
-def test_a_tinted_run_with_only_a_background_adds_no_mark() -> None:
-    assert _written((Tinted(None, "warning", (Plain("x"),)),)) == [_text("x")]
+@pytest.mark.parametrize(
+    "tone", [pytest.param(None, id="highlight-alone"), pytest.param("danger", id="colour-and-highlight")]
+)
+def test_a_highlight_is_an_invariant_the_check_backs(tone: ToneLiteral | None) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((Tinted(tone, "warning", (Plain("x"),)),))
+
+    assert str(raised.value) == (
+        "a Jira description does not show a text highlight; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(("position", "kind"), [("subscript", "sub"), ("superscript", "sup")])
