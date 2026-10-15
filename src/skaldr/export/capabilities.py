@@ -23,7 +23,7 @@ OccurrenceFeature = Literal[
     "range",
     "flow diagram",
     "fan diagram",
-    "link, citation or math in a flow or fan step's note",
+    "link, citation, math or strikethrough in a flow or fan step's note",
     "chart",
     "chart with several series",
     "math block",
@@ -39,7 +39,9 @@ Feature = Literal[
     ScriptFormFeature,
     OccurrenceFeature,
 ]
-RICH_STEP_NOTE: Final[OccurrenceFeature] = "link, citation or math in a flow or fan step's note"
+RICH_STEP_NOTE: Final[OccurrenceFeature] = (
+    "link, citation, math or strikethrough in a flow or fan step's note"
+)
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
 Held = Literal["table", "callout", "quote", "toggle"]
@@ -221,8 +223,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     RICH_STEP_NOTE: _kept_except(
         _refused_by(
             _TARGETS_WITH_MERMAID_DIAGRAMS,
-            "show a link, citation, math, or a subscript or superscript with no Unicode form "
-            "in a flow or fan step's note, since a diagram label holds plain text only",
+            "show a link, citation, math, struck-through text, or a subscript or superscript "
+            "with no Unicode form in a flow or fan step's note, since a diagram label holds plain text only",
             "write the note as plain text and put the rest in a text block after the diagram",
         )
     ),

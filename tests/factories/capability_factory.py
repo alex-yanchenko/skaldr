@@ -174,8 +174,8 @@ FAN: dict[str, Any] = {
 AS_A_NUMBERED_LIST = "write the steps as a numbered list"
 AS_A_LIST = "write the hub and its spokes as a list"
 RICH_NOTE_WHY = (
-    "{subject} cannot show a link, citation, math, or a subscript or superscript with no Unicode form "
-    "in a flow or fan step's note, since a diagram label holds plain text only"
+    "{subject} cannot show a link, citation, math, struck-through text, or a subscript or superscript "
+    "with no Unicode form in a flow or fan step's note, since a diagram label holds plain text only"
 )
 RICH_NOTE_INSTEAD = "write the note as plain text and put the rest in a text block after the diagram"
 REFERENCES: dict[str, Any] = {
@@ -193,6 +193,8 @@ RICH_NOTES: dict[str, str] = {
     "subscript-with-no-unicode-form": "zone C~b~",
     "issue-link": "see [WH-1](jira:WH-1)",
     "document-link": "see [the plan](doc:cold-room-plan)",
+    "strikethrough": "was ~~40~~ now 30 bins",
+    "strikethrough-inside-italic": "*was ~~40~~ now 30*",
 }
 
 
@@ -284,6 +286,14 @@ SCRIPTED_NOTE_FLOW: dict[str, Any] = {
 SCRIPTED_NOTE_MERMAID = (
     '```mermaid\nflowchart LR\n    s1["Scan<br>about 10³ bins of H₂O"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
 )
+CODE_NOTE_FLOW: dict[str, Any] = {
+    "type": "flow",
+    "numbered": False,
+    "steps": [{"label": "Scan", "note": "bin `B-12` first"}, {"label": "Fix"}],
+}
+CODE_NOTE_MERMAID = (
+    '```mermaid\nflowchart LR\n    s1["Scan<br>bin B-12 first"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
+)
 MENTION_NOTE_FLOW: dict[str, Any] = {
     "type": "flow",
     "numbered": False,
@@ -344,6 +354,9 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
     },
     "notion-flow-note-web-link": rich_note_refusal(
         "notion", "Notion", flow_with_a_note(RICH_NOTES["web-link"]), "at blocks.1.flow"
+    ),
+    "notion-flow-note-strikethrough": rich_note_refusal(
+        "notion", "Notion", flow_with_a_note(RICH_NOTES["strikethrough"]), "at blocks.1.flow"
     ),
     "notion-fan-hub-note-inline-math": rich_note_refusal(
         "notion",
@@ -438,6 +451,12 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     ),
     "notion-flow-note-with-unicode-scripts": AcceptedCase(
         "notion", [SCRIPTED_NOTE_FLOW], SCRIPTED_NOTE_MERMAID
+    ),
+    "markdown-flow-note-with-inline-code-keeps-its-characters": AcceptedCase(
+        "markdown", [CODE_NOTE_FLOW], f"# Plan\n\n{CODE_NOTE_MERMAID}"
+    ),
+    "notion-flow-note-with-inline-code-keeps-its-characters": AcceptedCase(
+        "notion", [CODE_NOTE_FLOW], CODE_NOTE_MERMAID
     ),
     "markdown-flow-note-with-a-mention-and-a-date": AcceptedCase(
         "markdown", [MENTION_NOTE_FLOW], f"# Plan\n\n{MENTION_NOTE_MERMAID}", PEOPLE_META

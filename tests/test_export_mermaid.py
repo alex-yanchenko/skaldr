@@ -138,6 +138,7 @@ def test_a_stacked_xy_chart_with_one_series_is_drawn_as_an_unstacked_one() -> No
         pytest.param(DocumentLink((Plain("plan"),), "plan", None), "a document link", id="document-link"),
         pytest.param(Citation("audit", 1), "a citation", id="citation"),
         pytest.param(InlineMath("x^2"), "math", id="math"),
+        pytest.param(Styled("strike", (Plain("40"),)), "struck-through text", id="strike"),
     ],
 )
 def test_a_note_holding_a_run_the_check_refuses_in_a_mermaid_label_is_an_internal_error(

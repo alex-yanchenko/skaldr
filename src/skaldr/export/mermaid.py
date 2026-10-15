@@ -10,7 +10,7 @@ from skaldr.export.inline import one_line
 from skaldr.export.runs import ExportVisibleText, write_export_runs
 from skaldr.export.swaps import mermaid_cannot_draw
 from skaldr.export.tree import Figure, Graph, GraphNode, PieChart, ToneName, XYChart
-from skaldr.richtext import Citation, ScriptPosition
+from skaldr.richtext import Citation, ScriptPosition, StyleName
 
 
 class NodeColors(NamedTuple):
@@ -85,6 +85,11 @@ class _LabelText(ExportVisibleText):
 
     def math(self, _expression: str, /) -> NoReturn:
         _no_label_form_for("math")
+
+    def styled(self, style: StyleName, inner: str, /) -> str:
+        if style == "strike":
+            _no_label_form_for("struck-through text")
+        return inner
 
 
 def _node_line(node: GraphNode) -> str:

@@ -288,9 +288,13 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
 
 
 def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
-    if isinstance(run, ScriptText):
-        return character_without_a_unicode_form(run.position, run.text) is not None
-    return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
+    match run:
+        case ScriptText():
+            return character_without_a_unicode_form(run.position, run.text) is not None
+        case Styled():
+            return run.style == "strike"
+        case _:
+            return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
 
 
 def _loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
