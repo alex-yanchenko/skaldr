@@ -25,9 +25,10 @@ STAMP_WORDS: Final = "Published with skaldr from document"
 STAMP_COLOR: Final = '{color="gray"}'
 LINK_GROUP_SEPARATOR: Final = " · "
 LINK_SEPARATOR: Final = ", "
+SERVICE_NAME_END: Final = " "
 STAMP_PATTERN: Final = re.compile(
     rf"{STAMP_WORDS} ({SLUG_PATTERN})(?:, section ({SLUG_PATTERN}))?"
-    rf"(?:{LINK_GROUP_SEPARATOR}((?:{'|'.join(SERVICES_BY_NAME)}) .*?))?"
+    rf"(?:{LINK_GROUP_SEPARATOR}((?:{'|'.join(SERVICES_BY_NAME)}){SERVICE_NAME_END}.*?))?"
     rf"(?: {re.escape(STAMP_COLOR)})?"
 )
 STAMP_LINKS_PARSER: Final = MarkdownIt("commonmark")
@@ -58,7 +59,8 @@ def _link_text(link: ShownLink) -> str:
 
 def _links_text(links: Sequence[ShownLink]) -> str:
     return "".join(
-        f"{LINK_GROUP_SEPARATOR}{SERVICE_NAMES[service]} {LINK_SEPARATOR.join(map(_link_text, group))}"
+        f"{LINK_GROUP_SEPARATOR}{SERVICE_NAMES[service]}{SERVICE_NAME_END}"
+        f"{LINK_SEPARATOR.join(map(_link_text, group))}"
         for service, group in _by_service(links).items()
     )
 
@@ -78,9 +80,8 @@ def _linked_item_id(service: Service, url: str) -> str:
     return url if found is None else found
 
 
-def _service_named_last(text: str) -> Service | None:
-    named = text.rsplit(LINK_GROUP_SEPARATOR.strip(), 1)[-1].strip(LINK_SEPARATOR)
-    return SERVICES_BY_NAME.get(named)
+def _service_opened_by(text: str) -> Service | None:
+    return SERVICES_BY_NAME.get(text.removeprefix(LINK_GROUP_SEPARATOR).removesuffix(SERVICE_NAME_END))
 
 
 @dataclass
@@ -102,7 +103,7 @@ class _LinkReading:
         elif self.url is not None:
             self.title.append(token.content)
         elif token.type == "text":
-            self.service = _service_named_last(token.content) or self.service
+            self.service = _service_opened_by(token.content) or self.service
 
 
 def _parsed_stamp_links(line: str) -> tuple[ShownLink, ...]:

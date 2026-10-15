@@ -249,6 +249,30 @@ HANDBOOK_PAGE = ShownLink(
             '[GARDEN\\_OPS-4](https://example.atlassian.net/browse/GARDEN_OPS-4) {color="gray"}\n',
             id="escaped-title",
         ),
+        *(
+            pytest.param(
+                (DEMO_12.model_copy(update={"title": title}),),
+                "Published with skaldr from document garden-handbook, section planting · Jira "
+                f'[{written}](https://example.atlassian.net/browse/DEMO-12) {{color="gray"}}\n',
+                id=case,
+            )
+            for case, title, written in [
+                ("brackets", "Beds [north]", "Beds \\[north\\]"),
+                ("a-lone-closing-bracket", "Beds ]", "Beds \\]"),
+                ("a-backslash", "Beds\\north", "Beds\\\\north"),
+                ("a-comma-inside", "Beds, north", "Beds, north"),
+                ("the-group-separator-inside", "Beds · Jira notes", "Beds · Jira notes"),
+                ("a-trailing-comma", "Beds,", "Beds,"),
+                ("a-trailing-space", "Beds ", "Beds "),
+                ("a-trailing-link-separator", "Beds, ", "Beds, "),
+            ]
+        ),
+        pytest.param(
+            (DEMO_12.model_copy(update={"url": "https://example.atlassian.net/browse/DEMO-12?view=a%20b"}),),
+            "Published with skaldr from document garden-handbook, section planting · Jira "
+            '[DEMO-12](https://example.atlassian.net/browse/DEMO-12?view=a%20b) {color="gray"}\n',
+            id="a-percent-encoded-address",
+        ),
     ],
 )
 def test_the_stamp_names_each_linked_item_and_reads_back_with_its_links(
