@@ -83,6 +83,7 @@ from tests.factories import (
     notion_of,
     rendered_block_count,
 )
+from tests.factories.capability_factory import toned_step_titled
 from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
@@ -273,6 +274,114 @@ def test_a_latex_special_character_in_a_script_is_escaped_inside_its_text_comman
 )
 def test_an_attribute_span_is_a_notion_color_span(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            parse_rich("[a [x]{tone=info} b]{tone=danger}"),
+            '<span color="red">a </span><span color="blue">x</span><span color="red"> b</span>',
+            id="colour-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("[p [q]{bg=sky} r]{bg=warning}"),
+            '<span color="yellow_bg">p </span><span color="pink_bg">q</span>'
+            '<span color="yellow_bg"> r</span>',
+            id="highlight-inside-a-highlight",
+        ),
+        pytest.param(
+            parse_rich("[[x]{tone=info} b]{tone=danger}"),
+            '<span color="blue">x</span><span color="red"> b</span>',
+            id="inner-span-first",
+        ),
+        pytest.param(
+            parse_rich("[a **[x]{tone=info}** b]{tone=danger}"),
+            '<span color="red">a </span>**<span color="blue">x</span>**<span color="red"> b</span>',
+            id="inner-span-in-bold",
+        ),
+        pytest.param(
+            parse_rich("[a [[x]{tone=info} y]{tone=success} b]{tone=danger}"),
+            '<span color="red">a </span><span color="blue">x</span><span color="green"> y</span>'
+            '<span color="red"> b</span>',
+            id="three-deep",
+        ),
+        pytest.param(
+            (
+                TonedLabel(
+                    "danger", (Styled("bold", (Plain("Scan"),)), Plain(" "), *parse_rich("[cold]{tone=info}"))
+                ),
+            ),
+            '<span color="red">**Scan** </span><span color="blue">cold</span>',
+            id="author-colour-inside-a-toned-label",
+        ),
+    ],
+)
+def test_a_span_inside_a_span_of_the_same_kind_is_written_beside_it_as_notion_shows_it(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+def test_a_colour_inside_a_colour_passes_the_notion_check_and_is_written_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Zone [a [x]{tone=info} b]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Zone <span color="red">a </span><span color="blue">x</span><span color="red"> b</span>.\n'
+    }
+
+
+def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colour() -> None:
+    report = parse_report(make_report(blocks=toned_step_titled("the [cold room]{tone=info} first")))
+
+    assert render_export(report, "notion").pages == {
+        "page.md": '1. <span color="red">**Scan** </span>*<span color="red">the </span>'
+        '<span color="blue">cold room</span><span color="red"> first</span>*\n\tBoth aisles.\n'
+    }
+
+
+@pytest.mark.parametrize(
+    ("runs", "message"),
+    [
+        pytest.param(
+            (Tinted("danger", None, (Tinted(None, "sky", (Plain("x"),)),)),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
+            "the export check should have refused it",
+            id="highlight-inside-a-colour",
+        ),
+        pytest.param(
+            (Tinted(None, "sky", (Styled("bold", (Tinted("danger", None, (Plain("x"),)),)),)),),
+            "Notion holds no span inside a span, so it cannot show a colour inside a highlight; "
+            "the export check should have refused it",
+            id="colour-inside-bold-inside-a-highlight",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Tinted(None, "sky", (Plain("x"),)),)),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
+            "the export check should have refused it",
+            id="highlight-inside-a-toned-label",
+        ),
+        pytest.param(
+            (Tinted("danger", None, (Plain("see "), Code("</span>"))),),
+            "Notion closes a coloured or highlighted span early at inline code holding '</', '</span>'; "
+            "the export check should have refused it",
+            id="closing-tag-in-code-inside-a-colour",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Styled("italic", (Code("</b>"),)),)),),
+            "Notion closes a coloured or highlighted span early at inline code holding '</', '</b>'; "
+            "the export check should have refused it",
+            id="closing-tag-in-code-inside-a-toned-label",
+        ),
+    ],
+)
+def test_the_notion_writer_refuses_a_span_nesting_the_check_refuses_as_an_invariant(
+    runs: ExportRich, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        notion_inline(runs)
+
+    assert str(raised.value) == message
 
 
 @pytest.mark.parametrize(
@@ -878,11 +987,6 @@ def test_code_holding_an_angle_bracket_in_a_table_cell_stays_code() -> None:
 @pytest.mark.parametrize(
     ("text", "notion"),
     [
-        pytest.param(
-            "[see `</span>` here]{tone=danger}",
-            '<span color="red">see `</span>` here</span>',
-            id="a-closing-tag-inside-a-colour-span",
-        ),
         pytest.param("inline `</callout>` code", "inline `</callout>` code", id="a-closing-tag"),
         pytest.param("a `List<int>` type", "a `List<int>` type", id="an-angle-bracket"),
         pytest.param("a `<br>` tag", "a `<br>` tag", id="an-opening-tag"),

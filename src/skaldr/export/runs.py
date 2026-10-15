@@ -1,6 +1,5 @@
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, replace
+from typing import Literal, Protocol
 
 from typing_extensions import assert_never
 
@@ -8,14 +7,20 @@ from skaldr.export.inline import one_line
 from skaldr.models import BadgeColor, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
+    Citation,
+    Code,
     DateMention,
     DocumentLink,
+    InlineMath,
     IssueLink,
     Link,
     PersonMention,
+    Placeholder,
+    Plain,
     Rich,
     Run,
     RunWriter,
+    ScriptText,
     Styled,
     Tinted,
     VisibleText,
@@ -89,26 +94,58 @@ class TonedLabel:
 ChiplessExportRun = Run | Break | Mark | Gauge | SectionLink | TonedLabel
 ExportRun = ChiplessExportRun | Chip
 ExportRich = tuple[ExportRun, ...]
+SpanKind = Literal["colour", "highlight"]
 
 
-def every_run(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
-    for run in runs:
-        yield run
-        match run:
-            case (
-                Link()
-                | AnchorLink()
-                | DateMention()
-                | PersonMention()
-                | IssueLink()
-                | DocumentLink()
-                | SectionLink()
-            ):
-                yield from every_run(run.label)
-            case Styled() | Tinted() | TonedLabel():
-                yield from every_run(run.runs)
-            case _:
-                pass
+def tint_kind(run: Tinted) -> SpanKind:
+    return "colour" if run.tone is not None else "highlight"
+
+
+def nested_runs(run: ExportRun) -> Rich:
+    match run:
+        case (
+            Link()
+            | AnchorLink()
+            | DateMention()
+            | PersonMention()
+            | IssueLink()
+            | DocumentLink()
+            | SectionLink()
+        ):
+            return run.label
+        case Styled() | Tinted() | TonedLabel():
+            return run.runs
+        case (
+            Plain()
+            | Code()
+            | Citation()
+            | Placeholder()
+            | ScriptText()
+            | InlineMath()
+            | Break()
+            | StatusMark()
+            | SwimlaneMark()
+            | IndicatorMark()
+            | CheckMark()
+            | DecisionMark()
+            | Gauge()
+            | Chip()
+        ):
+            return ()
+        case _:
+            assert_never(run)
+
+
+def with_nested_runs(run: Run, runs: Rich) -> Run:
+    match run:
+        case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
+            return replace(run, label=runs)
+        case Styled() | Tinted():
+            return replace(run, runs=runs)
+        case Plain() | Code() | Citation() | Placeholder() | ScriptText() | InlineMath():
+            return run
+        case _:
+            assert_never(run)
 
 
 def holds_a_chip(runs: ExportRich) -> bool:

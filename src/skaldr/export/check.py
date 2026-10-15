@@ -49,11 +49,13 @@ from skaldr.export.runs import (
     Gauge,
     IndicatorMark,
     SectionLink,
+    SpanKind,
     StatusMark,
     SwimlaneMark,
     TonedLabel,
-    every_run,
     export_visible_text,
+    nested_runs,
+    tint_kind,
 )
 from skaldr.export.tree import (
     AuthoredNode,
@@ -253,35 +255,64 @@ def _visible_text(runs: ExportRich) -> str:
     return one_line(export_visible_text(runs))
 
 
-def _tint_feature(run: Tinted) -> TextMarkFeature:
+@dataclass(frozen=True)
+class _RunPlace:
+    in_a_table_cell: bool
+    span: SpanKind | None = None
+    span_is_generated: bool = False
+
+    def around(self, run: ExportRun) -> Self:
+        match run:
+            case Tinted():
+                return replace(self, span=tint_kind(run), span_is_generated=False)
+            case TonedLabel():
+                return replace(self, span="colour", span_is_generated=True)
+            case _:
+                return self
+
+
+def _tint_features(run: Tinted, place: _RunPlace) -> Iterator[TextMarkFeature]:
     if run.tone is not None and run.background is not None:
-        return "colour and highlight span"
-    return "colour span" if run.tone is not None else "highlight span"
+        yield "colour and highlight span"
+        return
+    kind = tint_kind(run)
+    yield "colour span" if kind == "colour" else "highlight span"
+    if place.span is None or place.span == kind:
+        return
+    if place.span_is_generated:
+        yield "highlight span inside a toned walkthrough step title"
+    else:
+        yield "colour and highlight span"
 
 
-def _code_details(code: Code, in_a_table_cell: bool) -> InlineCode | None:
+def _code_details(code: Code, place: _RunPlace) -> Iterator[InlineCode]:
     if BACKTICK in code.text:
-        return InlineCode("inline code holding a backtick", code.text)
-    if in_a_table_cell and CLOSING_TAG_OPENER in code.text:
-        return InlineCode("inline code holding a closing tag in a table cell", code.text)
-    return None
+        yield InlineCode("inline code holding a backtick", code.text)
+    elif CLOSING_TAG_OPENER not in code.text:
+        return
+    elif place.in_a_table_cell:
+        yield InlineCode("inline code holding a closing tag in a table cell", code.text)
+    elif place.span is not None:
+        yield InlineCode("inline code holding a closing tag in a coloured or highlighted span", code.text)
 
 
-def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
+def _inline_details(run: ExportRun, place: _RunPlace) -> Iterator[Details]:
     match run:
         case Code():
-            return _code_details(run, in_a_table_cell)
+            yield from _code_details(run, place)
         case ScriptText():
             character = character_without_a_unicode_form(run.position, run.text)
-            return None if character is None else ScriptForm(run.position, run.text, character)
+            if character is not None:
+                yield ScriptForm(run.position, run.text, character)
         case Tinted():
-            return MarkedText(_tint_feature(run), _visible_text(run.runs))
+            text = _visible_text(run.runs)
+            yield from (MarkedText(feature, text) for feature in _tint_features(run, place))
         case Styled() if run.style == "underline":
-            return MarkedText("underline", _visible_text(run.runs))
+            yield MarkedText("underline", _visible_text(run.runs))
         case AnchorLink():
-            return SameDocumentLink(_visible_text(run.label), run.as_written())
+            yield SameDocumentLink(_visible_text(run.label), run.as_written())
         case DocumentLink():
-            return OtherDocumentLink(_visible_text(run.label), run.doc_id)
+            yield OtherDocumentLink(_visible_text(run.label), run.doc_id)
         case (
             Plain()
             | Link()
@@ -303,9 +334,15 @@ def _inline_details(run: ExportRun, in_a_table_cell: bool) -> Details | None:
             | TonedLabel()
             | Chip()
         ):
-            return None
+            return
         case _:
             assert_never(run)
+
+
+def _inline_details_in(runs: Iterable[ExportRun], place: _RunPlace) -> Iterator[Details]:
+    for run in runs:
+        yield from _inline_details(run, place)
+        yield from _inline_details_in(nested_runs(run), place.around(run))
 
 
 def _authored_on_its_own(child: Node, holder: ListNode) -> bool:
@@ -383,11 +420,9 @@ class _TreeWalk:
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node) -> Iterator[FeatureHit]:
-        in_a_table_cell = isinstance(node, TableNode)
-        for run in every_run(chain.from_iterable(_own_texts(node))):
-            details = _inline_details(run, in_a_table_cell)
-            if details is not None:
-                yield self.hit(details, node.authored_at)
+        place = _RunPlace(in_a_table_cell=isinstance(node, TableNode))
+        for details in _inline_details_in(chain.from_iterable(_own_texts(node)), place):
+            yield self.hit(details, node.authored_at)
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)

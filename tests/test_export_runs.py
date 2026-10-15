@@ -11,8 +11,9 @@ from skaldr.export.runs import (
     SectionLink,
     StatusMark,
     TonedLabel,
-    every_run,
     mark_name,
+    nested_runs,
+    with_nested_runs,
     write_export_runs,
 )
 from skaldr.models import Person, ToneLiteral
@@ -175,23 +176,25 @@ def test_a_section_link_and_a_toned_label_reach_their_own_writer_methods_apart_f
     )
 
 
-def test_every_run_yields_each_run_before_the_runs_inside_it_in_document_order() -> None:
-    italic = Styled("italic", (Plain("hot"),))
-    tinted = Tinted("danger", None, (italic,))
-    link = Link((tinted,), "https://example.com")
-    section = SectionLink((Plain("Totals"),), "totals")
-    label = TonedLabel("info", (Code("x"),))
-    runs: ExportRich = (Plain("a "), link, section, label, Chip("api", "blue"))
-
-    assert list(every_run(runs)) == [
-        Plain("a "),
-        link,
-        tinted,
-        italic,
-        Plain("hot"),
-        section,
-        Plain("Totals"),
-        label,
+def test_the_nested_runs_of_a_run_are_its_label_or_its_runs_and_a_leaf_holds_none() -> None:
+    held = (Styled("italic", (Plain("hot"),)),)
+    runs: ExportRich = (
+        Link(held, "https://example.com"),
+        SectionLink(held, "totals"),
+        Tinted("danger", None, held),
+        TonedLabel("info", held),
         Code("x"),
         Chip("api", "blue"),
-    ]
+    )
+
+    assert [nested_runs(run) for run in runs] == [held, held, held, held, (), ()]
+
+
+def test_a_run_rebuilt_with_other_nested_runs_keeps_everything_else_and_a_leaf_stays_as_it_is() -> None:
+    held = (Plain("cold"),)
+
+    assert [
+        with_nested_runs(Link((Plain("hot"),), "https://example.com"), held),
+        with_nested_runs(Tinted("danger", "sky", (Plain("hot"),)), held),
+        with_nested_runs(Code("x"), held),
+    ] == [Link(held, "https://example.com"), Tinted("danger", "sky", held), Code("x")]

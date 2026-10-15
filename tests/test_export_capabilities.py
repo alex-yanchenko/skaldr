@@ -63,6 +63,8 @@ TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "link to another skaldr document": {"notion": "reject", "slack": "reject"},
     "inline code holding a backtick": {"notion": "reject"},
     "inline code holding a closing tag in a table cell": {"notion": "reject"},
+    "inline code holding a closing tag in a coloured or highlighted span": {"notion": "reject"},
+    "highlight span inside a toned walkthrough step title": {"notion": "reject"},
     "list numbered with letters or roman numerals": {"adf": "reject", "slack": "reject"},
     "table, callout, heading, quote, toggle or divider inside a list item": {"adf": "reject"},
     "table, callout, heading, quote, toggle or divider inside a walkthrough step": {"adf": "reject"},

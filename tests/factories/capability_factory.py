@@ -286,6 +286,115 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.table",
     ),
 }
+AT_THE_TEXT = "at blocks.0.text"
+NOTION_BOTH_WHY = (
+    "a Notion text run takes a colour or a highlight, not both, so it cannot show both on '{text}'"
+)
+NOTION_BOTH_INSTEAD = "keep either the colour or the highlight on the text"
+CANVAS_HIGHLIGHT_WHY = "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'"
+SPAN_CODE_WHY = (
+    "Notion closes a coloured or highlighted span early at inline code holding '</', as in '{code}'"
+)
+SPAN_CODE_INSTEAD = "write the code outside the coloured text, or without '</'"
+STEP_PATH_OF_THE_TITLE = "at blocks.0.walkthrough"
+
+
+def toned_step_titled(sub: str) -> list[dict[str, Any]]:
+    step = {
+        "label": "Scan",
+        "tone": "danger",
+        "sub": sub,
+        "detail": [{"type": "text", "body": "Both aisles."}],
+    }
+    return [{"type": "walkthrough", "steps": [step]}]
+
+
+@dataclass(frozen=True)
+class NestedSpans:
+    body: str
+    coloured: str
+    highlighted: str
+    inner: str
+    outer_is_a_colour: bool
+
+    def refusals(self, name: str) -> dict[str, RefusedCase]:
+        blocks = [{"type": "text", "body": self.body}]
+        outer = self.coloured if self.outer_is_a_colour else self.highlighted
+        canvas_why = CANVAS_COLOUR_WHY if self.outer_is_a_colour else CANVAS_HIGHLIGHT_WHY
+        canvas_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
+        github_why = GITHUB_COLOUR_WHY.format(text=self.coloured)
+        jira_why = JIRA_HIGHLIGHT_WHY.format(text=self.highlighted)
+        return {
+            f"markdown-{name}": RefusedCase("markdown", blocks, github_why, WITHOUT_THE_COLOUR, AT_THE_TEXT),
+            f"notion-{name}": RefusedCase(
+                "notion", blocks, NOTION_BOTH_WHY.format(text=self.inner), NOTION_BOTH_INSTEAD, AT_THE_TEXT
+            ),
+            f"adf-{name}": RefusedCase("adf", blocks, jira_why, WITHOUT_THE_HIGHLIGHT, AT_THE_TEXT),
+            f"slack-{name}": RefusedCase(
+                "slack", blocks, canvas_why.format(text=outer), canvas_instead, AT_THE_TEXT
+            ),
+        }
+
+
+HIGHLIGHT_IN_A_STEP_TITLE = toned_step_titled("the [cold room]{bg=sky} first")
+CODE_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Write [code `</span>` inside]{tone=danger}."}]
+SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
+    **NestedSpans("Zone [[x]{bg=sky}]{tone=danger}.", "x", "x", "x", outer_is_a_colour=True).refusals(
+        "highlight-inside-a-colour-span"
+    ),
+    **NestedSpans("Zone [a [x]{bg=sky} b]{tone=danger}.", "a x b", "x", "x", outer_is_a_colour=True).refusals(
+        "highlight-inside-part-of-a-colour-span"
+    ),
+    **NestedSpans(
+        "Zone [a [x]{tone=danger} b]{bg=sky}.", "x", "a x b", "x", outer_is_a_colour=False
+    ).refusals("colour-inside-part-of-a-highlight-span"),
+    "notion-highlight-inside-a-toned-step-title": RefusedCase(
+        "notion",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
+        "so it cannot show the highlight on 'cold room'",
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "adf-highlight-inside-a-toned-step-title": RefusedCase(
+        "adf",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        JIRA_HIGHLIGHT_WHY.format(text="cold room"),
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "slack-highlight-inside-a-toned-step-title": RefusedCase(
+        "slack",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        CANVAS_HIGHLIGHT_WHY.format(text="cold room"),
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "notion", CODE_IN_A_COLOUR_SPAN, SPAN_CODE_WHY.format(code="</span>"), SPAN_CODE_INSTEAD, AT_THE_TEXT
+    ),
+    "markdown-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "markdown",
+        CODE_IN_A_COLOUR_SPAN,
+        GITHUB_COLOUR_WHY.format(text="code </span> inside"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-a-colour-span": RefusedCase(
+        "slack",
+        CODE_IN_A_COLOUR_SPAN,
+        CANVAS_COLOUR_WHY.format(text="code </span> inside"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-a-toned-step-title": RefusedCase(
+        "notion",
+        toned_step_titled("run `</span>` first"),
+        SPAN_CODE_WHY.format(code="</span>"),
+        SPAN_CODE_INSTEAD,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+}
 LIST_FROM_3 = [{"type": "text", "body": "3. a\n4. b"}]
 ROMAN_LIST = [{"type": "list", "style": "number", "numbering": "roman", "items": ["a", "b"]}]
 LETTERED_LIST = [{"type": "list", "style": "number", "numbering": "letters", "items": ["a", "b"]}]
@@ -376,6 +485,7 @@ SEEDED_REFUSALS: dict[str, RefusedCase] = {
     **ADF_REFUSALS,
     **SLACK_REFUSALS,
     **INLINE_REFUSALS,
+    **SPAN_NESTING_REFUSALS,
     **LIST_STEP_AND_QUOTE_REFUSALS,
 }
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
@@ -383,6 +493,7 @@ SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.it
 
 CLEAN_BLOCKS: list[dict[str, Any]] = [
     {"type": "heading", "text": "Plan"},
+    {"type": "text", "body": "Close it with `</callout>` and type it as `List<int>`."},
     {"type": "text", "body": "1. a\n2. b"},
     {"type": "panel", "title": "Plan", "blocks": [{"type": "text", "body": "Inside."}]},
     make_toggle(TABLE),

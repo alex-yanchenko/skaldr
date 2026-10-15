@@ -18,11 +18,19 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
-TextMarkFeature = Literal["colour span", "highlight span", "colour and highlight span", "underline"]
+TextMarkFeature = Literal[
+    "colour span",
+    "highlight span",
+    "colour and highlight span",
+    "underline",
+    "highlight span inside a toned walkthrough step title",
+]
 SameDocumentLinkFeature = Literal["link to a heading of the same document"]
 OtherDocumentLinkFeature = Literal["link to another skaldr document"]
 InlineCodeFeature = Literal[
-    "inline code holding a backtick", "inline code holding a closing tag in a table cell"
+    "inline code holding a backtick",
+    "inline code holding a closing tag in a table cell",
+    "inline code holding a closing tag in a coloured or highlighted span",
 ]
 TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
 FencedInAListItemFeature = Literal[
@@ -294,6 +302,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "highlight span inside a toned walkthrough step title": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
+                "so it cannot show the highlight on '{text}'",
+                _WITHOUT_THE_HIGHLIGHT,
+            )
+        }
+    ),
     "link to a heading of the same document": _kept_except(
         {
             "notion": Rejection(_OWN_HEADING_WHY.format(target="a Notion page"), _OWN_HEADING_INSTEAD),
@@ -320,6 +337,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "notion": Rejection(
                 "Notion loses a table cell whose inline code holds '</', as in '{code}'",
                 "write the code outside the table, or without '</'",
+            )
+        }
+    ),
+    "inline code holding a closing tag in a coloured or highlighted span": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion closes a coloured or highlighted span early at inline code holding '</', "
+                "as in '{code}'",
+                "write the code outside the coloured text, or without '</'",
             )
         }
     ),
