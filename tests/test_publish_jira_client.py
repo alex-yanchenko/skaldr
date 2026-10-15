@@ -20,11 +20,9 @@ from skaldr.publish.jira.api import (
     StatusCategory,
     Transition,
 )
-from tests.factories.auth_factory import basic_auth_header, summarise
-from tests.factories.jira_factory import CLOSE, FakeJira, Reply
+from tests.factories.auth_factory import summarise
+from tests.factories.jira_factory import CLOSE, SITE, FakeJira, Reply, summarised_request
 
-SITE = "https://example.atlassian.net"
-AUTHORIZATION = basic_auth_header("reader@example.com", "api-token")
 PARAGRAPH: JsonValue = {"version": 1, "type": "doc", "content": [{"type": "paragraph"}]}
 STAMP = EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook", "section_id": None})
 ISSUE = "/rest/api/3/issue/DEMO-1"
@@ -36,16 +34,6 @@ MYSELF = "/rest/api/3/myself"
 
 def _exactly(message: str) -> str:
     return f"^{re.escape(message)}$"
-
-
-def _request(method: str, path: str, body: JsonValue = None) -> dict[str, object]:
-    return {
-        "method": method,
-        "url": f"{SITE}{path}",
-        "authorization": AUTHORIZATION,
-        "content_type": None if method == "GET" else "application/json",
-        "body": body,
-    }
 
 
 def _seeded() -> FakeJira:
@@ -64,7 +52,7 @@ def test_creating_an_issue_posts_its_fields_and_properties_with_basic_auth() -> 
     assert (created, [summarise(request) for request in jira.requests]) == (
         CreatedIssue(key="DEMO-1"),
         [
-            _request(
+            summarised_request(
                 "POST",
                 "/rest/api/3/issue",
                 {
@@ -90,7 +78,7 @@ def test_reading_an_issue_asks_for_the_named_fields_only() -> None:
 
     assert (issue, [summarise(request) for request in jira.requests]) == (
         Issue(key="DEMO-1", fields={"summary": "Garden handbook", "labels": ["garden"]}),
-        [_request("GET", "/rest/api/3/issue/DEMO-1?fields=summary%2Clabels")],
+        [summarised_request("GET", "/rest/api/3/issue/DEMO-1?fields=summary%2Clabels")],
     )
 
 
@@ -100,7 +88,7 @@ def test_editing_an_issue_puts_the_fields_and_properties_it_is_given() -> None:
     jira.client().edit_issue("DEMO-1", {"summary": "Garden guide", "labels": None}, [STAMP])
 
     assert [summarise(request) for request in jira.requests] == [
-        _request(
+        summarised_request(
             "PUT",
             "/rest/api/3/issue/DEMO-1",
             {
@@ -149,7 +137,7 @@ def test_the_changelog_is_read_page_by_page_to_the_end() -> None:
     )
 
 
-def test_an_empty_changelog_is_one_request() -> None:
+def test_an_empty_changelog_is_onesummarised_request() -> None:
     jira = _seeded()
 
     assert (jira.client().changelog("DEMO-1"), jira.calls()) == (
@@ -220,11 +208,11 @@ def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:
         None,
         EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook"}),
         [
-            _request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
-            _request(
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            summarised_request(
                 "PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp", {"doc_id": "garden-handbook"}
             ),
-            _request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
         ],
     )
 
@@ -244,23 +232,23 @@ def test_a_remote_link_is_posted_by_its_global_id_listed_and_deleted_by_its_glob
         [RemoteLink(globalId=global_id, object=RemoteObject(url=page, title="Garden guide"))],
         [],
         [
-            _request(
+            summarised_request(
                 "POST",
                 "/rest/api/3/issue/DEMO-1/remotelink",
                 {"globalId": global_id, "object": {"url": page, "title": "Garden handbook"}},
             ),
-            _request(
+            summarised_request(
                 "POST",
                 "/rest/api/3/issue/DEMO-1/remotelink",
                 {"globalId": global_id, "object": {"url": page, "title": "Garden guide"}},
             ),
-            _request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
-            _request(
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            summarised_request(
                 "DELETE",
                 "/rest/api/3/issue/DEMO-1/remotelink"
                 "?globalId=skaldr%3Agarden-handbook%3Adocument%3Anotion%3A0123456789abcdef0123456789abcdef",
             ),
-            _request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
         ],
     )
 
@@ -280,7 +268,7 @@ def test_transitions_are_listed_and_one_is_taken() -> None:
         True,
         False,
         {"name": "Done", "statusCategory": {"key": "done"}},
-        _request("POST", "/rest/api/3/issue/DEMO-1/transitions", {"transition": {"id": CLOSE}}),
+        summarised_request("POST", "/rest/api/3/issue/DEMO-1/transitions", {"transition": {"id": CLOSE}}),
     )
 
 
@@ -291,7 +279,7 @@ def test_a_comment_is_posted_as_adf() -> None:
 
     assert (jira.issues["DEMO-1"].comments, summarise(jira.requests[0])) == (
         [PARAGRAPH],
-        _request("POST", "/rest/api/3/issue/DEMO-1/comment", {"body": PARAGRAPH}),
+        summarised_request("POST", "/rest/api/3/issue/DEMO-1/comment", {"body": PARAGRAPH}),
     )
 
 

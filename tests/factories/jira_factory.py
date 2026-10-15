@@ -9,7 +9,7 @@ import httpx2
 from pydantic import BaseModel, Field, JsonValue
 
 from skaldr.publish.jira.client import JiraClient
-from tests.factories.auth_factory import make_jira_credentials
+from tests.factories.auth_factory import basic_auth_header, make_jira_credentials
 
 SITE = "https://example.atlassian.net"
 PROJECT = "DEMO"
@@ -44,6 +44,17 @@ REMOTE_LINK_FIELD = "RemoteWorkItemLink"
 JSON_MEDIA_TYPE = "application/json"
 History = dict[str, JsonValue]
 Author = dict[str, JsonValue] | None
+
+
+def summarised_request(method: str, path: str, body: JsonValue = None) -> dict[str, object]:
+    credentials = make_jira_credentials()
+    return {
+        "method": method,
+        "url": f"{SITE}{path}",
+        "authorization": basic_auth_header(credentials.email, credentials.api_token),
+        "content_type": None if method == "GET" else JSON_MEDIA_TYPE,
+        "body": body,
+    }
 
 
 @dataclass(frozen=True)

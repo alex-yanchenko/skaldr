@@ -24,7 +24,7 @@ from skaldr.publish.transport import (
 )
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import make_jira_target, make_notion_target
-from tests.factories.auth_factory import basic_auth_header, summarise
+from tests.factories.auth_factory import summarise
 from tests.factories.jira_factory import (
     DONE,
     DONE_RESOLUTION,
@@ -35,6 +35,7 @@ from tests.factories.jira_factory import (
     WRITER,
     FakeJira,
     Reply,
+    summarised_request,
 )
 
 DOC_ID = "garden-handbook"
@@ -105,6 +106,14 @@ def _layout_value(sections: dict[str, list[JsonValue]]) -> JsonValue:
 
 def _transport(jira: FakeJira) -> JiraTransport:
     return JiraTransport(jira.client())
+
+
+def _transition_bodies(jira: FakeJira) -> list[object]:
+    return [
+        summarise(request)["body"]
+        for request in jira.requests
+        if request.method == "POST" and request.url.path.endswith("/transitions")
+    ]
 
 
 def _created(jira: FakeJira, content: ItemContent = CONTENT) -> tuple[JiraTransport, RemoteItem]:
@@ -1126,7 +1135,7 @@ def test_an_issue_already_done_is_marked_archived_without_a_transition_or_a_comm
 
     transport.archive_item(created.item_id)
 
-    assert (jira.calls()[3:], jira.issues["DEMO-1"].comments) == (
+    assert ([call for call in jira.calls() if call[0] != "GET"], jira.issues["DEMO-1"].comments) == (
         [("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp")],
         [],
     )
@@ -1155,7 +1164,7 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
 
     transport.archive_item(created.item_id)
 
-    assert summarise(jira.requests[7])["body"] == {"transition": {"id": "31"}}
+    assert _transition_bodies(jira) == [{"transition": {"id": "31"}}]
 
 
 @pytest.mark.parametrize(
@@ -1466,10 +1475,10 @@ def test_archiving_through_a_close_that_sets_a_resolution_leaves_the_resolution_
     transport.archive_item(created.item_id)
 
     issue = jira.issues["DEMO-1"]
-    assert (issue.fields["status"], issue.fields["resolution"], summarise(jira.requests[7])["body"]) == (
+    assert (issue.fields["status"], issue.fields["resolution"], _transition_bodies(jira)) == (
         DONE,
         DONE_RESOLUTION,
-        {"transition": {"id": "31"}},
+        [{"transition": {"id": "31"}}],
     )
 
 
@@ -1599,16 +1608,6 @@ def _remote_link(global_id: str | None, link: PairedLink, link_id: int) -> dict[
     return {"id": link_id, "globalId": global_id, "object": {"url": link.url, "title": link.title}}
 
 
-def _summarised(method: str, path: str, body: JsonValue = None) -> dict[str, object]:
-    return {
-        "method": method,
-        "url": f"{SITE}{path}",
-        "authorization": basic_auth_header("reader@example.com", "api-token"),
-        "content_type": None if body is None else "application/json",
-        "body": body,
-    }
-
-
 @pytest.mark.parametrize(
     ("stamp", "global_id"),
     [
@@ -1631,9 +1630,9 @@ def test_a_link_is_a_remote_link_whose_global_id_names_the_document_the_item_and
     assert (written, [summarise(request) for request in jira.requests]) == (
         (HANDBOOK_PAGE.shown,),
         [
-            _summarised("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
-            _summarised("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
-            _summarised(
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            summarised_request("GET", "/rest/api/3/issue/DEMO-1/remotelink"),
+            summarised_request(
                 "POST",
                 "/rest/api/3/issue/DEMO-1/remotelink",
                 {
