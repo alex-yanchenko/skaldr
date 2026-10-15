@@ -34,8 +34,7 @@ InlineCodeFeature = Literal[
 ]
 TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
 FencedInAListItemFeature = Literal[
-    "table, callout, heading, quote, toggle or divider inside a list item",
-    "table, callout, heading, quote, toggle or divider inside a walkthrough step",
+    "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
 ]
 ListInAQuoteFeature = Literal["list inside a quote"]
 Feature = Literal[
@@ -146,8 +145,22 @@ class TextNumbering:
 
 @dataclass(frozen=True)
 class FencedInAListItem:
-    feature: FencedInAListItemFeature
     held: str
+    item: Literal["list item", "walkthrough step"]
+    out_of: Literal["list", "step"]
+    after: Literal["list", "walkthrough"]
+    feature: FencedInAListItemFeature = field(
+        default="table, callout, heading, quote, toggle or divider inside a list item or walkthrough step",
+        init=False,
+    )
+
+    @classmethod
+    def in_a_list_item(cls, held: str) -> "FencedInAListItem":
+        return cls(held, "list item", "list", "list")
+
+    @classmethod
+    def in_a_walkthrough_step(cls, held: str) -> "FencedInAListItem":
+        return cls(held, "walkthrough step", "step", "walkthrough")
 
 
 @dataclass(frozen=True)
@@ -355,20 +368,11 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(_DIGITS_ONLY_WHY.format(target="a Slack canvas"), _DIGITS_ONLY_INSTEAD),
         }
     ),
-    "table, callout, heading, quote, toggle or divider inside a list item": _kept_except(
+    "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step": _kept_except(
         {
             "adf": Rejection(
-                "ADF cannot place a {held} inside a list item",
-                "move the {held} out of the list, after the list",
-                names_the_heading=True,
-            )
-        }
-    ),
-    "table, callout, heading, quote, toggle or divider inside a walkthrough step": _kept_except(
-        {
-            "adf": Rejection(
-                "ADF cannot place a {held} inside a walkthrough step",
-                "move the {held} out of the step, after the walkthrough",
+                "ADF cannot place a {held} inside a {item}",
+                "move the {held} out of the {out_of}, after the {after}",
                 names_the_heading=True,
             )
         }

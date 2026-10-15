@@ -19,7 +19,6 @@ from skaldr.export.capabilities import (
     Container,
     Details,
     FencedInAListItem,
-    FencedInAListItemFeature,
     GridInAStep,
     Held,
     HeldByAListItem,
@@ -354,10 +353,10 @@ def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
     return "block inside a walkthrough step" if in_a_step else "block inside a list item"
 
 
-def _fenced_item_feature(child: Node, holder: ListNode) -> FencedInAListItemFeature:
+def _unplaced_in_a_list_item(child: Node, holder: ListNode, held: str) -> FencedInAListItem:
     if _authored_on_its_own(child, holder):
-        return "table, callout, heading, quote, toggle or divider inside a walkthrough step"
-    return "table, callout, heading, quote, toggle or divider inside a list item"
+        return FencedInAListItem.in_a_walkthrough_step(held)
+    return FencedInAListItem.in_a_list_item(held)
 
 
 def _nodes_adf_cannot_place_in_a_list_item(child: Node) -> Iterator[Node]:
@@ -466,7 +465,7 @@ class _TreeWalk:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
             unplaced = next(_nodes_adf_cannot_place_in_a_list_item(child), None)
             if unplaced is not None:
-                details = FencedInAListItem(_fenced_item_feature(child, holder), _term(unplaced))
+                details = _unplaced_in_a_list_item(child, holder, _term(unplaced))
                 yield self.hit(details, unplaced.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)

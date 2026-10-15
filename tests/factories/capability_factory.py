@@ -481,12 +481,73 @@ LIST_STEP_AND_QUOTE_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.quote",
     ),
 }
+
+
+def under_a_heading_in_a_step(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "heading", "text": "Plan"}, walkthrough_holding(detail)]
+
+
+def refusals_of_a_block_in_a_step(detail: dict[str, Any], held: str) -> dict[str, RefusedCase]:
+    blocks = under_a_heading_in_a_step(detail)
+    name = detail["type"]
+    path = f"at blocks.1.walkthrough.steps.0.detail.0.{name}"
+    return {
+        f"adf-{name}-in-a-walkthrough-step": RefusedCase(
+            "adf",
+            blocks,
+            f"ADF cannot place a {held} inside a walkthrough step",
+            f"move the {held} out of the step, after the walkthrough",
+            f"{path}, under the heading 'Plan'",
+        ),
+        f"slack-{name}-in-a-walkthrough-step": RefusedCase(
+            "slack", blocks, LIST_ITEM_WHY.format(what=f"a {held}"), OUT_OF_THE_STEP, path
+        ),
+    }
+
+
+def grid_holding_a_table() -> dict[str, Any]:
+    grid = text_grid()
+    grid["cells"][0]["blocks"] = [TABLE]
+    return grid
+
+
+TWO_TABS = {
+    "type": "tabs",
+    "tabs": [
+        {"label": "One", "blocks": [{"type": "text", "body": "x"}]},
+        {"label": "Two", "blocks": [{"type": "text", "body": "y"}]},
+    ],
+}
+GRID_IN_A_STEP_UNDER_A_HEADING = under_a_heading_in_a_step(grid_holding_a_table())
+BLOCK_IN_A_STEP_REFUSALS: dict[str, RefusedCase] = {
+    **refusals_of_a_block_in_a_step({"type": "heading", "text": "Lock"}, "heading"),
+    **refusals_of_a_block_in_a_step({"type": "quote", "body": "Count twice."}, "quote"),
+    **refusals_of_a_block_in_a_step(make_toggle(), "toggle"),
+    **refusals_of_a_block_in_a_step({"type": "divider"}, "divider"),
+    **refusals_of_a_block_in_a_step(TWO_TABS, "set of tabs"),
+    "adf-table-in-a-grid-in-a-walkthrough-step": RefusedCase(
+        "adf",
+        GRID_IN_A_STEP_UNDER_A_HEADING,
+        "ADF cannot place a table inside a walkthrough step",
+        "move the table out of the step, after the walkthrough",
+        "at blocks.1.walkthrough.steps.0.detail.0.grid.cells.0.blocks.0.table, under the heading 'Plan'",
+    ),
+    "slack-grid-holding-a-table-in-a-walkthrough-step": RefusedCase(
+        "slack",
+        GRID_IN_A_STEP_UNDER_A_HEADING,
+        "a Slack canvas cannot show a grid inside a walkthrough step, "
+        "since a canvas list item holds only text",
+        "move the grid out of the step, after the walkthrough",
+        "at blocks.1.walkthrough.steps.0.detail.0.grid",
+    ),
+}
 SEEDED_REFUSALS: dict[str, RefusedCase] = {
     **ADF_REFUSALS,
     **SLACK_REFUSALS,
     **INLINE_REFUSALS,
     **SPAN_NESTING_REFUSALS,
     **LIST_STEP_AND_QUOTE_REFUSALS,
+    **BLOCK_IN_A_STEP_REFUSALS,
 }
 ADF_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items() if case.target == "adf"]
 SEEDED_CASES = [pytest.param(case, id=name) for name, case in SEEDED_REFUSALS.items()]
