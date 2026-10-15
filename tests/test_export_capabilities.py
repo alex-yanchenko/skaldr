@@ -66,6 +66,8 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
         "slack": "reject",
     },
     "chart": {"adf": "swap", "slack": "swap"},
+    "math block": {"adf": "swap", "slack": "swap"},
+    "inline math": {"adf": "swap", "slack": "swap"},
     "chart with several series or stacked": {
         "markdown": "reject",
         "notion": "reject",

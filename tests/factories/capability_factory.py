@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from skaldr.export_targets import ExportTarget
+from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from tests.factories.report_factory import in_a_grid_cell, make_report, make_section, make_toggle
 
 TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "a"}]}
@@ -226,6 +226,12 @@ SEVERAL_SERIES_OR_STACKED: dict[str, dict[str, Any]] = {
 }
 
 
+MATH_BLOCKS: list[dict[str, Any]] = [
+    {"type": "math", "expression": "x^2 + 1"},
+    {"type": "text", "body": "rate $`x_i`$ now"},
+]
+
+
 def flow_with_a_note(note: str) -> list[dict[str, Any]]:
     flow = {"type": "flow", "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
     return [{"type": "heading", "text": "Count"}, flow, REFERENCES]
@@ -337,6 +343,7 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
         for target in TABLE_TARGETS
         for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_OR_STACKED}.items()
     },
+    **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
 DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

@@ -25,6 +25,8 @@ OccurrenceFeature = Literal[
     "link, citation or math in a flow or fan step's note",
     "chart",
     "chart with several series or stacked",
+    "math block",
+    "inline math",
 ]
 Feature = Literal[
     PlacementFeature,
@@ -137,7 +139,7 @@ _TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 }
 
 
-_DRAWING_NO_DIAGRAM: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_NO_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a row per slice with its value and share and a total row for a donut, "
     "a row per series with a column per category for a bar or line chart"
@@ -199,10 +201,10 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
     "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
     "flow diagram": _kept_except(
-        _refused_by(_DRAWING_NO_DIAGRAM, "draw a flow diagram", "write the steps as a numbered list")
+        _refused_by(_NO_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list")
     ),
     "fan diagram": _kept_except(
-        _refused_by(_DRAWING_NO_DIAGRAM, "draw a fan diagram", "write the hub and its spokes as a list")
+        _refused_by(_NO_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list")
     ),
     "link, citation or math in a flow or fan step's note": _refused_by(
         EXPORT_TARGETS,
@@ -210,7 +212,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         "since a diagram label holds plain text only",
         "write the note as plain text and put the rest in a text block after the diagram",
     ),
-    "chart": _kept_except(dict.fromkeys(_DRAWING_NO_DIAGRAM, _CHART_AS_ITS_TABLE)),
+    "chart": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
     "chart with several series or stacked": {
         **_refused_by(
             ("markdown", "notion"),
@@ -218,8 +220,10 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "since its Mermaid chart has no legend and no stacking",
             "draw one chart per series, or write the values in a table",
         ),
-        **dict.fromkeys(_DRAWING_NO_DIAGRAM, _CHART_AS_ITS_TABLE),
+        **dict.fromkeys(_NO_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE),
     },
+    "math block": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("a code block in latex"))),
+    "inline math": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

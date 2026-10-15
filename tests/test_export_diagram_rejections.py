@@ -5,19 +5,22 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
+from skaldr.export import check as check_module
 from skaldr.export.adf import render_adf
+from skaldr.export.capabilities import CAPABILITIES, Feature, Rejection
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.tree import Diagram, TableNode
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import lowered, make_report, slack_of, write_report
+from tests.factories import lowered, make_report, make_toggle, slack_of, write_report
 from tests.factories.capability_factory import (
     DIAGRAM_ACCEPTED_CASES,
     DIAGRAM_CASES,
     DIAGRAM_REFUSALS,
     DONUT,
+    MATH_BLOCKS,
     ONE_SERIES_CHARTS,
     SEVERAL_SERIES_OR_STACKED,
     AcceptedCase,
@@ -80,6 +83,66 @@ def test_adf_writes_each_chart_as_exactly_its_data_table(chart: dict[str, Any]) 
 
     assert render_adf((diagram,)) == render_adf(diagram.supplement)
     assert [type(node) for node in diagram.supplement] == [TableNode]
+
+
+@pytest.mark.parametrize(
+    ("feature", "blocks", "where"),
+    [
+        pytest.param("chart", [DONUT], "at blocks.0.chart", id="donut"),
+        pytest.param("chart", [xy_chart("line", [1, 2])], "at blocks.0.chart", id="line"),
+        pytest.param(
+            "math block", [make_toggle(MATH_BLOCKS[0])], "at blocks.0.toggle.blocks.0.math", id="math"
+        ),
+        pytest.param(
+            "inline math",
+            [{"type": "list", "items": ["plain", {"text": "deep", "items": ["at $`x_i`$"]}]}],
+            "at blocks.0.list",
+            id="inline-math-in-a-nested-list-item",
+        ),
+        pytest.param(
+            "inline math",
+            [{"type": "text", "body": "**bold [$`x`$](https://example.com/x)**"}],
+            "at blocks.0.text",
+            id="inline-math-in-a-link-in-bold",
+        ),
+    ],
+)
+def test_the_check_finds_each_swapped_feature_where_a_target_would_refuse_it(
+    monkeypatch: pytest.MonkeyPatch, feature: Feature, blocks: list[dict[str, Any]], where: str
+) -> None:
+    refusing = Rejection("refused", "instead")
+    monkeypatch.setattr(check_module, "CAPABILITIES", {**CAPABILITIES, feature: {"adf": refusing}})
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "adf")
+
+    assert vars(raised.value) == {"target": "adf", "why": "refused", "instead": "instead", "where": where}
+
+
+def test_a_slack_canvas_writes_math_as_a_latex_code_block_and_inline_math_as_inline_code() -> None:
+    assert slack_of(MATH_BLOCKS) == "```latex\nx^2 + 1\n```\n\nrate `x_i` now\n"
+
+
+def test_adf_writes_math_as_a_latex_code_block_and_inline_math_as_a_code_mark() -> None:
+    assert render_adf(lowered(MATH_BLOCKS)) == {
+        "version": 1,
+        "type": "doc",
+        "content": [
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "latex"},
+                "content": [{"type": "text", "text": "x^2 + 1"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "rate "},
+                    {"type": "text", "text": "x_i", "marks": [{"type": "code"}]},
+                    {"type": "text", "text": " now"},
+                ],
+            },
+        ],
+    }
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)

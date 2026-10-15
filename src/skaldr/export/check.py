@@ -310,8 +310,16 @@ class _TreeWalk:
             if character is not None:
                 yield self.hit(ScriptForm(script.position, script.text, character), node.authored_at)
 
+    def math_hits(self, node: Node) -> Iterator[FeatureHit]:
+        if isinstance(node, DisplayMath):
+            yield self.hit(Occurrence("math block"), node.authored_at)
+        own_runs = every_run_within(chain.from_iterable(_own_texts(node)))
+        if any(isinstance(run, InlineMath) for run in own_runs):
+            yield self.hit(Occurrence("inline math"), node.authored_at)
+
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.script_hits(node)
+        yield from self.math_hits(node)
         match node:
             case Heading():
                 self.note_heading(node.text)

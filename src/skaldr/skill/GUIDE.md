@@ -1513,7 +1513,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `text`, and prose in other blocks | a paragraph; a toned paragraph gets the tone's text colour |
 | a list | a bullet, ordered (with its start number) or task list, nested as written |
 | `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
-| `code` | a code block with its language; a `math` block is a code block in `latex` |
+| `code` | a code block with its language; a `math` block is a code block in `latex`, since ADF has no math, and `` $`x_i`$ `` inline math is inline code holding the LaTeX |
 | `quote` | a block quote, the citation in italics |
 | `divider` | a rule |
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
@@ -1548,7 +1548,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `text`, and prose in other blocks | a paragraph; tones are dropped |
 | a list | a `*`, `1.` or `* [ ]` and `* [x]` list. A canvas list item holds only text and one nested list; a nested list keeps its own kind, so bullets under a numbered step stay bullets. A paragraph in a list item joins the item's text when it comes before the item's nested list. A list item holding anything else, such as a paragraph after its nested list, a code block, table, quote, callout, image, media, diagram, math block, heading, toggle, tabs, divider or a second nested list, fails the export with an error naming the YAML path of the block that holds it, since a canvas could only show it after the whole list, away from its item. A canvas joins two lists in a row into one, so a paragraph holding `&nbsp;`, which the canvas stores as a single no-break space, keeps them apart, such as a `fact_strip` right before a `cards` block. A canvas numbers every list from 1, so a numbered list that starts at another number fails the export with an error naming its YAML path |
 | `callout`, `note`, `panel`, a toned `grid` cell | a `::: {.callout}` block whose body starts with the tone's icon, or the block's `icon`; a `panel` has no icon, as on the page, so its body starts with its bold title. A canvas callout cannot hold a table, a callout, a divider or a column layout, so each of those moves to just after it |
-| `code` | a fenced block with its language; a `math` block is a fenced block in `latex` |
+| `code` | a fenced block with its language; a `math` block is a fenced block in `latex`, since a canvas has no math |
 | `chart` | its data table in place of the chart, since a canvas cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, stacked or not |
 | `quote` | quoted lines, with the citation on its own line in italics |
 | `divider` | `---` at the top level; dropped inside a list item or a grid column |
@@ -1564,7 +1564,7 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 | `**bold**`, `*italic*`, `~~strike~~` | the same marks, except where the characters around a mark would stop a canvas reading it, such as bold text that ends in a bracket right before a letter, or an italic that opens or closes a bold (or a bold an italic); there the text is written without the mark. A mark inside the same mark is written once |
 | `++underline++`, `[text]{tone=…}` | the text alone |
 | `H~2~O`, `10^3^` | Unicode subscript and superscript characters, `H₂O` and `10³`, since a canvas has no subscript or superscript mark. Digits, `+`, `-`, `=` and brackets have both forms; a superscript also covers every lowercase letter but `q` and the capitals `A B D E G H I J K L M N O P R T U V W`, and a subscript the lowercase `a e h i j k l m n o p r s t u v x`. A subscript or superscript holding any other character, a space included, fails the export with an error naming its text, the first such character and the path in the YAML of the block that holds it, since writing it bare would change its meaning (`10^3^` read as 103); write the text without the mark, or export the document elsewhere |
-| `` $`x_i`$ `` inline math | inline code |
+| `` $`x_i`$ `` inline math | inline code holding the LaTeX |
 | `[1 Oct](date:2026-10-01)` | a canvas date, `![](slack_date:2026-10-01)`; a range is the start date, the text " to " and the end date |
 | `[Ada](user:ada)` | the label as text |
 | a same-page `[…](#id)` link, `[the plan](doc:…)` | the label as text |
