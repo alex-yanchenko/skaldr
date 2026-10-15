@@ -277,6 +277,27 @@ def test_naming_another_conversation_moves_no_canvas_and_posts_nothing(
     )
 
 
+def test_naming_another_workspace_is_refused_as_a_move_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    write_garden_report(tmp_path, publish=_slack_publish(split=["tools"], where={"workspace": TEAM_ID}))
+    slack.forget_requests()
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (exit_code, capsys.readouterr().err, slack.requests) == (
+        1,
+        "error: the Slack target moved from slack canvases to slack canvases in workspace T0EXAMPLE1; skaldr "
+        "does not move pages or issues, so nothing was written. Publish once with the old target removed "
+        "from the `publish` block, which archives the items skaldr created there and releases any page it "
+        "wrote into, then add the new target and publish again\n",
+        [],
+    )
+
+
 def test_retiring_the_document_archives_each_canvas(tmp_path: Path) -> None:
     slack = InMemorySlack()
     path = _published(tmp_path, slack)

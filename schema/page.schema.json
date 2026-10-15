@@ -5167,7 +5167,7 @@
             }
           ],
           "default": null,
-          "description": "The id or name of the signed-in Slack workspace to publish with; needed only when signed in to several. Not part of the target's place.",
+          "description": "The id or name of the signed-in Slack workspace to publish with; needed only when signed in to several. Part of the target's place, so naming another workspace is a move, which skaldr refuses.",
           "title": "Workspace"
         }
       },

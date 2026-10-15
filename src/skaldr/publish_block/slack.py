@@ -54,7 +54,8 @@ class SlackWhere(FrozenModel):
     workspace: str | None = Field(
         default=None,
         description="The id or name of the signed-in Slack workspace to publish with; needed only when "
-        "signed in to several. Not part of the target's place.",
+        "signed in to several. Part of the target's place, so naming another workspace is a move, which "
+        "skaldr refuses.",
     )
 
     @field_validator("conversation")
@@ -116,9 +117,8 @@ class SlackTarget(TargetBase):
         return f"{self.place_label()}{written_into}"
 
     def place_key(self) -> Location:
-        return ("slack", self.where.canvas or "")
+        return ("slack", self.where.canvas or "", self.where.workspace or "")
 
     def place_label(self) -> str:
-        if self.where.canvas is not None:
-            return f"slack canvas {self.where.canvas}"
-        return "slack canvases"
+        label = "slack canvases" if self.where.canvas is None else f"slack canvas {self.where.canvas}"
+        return label if self.where.workspace is None else f"{label} in workspace {self.where.workspace}"

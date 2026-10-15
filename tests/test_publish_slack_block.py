@@ -60,7 +60,7 @@ def test_a_slack_target_without_where_publishes_canvases_it_links_nowhere() -> N
         target.location_label(),
     ) == (
         {"conversation": None, "canvas": None, "workspace": None},
-        ("slack", ""),
+        ("slack", "", ""),
         "slack canvases",
     )
 
@@ -69,23 +69,29 @@ def test_a_slack_target_without_where_publishes_canvases_it_links_nowhere() -> N
     ("where", "place_key", "label"),
     [
         pytest.param(
-            {"conversation": SLACK_CONVERSATION_ID}, ("slack", ""), "slack canvases", id="conversation"
+            {"conversation": SLACK_CONVERSATION_ID}, ("slack", "", ""), "slack canvases", id="conversation"
         ),
         pytest.param(
             {"conversation": CHANNEL_LINK, "workspace": "Example Garden"},
-            ("slack", ""),
-            "slack canvases",
-            id="conversation-link-and-a-workspace-outside-the-place",
+            ("slack", "", "Example Garden"),
+            "slack canvases in workspace Example Garden",
+            id="conversation-link-outside-the-place-and-a-workspace-in-it",
         ),
         pytest.param(
             {"canvas": CANVAS_LINK},
-            ("slack", SLACK_CANVAS_ID),
+            ("slack", SLACK_CANVAS_ID, ""),
             f"slack canvas {SLACK_CANVAS_ID} (written into)",
             id="canvas-written-into",
         ),
+        pytest.param(
+            {"canvas": SLACK_CANVAS_ID, "workspace": SLACK_TEAM_ID},
+            ("slack", SLACK_CANVAS_ID, SLACK_TEAM_ID),
+            f"slack canvas {SLACK_CANVAS_ID} in workspace {SLACK_TEAM_ID} (written into)",
+            id="canvas-in-a-workspace",
+        ),
     ],
 )
-def test_a_slack_target_is_placed_by_its_canvas_and_not_by_where_its_links_are_posted(
+def test_a_slack_target_is_placed_by_its_canvas_and_workspace_and_not_by_where_its_links_are_posted(
     where: dict[str, Any], place_key: tuple[str, ...], label: str
 ) -> None:
     target = _parse({"doc_id": "plan", "targets": [make_slack_target(where=where)]}).targets[0]
@@ -220,10 +226,37 @@ def test_an_empty_override_is_accepted() -> None:
             f"publish targets 1 and 2 both write to slack canvas {SLACK_CANVAS_ID}",
             id="one-canvas-named-two-ways",
         ),
+        pytest.param(
+            [
+                make_slack_target(where={"workspace": "Example Garden"}),
+                make_slack_target(
+                    where={"conversation": OTHER_CONVERSATION_ID, "workspace": "Example Garden"}
+                ),
+            ],
+            "publish targets 1 and 2 both write to slack canvases in workspace Example Garden",
+            id="one-workspace",
+        ),
     ],
 )
 def test_two_slack_targets_cannot_write_to_one_place(targets: list[dict[str, Any]], message: str) -> None:
     _rejects({"doc_id": "plan", "targets": targets}, message)
+
+
+def test_slack_targets_in_two_workspaces_are_two_places() -> None:
+    publish = _parse(
+        {
+            "doc_id": "plan",
+            "targets": [
+                make_slack_target(where={"workspace": "Example Garden"}),
+                make_slack_target(where={"workspace": "Example Orchard"}),
+            ],
+        }
+    )
+
+    assert [target.location_label() for target in publish.targets] == [
+        "slack canvases in workspace Example Garden",
+        "slack canvases in workspace Example Orchard",
+    ]
 
 
 def test_a_slack_target_sits_beside_a_notion_target() -> None:
