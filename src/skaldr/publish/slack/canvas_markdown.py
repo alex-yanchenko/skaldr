@@ -257,17 +257,17 @@ def keyed_canvas(markdown: str, layout: Mapping[str, str]) -> KeyedCanvas:
     )
 
 
-def _as_sent_back(raw: str) -> str:
+def _blank_as_a_list_separator(raw: str) -> str:
     return LIST_SEPARATOR if comparable_block(raw) == "" else raw
 
 
 def canvas_body(raws: Sequence[str]) -> str:
     spaced: list[str] = []
-    for raw in map(_as_sent_back, raws):
+    for raw in map(_blank_as_a_list_separator, raws):
         if spaced and is_a_list(spaced[-1]) and is_a_list(raw):
             spaced.append(LIST_SEPARATOR)
         spaced.append(raw)
-    return _blocks_text(spaced)
+    return _blocks_text(spaced or [LIST_SEPARATOR])
 
 
 def body_with_content_swapped(keyed: KeyedCanvas, old: Sequence[int], at: int, markdown: str) -> list[str]:

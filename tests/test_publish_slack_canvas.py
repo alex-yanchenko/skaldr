@@ -341,7 +341,7 @@ def test_the_archived_line_names_the_document() -> None:
         pytest.param(
             ["* One.", "Sow.", "* Two."], "* One.\n\nSow.\n\n* Two.\n", id="a-paragraph-keeps-lists-apart"
         ),
-        pytest.param([], "", id="nothing"),
+        pytest.param([], "&nbsp;\n", id="no-blocks-is-one-blank-paragraph"),
     ],
 )
 def test_a_canvas_body_is_its_blocks_with_two_lists_in_a_row_kept_apart(raws: list[str], body: str) -> None:

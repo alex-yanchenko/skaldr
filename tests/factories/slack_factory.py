@@ -240,6 +240,8 @@ class InMemorySlack:
             return _refused("invalid_arguments")
         change = changes[0]
         operation = change["operation"]
+        if operation == "replace" and not change["document_content"]["markdown"].strip():
+            return _refused("canvas_editing_failed")
         if operation == "replace" and "section_id" not in change:
             canvas.blocks = as_slack_stores(change["document_content"]["markdown"])
         elif operation == "rename":

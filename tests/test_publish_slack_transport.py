@@ -898,6 +898,23 @@ def test_a_release_deletes_the_blocks_skaldr_published_and_its_stamp_and_keeps_w
     )
 
 
+def test_a_release_of_a_canvas_holding_only_what_skaldr_published_leaves_one_blank_paragraph() -> None:
+    slack = InMemorySlack()
+    _created(slack)
+    transport = slack.transport()
+    read = transport.read_item(CANVAS, CONTENT)
+
+    slack.forget_requests()
+
+    transport.release_item(CANVAS, Release(read.raw_sections, ()))
+    sent = list(slack.requests)
+
+    assert (sent, slack.markdown_of(CANVAS)) == (
+        [_read_call(), _read_call(), _replace_call("&nbsp;\n")],
+        f"# {TITLE_TEXT}\n\n \n",
+    )
+
+
 def test_a_release_after_a_hand_edit_since_the_read_writes_nothing() -> None:
     slack = InMemorySlack()
     _created(slack)
