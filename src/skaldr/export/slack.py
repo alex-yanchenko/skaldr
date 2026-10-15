@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Literal
+from typing import Final, Literal, NoReturn
 
 from typing_extensions import assert_never
 
@@ -56,7 +56,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import SLACK_TARGET
-from skaldr.models import MEDIA_KIND_LABELS, ToneLiteral
+from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
@@ -101,9 +101,7 @@ class _SlackRuns(CommonMarkRuns):
     def unflanked_emphasis(self, _style: MarkerStyle, inner: str, /) -> str:
         return inner
 
-    def require_a_tint_it_can_drop(
-        self, _tone: ToneLiteral | None, _background: ToneLiteral | None, /
-    ) -> None:
+    def refuse_a_tint(self) -> NoReturn:
         raise ExportInvariantError(
             "a Slack canvas cannot colour or highlight text; the export check should have refused it"
         )

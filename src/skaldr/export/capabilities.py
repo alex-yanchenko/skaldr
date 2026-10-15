@@ -288,6 +288,10 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "colour span": _kept_except({"markdown": _GITHUB_CANNOT_COLOUR, "slack": _CANVAS_CANNOT_COLOUR}),
     "highlight span": _kept_except(
         {
+            "markdown": Rejection(
+                "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'",
+                _WITHOUT_THE_HIGHLIGHT,
+            ),
             "adf": _JIRA_CANNOT_HIGHLIGHT,
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
@@ -334,6 +338,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "link to another skaldr document": _kept_except(
         {
             "notion": Rejection(_OTHER_DOCUMENT_WHY.format(target="Notion"), _OTHER_DOCUMENT_INSTEAD),
+            "adf": Rejection(
+                _OTHER_DOCUMENT_WHY.format(target="a Jira description"), _OTHER_DOCUMENT_INSTEAD
+            ),
             "slack": Rejection(_OTHER_DOCUMENT_WHY.format(target="a Slack canvas"), _OTHER_DOCUMENT_INSTEAD),
         }
     ),

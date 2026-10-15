@@ -53,7 +53,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
 }
 TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "colour span": {"markdown": "reject", "slack": "reject"},
-    "highlight span": {"adf": "reject", "slack": "reject"},
+    "highlight span": {"markdown": "reject", "adf": "reject", "slack": "reject"},
     "colour and highlight span": {
         "markdown": "reject",
         "notion": "reject",
@@ -62,7 +62,7 @@ TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     },
     "underline": {"slack": "reject"},
     "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
-    "link to another skaldr document": {"notion": "reject", "slack": "reject"},
+    "link to another skaldr document": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "inline code holding a backtick": {"notion": "reject"},
     "inline code holding a closing tag in a table cell": {"notion": "reject"},
     "inline code holding a closing tag in a coloured, highlighted or underlined span": {"notion": "reject"},

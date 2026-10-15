@@ -157,6 +157,7 @@ JIRA_HIGHLIGHT_WHY = (
     "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'"
 )
 GITHUB_COLOUR_WHY = "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'"
+GITHUB_HIGHLIGHT_WHY = "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'"
 CANVAS_COLOUR_WHY = "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'"
 OWN_HEADING_INSTEAD = "write the heading's name without the link, or export the document elsewhere"
 OWN_HEADING_WHY = (
@@ -186,6 +187,13 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         "slack",
         HIGHLIGHTED_TEXT,
         "a Slack canvas cannot highlight text, so it cannot show the highlight on 'due Friday'",
+        WITHOUT_THE_HIGHLIGHT,
+        "at blocks.0.text",
+    ),
+    "markdown-highlight-span": RefusedCase(
+        "markdown",
+        HIGHLIGHTED_TEXT,
+        GITHUB_HIGHLIGHT_WHY.format(text="due Friday"),
         WITHOUT_THE_HIGHLIGHT,
         "at blocks.0.text",
     ),
@@ -266,6 +274,13 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         OTHER_DOCUMENT_INSTEAD,
         "at blocks.0.text",
     ),
+    "adf-link-to-another-document": RefusedCase(
+        "adf",
+        LINK_TO_ANOTHER_DOCUMENT,
+        OTHER_DOCUMENT_WHY.format(target="a Jira description"),
+        OTHER_DOCUMENT_INSTEAD,
+        "at blocks.0.text",
+    ),
     "notion-inline-code-holding-a-backtick": RefusedCase(
         "notion",
         [{"type": "text", "body": "Split on `` a`b `` first."}],
@@ -324,17 +339,19 @@ class NestedSpans:
         blocks = [{"type": "text", "body": self.body}]
         outer = self.coloured if self.outer_is_a_colour else self.highlighted
         canvas_why = CANVAS_COLOUR_WHY if self.outer_is_a_colour else CANVAS_HIGHLIGHT_WHY
-        canvas_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
-        github_why = GITHUB_COLOUR_WHY.format(text=self.coloured)
+        github_why = GITHUB_COLOUR_WHY if self.outer_is_a_colour else GITHUB_HIGHLIGHT_WHY
+        outer_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
         jira_why = JIRA_HIGHLIGHT_WHY.format(text=self.highlighted)
         return {
-            f"markdown-{name}": RefusedCase("markdown", blocks, github_why, WITHOUT_THE_COLOUR, AT_THE_TEXT),
+            f"markdown-{name}": RefusedCase(
+                "markdown", blocks, github_why.format(text=outer), outer_instead, AT_THE_TEXT
+            ),
             f"notion-{name}": RefusedCase(
                 "notion", blocks, NOTION_BOTH_WHY.format(text=self.inner), NOTION_BOTH_INSTEAD, AT_THE_TEXT
             ),
             f"adf-{name}": RefusedCase("adf", blocks, jira_why, WITHOUT_THE_HIGHLIGHT, AT_THE_TEXT),
             f"slack-{name}": RefusedCase(
-                "slack", blocks, canvas_why.format(text=outer), canvas_instead, AT_THE_TEXT
+                "slack", blocks, canvas_why.format(text=outer), outer_instead, AT_THE_TEXT
             ),
         }
 
@@ -359,6 +376,13 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         HIGHLIGHT_IN_A_STEP_TITLE,
         "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
         "so it cannot show the highlight on 'cold room'",
+        WITHOUT_THE_HIGHLIGHT,
+        STEP_PATH_OF_THE_TITLE,
+    ),
+    "markdown-highlight-inside-a-toned-step-title": RefusedCase(
+        "markdown",
+        HIGHLIGHT_IN_A_STEP_TITLE,
+        GITHUB_HIGHLIGHT_WHY.format(text="cold room"),
         WITHOUT_THE_HIGHLIGHT,
         STEP_PATH_OF_THE_TITLE,
     ),

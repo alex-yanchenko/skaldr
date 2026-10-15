@@ -451,5 +451,10 @@ def test_an_issue_link_without_a_url_is_the_label_as_plain_text() -> None:
     assert _written((IssueLink((Plain("ABC-123"),), "ABC-123", None),)) == [_text("ABC-123")]
 
 
-def test_a_document_link_is_the_label_as_plain_text() -> None:
-    assert _written((DocumentLink((Plain("the plan"),), "onboarding-plan", "st2"),)) == [_text("the plan")]
+def test_a_link_to_another_document_is_an_invariant_the_check_backs() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written((DocumentLink((Plain("the plan"),), "onboarding-plan", "st2"),))
+
+    assert str(raised.value) == (
+        "a Jira description cannot link to another skaldr document; the export check should have refused it"
+    )

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Final
+from typing import Final, NoReturn
 from urllib.parse import quote
 
 from typing_extensions import Self, assert_never
@@ -289,9 +289,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str: ...
 
     @abstractmethod
-    def require_a_tint_it_can_drop(
-        self, tone: ToneLiteral | None, background: ToneLiteral | None, /
-    ) -> None: ...
+    def refuse_a_tint(self) -> NoReturn: ...
 
     @abstractmethod
     def require_links_to_its_own_headings(self) -> None: ...
@@ -346,8 +344,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Styled():
                     pieces += self._styled_pieces(run, enclosing)
                 case Tinted():
-                    self.require_a_tint_it_can_drop(run.tone, run.background)
-                    pieces += self._pieces(run.runs, enclosing)
+                    self.refuse_a_tint()
                 case TonedLabel():
                     pieces += self._pieces(run.runs, enclosing)
                 case Link():

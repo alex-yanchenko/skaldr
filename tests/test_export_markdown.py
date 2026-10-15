@@ -51,7 +51,7 @@ from skaldr.export.tree import (
     Toggle,
     ToneName,
 )
-from skaldr.models import load_report, parse_report
+from skaldr.models import ToneLiteral, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -229,7 +229,6 @@ def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link
         pytest.param(AnchorLink((Plain("method"),), "method"), "[method](#how-we-count)", id="anchor-link"),
         pytest.param(AnchorLink((Plain("gone"),), "nowhere"), "gone", id="anchor-link-to-no-heading"),
         pytest.param(SectionLink((Plain("method"),), "method"), "[method](#how-we-count)", id="section-link"),
-        pytest.param(Tinted(None, "warning", (Plain("due"),)), "due", id="highlight-is-its-text"),
         pytest.param(TonedLabel("danger", (Plain("Scan"),)), "Scan", id="toned-label-is-its-text"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
         pytest.param(SwimlaneMark("deferred"), "⏸️", id="swimlane-mark"),
@@ -262,11 +261,23 @@ def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_
     assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
 
 
-def test_the_github_writer_alone_raises_an_internal_error_for_a_colour_span_the_check_refuses() -> None:
+@pytest.mark.parametrize(
+    ("tone", "background"),
+    [
+        pytest.param("danger", None, id="colour"),
+        pytest.param(None, "warning", id="highlight"),
+        pytest.param("danger", "sky", id="colour-and-highlight"),
+    ],
+)
+def test_the_github_writer_alone_raises_an_internal_error_for_a_span_the_check_refuses(
+    tone: ToneLiteral | None, background: ToneLiteral | None
+) -> None:
     with pytest.raises(ExportInvariantError) as raised:
-        render_markdown([Paragraph((Tinted("danger", "sky", (Plain("behind"),)),))])
+        render_markdown([Paragraph((Tinted(tone, background, (Plain("behind"),)),))])
 
-    assert str(raised.value) == "GitHub Markdown cannot colour text; the export check should have refused it"
+    assert str(raised.value) == (
+        "GitHub Markdown cannot colour or highlight text; the export check should have refused it"
+    )
 
 
 def test_an_anchor_link_to_a_heading_whose_github_slug_is_empty_is_its_label() -> None:
@@ -349,12 +360,8 @@ def test_a_math_block_holding_a_backtick_fence_line_gets_a_longer_fence() -> Non
     assert markdown_of([{"type": "math", "expression": "a\n```\nb"}]) == "````math\na\n```\nb\n````\n"
 
 
-def test_a_highlight_span_keeps_only_its_text_because_github_has_no_highlight() -> None:
-    body = "[**late** a_b]{bg=warning} [x]{y} [[docs]{bg=info}](https://x.io)"
-
-    assert markdown_of([{"type": "text", "body": body}]) == (
-        "**late** a\\_b \\[x\\]{y} [docs](https://x.io)\n"
-    )
+def test_brackets_followed_by_braces_that_are_not_a_span_stay_escaped_prose_in_markdown() -> None:
+    assert markdown_of([{"type": "text", "body": "a_b [x]{y}"}]) == "a\\_b \\[x\\]{y}\n"
 
 
 def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_markdown() -> None:
@@ -872,53 +879,57 @@ def _github_html(markdown: str) -> str:
     return MarkdownIt("commonmark").enable("strikethrough").render(markdown)
 
 
+def _toned(text: str) -> TonedLabel:
+    return TonedLabel("info", parse_rich(text))
+
+
 @pytest.mark.parametrize(
-    ("body", "markdown", "html"),
+    ("runs", "markdown", "html"),
     [
         pytest.param(
-            "**(bold)**[t]{bg=danger}",
+            (*parse_rich("**(bold)**"), _toned("t")),
             "<strong>(bold)</strong>t\n",
             "<p><strong>(bold)</strong>t</p>\n",
-            id="bold-before-a-tinted-span",
+            id="bold-before-a-toned-label",
         ),
         pytest.param(
-            "*(it)*[u]{bg=info}",
+            (*parse_rich("*(it)*"), _toned("u")),
             "<em>(it)</em>u\n",
             "<p><em>(it)</em>u</p>\n",
-            id="italic-before-a-tinted-span",
+            id="italic-before-a-toned-label",
         ),
         pytest.param(
-            "~~(b)~~[c]{bg=amber}",
+            (*parse_rich("~~(b)~~"), _toned("c")),
             "<del>(b)</del>c\n",
             "<p><del>(b)</del>c</p>\n",
-            id="strike-before-a-tinted-span",
+            id="strike-before-a-toned-label",
         ),
         pytest.param(
-            "[a]{bg=info}**(x)** y",
+            (_toned("a"), *parse_rich("**(x)** y")),
             "a<strong>(x)</strong> y\n",
             "<p>a<strong>(x)</strong> y</p>\n",
-            id="bold-after-a-tinted-span",
+            id="bold-after-a-toned-label",
         ),
         pytest.param(
-            "**(x)** y and **`api`**.",
+            parse_rich("**(x)** y and **`api`**."),
             "**(x)** y and **`api`**.\n",
             "<p><strong>(x)</strong> y and <strong><code>api</code></strong>.</p>\n",
             id="markers-stay-when-the-neighbours-allow-them",
         ),
         pytest.param(
-            "**a** [b]{bg=info}",
+            (*parse_rich("**a** "), _toned("b")),
             "**a** b\n",
             "<p><strong>a</strong> b</p>\n",
-            id="a-tinted-span-after-a-space-changes-nothing",
+            id="a-toned-label-after-a-space-changes-nothing",
         ),
         pytest.param(
-            "*a **(x)**[t]{bg=info}* z",
+            parse_rich("*a **(x)**[t](date:2026-10-01)* z"),
             "*a <strong>(x)</strong>t* z\n",
             "<p><em>a <strong>(x)</strong>t</em> z</p>\n",
             id="nested-emphasis-falls-back-on-its-own",
         ),
         pytest.param(
-            "[**(x)**[t]{bg=info}](https://x.io)",
+            (Link(parse_rich("**(x)**[t](date:2026-10-01)"), "https://x.io"),),
             "[<strong>(x)</strong>t](https://x.io)\n",
             '<p><a href="https://x.io"><strong>(x)</strong>t</a></p>\n',
             id="inside-a-link-label",
@@ -926,48 +937,48 @@ def _github_html(markdown: str) -> str:
     ],
 )
 def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
-    body: str, markdown: str, html: str
+    runs: ExportRich, markdown: str, html: str
 ) -> None:
-    written = markdown_of([{"type": "text", "body": body}])
+    written = render_markdown([Paragraph(runs)])
 
     assert (written, _github_html(written)) == (markdown, html)
 
 
 @pytest.mark.parametrize(
-    ("body", "markdown", "html"),
+    ("runs", "markdown", "html"),
     [
         pytest.param(
-            "*(a)*[**b**]{bg=info}",
+            (*parse_rich("*(a)*"), _toned("**b**")),
             "*(a)*<strong>b</strong>\n",
             "<p><em>(a)</em><strong>b</strong></p>\n",
             id="italic-then-bold",
         ),
         pytest.param(
-            "**(a)**[*b*]{bg=info}",
+            (*parse_rich("**(a)**"), _toned("*b*")),
             "**(a)**<em>b</em>\n",
             "<p><strong>(a)</strong><em>b</em></p>\n",
             id="bold-then-italic",
         ),
         pytest.param(
-            "**(a)**[**b**]{bg=info}",
+            (*parse_rich("**(a)**"), _toned("**b**")),
             "**(a)**<strong>b</strong>\n",
             "<p><strong>(a)</strong><strong>b</strong></p>\n",
             id="bold-then-bold",
         ),
         pytest.param(
-            "~~(a)~~[~~b~~]{bg=info}",
+            (*parse_rich("~~(a)~~"), _toned("~~b~~")),
             "~~(a)~~<del>b</del>\n",
             "<p><s>(a)</s><del>b</del></p>\n",
             id="strike-then-strike",
         ),
         pytest.param(
-            "**(a)**[~~b~~]{bg=info}",
+            (*parse_rich("**(a)**"), _toned("~~b~~")),
             "**(a)**~~b~~\n",
             "<p><strong>(a)</strong><s>b</s></p>\n",
             id="different-marker-characters-do-not-merge",
         ),
         pytest.param(
-            "**(a)** [**b**]{bg=info}",
+            (*parse_rich("**(a)** "), _toned("**b**")),
             "**(a)** **b**\n",
             "<p><strong>(a)</strong> <strong>b</strong></p>\n",
             id="a-space-keeps-the-markers-apart",
@@ -975,9 +986,9 @@ def test_emphasis_whose_markers_github_would_not_close_is_written_as_html_tags(
     ],
 )
 def test_emphasis_written_straight_after_emphasis_never_merges_its_markers_into_one_run(
-    body: str, markdown: str, html: str
+    runs: ExportRich, markdown: str, html: str
 ) -> None:
-    written = markdown_of([{"type": "text", "body": body}])
+    written = render_markdown([Paragraph(runs)])
 
     assert (written, _github_html(written)) == (markdown, html)
 

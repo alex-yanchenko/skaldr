@@ -270,8 +270,11 @@ class AdfRuns:
             return label
         return (AdfInlineCard(type="inlineCard", attrs=AdfInlineCardAttrs(url=url)),)
 
-    def document_link(self, label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
-        return label
+    def document_link(self, _label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
+        raise ExportInvariantError(
+            "a Jira description cannot link to another skaldr document; "
+            "the export check should have refused it"
+        )
 
     def citation(self, run: Citation, /) -> AdfInlines:
         label = (_plain_text(f"[{run.number}]"),)
