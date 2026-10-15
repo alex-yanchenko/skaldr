@@ -1107,7 +1107,7 @@ def test_emit_json_dumps_the_people_and_the_jira_site(
     meta = {
         "title": "T",
         "jira_site": "https://example.atlassian.net",
-        "people": {"ada": {"jira": "5b10a2844c20165700ede21g"}},
+        "people": {"ada": {"jira": "5b10a2844c20165700ede21g", "slack": "U0EXAMPLE1"}},
     }
     data_path = _write(tmp_path, make_report(meta=meta))
 
@@ -1118,7 +1118,7 @@ def test_emit_json_dumps_the_people_and_the_jira_site(
     assert (exit_code, emitted["jira_site"], emitted["people"]) == (
         0,
         "https://example.atlassian.net",
-        {"ada": {"notion": None, "jira": "5b10a2844c20165700ede21g"}},
+        {"ada": {"notion": None, "jira": "5b10a2844c20165700ede21g", "slack": "U0EXAMPLE1"}},
     )
 
 

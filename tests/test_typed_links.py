@@ -18,17 +18,24 @@ from skaldr.richtext import (
     visible_text,
 )
 from skaldr.typed_links import issue_key_in_url, issue_url
-from tests.factories import make_report, markdown_of, notion_of
+from tests.factories import make_report, markdown_of, notion_of, slack_of
 
-ADA = Person(notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g")
+ADA = Person(
+    notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g", slack="U0EXAMPLE1"
+)
 SITE = "https://example.atlassian.net"
 CONTEXT = RichContext(people={"ada": ADA, "bo": Person()}, jira_site=SITE)
 PEOPLE_META: dict[str, Any] = {
     "title": "Plan",
     "jira_site": SITE,
     "people": {
-        "ada": {"notion": "user://11111111-2222-3333-4444-555555555555", "jira": "5b10a2844c20165700ede21g"},
+        "ada": {
+            "notion": "user://11111111-2222-3333-4444-555555555555",
+            "jira": "5b10a2844c20165700ede21g",
+            "slack": "U0EXAMPLE1",
+        },
         "bo": {},
+        "cy": {"slack": "U0EXAMPLE2"},
     },
 }
 TYPED_BODY_OPENING = (
@@ -223,6 +230,28 @@ def test_a_notion_id_must_be_a_user_uri() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "slack",
+    [
+        pytest.param("u0example1", id="lowercase"),
+        pytest.param("C0EXAMPLE1", id="channel-id"),
+        pytest.param("<@U0EXAMPLE1>", id="message-mention-form"),
+        pytest.param("@ada", id="handle"),
+        pytest.param("U", id="prefix-alone"),
+        pytest.param("U0EXAMPLE1 ", id="trailing-space"),
+    ],
+)
+def test_a_slack_id_must_be_a_member_id(slack: str) -> None:
+    meta = {"title": "T", "people": {"ada": {"slack": slack}}}
+
+    with pytest.raises(ReportError) as error:
+        parse_report(make_report(meta=meta))
+
+    assert str(error.value) == (
+        "invalid content data: meta.people.ada.slack: String should match pattern '^U[0-9A-Z]+$'"
+    )
+
+
 def test_a_jira_site_loses_its_trailing_slash() -> None:
     report = parse_report(make_report(meta={"title": "T", "jira_site": f"{SITE}/"}))
 
@@ -295,10 +324,62 @@ def test_a_full_page_render_resolves_people_from_the_meta_map() -> None:
     assert '<a class="issue-link" href="https://example.atlassian.net/browse/ABC-123">ABC-123</a>' in html
 
 
-def test_github_markdown_keeps_the_label_and_links_issues_and_documents() -> None:
+def test_github_markdown_keeps_the_label_dates_it_and_links_issues_and_documents() -> None:
     assert markdown_of(_text_block(TYPED_BODY), meta=PEOPLE_META) == (
-        "Due 1 Oct or the week; Ada owns [ABC-123](https://example.atlassian.net/browse/ABC-123); "
+        'Due <time datetime="2026-10-01">1 Oct</time> or '
+        '<span data-range="2026-10-05/2026-10-09">the week</span>; '
+        "Ada owns [ABC-123](https://example.atlassian.net/browse/ABC-123); "
         "see [the plan](onboarding-plan.md).\n"
+    )
+
+
+def test_github_markdown_keeps_the_marks_and_escapes_of_a_date_label() -> None:
+    assert markdown_of(_text_block("[**1 Oct** a*b](date:2026-10-01)"), meta=PEOPLE_META) == (
+        '<time datetime="2026-10-01">**1 Oct** a\\*b</time>\n'
+    )
+
+
+def test_github_markdown_writes_a_blank_date_label_as_an_empty_element() -> None:
+    assert markdown_of(_text_block("on [ ](date:2026-10-01)"), meta=PEOPLE_META) == (
+        'on <time datetime="2026-10-01"> </time>\n'
+    )
+
+
+def test_github_markdown_keeps_the_marks_and_escapes_of_a_date_range_label() -> None:
+    assert markdown_of(_text_block("[**the week** a*b](date:2026-10-05/2026-10-09)"), meta=PEOPLE_META) == (
+        '<span data-range="2026-10-05/2026-10-09">**the week** a\\*b</span>\n'
+    )
+
+
+def test_github_markdown_writes_a_date_chip_in_a_heading_caption_and_a_table_cell() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "when", "label": "When", "kind": "rich"}],
+        "rows": [{"when": "[1 Oct](date:2026-10-01) to [the week](date:2026-10-05/2026-10-09)"}],
+    }
+    heading = {"type": "heading", "text": "Plan", "sub": "due [1 Oct](date:2026-10-01)"}
+
+    assert markdown_of([heading, table], meta=PEOPLE_META) == (
+        "## Plan\n"
+        "\n"
+        '*due <time datetime="2026-10-01">1 Oct</time>*\n'
+        "\n"
+        "| When |\n"
+        "| --- |\n"
+        '| <time datetime="2026-10-01">1 Oct</time> to '
+        '<span data-range="2026-10-05/2026-10-09">the week</span> |\n'
+    )
+
+
+def test_notion_markdown_keeps_the_marks_and_escapes_of_a_date_label() -> None:
+    assert notion_of(_text_block("[**1 Oct** a*b](date:2026-10-01)"), meta=PEOPLE_META) == (
+        '**1 Oct** a\\*b <mention-date start="2026-10-01"/>\n'
+    )
+
+
+def test_notion_markdown_keeps_the_marks_of_a_date_range_label() -> None:
+    assert notion_of(_text_block("[*the* **week**](date:2026-10-05/2026-10-09)"), meta=PEOPLE_META) == (
+        '*the* **week** <mention-date start="2026-10-05" end="2026-10-09"/>\n'
     )
 
 
@@ -316,24 +397,50 @@ def test_github_markdown_leaves_an_issue_key_as_text_without_a_site() -> None:
 
 def test_notion_markdown_writes_mentions_for_dates_and_people_and_links_for_issues() -> None:
     assert notion_of(_text_block(TYPED_BODY_WITHOUT_A_DOCUMENT_LINK), meta=PEOPLE_META) == (
-        'Due <mention-date start="2026-10-01"/> or <mention-date start="2026-10-05" end="2026-10-09"/>; '
+        'Due 1 Oct <mention-date start="2026-10-01"/> or '
+        'the week <mention-date start="2026-10-05" end="2026-10-09"/>; '
         '<mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> owns '
         "[ABC-123](https://example.atlassian.net/browse/ABC-123).\n"
     )
 
 
+def test_notion_markdown_writes_a_blank_date_label_as_the_date_mention_alone() -> None:
+    assert notion_of(_text_block("on [ ](date:2026-10-01)"), meta=PEOPLE_META) == (
+        'on <mention-date start="2026-10-01"/>\n'
+    )
+
+
 def test_notion_markdown_writes_a_person_without_a_notion_id_as_its_label() -> None:
-    assert notion_of(_text_block("[Bo](user:bo)"), meta=PEOPLE_META) == "Bo\n"
+    assert notion_of(_text_block("[Bo](user:bo) and [Cy](user:cy)"), meta=PEOPLE_META) == "Bo and Cy\n"
+
+
+def test_github_markdown_writes_a_person_with_only_a_slack_id_as_its_label() -> None:
+    assert markdown_of(_text_block("[Cy](user:cy)"), meta=PEOPLE_META) == "Cy\n"
+
+
+def test_slack_canvas_writes_a_member_mention_for_a_slack_id_and_the_label_without_one() -> None:
+    body = "[Ada](user:ada), [Bo](user:bo) and [**Cy**](user:cy) own [ABC-123](jira:ABC-123)."
+
+    assert slack_of(_text_block(body), meta=PEOPLE_META) == (
+        "![](@U0EXAMPLE1), Bo and ![](@U0EXAMPLE2) own [ABC-123](https://example.atlassian.net/browse/ABC-123).\n"
+    )
 
 
 def test_emit_json_carries_people_and_the_jira_site_in_the_meta() -> None:
     meta = parse_report(make_report(meta=PEOPLE_META)).model_dump(mode="json")["meta"]
 
-    assert meta["jira_site"] == SITE
-    assert meta["people"] == {
-        "ada": {"notion": "user://11111111-2222-3333-4444-555555555555", "jira": "5b10a2844c20165700ede21g"},
-        "bo": {"notion": None, "jira": None},
-    }
+    assert (meta["jira_site"], meta["people"]) == (
+        SITE,
+        {
+            "ada": {
+                "notion": "user://11111111-2222-3333-4444-555555555555",
+                "jira": "5b10a2844c20165700ede21g",
+                "slack": "U0EXAMPLE1",
+            },
+            "bo": {"notion": None, "jira": None, "slack": None},
+            "cy": {"notion": None, "jira": None, "slack": "U0EXAMPLE2"},
+        },
+    )
 
 
 @pytest.mark.parametrize(
@@ -423,7 +530,7 @@ def test_notion_writes_typed_links_in_a_table_cell_and_a_heading_caption() -> No
 
     assert notion_of([heading, table], meta=PEOPLE_META) == (
         "## Plan\n"
-        '*due <mention-date start="2026-10-01"/>* {color="gray"}\n'
+        '*due 1 Oct <mention-date start="2026-10-01"/>* {color="gray"}\n'
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n"
         "\t\t<td>**Who**</td>\n"
@@ -431,7 +538,7 @@ def test_notion_writes_typed_links_in_a_table_cell_and_a_heading_caption() -> No
         "\t</tr>\n"
         "\t<tr>\n"
         '\t\t<td><mention-user url="user://11111111-2222-3333-4444-555555555555">Ada</mention-user> '
-        'on <mention-date start="2026-10-01"/></td>\n'
+        'on 1 Oct <mention-date start="2026-10-01"/></td>\n'
         "\t\t<td>x</td>\n"
         "\t</tr>\n"
         "</table>\n"

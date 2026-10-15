@@ -188,6 +188,10 @@ def _date_node(day: date) -> AdfDate:
     return AdfDate(type="date", attrs=AdfDateAttrs(timestamp=str(int(midnight_utc.timestamp()) * 1000)))
 
 
+def _shows_nothing(nodes: AdfInlines) -> bool:
+    return all(node["type"] == "text" and not node["text"].strip() for node in nodes)
+
+
 def _text_of(nodes: AdfInlines) -> str:
     return "".join(node["text"] for node in nodes if node["type"] == "text")
 
@@ -255,10 +259,13 @@ class AdfRuns:
     def section_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
         return label
 
-    def date_mention(self, _label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
-        if end is None:
-            return (_date_node(start),)
-        return (_date_node(start), _plain_text(" to "), _date_node(end))
+    def date_mention(self, label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
+        dates = (
+            (_date_node(start),) if end is None else (_date_node(start), _plain_text(" to "), _date_node(end))
+        )
+        if _shows_nothing(label):
+            return dates
+        return (*label, _plain_text(" "), *dates)
 
     def person_mention(self, label: AdfInlines, _key: str, person: Person, /) -> AdfInlines:
         if person.jira is None:
