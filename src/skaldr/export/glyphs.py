@@ -4,6 +4,7 @@ from typing import Final
 
 from typing_extensions import assert_never
 
+from skaldr.compute import STATUS_GLYPHS
 from skaldr.export.runs import (
     CheckMark,
     DecisionMark,
@@ -53,19 +54,7 @@ def tab_title_led_by_its_icon(tab: Tab) -> ExportRich:
 
 
 def status_glyph(state: StatusState) -> str:
-    match state:
-        case "done":
-            return "✅"
-        case "current":
-            return "🔵"
-        case "pending":
-            return "⚪"
-        case "failed":
-            return "❌"
-        case "blocked":
-            return "⏸️"
-        case _:
-            assert_never(state)
+    return STATUS_GLYPHS[state].export
 
 
 def swimlane_glyph(state: SwimlaneStepState) -> str:

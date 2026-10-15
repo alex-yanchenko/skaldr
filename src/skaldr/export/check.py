@@ -47,6 +47,7 @@ from skaldr.export.capabilities import (
     TonedCell,
     character_without_a_unicode_form,
 )
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
 from skaldr.export.markup import table_width
 from skaldr.export.runs import (
@@ -77,6 +78,7 @@ from skaldr.export.tree import (
     Diagram,
     DisplayMath,
     Divider,
+    GenericNode,
     Graph,
     Heading,
     ListEntry,
@@ -209,18 +211,18 @@ class _Place:
         return replace(self, in_a_column=True)
 
 
-def _term(node: Node) -> str:
+def _term(node: GenericNode) -> str:
     named = node.authored_as if isinstance(node, AuthoredNode) else None
     return named or _NODE_TERMS[type(node)]
 
 
-def _held(node: Node) -> Held | None:
+def _held(node: GenericNode) -> Held | None:
     match node:
         case TableNode():
             return "table"
         case Callout():
             return "callout"
-        case Quote() if any(node.lines) or node.cite:
+        case Quote() if any(quote_lines(node)) or node.cite:
             return "quote"
         case Toggle():
             return "toggle"
@@ -232,7 +234,7 @@ def _held(node: Node) -> Held | None:
             return None
 
 
-def _what_a_list_item_cannot_hold(child: Node, holds_a_list: bool) -> str | None:
+def _what_a_list_item_cannot_hold(child: GenericNode, holds_a_list: bool) -> str | None:
     match child:
         case Paragraph():
             return "a paragraph after its nested list" if holds_a_list and child.text else None
@@ -268,17 +270,17 @@ def _what_a_list_item_cannot_hold(child: Node, holds_a_list: bool) -> str | None
             assert_never(child)
 
 
-def _own_texts(node: Node) -> Iterator[ExportRich]:
+def _own_texts(node: GenericNode) -> Iterator[ExportRich]:
     match node:
         case Heading() | Paragraph():
             yield node.text
         case TableNode():
-            yield from (cell.text for cell in node.header)
-            yield from (cell.text for row in node.rows for cell in row.cells)
+            yield from map(cell_text, node.header)
+            yield from (cell_text(cell) for row in node.rows for cell in row.cells)
         case Media():
             yield from (node.description, node.caption)
         case Quote():
-            yield from (*node.lines, node.cite)
+            yield from (*quote_lines(node), node.cite)
         case Toggle():
             yield node.title
         case Tabs():
@@ -435,10 +437,10 @@ def _unplaced_in_a_list_item(child: Node, holder: ListNode, held: str) -> Fenced
     return FencedInAListItem.in_a_list_item(held)
 
 
-def _nodes_adf_cannot_place_in_a_list_item(child: Node) -> Iterator[Node]:
+def _nodes_adf_cannot_place_in_a_list_item(child: GenericNode) -> Iterator[GenericNode]:
     match child:
         case Columns() | Diagram():
-            for nested in nested_nodes(child):
+            for nested in folded(nested_nodes(child)):
                 yield from _nodes_adf_cannot_place_in_a_list_item(nested)
         case Heading() | Divider():
             yield child
@@ -478,7 +480,7 @@ class _TreeWalk:
             yield self.hit(details, path)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
-        for node in nodes:
+        for node in folded(nodes):
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
@@ -493,7 +495,7 @@ class _TreeWalk:
         if any(isinstance(run, InlineMath) for run in runs):
             yield self.hit(Occurrence("inline math"), node.authored_at)
 
-    def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
+    def node(self, node: GenericNode, place: _Place) -> Iterator[FeatureHit]:
         yield from self.located_hits_before(node)
         yield from self.math_hits(node, _own_texts(node))
         if place.in_a_column:
@@ -541,7 +543,7 @@ class _TreeWalk:
         ):
             yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 
-    def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
+    def placement_hits(self, node: GenericNode, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
         container = place.container
         if held is None or container in ("document", "toggle"):
@@ -551,7 +553,7 @@ class _TreeWalk:
             details = Placement(feature, _term(node), place.holder(), place.holder_name())
             yield self.hit(details, node.authored_at)
 
-    def grid_cell_hits(self, node: Node) -> Iterator[FeatureHit]:
+    def grid_cell_hits(self, node: GenericNode) -> Iterator[FeatureHit]:
         if isinstance(node, Callout) and node.authored_as == _GRID_CELL_AUTHORED_AS:
             yield self.hit(TonedCell(node.tone), node.authored_at)
             return
@@ -573,7 +575,7 @@ class _TreeWalk:
         yield from self.math_hits(holder, (entry.text,))
         yield from self.inline_hits(holder, (entry.text,))
         holds_a_list = False
-        for child in entry.children:
+        for child in folded(entry.children):
             yield from self.located_hits_before(child)
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
@@ -582,7 +584,7 @@ class _TreeWalk:
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
-    def unplaced_hits(self, child: Node, holder: ListNode) -> Iterator[FeatureHit]:
+    def unplaced_hits(self, child: GenericNode, holder: ListNode) -> Iterator[FeatureHit]:
         if isinstance(child, Divider):
             yield self.hit(DividerInAStep(), child.authored_at)
             return

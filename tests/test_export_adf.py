@@ -22,14 +22,19 @@ from skaldr.export.tree import (
     HEADING_LEVELS,
     BlockRegion,
     Callout,
+    Cards,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     GridColumn,
     Heading,
     HeadingLevel,
+    KeyValueList,
+    LinkCard,
     ListEntry,
     ListKind,
     ListNode,
@@ -48,6 +53,7 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    Timeline,
     TocEntry,
     Toggle,
     ToneName,
@@ -469,7 +475,7 @@ def test_display_math_is_a_latex_code_block() -> None:
 
 
 def test_a_quote_is_a_block_quote_with_one_paragraph_per_line_and_an_italic_cite() -> None:
-    node = Quote((plain("one"), plain("two")), cite=plain("Someone"))
+    node = Quote((Paragraph(plain("one")), Paragraph(plain("two"))), cite=plain("Someone"))
 
     assert _rendered(node) == _doc(
         {
@@ -964,6 +970,12 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "table",
+    FactStrip: "bulletList",
+    KeyValueList: "bulletList",
+    DefinitionList: "bulletList",
+    Cards: "bulletList",
+    Timeline: "bulletList",
+    LinkCard: "blockquote",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

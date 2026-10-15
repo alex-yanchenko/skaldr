@@ -2,10 +2,12 @@ from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
-from skaldr.models import MediaKind, ToneLiteral
+from skaldr.models import BadgeColor, MediaKind, TimelineState, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
+LinkCardDisplay = Literal["card", "embed"]
 ListKind = Literal["bullet", "number", "check"]
+TextNumbering = Literal["letters", "roman"]
 AuthoredName = Literal[
     "panel",
     "grid cell",
@@ -60,6 +62,7 @@ class ListNode:
     kind: ListKind
     entries: tuple[ListEntry, ...]
     start: int = 1
+    numbering: TextNumbering | None = None
     authored_at: str | None = field(default=None, compare=False)
 
 
@@ -67,6 +70,7 @@ class ListNode:
 class TableCell:
     text: ExportRich
     tone: ToneName | None = None
+    blocks: "tuple[Node, ...]" = ()
 
 
 @dataclass(frozen=True)
@@ -132,7 +136,7 @@ class Callout:
 
 @dataclass(frozen=True)
 class Quote:
-    lines: tuple[ExportRich, ...]
+    body: "tuple[Node, ...]"
     cite: ExportRich = ()
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
@@ -149,6 +153,7 @@ class Toggle:
     heading_level: HeadingLevel | None
     children: "tuple[Node, ...]"
     anchor: str | None = None
+    open: bool = False
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
 
@@ -244,7 +249,77 @@ class TableOfContents:
     authored_at: str | None = field(default=None, compare=False)
 
 
-Node = (
+@dataclass(frozen=True)
+class LabelledValue:
+    label: str | None
+    value: ExportRich
+
+
+@dataclass(frozen=True)
+class FactStrip:
+    facts: tuple[LabelledValue, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
+class KeyValueList:
+    pairs: tuple[LabelledValue, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
+class Definition:
+    term: str
+    body: "tuple[Node, ...]"
+
+
+@dataclass(frozen=True)
+class DefinitionList:
+    definitions: tuple[Definition, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
+class Card:
+    label: str | None
+    value: ExportRich
+    note: str = ""
+    tone: ToneLiteral | None = None
+    badge: BadgeColor | None = None
+
+
+@dataclass(frozen=True)
+class Cards:
+    cards: tuple[Card, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
+class TimelineEvent:
+    title: str
+    time: str | None = None
+    state: TimelineState | None = None
+    chips: ExportRich = ()
+    body: ExportRich | None = None
+
+
+@dataclass(frozen=True)
+class Timeline:
+    events: tuple[TimelineEvent, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
+class LinkCard:
+    title: str
+    url: str
+    display: LinkCardDisplay
+    domain: str | None = None
+    caption: str | None = None
+    authored_at: str | None = field(default=None, compare=False)
+
+
+GenericNode = (
     Heading
     | Paragraph
     | ListNode
@@ -261,6 +336,8 @@ Node = (
     | Diagram
     | TableOfContents
 )
+BlockNode = FactStrip | KeyValueList | DefinitionList | Cards | Timeline | LinkCard
+Node = GenericNode | BlockNode
 
 AuthoredNode = Callout | Quote | TableNode | Tabs | Toggle
 
@@ -334,6 +411,14 @@ def with_authored_path(node: Node, path: str | None) -> Node:
             return replace(node, tabs=tabs, authored_at=path)
         case Diagram():
             return replace(node, supplement=_all_authored_at(node.supplement, path), authored_at=path)
+        case DefinitionList():
+            definitions = tuple(
+                replace(definition, body=_all_authored_at(definition.body, path))
+                for definition in node.definitions
+            )
+            return replace(node, definitions=definitions, authored_at=path)
+        case Quote():
+            return replace(node, body=_all_authored_at(node.body, path), authored_at=path)
         case (
             Heading()
             | Paragraph()
@@ -341,9 +426,13 @@ def with_authored_path(node: Node, path: str | None) -> Node:
             | CodeBlock()
             | DisplayMath()
             | Media()
-            | Quote()
             | Divider()
             | TableOfContents()
+            | FactStrip()
+            | KeyValueList()
+            | Cards()
+            | Timeline()
+            | LinkCard()
         ):
             return replace(node, authored_at=path)
 
@@ -360,6 +449,10 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return tuple(child for tab in node.tabs for child in tab.children)
         case Diagram():
             return node.supplement
+        case DefinitionList():
+            return tuple(child for definition in node.definitions for child in definition.body)
+        case Quote():
+            return node.body
         case (
             Heading()
             | Paragraph()
@@ -367,8 +460,12 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             | CodeBlock()
             | DisplayMath()
             | Media()
-            | Quote()
             | Divider()
             | TableOfContents()
+            | FactStrip()
+            | KeyValueList()
+            | Cards()
+            | Timeline()
+            | LinkCard()
         ):
             return ()

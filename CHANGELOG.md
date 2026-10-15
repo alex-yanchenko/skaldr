@@ -1,5 +1,57 @@
 # Changelog
 
+## [4.0.0](https://github.com/alex-yanchenko/skaldr/compare/v3.3.0...v4.0.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **export:** `--export`, `--check --for` and `publish` now refuse, naming the YAML path and what to write instead: `--export markdown` a document holding a colour span; `--export notion` one holding a span with both a colour and a highlight, a same-page `#anchor` link, or a `doc:` link to another document; `--export adf` one holding a same-page `#anchor` link; `--export slack` one holding a colour span, a highlight span, an underline, a same-page `#anchor` link or a `doc:` link. Write the text without the mark, the heading's name without the link, or an https link to the other document.
+* **export:** a document holding a `range` block, at any depth, now fails `--export markdown`, `--export notion`, `--export adf`, `--export slack`, `skaldr publish` and `skaldr --check --for <target>` with an error naming the block's path; write a `meter` or a `table` in its place in a document you export.
+* **export:** `--export slack` and `--check --for slack` now fail on a panel holding a table, callout, note, toggle, tabs, image or divider, on a grid of four or more cells, a toned grid cell, a grid cell holding a table, callout, note or divider, and a grid inside a grid cell; move the block out of the panel or grid, split the grid, or drop the cell's tone. `--export adf` and a publish to Jira now fail on a table inside a grid cell and on a divider inside a walkthrough step; move the block out of the grid or the step.
+
+### Features
+
+* **blocks:** name an image by URL and add a media block ([#197](https://github.com/alex-yanchenko/skaldr/issues/197)) ([9842a2b](https://github.com/alex-yanchenko/skaldr/commit/9842a2b29a697f6484c2a42636e86b41a26b696a))
+* **cli:** look up one block or section with skaldr --guide &lt;name&gt; ([#190](https://github.com/alex-yanchenko/skaldr/issues/190)) ([bcfd281](https://github.com/alex-yanchenko/skaldr/commit/bcfd281d555f20a74a28f6fb3722213d5f3675b5))
+* **export:** keep a table whole when --chunk splits a notion page ([#191](https://github.com/alex-yanchenko/skaldr/issues/191)) ([6576db6](https://github.com/alex-yanchenko/skaldr/commit/6576db60e1995c529fb2e03db65a6d88826b46af))
+* **export:** refuse callout and grid content a target cannot show and write tabs as toggles on notion and jira ([#212](https://github.com/alex-yanchenko/skaldr/issues/212)) ([0cf6186](https://github.com/alex-yanchenko/skaldr/commit/0cf6186bae694a19cd6a73684194b89563c5c958))
+* **export:** refuse diagrams, ranges and data: images a target cannot show and write charts and math in a form it can ([#213](https://github.com/alex-yanchenko/skaldr/issues/213)) ([0d7d9c9](https://github.com/alex-yanchenko/skaldr/commit/0d7d9c94ff758a9c1c29abbf7fc9c557d5b9a7c1))
+* **export:** refuse inline marks, links and list forms a target cannot show ([#214](https://github.com/alex-yanchenko/skaldr/issues/214)) ([e71df75](https://github.com/alex-yanchenko/skaldr/commit/e71df75346ed2049a79a20f50725f34e0ec699d1))
+* **export:** show tones as dots on github and slack ([#217](https://github.com/alex-yanchenko/skaldr/issues/217)) ([752f5df](https://github.com/alex-yanchenko/skaldr/commit/752f5dfc9b2ab6f5713a1b32000de38af93891ca))
+* **export:** write a date chip's label and its date in every target ([#216](https://github.com/alex-yanchenko/skaldr/issues/216)) ([1a5439d](https://github.com/alex-yanchenko/skaldr/commit/1a5439d2631f6c6ac1f2a5fd64d36a6194a33940))
+* **export:** write a document as adf for jira with --export adf ([#198](https://github.com/alex-yanchenko/skaldr/issues/198)) ([031932c](https://github.com/alex-yanchenko/skaldr/commit/031932cb58717b3646a88340a58b18883e3b7dbc))
+* **export:** write a document as slack canvas markdown with --export slack ([#208](https://github.com/alex-yanchenko/skaldr/issues/208)) ([e34efc1](https://github.com/alex-yanchenko/skaldr/commit/e34efc180bd59325f4d90b0cb049bf8b6ec24abe))
+* **link:** add a link block and a page icon and cover ([#194](https://github.com/alex-yanchenko/skaldr/issues/194)) ([d256d64](https://github.com/alex-yanchenko/skaldr/commit/d256d64f41df90aee4d5099e43144406497a40df))
+* **people:** a slack member id on people and canvas mentions ([#215](https://github.com/alex-yanchenko/skaldr/issues/215)) ([3803c85](https://github.com/alex-yanchenko/skaldr/commit/3803c85bad47a09eb338d3567ba260ddb69d69c8))
+* **plan:** ship a working plan starter with skaldr new plan and --guide plan ([#200](https://github.com/alex-yanchenko/skaldr/issues/200)) ([f316360](https://github.com/alex-yanchenko/skaldr/commit/f316360e6e89511d000f8a4b6a30cfaa634bb7d4))
+* **publish:** link each notion page and jira issue that hold the same part of a document ([#211](https://github.com/alex-yanchenko/skaldr/issues/211)) ([1ddcf0e](https://github.com/alex-yanchenko/skaldr/commit/1ddcf0ebb00c309aa07d4e091d0e12487473b4a8))
+* **publish:** plan and apply a publish with a state file, remote-edit checks and a transport contract ([#199](https://github.com/alex-yanchenko/skaldr/issues/199)) ([af48bf7](https://github.com/alex-yanchenko/skaldr/commit/af48bf7958bf4a5baab27bd44f38b8735cf635ea))
+* **publish:** publish a document to slack canvases signed in with your own user token ([#218](https://github.com/alex-yanchenko/skaldr/issues/218)) ([b6207cf](https://github.com/alex-yanchenko/skaldr/commit/b6207cf981ba780783e8fb2e4c62a08645444b0a))
+* **publish:** publish to jira cloud with a jira transport, client and sign-in ([#202](https://github.com/alex-yanchenko/skaldr/issues/202)) ([77510b5](https://github.com/alex-yanchenko/skaldr/commit/77510b5abc9d5558ccd21be3cb856cedbfee3621))
+* **publish:** publish to notion with a notion transport, client and token renewal ([#203](https://github.com/alex-yanchenko/skaldr/issues/203)) ([0c72253](https://github.com/alex-yanchenko/skaldr/commit/0c7225303000f0473a59a777084e7296506cd6f2))
+* **request:** let a case fill several declared variables through values ([#192](https://github.com/alex-yanchenko/skaldr/issues/192)) ([aee0890](https://github.com/alex-yanchenko/skaldr/commit/aee0890d30a473cb7bdf9bb0d556a87a02de4fc2))
+* **request:** record a database, SQL or MCP query as evidence ([#193](https://github.com/alex-yanchenko/skaldr/issues/193)) ([c6cf20d](https://github.com/alex-yanchenko/skaldr/commit/c6cf20d5fbd5e6956ddbadf625199f5bbbff9697))
+* **richtext:** add typed links for dates, people, issues and documents ([#196](https://github.com/alex-yanchenko/skaldr/issues/196)) ([a301313](https://github.com/alex-yanchenko/skaldr/commit/a301313cf9c63f7f07c6d532bdff68f7cc45c47b))
+* **section:** show issue fields as a fact strip on a section ([#195](https://github.com/alex-yanchenko/skaldr/issues/195)) ([7401e65](https://github.com/alex-yanchenko/skaldr/commit/7401e6531826ec6928c1f49068c0fae3b9715417))
+
+
+### Bug Fixes
+
+* **adf:** drop the table of contents and name the author's block and path in refusals ([#206](https://github.com/alex-yanchenko/skaldr/issues/206)) ([4c8e352](https://github.com/alex-yanchenko/skaldr/commit/4c8e352b95d08832f7ba74ef316b37210562899c))
+* **auth:** close keychain crash windows and let every sign-in be named and removed ([#207](https://github.com/alex-yanchenko/skaldr/issues/207)) ([c28dbe3](https://github.com/alex-yanchenko/skaldr/commit/c28dbe3bf2bd233fc047436808e83bd2fb079cdc))
+* **auth:** keep one sign-in per jira site and per notion workspace ([#185](https://github.com/alex-yanchenko/skaldr/issues/185)) ([83e4c5b](https://github.com/alex-yanchenko/skaldr/commit/83e4c5bdf2f788f45bb50e1af7cb5df13bf1d510))
+* **export:** show blocked and panels as the page does and keep slack lists apart ([#209](https://github.com/alex-yanchenko/skaldr/issues/209)) ([df431fa](https://github.com/alex-yanchenko/skaldr/commit/df431fa27c7f60fec49d25be09d96b04d4c82849))
+* **publish:** compare a saved copy in the transport's current form ([#205](https://github.com/alex-yanchenko/skaldr/issues/205)) ([41f247f](https://github.com/alex-yanchenko/skaldr/commit/41f247fd77349108be9850ca3dfe8bcfdba69b93))
+* **render:** remember the reader's page width across reloads like the theme ([#201](https://github.com/alex-yanchenko/skaldr/issues/201)) ([a0471d4](https://github.com/alex-yanchenko/skaldr/commit/a0471d42df6d04836c74af411ad6aed6479adb55))
+
+
+### Code Refactoring
+
+* **export:** lower each top-level block into its own region ([#186](https://github.com/alex-yanchenko/skaldr/issues/186)) ([7d76d13](https://github.com/alex-yanchenko/skaldr/commit/7d76d13b930bbf1a3ef3f839e645ac1487f321f1))
+* **export:** make the run writers generic and parse table rows once into typed rows ([#187](https://github.com/alex-yanchenko/skaldr/issues/187)) ([e31ece8](https://github.com/alex-yanchenko/skaldr/commit/e31ece8fb01b431788f75834ae310fc332822d7b))
+* **export:** name each block in the export tree and fold it in every writer ([#219](https://github.com/alex-yanchenko/skaldr/issues/219)) ([fd4ad43](https://github.com/alex-yanchenko/skaldr/commit/fd4ad43f4485d4d8413b989182d7e0f943d7211c))
+* **export:** refuse what a target cannot show from one capability table ([#210](https://github.com/alex-yanchenko/skaldr/issues/210)) ([00c66cc](https://github.com/alex-yanchenko/skaldr/commit/00c66cc0714d56a6a85d719fb34a636512bd0179))
+
 ## [3.3.0](https://github.com/alex-yanchenko/skaldr/compare/v3.2.1...v3.3.0) (2026-10-06)
 
 

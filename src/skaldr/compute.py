@@ -53,6 +53,7 @@ from skaldr.models import (
     Row,
     Section,
     SectionFields,
+    StatusState,
     Swimlane,
     SwimlaneStepState,
     Table,
@@ -343,6 +344,20 @@ class SwimLayout(TypedDict):
 
 _SWIM_STATE_ORDER: tuple[SwimlaneStepState, ...] = ("done", "current", "todo", "blocked", "deferred")
 DELTA_GLYPHS: Final[Mapping[DeltaDirection, str]] = {"up": "▲", "down": "▼", "flat": "→"}
+
+
+class StatusGlyph(NamedTuple):
+    page: str
+    export: str
+
+
+STATUS_GLYPHS: Final[Mapping[StatusState, StatusGlyph]] = {
+    "done": StatusGlyph("✓", "✅"),
+    "current": StatusGlyph("◐", "🔵"),
+    "pending": StatusGlyph("○", "⚪"),
+    "failed": StatusGlyph("✗", "❌"),
+    "blocked": StatusGlyph("⏸", "⏸️"),
+}
 
 
 class SwimTotals(TypedDict):

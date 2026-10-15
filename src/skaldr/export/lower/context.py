@@ -1,10 +1,9 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
 
 from skaldr import compute
 from skaldr.export.inline import bold, one_line, plain, rich_line
-from skaldr.export.runs import Chip, ExportRich, TonedLabel
+from skaldr.export.runs import Break, Chip, ExportRich, ExportRun, TonedLabel
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
 from skaldr.models import (
     AnyBlock,
@@ -14,11 +13,8 @@ from skaldr.models import (
     ToneLiteral,
     iter_reference_items,
 )
-from skaldr.prose_blocks import ProseBlock, ProseItem, ProseList, prose_blocks
+from skaldr.prose_blocks import ProseBlock, prose_blocks
 from skaldr.richtext import Plain, Rich, RichContext
-
-TEXT_BULLET: Final = "• "
-NESTED_TEXT_BULLET: Final = "◦ "
 
 
 @dataclass(frozen=True)
@@ -49,19 +45,6 @@ class Lowering:
         return (
             ListNode("bullet", entries) if block.start is None else ListNode("number", entries, block.start)
         )
-
-    def prose_lines(self, text: str) -> tuple[ExportRich, ...]:
-        return tuple(line for block in prose_blocks(text) for line in self._text_lines(block, depth=0))
-
-    def _text_lines(self, block: ProseBlock, depth: int) -> list[ExportRich]:
-        if isinstance(block, str):
-            return [self.rich(block)]
-        lines: list[ExportRich] = []
-        for marker, item in _item_markers(block, depth):
-            lines.append((Plain(marker), *self.rich(item.text)))
-            for child in item.blocks:
-                lines += self._text_lines(child, depth + 1)
-        return lines
 
     def anchor_of(self, block: AnyBlock) -> str | None:
         return self.anchors.get(id(block))
@@ -111,12 +94,6 @@ def lowering_for(report: Report) -> Lowering:
     )
 
 
-def _item_markers(block: ProseList, depth: int) -> list[tuple[str, ProseItem]]:
-    if block.start is None:
-        return [(TEXT_BULLET if depth == 0 else NESTED_TEXT_BULLET, item) for item in block.items]
-    return [(f"{number}. ", item) for number, item in enumerate(block.items, start=block.start)]
-
-
 def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
     runs: ExportRich = ()
     for part in parts:
@@ -124,6 +101,15 @@ def spaced(parts: Sequence[ExportRich], separator: str = " ") -> ExportRich:
             runs += (Plain(separator),)
         runs += part
     return runs
+
+
+def joined_by_breaks(lines: Iterable[ExportRich]) -> ExportRich:
+    runs: list[ExportRun] = []
+    for line in lines:
+        if line and runs:
+            runs.append(Break())
+        runs.extend(line)
+    return tuple(runs)
 
 
 def toned(tone: ToneLiteral | None, runs: Rich) -> ExportRich:

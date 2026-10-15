@@ -282,7 +282,7 @@ def _broken_line(second: str) -> tuple[ExportRun, ...]:
         ),
         pytest.param(Heading(2, _broken_line("two")), "## one two\n", id="heading-space"),
         pytest.param(make_bullets(ListEntry(_broken_line("two"))), "* one two\n", id="list-item-space"),
-        pytest.param(Quote((_broken_line("two"),)), "> one two\n", id="quote-space"),
+        pytest.param(Quote((Paragraph(_broken_line("two")),)), "> one two\n", id="quote-space"),
         pytest.param(Toggle(_broken_line("two"), None, ()), "**one two**\n", id="title-space"),
     ],
 )
@@ -510,7 +510,7 @@ def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:
     [
         pytest.param(CodeBlock("x", "bash"), "a code block", id="code"),
         pytest.param(_key_value_table(), "a table", id="table"),
-        pytest.param(Quote((make_rich_text("said"),)), "a quote", id="quote"),
+        pytest.param(Quote((make_paragraph("said"),)), "a quote", id="quote"),
         pytest.param(Callout("info", (make_paragraph("careful"),)), "a callout", id="callout"),
         pytest.param(
             Media("image", "https://example.com/a.png", make_rich_text("a chart")),
@@ -879,7 +879,7 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
         ),
         pytest.param(Callout("info", ()), "::: {.callout}\n💡\n:::\n", id="empty"),
         pytest.param(
-            Callout("info", (Quote((make_rich_text("said"),)), CodeBlock("x", "sh"))),
+            Callout("info", (Quote((make_paragraph("said"),)), CodeBlock("x", "sh"))),
             "::: {.callout}\n💡\n\n> said\n\n```sh\nx\n```\n:::\n",
             id="led-by-a-quote-then-code",
         ),
@@ -937,7 +937,7 @@ def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
 
 
 def test_a_quote_is_quoted_lines_with_the_cite_on_its_own_italic_line() -> None:
-    node = Quote((make_rich_text("said"), make_rich_text("# again")), make_rich_text("Ana"))
+    node = Quote((make_paragraph("said"), make_paragraph("# again")), make_rich_text("Ana"))
 
     assert render_slack([node]) == "> said\n>\n> \\# again\n>\n> *Ana*\n"
 
@@ -1223,7 +1223,7 @@ def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(
             TableNode((make_table_cell("h"),), (TableRow((TableCell((SCRIPT_WITHOUT_A_FORM,)),)),)),
             id="table-cell",
         ),
-        pytest.param(Quote((make_rich_text("q"),), (SCRIPT_WITHOUT_A_FORM,)), id="quote-cite"),
+        pytest.param(Quote((make_paragraph("q"),), (SCRIPT_WITHOUT_A_FORM,)), id="quote-cite"),
         pytest.param(Toggle((SCRIPT_WITHOUT_A_FORM,), None, ()), id="toggle-title"),
         pytest.param(Tabs((Tab((SCRIPT_WITHOUT_A_FORM,), ()),)), id="tab-title"),
         pytest.param(

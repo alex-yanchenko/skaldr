@@ -888,7 +888,7 @@ def test_block_nodes_become_notion_blocks() -> None:
         ListNode("number", (ListEntry((Plain("one"),)),)),
         ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),)))),
         Callout("info", (Paragraph((Plain("tip"),)),)),
-        Quote(((Plain("said"),),)),
+        Quote((Paragraph((Plain("said"),)),)),
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
         Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
         Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),

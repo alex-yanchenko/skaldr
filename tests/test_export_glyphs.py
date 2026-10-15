@@ -2,6 +2,8 @@ from typing import get_args
 
 import pytest
 
+from skaldr.compute import STATUS_GLYPHS, StatusGlyph
+from skaldr.export import glyphs
 from skaldr.export.glyphs import (
     CALLOUT_ICON,
     callout_icon,
@@ -40,6 +42,27 @@ def test_a_state_glyph_is_the_pages_symbol_as_a_coloured_emoji_since_markdown_ha
         "pending": "⚪",
         "failed": "❌",
         "blocked": "⏸️",
+    }
+
+
+def test_each_state_has_one_row_pairing_the_pages_symbol_with_its_export_emoji() -> None:
+    rows = dict(STATUS_GLYPHS)
+
+    assert rows == {
+        "done": StatusGlyph("✓", "✅"),
+        "current": StatusGlyph("◐", "🔵"),
+        "pending": StatusGlyph("○", "⚪"),
+        "failed": StatusGlyph("✗", "❌"),
+        "blocked": StatusGlyph("⏸", "⏸️"),
+    }
+
+
+def test_the_export_writes_the_emoji_of_each_states_shared_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = {state: StatusGlyph(f"page-{state}", f"export-{state}") for state in get_args(StatusState)}
+    monkeypatch.setattr(glyphs, "STATUS_GLYPHS", rows)
+
+    assert {state: status_glyph(state) for state in get_args(StatusState)} == {
+        state: f"export-{state}" for state in get_args(StatusState)
     }
 
 

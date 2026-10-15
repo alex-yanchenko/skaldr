@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 
 from skaldr.code_language import code_language
+from skaldr.export.folds import quote_lines
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
 from skaldr.export.lower.context import spaced, with_bold_label
@@ -21,17 +22,24 @@ from skaldr.export.runs import (
 from skaldr.export.tree import (
     BlockRegion,
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     Graph,
     GraphEdge,
     GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
+    KeyValueList,
+    LabelledValue,
     ListEntry,
     ListNode,
     LoweredDocument,
@@ -49,6 +57,9 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
+    TextNumbering,
+    Timeline,
+    TimelineEvent,
     TocEntry,
     Toggle,
     ToneName,
@@ -73,6 +84,7 @@ from skaldr.richtext import (
 from tests.factories import (
     API_BADGES,
     lowered,
+    lowered_as_written_today,
     make_cell,
     make_command_request,
     make_grid,
@@ -848,7 +860,7 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
         "note": "since Monday",
     }
 
-    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
         ListNode(
             "bullet",
@@ -908,7 +920,9 @@ def test_a_card_shows_its_share_delta_badges_and_note() -> None:
     ],
 )
 def test_a_card_shows_only_the_parts_it_has(card: dict[str, Any], text: ExportRich) -> None:
-    assert lowered([{"type": "cards", "items": [card]}]) == (ListNode("bullet", (ListEntry(text),)),)
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}]) == (
+        ListNode("bullet", (ListEntry(text),)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -925,7 +939,7 @@ def test_a_toned_card_leaves_its_colour_only_to_a_badge_of_the_same_colour(
 ) -> None:
     card = {"label": "Cost", "value": 5, "tone": tone, "badges": ["API"]}
 
-    assert lowered([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
+    assert lowered_as_written_today([{"type": "cards", "items": [card]}], badges=API_BADGES) == (
         API_LEGEND,
         ListNode("bullet", (ListEntry((*label, Plain(": "), Plain("5"), Plain(" "), Chip("api", "blue"))),)),
     )
@@ -943,7 +957,7 @@ def test_a_derived_card_counts_its_badge_in_a_matrix_and_leaves_its_colour_to_th
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
         API_LEGEND,
         ListNode(
             "bullet",
@@ -980,7 +994,7 @@ def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> 
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
         ListNode("bullet", (ListEntry((Chip("API rows", "blue"), Plain(": 1 (50.0%)"))),)),
         API_LEGEND,
         TableNode(
@@ -994,7 +1008,7 @@ def test_a_derived_card_sums_its_tables_and_leaves_its_colour_to_its_badge() -> 
     )
 
 
-def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
+def test_a_fact_strip_and_a_key_value_block_lower_to_their_labelled_values() -> None:
     blocks = [
         {
             "type": "fact_strip",
@@ -1004,6 +1018,111 @@ def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
     ]
 
     assert lowered(blocks) == (
+        FactStrip((LabelledValue("Site:", (Plain("West wing"),)), LabelledValue(" ", (Plain("x"),)))),
+        KeyValueList((LabelledValue("Owner", (Styled("bold", (Plain("ops"),)),)),)),
+    )
+
+
+def test_a_definition_list_lowers_to_each_term_over_the_prose_of_its_body() -> None:
+    block = {
+        "type": "def_list",
+        "items": [{"term": "Fix", "body": "first\n\n- one\n- two"}, {"term": "Gap", "body": " "}],
+    }
+
+    assert lowered([block]) == (
+        DefinitionList(
+            (
+                Definition(
+                    "Fix",
+                    (
+                        Paragraph((Plain("first"),)),
+                        ListNode("bullet", (ListEntry((Plain("one"),)), ListEntry((Plain("two"),)))),
+                    ),
+                ),
+                Definition("Gap", ()),
+            )
+        ),
+    )
+
+
+def test_cards_lower_to_a_card_per_item_with_a_derived_card_led_by_its_badge_colour() -> None:
+    blocks = [
+        {
+            "type": "cards",
+            "items": [
+                {
+                    "label": "Clean",
+                    "value": 9,
+                    "of": 10,
+                    "tone": "success",
+                    "delta": {"label": "+1", "direction": "up"},
+                    "badges": ["API"],
+                    "note": "since Monday",
+                },
+                {"label": "Cost", "value": 5, "tone": "info", "badges": ["API"]},
+                {"badge": "API", "of_matrix": "m", "note": "live"},
+            ],
+        },
+        {
+            "type": "matrix",
+            "id": "m",
+            "rows": ["r1", "r2"],
+            "columns": ["c"],
+            "cells": [{"row": "r1", "col": "c", "badge": "API"}],
+        },
+    ]
+
+    assert lowered(blocks, badges=API_BADGES)[1] == Cards(
+        (
+            Card(
+                "Clean",
+                (
+                    Plain("9"),
+                    Plain(" "),
+                    Plain("(90.0%)"),
+                    Plain(" "),
+                    Plain("▲ +1"),
+                    Plain(" "),
+                    Chip("api", "blue"),
+                ),
+                note="since Monday",
+                tone="success",
+            ),
+            Card("Cost", (Plain("5"), Plain(" "), Chip("api", "blue"))),
+            Card("api", (Plain("1 (50.0%)"),), note="live", badge="blue"),
+        )
+    )
+
+
+def test_a_timeline_lowers_to_its_events_with_their_state_chips_and_body() -> None:
+    block = {
+        "type": "timeline",
+        "items": [
+            {"time": "Mon", "title": "Start", "state": "done", "badges": ["API"], "body": "kick-off"},
+            {"title": "Later"},
+        ],
+    }
+
+    assert lowered([block], badges=API_BADGES)[1] == Timeline(
+        (
+            TimelineEvent(
+                "Start", time="Mon", state="done", chips=(Chip("api", "blue"),), body=(Plain("kick-off"),)
+            ),
+            TimelineEvent("Later"),
+        )
+    )
+
+
+def test_fact_strip_and_key_value_entries_are_labelled_bullets() -> None:
+    blocks = [
+        {
+            "type": "fact_strip",
+            "facts": [{"label": "Site:", "value": "West  wing"}, {"label": " ", "value": "x"}],
+        },
+        {"type": "key_value", "pairs": [{"label": "Owner", "value": "**ops**"}]},
+    ]
+
+    assert lowered_as_written_today(blocks) == (
         ListNode(
             "bullet",
             (ListEntry((*bold("Site"), Plain(": "), Plain("West wing"))), ListEntry((Plain("x"),))),
@@ -1058,7 +1177,7 @@ def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
         },
     ]
 
-    assert lowered(blocks, badges=API_BADGES) == (
+    assert lowered_as_written_today(blocks, badges=API_BADGES) == (
         API_LEGEND,
         ListNode("bullet", (ListEntry((StatusMark("blocked"), Plain(" "), Plain("Vendor"))),)),
         ListNode(
@@ -1104,6 +1223,34 @@ def test_a_decimal_list_keeps_its_start_and_its_nested_list_counts_from_one(opti
     )
 
 
+@pytest.mark.parametrize("numbering", ["roman", "letters"])
+def test_a_letter_or_roman_list_is_a_numbered_list_naming_its_numbering_at_every_level(
+    numbering: TextNumbering,
+) -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "start": 4,
+        "numbering": numbering,
+        "items": ["a", {"text": "b", "items": ["c"]}],
+    }
+
+    assert lowered([block]) == (
+        ListNode(
+            "number",
+            (
+                ListEntry((Plain("a"),)),
+                ListEntry(
+                    (Plain("b"),),
+                    children=(ListNode("number", (ListEntry((Plain("c"),)),), numbering=numbering),),
+                ),
+            ),
+            start=4,
+            numbering=numbering,
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("numbering", "labels"),
     [
@@ -1111,7 +1258,7 @@ def test_a_decimal_list_keeps_its_start_and_its_nested_list_counts_from_one(opti
         pytest.param("letters", ("d. ", "e. ", "a. "), id="letters"),
     ],
 )
-def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_list_starts_over(
+def test_a_letter_or_roman_list_is_written_as_bullets_led_by_its_labels_and_a_nested_list_starts_over(
     numbering: str, labels: tuple[str, str, str]
 ) -> None:
     block = {
@@ -1123,7 +1270,7 @@ def test_a_letter_or_roman_list_is_a_bullet_list_led_by_its_labels_and_a_nested_
     }
     first, second, nested = labels
 
-    assert lowered([block]) == (
+    assert lowered_as_written_today([block]) == (
         ListNode(
             "bullet",
             (
@@ -1198,7 +1345,7 @@ def test_a_definition_keeps_its_later_paragraphs_and_an_empty_body_is_its_term_a
         "items": [{"term": "Fix", "body": "first\n\nsecond"}, {"term": "Gap", "body": " "}],
     }
 
-    assert lowered([block]) == (
+    assert lowered_as_written_today([block]) == (
         ListNode(
             "bullet",
             (
@@ -1372,8 +1519,164 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
     ]
 
     assert lowered(blocks) == (
-        Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
+        Quote((Paragraph((Plain("said"),)), Paragraph((Plain("again"),))), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
+    )
+
+
+QUOTE_WITH_LISTS = "Said:\n- a\n  - x\n  - y\n- b\n\n3. c\n4. d"
+
+
+def test_a_quote_holds_the_lists_of_its_body_as_list_nodes() -> None:
+    block = {"type": "quote", "body": QUOTE_WITH_LISTS, "cite": "Ops"}
+    nested = ListNode("bullet", (ListEntry((Plain("x"),)), ListEntry((Plain("y"),))))
+
+    assert lowered([block]) == (
+        Quote(
+            (
+                Paragraph((Plain("Said:"),)),
+                ListNode("bullet", (ListEntry((Plain("a"),), children=(nested,)), ListEntry((Plain("b"),)))),
+                ListNode("number", (ListEntry((Plain("c"),)), ListEntry((Plain("d"),))), start=3),
+            ),
+            (Plain("Ops"),),
+        ),
+    )
+
+
+def test_a_quote_with_lists_is_written_as_text_lines_led_by_their_markers() -> None:
+    (quote,) = lowered([{"type": "quote", "body": QUOTE_WITH_LISTS}])
+    assert isinstance(quote, Quote)
+
+    assert quote_lines(quote) == (
+        (Plain("Said:"),),
+        (Plain("• "), Plain("a")),
+        (Plain("◦ "), Plain("x")),
+        (Plain("◦ "), Plain("y")),
+        (Plain("• "), Plain("b")),
+        (Plain("3. "), Plain("c")),
+        (Plain("4. "), Plain("d")),
+    )
+
+
+def test_a_table_cell_holding_a_list_holds_its_prose_as_paragraphs_and_lists() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "Issue"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "b", "label": "Steps"},
+        ],
+        rows=[
+            {
+                "a": "Fix:\n- one\n- two",
+                "tag": "API",
+                "b": "- x\n- y",
+                "subrows": [{"label": "s", "value": 2}],
+            },
+            {"a": "Plain", "tag": "", "b": "Count"},
+        ],
+    )
+
+    assert lowered([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue", "Steps"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (),
+                        blocks=(
+                            Paragraph((Plain("Fix:"),)),
+                            ListNode(
+                                "bullet",
+                                (
+                                    ListEntry((Plain("one"),)),
+                                    ListEntry((Plain("two"), Plain(" "), Chip("api", "blue"))),
+                                ),
+                            ),
+                            Paragraph((Plain("s"), Plain(": 2"))),
+                        ),
+                    ),
+                    TableCell(
+                        (), blocks=(ListNode("bullet", (ListEntry((Plain("x"),)), ListEntry((Plain("y"),)))),)
+                    ),
+                )
+            ),
+            TableRow((TableCell((Plain("Plain"),)), TableCell((Plain("Count"),)))),
+        ),
+    )
+
+
+def test_a_title_cells_badges_follow_a_closing_paragraph_after_its_list() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Issue"}, {"key": "tag", "label": "", "kind": "badge", "placement": "title"}],
+        rows=[{"a": "- one\n- two\n\nEnd", "tag": "API"}],
+    )
+
+    assert lowered([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (),
+                        blocks=(
+                            ListNode("bullet", (ListEntry((Plain("one"),)), ListEntry((Plain("two"),)))),
+                            Paragraph((Plain("End"), Plain(" "), Chip("api", "blue"))),
+                        ),
+                    ),
+                )
+            ),
+        ),
+    )
+
+
+def test_a_table_cell_holding_a_list_is_written_as_text_lines_joined_by_breaks() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "Issue"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "b", "label": "Steps"},
+        ],
+        rows=[
+            {
+                "a": "Fix:\n- one\n- two\n  - x\n  - y",
+                "tag": "API",
+                "b": "",
+                "subrows": [{"label": "s", "value": 2}],
+            }
+        ],
+    )
+
+    assert lowered_as_written_today([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue", "Steps"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (
+                            Plain("Fix:"),
+                            Break(),
+                            Plain("• "),
+                            Plain("one"),
+                            Break(),
+                            Plain("• "),
+                            Plain("two"),
+                            Break(),
+                            Plain("◦ "),
+                            Plain("x"),
+                            Break(),
+                            Plain("◦ "),
+                            Plain("y"),
+                            Plain(" "),
+                            Chip("api", "blue"),
+                            Break(),
+                            Plain("s"),
+                            Plain(": 2"),
+                        )
+                    ),
+                    TableCell(()),
+                )
+            ),
+        ),
     )
 
 
@@ -1471,7 +1774,7 @@ def test_a_collapsed_toggle_is_a_plain_toggle_with_no_heading_or_anchor() -> Non
     assert lowered([toggle]) == (Toggle((Plain("Raw counts"),), None, (Paragraph((Plain("x"),)),)),)
 
 
-def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+def test_an_open_toggle_is_a_toggle_marked_open() -> None:
     toggle = {
         "type": "toggle",
         "title": "Raw counts",
@@ -1479,7 +1782,20 @@ def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
         "blocks": [{"type": "text", "body": "x"}],
     }
 
-    assert lowered([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
+    assert lowered([toggle]) == (
+        Toggle(plain("Raw counts"), None, (Paragraph((Plain("x"),)),), authored_as="toggle", open=True),
+    )
+
+
+def test_an_open_toggle_is_written_as_its_bold_title_over_its_content() -> None:
+    toggle = {
+        "type": "toggle",
+        "title": "Raw counts",
+        "collapsed": False,
+        "blocks": [{"type": "text", "body": "x"}],
+    }
+
+    assert lowered_as_written_today([toggle]) == (Paragraph(bold("Raw counts")), Paragraph((Plain("x"),)))
 
 
 def test_a_heading_in_a_top_level_toggle_keeps_its_level_and_anchor() -> None:
