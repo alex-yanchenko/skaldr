@@ -221,12 +221,12 @@ def test_a_container_authored_as_a_note_is_named_a_note() -> None:
     )
 
 
-def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
-    blocks = [make_toggle(make_toggle(make_toggle(COMPARISON)))]
+def test_a_table_kind_block_inside_a_toggle_inside_a_toggle_keeps_its_own_name() -> None:
+    blocks = [make_toggle(make_toggle(COMPARISON))]
 
     assert str(refusal_of(lowered(blocks), "adf")) == (
         "ADF cannot place a comparison inside a toggle that is itself inside a toggle, "
-        "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.comparison; "
+        "at blocks.0.toggle.blocks.0.toggle.blocks.0.comparison; "
         "move the comparison out of the toggle"
     )
 
@@ -235,11 +235,11 @@ def test_a_request_with_two_cases_inside_nested_toggles_is_named_a_request() -> 
     request = make_request(
         cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
     )
-    blocks = [make_toggle(make_toggle(make_toggle(request)))]
+    blocks = [make_toggle(make_toggle(request))]
 
     assert str(refusal_of(lowered(blocks), "adf")) == (
         "ADF cannot place a request inside a toggle that is itself inside a toggle, "
-        "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle.blocks.0.request; "
+        "at blocks.0.toggle.blocks.0.toggle.blocks.0.request; "
         "move the request out of the toggle"
     )
 

@@ -309,7 +309,7 @@ def _document_position(path: str) -> DocumentPosition:
 class _TreeWalk:
     def __init__(self, located: Iterable[LocatedDetails]) -> None:
         self.heading = ""
-        self.located = deque(sorted(located, key=lambda each: _document_position(each[0])))
+        self.located = deque(located)
 
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
@@ -352,6 +352,7 @@ class _TreeWalk:
         yield from self.located_hits_before(node)
         yield from self.script_hits(node)
         yield from self.math_hits(node)
+        yield from self.placement_hits(node, place)
         match node:
             case Heading():
                 self.note_heading(node.text)
@@ -380,7 +381,6 @@ class _TreeWalk:
                 pass
             case _:
                 assert_never(node)
-        yield from self.placement_hits(node, place)
 
     def diagram_hits(self, node: Diagram) -> Iterator[FeatureHit]:
         yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
@@ -441,15 +441,15 @@ def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
             return
 
 
-def _model_hits(report: Report, document: LoweredDocument) -> Iterator[LocatedDetails]:
+def _model_hits_in_document_order(report: Report, document: LoweredDocument) -> list[LocatedDetails]:
     located = (
         located_block
         for region in document.regions
         if isinstance(region, BlockRegion)
         for located_block in walk_located_block(region.source_index, report.blocks[region.source_index])
     )
-    for path, block in located:
-        yield from _block_hits(path, block)
+    hits = (hit for path, block in located for hit in _block_hits(path, block))
+    return sorted(hits, key=lambda each: _document_position(each[0]))
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -460,7 +460,7 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
 
 
 def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
-    return _TreeWalk(_model_hits(report, document)).document(document.body)
+    return _TreeWalk(_model_hits_in_document_order(report, document)).document(document.body)
 
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:

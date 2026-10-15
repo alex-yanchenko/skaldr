@@ -18,7 +18,15 @@ from skaldr.export.slack import render_slack
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
-from tests.factories import lowered, make_report, make_toggle, markdown_of, slack_of, write_report
+from tests.factories import (
+    lowered,
+    make_report,
+    make_section,
+    make_toggle,
+    markdown_of,
+    slack_of,
+    write_report,
+)
 from tests.factories.capability_factory import (
     DATA_IMAGE,
     DIAGRAM_ACCEPTED_CASES,
@@ -32,6 +40,7 @@ from tests.factories.capability_factory import (
     SWAPPED_BLOCKS,
     AcceptedCase,
     RefusedCase,
+    text_grid,
     xy_chart,
 )
 
@@ -223,6 +232,53 @@ def test_the_first_refusal_in_the_document_is_reported_though_a_later_block_is_f
         _check([FLOW, RANGE], "adf")
 
     assert raised.value.where == "at blocks.0.flow"
+
+
+def _nine_texts() -> list[dict[str, Any]]:
+    return [{"type": "text", "body": f"Row {index}."} for index in range(9)]
+
+
+@pytest.mark.parametrize(
+    ("blocks", "target", "where"),
+    [
+        pytest.param([*_nine_texts(), FLOW, RANGE], "adf", "at blocks.9.flow", id="flow-at-9-range-at-10"),
+        pytest.param([*_nine_texts(), RANGE, FLOW], "adf", "at blocks.9.range", id="range-at-9-flow-at-10"),
+        pytest.param(
+            [make_section("counts", blocks=[*_nine_texts(), RANGE, FLOW])],
+            "adf",
+            "at blocks.0.section.blocks.9.range",
+            id="range-at-9-then-a-flow-at-10-in-a-section",
+        ),
+    ],
+)
+def test_the_first_refusal_reported_compares_the_indexes_of_a_yaml_path_as_numbers(
+    blocks: list[dict[str, Any]], target: ExportTarget, where: str
+) -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, target)
+
+    assert raised.value.where == where
+
+
+def test_a_range_in_the_first_walkthrough_step_is_reported_before_a_grid_in_the_second() -> None:
+    steps = [{"label": "Scan", "detail": [RANGE]}, {"label": "Count", "detail": [text_grid()]}]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([{"type": "walkthrough", "steps": steps}], "slack")
+
+    assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.range"
+
+
+def test_a_container_the_target_cannot_place_is_reported_before_an_image_inside_it() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([make_toggle(make_toggle(make_toggle(DATA_IMAGE)))], "adf")
+
+    assert vars(raised.value) == {
+        "target": "adf",
+        "why": "ADF cannot place a toggle inside a toggle that is itself inside a toggle",
+        "instead": "move the toggle out of the toggle",
+        "where": "at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle",
+    }
 
 
 @pytest.mark.parametrize("case", DIAGRAM_CASES)
