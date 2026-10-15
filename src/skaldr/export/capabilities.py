@@ -1,44 +1,30 @@
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
-from typing_extensions import assert_never
-
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
-from skaldr.models import Chart, FlowStep
-from skaldr.richtext import (
-    AnchorLink,
-    Citation,
-    Code,
-    DateMention,
-    DocumentLink,
-    InlineMath,
-    IssueLink,
-    Link,
-    PersonMention,
-    Placeholder,
-    Plain,
-    Rich,
-    Run,
-    ScriptPosition,
-    ScriptText,
-    Styled,
-    Tinted,
-)
+from skaldr.richtext import ScriptPosition
 
-Feature = Literal[
+PlacementFeature = Literal[
     "table inside a callout",
     "callout inside a callout",
     "quote inside a callout",
     "toggle inside a callout",
     "table inside a toggle inside a toggle",
     "toggle inside a toggle inside a toggle",
-    "block inside a list item",
-    "block inside a walkthrough step",
-    "numbered list starting past 1",
-    "table over 300 cells",
-    "grid inside a walkthrough step",
-    "subscript or superscript with no Unicode form",
+]
+ListItemFeature = Literal["block inside a list item", "block inside a walkthrough step"]
+ListStartFeature = Literal["numbered list starting past 1"]
+CellCountFeature = Literal["table over 300 cells"]
+GridInAStepFeature = Literal["grid inside a walkthrough step"]
+ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
+Feature = Literal[
+    PlacementFeature,
+    ListItemFeature,
+    ListStartFeature,
+    CellCountFeature,
+    GridInAStepFeature,
+    ScriptFormFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
@@ -59,6 +45,7 @@ UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
 
 @dataclass(frozen=True)
 class Placement:
+    feature: PlacementFeature
     held: str
     holder: str
     holder_name: str
@@ -66,18 +53,26 @@ class Placement:
 
 @dataclass(frozen=True)
 class HeldByAListItem:
+    feature: ListItemFeature
     held: str
 
 
 @dataclass(frozen=True)
 class ListStart:
     start: int
+    feature: ListStartFeature = field(default="numbered list starting past 1", init=False)
 
 
 @dataclass(frozen=True)
 class CellCount:
     cells: int
     limit: int = CANVAS_TABLE_CELL_LIMIT
+    feature: CellCountFeature = field(default="table over 300 cells", init=False)
+
+
+@dataclass(frozen=True)
+class GridInAStep:
+    feature: GridInAStepFeature = field(default="grid inside a walkthrough step", init=False)
 
 
 @dataclass(frozen=True)
@@ -85,28 +80,10 @@ class ScriptForm:
     position: ScriptPosition
     text: str
     character: str
+    feature: ScriptFormFeature = field(default="subscript or superscript with no Unicode form", init=False)
 
 
-@dataclass(frozen=True)
-class NoDetails:
-    pass
-
-
-Details = Placement | HeldByAListItem | ListStart | CellCount | ScriptForm | NoDetails
-FEATURE_DETAILS: Final[Mapping[Feature, type[Details]]] = {
-    "table inside a callout": Placement,
-    "callout inside a callout": Placement,
-    "quote inside a callout": Placement,
-    "toggle inside a callout": Placement,
-    "table inside a toggle inside a toggle": Placement,
-    "toggle inside a toggle inside a toggle": Placement,
-    "block inside a list item": HeldByAListItem,
-    "block inside a walkthrough step": HeldByAListItem,
-    "numbered list starting past 1": ListStart,
-    "table over 300 cells": CellCount,
-    "grid inside a walkthrough step": NoDetails,
-    "subscript or superscript with no Unicode form": ScriptForm,
-}
+Details = Placement | HeldByAListItem | ListStart | CellCount | GridInAStep | ScriptForm
 
 
 @dataclass(frozen=True)
@@ -116,7 +93,7 @@ class Rejection:
     names_the_heading: bool = False
 
 
-Capability = Literal["keep", "upgrade", "swap"] | Rejection
+Capability = Literal["keep"] | Rejection
 
 _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
@@ -184,7 +161,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
 }
 
-PLACEMENTS: Final[Mapping[tuple[Holder, Held], Feature]] = {
+PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {
     ("callout", "table"): "table inside a callout",
     ("callout", "callout"): "callout inside a callout",
     ("callout", "quote"): "quote inside a callout",
@@ -197,25 +174,3 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], Feature]] = {
 def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:
     forms = UNICODE_SCRIPT_FORMS[position]
     return next((character for character in text if ord(character) not in forms), None)
-
-
-def mermaid_cannot_label_its_series(block: Chart) -> bool:
-    return block.stacked or len(block.series) > 1
-
-
-def loses_meaning_in_a_plain_label(run: Run) -> bool:
-    match run:
-        case Link() | AnchorLink() | IssueLink() | DocumentLink() | Citation() | InlineMath() | ScriptText():
-            return True
-        case DateMention() | PersonMention():
-            return any(map(loses_meaning_in_a_plain_label, run.label))
-        case Styled() | Tinted():
-            return any(map(loses_meaning_in_a_plain_label, run.runs))
-        case Plain() | Code() | Placeholder():
-            return False
-        case _:
-            assert_never(run)
-
-
-def diagram_label_cannot_show(step: FlowStep, note: Rich) -> bool:
-    return bool(step.points or step.badges) or any(map(loses_meaning_in_a_plain_label, note))

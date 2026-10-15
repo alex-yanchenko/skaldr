@@ -6,7 +6,6 @@ from typing_extensions import assert_never
 
 from skaldr import compute
 from skaldr.charts import chart_legend, donut_total
-from skaldr.export.capabilities import diagram_label_cannot_show, mermaid_cannot_label_its_series
 from skaldr.export.inline import bold, one_line
 from skaldr.export.lower.context import Lowering, bullets, plain_cells, spaced, with_bold_label
 from skaldr.export.tree import (
@@ -25,7 +24,24 @@ from skaldr.export.tree import (
     XYChartMark,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
-from skaldr.richtext import visible_text
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    DateMention,
+    DocumentLink,
+    InlineMath,
+    IssueLink,
+    Link,
+    PersonMention,
+    Placeholder,
+    Plain,
+    Run,
+    ScriptText,
+    Styled,
+    Tinted,
+    visible_text,
+)
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -47,12 +63,29 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
     return ListEntry(text, children=children)
 
 
+def _loses_meaning_in_a_plain_label(run: Run) -> bool:
+    match run:
+        case Link() | AnchorLink() | IssueLink() | DocumentLink() | Citation() | InlineMath() | ScriptText():
+            return True
+        case DateMention() | PersonMention():
+            return any(map(_loses_meaning_in_a_plain_label, run.label))
+        case Styled() | Tinted():
+            return any(map(_loses_meaning_in_a_plain_label, run.runs))
+        case Plain() | Code() | Placeholder():
+            return False
+        case _:
+            assert_never(run)
+
+
+def _diagram_cannot_show_all_of(step: FlowStep, lowering: Lowering) -> bool:
+    note_loses_meaning = (
+        any(map(_loses_meaning_in_a_plain_label, lowering.rich(step.note))) if step.note else False
+    )
+    return bool(step.points or step.badges) or note_loses_meaning
+
+
 def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ...]:
-    detailed = [
-        step
-        for step in steps
-        if diagram_label_cannot_show(step, lowering.rich(step.note) if step.note else ())
-    ]
+    detailed = [step for step in steps if _diagram_cannot_show_all_of(step, lowering)]
     return (bullets(_step_entry(step, lowering) for step in detailed),) if detailed else ()
 
 
@@ -90,6 +123,10 @@ def _donut_table(block: Chart) -> TableNode:
     return TableNode(plain_cells(*DONUT_COLUMNS), (*rows, total), authored_as="chart")
 
 
+def _mermaid_cannot_label_its_series(block: Chart) -> bool:
+    return block.stacked or len(block.series) > 1
+
+
 def _donut(block: Chart) -> Diagram:
     pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
     return Diagram(pie, (_donut_table(block),))
@@ -104,7 +141,7 @@ def _xy_chart(block: Chart, mark: XYChartMark) -> Node:
         ),
         authored_as="chart",
     )
-    if mermaid_cannot_label_its_series(block):
+    if _mermaid_cannot_label_its_series(block):
         return table
     chart = XYChart(mark, tuple(block.categories), tuple(tuple(series.values) for series in block.series))
     return Diagram(chart, (table,))

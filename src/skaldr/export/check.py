@@ -1,25 +1,24 @@
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, replace
 from itertools import chain
 from typing import Final
 
-from typing_extensions import assert_never
+from typing_extensions import Self, assert_never
 
-from skaldr.errors import ExportInvariantError, ExportRejectedError
+from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
-    FEATURE_DETAILS,
     FIRST_LIST_NUMBER,
     PLACEMENTS,
     CellCount,
     Container,
     Details,
-    Feature,
+    GridInAStep,
     Held,
     HeldByAListItem,
+    ListItemFeature,
     ListStart,
-    NoDetails,
     Placement,
     Rejection,
     ScriptForm,
@@ -101,18 +100,9 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
 
 @dataclass(frozen=True)
 class FeatureHit:
-    feature: Feature
-    details: Details = field(default_factory=NoDetails)
+    details: Details
     path: str | None = None
     heading: str = ""
-
-    def __post_init__(self) -> None:
-        expected = FEATURE_DETAILS[self.feature]
-        if not isinstance(self.details, expected):
-            raise ExportInvariantError(
-                f"the feature '{self.feature}' takes {expected.__name__} details, "
-                f"not {type(self.details).__name__}"
-            )
 
 
 @dataclass(frozen=True)
@@ -145,10 +135,10 @@ class _Place:
             case _:
                 assert_never(self.container)
 
-    def in_a_callout(self, name: str) -> "_Place":
+    def in_a_callout(self, name: str) -> Self:
         return replace(self, container="callout", callout_name=name)
 
-    def in_a_toggle(self, name: str) -> "_Place":
+    def in_a_toggle(self, name: str) -> Self:
         nested = self.container in ("toggle", "toggle inside a toggle")
         return replace(
             self,
@@ -266,7 +256,7 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
                 assert_never(run)
 
 
-def _item_feature(child: Node, holder: ListNode) -> Feature:
+def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
     authored_on_its_own = child.authored_at != holder.authored_at
     return "block inside a walkthrough step" if authored_on_its_own else "block inside a list item"
 
@@ -278,19 +268,18 @@ class _TreeWalk:
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
 
-    def hit(self, feature: Feature, path: str | None, details: Details) -> FeatureHit:
-        return FeatureHit(feature, details, path, self.heading)
+    def hit(self, details: Details, path: str | None) -> FeatureHit:
+        return FeatureHit(details, path, self.heading)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
         for node in nodes:
             yield from self.node(node, place)
 
     def script_hits(self, node: Node) -> Iterator[FeatureHit]:
-        for script in (script for text in _own_texts(node) for script in _scripts(text)):
+        for script in chain.from_iterable(map(_scripts, _own_texts(node))):
             character = character_without_a_unicode_form(script.position, script.text)
             if character is not None:
-                details = ScriptForm(script.position, script.text, character)
-                yield self.hit("subscript or superscript with no Unicode form", node.authored_at, details)
+                yield self.hit(ScriptForm(script.position, script.text, character), node.authored_at)
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.script_hits(node)
@@ -328,12 +317,12 @@ class _TreeWalk:
             return
         feature = PLACEMENTS.get((container, held))
         if feature is not None:
-            details = Placement(_term(node), place.holder(), place.holder_name())
-            yield self.hit(feature, node.authored_at, details)
+            details = Placement(feature, _term(node), place.holder(), place.holder_name())
+            yield self.hit(details, node.authored_at)
 
     def list_hits(self, node: ListNode, place: _Place) -> Iterator[FeatureHit]:
         if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
-            yield self.hit("numbered list starting past 1", node.authored_at, ListStart(node.start))
+            yield self.hit(ListStart(node.start), node.authored_at)
         for entry in node.entries:
             yield from self.entry_hits(entry, node, place)
 
@@ -342,18 +331,14 @@ class _TreeWalk:
         for child in entry.children:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
-                yield self.hit(_item_feature(child, holder), child.authored_at, HeldByAListItem(what))
+                yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
         cells = table_width(node) * (1 + len(node.rows))
         if cells > CANVAS_TABLE_CELL_LIMIT:
-            yield self.hit("table over 300 cells", node.authored_at, CellCount(cells))
-
-
-def _tree_hits(nodes: Sequence[Node]) -> Iterator[FeatureHit]:
-    yield from _TreeWalk().nodes(nodes, _Place())
+            yield self.hit(CellCount(cells), node.authored_at)
 
 
 def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[FeatureHit]:
@@ -361,16 +346,19 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
         for index, detail in enumerate(step.detail):
             if isinstance(detail, InnerGrid):
                 where = f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-                yield FeatureHit("grid inside a walkthrough step", path=where)
+                yield FeatureHit(GridInAStep(), where)
 
 
 def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
-    for region in document.regions:
-        if not isinstance(region, BlockRegion):
-            continue
-        for path, block in walk_located_block(region.source_index, report.blocks[region.source_index]):
-            if isinstance(block, Walkthrough):
-                yield from _grids_in_walkthrough_steps(path, block)
+    located = (
+        located_block
+        for region in document.regions
+        if isinstance(region, BlockRegion)
+        for located_block in walk_located_block(region.source_index, report.blocks[region.source_index])
+    )
+    for path, block in located:
+        if isinstance(block, Walkthrough):
+            yield from _grids_in_walkthrough_steps(path, block)
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -382,7 +370,7 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
     for hit in hits:
-        capability = CAPABILITIES[hit.feature][target]
+        capability = CAPABILITIES[hit.details.feature][target]
         if isinstance(capability, Rejection):
             details = vars(hit.details)
             raise ExportRejectedError(
@@ -396,4 +384,5 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    _raise_the_first_rejection(chain(_model_hits(report, document), _tree_hits(document.body)), target)
+    tree_hits = _TreeWalk().nodes(document.body, _Place())
+    _raise_the_first_rejection(chain(_model_hits(report, document), tree_hits), target)

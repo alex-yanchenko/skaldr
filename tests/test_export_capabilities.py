@@ -1,33 +1,26 @@
 from dataclasses import fields
 from pathlib import Path
 from string import Formatter
-from typing import Any, Literal, get_args
+from typing import Any, Literal, get_args, get_type_hints
 
 import pytest
 
 from skaldr.cli import main
-from skaldr.errors import ExportInvariantError, ExportRejectedError
-from skaldr.export.capabilities import (
-    CAPABILITIES,
-    FEATURE_DETAILS,
-    Capability,
-    Details,
-    Feature,
-    ListStart,
-    Rejection,
-)
-from skaldr.export.check import FeatureHit, reject_what_the_target_cannot_show
+from skaldr.errors import ExportRejectedError
+from skaldr.export.capabilities import CAPABILITIES, Capability, Details, Feature, Rejection
+from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish_block import JiraTarget, NotionTarget
-from tests.factories import make_jira_target, make_report, write_report
+from tests.factories import make_jira_target, make_report, make_section, write_report
 from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
     SEEDED_CASES,
+    SEEDED_REFUSALS,
     TABLE,
     RefusedCase,
     in_a_panel,
@@ -37,8 +30,9 @@ from tests.factories.capability_factory import (
 )
 from tests.factories.publish_factory import FakeConnector, FakeTransport
 
-Verdict = Literal["keep", "upgrade", "swap", "reject"]
+Verdict = Literal["keep", "reject"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
+DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table inside a callout": {"adf": "reject"},
     "callout inside a callout": {"adf": "reject"},
@@ -54,15 +48,22 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
 KEPT_BY_THE_OTHER_TARGETS = [
-    pytest.param(case, other, id=f"{seeded.id}-kept-by-{other}")
-    for seeded in SEEDED_CASES
-    for case in seeded.values
-    if isinstance(case, RefusedCase)
+    pytest.param(case, other, id=f"{name}-kept-by-{other}")
+    for name, case in SEEDED_REFUSALS.items()
     for other in EXPORT_TARGETS
     if other != case.target
 ]
+
+
+def _features_carried_by(details: type[Details]) -> tuple[Feature, ...]:
+    return get_args(get_type_hints(details)["feature"])
+
+
+DETAILS_OF_A_FEATURE: dict[Feature, type[Details]] = {
+    feature: details for details in DETAILS_KINDS for feature in _features_carried_by(details)
+}
 REJECTIONS = [
-    pytest.param(capability, FEATURE_DETAILS[feature], id=f"{target}-{feature}")
+    pytest.param(capability, DETAILS_OF_A_FEATURE[feature], id=f"{target}-{feature}")
     for feature, cells in CAPABILITIES.items()
     for target, capability in cells.items()
     if isinstance(capability, Rejection)
@@ -101,8 +102,10 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
     }
 
 
-def test_every_feature_names_the_details_its_hits_carry() -> None:
-    assert set(FEATURE_DETAILS) == set(FEATURES)
+def test_each_feature_is_carried_by_exactly_one_kind_of_details() -> None:
+    carried = [feature for details in DETAILS_KINDS for feature in _features_carried_by(details)]
+
+    assert sorted(carried) == sorted(FEATURES)
 
 
 @pytest.mark.parametrize(("rejection", "details"), REJECTIONS)
@@ -112,13 +115,6 @@ def test_every_rejection_names_only_details_its_feature_supplies(
     supplied = {detail.name for detail in fields(details)}
 
     assert _template_fields(rejection.why) | _template_fields(rejection.instead) <= supplied
-
-
-def test_a_hit_carrying_details_its_feature_does_not_take_is_an_internal_error() -> None:
-    with pytest.raises(ExportInvariantError) as raised:
-        FeatureHit("table over 300 cells", ListStart(3))
-
-    assert str(raised.value) == "the feature 'table over 300 cells' takes CellCount details, not ListStart"
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)
@@ -204,10 +200,7 @@ def test_publishing_to_jira_refuses_each_adf_case_before_any_transport_call(
 
 
 def test_publishing_to_jira_checks_only_the_sections_the_target_is_built_from(tmp_path: Path) -> None:
-    blocks = [
-        {"type": "section", "id": "kept", "title": "Kept", "blocks": [{"type": "text", "body": "x"}]},
-        {"type": "section", "id": "left-out", "title": "Left out", "blocks": in_a_panel(TABLE)},
-    ]
+    blocks = [make_section("kept"), make_section("left-out", blocks=in_a_panel(TABLE))]
     target = make_jira_target(**{"from": ["kept"]})
     data_path = write_report(tmp_path, published_report(blocks, target))
 
