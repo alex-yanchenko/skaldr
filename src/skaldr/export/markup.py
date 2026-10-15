@@ -36,7 +36,6 @@ from skaldr.richtext import (
     Tinted,
     write_runs,
 )
-from skaldr.typed_links import date_target_text
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
@@ -62,12 +61,6 @@ def wrap_around_core(inner: str, opener: str, closer: str) -> str:
 
 def label_then(label: str, written_date: str) -> str:
     return f"{label} {written_date}" if label.strip() else written_date
-
-
-def date_element(label: str, start: date, end: date | None) -> str:
-    if end is None:
-        return f'<time datetime="{start.isoformat()}">{label}</time>'
-    return f'<span data-range="{date_target_text(start, end)}">{label}</span>'
 
 
 def styled(style: MarkerStyle, inner: str) -> str:

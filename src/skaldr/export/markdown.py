@@ -16,7 +16,6 @@ from skaldr.export.markup import (
     LARGEST_ORDERED_MARKER_NUMBER,
     CommonMarkRuns,
     code_block_lines,
-    date_element,
     encode_url,
     escape_block_start,
     heading_line,
@@ -57,6 +56,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import SCRIPT_HTML_TAG, Link, MarkerStyle, ScriptPosition
+from skaldr.typed_links import date_target_text
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -117,7 +117,9 @@ class _MarkdownRuns(CommonMarkRuns):
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
     def date_mention(self, label: str, start: date, end: date | None, /) -> str:
-        return date_element(label, start, end)
+        if end is None:
+            return f'<time datetime="{start.isoformat()}">{label}</time>'
+        return f'<span data-range="{date_target_text(start, end)}">{label}</span>'
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")

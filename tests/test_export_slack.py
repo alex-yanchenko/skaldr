@@ -1113,27 +1113,32 @@ def test_a_table_of_contents_writes_nothing() -> None:
         ),
         pytest.param(
             DateMention(make_rich_text("1 Oct"), date(2026, 10, 1), None),
-            '<time datetime="2026-10-01">1 Oct</time>',
-            id="date-is-a-time-element-around-its-label",
+            "1 Oct",
+            id="date-is-its-label",
         ),
         pytest.param(
             DateMention(make_rich_text("1 to 3 Oct"), date(2026, 10, 1), date(2026, 10, 3)),
-            '<span data-range="2026-10-01/2026-10-03">1 to 3 Oct</span>',
-            id="date-range-is-a-span-around-its-label",
+            "1 to 3 Oct",
+            id="date-range-is-its-label",
         ),
         pytest.param(
             DateMention(make_rich_text("2026-10-01"), date(2026, 10, 1), None),
-            '<time datetime="2026-10-01">2026-10-01</time>',
-            id="date-labelled-with-itself-is-written-like-any-other",
+            "2026-10-01",
+            id="date-labelled-with-itself-is-its-label",
         ),
         pytest.param(
             DateMention(make_rich_text(" "), date(2026, 10, 1), None),
-            '<time datetime="2026-10-01"> </time>',
-            id="date-with-a-blank-label-is-written-like-any-other",
+            "2026-10-01",
+            id="date-with-a-blank-label-is-the-date-as-written",
+        ),
+        pytest.param(
+            DateMention(make_rich_text(" "), date(2026, 10, 1), date(2026, 10, 3)),
+            "2026-10-01/2026-10-03",
+            id="date-range-with-a-blank-label-is-the-range-as-written",
         ),
         pytest.param(
             DateMention(make_rich_text("1*Oct"), date(2026, 10, 1), None),
-            '<time datetime="2026-10-01">1\\*Oct</time>',
+            "1\\*Oct",
             id="date-label-is-escaped",
         ),
         pytest.param(

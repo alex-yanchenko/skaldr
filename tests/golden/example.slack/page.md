@@ -32,7 +32,7 @@ Every bin label now ends in a check digit. The cold room logged H₂O condensati
 
 Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
 
-The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, is led by ![](@U0EXAMPLE1), is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows the cold room plan.
+The recount runs 10 to 14 Jul, is led by ![](@U0EXAMPLE1), is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows the cold room plan.
 
 ### Count pipeline
 
