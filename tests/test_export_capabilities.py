@@ -21,11 +21,16 @@ from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
     COLOURED_TEXT,
+    HIGHLIGHTED_TEXT,
     LETTERED_LIST,
+    LINK_TO_A_SECTION,
+    LINK_TO_ANOTHER_DOCUMENT,
+    LIST_IN_A_QUOTE,
     NOTION_CASES,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
+    UNDERLINED_TEXT,
     RefusedCase,
     in_a_panel,
     published_report,
@@ -158,10 +163,58 @@ def test_the_check_refuses_each_seeded_case_naming_its_yaml_path(case: RefusedCa
 
 
 @pytest.mark.parametrize(("case", "other"), KEPT_BY_THE_OTHER_TARGETS)
-def test_every_other_target_keeps_what_one_target_refuses(case: RefusedCase, other: ExportTarget) -> None:
+def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
+    case: RefusedCase, other: ExportTarget
+) -> None:
     report = parse_report(make_report(blocks=case.blocks))
 
     assert render_export(report, other).pages != {}
+
+
+@pytest.mark.parametrize(
+    ("blocks", "target", "page"),
+    [
+        pytest.param(
+            COLOURED_TEXT, "notion", 'Zone C is <span color="red">behind</span>.\n', id="colour-on-notion"
+        ),
+        pytest.param(
+            HIGHLIGHTED_TEXT,
+            "notion",
+            'The recount is <span color="yellow_bg">due Friday</span>.\n',
+            id="highlight-on-notion",
+        ),
+        pytest.param(
+            UNDERLINED_TEXT,
+            "markdown",
+            "# Test Report\n\nEvery label ends in a <ins>check digit</ins>.\n",
+            id="underline-on-github",
+        ),
+        pytest.param(
+            LETTERED_LIST, "markdown", "# Test Report\n\n- a. a\n- b. b\n", id="lettered-list-on-github"
+        ),
+        pytest.param(
+            LINK_TO_ANOTHER_DOCUMENT,
+            "markdown",
+            "# Test Report\n\nIt follows [the plan](cold-room-plan.md).\n",
+            id="doc-link-on-github",
+        ),
+        pytest.param(
+            LINK_TO_A_SECTION,
+            "markdown",
+            "# Test Report\n\n## Counts\n\nTen.\n\nSee [the counts](#counts).\n",
+            id="same-page-link-on-github",
+        ),
+        pytest.param(
+            LIST_IN_A_QUOTE, "notion", "> Count:<br>• aisles<br>• bins\n", id="list-in-a-quote-on-notion"
+        ),
+    ],
+)
+def test_a_target_that_keeps_what_another_refuses_writes_it_as_the_page_shows_it(
+    blocks: list[dict[str, Any]], target: ExportTarget, page: str
+) -> None:
+    report = parse_report(make_report(blocks=blocks))
+
+    assert render_export(report, target).pages == {"page.md": page}
 
 
 @pytest.mark.parametrize("target", EXPORT_TARGETS)
