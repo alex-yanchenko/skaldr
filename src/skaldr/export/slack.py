@@ -32,7 +32,7 @@ from skaldr.export.markup import (
     table_width,
 )
 from skaldr.export.runs import ExportRich
-from skaldr.export.swaps import data_table_swapped_in, require_the_swap
+from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -334,11 +334,12 @@ class _CanvasWriter:
         return [styled("bold", f"{title.icon} {text}" if title.icon else text)]
 
     def media_lines(self, media: Media) -> list[str]:
+        url = web_address_of(media, "slack")
         if media.kind == "image":
-            image = f"![{self.inline(media.description)}]({encode_url(media.url)})"
+            image = f"![{self.inline(media.description)}]({encode_url(url)})"
             caption = [styled("italic", self.inline(media.caption))] if media.caption else []
             return joined([[image], caption])
-        return [self.runs.link(self.inline(media.caption) or MEDIA_KIND_LABELS[media.kind], media.url)]
+        return [self.runs.link(self.inline(media.caption) or MEDIA_KIND_LABELS[media.kind], url)]
 
     def quote_lines(self, quote: Quote) -> list[str]:
         parts = [self.block_text(line) for line in quote.lines]

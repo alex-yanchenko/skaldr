@@ -6,7 +6,7 @@ from typing_extensions import assert_never
 
 from skaldr import compute, models
 from skaldr.code_language import block_code_language
-from skaldr.export.inline import bold, italic, one_line, plain
+from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, StatusMark
 from skaldr.export.tree import (
@@ -215,9 +215,7 @@ def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
 
 
 def lower_image(block: models.Image) -> list[Node]:
-    if block.src.startswith(models.WEB_URL_SCHEMES):
-        return [Media("image", block.src, plain(block.alt), plain(block.caption or ""))]
-    return [Paragraph(italic(plain(f"Image: {block.caption or block.alt}")), "muted")]
+    return [Media("image", block.src, plain(block.alt), plain(block.caption or ""))]
 
 
 def lower_media(block: models.Media) -> list[Node]:

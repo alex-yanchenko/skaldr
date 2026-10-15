@@ -44,7 +44,7 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import data_table_swapped_in, require_the_swap
+from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -185,10 +185,11 @@ class _AdfBlocks:
         return [AdfParagraph(type="paragraph", content=content)]
 
     def media_paragraph(self, node: Media) -> AdfParagraph:
-        name = self.runs.write(node.caption or node.description or plain(node.url))
+        url = web_address_of(node, "adf")
+        name = self.runs.write(node.caption or node.description or plain(url))
         label = (AdfText(type="text", text=f"{MEDIA_NODE_LABELS[node.kind]}: "),)
         return AdfParagraph(
-            type="paragraph", content=list(self.runs.concat([label, self.runs.link(name, node.url)]))
+            type="paragraph", content=list(self.runs.concat([label, self.runs.link(name, url)]))
         )
 
     def code_block(self, content: str, language: str) -> AdfCodeBlock:

@@ -313,6 +313,13 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         [{**FAN, "hub": {"label": "Count", "note": RICH_NOTES["inline-math"]}}],
         "at blocks.0.fan",
     ),
+    "markdown-data-image": RefusedCase(
+        "markdown",
+        [DATA_IMAGE],
+        "GitHub cannot show an image from a data: URI",
+        HOST_THE_IMAGE,
+        "at blocks.0.image",
+    ),
     "notion-data-image": RefusedCase(
         "notion",
         [DATA_IMAGE],
@@ -370,7 +377,6 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
         for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_CHARTS}.items()
     },
     **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
-    "markdown-data-image": AcceptedCase("markdown", [DATA_IMAGE]),
     **{f"{target}-web-image": AcceptedCase(target, [WEB_IMAGE]) for target in EXPORT_TARGETS},
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]

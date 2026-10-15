@@ -20,6 +20,7 @@ from skaldr.models import parse_report
 from tests.conftest import REPO_ROOT
 from tests.factories import lowered, make_report, make_toggle, markdown_of, slack_of, write_report
 from tests.factories.capability_factory import (
+    DATA_IMAGE,
     DIAGRAM_ACCEPTED_CASES,
     DIAGRAM_CASES,
     DIAGRAM_REFUSALS,
@@ -100,6 +101,19 @@ def test_a_writer_that_cannot_draw_a_diagram_raises_an_internal_error_for_a_flow
 
     assert str(raised.value) == (
         f"{TARGET_SUBJECTS[target]} has no form for '{blocks[0]['type']} diagram'; "
+        "the export check should have refused it"
+    )
+
+
+@pytest.mark.parametrize("target", EXPORT_TARGETS)
+def test_every_writer_raises_an_internal_error_for_an_image_from_a_data_uri_handed_to_it(
+    target: ExportTarget,
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        _written_without_the_check([DATA_IMAGE], target)
+
+    assert str(raised.value) == (
+        f"{TARGET_SUBJECTS[target]} has no form for 'image from a data: URI'; "
         "the export check should have refused it"
     )
 

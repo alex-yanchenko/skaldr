@@ -23,7 +23,7 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import Chip, ExportRich, export_visible_text, holds_a_chip, write_export_runs
-from skaldr.export.swaps import writes_its_data_table
+from skaldr.export.swaps import web_address_of, writes_its_data_table
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
     Callout,
@@ -357,9 +357,10 @@ def _list_lines(node: ListNode, room: TableRoom) -> list[str]:
 
 
 def _media_line(node: Media) -> str:
+    url = encode_url(web_address_of(node, "notion"))
     if node.kind == "image":
-        return f"![{notion_inline(node.caption or node.description)}]({encode_url(node.url)})"
-    return f'<{node.kind} src="{encode_url(node.url)}">{notion_inline(node.caption)}</{node.kind}>'
+        return f"![{notion_inline(node.caption or node.description)}]({url})"
+    return f'<{node.kind} src="{url}">{notion_inline(node.caption)}</{node.kind}>'
 
 
 def _quote_line(node: Quote) -> str:

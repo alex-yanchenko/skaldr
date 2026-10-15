@@ -68,12 +68,12 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "chart": {"adf": "swap", "slack": "swap"},
     "math block": {"adf": "swap", "slack": "swap"},
     "inline math": {"adf": "swap", "slack": "swap"},
-    "image from a data: URI": {"notion": "reject", "adf": "reject", "slack": "reject"},
+    "image from a data: URI": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
     "chart with several series": {"markdown": "swap", "notion": "swap", "adf": "swap", "slack": "swap"},
 }
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
-    "markdown": ["range"],
+    "markdown": ["range", "image"],
     "notion": ["range", "image"],
     "adf": ["range", "flow", "image", "fan"],
     "slack": ["range", "flow", "image", "fan", "walkthrough"],

@@ -1220,21 +1220,6 @@ def test_a_badge_label_or_legend_with_a_line_break_stays_on_one_line() -> None:
 
 
 @pytest.mark.parametrize(
-    ("image", "caption"),
-    [
-        pytest.param(
-            {"caption": "Fig **1** [^x]"}, "Fig **1** [^x]", id="caption-stays-literal-like-the-html"
-        ),
-        pytest.param({}, "chart", id="no-caption-falls-back-to-alt"),
-    ],
-)
-def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: str) -> None:
-    block = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "chart", **image}
-
-    assert lowered([block]) == (Paragraph((Styled("italic", (Plain(f"Image: {caption}"),)),), "muted"),)
-
-
-@pytest.mark.parametrize(
     ("image", "node"),
     [
         pytest.param(
@@ -1243,9 +1228,14 @@ def test_an_embedded_image_becomes_its_caption(image: dict[str, Any], caption: s
             id="with-a-caption",
         ),
         pytest.param({}, Media("image", "https://example.com/aisle.png", plain("Aisle 12")), id="alt-only"),
+        pytest.param(
+            {"src": "data:image/png;base64,AA=="},
+            Media("image", "data:image/png;base64,AA==", plain("Aisle 12")),
+            id="data-uri-left-for-the-writers-to-refuse",
+        ),
     ],
 )
-def test_a_web_image_keeps_its_url_alt_and_caption(image: dict[str, Any], node: Media) -> None:
+def test_an_image_keeps_its_source_alt_and_caption(image: dict[str, Any], node: Media) -> None:
     block = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12", **image}
 
     assert lowered([block]) == (node,)

@@ -142,6 +142,7 @@ TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 
 
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
+_HOST_THE_IMAGE: Final = "host the image and give its https address"
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
     "a bar or line chart's series, a row each with its value in each category, "
@@ -229,22 +230,17 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "inline math": _kept_except(
         dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))
     ),
-    "image from a data: URI": _kept_except(
-        {
-            "notion": Rejection(
-                "Notion cannot show an image from a data: URI", "host the image and give its https address"
-            ),
-            "adf": Rejection(
-                "ADF cannot show an image from a data: URI, "
-                "since Jira embeds only files attached to the issue",
-                "host the image and give its https address",
-            ),
-            "slack": Rejection(
-                "a Slack canvas cannot show an image from a data: URI",
-                "upload the image to Slack and give its permalink",
-            ),
-        }
-    ),
+    "image from a data: URI": {
+        **_refused_by(("markdown", "notion"), "show an image from a data: URI", _HOST_THE_IMAGE),
+        "adf": Rejection(
+            "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
+            _HOST_THE_IMAGE,
+        ),
+        "slack": Rejection(
+            "a Slack canvas cannot show an image from a data: URI",
+            "upload the image to Slack and give its permalink",
+        ),
+    },
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

@@ -27,7 +27,7 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import ExportRich, export_visible_text
-from skaldr.export.swaps import writes_its_data_table
+from skaldr.export.swaps import web_address_of, writes_its_data_table
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
@@ -228,12 +228,13 @@ class _MarkdownWriter:
         return quoted(lines)
 
     def media_lines(self, node: Media) -> list[str]:
+        url = web_address_of(node, "markdown")
         if node.kind == "image":
-            image = f"![{self.inline(node.description)}]({encode_url(node.url)})"
+            image = f"![{self.inline(node.description)}]({encode_url(url)})"
             caption = [styled("italic", self.inline(node.caption))] if node.caption else []
             return joined([[image], caption])
-        label = self.inline(node.caption or plain(node.url))
-        return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, node.url)}"]
+        label = self.inline(node.caption or plain(url))
+        return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, url)}"]
 
     def quote_lines(self, node: Quote) -> list[str]:
         parts = [self.block_text(line) for line in node.lines]
